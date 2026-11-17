@@ -145,3 +145,62 @@ test('Best-Fit history feeds Decided and weekly periods before history are Not r
   assert.ok(weekly.not_recorded_periods.includes('Best-Fit consultations'));
   db.close();
 });
+
+// D5886 (#5886): the owner chose B, in app only. Confirm (with the slot time) and cancel tell the member;
+// completion does not; a refused transition tells nobody; a failed notice never undoes the committed status.
+const inbox = (db: DatabaseSync) => {
+  try {
+    return db.prepare('SELECT user_id, type, title, body, link, channel FROM notifications_inbox ORDER BY id').all() as any[];
+  } catch { return []; }
+};
+
+test('D5886: confirm and cancel put one in-app notice in the member\'s inbox; completion and refusals put none', async () => {
+  const { db, binding } = fixture();
+  const confirmed = booking(db);
+  const c1 = await call(binding, ADMIN_A, 'POST', `/${confirmed}/status`, { status: 'confirmed', expected_version: 1, slot_at: '2026-12-03T15:30:00Z' });
+  assert.equal(c1.status, 200);
+  assert.equal(c1.body.notified, true);
+  let rows = inbox(db);
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].user_id, rows[0].type, rows[0].link, rows[0].channel], [MEMBER, 'consultation_confirmed', '/studio', 'in_app']);
+  assert.match(rows[0].body, /3 Dec 2026, 15:30 UTC/, 'the confirm notice names the slot time');
+  assert.match(rows[0].body, /Fundraising fit/);
+
+  const done = await call(binding, ADMIN_A, 'POST', `/${confirmed}/status`, { status: 'completed', expected_version: 2 });
+  assert.equal(done.status, 200);
+  assert.equal(done.body.notified, null, 'a completed consultation is not announced');
+  assert.equal(inbox(db).length, 1);
+
+  const refused = await call(binding, ADMIN_A, 'POST', `/${confirmed}/status`, { status: 'cancelled', expected_version: 3 });
+  assert.equal(refused.status, 409);
+  assert.equal(inbox(db).length, 1, 'a refused transition tells nobody');
+
+  const cancelled = booking(db);
+  const c2 = await call(binding, ADMIN_B, 'POST', `/${cancelled}/status`, { status: 'cancelled', expected_version: 1 });
+  assert.equal(c2.status, 200);
+  assert.equal(c2.body.notified, true);
+  rows = inbox(db);
+  assert.equal(rows.length, 2);
+  assert.deepEqual([rows[1].user_id, rows[1].type], [MEMBER, 'consultation_cancelled']);
+  assert.doesNotMatch(JSON.stringify(rows), /mina@example\.test/, 'no email address in the notice');
+  db.close();
+});
+
+test('D5886: a failed notice leaves the committed status and reports notified false', async () => {
+  const { db, binding } = fixture();
+  const id = booking(db);
+  const failing = {
+    ...binding,
+    prepare(sql: string) {
+      if (/INSERT INTO notifications_inbox/.test(sql)) throw new Error('synthetic inbox failure');
+      return binding.prepare(sql);
+    },
+  };
+  const r = await call(failing, ADMIN_A, 'POST', `/${id}/status`, { status: 'confirmed', expected_version: 1 });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.booking.status, 'confirmed');
+  assert.equal(r.body.notified, false);
+  const current = db.prepare('SELECT status, version FROM admin_consultation_bookings WHERE id = ?').get(id) as any;
+  assert.deepEqual([current.status, current.version], ['confirmed', 2]);
+  db.close();
+});

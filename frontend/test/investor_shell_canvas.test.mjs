@@ -37,11 +37,12 @@ test('investor Deals zones match Pages · Investor Deals (ID2–ID4; ID1 Pipelin
   ]);
 });
 
-test('investor Portfolio zones match Pages · Investor Portfolio (IP1–IP3)', () => {
+test('investor Portfolio lists Performance between Reports and Value-add', () => {
   const portfolio = investor.rows.find((r) => r.label === 'Portfolio');
   assert.deepEqual(portfolio.zones.map((z) => [z.slug, archetypeLabel(z)]), [
     ['positions', 'LEDGER'],
     ['updates', 'FEED'],
+    ['performance', 'ANALYTICS'],
     ['value-add', 'FEED'],
   ]);
 });

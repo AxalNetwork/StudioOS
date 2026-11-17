@@ -6,7 +6,8 @@
 // that does listen would run on a branch nobody reviewed.
 //
 // The required checks are the owner's ruleset "main: required checks"
-// (2026-11-02, on #4107). When the ruleset changes, change REQUIRED here.
+// (2026-11-02, on #4107). REQUIRED lives in scripts/lib/requiredChecks.mjs
+// (#5973) because the CI scorecard reads it too; change it there.
 //
 // Run with:
 //   node --test frontend/test/merge_queue_ci_4107.test.mjs
@@ -15,15 +16,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { REQUIRED } from '../../scripts/lib/requiredChecks.mjs';
 const DIR = '.github/workflows';
-const REQUIRED = Object.freeze({
-  'test:drift (full suite)': 'ci.yml',
-  'worker (typecheck)': 'ci.yml',
-  'frontend (build)': 'ci.yml',
-  'api ↔ worker drift': 'ci.yml',
-  'applied migrations unchanged': 'migration-immutability.yml',
-  scan: 'gitleaks.yml',
-});
 const SHADOW = Object.freeze({ 'landing gate': 'ci.yml' });
 // The only workflows the queue runs. Adding one here is a decision: nothing in
 // a queue run may deploy, post a comment or touch production.
@@ -87,6 +81,12 @@ const SKIPS_IN_QUEUE = Object.freeze([
   "always() && github.event_name == 'pull_request'",
 ]);
 
+// Jobs that run in the queue although no required check needs them, each with
+// why. D5608: `test-deps` merges the suite parts' traces into one artifact per
+// commit; a push that `verified` skips has none, so the queue run must make it.
+// test_tracer_5608.test.mjs keeps it advisory: neither gate needs it.
+const QUEUE_ADVISORY = Object.freeze({ 'test-deps': 'D5608' });
+
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
 
 test('every required and shadow check comes from a job in its workflow, which listens for merge_group and runs there', () => {
@@ -127,6 +127,7 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
     for (const j of all) {
       if (required.has(queueName(j))) continue;
       if (fed.has(j.id) && !SKIPS_IN_QUEUE.includes(j.if)) continue;
+      if (f === 'ci.yml' && Object.hasOwn(QUEUE_ADVISORY, j.id)) continue;
       assert.ok(
         SKIPS_IN_QUEUE.includes(j.if),
         `${f} › ${j.name} is not a required check and no required check needs it, so it is skipped in the queue (if: ${j.if})`,

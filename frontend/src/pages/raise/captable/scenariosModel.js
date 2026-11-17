@@ -737,3 +737,15 @@ export function runRequest(scenario, exits = null) {
   const { notes: _n, exit_value: _e, ...rest } = i;
   return { kind: 'model', inputs: { ...rest, ...(exitList.length ? { exit_values: exitList } : {}) } };
 }
+
+/**
+ * D6085 (#6085): the line on a scenario's page naming the Use of funds plan
+ * scenarios that say this one pays for them. Null when none does, or when the
+ * read could not say (`used_by_plans: null`): the page then claims nothing.
+ */
+export function usedByLine(plans) {
+  if (!Array.isArray(plans) || !plans.length) return null;
+  const names = plans.map((p) => `${p.name}${p.is_base ? ' (base)' : ''}`);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `Use of funds: ${list} ${plans.length === 1 ? 'is' : 'are'} paid for by this scenario.`;
+}

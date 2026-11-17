@@ -11,21 +11,30 @@ import { storeGapFor } from '../src/workspaces/noStoreCopy.js';
 
 const op = (zone, label) => investorZoneActions(zone).find((a) => a.label === label);
 
-test('IR1 Clear history is held on the owner’s decision, not presented as one', () => {
-  const clear = op('research/ask', 'Clear history');
-  assert.equal(clear.disabled, true, 'Clear history can be pressed');
-  assert.equal(clear.onClick, undefined);
-  assert.match(clear.title, /not decided yet/);
-  assert.match(clear.title, /Nothing has been deleted/);
-  assert.doesNotMatch(clear.title, /declines|irreversible/, 'an undecided refusal is still worded as policy');
+// D6272 (#6272): IR1 is no longer held. The owner answered #6274 question 4
+// with B (hide, do not delete), so Clear history is a page handler, and with
+// no page to supply one it draws nothing rather than a dead control.
+test('IR1 Clear history is the page’s handler, not a note citing closed #1023', () => {
+  assert.equal(op('research/ask', 'Clear history'), undefined, 'drawn without a page handler');
+  let pressed = 0;
+  const clear = investorZoneActions('research/ask', { handlers: { clearHistory: () => { pressed += 1; } } })
+    .find((a) => a.label === 'Clear history');
+  assert.equal(clear.disabled, false);
+  clear.onClick();
+  assert.equal(pressed, 1);
+  assert.doesNotMatch(String(clear.title || ''), /#1023|not decided/);
 });
 
-test('IR2 New request and Attach to deal say they wait on the deal routes, which are slot S02’s', () => {
+// D6272: the request shipped on the deal (its Documents tab, Ask for access),
+// so neither row may say it waits on another slot's routes.
+test('IR2 New request and Attach to deal point at the deal, not at slot S02', () => {
   for (const label of ['New request', 'Attach to deal']) {
     const a = op('research/diligence', label);
     assert.equal(a.disabled, true, `${label} can be pressed`);
-    assert.match(a.title, /deal.*routes \(slot S02\)/, `${label} does not say what it waits on`);
+    assert.doesNotMatch(a.title, /slot S02|research\.ts/, `${label} still cites the old wait`);
   }
+  assert.match(op('research/diligence', 'New request').title, /deal’s Documents tab/);
+  assert.match(op('research/diligence', 'Attach to deal').title, /already shows its deal/);
 });
 
 test('IR4: the investor’s Markets zone states that theses wait on a decision', () => {

@@ -268,20 +268,18 @@ export const INVESTOR_ZONE_ACTIONS = {
   // true of the op, since a box that always appends to one thread cannot start
   // a second.
   //
-  // `Clear history` KEEPS A NOTE, AND IT IS A DIFFERENT NOTE. "No session
-  // history is stored to clear" stopped being true with the same migration —
-  // but what replaced it is not a clear button. Nothing deletes an answer,
-  // deliberately: kept-or-not-kept is the only bit the ops row writes, and
-  // erasing a reader's own questions is the one irreversible act on this page.
-  // The reason is now about the refusal rather than about an absent store.
+  // `Clear history` IS LIVE, AND IT STILL ERASES NOTHING. "No session history
+  // is stored to clear" stopped being true with the same migration; the owner
+  // then chose hide over delete (D6272, #6274 question 4 B), so the one
+  // irreversible act this page declined to offer is still not offered.
   'research/ask': [
     { label: 'New brief', kind: 'handler', handler: 'newSession', primary: true },
     { label: 'Export session', kind: 'export' },
-    // D495 (#1023): BUILT UP TO THE OWNER'S LINE. The refusal above was never
-    // a recorded decision. Whether Clear deletes the caller's sessions, hides
-    // them behind a "Show cleared" filter, or stays refused is question 4 on
-    // #1023, and until it is answered nothing is cleared.
-    { label: 'Clear history', unbuilt: 'the history is stored and nothing clears it yet: whether clearing deletes your sessions, hides them, or stays refused is the owner’s decision, asked on #1023', hover: 'Clearing history is not decided yet. Nothing has been deleted.' },
+    // D6272: BUILT TO THE OWNER'S ANSWER (#6274, question 4 B). Clearing
+    // HIDES the caller's sessions (`cleared_at`) and deletes nothing; the
+    // `Show cleared` filter reads them back and offers Restore. The question
+    // this row cited to #1023 (closed) is answered, so no note remains.
+    { label: 'Clear history', kind: 'handler', handler: 'clearHistory' },
   ],
   // Both of these zones have had a real body since the research stores landed,
   // and both were calling `zoneActionsFor` all along — with no key here, so
@@ -292,19 +290,20 @@ export const INVESTOR_ZONE_ACTIONS = {
     // The zone's own StatedLimit argues this one, and the note says the same
     // thing it does: "a request button that wrote nowhere would be worse than
     // the conversation it replaced."
-    // D495 (#1023): both wait on `research.ts`'s `deals/*` routes, which are
-    // slot S02's, so the reason names what each waits on rather than a store.
-    { label: 'New request', unbuilt: 'a founder opens a room; asking one to waits on the deal-request routes in research.ts (slot S02), and a button that wrote nowhere would replace the conversation that does', hover: 'Requesting a data room waits on the deal-request routes (slot S02).' },
-    { label: 'Attach to deal', unbuilt: 'nothing links a room grant to a deal record yet; that link waits on the deal routes in research.ts (slot S02)', hover: 'Linking a room to a deal waits on the deal routes (slot S02).' },
+    // Data-room requests live on the deal’s Documents tab; this list shows granted rooms.
+    { label: 'New request', unbuilt: 'a room is asked for on its deal: open the deal, then Documents, then Ask for access. The founder decides, and you get a notice either way', hover: 'Ask for a data room from the deal’s Documents tab.' },
+    // D6266: a room already shows the deals on its company that you may open; there is nothing to attach by hand.
+    { label: 'Attach to deal', unbuilt: 'a room shows the deals on its company that you are invited to or committed on, with their stage and a link; there is nothing to attach by hand', hover: 'Each room already shows its deal when you are invited to it.' },
     { label: 'Export', kind: 'export' },
   ],
   'research/benchmarking': [
-    { label: 'New benchmark', unbuilt: 'the add-a-metric form below takes one, with its source and sample size' },
+    { label: 'New benchmark', kind: 'handler', handler: 'newBenchmark' },
     { label: 'Change peer set', unbuilt: 'a peer source is recorded per row, so there is no one set to switch' },
     // Not an export. The zone renders comparisons as rows precisely so each
     // carries the base it rests on; a chart is the shape that detaches a figure
     // from its sample size, which is the thing this zone exists to refuse.
     { label: 'Export chart', unbuilt: 'no chart is drawn here — each comparison is a row carrying the base it rests on' },
+    { label: 'Export', kind: 'export' },
   ],
   'research/markets': [
     { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },

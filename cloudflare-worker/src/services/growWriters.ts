@@ -703,7 +703,9 @@ export async function updateMarket(env: Env, pid: number, user: User, uid: strin
 
 export const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'culture', 'tax', 'other'] as const;
 export const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up', 'overdue', 'snoozed'] as const;
-const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'other', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
+// D6872 (#6872, owner answer B): compliance and other are stored as two event types, so one of each can fall on the
+// same day (UNIQUE(project_id, event_type, due_date)) and each reads back its own kind.
+const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'compliance', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
 /** Repeats, as the form says it, to `compliance_events.recurrence` (decision 1). */
 export const REPEATS = { once: 'one_time', monthly: 'monthly', quarterly: 'quarterly', yearly: 'annual' } as const;
 export const REPEATS_OF: Record<string, keyof typeof REPEATS> = { one_time: 'once', monthly: 'monthly', quarterly: 'quarterly', annual: 'yearly' };
@@ -712,6 +714,7 @@ export function obligationKind(event: Row): string {
   if (event.kind) return String(event.kind);
   if (event.event_type === 'board_meeting') return 'governance';
   if (event.event_type === 'risk' || event.event_type === 'culture') return String(event.event_type);
+  // D6872: a kind-less `compliance` or `other` row (Calendar, or older than D6872) reads as compliance, as before.
   return 'compliance';
 }
 
@@ -973,6 +976,56 @@ export async function addEntryStep(env: Env, pid: number, user: User, marketUid:
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_entry_step_added', summary: 'Entry step added' })),
   ]);
   return { uid: id };
+}
+
+/**
+ * D6113 (#6113): a step of this market, by its uid. The step's market must be
+ * the market named and that market the venture's, so a step of another
+ * market, or of another venture's, is a 404 before anything is written.
+ */
+async function entryStep(env: Env, pid: number, marketUid: string, stepUid: unknown) {
+  if (typeof stepUid !== 'string' || !stepUid) throw new Refused(404, 'Not found', 'step');
+  const row = await env.DB.prepare(
+    `SELECT s.id, s.text, s.owner_name, s.due_on, s.done_at FROM market_entry_steps s JOIN markets m ON m.id = s.market_id
+      WHERE s.uid = ? AND m.uid = ? AND m.project_id = ?`,
+  ).bind(stepUid, marketUid, pid).first<{ id: number; text: string; owner_name: string | null; due_on: string | null; done_at: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'step');
+  return row;
+}
+
+/**
+ * D6113 (#6113): a step's edit. Only the keys the body sends change; `done`
+ * marks the step done (keeping the day it was first done) or reopens it. One
+ * activity row on the market, named for what changed; never the step's text.
+ */
+export async function updateEntryStep(env: Env, pid: number, user: User, marketUid: string, stepUid: unknown, b: Body) {
+  const s = await entryStep(env, pid, marketUid, stepUid);
+  let text = s.text;
+  if (has(b, 'text')) { text = str(b.text, 300) ?? ''; if (!text) throw new Refused(400, 'A step says what is to be done', 'text'); }
+  const owner = has(b, 'owner_name') ? str(b.owner_name, 120) : s.owner_name;
+  const due = has(b, 'due_on') ? day(b.due_on, 'due_on') : s.due_on;
+  const done = has(b, 'done') ? switchOf(b.done === 'true' ? 1 : b.done === 'false' ? 0 : b.done, 'done') : null;
+  const doneAt = done == null ? s.done_at : done === 1 ? s.done_at ?? nowIso() : null;
+  const edited = has(b, 'text') || has(b, 'owner_name') || has(b, 'due_on');
+  const [action, summary] = !edited && done === 1 ? ['grow_entry_step_done', 'Entry step done']
+    : !edited && done === 0 ? ['grow_entry_step_reopened', 'Entry step reopened']
+      : ['grow_entry_step_updated', 'Entry step updated'];
+  await env.DB.batch([
+    env.DB.prepare("UPDATE market_entry_steps SET text = ?, owner_name = ?, due_on = ?, done_at = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(text, owner, due, doneAt, s.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action, summary })),
+  ]);
+  return { uid: String(stepUid), done: doneAt != null };
+}
+
+/** D6113 (#6113): removes a step of this market, logged on the market. */
+export async function removeEntryStep(env: Env, pid: number, user: User, marketUid: string, stepUid: unknown) {
+  const s = await entryStep(env, pid, marketUid, stepUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM market_entry_steps WHERE id = ?').bind(s.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_entry_step_removed', summary: 'Entry step removed' })),
+  ]);
+  return { uid: String(stepUid), deleted: true as const };
 }
 
 export const LOCALISATION_KEYS = ['language', 'payments', 'legal_entity'] as const;

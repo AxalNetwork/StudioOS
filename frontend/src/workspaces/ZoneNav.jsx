@@ -49,11 +49,6 @@ const zonePath = (bucket, zone) => (zone.to || (zone.root ? bucket.prefix : shel
  * first under that label, current on the root; `row.order` is the canvas's
  * slug order; `row.scroll` keeps the row on one line that scrolls sideways
  * below 1024px instead of wrapping, with 44px targets there.
- *
- * D4817 part 1 (#5311): `row.extra` adds items that are routes of the bucket
- * without being zones of it (`{ slug, label, to }`), placed by `row.order`.
- * Portfolio's local navigation names Performance beside its three zones, and
- * Performance is not a sidebar zone; nothing else passes it.
  */
 /**
  * #6232: `carry` adds query values every pill keeps (`{ fund: 12 }` on the Fund
@@ -75,7 +70,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
   if (!bucket || !bucket.zones?.length) return null;
 
   const accent = ACCENT[role] || ACCENT.founder;
-  const zones = row?.extra?.length ? [...bucket.zones, ...row.extra] : bucket.zones;
+  const { zones } = bucket;
   const active = activeSlug === undefined
     ? zoneForPath(bucket, location.pathname)
     : (activeSlug === null ? null : zones.find((z) => z.slug === activeSlug) || null);
