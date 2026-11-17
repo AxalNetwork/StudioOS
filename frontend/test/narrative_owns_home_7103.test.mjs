@@ -304,7 +304,7 @@ async function routed(part) {
   await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/raise/investor-narrative?project_id=3'] }, h(Routes, null,
     h(Route, { path: '/raise/:slug', element: h(CycleRoute, { cycle: 'raise' }) }),
   ))));
-  await act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setImmediate(r)); });
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
