@@ -278,3 +278,5 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
 @media (max-width:640px){
   .pf-actions .pf-btn,.pf-radio{min-height:44px}
 }
+/* D6204: an obligation past its due date, by the Worker's date. */
+.pf-late-text{color:var(--pf-neg);font-weight:700;display:block}
