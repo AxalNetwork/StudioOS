@@ -298,3 +298,6 @@ e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_ac
 # #5791: the share-walkthrough frontend test used a base64-looking placeholder share token (synthetic, never a
 # credential). The fixture now uses 'synthetic-share-token-5791-not-a-jwt'. Scope this to the original finding.
 19ffa0d4df299a7c7523026e7c5e6aa8261c61ce:frontend/test/share_walkthrough_d5791.test.mjs:generic-api-key:32
+
+# D5531: documented public CodeQL archive SHA256, not an API key.
+00888164d8e120c38d808247dbea41bf2cb01184:documentation/architecture/decisions/D5531.md:generic-api-key:16
