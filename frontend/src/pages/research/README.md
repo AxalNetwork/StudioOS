@@ -15,7 +15,6 @@ zones: one record each, reached from a zone's list.
 | `researchStates.js` | D3701 (Research v2): the words, tones and glyphs for a document's index state, whether Ask may cite it (read only from the Worker's `in_ask`), a Failed or Unsupported row's reason and next step, and Ask's seven response states. Unknown is Not recorded. |
 | `AskZone.jsx` | Ask over owned documents, with saved/discarded disposition, use notes and owned citation links (D549). |
 | `LibraryZone.jsx` | Owned and read-only client documents; kind/source-year editing and owned collections (D549). |
-| `MarketZone.jsx` | Markets. |
 | `MarketSectorProfile.jsx` | The sector route's entry point; an unmapped market keeps its existing profile. |
 | `SectorProfile.jsx` | D547: tracked sectors inside `WorkspaceShell`, monthly live indexes with gaps, source mix, countries, funds, sub-markets and recorded build opportunities. Old market links redirect through the D533 crosswalk. |
 | `BenchmarkingZone.jsx` | Investor benchmarking. Each metric links to its page. |
@@ -44,6 +43,10 @@ zones: one record each, reached from a zone's list.
 | `researchComparisons.js` | The readings that tab and the Add to research panel share: cells, columns that left the directory, the badge (absent, never 0, on a failed read), refusal words and which shells may add to research. |
 | `AddToResearch.jsx` | D5157 part 3: the Add to research and Compare panel (RS-04, RS-05), the shared `Sheet`: pick one of your active projects or start one, then keep the companies or funds there or open a comparison of them. |
 | `ResearchActions.jsx` | D5157 part 3: a company or fund profile's Add to research and Compare buttons, which open that panel. |
+| `MarketDirectoryZone.jsx` | `/research/markets`, the Markets zone `ResearchWorkspace` mounts (D546, D593): the taxonomy's markets by tracked sector, the public tab, and the Your market readings card, where a comparable range is recorded. Each card reads, fails and retries on its own. |
+| `GeographiesZone.jsx` | `/research/geographies`. The countries the directories place a company or a fund in, with both counts and the unplaced counted, never dropped (D546). |
+| `GeographyProfile.jsx` | `/research/geographies/:code`. One country inside `WorkspaceShell` (D593). Per-country demand is Not recorded; a fund size shows only in euros. |
+| `MarketReading.jsx` | `/research/markets/:uid`. One comparable range. A save writes a new reading; a reading past ninety days cannot be attached. Its readings, age windows (`STALE_AT`, `AGE_AT`), `daysSince` and `ageBand` are in `marketReadingRead.js` (D6285). |
 
 The workspace chrome — crumb, zone pills, company chip — lives in
 `frontend/src/workspaces/WorkspaceShell.jsx`, not in these files. A fit score

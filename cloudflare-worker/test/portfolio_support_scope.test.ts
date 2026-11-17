@@ -27,6 +27,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
 import support from '../src/routes/portfolio_support.ts';
+import updates from '../src/routes/portfolio_updates.ts';
 import { applySupportLedgerSchema } from './_support_ledger_schema.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -388,4 +389,75 @@ test('a company in the book with no entry is reported as untouched', async () =>
   assert.deepEqual(body.untouched.map((x: any) => x.name), ['Gamma']);
   assert.equal(body.totals.companies_in_book, 2);
   assert.equal(body.totals.companies_supported, 1);
+});
+
+test('founder asks require both a holding and a delivery; promises remain private and unique', async t => {
+  const db = freshDb();
+  t.after(() => db.close());
+  db.exec(`
+    CREATE TABLE commitments (deal_id INTEGER, investor_user_id INTEGER, status TEXT, company_id INTEGER);
+    CREATE TABLE portfolio_updates (id INTEGER PRIMARY KEY, uid TEXT, project_id INTEGER, kind TEXT, sent_at TEXT);
+    CREATE TABLE update_recipients (update_id INTEGER, user_id INTEGER, audience TEXT, version_id INTEGER, delivery_state TEXT, opened_at TEXT);
+    CREATE TABLE update_asks (id INTEGER PRIMARY KEY, uid TEXT, update_id INTEGER, kind TEXT, text TEXT, link_ref TEXT);
+    CREATE TABLE update_ask_replies (ask_id INTEGER);
+    INSERT INTO commitments VALUES (71, 41, 'confirmed', NULL), (71, 42, 'confirmed', NULL);
+    INSERT INTO investor_dealroom_members (investor_user_id, deal_id) VALUES (42, 71);
+    INSERT INTO portfolio_updates VALUES (1, 'sent-update', 7, 'update', '2026-11-15'), (2, 'empty-update', 7, 'update', '2026-11-15');
+    INSERT INTO update_recipients VALUES
+      (1, 41, 'investor', 1, 'delivered', NULL),
+      (1, 42, 'investor', 1, 'reserved', NULL),
+      (1, 43, 'investor', 1, 'delivered', NULL),
+      (2, 41, 'investor', 2, 'delivered', NULL);
+    INSERT INTO update_asks VALUES (1, 'ask-one', 1, 'customer', 'Private request for a customer intro', NULL),
+      (2, 'ask-two', 1, 'hire', 'Private request to hire', NULL);
+  `);
+  async function read(who: number, update: string) {
+    return updates.fetch(new Request(`http://x/${update}/asks`, {
+      headers: { Authorization: `Bearer ${await token(who, 'investor')}` },
+    }), env(db));
+  }
+  const authorized = await read(MINE, 'sent-update');
+  assert.equal(authorized.status, 200, await authorized.clone().text());
+  assert.deepEqual((await authorized.json() as any).asks.map((x: any) => x.uid), ['ask-one', 'ask-two']);
+  assert.deepEqual(await (await read(MINE, 'empty-update')).json(), { asks: [] });
+  assert.equal((await read(OTHER, 'sent-update')).status, 403);
+  assert.equal((await read(LONER, 'sent-update')).status, 403);
+  assert.equal(db.prepare('SELECT COUNT(opened_at) AS n FROM update_recipients').get()?.n, 0);
+
+  const mine = { user: MINE, role: 'investor' };
+  const other = { user: OTHER, role: 'investor' };
+  const promise = (who: typeof mine, askUid: string) => call(db, who, '/', {
+    method: 'POST', body: JSON.stringify({ project_uid: 'p-alpha', ask_uid: askUid, kind: 'intro', summary: 'Private request for a customer intro' }),
+  });
+  assert.equal((await promise(other, 'ask-one')).status, 404);
+  const created = await promise(mine, 'ask-one');
+  assert.equal(created.status, 201, await created.clone().text());
+  const { item } = await created.json() as any;
+  const retry = await promise(mine, 'ask-one');
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json() as any).item.uid, item.uid);
+  const ledger = await call(db, other, '/');
+  assert.doesNotMatch(await ledger.text(), /Private request|ask-one/);
+  assert.equal((await call(db, other, `/${item.uid}/history`)).status, 404);
+
+  const second = await promise(mine, 'ask-two');
+  const secondUid = (await second.json() as any).item.uid;
+  const started = await call(db, mine, `/${item.uid}`, { method: 'PATCH', body: JSON.stringify({ state: 'in_progress', expected_revision: 1 }) });
+  assert.equal(started.status, 200, await started.clone().text());
+  const openMine = await call(db, mine, '/?state=open');
+  const openItems = (await openMine.json() as any).entries;
+  assert.ok(openItems.some((row: any) => row.uid === item.uid && row.state === 'in_progress'));
+  assert.ok(openItems.some((row: any) => row.uid === secondUid && row.state === 'promised'));
+  const openColleague = await call(db, other, '/?state=open');
+  assert.doesNotMatch(await openColleague.text(), /Private request|ask-one|ask-two/);
+  for (const [uid, state] of [[item.uid, 'delivered'], [secondUid, 'withdrawn']]) {
+    const moved = await call(db, mine, `/${uid}`, { method: 'PATCH', body: JSON.stringify({ state, expected_revision: uid === item.uid ? 2 : 1 }) });
+    assert.equal(moved.status, 200, await moved.clone().text());
+  }
+  const states = (await (await read(MINE, 'sent-update')).json() as any).asks.map((a: any) => a.support_state);
+  assert.deepEqual(states, ['delivered', 'withdrawn']);
+  const ownerLedger = await call(db, mine, '/');
+  assert.match(await ownerLedger.text(), /ask-one/);
+  db.exec('DROP TABLE update_ask_replies');
+  assert.equal((await read(MINE, 'sent-update')).status, 500);
 });

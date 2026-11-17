@@ -12,11 +12,17 @@ import ReadinessHome, { ReadinessBands } from '../ReadinessHome';
 import { coverageLine } from '../readinessModel';
 import RaiseReceiptMatches from '../../../components/RaiseReceiptMatches';
 import EvidencePart from '../evidence/EvidencePart';
-import { isNarrativeAdmin } from '../../raise/narrative/narrativeModel';
-import { forecastHref } from '../../raise/useoffunds/useOfFundsModel';
+import { narrativeStanding } from '../../raise/narrative/narrativeModel';
+import { HOME_PATH, SET_ACTION, forecastHref, tabSearch } from '../../raise/useoffunds/useOfFundsModel';
+import { ADD_ACTION as CAP_REL_ADD, addHref as capRelAddHref } from '../../raise/caprel/capRelModel';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
+// D5081 (#5081, RA-14): Use of funds' Home read, which CycleRoute holds for the header's action and Home (HUBS.md: a cycle's
+// new part comes in through its defs file, so the frozen route gains no import).
+export { useUseOfFundsHome } from '../../raise/useoffunds/useOfFundsRead.js';
+// D5081 part 2 (#5081, RA-22): Capital relationships' Overview reads, which CycleRoute holds for the header's action and Overview.
+export { useCapRelHome } from '../../raise/caprel/capRelHomeRead.js';
 
 // D4574 (#4574, H5): Raise's step behind its own lazy boundary.
 const NarrativeHome = lazyStep(() => import('../../raise/narrative/NarrativeTool'), 'NarrativeHome');
@@ -42,6 +48,14 @@ const raise = {
   path: 'call',
   Mount: RaiseMount,
   action: (q) => ({ label: 'Build your deck', href: `/raise/pitch${q}` }),
+  // D5081 (#5081, RA-14): a module's own primary in place of Build your deck. On Use of funds' tabs it is
+  // Set raise & allocation, opening Allocation; on Home CycleRoute opens Edit split in place (`homeAction`).
+  actions: toFnMap({
+    'use-of-funds': (q) => ({ label: SET_ACTION, href: `${HOME_PATH}/allocation${tabSearch(q)}` }),
+    // D5081 part 2 (RA-22): on Capital relationships' tabs it is Add investor, opening Pipeline's Add investor;
+    // on Overview CycleRoute chooses from the prospects read (`homeAction`); on Pipeline the tab's own Add is it.
+    'capital-relationships': (q) => ({ label: CAP_REL_ADD, href: capRelAddHref(q) }),
+  }),
   // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
   // D752 (#1989): then the founder's "Match to my Mercury" for committed prospects.
   // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
@@ -57,9 +71,10 @@ const raise = {
     )])),
     // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
     // D913: its Objections heard, with no Answer it for an admin.
+    // D5074 part 7: `admin` is the part's narrative map (no `edit`: no Answer it, no reads list); no map draws neither.
     'investor-narrative': (data, ctx) => (
       <>
-        <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} projectId={ctx.projectId} />
+        <NarrativeHome data={data} admin={narrativeStanding(data?.parts?.narrative?.capabilities).readOnly} projectId={ctx.projectId} />
         {mercuryPart('investor-narrative', data, ctx)}
         <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
         <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />

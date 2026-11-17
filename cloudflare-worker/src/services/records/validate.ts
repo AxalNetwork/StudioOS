@@ -19,7 +19,7 @@ import { sessionPlacementRows } from '../../routes/founder_validate_structure';
 import { loadSession, type SessionRow } from '../interviewSessions';
 import {
   MODULES, QUOTE_WITHHELD, claimsOf, heldDate, interviewState, isHeld, loadInterviews, recordingConsentText,
-  loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
+  contradictsByGroup, loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
   type ClaimStatus, type HypRow, type InterviewRow, type LinkRow,
 } from '../cycleValidate';
 import { getPainGroupsView, loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
@@ -31,10 +31,10 @@ import { deleteInterview, updateInterviewDetails } from '../interviewWriters';
 import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
-  addCompetitorSignal, addEvidence, addExperiment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
+  addCompetitorSignal, addEvidence, addExperiment, assignInterviewSegment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
   INTERVIEW_STAGES, latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setInterviewStage, setLinkStrength,
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
-  updateTheme,
+  updateTheme, updateThemeStatement,
 } from '../validateWriters';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
 import { acceptedPerModule, findingKindsOf, findingsFor } from '../interviewSuggestions';
@@ -143,8 +143,16 @@ async function claimOptions(ctx: RecordContext) {
 
 // ── Problem discovery: one pain group ────────────────────────────────────────
 
+/** D6006 (V19 "Used on slide"): the deck stores the Problem slide's text, never which themes fed it. */
+export const USED_ON_SLIDE_UNAVAILABLE = 'Not tracked per theme yet. The deck reads the themes as a whole.';
+
 type ThemeData = {
-  group: { id: number; title: string; created_by: number | null; created_at: string | null };
+  group: {
+    id: number; title: string; created_by: number | null; created_at: string | null;
+    // D6006: the problem statement (migration 202611152333_6006); NULL until written.
+    statement_who: string | null; statement_cope: string | null; statement_cost: string | null;
+    statement_updated_at: string | null; statement_updated_by: number | null;
+  };
   theme: ReturnType<typeof themesOf>[number] | null;
   interviews: InterviewRow[];
   held: number;
@@ -157,7 +165,9 @@ const themeMemo = memo<ThemeData>('theme');
 function loadTheme(ctx: RecordContext, id: string): Promise<ThemeData> {
   return themeMemo(ctx, id, async () => {
     const c = vctx(ctx);
-    const group = await ctx.env.DB.prepare('SELECT id, title, created_by, created_at FROM pain_groups WHERE id = ? AND project_id = ?')
+    const group = await ctx.env.DB.prepare(
+      `SELECT id, title, created_by, created_at, statement_who, statement_cope, statement_cost, statement_updated_at, statement_updated_by
+         FROM pain_groups WHERE id = ? AND project_id = ?`)
       .bind(Number(id), ctx.projectId).first<ThemeData['group']>();
     if (!group) throw vanished();
     const [interviews, model, sev, hypRes, linkRes] = await Promise.all([
@@ -174,7 +184,7 @@ function loadTheme(ctx: RecordContext, id: string): Promise<ThemeData> {
     ]);
     const hyps = hypRes.results || [];
     const links = linkRes.results || [];
-    const theme = themesOf(interviews, model, sev, c.today, supportsByGroup(hyps, links))
+    const theme = themesOf(interviews, model, sev, c.today, supportsByGroup(hyps, links), contradictsByGroup(hyps, links))
       .find((t) => t.group_id != null && Number(t.group_id) === Number(group.id)) ?? null;
     return { group, theme, interviews, held: interviews.filter(isHeld).length, model, hyps, links };
   });
@@ -257,9 +267,35 @@ const problemDiscovery: ModuleSpec = {
         fact('First heard', dMon(t?.first_mention), 'No dated mention'),
       ],
       createdBy: d.group.created_by, createdAt: d.group.created_at,
+      parts: {
+        // D6006 (V19): the founder's own words, not a quote, so every reader of the record reads them.
+        problem_statement: {
+          who: d.group.statement_who, cope: d.group.statement_cope, cost: d.group.statement_cost,
+          updated_at: d.group.statement_updated_at, updated_by: d.group.statement_updated_by,
+        },
+        sources: t ? {
+          interviews: t.mentions, people: t.people, organisations: t.organisations,
+          people_unrecorded: t.people_unrecorded, organisations_unrecorded: t.organisations_unrecorded, phrases: t.phrases,
+        } : { interviews: 0, people: null, organisations: null, people_unrecorded: 0, organisations_unrecorded: 0, phrases: 0 },
+        supporting: t?.supports.length ?? 0,
+        contradicting: t?.contradicts.length ?? 0,
+        // The deck store keeps the Problem slide's text, not which themes it drew on, so this cannot be answered.
+        used_on_slide: { state: 'unavailable', reason: USED_ON_SLIDE_UNAVAILABLE, slide: 'problem' },
+      },
     };
   },
   sections: [
+    {
+      key: 'statement', title: 'Problem statement',
+      read: async (ctx, id) => {
+        const d = await loadTheme(ctx, id);
+        const row = (a: string, v: string | null) => (v ? { a, b: v } : { a, b: 'Not recorded', tone: 'grey' });
+        return {
+          rows: [row('Who has it', d.group.statement_who), row('How they cope today', d.group.statement_cope), row('What it costs', d.group.statement_cost)],
+          action: 'statement',
+        };
+      },
+    },
     {
       key: 'quotes', title: 'Quotes',
       read: async (ctx, id) => {
@@ -361,6 +397,18 @@ const problemDiscovery: ModuleSpec = {
           ] },
         execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateTheme(c.env, {
           projectId: c.projectId, userId: userId(c), themeId, title: field(body, 'title'), severity: field(body, 'severity'),
+        }) })),
+      },
+      {
+        key: 'statement', label: 'Write the problem statement', kind: 'form',
+        form: { title: 'Problem statement', cta: 'Save', foot: 'Your words, not a quote. Leave a field empty to clear it.',
+          fields: [
+            { key: 'who', label: 'Who has it', kind: 'T', value: d.group.statement_who ?? undefined },
+            { key: 'cope', label: 'How they cope today', kind: 'T', value: d.group.statement_cope ?? undefined },
+            { key: 'cost', label: 'What it costs', kind: 'T', value: d.group.statement_cost ?? undefined },
+          ] },
+        execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateThemeStatement(c.env, {
+          projectId: c.projectId, userId: userId(c), themeId, who: field(body, 'who'), cope: field(body, 'cope'), cost: field(body, 'cost'),
         }) })),
       },
       {
@@ -707,6 +755,7 @@ const customerResearch: ModuleSpec = {
     if (!isWriter(ctx)) return [];
     const d = await loadInterview(ctx, id);
     const interviewId = Number(d.iv.id);
+    const segments = await loadSegments(vctx(ctx));
     const actions: RecordAction[] = [
       {
         key: 'edit-details', label: 'Edit details', kind: 'form',
@@ -731,6 +780,22 @@ const customerResearch: ModuleSpec = {
         ] },
         execute: (c, _id, body) => refusing(async () => {
           await setInterviewStage(c.env, { projectId: c.projectId, userId: userId(c), interviewId, stage: field(body, 'stage'), at: field(body, 'at') || undefined });
+          return { ok: true };
+        }),
+      },
+      {
+        key: 'set-segment', label: 'Set segment', kind: 'form',
+        form: { title: 'Set interview segment', cta: 'Save', fields: [
+          { key: 'segment_id', label: 'Segment', kind: 'CH',
+            value: segments.some((segment) => segment.id === d.iv.segment_id) ? String(d.iv.segment_id) : '',
+            options: [{ value: '', label: 'No segment' }, ...segments.map(({ id, name }) => ({ value: String(id), label: name }))] },
+        ] },
+        execute: (c, _id, body) => refusing(async () => {
+          const raw = field(body, 'segment_id');
+          if (raw !== '' && ((typeof raw !== 'string' && typeof raw !== 'number') || !/^[1-9][0-9]{0,9}$/.test(String(raw)))) {
+            throw new WriterError(400, 'Invalid segment id');
+          }
+          await assignInterviewSegment(c.env, { projectId: c.projectId, userId: userId(c), interviewId, segmentId: raw === '' ? null : Number(raw) });
           return { ok: true };
         }),
       },

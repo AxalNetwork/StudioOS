@@ -343,3 +343,22 @@ test('6. the model: period words, the Worker’s period rule, the required set, 
   assert.equal(fields.find((f) => f.key === 'net_burn').reason, 'Moving banks');
   assert.deepEqual(reportFieldsOf(null), []);
 });
+
+test('founder asks distinguish populated, empty, refused and unavailable without opening the sent update', async () => {
+  for (const [payload, status, expected] of [
+    [{ asks: [{ uid: 'a1', kind: 'customer', text: 'A customer introduction in Europe', answered: false, support_state: null }] }, 200, /A customer introduction in Europe.*Promise support/],
+    [{ asks: [] }, 200, /no shared asks/],
+    [{ detail: 'Forbidden' }, 403, /Refused/],
+    [{ detail: 'INTERNAL_FAILURE' }, 503, /Unavailable/],
+  ]) {
+    const view = await mount(worker({ '/api/portfolio-updates/u2/asks': json(payload, status) }));
+    try {
+      await view.click('button-open-report-2');
+      assert.match(view.text('report-founder-asks'), expected);
+      assert.equal(view.reads('/api/portfolio-updates/u2/asks'), 1);
+      assert.equal(view.reads('/api/portfolio-updates/u2/page'), 0);
+      assert.doesNotMatch(view.text('report-founder-asks'), /INTERNAL_FAILURE/);
+      if (payload.asks?.length) assert.ok(view.hrefs().includes('/portfolio/value-add'));
+    } finally { await view.close(); }
+  }
+});
