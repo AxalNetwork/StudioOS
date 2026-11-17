@@ -11,6 +11,7 @@ import {
 } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
+import { SidebarSubpagesProvider } from './ui/SidebarNav'; // D6029: from the sidebar's own module (App.jsx imports are frozen, D5615)
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
@@ -1556,10 +1557,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <Link
                 to="/email"
                 data-testid="email-door"
-                className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+                aria-label="Email"
+                title="Email"
+                className="hidden sm:inline-flex items-center justify-center rounded-lg p-2 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
               >
-                <Mail size={14} />
-                Email
+                <Mail size={18} aria-hidden="true" />
               </Link>
             )}
             {/* D563 — no Workspaces launcher. Its 28 pages each light the
@@ -1631,6 +1633,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
             {/* D768 (#2092): every rail below reads its page key from the route (lib/railPages.js). */}
+            {/* D6029 (#6029): which sidebar rows list their own pages now, so Build's header drops its desktop module tabs only then. */}
+            <SidebarSubpagesProvider groups={sidebarGroups} open={sidebarOpen && isDesktop} collapsed={effectiveCollapsed}>
             <RailPageProvider role={shellRole}>
             <RailStripSlot.Provider value={railStrip}>
               <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
@@ -1638,6 +1642,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </div>
             </RailStripSlot.Provider>
             </RailPageProvider>
+            </SidebarSubpagesProvider>
             {!onboardingCanvas && !pitchFocused && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
@@ -2571,6 +2576,13 @@ function AppInner() {
     user?.role === 'investor' && effectiveRole === 'investor'
       ? investorWorkspace('deals', <Component embedded />)
       : <Component />
+  );
+  // D6160 (#6160): an investor's round calls list is a page of Deals, drawn in
+  // InvestorDealsRoutes' shell; a founder's `?project_id` list keeps RoundCallIndex.
+  const investorRoundCallList = () => (
+    user?.role === 'investor' && effectiveRole === 'investor'
+      ? <InvestorDealsRoutes />
+      : <RoundCallIndex />
   );
   const trustCenter = user
     ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
@@ -3681,7 +3693,7 @@ function AppInner() {
           redirects' `mode=workspace` is kept only so old links stay stable. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderWorkspace('grow', founderEditor(<FounderTeamPage />)))} />
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
-      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCall(RoundCallIndex))} />
+      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCallList())} />
       <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], investorRoundCall(RoundCallPage))} />
       {/* D668 (#1498): approve an AI assistant for the companies ticked. Outside
           the shell's guard on purpose: the assistant's OAuth flow lands here,
@@ -4003,7 +4015,8 @@ function AppInner() {
           founder's board and the partner's bucket root with it. */}
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
-      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? investorFundWorkspace(<FundPerformancePage embedded />) : <FundOpsRedirect />)} />
+      {/* #6245 (owner: C): the Worker's gate, so no tier here. An LP reads their funds and a GP of record theirs (#6246). */}
+      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? <FundPerformancePage fundUnlocked={hasInvestorTier(user, 'institutional')} /> : effectiveRole !== 'admin' ? <FundPerformancePage locked /> : <FundOpsRedirect />)} />
       <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
       <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
       <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />

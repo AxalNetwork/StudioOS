@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Directory and Investor View · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Markets · #7036 · extends RS-03 and RS-17</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Markets directory — coverage filters, freshness and the investor thesis beside the results</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Markets (/research/markets): a founder finds the markets with recent evidence in the countries they care about; an investor sees which of them match the one thesis on their profile. Two destinations, Market directory and Listed companies; government ownership moves into a short coverage note. Every row shows the market and its tracked sector, the taxonomy’s company count (never market size), countries represented, distinct sources split into sector-level and evidence that names the market, and the latest source with its age. Unknown values read Not recorded with the Worker’s reason; unmapped markets stay listed. Table, Cards and Analysis carry the same hierarchy, and the URL restores tab, search, filters, sort, view, page and the open row. States follow Platform States (D5129). Violet dashed ◇ tags mark backend work on #7036; amber ⚑ tags mark owner questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026, 09:40 UTC · checked against main 87bf3ac4ac · [Halden Grid], [Northlake Capital], every bracketed market, sector, source, listed company and ticker, and every figure (9,640 taxonomy companies, 1,240 listed, all counts and dates) are fictional sample data; 82 is the number of markets the taxonomy holds on main</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Markets Directory and Investor View Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RMD-00', 'What it answers, the row and the URL', 'The two questions, where each column is read from on GET /api/research/markets, and every URL parameter, today and proposed.', [W('RMD00')]],
+      ['RMD-01', 'Default directory · desktop 1440', 'Markets with its purpose line, Market directory and Listed companies, the coverage note, a labelled Search markets or sectors field, Country, Source freshness, Source type, Sort and View. 82 markets sorted by taxonomy count across the whole set before paging; Not recorded with reasons; an unmapped market kept; Stale with its age.', [F('RMD01', false, 1180)]],
+      ['RMD-02', 'Sector search', '“energy” matches three market names and three tracked sectors. ◇ the Worker’s q matches names only today.', [F('RMD02', false, 1040)]],
+      ['RMD-03', 'Country and source freshness', 'Germany and Last 30 days leave 2 of 6: what was left out and why, and a market without a recorded country is never placed in none. Popovers with counts, Reset and Apply.', [F('RMD03', 'Country popover open', 960), C('RMD03B', 'Source freshness and source type', 720, 420)]],
+      ['RMD-04', 'Expanded market row', '[Energy storage]: countries with counts, 4 sector-level sources and 2 that name the market, the taxonomy count explained as not market size, market size Not recorded, and Open sector.', [F('RMD04', false, 960)]],
+      ['RMD-05', 'Sector profile and return', '[Climate & energy] with a Back link that names the view it returns to; back on the directory the same URL reopens the row and puts focus on it.', [F('RMD05', 'Sector page', 980), C('RMD05B', 'Returned · view restored', 1240, 790)]],
+      ['RMD-06', 'Cards and Analysis', 'Cards keep the table’s hierarchy. Analysis summarises documented coverage of all 82 markets, dated, with counts that add up and no size or growth.', [F('RMD06', 'Cards', 1020), F('RMD06B', 'Analysis', 1080)]],
+      ['RMD-07', 'Listed companies', 'The second destination: 1,240 listed companies from two labelled sources, paged on the server; SEC EDGAR rows read Not recorded for country and bands.', [F('RMD07', false, 960)]],
+      ['RMD-08', 'Investor · thesis beside the results', 'RS-17’s single profile thesis beside the directory, with “Matches your thesis sectors” only for an actual tracked-sector match (⚑ Q1), non-matching and unmapped rows in words, no market readings. Missing thesis keeps the full directory; a failed thesis read shows no marks and claims nothing.', [F('RMD08', 'Matching and non-matching', 1400), F('RMD08B', 'No thesis yet', 1310), C('RMD08C', 'Thesis Unavailable', 1300, 320)]],
+      ['RMD-09', 'States', 'Loading, a successful empty directory, filters matching nothing with Clear filters, Not recorded with each reason, a failed read with Retry and Partial when the sectors read fails.', [C('RMD09', 'Loading and empty', 1200, 390), C('RMD09B', 'Zero results, missing fields, failed read', 1300, 340)]],
+      ['RMD-10', 'Keyboard focus order', 'Numbered tab stops from breadcrumb to pager, live-region wording, focus rings and popover focus handling.', [C('RMD10', false, 1300, 400)]],
+      ['RMD-11', 'Phone 390', 'Default list; the Filters sheet with Reset and Show 2 markets; an expanded card; the investor thesis collapsed above results and expanded; no thesis; the sector page with its Back link.', [P('RMD11A', 'Default'), P('RMD11B', 'Filters sheet'), P('RMD11C', 'Filtered · expanded card'), P('RMD11D', 'Investor · thesis collapsed'), P('RMD11E', 'Investor · thesis expanded'), P('RMD11F', 'Investor · no thesis'), P('RMD11G', 'Sector page · Back')]],
+      ['RMD-12', 'Dark', 'The expanded row, the investor view and the investor phone on the dark tokens; marks, Stale and Not recorded keep their words and shapes.', [F('RMD12', 'Expanded row · dark', 960), F('RMD12B', 'Investor · dark', 1400), P('RMD12C', 'Phone · dark')]],
+      ['RMD-13', 'Main task path', 'Search a sector, filter by country and freshness, expand, open the sector and return to the same view: each step with its frame and URL.', [W('RMD13')]],
+      ['RMD-14', 'Handoff', 'Checked on main, whole-directory filtering vs the current 100-row client read, backend required, owner questions, frontend only, states and their data, accessibility.', [W('RMD14')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -280,6 +280,8 @@ const PROFILES = {
       ['practice/engagements', 'design/incoming/Practice v2 Page.dc.html', 'engagements'],
       ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery'],
       ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
+      // #4832 (D4832): Sessions' row (PX-05), `Upcoming · Past · Cancelled`.
+      ['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions'],
       // #4826 (D4826 part 2): Thinking is redrawn to the Expertise v2 canvas
       // (EX-11), whose chips are literal radio buttons in the `thinking`
       // section builder — `All · Needs you · With editors · Published` — read
@@ -788,6 +790,8 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     if (name === 'founder') canvas['research/ask'] = canvas['research/ask'].filter((label) => label !== 'Cited in deck');
     // #5365 (F-09) retires IP2's Parse review chip: it was internal working copy shown to investors, and no extraction layer exists.
     if (name === 'investor') canvas['portfolio/updates'] = canvas['portfolio/updates'].filter((label) => label !== 'Parse review');
+    // #6276 adds No read yet after Metrics.
+    if (name === 'investor') canvas['research/benchmarking'].splice(2, 0, 'No read yet');
     // D6272 (#6272): no store selects `Cited in a memo` (a citation names a
     // passage, never a memo), so it is retired; `Show cleared` is the owner's
     // filter for Clear history (#6274 question 4 B) and has no artboard label.
