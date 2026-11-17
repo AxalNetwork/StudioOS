@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {scanR2,bucketDeclarations,classifyCalls,renderInventory} from '../../scripts/build-r2-inventory.mjs';
+import {scanR2,bucketDeclarations,classifyCalls,renderInventory,staleReferences} from '../../scripts/build-r2-inventory.mjs';
 const declarations=`interface R2MultipartUpload {uploadPart(n:number,b:unknown):Promise<void>;complete(parts:unknown[]):Promise<void>;abort():Promise<void>}
 interface R2Bucket {put(key:string,body:unknown):Promise<void>;delete(key:string|string[]):Promise<void>;createMultipartUpload(key:string):R2MultipartUpload;resumeMultipartUpload(key:string,id:string):R2MultipartUpload}
 interface KVNamespace {put(key:string,v:string):Promise<void>;delete(key:string):Promise<void>}
@@ -37,12 +37,20 @@ test('a dominating assignment identifies the actual write prefix, not pre-write 
  const f=fixture(t,body);const sites=f.classify();assert.ok(sites[0].values.every(v=>v.text.startsWith('records/')));
  f.write(body.replace('records/','unclassified/'));assert.throws(()=>f.classify(),/unclassified synthetic-files prefix/);
 });
-test('stored-key deletion needs reviewed provenance and refuses a changed selector',t=>{
- const body='export async function erase(env:Env,row:{key:string,other:string}){const selected=row.key;await env.FILES.delete(selected);}';
- const f=fixture(t,body),calls=f.scan();assert.throws(()=>f.classify(calls),/unresolved key/);
- const c=calls[0];f.registry.key_references.push({site:[c.file,c.scope,c.method,c.key].join(' | '),classes:['record'],review_hash:c.review_hash,evidence:'Synthetic records writer'});
+test('stored-key deletion needs reviewed provenance; a changed key expression or a new site re-opens review',t=>{
+ const body='export async function erase(env:Env,row:{key:string,other:string}){await env.FILES.delete(row.key);}';
+ const f=fixture(t,body),calls=f.scan();assert.throws(()=>f.classify(calls),/unresolved key row\.key/);
+ const c=calls[0];f.registry.key_references.push({site:[c.file,c.scope,c.method,c.key].join(' | '),classes:['record'],evidence:'Synthetic records writer'});
  assert.ok(f.classify(calls)[0].classes.includes('record'));
- f.write(body.replace('selected=row.key','selected=row.other'));assert.throws(()=>f.classify(),/provenance changed/);
+ f.write(body.replace('delete(row.key)','delete(row.other)'));assert.throws(()=>f.classify(),/unresolved key row\.other/);
+ f.write(body.replace('{await','{await env.FILES.delete(row.key);await env.FILES.delete(row.other);await'));assert.throws(()=>f.classify(),/unresolved key row\.other/);
+});
+test('an unrelated edit to a reviewed handler keeps its provenance: nothing derived from source is committed',t=>{
+ const body='export async function erase(env:Env,row:{key:string}){await env.FILES.delete(row.key);}';
+ const f=fixture(t,body),c=f.scan()[0];f.registry.key_references.push({site:[c.file,c.scope,c.method,c.key].join(' | '),classes:['record'],evidence:'Synthetic records writer'});
+ f.write(body.replace('{await','{console.log("an unrelated change in the same handler");const unused=1+1;await'));
+ assert.ok(f.classify()[0].classes.includes('record'));
+ f.registry.key_references[0].review_hash='0'.repeat(64);assert.throws(()=>f.classify(),/review_hash; source fingerprints are derived output/);
 });
 test('multipart initiation, parts, completion, resume and abort are also inventoried',t=>{
  const f=fixture(t,'export async function upload(env:Env,id:string){const h=env.FILES.createMultipartUpload(`media/${id}`);await h.uploadPart(1,"synthetic");await h.complete([]);await env.FILES.resumeMultipartUpload("media/synthetic","upload").abort();}');
@@ -52,10 +60,10 @@ test('unknown legal retention cannot accidentally enable a locked copy',t=>{
  const f=fixture(t,'export async function run(env:Env){await env.FILES.put("records/synthetic","x");}');
  f.registry.classes[0].locked_copy='yes';f.registry.classes[0].retention_days=2555;assert.throws(()=>f.classify(),/Unapproved locked-copy/);
 });
-test('unrecognised buckets and stale provenance fail rather than silently dropping call sites',t=>{
+test('unrecognised buckets fail rather than silently dropping call sites; stale provenance is reported',t=>{
  const f=fixture(t,'export async function run(env:Env){await env.FILES.put("records/synthetic","x");}');
  const calls=f.scan();assert.throws(()=>classifyCalls(calls,f.registry,[{binding:'FILES',bucket:'other-bucket'}]),/unclassified other-bucket prefix/);
- f.registry.key_references.push({site:'removed site',classes:['record'],review_hash:'old',evidence:'old'});assert.throws(()=>f.classify(calls),/Stale key provenance/);
+ f.registry.key_references.push({site:'removed site',classes:['record'],evidence:'old'});assert.deepEqual(staleReferences(calls,f.registry),['removed site']);assert.ok(f.classify(calls).every(c=>c.classes.includes('record')),'a removed site is a note, never a mutation left unclassified');
 });
 
 test('destructured and computed aliases cannot hide a new unclassified write',t=>{
@@ -68,10 +76,13 @@ test('the actual CLI check exits nonzero when a new source prefix is not classif
  const body='export async function run(env:Env){await env.FILES.put("records/synthetic","x");}';const f=fixture(t,body);
  mkdirSync(join(f.root,'scripts'));mkdirSync(join(f.root,'documentation/operations'),{recursive:true});
  for(const dir of ['cloudflare-worker','cloudflare-worker-tail']){mkdirSync(join(f.root,dir));writeFileSync(join(f.root,dir,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ES2022',module:'ESNext',types:[]},include:['../src/**/*.ts']}));}
- copyFileSync(fileURLToPath(new URL('../../scripts/build-r2-inventory.mjs',import.meta.url)),join(f.root,'scripts/build-r2-inventory.mjs'));
+ mkdirSync(join(f.root,'scripts/lib'));for(const file of ['build-r2-inventory.mjs','lib/generatedOutput.mjs'])copyFileSync(fileURLToPath(new URL(`../../scripts/${file}`,import.meta.url)),join(f.root,'scripts',file));
  symlinkSync(fileURLToPath(new URL('../../node_modules',import.meta.url)),join(f.root,'node_modules'),'dir');
  writeFileSync(join(f.root,'documentation/operations/R2_INVENTORY.json'),JSON.stringify(f.registry));
  const cli=join(f.root,'scripts/build-r2-inventory.mjs');execFileSync(process.execPath,[cli,'--write']);execFileSync(process.execPath,[cli,'--check']);
+ execFileSync('git',['init','-q'],{cwd:f.root});execFileSync('git',['add','-f','documentation/operations/R2_INVENTORY.md'],{cwd:f.root});
+ assert.throws(()=>execFileSync(process.execPath,[cli,'--check'],{stdio:'pipe'}),error=>error.status===1&&/R2_INVENTORY\.md is tracked by git/.test(String(error.stderr)));
+ execFileSync('git',['rm','-q','--cached','documentation/operations/R2_INVENTORY.md'],{cwd:f.root});execFileSync(process.execPath,[cli,'--check']);
  f.write(body.replace('records/','new-unclassified/'));
  assert.throws(()=>execFileSync(process.execPath,[cli,'--check'],{stdio:'pipe'}),error=>error.status===1&&/unclassified.*new-unclassified/.test(String(error.stderr)));
 });

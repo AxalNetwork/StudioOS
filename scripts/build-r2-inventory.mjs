@@ -3,8 +3,8 @@
 import { API } from 'typescript/unstable/sync';
 import * as ts from 'typescript/unstable/ast';
 import {readdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';
+import { trackedByGit } from './lib/generatedOutput.mjs';
 import {resolve,relative} from 'node:path';
-import { createHash } from 'node:crypto';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 const ROOT = resolve(fileURLToPath(new URL('../',import.meta.url)));
 export function scanR2(root=ROOT,configPaths=['cloudflare-worker/tsconfig.json','cloudflare-worker-tail/tsconfig.json']){
@@ -60,16 +60,6 @@ function val(n,seen=new Set()){
 function scopeOf(n){for(let x=n.parent;x;x=x.parent){if(x.parameters&&x.body){if(x.name)return x.name.getText();if(x.parent&&ts.isVariableDeclaration(x.parent))return x.parent.name.getText();}
  if(ts.isCallExpression(x)&&ts.isPropertyAccessExpression(x.expression)&&['get','put','post','delete','patch'].includes(x.expression.name.text)&&x.arguments[0]&&ts.isStringLiteral(x.arguments[0]))return x.expression.name.text+' '+x.arguments[0].text;
  }return 'module';}
-function reviewHash(key){
- const parts=new Set(),seen=new Set();
- const collect=(n,depth=0)=>{if(!n||seen.has(n)||depth>5)return;seen.add(n);const sf=n.getSourceFile();if(!sf.fileName.startsWith(root+'/')||sf.fileName.includes('/node_modules/'))return;
- parts.add(relative(root,sf.fileName)+':'+n.getText().replace(/\s+/g,' '));
- const walk=x=>{if(ts.isIdentifier(x)){const d=declaration(x);if(d&&d!==x){if(d.initializer)collect(d.initializer,depth+1);else if(d.parent?.parameters?.includes(d))for(const v of origins(x))collect(v,depth+1);}}
- if(ts.isCallExpression(x)){const fn=checker.getResolvedSignature(x)?.declaration?.resolve();if(fn?.body)collect(fn.body,depth+1);}
- x.forEachChild(walk);};walk(n);
- };collect(key);
- return createHash('sha256').update([...parts].sort().join('\n')).digest('hex');
-}
 const calls=[];
 for(const path of sources){const project=snapshot.getDefaultProjectForFile(path)||snapshot.getProjects().find(p=>p.program.getSourceFile(path));if(!project)throw Error(`No compiler project for ${path}`);program=project.program;checker=project.checker;const sf=program.getSourceFile(path);function visit(n){
  if(ts.isCallExpression(n)){
@@ -88,7 +78,7 @@ for(const path of sources){const project=snapshot.getDefaultProjectForFile(path)
     receiver=creation.expression.expression;key=creation.arguments[0];
    }
    const scope=scopeOf(n),arg=key?.getText(sf),bound=bindings(receiver),values=val(key);
-   calls.push({file:relative(root,path),line:sf.text.slice(0,n.getStart()).split('\n').length,bindings:[...new Set(bound)],method,key:arg,values,scope,review_hash:createHash('sha256').update(reviewHash(key)+'\n'+(()=>{for(let f=n.parent;f;f=f.parent)if(f.parameters&&f.body)return f.getText().replace(/\s+/g,' ');return n.getText();})()).digest('hex')});
+   calls.push({file:relative(root,path),line:sf.text.slice(0,n.getStart()).split('\n').length,bindings:[...new Set(bound)],method,key:arg,values,scope});
 
   }
  }
@@ -122,11 +112,11 @@ export function classifyCalls(calls,registry,declarations){
   if(c.locked_copy==='yes'&&(c.class!=='record'||!recorded(c.retention_basis)||!recorded(c.approval_source)||!Number.isSafeInteger(c.retention_days)||c.retention_days<1||c.match==='pattern'))throw Error(`Unapproved locked-copy class ${c.id}`);
   ids.set(c.id,c);pairs.add(c.bucket+'|'+c.prefix);
  }
- const refs=new Map();for(const r of registry.key_references){if(refs.has(r.site)||!r.evidence||!r.review_hash)throw Error(`Invalid key provenance ${r.site}`);refs.set(r.site,r);}
+ const refs=new Map();for(const r of registry.key_references){if(refs.has(r.site)||!r.evidence||!Array.isArray(r.classes)||!r.classes.length)throw Error(`Invalid key provenance ${r.site}`);if('review_hash' in r)throw Error(`Key provenance ${r.site} carries a review_hash; source fingerprints are derived output and are not committed (D6650)`);refs.set(r.site,r);}
  const used=new Set(),errors=[],sites=[];
  for(const call of calls){
   const ref=refs.get(locator(call)),resolved=new Set();
-  if(ref){used.add(ref.site);if(ref.review_hash!==call.review_hash)errors.push(`${call.file}:${call.line}: stored-key provenance changed; review ${ref.site}; expected hash ${call.review_hash}`);}
+  if(ref)used.add(ref.site);
   if(!call.values.length)errors.push(`${call.file}:${call.line}: empty or non-string R2 key cannot be classified`);
   if(!call.bindings.length)errors.push(`${call.file}:${call.line}: unresolved R2 binding`);
   for(const binding of call.bindings){
@@ -137,20 +127,21 @@ export function classifyCalls(calls,registry,declarations){
      if(candidates.length){resolved.add(candidates[0].id);continue;}
      if(value.text){errors.push(`${call.file}:${call.line}: unclassified ${physical} prefix ${JSON.stringify(value.text)}`);continue;}
      const mapped=(ref?.classes||[]).map(id=>ids.get(id));
-     if(!mapped.length||mapped.some(c=>!c)||!mapped.some(c=>c.bucket===bucket)){errors.push(`${call.file}:${call.line}: unresolved key ${call.key}; add reviewed prefix provenance (${locator(call)}, hash ${call.review_hash})`);continue;}
+     if(!mapped.length||mapped.some(c=>!c)||!mapped.some(c=>c.bucket===bucket)){errors.push(`${call.file}:${call.line}: unresolved key ${call.key}; add reviewed prefix provenance for site "${locator(call)}"`);continue;}
      for(const c of mapped.filter(c=>c.bucket===bucket))resolved.add(c.id);
     }
    }
   }
   sites.push({...call,classes:[...resolved].sort()});
  }
- for(const site of refs.keys())if(!used.has(site))errors.push(`Stale key provenance: ${site}`);
  if(errors.length)throw Error(errors.join('\n'));
  return sites;
 }
 const md=v=>String(v??'not recorded').replaceAll('|','\\|').replaceAll('\n',' ');
+/** Reviewed provenance entries whose site no longer exists in the source. Reported, never fatal: a removed or renamed site leaves no mutation unclassified. */
+export function staleReferences(calls,registry){const live=new Set(calls.map(locator));return registry.key_references.map(r=>r.site).filter(site=>!live.has(site));}
 export function renderInventory(registry,declarations,sites,{includeCalls=true}={}){
- const lines=['# R2 source inventory','', '<!-- Generated by node scripts/build-r2-inventory.mjs --write; edit R2_INVENTORY.json and reviewed provenance, then regenerate. -->','',
+ const lines=['# R2 source inventory','', '<!-- Generated by node scripts/build-r2-inventory.mjs --write and never committed (D5612, D6650); the policy is R2_INVENTORY.json. -->','',
  'Source-only inventory for #6650. No live objects, member keys or contents are read. `record` denotes original business/legal evidence requiring recovery planning; classification does not establish a legal retention basis or authorize a locked copy. Unknown periods and legal bases stay **not recorded**. All current locked-copy approvals are **no**; #6428/#6652 require counsel confirmation and synthetic-only drills.','',
  'Scope: typed R2 mutators in the main Worker and tail consumer, including aliases, helper calls, stored-key deletes and multipart video operations. Known external backup prefixes are listed with their source, but external shell/API writers are not covered by the Worker call-site guard. This is not a live bucket listing or proof that a backup/lock is configured.','',
  '## Buckets and environments','', '| Bucket | Binding | Environment | Configuration |','|---|---|---|---|'];
@@ -161,21 +152,23 @@ export function renderInventory(registry,declarations,sites,{includeCalls=true}=
   for(const c of registry.classes.filter(c=>c.bucket===canonical).sort((a,b)=>a.prefix.localeCompare(b.prefix)))lines.push(`| ${physical} | \`${md(c.prefix)}\`${c.match==='pattern'?' (pattern)':c.match==='object'?' (object)':''} | ${c.class} | ${md(c.purpose)} | ${preview?'not recorded (preview)':md(c.retention_period)} | ${md((c.policy_sources||[]).join('; ')||'not recorded')} | ${preview?'not recorded':md(c.retention_basis)} | ${preview?'no':c.locked_copy} |`);
  }
  if(includeCalls){
- lines.push('','## Worker call sites','', 'Each row is a source call, not an object. Dynamic D1/list-derived keys use reviewed writer/prefix provenance from the JSON; changing that source context fails the guard. Literal/helper-derived prefixes are resolved independently, so an annotation cannot hide a new literal prefix. Lines are regenerated from the source.','', '| File and line | Binding | Operation | Key expression | Classified prefixes |','|---|---|---|---|---|');
+ lines.push('','## Worker call sites','', 'Each row is a source call, not an object. Dynamic D1/list-derived keys use reviewed writer/prefix provenance from the JSON, keyed by file, scope, operation and key expression; a new or changed key expression fails the guard until it is reviewed. Literal/helper-derived prefixes are resolved independently, so an annotation cannot hide a new literal prefix. Lines are regenerated from the source.','', '| File and line | Binding | Operation | Key expression | Classified prefixes |','|---|---|---|---|---|');
  const byId=new Map(registry.classes.map(c=>[c.id,c]));for(const c of sites)lines.push(`| ${c.file}:${c.line} | ${c.bindings.join(', ')} | ${c.method} | \`${md(c.key)}\` | ${c.classes.map(id=>{const x=byId.get(id);return `${x.bucket}: ${x.prefix}`;}).join('; ')} |`);
 
- }else lines.push('','## Current Worker call sites','','Run `node scripts/build-r2-inventory.mjs` for the current file/line, binding, operation, key expression and classified prefixes of every typed R2 mutator. The committed policy table is generated from classification/configuration; unrelated source line shifts do not churn this document. Stored-key provenance remains fail-closed in `--check`.');
+ }
  lines.push('','## Planned formation records','', 'The #6680 follow-up names these record classes. Their physical prefixes are not implemented on this source baseline; none is invented here. Each new writer must add a concrete classified prefix or the guard fails. No identity-file prefix is approved (owner decision 13 A).','', '| Planned class | Prefix | Retention/basis | Approval |','|---|---|---|---|');
  for(const c of registry.planned_formation_records||[])lines.push(`| ${md(c)} | not recorded | not recorded | synthetic only; counsel confirmation pending |`);
- lines.push('','## Maintenance and recovery handoff','', '- `node scripts/build-r2-inventory.mjs` prints this inventory; `--write` regenerates it; `--check` validates classification/provenance and fails stale generated output. No flag approves a prefix automatically.', '- Review changed stored-key provenance against its named writer before updating a review hash. Do not copy an error hash into the JSON without inspecting the source contract.', '- #6428 consumes the version-1 `classes` list. Only explicit `locked_copy: yes`, `class: record`, recorded counsel basis and approved duration may qualify; this inventory currently enables none. Apply #6654 suppression decisions on restore.', '- #6651 owns write-once behavior; this task changes no Worker call site. #6428 owns the existing contracts/KYC recovery rows and setup steps 4–5.', '- Preview aliases share source classification only. They inherit no production retention promise or locked-copy approval.','');return lines.join('\n');
+ lines.push('','## Maintenance and recovery handoff','', '- `node scripts/build-r2-inventory.mjs` prints this inventory; `--write` writes it to `documentation/operations/R2_INVENTORY.md`, which is gitignored; `--check` classifies every current call site against `R2_INVENTORY.json` and fails on any unclassified prefix or unreviewed stored-key site. No flag approves a prefix automatically.', '- Add stored-key provenance only after reading the named writer: the site string is the identity, and its classes are a review, not a guess.', '- #6428 consumes the version-1 `classes` list. Only explicit `locked_copy: yes`, `class: record`, recorded counsel basis and approved duration may qualify; this inventory currently enables none. Apply #6654 suppression decisions on restore.', '- #6651 owns write-once behavior; this task changes no Worker call site. #6428 owns the existing contracts/KYC recovery rows and setup steps 4–5.', '- Preview aliases share source classification only. They inherit no production retention promise or locked-copy approval.','');return lines.join('\n');
 }
-export function buildInventory(root=ROOT,configPaths){const registry=JSON.parse(readFileSync(resolve(root,'documentation/operations/R2_INVENTORY.json'),'utf8')),declarations=bucketDeclarations(root),sites=classifyCalls(scanR2(root,configPaths),registry,declarations);return{registry,declarations,sites,markdown:renderInventory(registry,declarations,sites)};}
+export function buildInventory(root=ROOT,configPaths){const registry=JSON.parse(readFileSync(resolve(root,'documentation/operations/R2_INVENTORY.json'),'utf8')),declarations=bucketDeclarations(root),calls=scanR2(root,configPaths),sites=classifyCalls(calls,registry,declarations);return{registry,declarations,sites,stale:staleReferences(calls,registry),markdown:renderInventory(registry,declarations,sites)};}
+export const INVENTORY_DOC='documentation/operations/R2_INVENTORY.md';
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
  try{const args=process.argv.slice(2);if(args.length>1||args.some(a=>!['--check','--write'].includes(a)))throw Error('Usage: build-r2-inventory.mjs [--check|--write]');
-  const out=buildInventory(),path=resolve(ROOT,'documentation/operations/R2_INVENTORY.md');
-  const policy=renderInventory(out.registry,out.declarations,out.sites,{includeCalls:false});
-  if(args[0]==='--write')writeFileSync(path,policy);
-  else if(args[0]==='--check'){if(!existsSync(path)||readFileSync(path,'utf8')!==policy)throw Error('R2 inventory is stale; run node scripts/build-r2-inventory.mjs --write');console.log(`R2 inventory: ${out.sites.length} classified mutator call sites; no live bucket access.`);}
+  const out=buildInventory();
+  if(args[0]==='--write')writeFileSync(resolve(ROOT,INVENTORY_DOC),out.markdown);
+  else if(args[0]==='--check'){if(trackedByGit(ROOT,INVENTORY_DOC))throw Error(`${INVENTORY_DOC} is tracked by git; it is generated and never committed (D5612, D6650) — run: git rm --cached ${INVENTORY_DOC}`);
+   for(const site of out.stale)console.warn(`R2 inventory note: reviewed provenance names a site that no longer exists; remove it from R2_INVENTORY.json: ${site}`);
+   console.log(`R2 inventory: ${out.sites.length} classified mutator call sites; no live bucket access.`);}
   else process.stdout.write(out.markdown);
  }catch(error){console.error(`R2 inventory refused: ${error.message}`);process.exitCode=1;}
 }
