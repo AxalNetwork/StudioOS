@@ -39,15 +39,7 @@ export const PUBLIC_PATHS = TABS.map((t) => t.path);
 /** The tab an address names; any other address under /trust is the overview. */
 export const tabOf = (pathname = '') => (TABS.find((t) => t.path === String(pathname).replace(/\/+$/, '')) || TABS[0]).id;
 
-/** One line per status, from `/api/public/status`'s overall state. */
-export function statusLine(overall) {
-  switch (overall) {
-    case 'operational': return 'All systems operational';
-    case 'degraded': return 'Some systems degraded';
-    case 'down': return 'A major outage is reported';
-    default: return 'Status not known';
-  }
-}
+// #7002: the Status tile no longer has its own wording. It draws `lib/statusSummary.js`, the summary `/status` draws.
 
 /** A fact the code shows, or one it does not (`missing`), with the line that says what is missing. */
 const fact = (text) => ({ text, recorded: true });
@@ -88,7 +80,29 @@ export const DATA = [
   fact('You can download your data or ask to delete your account from your account settings.'),
 ];
 
-export const SUBPROCESSORS_WAIT = 'Our subprocessor list is being reviewed by counsel. Ask privacy@axal.vc for it.';
+export const SUBPROCESSORS_WAIT = 'Our subprocessor list is being reviewed by counsel.';
+/** #7002: the labelled action that asks for the list while counsel reviews it. */
+export const SUBPROCESSORS_REQUEST = { label: 'Request the subprocessor list', href: 'mailto:privacy@axal.vc?subject=Subprocessor%20list' };
+
+/**
+ * #7002: the two data requests, each with its own label and its own account section (SettingsPage's
+ * Account & data card anchors). Signed out, each signs in first and returns to that section.
+ */
+export const DATA_REQUESTS = [
+  { key: 'copy', title: 'Request a copy of your data', sub: 'Your profile, companies, agreements and activity.', path: '/account#account-data-export' },
+  { key: 'delete', title: 'Request deletion', sub: 'We keep only what the law makes us keep.', path: '/account#account-deletion' },
+];
+export const dataRequestHref = (req, signedIn) => (signedIn ? req.path : `/login?next=${encodeURIComponent(req.path)}`);
+
+/**
+ * #7002 (D1072): how a line is marked. A tick only for a recorded line with a recorded check date; a recorded
+ * line with no check date reads Not recorded with UNCHECKED_WHY; a gap is a gap.
+ */
+export const UNCHECKED_WHY = 'No check date is recorded for this yet.';
+export function lineMark(f) {
+  if (!f || f.recorded === false) return 'gap';
+  return dayWord(f.checked_at) ? 'checked' : 'unchecked';
+}
 
 /** Severity, acknowledgement, updates, fix target: SECURITY.md's Response SLAs. */
 export const RESPONSE_TIMES = [
@@ -103,13 +117,18 @@ export const DISCLOSURE_GAPS = [
   missing('Researchers we thank', 'No report has been credited yet.'),
 ];
 
-/** The documents and their last update, from the legal pages' own dates; a version is not recorded yet. */
-export function documentRows({ terms, privacy, risk }) {
+/**
+ * The documents and their last update, from the legal pages' own dates; a version is not recorded yet.
+ * #7002: the interview notice's version and date come from the notice page's own source
+ * (`currentInterviewNotice()` in InterviewNoticePage.jsx), so the two cannot differ.
+ */
+export function documentRows({ terms, privacy, risk, interview = null }) {
+  const notice = interview && Number.isInteger(interview.version) ? interview : null;
   return [
     { name: 'Terms of Service', to: '/terms', updated: terms || null, appliesTo: 'Everyone' },
     { name: 'Privacy Policy', to: '/privacy', updated: privacy || null, appliesTo: 'Everyone' },
     { name: 'Risk Disclosures', to: '/risk-disclosures', updated: risk || null, appliesTo: 'Investors' },
-    { name: 'Interview notice', to: '/privacy/interviews', updated: null, appliesTo: 'Recorded sessions' },
+    { name: 'Interview notice', to: '/privacy/interviews', updated: notice?.updated || null, appliesTo: 'Recorded sessions', version: notice ? `Version ${notice.version}` : null },
     { name: 'Data Processing Addendum', to: null, updated: null, appliesTo: 'Being reviewed by counsel' },
   ];
 }
@@ -298,7 +317,8 @@ export function statusStrip(read) {
 
 /** TRU6: the three ways to report. The third is a private report filed from the app, signed in (D1075). */
 export const REPORT_WAYS = [
-  { key: 'advisory', eye: 'PREFERRED FOR CODE ISSUES', title: 'Private advisory on the code host', note: 'Open a private security advisory on our code repository.', action: 'Open an advisory', href: 'https://github.com/AxalNetwork/StudioOS/security/advisories/new' },
+  // #7002: names the code host, and the action says what it does.
+  { key: 'advisory', eye: 'PREFERRED FOR CODE ISSUES', title: 'Private advisory on GitHub', note: 'Open a private security advisory on our GitHub repository.', action: 'Report a security concern privately', href: 'https://github.com/AxalNetwork/StudioOS/security/advisories/new' },
   { key: 'email', eye: 'ANY ISSUE', title: 'Email', note: 'Write to security@axal.vc.', action: 'Copy address', copy: 'security@axal.vc' },
   { key: 'app', eye: 'MEMBERS', title: 'Signed in', note: 'Report a security issue opens a private report only HQ’s security team reads.', action: 'Report a security issue' },
 ];
@@ -316,7 +336,7 @@ export const REPORT_DIALOG = {
 
 /** TRU5's rows: the legal pages with their own dates, the cookie dialog, the DPA not yet published and security.txt. */
 export function documentTable(dates) {
-  return documentRows(dates).map((r) => ({ ...r, version: r.to ? null : 'Not published yet', kind: 'page' })).concat([
+  return documentRows(dates).map((r) => ({ ...r, version: r.version || (r.to ? null : 'Not published yet'), kind: 'page' })).concat([
     { name: 'Cookie preferences', to: null, updated: '—', appliesTo: 'Everyone', version: '—', kind: 'cookies' },
     { name: 'security.txt', to: '/.well-known/security.txt', updated: '—', appliesTo: 'Security researchers', version: '—', kind: 'file' },
   ]);

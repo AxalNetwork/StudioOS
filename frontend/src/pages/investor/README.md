@@ -240,4 +240,11 @@ The owner removed the AI side rail from `/spinout-lab/investor-workspace`
 zero-rail expectation is recorded in `NO_RAIL_ROUTES` for investors;
 other Investor boards retain their existing rails.
 
+`RoundCallIndex.jsx` (D6160, #6160) is the investor's round calls list at
+`/round-calls`, drawn inside `../../workspaces/investor/InvestorDealsRoutes.jsx`'
+shell (canvas DCA16, DCA17, DCA20, DCA21): each row names the company and
+shows the investor's own response or "No response recorded", with Coming
+soon, verification, empty and Unreadable states. Its words, filters and sort
+live in `roundCallsModel.js`, pure. A founder's `?project_id` list stays in
+`../founder/RoundCallPage.jsx`.
 `introCreditModel.js` (D6262) uses the introduction service's spendable balance and counterpart answer, preserving unknown versus recorded zero and preventing acceptance against an unread balance.
