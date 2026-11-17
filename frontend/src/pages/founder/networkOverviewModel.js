@@ -43,7 +43,7 @@ export function daysBetween(fromIso, now = Date.now()) {
 }
 const day = (iso) => (iso ? String(iso).slice(0, 10) : null);
 
-/** The four tiles. Each is `{ key, label, state, value, sub, href? }`; `state` is the read's. */
+/** The four tiles. Each is `{ key, label, state, value, sub, href?, mark? }`; `state` is the read's. */
 export function overviewTiles({ book, followUps, summary, pending, accepted }) {
   const tile = (key, label, read, value, sub, href) => {
     if (!read || read.status === 'loading') return { key, label, state: 'loading', value: null, sub: null, href };
@@ -57,10 +57,13 @@ export function overviewTiles({ book, followUps, summary, pending, accepted }) {
   const acc = has(accepted) ? (n(accepted.data?.totals?.sent) ?? 0) + (n(accepted.data?.totals?.received) ?? 0) : null;
   const active = waiting === null || acc === null ? null : waiting + acc;
   const activeRead = !has(pending) ? pending : !has(accepted) ? accepted : (pending.status === 'stale' || accepted.status === 'stale' ? { ...pending, status: 'stale' } : pending);
+  // NW1 and NW8 mark a tile that asks for something (canvas `.k.att`): an amber edge and a glyph,
+  // never colour alone. Only a read count above zero is marked: an unread or loading tile has no value.
+  const mark = (t, glyph) => (t.value > 0 ? { ...t, mark: glyph } : t);
   return [
     tile('connections', 'Connections', book, total, total === null ? null : `${total === 1 ? 'person' : 'people'} in your relationship book`, '/network/relationships'),
-    tile('attention', 'Needs attention', followUps, overdue, overdue === null ? null : `follow-up${overdue === 1 ? '' : 's'} past their due date`),
-    tile('decide', 'Awaiting my action', summary, decide, decide === null ? null : `team request${decide === 1 ? '' : 's'} asking you to decide`),
+    mark(tile('attention', 'Needs attention', followUps, overdue, overdue === null ? null : `follow-up${overdue === 1 ? '' : 's'} past their due date`), '◷'),
+    mark(tile('decide', 'Awaiting my action', summary, decide, decide === null ? null : `team request${decide === 1 ? '' : 's'} asking you to decide`), '!'),
     tile('active', 'Active introductions', activeRead, active, active === null ? null : `${waiting} waiting · ${acc} accepted, not yet made`),
   ];
 }
