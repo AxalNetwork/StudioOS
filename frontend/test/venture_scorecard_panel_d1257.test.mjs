@@ -229,7 +229,10 @@ test('SC1: the open read draws each scope, the chart and what it rests on; no mi
 test('SC2, SC22: a scope opens its drawer with inputs, grades, dates and points; a personal input is counted, not shown', async () => {
   const v = await mount(panel());
   try {
+    // D4815 part 51 (#5905): a row expands in place into its evidence; Open full detail opens the drawer.
     await v.click('scorecard-scope-team');
+    assert.ok(v.has('scorecard-expansion-team'));
+    await v.click('scorecard-detail-team');
     assert.ok(v.has('scorecard-drawer-team'));
     assert.match(v.of('scorecard-input-build_evidence'), /Build evidence 80 16\.0 pts 212 commits in 90 days\. Measured as of 2026-10-20 weight 20 ?%/);
     assert.match(v.of('scorecard-input-function_coverage'), /Counted, not shown/);
@@ -242,6 +245,7 @@ test('SC2, SC22: a scope opens its drawer with inputs, grades, dates and points;
     await v.close();
     const p = await mount(panel());
     await p.click('scorecard-scope-pmf');
+    await p.click('scorecard-detail-pmf');
     const d = p.of('scorecard-drawer-pmf');
     assert.ok(d.indexOf('Who you heard from') < d.indexOf('ICP interviews held') && d.indexOf('The problem') < d.indexOf('Pain frequency'), 'PMF in its groups');
     await p.close();
@@ -265,13 +269,15 @@ test('SC18: masked before the NDA shows bands and confidence, the NDA door, and 
   try {
     assert.match(v.of('scorecard-masked'), /Sign the NDA with this venture to see inputs\. Bands and confidence show now\./);
     assert.equal(v.props(v.by('scorecard-nda')).href, '/deals/4/documents');
-    assert.match(v.of('scorecard-scope-team'), /Team Fair ⊘ After the NDA Medium/);
+    assert.match(v.of('scorecard-scope-team'), /Team Fair · Medium Locked .*After the NDA/);
     assert.doesNotMatch(v.page(), /\b62\b|\b81\b/, 'no value is drawn');
     assert.equal(v.has('scorecard-glance'), false);
     assert.equal(v.has('scorecard-rests'), false);
     assert.match(v.of('scorecard-after-nda'), /Every input with its grade and date/);
     await v.click('scorecard-scope-team');
-    assert.equal(v.has('scorecard-drawer-team'), false, 'a masked row opens nothing');
+    assert.equal(v.has('scorecard-drawer-team'), false, 'a masked row opens no drawer');
+    assert.equal(v.has('scorecard-detail-team'), false);
+    assert.match(v.of('scorecard-expansion-team'), /open after you sign the NDA/);
   } finally { await v.close(); }
 });
 
@@ -367,8 +373,9 @@ test('SC19: on a phone each row is a 44px target with four columns, and the draw
   try {
     const row = v.by('scorecard-scope-team');
     assert.match(v.props(row).className, /min-h-\[44px\]/);
-    assert.match(v.props(row).className, /grid-cols-\[minmax\(0,1fr\)_auto_36px_14px\] .*sm:grid-cols-/);
+    assert.match(v.props(row).className, /grid-cols-\[minmax\(0,1fr\)_auto_40px_14px\] .*sm:grid-cols-/);
     await v.click('scorecard-scope-team');
+    await v.click('scorecard-detail-team');
     assert.equal(v.props(v.by('scorecard-drawer-team-layer'))['data-phone'], 'sheet');
   } finally { await v.close(); }
 });

@@ -52,6 +52,8 @@ const exportAmount = (cents) => {
 export default function InvestorFundCalls() {
   const managed = useManagedFund();
   const fund = managed.fund;
+  // D6236: an LP's name on a line opens their record on Fund · LPs.
+  const lpHref = (lpId) => `/funds/lps?fund=${encodeURIComponent(fund?.id ?? '')}&lp=${encodeURIComponent(lpId)}`;
   const [filter, setFilter] = useState('latest');
   const [ledger, setLedger] = useState({ status: 'loading', data: null });
   const [wires, setWires] = useState({ status: 'loading', data: null });
@@ -216,13 +218,13 @@ export default function InvestorFundCalls() {
           <span>{plural(shown.length, 'line')}</span></header>
         {filter === 'latest' && latest && <p className="if2-purpose">{latest.purpose ? `Purpose: ${latest.purpose}` : 'No purpose recorded'}{latest.issued_by_name ? ` · issued by ${latest.issued_by_name}` : ''} · {String(latest.created_at).slice(0, 10)}</p>}
         {shown.length === 0 ? <div className="i6-empty if2-empty"><div><strong>{filter === 'outstanding' ? 'Nothing is outstanding.' : 'No numbered call has been issued on this fund.'}</strong><p>{filter === 'outstanding' ? 'Every line issued on this fund is paid.' : 'New call previews the split before anything is written.'}</p></div></div>
-          : <LineTable lines={shown} showCall={filter !== 'latest'} receipt={receipt} setReceipt={setReceipt} onOpen={openReceipt} onSave={saveReceipt}
+          : <LineTable lines={shown} showCall={filter !== 'latest'} receipt={receipt} setReceipt={setReceipt} onOpen={openReceipt} onSave={saveReceipt} lpHref={lpHref}
             followUp={followUp} setFollowUp={setFollowUp} onDraft={openDraft} onLog={openLog} onSaveLog={saveLog} />}
       </section>}
 
       {data?.unnumbered?.length > 0 && <section className="i6-card if2-ledger if2-legacy" data-testid="card-unnumbered-lines">
         <header><div><h2>Issued before calls were numbered</h2><span>Lines written before the call ledger. Their amounts were stored in dollars and are shown rounded to the cent; a line marked paid then has no receipt behind it.</span></div><span>{plural(data.unnumbered.length, 'line')}</span></header>
-        <LineTable lines={data.unnumbered} showCall={false} receipt={receipt} setReceipt={setReceipt} onOpen={openReceipt} onSave={saveReceipt}
+        <LineTable lines={data.unnumbered} showCall={false} receipt={receipt} setReceipt={setReceipt} onOpen={openReceipt} onSave={saveReceipt} lpHref={lpHref}
           followUp={followUp} setFollowUp={setFollowUp} onDraft={openDraft} onLog={openLog} onSaveLog={saveLog} />
       </section>}
       {data?.truncated && <p className="i6-footnote">This fund has more calls or lines than one read returns; the oldest are not shown, and the totals above cover only what was read.</p>}
@@ -265,14 +267,17 @@ function residualSentence(call) {
   return `${base} The ${call.residual_cents}-cent residual sits on ${who}.`;
 }
 
-export function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave, followUp = null, setFollowUp = () => {}, onDraft = () => {}, onLog = () => {}, onSaveLog = () => {} }) {
+export function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave, lpHref = null, followUp = null, setFollowUp = () => {}, onDraft = () => {}, onLog = () => {}, onSaveLog = () => {} }) {
   return <div className="if2-table-wrap"><table><thead><tr>
     {showCall && <th>Call</th>}<th>LP</th><th className="right">Commitment</th><th className="right">Owed</th><th className="right">Received</th><th>State</th><th>Age</th><th />
   </tr></thead><tbody>
     {lines.map((line) => [
       <tr key={line.id} data-testid={`row-call-line-${line.id}`}>
         {showCall && <td data-label="Call">{line.call_number != null ? `Call ${line.call_number}` : 'Before numbering'}</td>}
-        <td><strong>{line.lp_name || line.lp_email || `LP #${line.limited_partner_id}`}</strong><small>{kycLabel(line)}</small></td>
+        <td>{lpHref && line.limited_partner_id != null
+          // D6236: the LP's name opens their record on Fund · LPs.
+          ? <Link to={lpHref(line.limited_partner_id)} className="if2-lp-link" data-testid={`link-lp-record-${line.id}`}><strong>{line.lp_name || line.lp_email || `LP #${line.limited_partner_id}`}</strong></Link>
+          : <strong>{line.lp_name || line.lp_email || `LP #${line.limited_partner_id}`}</strong>}<small>{kycLabel(line)}</small></td>
         <td className="right" data-label="Commitment">{money(line.commitment_cents)}</td>
         <td className="right" data-label="Owed">{money(line.owed_cents)}</td>
         <td className="right" data-label="Received">{money(line.received_cents)}</td>
