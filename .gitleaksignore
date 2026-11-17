@@ -302,6 +302,8 @@ e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_ac
 # Actions secrets it reads (the second and third Claude account slots); no value
 # is in the file. Scoped to these two findings in the commit that added them.
 # The third entry is this comment's first wording, which quoted those names.
+# The slot table's property is now `envName`, so the merge queue's squashed
+# commit carries no such line; these entries cover the PR's own history only.
 5ca473a6086e9d4ecaa257b0010d64a1d8af2fb6:scripts/agent-gateway-keys.mjs:generic-api-key:31
 5ca473a6086e9d4ecaa257b0010d64a1d8af2fb6:scripts/agent-gateway-keys.mjs:generic-api-key:32
 001f03c99dbcf6014f12be5d932daa8a814fbe89:.gitleaksignore:generic-api-key:302

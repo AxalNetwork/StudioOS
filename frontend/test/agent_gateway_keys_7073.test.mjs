@@ -64,7 +64,7 @@ const run = async (w, env, plan = false) => {
 const noValues = (text) => { for (const v of [...Object.values(KEYS), BASE.CLOUDFLARE_API_TOKEN, 'org-primary', 'org-two', 'org-three']) assert.ok(!text.includes(v), `the summary prints no secret or organization id (${v.slice(0, 6)}…)`); };
 
 test('the slots follow the review order, default to named aliases and never take `default`', () => {
-  assert.deepEqual(SLOTS.map((s) => [s.slot, s.keyVar, s.alias]), [[1, 'ANTHROPIC_API_KEY', 'claude-primary'], [2, 'ANTHROPIC_API_KEY_2', 'claude-2'], [3, 'ANTHROPIC_API_KEY_3', 'claude-3'], [4, 'OPENAI_API_KEY', 'openai-codex']]);
+  assert.deepEqual(SLOTS.map((s) => [s.slot, s.envName, s.alias]), [[1, 'ANTHROPIC_API_KEY', 'claude-primary'], [2, 'ANTHROPIC_API_KEY_2', 'claude-2'], [3, 'ANTHROPIC_API_KEY_3', 'claude-3'], [4, 'OPENAI_API_KEY', 'openai-codex']]);
   const p = planSlots({ ANTHROPIC_API_KEY_2: 'x', OPENAI_API_KEY: 'y', AGENT_OPENAI_ALIAS: 'default' });
   assert.deepEqual(p.map((s) => s.action), ['skip', 'store', 'skip', 'refuse']);
   assert.match(p[0].reason, /credential gap: ANTHROPIC_API_KEY is not set, so the primary account is reached by federation only/);

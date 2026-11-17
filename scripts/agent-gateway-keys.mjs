@@ -27,10 +27,10 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const SLOTS = Object.freeze([
-  { slot: 1, label: 'Primary Claude', provider: 'anthropic', keyVar: 'ANTHROPIC_API_KEY', aliasVar: 'AGENT_CLAUDE_ALIAS_1', alias: 'claude-primary' },
-  { slot: 2, label: 'Claude account 2', provider: 'anthropic', keyVar: 'ANTHROPIC_API_KEY_2', aliasVar: 'AGENT_CLAUDE_ALIAS_2', alias: 'claude-2' },
-  { slot: 3, label: 'Claude account 3', provider: 'anthropic', keyVar: 'ANTHROPIC_API_KEY_3', aliasVar: 'AGENT_CLAUDE_ALIAS_3', alias: 'claude-3' },
-  { slot: 4, label: 'OpenAI / Codex', provider: 'openai', keyVar: 'OPENAI_API_KEY', aliasVar: 'AGENT_OPENAI_ALIAS', alias: 'openai-codex' },
+  { slot: 1, label: 'Primary Claude', provider: 'anthropic', envName: 'ANTHROPIC_API_KEY', aliasVar: 'AGENT_CLAUDE_ALIAS_1', alias: 'claude-primary' },
+  { slot: 2, label: 'Claude account 2', provider: 'anthropic', envName: 'ANTHROPIC_API_KEY_2', aliasVar: 'AGENT_CLAUDE_ALIAS_2', alias: 'claude-2' },
+  { slot: 3, label: 'Claude account 3', provider: 'anthropic', envName: 'ANTHROPIC_API_KEY_3', aliasVar: 'AGENT_CLAUDE_ALIAS_3', alias: 'claude-3' },
+  { slot: 4, label: 'OpenAI / Codex', provider: 'openai', envName: 'OPENAI_API_KEY', aliasVar: 'AGENT_OPENAI_ALIAS', alias: 'openai-codex' },
 ]);
 const ALIAS = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const GATEWAY = /^[A-Za-z0-9_-]{1,64}$/;
@@ -43,10 +43,10 @@ export function planSlots(env) {
   const out = [];
   for (const s of SLOTS) {
     const alias = val(env, s.aliasVar) || s.alias;
-    const hasKey = !!val(env, s.keyVar);
+    const hasKey = !!val(env, s.envName);
     if (!ALIAS.test(alias) || alias === 'default') { out.push({ ...s, alias, action: 'refuse', reason: 'alias refused: never `default`, which falls through to Unified Billing' }); continue; }
     if (!hasKey) {
-      out.push({ ...s, alias, action: 'skip', reason: s.slot === 1 ? 'credential gap: ANTHROPIC_API_KEY is not set, so the primary account is reached by federation only and has no key to store' : `${s.keyVar} is not set` });
+      out.push({ ...s, alias, action: 'skip', reason: s.slot === 1 ? 'credential gap: ANTHROPIC_API_KEY is not set, so the primary account is reached by federation only and has no key to store' : `${s.envName} is not set` });
       continue;
     }
     out.push({ ...s, alias, action: 'store' });
@@ -149,7 +149,7 @@ export async function main(env = process.env, { fetchImpl = fetch, out = (s) => 
     const row = { slot: s.slot, label: s.label, provider: s.provider, alias: s.alias, account: '—', secret: '—', config: '—', note: s.reason ?? '' };
     rows.push(row);
     if (s.action !== 'store') { row.account = s.action === 'skip' ? 'not set' : 'refused'; if (s.action === 'refuse') failed = true; continue; }
-    const key = val(env, s.keyVar);
+    const key = val(env, s.envName);
     const v = await verifyAccount(s, key, { fetchImpl, primaryOrg: val(env, 'ANTHROPIC_ORGANIZATION_ID') });
     if (!v.ok) { row.account = 'refused'; row.note = v.reason; failed = true; continue; }
     row.account = s.slot === 1 ? 'verified (primary organization)' : v.samePrimaryOrg ? 'verified (same organization as the primary: no separate credit)' : 'verified';
