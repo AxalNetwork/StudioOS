@@ -1,4 +1,5 @@
 /** D4829: recorded Practice cockpit facts, with independent sources, calendar dates and exact record destinations. */
+import { formatMinor } from '../../../lib/money.js';
 import { earningsCards } from './earningsLedger.js';
 import { SIGNED_LANES } from './engagementBoard.js';
 import { classifyBooking } from './opportunityLog.js';
@@ -34,7 +35,7 @@ export function clockTime(value, timeZone) {
 const rows = (src, key) => src[key]?.state === 'read' ? src[key].data.items : [];
 const total = (value, data) => data?.complete === false ? (value ? `${value}+` : 'Not recorded') : value;
 const name = row => row.client_name || row.client_user_name || 'Client name not recorded';
-const money = cents => cents == null ? 'Not recorded' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cents / 100);
+const money = cents => formatMinor(cents, 'USD', { locale: 'en-US' }) ?? 'Not recorded';
 const loadedBasis = data => data?.complete === false ? `Loaded ${data.items.length} of ${data.total ?? 'more'} records; this is a partial view.` : null;
 
 export function cockpitModel(src, now = Date.now()) {

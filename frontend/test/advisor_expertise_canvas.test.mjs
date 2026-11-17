@@ -178,9 +178,9 @@ test('a zone reaches the shell with its own heading, not the bucket’s line', (
   // `intro` was `INTRO[prefix]` flat, which is what made all five identical.
   // D4813: Cohorts heads every section "Cohorts" (its canvas's header, with
   // the section in the tabs below); every other bucket keeps this wiring.
-  assert.match(ROUTES, /title=\{cohorts \? 'Cohorts' : \(isRoot \? bucketTitle\(bucket\) : zoneHead\?\.h1\)\}/,
+  assert.match(ROUTES, /title=\{cohorts \? 'Cohorts' : \(isRoot && prefix === '\/practice' \? 'Run my advisory business' : isRoot \? bucketTitle\(bucket\) : zoneHead\?\.h1\)\}/,
     'a zone no longer passes its own heading to the shell');
-  assert.match(ROUTES, /intro=\{zoneHead\?\.sub \|\| INTRO\[prefix\]\}/,
+  assert.match(ROUTES, /intro=\{isRoot && prefix === '\/practice' \? <span className="dark:text-gray-400">\{INTRO\[prefix\]\}<\/span> : zoneHead\?\.sub \|\| INTRO\[prefix\]\}/,
     'a zone no longer prefers its own line over the bucket sentence');
   assert.match(ROUTES, /prefix === '\/expertise' && !isRoot \? EXPERTISE_ZONE_HEAD\[slug\] : null/,
     'the per-zone lookup is gone, or now fires on the bucket root too');

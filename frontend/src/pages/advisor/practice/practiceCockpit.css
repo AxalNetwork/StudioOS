@@ -18,7 +18,7 @@
 .pc-mark{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;color:var(--pc-accent);background:var(--pc-tint)}
 .pc-mark.pc-warn{background:#fffbeb;color:#92400e}.dark .pc-mark.pc-warn{background:#451a03;color:#fcd34d}
 .pc-today li{display:grid;grid-template-columns:65px 120px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--pc-line);font-size:12.5px}
-.pc-today time{font-family:ui-monospace,monospace;font-size:12px;font-weight:600}
+.pc-today time{font-family:var(--font-mono);font-size:12px;font-weight:600}
 .pc-client-name{font-weight:700;color:var(--pc-ink);overflow-wrap:anywhere}
 .pc-state{border-radius:20px;padding:3px 7px;background:var(--pc-tint);color:var(--pc-accent);font-size:11px;white-space:nowrap}
 .pc-health{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:8px}
@@ -38,5 +38,5 @@
 @media(max-width:639px){.pc-actions{justify-content:stretch}.pc-actions .pc-primary{order:-1;width:100%;min-height:48px}.pc-actions>.pc-button:not(.pc-primary){min-height:44px}.pc-card{padding:12px 14px}.pc-attention li{grid-template-columns:22px minmax(0,1fr);gap:8px}.pc-attention-main>span{display:block}.pc-attention .pc-button{grid-column:2;justify-self:start;min-height:44px}.pc-health{grid-template-columns:repeat(2,minmax(0,1fr))}.pc-metric{padding:12px}.pc-metric>b{font-size:21px}.pc-clients{grid-template-columns:1fr}.pc-today li{grid-template-columns:52px minmax(0,1fr)}.pc-today li>span:not(.pc-state){grid-column:2}.pc-today .pc-button{grid-column:2;justify-self:start;min-height:44px}.pc-client{min-height:60px}}
 
 /* The whole phone row is the record link; desktop keeps its explicit action. */
-.pc-attention-main{color:var(--pc-ink);text-decoration:none;min-width:0}.pc-attention .pc-button{min-height:32px;padding:4px 10px}.pc-today .pc-button{min-height:30px;padding:4px 10px}.pc-metric>b{font-family:var(--font-mono,ui-monospace,monospace)}
+.pc-attention-main{color:var(--pc-ink);text-decoration:none;min-width:0}.pc-attention .pc-button{min-height:32px;padding:4px 10px}.pc-today .pc-button{min-height:30px;padding:4px 10px}.pc-metric>b{font-family:var(--font-mono)}
 @media(max-width:639px){.pc-attention-main{min-height:44px;display:flex;flex-direction:column;justify-content:center}.pc-attention .pc-button{display:none}.pc-attention li{padding:8px 0}.pc-today li{grid-template-columns:45px minmax(0,1fr) auto;gap:6px}.pc-today .pc-state{grid-column:3;grid-row:1;justify-self:end}.pc-today li>span:not(.pc-state){grid-column:2;grid-row:2}.pc-today .pc-button{grid-column:3;grid-row:2;min-height:44px}.pc-today time{grid-column:1;grid-row:1}.pc-today .pc-client-name{grid-column:2;grid-row:1}}
