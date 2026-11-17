@@ -19,7 +19,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/build_systems_states_d5065.test.ts
  */
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -33,6 +33,8 @@ import cycleRecords from '../src/routes/cycle_records.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
+import { isolatedMutationSource } from './_isolated_mutation_source.mjs';
+import { failedTests } from '../../scripts/lib/mutationCheck.mjs';
 import {
   SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, disconnectedReason, systemActionIntent, systemStateOf,
 } from '../src/services/systemsState.ts';
@@ -289,8 +291,9 @@ test('the SPA draws a tile for every state the Worker sends', () => {
  * Every assertion above is checked both ways. A check names the source it
  * guards, the exact text to break, and the tests that must then fail.
  *
- * The mutation is applied to the file on disk and this same file is re-run in
- * a child process, filtered to those tests. Rebinding the module in memory is
+ * D6811: the mutation is applied inside a private source copy and this same
+ * file is re-run there in a child process, filtered to those tests. The shared
+ * checkout stays unchanged while other test files import it. Rebinding the module in memory is
  * not enough here: the record read reaches `services/records/build.ts` through
  * `routes/cycle_records.ts`, so only a real import of the mutated tree
  * exercises it. The child is told to skip this section, so it never recurses,
@@ -345,11 +348,13 @@ const CHECKS: Check[] = [
     pattern: 'contradict each other' },
 ];
 
-const SELF = new URL(import.meta.url).pathname;
+let mutationSource: ReturnType<typeof isolatedMutationSource> | null = null;
+const mutationRoot = () => (mutationSource ??= isolatedMutationSource(ROOT)).root;
+after(() => mutationSource?.close());
 const run = (pattern: string) => spawnSync(process.execPath,
   ['--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs',
-    '--test', '--test-name-pattern', pattern, SELF],
-  { cwd: resolve(ROOT), encoding: 'utf8', timeout: 240000, maxBuffer: 8 * 1024 * 1024,
+    '--test', '--test-reporter=tap', '--test-name-pattern', pattern, resolve(mutationRoot(), 'cloudflare-worker/test/build_systems_states_d5065.test.ts')],
+  { cwd: mutationRoot(), encoding: 'utf8', timeout: 240000, maxBuffer: 8 * 1024 * 1024,
     // NODE_TEST_CONTEXT makes a nested runner report to its parent instead of
     // stdout, so the child's TAP would never reach us. It is dropped here.
     env: { ...childEnv(), D5065_SKIP_MUTATIONS: '1' } });
@@ -370,7 +375,9 @@ if (!process.env.D5065_SKIP_MUTATIONS) {
   });
 
   for (const check of CHECKS) test(`Mutation and restoration: ${check.name}`, () => {
-    const file = resolve(ROOT, 'cloudflare-worker', check.file);
+    const file = resolve(mutationRoot(), 'cloudflare-worker', check.file);
+    const shared = resolve(ROOT, 'cloudflare-worker', check.file);
+    const sharedBefore = readFileSync(shared, 'utf8');
     const original = readFileSync(file, 'utf8');
     assert.ok(original.includes(check.before), `mutation_target_missing: ${check.name}`);
     assert.equal(original.split(check.before).length - 1, 1, `mutation target is not unique: ${check.name}`);
@@ -380,6 +387,8 @@ if (!process.env.D5065_SKIP_MUTATIONS) {
       result = run(check.pattern);
     } finally { writeFileSync(file, original); }
     assert.notEqual(result.status, 0, `the mutation went unnoticed by "${check.pattern}": ${(result.stdout ?? '').slice(-1500)}`);
-    assert.equal(readFileSync(file, 'utf8'), original, 'the source was not restored');
+    assert.ok(failedTests(result.stdout).some(name => name.includes(check.pattern)), `wrong mutation failure for ${check.name}: ${(result.stdout ?? '').slice(-1500)}`);
+    assert.equal(readFileSync(file, 'utf8'), original, 'the private source was not restored');
+    assert.equal(readFileSync(shared, 'utf8'), sharedBefore, 'the shared checkout changed during a mutation');
   });
 }

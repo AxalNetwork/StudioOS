@@ -18,6 +18,7 @@
  * screen builds the draft from an allow-list, so a figure the model writes has
  * no key to land in.
  */
+import { liveFiles } from './dataRoomTrash';
 import type { Env } from '../types';
 import { convertToMarkdown, run as aiRun, type RunResult } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
@@ -180,7 +181,7 @@ export async function readDocumentTerms(env: Env, projectId: number, userId: num
   const ref = typeof body.document_ref === 'string' ? body.document_ref.trim() : '';
   const m = /^data_room_files:([1-9]\d{0,15})$/.exec(ref);
   if (!m) throw new RecordError(400, 'bad_document_ref', 'Pick a document from the venture’s data room (data_room_files:<id>).', { field: 'document_ref' });
-  const file = await env.DB.prepare('SELECT id, name, r2_key, content_type FROM data_room_files WHERE id = ? AND project_id = ?')
+  const file = await env.DB.prepare(`SELECT id, name, r2_key, content_type FROM data_room_files WHERE id = ? AND project_id = ?${await liveFiles(env.DB)}`)
     .bind(Number(m[1]), projectId).first<{ id: number; name: string; r2_key: string; content_type: string | null }>();
   if (!file) throw new RecordError(400, 'unknown_document', 'That document is not this venture’s.', { field: 'document_ref' });
   const pages = await documentPages(env, file, userId, rail);
