@@ -153,3 +153,4 @@ and citations by number keep working.
 | `D6028.md` | Build Overview V2 page: `/build` drawn to BD1 and BD2 from D6027's read, one primary action, the header's Connect a tool removed on `/build` only (#6028). |
 | `D4838-p2.md` | Pipeline v2 PP03: Leads, reasons before the score and structured pass (#5935). |
 | `D5937.md` | Pipeline v2 PP04: Proposals as a follow-up list (#5937). |
+| `D7116.md` | A global Wellness program links Administrators to their personal Wellbeing workspace (#7116). |
