@@ -65,17 +65,12 @@ async function pack(w: World) {
 }
 /** What may never leave Axal in a pack: private fields, a balance, a bank amount, an investor's name, money or email. */
 const NEVER = /PRIVATE|987654321|123400|50000|private@example|snapshot_hash|private_reason|source_ref|accepted_by|Synthetic Investor/;
-const tokenOf = (path: string) => path.split('/').pop() as string;
 /** A fixed day already past, so the NDA day is never in the future; no real clock is read. */
 const NDA_DAY = '2026-11-01';
 async function call(w: World, who: number, method: string, tail: string, body?: unknown) {
   const auth = { Authorization: 'Bearer ' + await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret)) };
   const r = await w.app.request('/api/cycles/raise' + tail, { method, headers: { 'Content-Type': 'application/json', 'X-Company-Id': '10', ...auth }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, w.env);
   return { status: r.status, body: await r.json() as any };
-}
-async function open(w: World, token: string) {
-  const r = await w.app.request('/api/share/evidence/' + token, { method: 'GET' }, w.env);
-  return { status: r.status, cache: r.headers.get('Cache-Control'), body: await r.json() as any };
 }
 
 
