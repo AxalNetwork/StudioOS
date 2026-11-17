@@ -220,7 +220,8 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId'));
   // D5079 (#5079): Home also reports a refused or summary-only room to the
   // page, so the page draws none of the room's data under it.
-  assert.ok(route.includes("slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />"));
+  // D5081 part 4 (#5081): Home also reports the header's primary (Complete data room) through `onAction`.
+  assert.ok(route.includes("slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} onAction={dataRoomOwnsHome ? onDataRoomAction : null} />"));
   const tool = read('frontend/src/pages/raise/dataroom/DataRoomTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm|prompt)\(/);
   assert.doesNotMatch(tool, /dataRoom(Upload|Delete|Grant|Revoke|Update)/, 'the integration writes nothing');

@@ -11,7 +11,9 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Unreadable } from '../../ui';
+import { Lightbox, Unreadable, actionGhost, actionPrimary } from '../../ui';
+import { dd } from '../../lib/api';
+import { caseForDeal } from './dealWorkModel';
 import { dealInsightsApi } from '../../lib/api/dealInsights';
 import { reportError } from '../../lib/log';
 import { tabHref } from '../dealPageModel';
@@ -19,7 +21,7 @@ import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
 import { Slot } from './DealOverview';
 import {
   ADVISORS_LINE, COVERAGE_NOTE, MASKED, NOT_RECORDED, NOT_REPORTED, SLOTS, TRACTION_CHARTS,
-  blockOf, chartSummary, coverageView, dateText, figureText, insightState, marketRow, personView, safeUrl, sizingView, slotOf, tractionCsv, tractionSources, tractionView,
+  askDraft, blockOf, chartSummary, coverageView, dateText, figureText, insightState, marketRow, personView, safeUrl, sizingView, slotOf, tractionCsv, tractionSources, tractionView,
 } from './dealInsightsModel';
 
 const TONE = {
@@ -332,6 +334,73 @@ function Chart({ chart, points }) {
   );
 }
 
+/**
+ * D6187: Ask the founder for the months not reported, as a diligence request
+ * on the deal's case. Only the case's owner or lead may send one (the Worker
+ * says so too); with no case, the investor is pointed at Diligence to open one.
+ */
+export function AskFounder({ deal, userId, draft }) {
+  const [list, setList] = useState({ status: 'loading' });
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState(draft);
+  const [state, setState] = useState({ busy: false, err: '', sent: false });
+  useEffect(() => {
+    let live = true;
+    dd.listCases({ subject_type: 'project', subject_id: deal.project_id })
+      .then((data) => { if (live) setList({ status: 'ready', data }); })
+      .catch((e) => { reportError('DealTraction:cases', e); if (live) setList({ status: 'unreadable' }); });
+    return () => { live = false; };
+  }, [deal.project_id]);
+  const found = caseForDeal(list, deal.project_id);
+  if (found.state === 'loading' || found.state === 'unreadable') return null;
+  const diligence = tabHref(deal.id, 'diligence');
+  if (found.state === 'none') {
+    return (
+      <p className={`m-0 md:col-span-4 ${SUB}`} data-testid="deal-traction-ask-nocase">
+        Some months were not reported. To ask the founder for them, <Link to={diligence} className="font-semibold text-axal-violet-deep dark:text-violet-300">open a diligence case</Link> first.
+      </p>
+    );
+  }
+  const owns = [found.row.owner_user_id, found.row.lead_user_id].some((u) => u != null && Number(u) === Number(userId));
+  if (!owns) return <p className={`m-0 md:col-span-4 ${SUB}`} data-testid="deal-traction-ask-notowner">Some months were not reported. Only the diligence case's owner can ask the founder for them.</p>;
+  const send = async () => {
+    if (!f.title.trim()) { setState({ busy: false, err: 'Give the request a title.', sent: false }); return; }
+    setState({ busy: true, err: '', sent: false });
+    try { await dd.createRequest(found.row.uid, { title: f.title.trim(), details: f.details.trim() || null }); setState({ busy: false, err: '', sent: true }); }
+    catch (e) { setState({ busy: false, err: e?.message || 'The request was not sent. Try again.', sent: false }); }
+  };
+  return (
+    <div className="md:col-span-4">
+      <button type="button" className={BTN_S} onClick={() => { setF(draft); setState({ busy: false, err: '', sent: false }); setOpen(true); }} data-testid="deal-traction-ask">Ask the founder for an update</button>
+      {open && (
+        <Lightbox label="Ask the founder for an update" title="Ask the founder for an update" sub="A diligence request on this deal's case. The founder answers it from their requests." onClose={() => setOpen(false)} testId="deal-traction-ask-dialog"
+          footer={(
+            <div className="flex flex-wrap justify-end gap-2">
+              {state.sent
+                ? <button type="button" className={actionPrimary} onClick={() => setOpen(false)}>Done</button>
+                : (<>
+                  <button type="button" className={actionGhost} onClick={() => setOpen(false)}>Back</button>
+                  <button type="button" className={actionPrimary} disabled={state.busy} onClick={send} data-testid="deal-traction-ask-send">{state.busy ? 'Sending…' : 'Send request'}</button>
+                </>)}
+            </div>
+          )}>
+          <div className="flex flex-col gap-3 px-5 py-4">
+            {state.sent
+              ? <p className="m-0 text-[13px]" data-testid="deal-traction-ask-sent">Sent. The request is on the <Link to={diligence} className="font-semibold text-axal-violet-deep dark:text-violet-300">Diligence</Link> tab, where you can remind or withdraw it.</p>
+              : (<>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Title
+                  <input value={f.title} maxLength={200} onChange={(e) => setF((x) => ({ ...x, title: e.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900" /></label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">What you are asking for
+                  <textarea rows={5} value={f.details} maxLength={4000} onChange={(e) => setF((x) => ({ ...x, details: e.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900" /></label>
+                {state.err && <p className="m-0 text-sm text-red-700 dark:text-red-300" role="alert">{state.err}</p>}
+              </>)}
+          </div>
+        </Lightbox>
+      )}
+    </div>
+  );
+}
+
 /** D6177: the browser downloads the already-read monthly figures, without another API request. */
 function downloadTraction(view, dealId) {
   const url = URL.createObjectURL(new Blob([tractionCsv(view)], { type: 'text/csv;charset=utf-8' }));
@@ -343,7 +412,7 @@ function downloadTraction(view, dealId) {
   } finally { link.remove(); URL.revokeObjectURL(url); }
 }
 
-export function DealTraction({ deal }) {
+export function DealTraction({ deal, userId }) {
   const [read, retry] = useInsight(dealInsightsApi.traction, deal.id);
   return (
     <InsightFrame read={read} retry={retry} dealId={deal.id} what="The traction figures" testId="deal-traction">
@@ -367,6 +436,7 @@ export function DealTraction({ deal }) {
                 <p className={`m-0 ${SUB}`} data-testid="deal-traction-last-shared">Last shared: {dateText(v.lastShared) || NOT_RECORDED}</p>
                 <button type="button" className={`${BTN_S} min-h-11`} onClick={() => downloadTraction(v, deal.id)} data-testid="deal-traction-csv">Download CSV</button>
               </div>
+              {askDraft(v) && <AskFounder deal={deal} userId={userId} draft={askDraft(v)} />}
               {v.tiles.map((t) => (
                 <Card key={t.key} eye={t.label} testId={`deal-traction-tile-${t.key}`}>
                   {t.value ? <p className={BIG}>{t.value}</p> : <Missing reason={t.reason} />}
