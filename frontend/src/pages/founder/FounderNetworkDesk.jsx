@@ -10,10 +10,11 @@
  *                 GET /api/relationships/intro-requests?status=…  the request log and its whole-log totals (D4611)
  *   propositions  GET /api/introductions/propositions?status=pending  curated matches and the credit balance
  *   contacts      GET /api/contacts                            only the re-engagement band's project (D551)
+ *   activity      GET /api/relationships/activity?limit=5      recorded events, each source's health (D6557, D5310-p5)
  *
  * A read that fails is Could not be read with Retry, never zero; a refresh that fails after an earlier
- * read keeps that read and says when it was made (NW5). Relationship strength and the activity feed
- * have no store and say Not recorded with why (D5310 § Backend required).
+ * read keeps that read and says when it was made (NW5). Relationship strength has no store and says
+ * Not recorded with why (D5310 § Backend required).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, Network, RefreshCw } from 'lucide-react';
@@ -34,7 +35,7 @@ import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import WhoKnowsStrip from '../relationships/WhoKnowsStrip.jsx';
 import { reportError } from '../../lib/log';
 import {
-  ACTIVITY_NOT_RECORDED, ADD_PERSON_UNBUILT, NOT_RECORDED, READ_LOADING, STRENGTH_NOT_RECORDED, UNREADABLE,
+  ACTIVITY_EMPTY, ACTIVITY_LIMIT, ADD_PERSON_UNBUILT, activityView, NOT_RECORDED, READ_LOADING, STRENGTH_NOT_RECORDED, UNREADABLE,
   acceptGate, attentionRows, introGroups, isFirstRun, matchesView, minutesAgo, overviewTiles, settle, sharingLine, staleNotice,
 } from './networkOverviewModel';
 
@@ -63,8 +64,9 @@ export const SOURCES = {
   made: () => relationshipsApi.introRequests({ status: 'made' }),
   propositions: () => api.introPropositions({ status: 'pending' }),
   contacts: () => api.contactsList(),
+  activity: () => relationshipsApi.activity(ACTIVITY_LIMIT),
 };
-const STALE_LABELS = { book: 'Connections', followUps: 'Follow-ups', summary: 'Team requests', pending: 'Introductions', accepted: 'Introductions', made: 'Introductions', propositions: 'Curated matches' };
+const STALE_LABELS = { book: 'Connections', followUps: 'Follow-ups', summary: 'Team requests', pending: 'Introductions', accepted: 'Introductions', made: 'Introductions', propositions: 'Curated matches', activity: 'Recent activity' };
 const INTRO_KEYS = ['pending', 'accepted', 'made', 'summary'];
 
 export default function FounderNetworkDesk() {
@@ -190,10 +192,7 @@ function Overview({ records, tiles, load, state, fillsOn, ai, coldScope }) {
       </section>
     </div>
     <div className="a6-pair">
-      <section className="a6-card" data-testid="card-network-activity">
-        <Head title="Recent network activity" meta="recorded events only" />
-        <Empty title={NOT_RECORDED} body={ACTIVITY_NOT_RECORDED} />
-      </section>
+      <Activity read={records.activity} onRetry={() => load(['activity'])} />
       <WarmPath />
     </div>
     <Matches read={records.propositions} onRetry={() => load(['propositions'])} onChanged={() => load(['propositions', 'pending', 'accepted'])} state={state} />
@@ -306,6 +305,26 @@ function FirstRun({ records, state }) {
     <section className="a6-card" data-testid="card-network-sharing"><Head title="Team sharing" meta={null} /><p className="a6-quiet" data-testid="text-network-sharing">{sharing.text}</p><DeskLink testid="link-network-sharing" to={ZONE.Relationships} state={state}>Sharing settings</DeskLink></section>
     <DeskLink testid="link-open-network-organizations" to={ZONE.Organizations} state={state}>Open organizations</DeskLink>
   </div>;
+}
+
+/** NW1's Recent network activity (D5310-p5): recorded events only, each failed source named. */
+function Activity({ read, onRetry }) {
+  const v = activityView(read);
+  return <section className="a6-card" data-testid="card-network-activity">
+    <Head title="Recent network activity" meta="recorded events only" />
+    {v.state === 'loading' ? <Skeleton rows={3} />
+      : v.state === 'unreadable' ? <Unread what="Recent network activity" note="This is not an empty history." onRetry={onRetry} />
+        : <>
+          {v.unread.length ? <div className="a6-unread" role="status" data-testid="text-network-activity-partial"><AlertCircle size={15} aria-hidden="true" /><div><strong>{v.unread.join(', ')} could not be read.</strong><p>{v.rows.length ? `The list below may be missing ${v.unread.length === 1 ? 'its' : 'their'} events.` : 'This is not an empty history.'}</p></div><button type="button" onClick={onRetry} data-testid="button-network-activity-retry">Retry</button></div> : null}
+          {v.rows.length ? <ul className="a6-rows a6-activity">{v.rows.map((r) => <li key={r.key} data-testid="row-network-activity">
+            <span className={`a6-activity-mark is-${r.tone}`} aria-hidden="true">{r.glyph}</span>
+            <span className="a6-row-text"><strong>{r.action}{r.detail ? <span className="a6-activity-detail"> · {r.detail}</span> : null}</strong></span>
+            <time className="a6-activity-at" dateTime={r.at.replace(' ', 'T')}>{r.at}</time>
+          </li>)}</ul>
+            : v.state === 'empty' ? <Empty title="Nothing recorded yet" body={ACTIVITY_EMPTY} /> : null}
+          {v.state === 'stale' ? <p className="a6-quiet">Out of date: the last refresh failed.</p> : null}
+        </>}
+  </section>;
 }
 
 function Unread({ what, note, onRetry }) {

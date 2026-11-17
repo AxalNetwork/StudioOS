@@ -61,8 +61,8 @@ import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
 import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
 import { NarrativeAdminGate, narrativeFormAccess } from '../raise/narrative/NarrativeAdmin';
-import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
-import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
+import { LINE as CAP_TABLE_LINE, homeAction as capTableHomeAction, isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
+import { LINE as DATA_ROOM_LINE, isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
 import { HOME_FRAME as UOF_FRAME, homeAction as uofHomeAction, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import { canonicalVentureSearch, legacyVentureRedirect, resolveVenture, ventureRef } from './ventureQuery.js';
@@ -74,7 +74,7 @@ import { LINE as CAP_REL_LINE, capRelStanding, homeAction as capRelHomeAction, i
 import { lazyStep } from './lazyStep.jsx';
 import validateDef from './defs/validate.jsx';
 import raiseDef from './defs/raise.jsx';
-import { useCapRelHome, useUseOfFundsHome } from './defs/raise.jsx';
+import { useCapRelHome, useCapTableHome, useUseOfFundsHome } from './defs/raise.jsx';
 import growDef from './defs/grow.jsx';
 import buildDef from './defs/build.jsx';
 
@@ -560,6 +560,16 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // reads are held here, so the header's primary action and Overview draw from one pair of reads.
   const capRelOwnsHome = cycle === 'raise' && slug === CAP_REL && !record && !lightbox;
   const capRelHome = useCapRelHome(capRelOwnsHome ? projectId : null);
+  // D5081 part 3 (#5081, RA-20): Cap table's Overview owns its page, and its record read is held here for the
+  // module page and the tool's tabs, so the header's Record an issuance and Overview's blocks read once.
+  const capTableOwnsHome = cycle === 'raise' && slug === CAP_TABLE && !record && !capTableTab && !lightbox;
+  const capTableHere = capTableOwnsHome || (!!capTableTab && !lightbox);
+  const capTableHome = useCapTableHome(capTableHere ? projectId : null);
+  // D5081 part 4 (#5081, RA-19): Data room's Home owns its page. Its room read needs the venture's uid from the
+  // venture context this page provides around itself, so Home keeps that read and reports its primary here.
+  const dataRoomOwnsHome = cycle === 'raise' && slug === DATA_ROOM && !record && !lightbox;
+  const [dataRoomPrimary, setDataRoomPrimary] = useState(null);
+  const onDataRoomAction = useCallback((a) => setDataRoomPrimary(a ?? null), []);
   // D1328 (#3489): Fill with Eadwyn on a founder form FILL_FIELDS lists (AF3, AF7), and a
   // waiting row's Edit (AF16), which opens its Add form with the row's values.
   // #3740 part 1: an Edit form passes its row id, so the sheet reads the saved row (`record`).
@@ -717,7 +727,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const moduleFill = !narrativeAdmin && projectId && slug ? moduleFillTarget(cycle, slug, forms) : null;
   // #3712: Add/Edit dialogs sit outside the page gate, including phone sheets.
   // The authenticated role decides read-only access; shell preview never grants writes.
-  const narrativeAccess = cycle === 'raise' && slug === NARRATIVE ? narrativeFormAccess(projectId, user) : {};
+  // D5074 part 7: from the module read's narrative map; the account words only a read that carried none.
+  const narrativeAccess = cycle === 'raise' && slug === NARRATIVE ? narrativeFormAccess(projectId, module?.parts?.narrative?.capabilities, user) : {};
   const openForm = record ? recordState.form
     : !projectId ? null
     // D1106 (#2986): DR4, Data room's Upload is its own sheet, the queue in states.
@@ -773,7 +784,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D5081 part 2: on Capital relationships' Overview it is Follow up, Find investors or Add investor, from the
   // prospects read and only for a viewer who works the tool; on Pipeline the tab's own Add investor is the action.
   const capRelWorks = capRelOwnsHome && capRelStanding(module?.capabilities).works;
-  const action = uofOwnsHome ? (uofPrimary ? { label: uofPrimary.label, onClick: () => uofHome.setDialog(uofPrimary.dialog) } : null)
+  // D5081 part 3: on Cap table it is Record an issuance (a co-founder's Propose), from the record read and only
+  // for a viewer its capability map lets write; none over Record an issuance or a proposal, which are already open.
+  const capTablePrimary = capTableHere && capTableTab !== 'new' && capTableTab !== 'proposal' ? capTableHomeAction(capTableHome.record, { search: q }) : null;
+  // D5081 part 4: on Data room's Home it is Complete data room (Checklist), as Home's room read allows it.
+  const action = capTableHere ? capTablePrimary
+    : dataRoomOwnsHome ? dataRoomPrimary
+    : uofOwnsHome ? (uofPrimary ? { label: uofPrimary.label, onClick: () => uofHome.setDialog(uofPrimary.dialog) } : null)
     : capRelOwnsHome ? capRelHomeAction(capRelHome, { works: capRelWorks, search: q })
       : uofTab === 'allocation' || capRelTab === 'pipeline' ? null : primary;
   const Mount = def.Mount || null;
@@ -841,14 +858,14 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   } else if (capTableTab) {
     body = (
       <CapTableTabPage tab={capTableTab} proposal={proposalId} instrument={instrumentId} scenario={scenarioId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} />
+        search={location.search} cards={tabs} action={action} phone={phone} home={capTableHome} />
     );
   } else if (dataRoomOldFile) {
     body = <DataRoomMovedRedirect kind="file" id={dataRoomOldFile} />;
   } else if (dataRoomTab) {
     body = (
       <DataRoomTabPage tab={dataRoomTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} fileId={dataRoomFile ? recordId : null}
+        search={location.search} cards={tabs} phone={phone} fileId={dataRoomFile ? recordId : null}
         viewer={supportViewer} onSupportRead={setSupportOpen} />
     );
   } else if (uofTab) {
@@ -975,13 +992,16 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         showRecords={!distribution}
         // D5081 (#5081, RA-14): Use of funds' Home owns the page; no generic "at a glance" or Categories under it.
         // D5081 part 2 (RA-22): so does Capital relationships' Overview; no generic "at a glance", This venture or stage counts.
-        owned={uofOwnsHome ? { sub: UOF_FRAME } : capRelOwnsHome ? { sub: CAP_REL_LINE } : null}
+        // D5081 part 3 (RA-20): so does Cap table's Overview; no generic Planned round card or Holders list under it.
+        // D5081 part 4 (RA-19): so does Data room's Home; no generic Last 90 days card or Files records under it.
+        owned={uofOwnsHome ? { sub: UOF_FRAME } : capRelOwnsHome ? { sub: CAP_REL_LINE } : capTableOwnsHome ? { sub: CAP_TABLE_LINE } : dataRoomOwnsHome ? { sub: DATA_ROOM_LINE } : null}
         // D6043 (#6043): a cycle that names `exportRecords` (Build) exports the list with the table's own search, filters and sort.
         recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
         onQuery={setQuery}
-        action={action}
+        // D5081 part 5 (#5081, RA-12): a module that owns its page (`def.homes`) names its own header action, or none.
+        action={home && Object.hasOwn(home, 'action') ? home.action : action}
         // D6001 (#6001): a def's Add may open a dialog of its own (Customer research's Add a lead).
         add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
@@ -1005,8 +1025,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
-          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} />
-          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} home={capTableOwnsHome ? capTableHome : null} />
+          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} onAction={dataRoomOwnsHome ? onDataRoomAction : null} />
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} home={uofOwnsHome ? uofHome : null} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} home={capRelOwnsHome ? capRelHome : null} works={capRelWorks} action={action} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.

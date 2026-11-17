@@ -50,11 +50,13 @@ test('every listed option exists in the code, and on a file an investor board re
   }
 });
 
-/** The model-running controls a file holds: each draft band's surface, and each research call that runs a model. */
+/** The model-running controls a file holds: each draft band's or draft card's surface, and each research call that runs a model. */
 function controlsIn(file) {
   const src = read(file);
   const found = [];
   for (const m of src.matchAll(/<ZoneDraft\b[^>]*?\bsurface="([^"]+)"/gs)) found.push(`surface="${m[1]}"`);
+  // D6888: a draft card that keeps nothing (the statement's cover note) names its surface on its root.
+  for (const m of src.matchAll(/\bdata-draft-surface="([^"]+)"/g)) found.push(`surface="${m[1]}"`);
   for (const m of src.matchAll(/api\.research\.(ask|upload|reindex)\(/g)) found.push(`api.research.${m[1]}(`);
   return [...new Set(found)];
 }

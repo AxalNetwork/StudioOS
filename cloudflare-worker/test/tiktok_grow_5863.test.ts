@@ -94,6 +94,8 @@ async function world(scopes = ALL_SCOPES) {
   db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
   db.exec(readFileSync(`${M}/435_connector_companies.sql`, 'utf8'));
   db.exec(readFileSync(`${M}/${MIGRATION}`, 'utf8'));
+  // D5864: a sync also raises the channel proposal (`tiktok_proposals_5864.test.ts`).
+  db.exec(readFileSync(`${M}/${readdirSync(M).find((f) => /^\d{12}_5864_tiktok_proposals\.sql$/.test(f))}`, 'utf8'));
   db.prepare('INSERT INTO user_company_links (company_id, user_id) VALUES (?, ?)').run(COMPANY, FOUNDER);
   env.RATE_LIMITS = kv();
   env.TIKTOK_CLIENT_KEY = 'fake-key';
@@ -129,7 +131,7 @@ test('1. a sync lands today\'s snapshot and the public videos through the ledger
   const w = await world();
   const out = await sync(w);
   assert.equal(out.status, 200, JSON.stringify(out.body));
-  assert.deepEqual(out.body.counts, { snapshots: 1, videos: 3, kept_deleted: 0, scopes_missing: [], partial: false, outcome: 'Synced' });
+  assert.deepEqual(out.body.counts, { snapshots: 1, videos: 3, kept_deleted: 0, scopes_missing: [], partial: false, outcome: 'Synced', proposals: 1 });
   assert.deepEqual(snapshots(w.db).map((r) => [r.snapshot_date, r.followers, r.following, r.likes_total, r.video_count]), [[TODAY, 1240, 18, 5310, 3]]);
   assert.deepEqual(videos(w.db).map((v) => [v.video_id, v.posted_on, v.views, v.likes, v.comments, v.shares]), [
     ['7301', '2025-11-01', 9100, 410, 22, 9], ['7302', '2025-10-20', 300, 12, 0, 0], ['7303', '2025-10-09', null, 4, null, null],
@@ -311,8 +313,9 @@ test('8. logs carry counts only; the feeds list, the registry and the page agree
   assert.deepEqual(meta.feeds, [...TIKTOK_FEEDS]);
   assert.deepEqual([...TIKTOK_FEEDS].sort(), ['distribution', 'revenue_and_traction']);
   const page = CONNECTOR_PAGES.tiktok;
-  assert.deepEqual(page.tools.map((t) => [t.lands_in, t.calls]), TIKTOK_BUILT_FEEDS.map((f) => [f.module, [...f.calls]]));
-  assert.ok(TIKTOK_FEED_LIST.some((f) => !f.built && f.kind === 'proposal'), 'the channel proposal waits for its part');
+  // A page tool names a call; the channel proposal (D5864) is computed from local data and calls nothing.
+  assert.deepEqual(page.tools.map((t) => [t.lands_in, t.calls]), TIKTOK_BUILT_FEEDS.filter((f) => f.calls.length).map((f) => [f.module, [...f.calls]]));
+  assert.deepEqual(TIKTOK_FEED_LIST.filter((f) => f.kind === 'proposal').map((f) => [f.key, f.built, f.calls.length]), [['channel', true, 0]]);
 
   const files = readdirSync('cloudflare-worker/src', { recursive: true }) as string[];
   const callers = files.filter((f) => f.endsWith('.ts') && readFileSync(`cloudflare-worker/src/${f}`, 'utf8').includes('/v2/video/list/') && !f.endsWith('tiktokFeeds.ts') && !f.endsWith('connectorPages.ts'));

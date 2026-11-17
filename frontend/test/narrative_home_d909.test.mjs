@@ -132,7 +132,8 @@ test('NAR12: based-on lines, Read by, why a version cannot be deleted, and the c
 const OPTIONS = withNarrativeCapabilities({ versions: [{ value: '1', label: 'v1 · seed fund' }, { value: '3', label: 'v3 · angel' }, { value: '4', label: 'v4 · seed fund' }] });
 const COMPARE = { a: 3, b: 4, pairs: [{ key: 'traction', label: 'Traction', a: { body: null }, b: { body: 'Pilots convert to paid.' }, state: 'changed' }] };
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: 'x' },
-  records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 }, parts: { narrative: PART } };
+  // D5074 part 7: the module read's part carries the caller's narrative map too.
+  records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 }, parts: { narrative: withNarrativeCapabilities(PART) } };
 
 async function mounted(url, handle) {
   const restore = installDocument();
@@ -204,11 +205,26 @@ test('Versions: a failed compare says so, never "the same"', async () => {
 
 test('the wiring: Home is the module part, never a fork; /new is today\'s address; the client calls D908\'s compare', () => {
   const route = cycleRouteText();
-  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*<NarrativeHome data=\{data\} admin=\{isNarrativeAdmin\(\{ role: ctx\.role \}\)\} projectId=\{ctx\.projectId\} \/>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
+  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*<NarrativeHome data=\{data\} admin=\{narrativeStanding\(data\?\.parts\?\.narrative\?\.capabilities\)\.readOnly\} projectId=\{ctx\.projectId\} \/>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
   assert.equal((route.match(/<CycleModulePage|<ModulePage/g) || []).length >= 1, true);
   const api = read('frontend/src/lib/api/cycles.js');
   assert.ok(api.includes('narrativeCompare: (projectId, a, b) => request(`/cycles/raise/narrative/compare?project=${encodeURIComponent(projectId)}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`)'));
   const tool = read('frontend/src/pages/raise/narrative/NarrativeTool.jsx');
   assert.equal(/cyclesApi\.record\(/.test(tool.slice(tool.indexOf('function VersionsTab'), tool.indexOf('export function NarrativeHome'))), false, 'Versions reads no record to compare');
   assert.match(tool, /title=\{`Duplicate v\$\{version\.version\}\?`\}/, 'Duplicate opens a dialog');
+});
+
+
+test('D5074 part 7: the Raise overview card reads the part\'s map: the founder\'s draws the reads list, an admin\'s and none do not', async () => {
+  const at = (part) => (u) => (u.includes('/cycles/raise/modules/investor-narrative?') ? response({ ...MODULE, parts: { narrative: part } }) : u.includes('/narrative/reads') ? response({ reads: [], mine: null }) : handler(u));
+  for (const [label, part, shown] of [
+    ['founder', withNarrativeCapabilities(PART), true],
+    ['admin map', withNarrativeCapabilities(PART, { admin: true }), false],
+    ['no map', PART, false],
+  ]) {
+    const view = await mounted('/raise/investor-narrative?project_id=3', at(part));
+    try {
+      assert.equal(view.byId('narrative-reads').length > 0, shown, `${label}: the reads list`);
+    } finally { await view.close(); }
+  }
 });

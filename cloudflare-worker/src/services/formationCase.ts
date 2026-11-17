@@ -55,6 +55,19 @@ export const LEGACY_STAGE: Readonly<Record<string, Stage>> = Object.freeze({
 });
 
 /** Who a stage waits on, where the stage alone says so. */
+/**
+ * D6686 part 2 (the owner's answer, 2026-11-16): the stages that keep a
+ * formation_case_stages record — every stage but draft through quoted. Entering
+ * one opens its row; leaving it marks the row completed, by whom and when.
+ */
+export const RECORDED_STAGES: readonly Stage[] = ['paid', 'preparing', 'ready_to_file', 'submitted', 'registry_query', 'registered', 'activating', 'handed_off'];
+const RECORDED = new Set<string>(RECORDED_STAGES);
+/** The role responsible for a recorded stage. */
+export const STAGE_ROLE: Readonly<Record<string, string>> = Object.freeze({
+  paid: 'hq', preparing: 'hq', ready_to_file: 'hq', submitted: 'registry', registry_query: 'registry',
+  registered: 'hq', activating: 'hq', handed_off: 'founder',
+});
+
 const WAITING_ON: Partial<Record<Stage, string>> = {
   paid: 'hq', preparing: 'hq', ready_to_file: 'hq',
   submitted: 'registry', registry_query: 'registry', registered: 'nobody',
@@ -107,6 +120,19 @@ const ORDER_UPDATE_TAIL =
 const ORDER_UPDATE: Readonly<Record<OrderStatus, string>> = Object.freeze(
   Object.fromEntries(Object.entries(SET_STATUS).map(([k, head]) => [k, head + ORDER_UPDATE_TAIL])) as Record<OrderStatus, string>,
 );
+// Both stage statements run after the case update and are guarded on the case
+// being at the new stage and revision, so they write only when the transition did.
+const STAGE_AFTER = 'EXISTS (SELECT 1 FROM formation_cases WHERE id = ? AND stage = ? AND revision = ?)';
+const STAGE_COMPLETE =
+  'INSERT INTO formation_case_stages (case_id, stage, responsible_role, completed_by, completed_at) '
+  + "SELECT ?, ?, ?, ?, datetime('now') WHERE " + STAGE_AFTER + ' '
+  + 'ON CONFLICT(case_id, stage) DO UPDATE SET completed_by = excluded.completed_by, completed_at = excluded.completed_at '
+  + 'WHERE formation_case_stages.completed_at IS NULL';
+const STAGE_OPEN =
+  'INSERT OR IGNORE INTO formation_case_stages (case_id, stage, responsible_role) SELECT ?, ?, ? WHERE ' + STAGE_AFTER;
+const STAGE_OPEN_BY_UID =
+  'INSERT OR IGNORE INTO formation_case_stages (case_id, stage, responsible_role) SELECT id, stage, ? FROM formation_cases WHERE uid = ? AND stage = ?';
+
 const CASE_UPDATE =
   "UPDATE formation_cases SET stage = ?, stage_entered_at = datetime('now'), revision = revision + 1, "
   + "waiting_on = COALESCE(?, waiting_on), updated_at = datetime('now') "
@@ -154,6 +180,8 @@ export async function ensureCaseForOrder(env: Env, incorporationId: number): Pro
        SELECT id, 'system', 'case_opened', ?, 'hq_only', ? FROM formation_cases
         WHERE uid = ? AND NOT EXISTS (SELECT 1 FROM formation_case_events e WHERE e.case_id = formation_cases.id AND e.kind = 'case_opened')`,
     ).bind(stage, JSON.stringify({ incorporation_id: order.id, status: order.status }), uid),
+    // D6686 part 2: the opened case's stage gets its record (every legacy stage is a recorded one).
+    env.DB.prepare(STAGE_OPEN_BY_UID).bind(STAGE_ROLE[stage] ?? null, uid, stage),
   ]);
   return (await env.DB.prepare(
     CASE_BY_ORDER,
@@ -216,6 +244,9 @@ export async function transition(
   }
   const caseIndex = statements.length;
   statements.push(env.DB.prepare(CASE_UPDATE).bind(to, WAITING_ON[to] ?? null, c.id, c.stage, c.revision, c.id, nextRevision));
+  const after = [c.id, to, nextRevision];
+  if (RECORDED.has(c.stage)) statements.push(env.DB.prepare(STAGE_COMPLETE).bind(c.id, c.stage, STAGE_ROLE[c.stage], actor.userId ?? null, ...after));
+  if (RECORDED.has(to)) statements.push(env.DB.prepare(STAGE_OPEN).bind(c.id, to, STAGE_ROLE[to], ...after));
   statements.push(...(payload.extra || []));
 
   const results = await env.DB.batch(statements);
