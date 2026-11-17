@@ -280,6 +280,9 @@ test('the probe is not wired into test:drift', () => {
 function installMockFetch(steps) {
   let failure;
   let repeatLast;
+  // Only the child process uses this clock. Each response advances its timeline.
+  let now = Date.UTC(2026, 0, 1);
+  Date.now = () => now;
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(input);
     const step = steps.shift() || repeatLast;
@@ -292,7 +295,8 @@ function installMockFetch(steps) {
       failure = 'The verification request did not use the token from the email';
     }
     if (failure) throw new Error(failure);
-    if (step.fresh) step.body.internalDate = String(Date.now() + 1);
+    now += step.elapsedMs ?? 1;
+    if (step.fresh) step.body.internalDate = String(now);
     return new Response(step.html ?? JSON.stringify(step.body || {}), {
       status: step.status || 200,
       headers: step.headers || { 'content-type': 'application/json' },
@@ -375,7 +379,7 @@ test('mailbox authorization and read failures preserve the untested delivery sta
 });
 
 test('a readable inbox without a new link gives a delivery timeout', (t) => {
-  runProbe(t, [start, oauth, { route: messages, body: {}, repeat: true }], 'DELIVERY_FAILURE', {
+  runProbe(t, [start, oauth, { route: messages, body: {}, repeat: true, elapsedMs: 100 }], 'DELIVERY_FAILURE', {
     MAGIC_MAIL_BUDGET_MS: '400', MAGIC_POLL_MS: '20',
   });
 });
