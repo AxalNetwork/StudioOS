@@ -225,7 +225,7 @@ test('mounted Sessions, empty: availability is published here, and a confirmed s
   // (SessionActions.jsx) carry this PR's rules: slotBody checks a slot before it is
   // sent, and a cancel needs a reason because the founder is told.
   // Mutation checked: PublishAvailabilityCard not mounted → no "Publish a slot" control.
-  const confirmed = { id: 5, status: 'confirmed', topic: 'First session', founder_name: 'Fran', slot_starts_at: '2026-11-20T10:00:00Z', slot_ends_at: '2026-11-20T11:00:00Z', billing_state: 'unpriced', amount_cents: null };
+  const confirmed = { id: 5, status: 'confirmed', topic: 'First session', founder_name: 'Fran', slot_starts_at: '2036-11-20T10:00:00Z', slot_ends_at: '2036-11-20T11:00:00Z', billing_state: 'unpriced', amount_cents: null };
   const m = await mount(SessionsZone, (c) => {
     if (c.path === '/api/advisors/me/bookings') return json({ items: [confirmed] });
     if (c.path === '/api/advisors/me/slots' && c.method === 'POST') return json({ id: 1, ...c.body });
@@ -264,7 +264,7 @@ test('mounted Sessions, empty: availability is published here, and a confirmed s
     assert.deepEqual(m.writes().filter((c) => c.path.includes('/bookings/5/')).map((c) => [c.path, c.body]),
       [['/api/advisors/bookings/5/cancel', { reason: 'Travel' }]]);
   } finally { await m.close(); }
-  for (const [label, path] of [[/^Session held$/, 'complete'], [/^No-show$/, 'no-show']]) {
+  for (const [label, path] of [[/^Complete$/, 'complete'], [/^No-show$/, 'no-show']]) {
     const k = await mount(SessionsZone, (c) => {
       if (c.path === '/api/advisors/me/bookings') return json({ items: [confirmed] });
       if (/\/bookings\/5\//.test(c.path)) return json({ ok: true });
@@ -280,7 +280,9 @@ test('mounted Sessions, empty: availability is published here, and a confirmed s
 
 test('a session already closed offers no lifecycle form; no mounted page sends the advisor to a retired one', () => {
   const lifecycle = read('pages/advisor/practice/SessionActions.jsx');
-  assert.match(lifecycle, /const confirmed = bookings\.filter\(\(b\) => b\.status === 'confirmed'\);/);
+  // #4832 (D4832): the lifecycle controls are on the session card, and only a confirmed one has them.
+  assert.match(lifecycle, /const closable = \(b\) => b\.status === 'confirmed';/);
+  assert.match(lifecycle, /\{closable\(b\) && \(/);
   for (const f of ['SessionsZone', 'DeliveryZone', 'EngagementsZone', 'SessionActions']) {
     const src = read(`pages/advisor/practice/${f}.jsx`);
     assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''), /advisor\/advisory\/(opportunities|engagements|delivery)/, `${f} links to a retired tab`);

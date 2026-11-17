@@ -433,11 +433,13 @@ export const RECORDS = {
       obligation: r.title ?? null,
       kind: word(OBLIGATION_KIND, r.kind),
       due: typeof r.due_at === 'string' ? r.due_at.slice(0, 10) : null,
-      owner: r.owner_name ?? { text: 'No owner named', tone: 'warn' },
+      // D6790: the picked team member, else a name typed before #6790 (`owner`, the Worker's one rule).
+      owner: r.owner ?? r.owner_name ?? { text: 'No owner named', tone: 'warn' },
       state: pill(OBLIGATION_STATE, r.status),
       // A repeat the store does not hold is Not recorded, never "Once".
       repeats: word(REPEATS, r.repeats),
-    }, edit: editOf(num(r.id) ? { id: r.id } : null, r, ['title', 'status', 'owner_name', 'due_at']) }),  // #4046: the title, which its Edit now draws
+    }, keys: { owner: (r.owner ?? r.owner_name) ? 'set' : 'none' },  // D6790: an ownerless row offers Pick owner
+    edit: editOf(num(r.id) ? { id: r.id } : null, r, ['title', 'status', 'owner_user_id', 'owner', 'owner_name', 'due_at']) }),  // #4046: the title, which its Edit now draws
     filters: [{ key: 'status', label: 'State', options: options(OBLIGATION_STATE) }],
     sorts: [{ key: 'due_at', label: 'Due soonest' }, { key: '-due_at', label: 'Due latest' }],
   },

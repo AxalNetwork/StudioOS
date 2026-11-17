@@ -26,14 +26,15 @@ test('the v2 cell counts each interview once, then support, contradiction and un
 
 test('Contested is its own status, in the table and its filter', () => {
   // Mutations checked: CLAIM_WORD without contested (the cell would be empty).
-  assert.deepEqual(row({ status: 'contested' }).cells.status, { text: 'Contested', tone: 'warn' });
+  // D6016 (#6016): the table draws the methodology's word for it, Mixed (S1, 2026-11-14); the filter value stays the Worker's.
+  assert.deepEqual(row({ status: 'contested' }).cells.status, { text: 'Mixed', tone: 'warn' });
   const status = RECORDS.experiments.filters.find((f) => f.key === 'status').options.map((o) => o.value);
   assert.ok(status.indexOf('contested') === status.indexOf('supported') + 1, 'listed beside Supported, in the Worker\'s order');
 });
 
 test('a claim moved only by the methodology reads "Method changed"; one its evidence moved reads "Moved"', () => {
   // Mutations checked: `method` read as `recent`.
-  assert.equal(row({ status: 'contested', moved: 'method' }).cells.status.text, 'Contested · Method changed');
+  assert.equal(row({ status: 'contested', moved: 'method' }).cells.status.text, 'Mixed · Method changed');
   assert.equal(row({ status: 'supported', moved: 'recent' }).cells.status.text, 'Supported · Moved');
   assert.equal(row({ status: 'supported', moved: null }).cells.status.text, 'Supported');
 });

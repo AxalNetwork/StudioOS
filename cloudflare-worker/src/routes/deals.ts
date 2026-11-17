@@ -1,7 +1,7 @@
 import { notifyInvitationAnswer } from '../services/dealInvitationAnswer';
 import { investorPreviewRefusal } from '../util/investorPreview';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
-import { dealAudience, dealAudiences, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
+import { dealAudience, dealAudiences, hasActiveDealNda, investorHasDealRelationship, isDealOwner, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -617,7 +617,8 @@ deals.get('/dealroom/quota', async (c) => {
   await ensureInvestorPaywallSchema(c.env);
   const cap = dealroomCap(user);
   const used = await dealroomsUsed(c.env, user.id);
-  const companyId = user.role === 'investor' ? await investorActiveCompany(c, user) : null;
+  // D4631 part 4: the firm narrowing follows the held Investor licence, as the deal list's `is_member` does.
+  const companyId = holdsLicence(user, 'investor') ? await investorActiveCompany(c, user) : null;
   const rows = companyId === null
     ? await c.env.DB.prepare(`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ?`).bind(user.id).all()
     : await c.env.DB.prepare(`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ? AND (company_id = ? OR company_id IS NULL)`).bind(user.id, companyId).all();
@@ -654,7 +655,7 @@ deals.get('/:id', async (c) => {
   await sql.end();
   const { profile_uid: profileUid, profile_status: profileStatus, profile_deleted_at: profileDeletedAt, ...row } = rows[0];
   const deal = serializeDeal(row, isDealStaff(user) ? 'admin' : 'member');
-  if (user.role === 'investor' && effectiveInvestorTier(user as InvestorUser) === 'free') {
+  if (freeInvestorReader(user, (rows[0] as any).project_founder_id)) {
     let own = null;
     let ownUnreadable = false;
     try {
@@ -1924,6 +1925,28 @@ import {
 const DEALROOM_BYPASS_ROLES = new Set<string>(['admin', 'partner', 'advisor']);
 
 /**
+ * D4631 part 4 (the owner's answer A, following #4472's): the deal-room cap follows the held Investor licence and
+ * that licence's own plan, whatever the primary role, as the investor plan gates do (D4729). The admin is never
+ * capped; a caller who holds Investor is capped by their Investor plan; a bypass primary without it is not capped.
+ */
+function dealroomUncapped(user: InvestorUser): boolean {
+  if (String(user.role) === 'admin') return true;
+  if (holdsLicence(user as User, 'investor')) return false;
+  return DEALROOM_BYPASS_ROLES.has(String(user.role));
+}
+
+/**
+ * D4631 part 4: the Free-tier projection of a deal follows the held Investor licence and its own plan, whatever the
+ * primary role. It applies only where the caller reads this deal as an investor (`dealAudience`): deal staff and the
+ * venture's own founder keep their projections. Called only after `canReadDeal` admitted the caller, so a reader
+ * who is neither staff nor this venture's owner holds Investor and is this deal's investor.
+ */
+function freeInvestorReader(user: User, projectFounderId: number | null | undefined): boolean {
+  if (isDealStaff(user) || isDealOwner(user, projectFounderId)) return false;
+  return effectiveInvestorTier(user as InvestorUser) === 'free';
+}
+
+/**
  * The caller's deal-room cap: Infinity for a bypass role.
  *
  * Task #24 — cap is sourced from `users.investor_dealroom_max` (the
@@ -1940,7 +1963,7 @@ const DEALROOM_BYPASS_ROLES = new Set<string>(['admin', 'partner', 'advisor']);
  * disagree about the number.
  */
 function dealroomCap(user: InvestorUser): number {
-  if (DEALROOM_BYPASS_ROLES.has(String(user.role))) return Number.POSITIVE_INFINITY;
+  if (dealroomUncapped(user)) return Number.POSITIVE_INFINITY;
   const colCap = (user as { investor_dealroom_max?: number | null }).investor_dealroom_max;
   const tier = effectiveInvestorTier(user);
   const tierCap = INVESTOR_QUOTAS[tier].dealroom_max;
@@ -1966,7 +1989,7 @@ const DEALROOM_UNLIMITED_AT = 1_000_000;
 deals.post('/:id/dealroom/join', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
   await ensureInvestorPaywallSchema(c.env);
-  const isBypass = DEALROOM_BYPASS_ROLES.has(String(user.role));
+  const isBypass = dealroomUncapped(user);
   if (!holdsLicence(user, 'investor') && !isBypass) {
     return c.json({ error: 'investor_only' }, 403);
   }

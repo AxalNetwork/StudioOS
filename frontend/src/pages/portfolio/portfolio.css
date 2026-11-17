@@ -21,6 +21,8 @@
 .pf-btn:hover,.pf-btn:focus-visible{border-color:var(--pf-vi);color:var(--pf-vt)}
 .pf-btn.is-primary{background:var(--pf-vi);border-color:var(--pf-vi);color:#fff}
 .pf-btn.is-primary:hover,.pf-btn.is-primary:focus-visible{color:#fff;filter:brightness(1.08)}
+/* D4818: white on the dark violet (#a78bfa) is 2.7:1; dark ink on it is 7:1, as writeFlow.css's primary. */
+.dark .pf-btn.is-primary,.dark .pf-btn.is-primary:hover,.dark .pf-btn.is-primary:focus-visible{color:#0f0e17}
 .pf-btn.is-quiet{border-color:transparent;background:transparent;color:var(--pf-vt);padding:0 4px}
 .pf-link-button{border:0;background:none;padding:0;color:var(--pf-vt);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
 .pf-card{background:var(--pf-card);border:1px solid var(--pf-hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
@@ -163,6 +165,9 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
 .pf-counts>.pf-metric:last-child{border-right:0}
 .pf-toolbar{padding:0 14px}
 .pf-mark-open{font:600 11.5px var(--font-mono)}
+/* D4818: the mark date and Request… sit side by side in one cell; each is a 24px target at every width (WCAG 2.5.8), 44px on a phone. */
+.pf-mark-open,.pf-request-link{min-height:24px;min-width:24px;display:inline-flex;align-items:center}
+.pf-request-link{margin-left:6px}
 .pf-table tr.pf-total th,.pf-table tr.pf-total td{background:var(--pf-raised);font-weight:800;border-bottom:0}
 .pf-table tr.pf-total td.pf-total-note{font-weight:500;font-size:11.5px;color:var(--pf-mu);white-space:normal}
 .pf-register thead th,.pf-register tbody th,.pf-register td{padding-left:6px;padding-right:6px}
@@ -257,3 +262,5 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
   .pf-obligations td.pf-row-actions .pf-btn+.pf-btn{margin-left:0}
   .pf-obligations td[data-label="Due"]{max-width:none}
 }
+/* D6204: an obligation past its due date, by the Worker's date. */
+.pf-late-text{color:var(--pf-neg);font-weight:700;display:block}
