@@ -21,6 +21,7 @@ import {
 } from './fundReportBuild';
 import { cashSummaryFigures, connectedEntities, fundUnmatchedCount } from './fundCashSummary';
 import { statementFor } from './fundFees';
+import { deployedAndSectors } from './fundSnapshotFigures';
 
 export const DRAFT_KINDS = ['entity_cash_monthly', 'lp_capital_statement', 'lp_quarterly_report', 'mgmt_fee_statement'] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
@@ -182,7 +183,7 @@ async function composePack(
       corrects_draft_id: corrects.get(subject) ?? null, built_by: actor });
   }
   const report = reportFigures(fund, p, lps.length, totals, figures, rows.map((r) => ({ uid: r.uid, figures_sha256: r.figures_sha256 })),
-    await fundUnmatchedCount(env, fund.id, p));
+    await fundUnmatchedCount(env, fund.id, p), await deployedAndSectors(env, fund.id));
   const json = JSON.stringify(report);
   const subject = `fund:${fund.id}`;
   rows.push({ uid: newUid(), kind: 'lp_quarterly_report', audience: 'fund_lps', subject_key: subject, fund_id: fund.id, limited_partner_id: null,

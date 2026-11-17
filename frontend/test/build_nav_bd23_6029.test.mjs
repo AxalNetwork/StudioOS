@@ -46,7 +46,7 @@ test('each Build module has its BD23 outcome line, and no module page draws the 
     assert.ok(out.includes(BUILD_OUTCOMES[slug]), `${name} shows its outcome`);
     assert.ok(!out.includes(OLD), `${name} no longer says the tabs above move between modules`);
   }
-  assert.match(read('frontend/src/pages/cycles/PhoneModulePage.jsx'), /sub=\{sub !== undefined \? \(sub \|\| undefined\) : \(meta\.key === 'build' && buildOutcome\(slug\)\) \|\| card\?\.caption \|\| undefined\}/, 'the phone module bar says it too');
+  assert.match(read('frontend/src/pages/cycles/PhoneModulePage.jsx'), /sub=\{sub !== undefined \? \(sub \|\| undefined\) : owned \? owned\.sub : \(meta\.key === 'build' && buildOutcome\(slug\)\) \|\| card\?\.caption \|\| undefined\}/, 'the phone module bar says it too (after a tool-owned page\'s own line, D5081)');
 });
 
 test('Build draws no desktop tab row; its below-1024px picker lists Overview, Plan, Progress, Tools, then the modules', () => {

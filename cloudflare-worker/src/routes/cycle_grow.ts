@@ -69,6 +69,10 @@
  * module still loads. A support session is refused; the logs carry counts only.
  *   POST   /tiktok/sync                            { project } the member whose TikTok serves the venture (the first sync links it)
  *   DELETE /tiktok/facts/:id?project=&kind=account|video  a writer; it stays deleted
+ * D5864 (#5864, part 2b): "Add TikTok as a channel", carried in Distribution's
+ * `parts.from_tiktok.proposal`. Accept creates the channel through `addChannel`.
+ *   POST   /tiktok/proposals/:id/accept            { project } the venture's founder only
+ *   POST   /tiktok/proposals/:id/dismiss           { project } the venture's founder only; final
  * D5859 (#5859, part 2a of #2399): a linked Facebook Page. Distribution's and
  * Revenue and traction's reads carry `parts.from_facebook` (`services/facebook/grow.ts`),
  * for anyone who may read the module; a failed read is `unreadable` and the module
@@ -129,7 +133,10 @@ import {
   dismissChannelProposal, linkOf as beehiivLinkOf, linkPublication, syncBeehiiv, unlinkPublication, type BeehiivSlug,
 } from '../services/beehiiv/grow';
 import { TikTokReadError, grantedScopes, tiktokReadsFor } from '../services/tiktok/client';
-import { SENTENCES as TIKTOK_SENTENCES, TIKTOK_SLUGS, claimVenture, deleteTikTokRow, linkOf as tiktokLinkOf, syncTikTok, tiktokPart as tiktokModulePart, type TikTokSlug } from '../services/tiktok/grow';
+import {
+  CHANNEL_NAME as TIKTOK_CHANNEL_NAME, CHANNEL_UTM as TIKTOK_CHANNEL_UTM, SENTENCES as TIKTOK_SENTENCES, TIKTOK_SLUGS, acceptTikTokProposal, claimVenture,
+  deleteTikTokRow, dismissTikTokProposal, linkOf as tiktokLinkOf, syncTikTok, tiktokPart as tiktokModulePart, type TikTokSlug,
+} from '../services/tiktok/grow';
 import { facebookPageGrants } from '../integrations/providers/facebook';
 import { facebookReads } from '../services/facebook/insights';
 import {
@@ -901,7 +908,7 @@ r.delete('/beehiiv/posts/:id', deleteBeehiiv('beehiiv_post_stats'));
 async function tiktokPart(c: C, user: User, pid: number, slug: string): Promise<{ from_tiktok?: unknown }> {
   if (!(TIKTOK_SLUGS as readonly string[]).includes(slug)) return {};
   try {
-    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid) };
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid), founder: await isVentureFounder(c.env, user, pid) };
     return { from_tiktok: await tiktokModulePart(c.env, pid, slug as TikTokSlug, viewer) };
   } catch (e) {
     console.error('[cycle_grow] tiktok part unreadable:', slug, (e as Error).name);
@@ -928,6 +935,10 @@ export const TIKTOK_REFUSALS: Record<string, string> = {
   tiktok_unreadable: 'TikTok could not be read. Nothing changed; try again.',
   bad_kind: 'Say which TikTok figure: kind=account or kind=video.',
   fact_not_found: 'That figure is not on this venture.',
+  not_founder: 'Only the venture’s founder decides what TikTok proposes.',
+  proposal_not_found: 'That proposal is not on this venture.',
+  proposal_decided: 'That proposal was already decided.',
+  channel_exists: 'This venture already has a channel with utm_source tiktok.',
 };
 
 const tiktokReadRefusal = (e: TikTokReadError): TikTokRefused =>
@@ -963,7 +974,7 @@ r.post('/tiktok/sync', tiktok(async (c, user) => {
   });
   await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(row.id).run();
   await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_tiktok_synced',
-    summary: `Grow synced from TikTok: ${counts.snapshots} snapshot, ${counts.videos} videos, ${counts.kept_deleted} kept deleted${counts.partial ? ', partly synced' : ''}` });
+    summary: `Grow synced from TikTok: ${counts.snapshots} snapshot, ${counts.videos} videos, ${counts.kept_deleted} kept deleted, ${counts.proposals} proposal${counts.partial ? ', partly synced' : ''}` });
   return c.json({ ok: true, counts });
 }));
 
@@ -977,6 +988,39 @@ r.delete('/tiktok/facts/:id', tiktok(async (c, user) => {
   await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: kind === 'account' ? 'grow_tiktok_snapshot_deleted' : 'grow_tiktok_video_deleted',
     summary: kind === 'account' ? 'TikTok audience snapshot deleted' : 'TikTok video figures deleted' });
   return c.json({ ok: true, id });
+}));
+
+// ── D5864 (#5864, part 2b of #2401): "Add TikTok as a channel" ─────────────
+
+const TIKTOK_DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'proposal_not_found'], decided: [409, 'proposal_decided'], channel_exists: [409, 'channel_exists'],
+};
+
+/** The venture's founder, writing, deciding proposal `:id`. A support session is already refused by `tiktok`. */
+async function tiktokDecision(c: C, user: User): Promise<{ pid: number; id: number }> {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  if (!(await isVentureFounder(c.env, user, pid))) throw new TikTokRefused(403, 'not_founder');
+  const id = Number(param(c, 'id'));
+  if (!Number.isSafeInteger(id) || id <= 0) throw new TikTokRefused(404, 'proposal_not_found');
+  return { pid, id };
+}
+
+r.post('/tiktok/proposals/:id/accept', tiktok(async (c, user) => {
+  const { pid, id } = await tiktokDecision(c, user);
+  // The existing channel writer, as POST /channels calls it: no second writer of growth_channels.
+  const create = async () => (await addChannel(c.env, pid, user, { name: TIKTOK_CHANNEL_NAME, utm_source: TIKTOK_CHANNEL_UTM, kind: 'organic' })).uid;
+  const out = await acceptTikTokProposal(c.env, pid, id, user.id, create);
+  if (out !== 'ok') throw new TikTokRefused(...TIKTOK_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id, action: 'grow_tiktok_channel_accepted', summary: 'TikTok channel proposal accepted: 1 channel added' });
+  return c.json({ ok: true, id, state: 'accepted' });
+}));
+r.post('/tiktok/proposals/:id/dismiss', tiktok(async (c, user) => {
+  const { pid, id } = await tiktokDecision(c, user);
+  const out = await dismissTikTokProposal(c.env, pid, id, user.id);
+  if (out !== 'ok') throw new TikTokRefused(...TIKTOK_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id, action: 'grow_tiktok_channel_dismissed', summary: 'TikTok channel proposal dismissed' });
+  return c.json({ ok: true, id, state: 'dismissed' });
 }));
 
 // ── D1095 (#2960): From Google — a metrics Sheet into Revenue and traction, tagged Calendar events into Durable company-building.
