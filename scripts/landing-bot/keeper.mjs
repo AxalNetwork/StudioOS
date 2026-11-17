@@ -39,6 +39,7 @@ export function client({ repo, token, fetchImpl = fetch }) {
     post: (p, b) => call('POST', r(p), b),
     patch: (p, b) => call('PATCH', r(p), b),
     put: (p, b) => call('PUT', r(p), b),
+    del: (p) => call('DELETE', r(p)),
     graph: async (query, variables) => {
       const [owner, name] = repo.split('/');
       const d = await call('POST', 'graphql', { query, variables: { owner, name, ...variables } });
@@ -81,7 +82,7 @@ export async function openPrs(gh) {
   throw new Error('more open PRs than one sweep reads');
 }
 
-async function pages(gh, path, max = 3) {
+export async function pages(gh, path, max = 3) {
   const out = [];
   for (let p = 1; p <= max; p++) {
     const rows = await gh.get(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${p}`);
@@ -138,7 +139,7 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
   return { act, skipped: result.skipped };
 }
 
-async function upsertSticky(gh, number, botLogin, lines) {
+export async function upsertSticky(gh, number, botLogin, lines) {
   const comments = await pages(gh, `issues/${number}/comments`, 5);
   const mine = stickyComment(comments, botLogin);
   const body = renderSticky(lines);
@@ -147,7 +148,7 @@ async function upsertSticky(gh, number, botLogin, lines) {
 }
 
 /** Push HEAD to the PR's branch: a normal push, never forced. The token goes in a header, never in a URL or log. */
-function push(dir, repo, token, ref) {
+export function push(dir, repo, token, ref) {
   const git = gitIn(dir);
   const header = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
   const r = git(['-c', `http.https://github.com/.extraheader=${header}`, 'push', '--no-verify', `https://github.com/${repo}.git`, `HEAD:refs/heads/${ref}`], { allowFail: true });

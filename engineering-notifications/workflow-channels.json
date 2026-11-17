@@ -138,6 +138,11 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/landing-bot-conflict.yml",
+      "channel": "#axalvc-actions-landing-bot-conflict"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/landing-bot-ejection.yml",
       "channel": "#axalvc-actions-landing-bot-ejection"
     },
@@ -145,6 +150,16 @@
       "id": null,
       "path": ".github/workflows/landing-bot-keeper.yml",
       "channel": "#axalvc-actions-landing-bot-keeper"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-model-round.yml",
+      "channel": "#axalvc-actions-landing-bot-model-round"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-model.yml",
+      "channel": "#axalvc-actions-landing-bot-model"
     },
     {
       "id": null,
