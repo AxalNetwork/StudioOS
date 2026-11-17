@@ -63,7 +63,7 @@ function fake() {
         assert.doesNotMatch(JSON.stringify(data), /PRIVATE|sensitive finding|private|closes|fixes #/i)
         assert.match(data.body, /Tracking issue #17/)
         assert.ok(data.body.includes('https://github.com/AxalNetwork/StudioOS/security/code-scanning/42'))
-        const pr = { number: 55, state: 'open', ...data, head: { ref: data.head, repo: { full_name: 'AxalNetwork/StudioOS' } },
+        const pr = { number: 55, state: 'open', ...data, head: { ref: data.head, repo: { full_name: 'AxalNetwork/StudioOS' } }, base: { ref: data.base },
           user: { login: 'github-actions[bot]' }, labels: [] }
         api.pulls.push(pr)
         return pr
@@ -118,12 +118,31 @@ test('preserves operator work and declined PRs; a fork cannot impersonate either
     assert.deepEqual(api.calls.filter(c => c.method !== 'GET'), [])
   }
   const api = fake()
-  api.pulls.push({ number: 7, state: 'closed', head: { ref: prepared, repo: { full_name: 'AxalNetwork/StudioOS' } } })
-  assert.deepEqual(await prepareFix(api, ctx), { status: 'prior_pr', prNumber: 7 })
-  api.pulls[0].state = 'open'
+  api.pulls.push({ number: 7, state: 'open', head: { ref: prepared, repo: { full_name: 'AxalNetwork/StudioOS' } }, base: { ref: 'main' } })
   assert.deepEqual(await prepareFix(api, ctx), { status: 'existing_pr', prNumber: 7 })
   api.pulls[0].head.repo.full_name = 'outside/StudioOS'
   assert.deepEqual(await prepareFix(api, ctx), { status: 'pull_request', prNumber: 55 })
+})
+
+// S21, 2026-11-17 audit: PR matching.
+test('a PR into another branch, or a closed unmerged PR, never stands in for a fix on main', async () => {
+  // Into staging: fixes nothing on main, so a draft into main is still made.
+  let api = fake()
+  api.pulls.push({ number: 7, state: 'open', head: { ref: prepared, repo: { full_name: 'AxalNetwork/StudioOS' } }, base: { ref: 'staging' } })
+  assert.deepEqual(await prepareFix(api, ctx), { status: 'pull_request', prNumber: 55 })
+  assert.equal(api.calls.find(c => c.method === 'POST' && c.path === '/pulls').data.base, 'main')
+  // Closed without merging: the tracker records a person's decision, so an old PR does not block a replacement.
+  api = fake()
+  api.pulls.push({ number: 8, state: 'closed', merged_at: null, head: { ref: generated, repo: { full_name: 'AxalNetwork/StudioOS' } }, base: { ref: 'main' } })
+  assert.deepEqual(await prepareFix(api, ctx), { status: 'pull_request', prNumber: 55 })
+  // Merged into main: wait for the scan, generate nothing.
+  api = fake()
+  api.pulls.push({ number: 9, state: 'closed', merged_at: '2026-11-17T10:00:00Z', head: { ref: prepared, repo: { full_name: 'AxalNetwork/StudioOS' } }, base: { ref: 'main' } })
+  assert.deepEqual(await prepareFix(api, ctx), { status: 'merged_pr', prNumber: 9 })
+  assert.deepEqual(api.calls.filter(c => c.method !== 'GET'), [])
+  // An open PR wins over a merged one on the other branch name.
+  api.pulls.push({ number: 10, state: 'open', head: { ref: generated, repo: { full_name: 'AxalNetwork/StudioOS' } }, base: { ref: 'main' } })
+  assert.deepEqual(await prepareFix(api, ctx), { status: 'existing_pr', prNumber: 10 })
 })
 
 test('a concurrent push wins over the non-forced prepared branch update', async () => {

@@ -253,6 +253,11 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/scan-remediation-model.yml",
+      "channel": "#axalvc-actions-scan-remediation-model"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/scan-remediation.yml",
       "channel": "#axalvc-actions-scan-remediation"
     },

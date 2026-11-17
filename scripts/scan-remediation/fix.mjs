@@ -36,22 +36,29 @@ function managedPatch(comparison, head, message, botLogin) {
     commit.commit?.verification?.verified === true
 }
 
+/**
+ * The PR that already carries this alert's fix, if any. S21 (2026-11-17 audit): only a PR into the default branch
+ * counts (one into `staging` fixes nothing on main), and a closed, unmerged PR never blocks a replacement: the
+ * tracker, not an old PR, records a person's decision. An open PR wins; else a merged one, which waits on the scan.
+ */
 async function findPull(api, ctx, branches) {
-  const { owner, repo } = ctx
+  const { owner, repo, defaultBranch } = ctx
   const found = []
   for (const branch of branches) {
     const query = new URLSearchParams({ head: owner + ':' + branch, state: 'all', per_page: '100' })
     const pulls = await api.request('GET', '/pulls?' + query)
     for (const pr of pulls) {
-      if (pr.head?.ref === branch && pr.head.repo?.full_name?.toLowerCase() === (owner + '/' + repo).toLowerCase()) found.push(pr)
+      if (pr.head?.ref === branch && pr.head.repo?.full_name?.toLowerCase() === (owner + '/' + repo).toLowerCase() &&
+        pr.base?.ref === defaultBranch) found.push(pr)
     }
   }
-  return found.find(pr => pr.state === 'open') ?? found[0]
+  return found.find(pr => pr.state === 'open') ?? found.find(pr => pr.merged_at)
 }
 
 async function pullResult(api, pr, marker, botLogin, newlyCreated = false) {
   if (!positiveId(pr.number)) throw Error('Invalid pull request response')
-  if (pr.state !== 'open') return { status: 'prior_pr', prNumber: pr.number }
+  // Merged into main and the alert is still open: the next main scan decides; nothing new is generated meanwhile.
+  if (pr.state !== 'open') return { status: 'merged_pr', prNumber: pr.number }
   if (newlyCreated || (isPublisher(pr.user?.login, botLogin) && pr.body?.split('\n').includes(marker))) {
     if (!pr.labels?.some(label => label.name === 'security-scan')) {
       await api.request('POST', '/issues/' + pr.number + '/labels', { labels: ['security-scan'] })

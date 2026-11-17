@@ -130,3 +130,36 @@ test('only the exact pull-creation policy response allows a manual PR handoff', 
   message = 'Resource not accessible by integration';
   await assert.rejects(api.request('POST','/pulls',{}), {status:403,prCreationDisabled:false});
 });
+
+// S21, 2026-11-17 audit: the model fallback's candidates, and the scan time passed to the trackers.
+test('alerts no Autofix can fix are offered to the model fallback, bounded, and only when asked', async () => {
+  const semgrep = n => ({ ...alert(n), tool: { name: 'Semgrep OSS' } });
+  // Off by default: nothing is offered.
+  let f = fixture([semgrep(1), alert(2)]);
+  let modelCandidates = [];
+  await f.run({ modelCandidates });
+  assert.deepEqual(modelCandidates, []);
+  // On, with a limit of 2: a Semgrep alert and a CodeQL alert whose Autofix is 'manual'.
+  f = fixture([semgrep(1), alert(2), semgrep(3)]);
+  modelCandidates = [];
+  await f.run({ modelCandidates, modelLimit: 2 });
+  assert.deepEqual(modelCandidates, [1, 2]);
+  // A CodeQL alert whose Autofix made a PR, or whose branch holds work, is not offered.
+  for (const fix of ['pull_request', 'existing_work', 'merged_pr']) {
+    f = fixture([alert(4)], { fix });
+    modelCandidates = [];
+    await f.run({ modelCandidates, modelLimit: 5 });
+    assert.deepEqual(modelCandidates, [], fix);
+  }
+  // A claimed alert (tracker not actionable) is not offered.
+  f = fixture([semgrep(5)], { claimed: [5] });
+  modelCandidates = [];
+  await f.run({ modelCandidates, modelLimit: 5 });
+  assert.deepEqual(modelCandidates, []);
+});
+
+test('a merged fix PR keeps its tracker linked while the scan decides', async () => {
+  const f = fixture([alert(6)], { fix: 'merged_pr' });
+  await f.run();
+  assert.deepEqual(f.calls, [['ensure', 6], ['proposed', 6], ['linked', 506, 77]]);
+});

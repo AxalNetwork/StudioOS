@@ -53,7 +53,12 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
     return fresh
   }
 
-  async function ensure(number) {
+  /**
+   * @param number the alert; @param scannedAt the ISO time of the latest default-branch analysis that still
+   * reports it open (S21, 2026-11-17 audit). A tracker a person closed as completed before that scan is reopened,
+   * once, with a comment saying why. One closed as not planned stays closed: that is a decision, not a fix.
+   */
+  async function ensure(number, { scannedAt } = {}) {
     if (!validNumber(number)) throw Error('Invalid alert number')
     if (!byAlert.has(number)) {
       // Includes old trackers whose bug label was removed. An alert-specific query
@@ -68,6 +73,19 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
       const issue = await current(matches[0], number)
       if (!issue) return hold(null)
       if (issue.state === 'closed') {
+        const scanned = Date.parse(scannedAt ?? '')
+        const closedAt = Date.parse(issue.closed_at ?? '')
+        const stillFound = Number.isFinite(scanned) && Number.isFinite(closedAt) && scanned > closedAt
+        if (issue.state_reason === 'completed' && !bots.has(login(issue.closed_by?.login)) && stillFound &&
+          await unclaimed(issue, true)) {
+          const reopened = await api.request('PATCH', '/issues/' + issue.number, { state: 'open' })
+          remember(reopened)
+          await commentOnce('/issues/' + issue.number, 'Reopened: the code scan of `' + defaultBranch + '` at ' +
+            new Date(scanned).toISOString() + ' still reports [alert #' + number + '](' + alertUrl(number) + '), after this ' +
+            'tracker was closed as completed. Close it as "not planned" to keep it closed, or dismiss the alert in Code Scanning.')
+          if (names(reopened).includes('state:review')) await removeLabel(reopened, 'state:review')
+          return { issue: reopened, actionable: true, created: false, reopened: true }
+        }
         if (!bots.has(login(issue.closed_by?.login)) || !issue.body.split('\n').includes(marker(number)) ||
           issue.state_reason !== 'completed' || !await unclaimed(issue, true)) return hold(issue)
         const reopened = await api.request('PATCH', '/issues/' + issue.number, { state: 'open' })

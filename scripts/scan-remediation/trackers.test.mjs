@@ -183,3 +183,35 @@ test('a prepared branch receives one safe comparison link and becomes ready when
     assert.equal(f.issues.get(123).state, 'open')
   }
 })
+
+// S21, 2026-11-17 audit: the six trackers a person closed as completed while their alerts stayed open on main.
+test('a tracker closed as completed is reopened once when a later main scan still reports its alert', async () => {
+  const closed = { ...legacy, state: 'closed', state_reason: 'completed', closed_at: '2026-11-13T10:00:00Z', closed_by: { login: 'guillaumelauzier' } }
+  // A scan from before the closure is no evidence: the closure stands.
+  let f = fixture([closed])
+  let trackers = await loadTrackers(f.api, ctx)
+  let r = await trackers.ensure(42, { scannedAt: '2026-11-12T10:00:00Z' })
+  assert.deepEqual([r.actionable, f.writes], [false, []])
+  // A scan after it still finds the alert: reopened, one comment that names the scan and the way to keep it closed.
+  f = fixture([closed])
+  trackers = await loadTrackers(f.api, ctx)
+  r = await trackers.ensure(42, { scannedAt: '2026-11-17T08:00:00Z' })
+  assert.deepEqual([r.actionable, r.reopened, f.issues.get(123).state], [true, true, 'open'])
+  const notes = f.comments.get('/issues/123/comments')
+  assert.equal(notes.length, 1)
+  assert.match(notes[0].body, /2026-11-17T08:00:00\.000Z still reports \[alert #42\]/)
+  assert.match(notes[0].body, /"not planned" to keep it closed/)
+  // A repeat run does not comment again (the tracker is open now).
+  r = await trackers.ensure(42, { scannedAt: '2026-11-17T09:00:00Z' })
+  assert.equal(f.comments.get('/issues/123/comments').length, 1)
+  // Closed as not planned: a decision, kept, whatever the scan says.
+  f = fixture([{ ...closed, state_reason: 'not_planned' }])
+  trackers = await loadTrackers(f.api, ctx)
+  r = await trackers.ensure(42, { scannedAt: '2026-11-17T08:00:00Z' })
+  assert.deepEqual([r.actionable, f.writes], [false, []])
+  // Claimed by a slot: left alone.
+  f = fixture([{ ...closed, labels: [{ name: 'slot:S06' }] }])
+  trackers = await loadTrackers(f.api, ctx)
+  r = await trackers.ensure(42, { scannedAt: '2026-11-17T08:00:00Z' })
+  assert.deepEqual([r.actionable, f.writes], [false, []])
+})

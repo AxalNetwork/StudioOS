@@ -2,3 +2,4 @@
 import '../../scripts/scan-remediation/fix.test.mjs';
 import '../../scripts/scan-remediation/trackers.test.mjs';
 import '../../scripts/scan-remediation/run.test.mjs';
+import '../../scripts/scan-remediation/model.test.mjs';
