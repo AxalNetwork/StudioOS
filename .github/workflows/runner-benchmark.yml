@@ -92,11 +92,16 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: suite-plan
-      # The suite imports React deck templates and the worker's TypeScript, so
-      # it needs both workspaces' dependencies installed.
+      # Every part installs the worker's and the root dependencies. Only the
+      # frontend-* parts and rest install frontend's: they import React deck
+      # templates through the vite loader and run the root SPA build, which
+      # needs vite. The worker-* parts run test:worker alone, which reads
+      # neither frontend/node_modules nor docs/ (D7108,
+      # frontend/test/ci_worker_parts_7108.test.mjs).
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci
+        if: ${{ !startsWith(matrix.part, 'worker') }}
       - name: Install worker deps
         working-directory: cloudflare-worker
         run: npm ci
@@ -111,9 +116,11 @@ jobs:
         run: bash scripts/ci/install-age-linux.sh
       # docs/ is not committed (D529), and part of the suite reads the built
       # SPA (check-docs-assets-closure, the tests that open docs/), so build
-      # it first — the same root build the deploy runs.
+      # it first — the same root build the deploy runs. Those tests are all in
+      # test:frontend and rest; the worker-* parts read no docs/ (D7108).
       - name: Build the SPA
         run: npm run build
+        if: ${{ !startsWith(matrix.part, 'worker') }}
       - name: Check merge queue ref still exists
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
