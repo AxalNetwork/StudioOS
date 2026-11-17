@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
+import { REQUIRED } from '../../scripts/lib/requiredChecks.mjs';
+
 const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 
 function job(id) {
@@ -85,6 +87,60 @@ test('D7108: fast skips only its six duplicated steps in the merge queue', () =>
   assert.throws(() => assertQueueSkips(swap('migrations', plain, queue)));
   assert.throws(() => assertQueueSkips(swap('drift', plain, queue)));
   assert.throws(() => assertQueueSkips(swap('scan', queue, "${{ !cancelled() && github.event_name == 'merge_group' }}")));
+});
+
+// D7108 (#7108): while fast skips those six steps in the queue, `ci / fast`
+// and `landing gate` go green on a candidate whose typecheck, build or secret
+// scan fails; only the separate required jobs check those there. So the
+// D5606 cutover (making `ci / fast` or `landing gate` required, then deleting
+// the duplicate jobs) must first revert the merge_group skips. This fails if
+// either half of the cutover happens while any skip is still present.
+const gitleaksWorkflow = readFileSync(new URL('../../.github/workflows/gitleaks.yml', import.meta.url), 'utf8');
+function jobIn(text, id) {
+  const lines = text.split('\n');
+  const start = lines.indexOf(`  ${id}:`);
+  if (start < 0) return null;
+  const next = lines.findIndex((line, index) => index > start && /^ {2}\S/.test(line));
+  return lines.slice(start, next < 0 ? undefined : next).join('\n') + '\n';
+}
+function assertQueueSkipsCovered({ fastBlock, ciText, gitleaksText, required }) {
+  const ifs = fastStepIfs(fastBlock);
+  const skipped = QUEUE_SKIPPED.filter((id) => /merge_group/.test(ifs[id] ?? ''));
+  if (skipped.length === 0) return;
+  for (const shadow of ['ci / fast', 'landing gate']) {
+    assert.ok(!(shadow in required),
+      `${shadow} is required while fast skips ${skipped.join(', ')} under merge_group: revert the D7108 skips first`);
+  }
+  for (const context of ['worker (typecheck)', 'frontend (build)', 'scan']) {
+    assert.ok(context in required, `${context} left the required set while fast skips it in the queue`);
+  }
+  for (const [text, id, name, commands] of [
+    [ciText, 'frontend', 'frontend (build)', ['- run: npm ci', '- run: npm run build']],
+    [ciText, 'worker', 'worker (typecheck)', ['- run: npm ci', 'run: npx --no-install tsc --noEmit']],
+    [gitleaksText, 'scan', 'scan', ['gitleaks detect']],
+  ]) {
+    const block = jobIn(text, id);
+    assert.ok(block, `the duplicate ${name} job was removed while fast skips it in the queue`);
+    assert.match(block, new RegExp(`^    name: ${name.replace(/[()]/g, '\\$&')}$`, 'm'));
+    assert.doesNotMatch(block, /^    if:/m, `${name} must run on every candidate`);
+    for (const command of commands) assert.ok(block.includes(command), `${name} still runs ${command}`);
+  }
+}
+
+test('D7108: the queue skips stay covered by the required jobs until they are reverted', () => {
+  const live = { fastBlock: fast, ciText: workflow, gitleaksText: gitleaksWorkflow, required: REQUIRED };
+  assertQueueSkipsCovered(live);
+  // Mutations that must be caught: either cutover half while the skips remain.
+  assert.throws(() => assertQueueSkipsCovered({ ...live, required: { ...REQUIRED, 'landing gate': 'ci.yml' } }));
+  assert.throws(() => assertQueueSkipsCovered({ ...live, required: { ...REQUIRED, 'ci / fast': 'ci.yml' } }));
+  const { 'worker (typecheck)': _w, ...withoutWorker } = REQUIRED;
+  assert.throws(() => assertQueueSkipsCovered({ ...live, required: withoutWorker }));
+  assert.throws(() => assertQueueSkipsCovered({ ...live, ciText: workflow.replace('  frontend:\n', '  frontend-old:\n') }));
+  assert.throws(() => assertQueueSkipsCovered({ ...live, ciText: workflow.replace('    name: worker (typecheck)\n', "    name: worker (typecheck)\n    if: github.event_name != 'merge_group'\n") }));
+  assert.throws(() => assertQueueSkipsCovered({ ...live, gitleaksText: gitleaksWorkflow.replace('  scan:\n', '  scan-old:\n') }));
+  // With every skip reverted, the cutover is allowed.
+  const reverted = fast.replaceAll(" && github.event_name != 'merge_group'", '');
+  assertQueueSkipsCovered({ ...live, fastBlock: reverted, required: { ...REQUIRED, 'landing gate': 'ci.yml' } });
 });
 
 const verdict = shell(fast, 'Report required and advisory results');
