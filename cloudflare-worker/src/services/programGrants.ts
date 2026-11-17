@@ -95,6 +95,16 @@ export const termsFor = (programKey: string) => TERM_FIELDS
 export type Terms = Record<string, string | number | null>;
 export type TermError = { field: string; message: string };
 
+/** Shared grant insertion for the single-program and atomic package paths (#5024). */
+export function insertGrantStatement(env: Env, o: {
+  uid: string; licenceId: number; programKey: string; terms: Terms; note: string | null; actorId: number; at: string;
+}): D1PreparedStatement {
+  return env.DB.prepare(`INSERT INTO program_grants
+    (uid, licence_id, program_key, state, starts_on, ends_on, ends_with_licence, capacity_cap, capacity_uncapped, cohorts_per_year, credits_per_quarter, fee_cents, currency, hq_share_bps, hq_approves_each_cohort, hq_approval_above_cents, playbook, brand, reporting, requires_signed_schedule, note, set_by_user_id, set_at)
+    VALUES (?, ?, ?, 'granted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(o.uid, o.licenceId, o.programKey, ...TERM_KEYS.map((k) => o.terms[k] ?? null), o.note, o.actorId, o.at);
+}
+
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 function one(f: (typeof TERM_FIELDS)[number], v: unknown): { ok: true; value: string | number | null } | { ok: false; message: string } {
   if (v === null) return { ok: true, value: null };

@@ -8,7 +8,9 @@
  *   POST /:id/filed           → { filed_on: 'YYYY-MM-DD' } — the date it was filed with the state
  *
  * Nothing here assembles a packet or files with a state; it records what an
- * admin did (services/incorporationFiling.ts).
+ * admin did (services/incorporationFiling.ts). D6686: each step is a
+ * transition of the order's formation case, and a v2 case answers 409
+ * `case_not_legacy`; URL, body and response are unchanged.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -29,6 +31,7 @@ r.post('/:id/packet-ready', async (c) => {
   const admin = await requireAdmin(c);
   const id = Number(c.req.param('id'));
   const body = (await c.req.json().catch(() => ({}))) as { document_id?: unknown };
+  // D6686 part 2: one log per step, this route's own (the owner's answer); the service is not handed the email.
   const out = await markPacketReady(c.env, id, body.document_id, admin.id);
   if (!out.ok) return c.json({ error: out.error }, out.status);
   await logAdminAction(c.env, admin.id, admin.email, 'incorporation_packet_ready', {

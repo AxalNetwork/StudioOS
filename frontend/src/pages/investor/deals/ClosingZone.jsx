@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { investorZoneActions } from '../../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../../workspaces/investorZoneFilters';
@@ -9,12 +9,27 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
 import { ZoneBody, NothingYet, StatedLimit } from '../../advisor/expertise/kit';
 import { SearchInput } from '../../advisor/network/kit';
 import { dealStage, dealMoneyExact } from '../../../lib/dealFlow';
+import {
+  LOADING, UNREADABLE, ready, closingRows, closingKpis, paperWord, figureWord,
+  EMPTY_TITLE, EMPTY_BODY, WAITS_ON_OVERVIEW,
+} from './closingListModel';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { exportView } from '../../../lib/csvExport';
 import FromMercury from '../FromMercury';
+import ClosingWorkspace from './ClosingWorkspace';
 
 /**
  * Deals · Closing — canvas **ID4**, `/deals/closing`. COLLECTION.
+ *
+ * DEALS V2 (D4815 part 8, #5911, canvas DX8, board DE08 A): the page is a
+ * deal-first list now. The strip is the canvas's five figures (Deals at
+ * closing, Paper executed, Signatures outstanding, Blocking conditions,
+ * Transfers recorded) and the list has one row per deal at closing, with its
+ * investment, closing progress, signatures outstanding, open conditions,
+ * transfer state and Open. Both come from `closingListModel.js`, the one
+ * place that joins the reads below, so moving to `GET
+ * /api/deals/closing-overview` (#6157) changes that file only. Paper reads
+ * in the agreement lifecycle's words: a completed envelope is Executed.
  *
  * WHAT WAS HERE: three hard-coded rows with a tick and two circles — "Deal
  * reached closing · Recorded", "Signatures and documents · Check deal room",
@@ -58,17 +73,85 @@ import FromMercury from '../FromMercury';
 
 const UNAVAILABLE = Symbol('unavailable');
 
+/**
+ * A figure from the model, in words: recorded is its text; unreadable says
+ * Unreadable (never 0); loading says Reading…; unrecorded says Not recorded.
+ */
+function FigureText({ figure, className = '' }) {
+  if (figure.state === 'recorded') return <span className={className}>{figure.text}</span>;
+  if (figure.state === 'unreadable') {
+    return <span className={`font-semibold text-red-700 dark:text-red-300 ${className}`} title={figure.reason || undefined}>Unreadable</span>;
+  }
+  if (figure.state === 'loading') return <span className="text-gray-500 dark:text-gray-400">Reading…</span>;
+  return <NotRecorded />;
+}
+
 /** The strip tile, in the anatomy every artboard shares. */
-function CloseTile({ label, value, note, tone = '' }) {
+export function KpiTile({ kpi }) {
   return (
-    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-      <Eyebrow>{label}</Eyebrow>
-      <div className="mt-1.5">
-        {value === null
-          ? <NotRecorded />
-          : <span className={`font-mono text-[16px] font-extrabold tracking-tight ${tone || 'text-axal-ink dark:text-gray-100'}`}>{value}</span>}
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900" data-testid={`closing-kpi-${kpi.key}`}>
+      <Eyebrow>{kpi.label}</Eyebrow>
+      <div className="mt-1.5 font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">
+        <FigureText figure={kpi} />
       </div>
-      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+      {kpi.reason ? <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{kpi.reason}</div> : null}
+    </div>
+  );
+}
+
+/** One count on a deal row: the figure, then what it counts. */
+function DealFraction({ figure, one, many, testid }) {
+  const word = figure.state === 'recorded' && figure.value === 1 ? one : many;
+  return (
+    <div className="flex items-baseline gap-1.5 md:flex-col md:items-start md:gap-0" data-testid={testid}>
+      <b className="font-mono text-[15px] text-axal-ink dark:text-gray-100"><FigureText figure={figure} /></b>
+      <small className="text-[10.5px] text-gray-600 dark:text-gray-400">{word}</small>
+    </div>
+  );
+}
+
+/** The transaction tag: a teal-edged tag, the canvas's Transaction family. */
+function TransferTag({ figure, testid }) {
+  return (
+    <span
+      className="inline-flex items-center whitespace-nowrap rounded-[4px] border border-l-[3px] border-gray-200 border-l-teal-600 bg-white px-2 py-0.5 text-[10.5px] font-semibold text-gray-800 dark:border-gray-700 dark:border-l-teal-400 dark:bg-gray-900 dark:text-gray-200"
+      data-testid={testid}
+    >
+      <FigureText figure={figure} />
+    </span>
+  );
+}
+
+/** One deal at closing (DE08 A): investment and progress, the two counts, the transfer tag, Open. */
+export function ClosingDealRow({ row, onOpen }) {
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-[10px] border border-axal-hairline bg-white p-3.5 dark:border-gray-800 dark:bg-gray-900 md:flex-row md:items-center md:gap-5"
+      data-testid={`closing-deal-${row.id}`}
+    >
+      <div className="min-w-0 flex-1">
+        <b className="text-[14px] text-axal-ink dark:text-gray-100">{row.name}</b>
+        <div className="mt-0.5 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid={`closing-deal-${row.id}-line`}>
+          {row.investment.state === 'recorded'
+            ? <span>{row.investment.text} investment</span>
+            : <span>Investment <FigureText figure={row.investment} /></span>}
+          {' · closing progress '}
+          <FigureText figure={row.progress} />
+          {row.progress.state === 'unrecorded' && row.progress.reason ? <span> ({row.progress.reason})</span> : null}
+        </div>
+      </div>
+      <DealFraction figure={row.signatures} one="signature outstanding" many="signatures outstanding" testid={`closing-deal-${row.id}-signatures`} />
+      <DealFraction figure={row.conditions} one="open condition" many="open conditions" testid={`closing-deal-${row.id}-conditions`} />
+      <TransferTag figure={row.transfer} testid={`closing-deal-${row.id}-transfer`} />
+      <button
+        type="button"
+        onClick={() => onOpen(row.href)}
+        data-testid={`button-open-closing-${row.id}`}
+        aria-label={`Open ${row.name}`}
+        className="min-h-[44px] self-start rounded-[7px] bg-axal-violet-deep px-4 py-1.5 text-[11.5px] font-bold text-white hover:bg-axal-violet dark:bg-violet-500 dark:text-white dark:hover:bg-violet-400 md:min-h-0 md:self-center"
+      >
+        Open
+      </button>
     </div>
   );
 }
@@ -113,6 +196,11 @@ const ITEM_STATE_CLASS = {
 export default function InvestorClosingZone() {
   const navigate = useNavigate();
   const { user } = useAuth() || {};
+  // D6866: `?deal=<id>` opens that deal's closing workspace (DX17 to DX22) in place of the list.
+  const [params, setParams] = useSearchParams();
+  const workspaceDeal = Number(params.get('deal')) || null;
+  // Bumped after a transfer is recorded, so the workspace reads its tabs again.
+  const [workspaceKey, setWorkspaceKey] = useState(0);
   const [deals, setDeals] = useState(null);
   const [envelopes, setEnvelopes] = useState(null);
   const [conditions, setConditions] = useState(null);
@@ -162,31 +250,29 @@ export default function InvestorClosingZone() {
   // an investor, so the page must not offer them one.
   const canOperate = user?.role === 'admin' || user?.role === 'partner';
   /**
-   * THE THIRD FLAG, AND THE REASON THE OTHER TWO ARE NOT ENOUGH.
-   *
-   * This strip is a JOIN. `rows` is the envelopes filtered against the closing
-   * deals, so it needs BOTH reads; and `rows` collapses to `[]` when either one
-   * is missing. A tile gated on only its own source therefore prints a zero it
-   * cannot know: with the deal record unreadable, "Executed" rendered "0 of 0"
-   * and "Awaiting" rendered "0" — stated as fact, under a sentence explaining
-   * what the figure means. With the signature archive unreadable, "At closing"
-   * said "0 documents raised against them".
-   *
-   * `bothFailed` below only catches the case where BOTH reads fail, which is
-   * the case a reader would notice anyway. One failed read was the quiet one.
+   * THE PACKET IS A JOIN: it indexes envelopes against the deals at closing,
+   * so it needs both reads. The strip's own joins are the model's
+   * (`closingKpis`), which names whichever read is missing.
    */
   const joinedReady = dealsReady && envReady;
+
   /**
-   * WHICH read is missing — because "unreadable" on its own sends a reader to
-   * refresh the wrong thing. The both-failed wording is kept correct even
-   * though `bothFailed` replaces the whole strip before it can render, so this
-   * stays true if that short-circuit ever moves.
+   * THE MODEL'S READS. Each list is LOADING, UNREADABLE or `ready(items)`;
+   * `checklists` maps a deal id to its checklist (undefined while it is read,
+   * UNREADABLE when it failed, null when none is applied). This is the one
+   * hand-off to `closingListModel.js`: when `GET /api/deals/closing-overview`
+   * (#6157) lands, these reads become that one.
    */
-  const missingRead = dealsReady
-    ? 'the signature archive could not be read, so nothing can be counted against these deals'
-    : (envReady
-      ? 'the deal record could not be read, so there is nothing to count envelopes against'
-      : 'neither the deal record nor the signature archive could be read');
+  const reads = useMemo(() => {
+    const asRead = (v) => (v === null ? LOADING : v === UNAVAILABLE ? UNREADABLE : ready(v));
+    return { deals: asRead(deals), envelopes: asRead(envelopes), conditions: asRead(conditions), transfers: asRead(transfers) };
+  }, [deals, envelopes, conditions, transfers]);
+  const checklistReads = useMemo(
+    () => Object.fromEntries(Object.entries(checklists).map(([id, v]) => [id, v === UNAVAILABLE ? UNREADABLE : v])),
+    [checklists],
+  );
+  const kpis = useMemo(() => closingKpis(reads), [reads]);
+  const dealList = useMemo(() => closingRows(reads, checklistReads), [reads, checklistReads]);
 
   /** The deals this stage is about, from the shared stage map rather than a status test. */
   const closing = useMemo(
@@ -214,24 +300,6 @@ export default function InvestorClosingZone() {
    * strip counts.
    */
   const executed = useMemo(() => rows.filter((e) => e.status === 'completed'), [rows]);
-  const awaiting = useMemo(() => rows.filter((e) => e.status === 'sent'), [rows]);
-
-  /** Signatures, summed across the envelopes rather than inferred from them. */
-  const sigs = useMemo(() => {
-    let signed = 0; let required = 0; let unrecorded = 0;
-    for (const e of rows) {
-      const need = Number(e.recipient_count);
-      const got = Number(e.signed_count);
-      if (Number.isFinite(need) && need > 0) { required += need; signed += Number.isFinite(got) ? got : 0; }
-      else unrecorded += 1;
-    }
-    return { signed, required, unrecorded };
-  }, [rows]);
-
-  const chipped = useMemo(() => {
-    if (view === 'documents') return rows;
-    return rows.filter((e) => e.status !== 'draft');
-  }, [view, rows]);
 
   /**
    * THE BLOCKING VIEW'S ROWS. A blocking item is a Commit condition that is
@@ -273,12 +341,6 @@ export default function InvestorClosingZone() {
     return wireRows.filter((t) => `${t.project_name || ''} ${t.reference || ''}`.toLowerCase().includes(q));
   }, [wireRows, query]);
 
-  /** The strip's Funds moved figure: the sum over recorded transfers. */
-  const movedCents = useMemo(
-    () => wireRows.reduce((sum, t) => sum + (Number.isFinite(Number(t.amount_cents)) ? Number(t.amount_cents) : 0), 0),
-    [wireRows],
-  );
-
   // The checklist per closing deal, loaded once the deals are known. Each
   // read is the per-deal route; a deal with none gets the apply control.
   useEffect(() => {
@@ -313,6 +375,7 @@ export default function InvestorClosingZone() {
       });
       setWireForm(null);
       load();
+      setWorkspaceKey((k) => k + 1);
     } catch (cause) {
       // The conditions gate refuses with 409 `open_conditions_block_transfer`;
       // e.message is the route's own sentence and names the count.
@@ -397,20 +460,24 @@ export default function InvestorClosingZone() {
   }, [joinedReady, executed]);
 
   /**
-   * SEARCH NARROWS WHAT THE CHIP CHOSE, over the two names the row shows: the
-   * document's title and the deal it belongs to. A closing row is an envelope,
-   * so "which deal is this" is the question the reader arrives with, and the
-   * deal name is not the envelope's own field — it is joined on. Searching it
-   * anyway is the point: the reader is looking for the deal, not the PDF.
+   * SEARCH NARROWS WHAT THE CHIP CHOSE. On This close it narrows the deal
+   * rows by the deal's name; on Documents it narrows the paper by the
+   * document's title and the deal it belongs to, which is joined on.
    */
+  const visibleDeals = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return dealList.rows;
+    return dealList.rows.filter((r) => r.name.toLowerCase().includes(q));
+  }, [dealList, query]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return chipped;
-    return chipped.filter((e) => {
+    if (!q) return rows;
+    return rows.filter((e) => {
       const hay = `${e.document_title || ''} ${e.document_type || ''} ${e.deal?.project_name || ''}`;
       return hay.toLowerCase().includes(q);
     });
-  }, [chipped, query]);
+  }, [rows, query]);
 
   const rowActions = investorZoneActions('deals/closing', {
     handlers: { applyTemplate, exportPacket, recordWire },
@@ -426,53 +493,26 @@ export default function InvestorClosingZone() {
             day(t.recorded_at) || '',
           ],
         }
+      : view === 'close'
+      ? {
+          header: ['Deal', 'Investment', 'Closing progress', 'Signatures outstanding', 'Open conditions', 'Transfer'],
+          rows: visibleDeals,
+          cells: (r) => [r.name, figureWord(r.investment), figureWord(r.progress), figureWord(r.signatures), figureWord(r.conditions), figureWord(r.transfer)],
+        }
       : {
-          header: ['Document', 'Deal', 'State', 'Signatures', 'Completed'],
+          header: ['Document', 'Deal', 'State', 'Signatures', 'Executed'],
           rows: visible,
           cells: (e) => [
             e.document_title || e.document_type || '',
             e.deal?.project_name || `Deal #${e.deal_id}`,
-            e.status || '',
+            paperWord(e.status),
             `${e.signed_count ?? ''}/${e.recipient_count ?? ''}`,
             day(e.completed_at) || '',
           ],
         },
   });
 
-  const bothFailed = deals === UNAVAILABLE && envelopes === UNAVAILABLE;
-
-  return (
-    <>
-      <ZoneToolbar
-        className="mb-3"
-        role="investor"
-        filters={investorZoneFilters('deals/closing', {
-          value: view,
-          onChange: setView,
-          // A count beside a failed read would read as a figure the store
-          // disclaimed, so `blocking` and `wires` drop the clause when their
-          // read failed rather than printing one.
-          counts: {
-            close: chipped.length,
-            documents: rows.length,
-            blocking: condReady ? blockingRows.length : undefined,
-            wires: wiresReady ? wireRows.length : undefined,
-          },
-        })}
-        actions={rowActions}
-      />
-      <div className="mb-3 flex" data-testid="closing-search">
-        <SearchInput value={query} onChange={setQuery} placeholder="Search document or deal" />
-      </div>
-      {actionError && (
-        <p className="mb-3 text-[11px] text-red-700 dark:text-red-400" role="alert" data-testid="status-closing-action-error">{actionError}</p>
-      )}
-      {/* RECORD WIRE — a transfer OUT to the company, recorded. The amount is
-          typed in dollars and stored as integer cents; the phone-verified flag
-          is the artboard's own fraud note (email-only verification is how
-          funds get defrauded). An open Commit condition refuses the write —
-          the route's 409 sentence renders in the form. */}
-      {wireForm && (
+  const wirePanel = wireForm ? (
         <div className="rounded-[10px] border border-amber-300 bg-amber-50/70 p-3 mb-3 dark:border-amber-900 dark:bg-amber-950/25" data-testid="panel-record-wire">
           <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">Record a transfer</p>
           <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
@@ -543,7 +583,59 @@ export default function InvestorClosingZone() {
             <button type="button" onClick={() => setWireForm(null)} className="rounded-[7px] px-[11px] py-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400">Cancel</button>
           </div>
         </div>
+  ) : null;
+
+  const bothFailed = deals === UNAVAILABLE && envelopes === UNAVAILABLE;
+
+  if (workspaceDeal) {
+    const deal = dealsReady ? deals.find((d) => Number(d.id) === workspaceDeal) || null : null;
+    return (
+      <>
+        {wirePanel}
+        <ClosingWorkspace
+          key={workspaceKey}
+          dealId={workspaceDeal}
+          deal={deal}
+          user={user}
+          onBack={() => setParams({})}
+          onRecordTransfer={(id) => { setActionError(''); setWireForm({ dealId: id, amount: '', reference: '', phoneVerified: false, note: '', busy: false, error: '' }); }}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <ZoneToolbar
+        className="mb-3"
+        role="investor"
+        filters={investorZoneFilters('deals/closing', {
+          value: view,
+          onChange: setView,
+          // A count beside a failed read would read as a figure the store
+          // disclaimed, so every chip drops the clause when its read failed
+          // rather than printing one. This close counts deals, not paper.
+          counts: {
+            close: dealsReady ? closing.length : undefined,
+            documents: joinedReady ? rows.length : undefined,
+            blocking: condReady ? blockingRows.length : undefined,
+            wires: wiresReady ? wireRows.length : undefined,
+          },
+        })}
+        actions={rowActions}
+      />
+      <div className="mb-3 flex" data-testid="closing-search">
+        <SearchInput value={query} onChange={setQuery} placeholder="Search deal or document" />
+      </div>
+      {actionError && (
+        <p className="mb-3 text-[11px] text-red-700 dark:text-red-400" role="alert" data-testid="status-closing-action-error">{actionError}</p>
       )}
+      {/* RECORD WIRE — a transfer OUT to the company, recorded. The amount is
+          typed in dollars and stored as integer cents; the phone-verified flag
+          is the artboard's own fraud note (email-only verification is how
+          funds get defrauded). An open Commit condition refuses the write —
+          the route's 409 sentence renders in the form. */}
+      {wireForm ? wirePanel : null}
       {/* APPLY TEMPLATE — the closing checklist for a deal, from one of the
           three closing templates. No default items are seeded: the default
           set is the owner's call, and the checklist says so until then. */}
@@ -599,66 +691,35 @@ export default function InvestorClosingZone() {
         error={bothFailed ? 'Neither the deal record nor the signature archive could be read.' : ''}
         onRetry={load}
         isEmpty={dealsReady && closing.length === 0}
-        empty={(
-          <NothingYet
-            title="No deal is at closing"
-            body={
-              'A deal appears here once it reaches closing, and its paper appears '
-              + 'as envelopes are raised against it. The record is readable and holds '
-              + 'no deal at this stage, which is a different fact from a record that '
-              + 'could not be read.'
-            }
-          />
-        )}
+        empty={<NothingYet title={EMPTY_TITLE} body={EMPTY_BODY} />}
       >
         <div className="space-y-6">
-          {/* ══ THE ID4 STRIP ═══════════════════════════════════════════════ */}
+          {/* ══ THE DE08 STRIP (DX8) — five figures from `closingKpis`. A
+              figure whose read failed says Unreadable and names the read;
+              it is never 0. ══ */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5" data-testid="closing-strip">
-            {/* THREE OF THESE FOUR FIGURES ARE JOINS, so they gate on
-                `joinedReady` and name the read that is missing rather than
-                counting to zero. "At closing" is the exception in one half:
-                its VALUE is a count of deals, so it stands on `dealsReady`
-                alone — but its note counts documents, which does not. */}
-            <CloseTile
-              label="At closing"
-              value={dealsReady ? String(closing.length) : null}
-              note={joinedReady
-                ? `${rows.length} document${rows.length === 1 ? '' : 's'} raised against them`
-                : (dealsReady ? missingRead : 'the deal record could not be read')}
-            />
-            <CloseTile
-              label="Executed"
-              value={joinedReady ? `${executed.length} of ${rows.length}` : null}
-              note={joinedReady
-                ? 'an envelope counts as executed only when its status is completed'
-                : missingRead}
-            />
-            <CloseTile
-              label="Signatures"
-              value={joinedReady && sigs.required ? `${sigs.signed} of ${sigs.required}` : null}
-              note={joinedReady
-                ? (sigs.unrecorded
-                  ? `${sigs.unrecorded} envelope${sigs.unrecorded === 1 ? ' records' : 's record'} no recipient, and ${sigs.unrecorded === 1 ? 'is' : 'are'} not counted`
-                  : 'summed across every envelope on these deals')
-                : missingRead}
-            />
-            <CloseTile
-              label="Awaiting"
-              value={joinedReady ? String(awaiting.length) : null}
-              note={joinedReady ? 'sent and not yet completed' : missingRead}
-              tone={joinedReady && awaiting.length ? 'text-amber-700 dark:text-amber-300' : ''}
-            />
-            {/* THE ARTBOARD'S FOURTH TILE, REAL NOW (migration 335): the
-                recorded transfers out, summed. The platform records the
-                movement of money; it does not move it. */}
-            <CloseTile
-              label="Funds moved"
-              value={wiresReady ? (dealMoneyExact(movedCents / 100) || '$0') : null}
-              note={wiresReady
-                ? `${wireRows.length} recorded transfer${wireRows.length === 1 ? '' : 's'} out · recorded, not moved here`
-                : 'the transfers record could not be read'}
-            />
+            {kpis.map((kpi) => <KpiTile key={kpi.key} kpi={kpi} />)}
           </div>
+
+          {/* ══ THE DEAL-FIRST LIST (DE08 A) — one row per deal at closing,
+              from `closingRows`. Open goes to the deal; the closing workspace
+              (DE08b) is the next part. ══ */}
+          {view === 'close' && (
+            dealList.state === 'unreadable' ? (
+              <p className="text-[12.5px] leading-relaxed text-red-700 dark:text-red-300" role="alert" data-testid="status-closing-deals-unreadable">
+                The deal record could not be read. That is not a claim that no deal is in closing.
+                <button type="button" onClick={load} className="ml-1 inline-flex min-h-[44px] items-center gap-1 underline md:min-h-0">Try again</button>
+              </p>
+            ) : dealList.state === 'ready' ? (
+              <section className="space-y-2" data-testid="closing-deals" aria-label="Deals at closing">
+                {visibleDeals.length === 0 ? (
+                  <p className="text-[12px] text-gray-600 dark:text-gray-400">No deal at closing matches the search.</p>
+                ) : visibleDeals.map((r) => (
+                  <ClosingDealRow key={r.id} row={r} onOpen={navigate} />
+                ))}
+              </section>
+            ) : null
+          )}
 
           {/* ══ THE CLOSING CHECKLIST (migration 335) — one per deal, applied
               from a closing template. THE DEFAULT ITEM SET IS THE OWNER'S
@@ -667,6 +728,10 @@ export default function InvestorClosingZone() {
               rather than seeding a list nobody signed off. ══ */}
           {view === 'close' && dealsReady && closing.length > 0 && (
             <section className="space-y-3" data-testid="closing-checklists">
+              {/* The checklist is the closing workspace's (DE08b, the next
+                  part of DX8); it stays here until that workspace has a
+                  route, so no capability is lost to the list. */}
+              <h3 className="text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Closing checklists</h3>
               {closing.map((d) => {
                 const list = checklists[d.id];
                 return (
@@ -822,13 +887,19 @@ export default function InvestorClosingZone() {
           )}
 
           {/* ══ THE COLLECTION THIS STAGE ACTUALLY HAS ══════════════════════ */}
-          {view !== 'blocking' && view !== 'wires' && (
+          {view === 'documents' && !joinedReady && deals !== null && envelopes !== null && (
+            <p className="text-[12.5px] leading-relaxed text-red-700 dark:text-red-300" role="alert" data-testid="status-paper-unreadable">
+              {dealsReady ? 'The signature archive could not be read.' : 'The deal record could not be read.'} That is not a claim that no paper is raised.
+              <button type="button" onClick={load} className="ml-1 inline-flex items-center gap-1 underline">Retry</button>
+            </p>
+          )}
+          {view === 'documents' && joinedReady && (
           <Instrument
             testid="closing-paper"
             title="Closing paper"
-            meta={view === 'documents' ? 'Every envelope, drafts included' : 'Raised and beyond · drafts hidden'}
+            meta="Every envelope on a deal at closing, drafts included"
             cols="1.6fr 1.1fr .8fr .8fr 1fr"
-            head={['Document', 'Deal', 'State', 'Signatures', 'Completed']}
+            head={['Document', 'Deal', 'State', 'Signatures', 'Executed']}
             rows={visible.map((e) => ({
               key: e.id,
               cells: [
@@ -840,7 +911,7 @@ export default function InvestorClosingZone() {
                   text: e.deal?.project_name || `Deal #${e.deal_id}`,
                   node: <OpenDeal id={e.deal_id} onOpen={navigate} />,
                 },
-                { text: '', pill: e.status, pillTone: STATUS_TONE[e.status] || 'neutral' },
+                { text: '', pill: paperWord(e.status), pillTone: STATUS_TONE[e.status] || 'neutral' },
                 Number.isFinite(Number(e.recipient_count)) && Number(e.recipient_count) > 0
                   ? { text: `${e.signed_count ?? 0} of ${e.recipient_count}` }
                   : { nr: true, sub: 'no recipient recorded' },
@@ -848,10 +919,9 @@ export default function InvestorClosingZone() {
               ],
             }))}
             note={
-              'This is the paper, not a checklist — the artboard draws a closing checklist and nothing stores '
-              + 'one, so this table shows what the record does hold: every envelope raised against a deal at '
-              + 'closing, with how many of its recipients have signed and when it completed. An envelope is '
-              + 'executed only when its STATUS says completed; a signature count reaching its recipient count '
+              'This is the paper: every envelope raised against a deal at closing, with how many of its '
+              + 'recipients have signed and when it was executed. An envelope is executed only when its '
+              + 'STATUS says completed; a signature count reaching its recipient count '
               + 'is a different fact, and an envelope that records no recipient at all would read as fully '
               + 'signed under a ratio, so it renders as unrecorded instead.'
             }
@@ -870,6 +940,14 @@ export default function InvestorClosingZone() {
           />
 
           <StatedLimit title="What closing does not record">
+            <p data-testid="closing-waits-on-overview">
+              <strong>The list is joined here, from five reads.</strong> The
+              deals, the paper, the open conditions and the transfers are read
+              once each, and each deal at closing has its checklist read on its
+              own. The investment is the round&rsquo;s confirmed commitments.
+              One closing read is planned to replace them and add what they do
+              not carry: {WAITS_ON_OVERVIEW.join('; ')}.
+            </p>
             <p>
               <strong>The checklist above is the closing store, not the
               diligence one.</strong> The two checklist stores that predate it

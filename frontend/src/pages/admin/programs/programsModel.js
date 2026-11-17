@@ -72,6 +72,10 @@ export const PARTNERS_HOW_PATH = '/admin/programs/referral-partners/how-it-runs'
 // D963 (#2796): Referral partners' Queue and Activity, and Investor cohort access's Activity.
 export const PARTNERS_QUEUE_PATH = '/admin/programs/referral-partners/queue';
 export const PARTNERS_ACTIVITY_PATH = '/admin/programs/referral-partners/activity';
+// D5888 (#5888): Referral partners runs in the generic shell (PG03a), so it gains the shell's three other core sections.
+export const PARTNERS_AVAILABILITY_PATH = '/admin/programs/referral-partners/availability';
+export const PARTNERS_PARTICIPATION_PATH = '/admin/programs/referral-partners/participation';
+export const PARTNERS_SETTINGS_PATH = '/admin/programs/referral-partners/settings';
 export const INVESTOR_PATH = '/admin/programs/investor-cohorts';
 export const INVESTOR_ACTIVITY_PATH = '/admin/programs/investor-cohorts/activity';
 export const AI_NATIVE_PATH = '/admin/programs/ai-native-venture';
@@ -428,11 +432,17 @@ export const PAGES = Object.freeze({
     title: 'Referral partners', workspace: 'Programs',
     line: 'People who bring the studio events, startups, deals and LPs, under the standard rules or their own signed terms.',
     facts: [`Who: ${PARTNERS_WHO}`, `Join: ${PARTNERS_JOIN}`, `Terms: ${PARTNERS_TERMS}`],
+    // D5888 (#5888): the generic shell's six core sections in PG03's order and words, with the Referral queue module
+    // (`referral_queue`, MODULE_PATHS) between Participation and History. The four addresses D953 and D963 gave it
+    // keep their paths: How it runs is Playbook, Queue is Referral queue, Activity is History.
     tabs: [
       { key: 'overview', label: 'Overview', path: PARTNERS_PATH },
-      { key: 'how', label: 'How it runs', path: PARTNERS_HOW_PATH },
-      { key: 'queue', label: 'Queue', path: PARTNERS_QUEUE_PATH },
-      { key: 'activity', label: 'Activity', path: PARTNERS_ACTIVITY_PATH },
+      { key: 'how', label: 'Playbook', path: PARTNERS_HOW_PATH },
+      { key: 'availability', label: 'Availability & grants', path: PARTNERS_AVAILABILITY_PATH },
+      { key: 'participation', label: 'Participation', path: PARTNERS_PARTICIPATION_PATH },
+      { key: 'queue', label: 'Referral queue', path: PARTNERS_QUEUE_PATH, module: 'referral_queue' },
+      { key: 'activity', label: 'History', path: PARTNERS_ACTIVITY_PATH },
+      { key: 'settings', label: 'Settings', path: PARTNERS_SETTINGS_PATH },
     ],
   },
   'investor-cohorts': {
@@ -441,7 +451,11 @@ export const PAGES = Object.freeze({
     facts: ['Who: Verified investors', 'Join: Assigned by an admin', 'Cycle: one Lab cohort'],
     tabs: [
       { key: 'overview', label: 'Overview', path: INVESTOR_PATH },
-      { key: 'activity', label: 'Activity', path: INVESTOR_ACTIVITY_PATH },
+      { key: 'how', label: 'Playbook', path: `${INVESTOR_PATH}/how-it-runs` },
+      { key: 'availability', label: 'Availability & grants', path: `${INVESTOR_PATH}/availability` },
+      { key: 'participation', label: 'Participation', path: `${INVESTOR_PATH}/participation` },
+      { key: 'activity', label: 'History', path: INVESTOR_ACTIVITY_PATH },
+      { key: 'settings', label: 'Settings', path: `${INVESTOR_PATH}/settings` },
     ],
   },
   // D4298 (#4298, IN11): seven tabs; the program's own address opens Applications.

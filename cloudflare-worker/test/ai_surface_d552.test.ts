@@ -230,7 +230,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/capTableDocumentRead.ts': ['AI_SURFACE.raiseCapTable'], // D1021: Eadwyn's read of a signed document
   'services/dataRoomSearch.ts': ['AI_SURFACE.raiseDataRoom'], // #3938: a data room search's embedding (its rerank goes through decide.ts)
   'services/roundCalls.ts': ['AI_SURFACE.raiseCapitalRelationships'], // #6051: founder round-call wording
-  'services/capRelTabs.ts': ['AI_SURFACE.raiseCapitalRelationships', 'AI_SURFACE.raiseCapitalRelationships'], // D1193: proposals from a note, message drafts
+  'services/capRelTabs.ts': ['AI_SURFACE.raiseCapitalRelationships', 'AI_SURFACE.raiseCapitalRelationships', 'AI_SURFACE.raiseCapitalRelationships'], // D1193: proposals from a note, message drafts; CRL11 (#6080): a pattern across feedback
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   // D766 (#2094) — system calls moved into the router.
   'routes/monitoring.ts': ['AI_SURFACE.monitoring'],

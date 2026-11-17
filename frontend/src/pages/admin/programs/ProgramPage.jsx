@@ -25,11 +25,11 @@ import { ApplicationsTab, InfluencersTab, OffersTab, PayoutsTab, SettingsTab } f
 import { KEY as INFLUENCER_KEY, LANDING as INFLUENCER_LANDING } from './influencersModel';
 import { LearningOverview, LearningPeople } from './LearningPages';
 import { PerksOverview, PerksParticipation, PerksQueue } from './PerksPages';
-import { Availability, Modules, OnRegistry, Settings } from './ProgramShellSections';
+import { Availability, Modules, OnRegistry, Participation, Settings } from './ProgramShellSections';
 import { shellModules } from './genericProgramModel';
-import { InvitePartner, PartnersOverview, PartnersQueue, useQueueCount } from './ReferralPartners';
+import { InvitePartner, PartnersOverview, PartnersParticipation, PartnersQueue, useQueueCount } from './ReferralPartners';
 import { ApproveDialog, EndTermsDialog, RuleDialog, SendDialog, TermsDialog } from './ReferralTermsDialogs';
-import { EndAccessDialog, GiveAccessDialog, InvestorOverview, NdaSendDialog, useInvestorReads } from './InvestorCohorts';
+import { EndAccessDialog, GiveAccessDialog, InvestorOverview, InvestorParticipation, NdaSendDialog, useInvestorReads } from './InvestorCohorts';
 import { InvestorTabs } from './ProgramTabs';
 import { SUB, Tile } from './parts';
 import { STATUS_WORD } from './catalogueModel';
@@ -95,6 +95,14 @@ function useDesk() {
   return { tick, reload, dialog, setDialog, close: () => setDialog(null) };
 }
 
+/**
+ * D5888 (#5888): Referral partners runs in the generic program shell (PG03a), as Perks does (D5313). Overview is its
+ * tiles, charts, Standard rules and partners table above the shell's Capability modules; Playbook is How it runs;
+ * Availability & grants and Settings are the shell's sections inside `OnRegistry`; Participation is the program's own
+ * summary; the Referral queue module is the Queue (D963), at `/queue` as MODULE_PATHS has it; History is the
+ * Activity read. The signed-terms dialogs open from any section, as before. A failed registry read marks only the
+ * sections that need it.
+ */
 function ReferralPartners({ tab, superAdmin }) {
   const detail = useProgramDetail('referral-partners');
   const desk = useDesk();
@@ -105,10 +113,18 @@ function ReferralPartners({ tab, superAdmin }) {
   return (
     <ProgramFrame detail={detail} program="referral-partners" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<PartnersTabs queue={queue} />}
       actions={<InvitePartner className={`${actionPrimary} w-full sm:w-auto`} />}>
-      {tab === 'overview' ? <PartnersOverview superAdmin={superAdmin} tick={desk.tick} open={open} /> : null}
+      {tab === 'overview' ? (
+        <>
+          <PartnersOverview superAdmin={superAdmin} tick={desk.tick} open={open} />
+          <Modules modules={shellModules('referral-partners', detail.read)} />
+        </>
+      ) : null}
       {tab === 'how' ? <PlaybookEditor program="referral-partners" superAdmin={superAdmin} detail={detail} testId="programs-partners-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <PartnersParticipation tick={desk.tick} open={open} /> : null}
       {tab === 'queue' ? <PartnersQueue superAdmin={superAdmin} tick={desk.tick} open={open} /> : null}
       {tab === 'activity' ? <ActivityTab program="referral-partners" testId="programs-partners-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="referral-partners" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
       {d?.kind === 'terms' ? <TermsDialog partner={d.partner} superAdmin={superAdmin} onClose={desk.close} onChanged={changed} onOpen={(kind, terms) => desk.setDialog({ kind, terms, partner: d.partner })} /> : null}
       {d?.kind === 'approve' ? <ApproveDialog terms={d.terms || null} partner={d.partner || null} onClose={desk.close} onChanged={changed} /> : null}
       {d?.kind === 'send' ? <SendDialog terms={d.terms || null} partner={d.partner || null} onClose={desk.close} onChanged={changed} /> : null}
@@ -131,10 +147,16 @@ function InvestorCohorts({ tab, superAdmin }) {
     <ProgramFrame detail={detail} program="investor-cohorts" superAdmin={superAdmin} status={status} tabs={<InvestorTabs />}
       actions={<button type="button" onClick={() => desk.setDialog({ kind: 'give' })} className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-investor-give">Give access</button>}>
       {tab === 'overview' ? (
-        <InvestorOverview reads={reads} running={status === 'Live'} tick={desk.tick} open={open}
-          how={<PlaybookEditor program="investor-cohorts" superAdmin={superAdmin} detail={detail} testId="programs-investor-how" />} />
+        <>
+          <InvestorOverview reads={reads} running={status === 'Live'} tick={desk.tick} open={open} />
+          <Modules modules={shellModules('investor-cohorts', detail.read)} />
+        </>
       ) : null}
+      {tab === 'how' ? <PlaybookEditor program="investor-cohorts" superAdmin={superAdmin} detail={detail} testId="programs-investor-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <InvestorParticipation summary={reads.summary} onRetry={desk.reload} /> : null}
       {tab === 'activity' ? <ActivityTab program="investor-cohorts" testId="programs-investor-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="investor-cohorts" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
       {d?.kind === 'give' ? <GiveAccessDialog reads={reads} onClose={desk.close} onGiven={desk.reload} /> : null}
       {d?.kind === 'end' ? <EndAccessDialog grant={d.grant} onClose={desk.close} onEnded={desk.reload} /> : null}
       {d?.kind === 'nda' ? <NdaSendDialog grant={d.grant} onClose={desk.close} onSent={desk.reload} /> : null}
@@ -156,11 +178,21 @@ function Influencers({ tab, superAdmin }) {
     <ProgramFrame detail={detail} program={INFLUENCER_KEY} superAdmin={superAdmin} status={registryStatus(detail)} tabs={<InfluencerTabs queue={queue} />}>
       {t === 'how' ? <PlaybookEditor program={INFLUENCER_KEY} superAdmin={superAdmin} detail={detail} testId="programs-influencer-how" /> : null}
       {t === 'applications' ? <ApplicationsTab onCount={setCounts} /> : null}
+      {tab === 'overview' ? <Modules modules={shellModules(INFLUENCER_KEY, detail.read)} /> : null}
+      {t === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {t === 'participation' ? <Participation /> : null}
       {t === 'influencers' ? <InfluencersTab /> : null}
       {t === 'offers' ? <OffersTab superAdmin={superAdmin} /> : null}
       {t === 'payouts' ? <PayoutsTab /> : null}
       {t === 'activity' ? <ActivityTab program={INFLUENCER_KEY} testId="programs-influencer-activity" /> : null}
-      {t === 'settings' ? <SettingsTab superAdmin={superAdmin} /> : null}
+      {t === 'settings' ? (
+        <>
+          <SettingsTab superAdmin={superAdmin} />
+          <OnRegistry detail={detail}>
+            {(data) => <Settings programKey={INFLUENCER_KEY} program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}
+          </OnRegistry>
+        </>
+      ) : null}
     </ProgramFrame>
   );
 }

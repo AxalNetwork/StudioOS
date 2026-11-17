@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toMajorString } from '../../../lib/money.js';
 import { Link } from 'react-router-dom';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
 import {
-  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, hireBody, money, roundSourceRows, sectionOf, sectionSheet, splitCheck, sourceText, tiesRows,
+  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, hireBody, planViewer, money, roundSourceRows, sectionOf, sectionSheet, splitCheck, sourceText, tiesRows,
 } from './useOfFundsModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
@@ -92,26 +92,8 @@ export function Skeleton({ lines = 3, testId }) {
   );
 }
 
-/** One read, its state and its retry. `read` is called with nothing; a null `key` makes no read. */
-export function useRead(read, key) {
-  const [state, setState] = useState({ status: 'loading', data: null });
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (key == null) return undefined;
-    let alive = true;
-    setState((s) => ({ status: 'loading', data: s.data }));
-    Promise.resolve().then(read)
-      .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: 'unreadable', data: null, code: error?.code || null }); });
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, n]);
-  const reload = useCallback(() => setN((x) => x + 1), []);
-  return { ...state, reload };
-}
-
-/** The plan read (D1176's `GET /plan`). */
-export const usePlan = (projectId, api = useOfFundsApi) => useRead(() => api.plan(projectId), projectId ? `plan:${projectId}` : null);
+/** The plan read and its hook live in `useOfFundsRead.js` (D5081), so CycleRoute can hold Home's read without this step. */
+export { useRead, usePlan } from './useOfFundsRead.js';
 
 /** The banner an admin or Super Admin works under (UF16): their changes are logged under their name. */
 export function AdminBanner({ viewer }) {
@@ -210,7 +192,7 @@ export function Columns({ groups, label, testId, format = (v) => v }) {
  * Dialogs
  * ------------------------------------------------------------------ */
 
-function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
+export function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   return (
     <div className="flex justify-end gap-2 max-md:[&>*]:flex-1">
       <button type="button" className={BTN_GHOST} onClick={onClose} disabled={busy}>Cancel</button>
@@ -219,11 +201,13 @@ function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   );
 }
 
-const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
+export const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
 /** D5069: the plan changed after the dialog opened. Nothing was written. */
-export const isStale = (e) => e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.code === 'changed_since_open');
+// D6082: `scenario_changed` is the same refusal, met when another save lands between the read and the write.
+const STALE_CODES = new Set(['changed_since_open', 'scenario_changed']);
+export const isStale = (e) => e?.status === 409 && (STALE_CODES.has(e?.code) || STALE_CODES.has(e?.data?.code));
 /** Review latest: closes the dialog and reads the plan again; the person's typed values stay in their head, not in a stale save. */
-function ReviewLatest({ onReview }) {
+export function ReviewLatest({ onReview }) {
   return <button type="button" className="self-start rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-bold text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" onClick={onReview} data-testid="uof-review-latest">Review latest</button>;
 }
 export const REVIEWED = 'Showing the latest plan. Your change was not saved; make it again from here.';
@@ -342,6 +326,53 @@ export function AddMilestoneDialog({ projectId, revision, onClose, onSaved, api 
 }
 
 /**
+ * D6082: change or remove one milestone. A milestone is part of its scenario, so the scenario's revision goes with
+ * the save (in the body) and the removal (in the query); a plan changed in another tab is refused (409, the dialog
+ * stays open, Review latest). An emptied cost is sent as null and stays Not costed, never 0.
+ */
+export function EditMilestoneDialog({ projectId, milestone, revision, currency = 'usd', onClose, onSaved, api = useOfFundsApi }) {
+  const [label, setLabel] = useState(milestone?.label ?? '');
+  const [section, setSection] = useState(milestone?.category_key ?? 'product');
+  const [by, setBy] = useState(milestone?.due_on ?? '');
+  const [cost, setCost] = useState(milestone?.cost_cents == null ? '' : (toMajorString(milestone.cost_cents, String(currency).toUpperCase()) ?? ''));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
+  const cents = cost.trim() === '' ? null : centsFromTyped(cost);
+  const byOk = by === '' || /^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$/.test(by);
+  const run = async (work, done) => {
+    setBusy(true); setError('');
+    try { await work(); onSaved(done); } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
+    setBusy(false);
+  };
+  const save = () => run(() => api.updateMilestone(projectId, milestone.id, { label: label.trim(), category_key: section, due_on: by || null, cost_cents: cents, expected_revision: revision }),
+    cents == null ? 'The milestone is saved. It stays Not costed until you add a cost.' : 'The milestone is saved.');
+  const remove = () => run(() => api.deleteMilestone(projectId, milestone.id, revision), 'The milestone is removed.');
+  return (
+    <Lightbox label="Edit milestone" title="Edit milestone" sub="A milestone names what a section’s money pays for, by a month." onClose={onClose} width={520} phone="sheet" testId="uof-edit-milestone"
+      footer={<div className="flex justify-between gap-2 max-md:flex-col">
+        <button type="button" className={BTN_GHOST} onClick={remove} disabled={busy} data-testid="uof-ms-remove">Remove milestone</button>
+        <DialogButtons busy={busy} onClose={onClose} go={save} goLabel="Save milestone" disabled={!label.trim() || !byOk || (cost.trim() !== '' && cents == null)} testId="uof-ms-save" />
+      </div>}>
+      <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Name</span><input className={FIELD} value={label} onChange={(e) => setLabel(e.target.value)} data-testid="uof-ms-label" /></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Section</span>
+          <select className={FIELD} value={section} onChange={(e) => setSection(e.target.value)} data-testid="uof-ms-edit-section">
+            {SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>By</span><input className={`${FIELD} ${MONO}`} placeholder="2027-03" value={by} onChange={(e) => setBy(e.target.value)} data-testid="uof-ms-by" />
+          {!byOk ? <span className="text-[12px] text-red-700 dark:text-red-300">A month is written like 2027-03.</span> : null}</label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Cost · optional</span>
+          <input className={`${FIELD} ${MONO}`} inputMode="decimal" placeholder="Leave empty to keep it Not costed" value={cost} onChange={(e) => setCost(e.target.value)} data-testid="uof-ms-cost" />
+          <span className={`text-[12px] ${MUTED}`}>An empty cost stays Not costed, never 0.</span></label>
+        {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-ms-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+/**
  * D5375: edit or remove one planned hire. The hire's own `revision` goes with the save and the removal, so a
  * hire changed in another tab is refused (409, the dialog stays open, Review latest) instead of replaced.
  * The cost a year and its currency are not edited here, so nothing is converted through a fixed factor.
@@ -445,7 +476,7 @@ export function SectionSheet({ plan, sectionKey, mercury, mercuryState = 'ready'
   const v = sectionSheet(base, sectionKey, mercury);
   if (!v) return null;
   const cur = base?.currency;
-  const founderOnly = plan?.viewer?.mercury === false;
+  const founderOnly = planViewer(plan)?.mercury === false;
   const deck = tiesRows(plan).find((r) => r.key === 'deck');
   const heading = (t) => <h4 className={`m-0 ${EYEBROW}`}>{t}</h4>;
   const block = 'flex flex-col gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800';
@@ -470,7 +501,7 @@ export function SectionSheet({ plan, sectionKey, mercury, mercuryState = 'ready'
         </section>
         <section className={block} data-testid="uof-section-hires">
           <div className="flex items-center justify-between gap-2">{heading('Hires')}
-            {plan?.viewer?.can_write && v.hireItems ? <button type="button" className={BTN_GHOST} onClick={onAddHire} data-testid="uof-section-add-hire">Add a hire</button> : null}</div>
+            {planViewer(plan)?.can_write && v.hireItems ? <button type="button" className={BTN_GHOST} onClick={onAddHire} data-testid="uof-section-add-hire">Add a hire</button> : null}</div>
           {v.hireItems == null ? <BlockError text={base?.hires?.reason || 'Hires could not be read.'} />
             : v.hireItems.length ? (
               <>
@@ -567,7 +598,7 @@ export function WhereUsedDialog({ plan, rows, onClose, onRound }) {
         {plan?.round?.disagreements?.length ? (
           <div className="flex flex-wrap items-center gap-2" data-testid="uof-round-differs">
             <Pill tone="amber">! Recorded round sizes differ</Pill>
-            {plan?.viewer?.can_write ? <button type="button" className={BTN_GHOST} onClick={onRound}>Choose the round size</button> : null}
+            {planViewer(plan)?.can_write ? <button type="button" className={BTN_GHOST} onClick={onRound}>Choose the round size</button> : null}
           </div>
         ) : null}
         {rows.filter((r) => r.key !== 'round').map((r) => (

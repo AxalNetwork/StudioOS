@@ -32,7 +32,10 @@ export type ManagedProviderKey =
   | 'affinity'
   | 'telegram'
   | 'gcip'
-  | 'tiktok';
+  | 'tiktok'
+  | 'x'
+  | 'google_search_console'
+  | 'typeform';
 
 export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'slack',
@@ -50,6 +53,9 @@ export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'telegram',
   'gcip',
   'tiktok',
+  'x',
+  'google_search_console',
+  'typeform',
 ];
 
 export interface ProviderEnvVarPair {
@@ -65,6 +71,12 @@ export interface ProviderEnvVarPair {
  */
 export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret: string }> = {
   tiktok:     { id: 'TIKTOK_CLIENT_KEY', secret: 'TIKTOK_CLIENT_SECRET' },
+  // D2403 — the second HQ-owned "founders" X app (owner decision 2B), never HQ's own X_CLIENT_ID posting app.
+  x:          { id: 'X_FOUNDERS_CLIENT_ID', secret: 'X_FOUNDERS_CLIENT_SECRET' },
+  // D5839 — Search Console's own Google OAuth client, never the Workspace or Calendar one.
+  google_search_console: { id: 'GOOGLE_SEARCH_CONSOLE_CLIENT_ID', secret: 'GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET' },
+  // D5827 — the Typeform developer app registered by the owner for the pilot.
+  typeform:   { id: 'TYPEFORM_CLIENT_ID',      secret: 'TYPEFORM_CLIENT_SECRET' },
   slack:      { id: 'SLACK_CLIENT_ID',         secret: 'SLACK_CLIENT_SECRET' },
   hubspot:    { id: 'HUBSPOT_CLIENT_ID',       secret: 'HUBSPOT_CLIENT_SECRET' },
   salesforce: { id: 'SF_CLIENT_ID',            secret: 'SF_CLIENT_SECRET' },

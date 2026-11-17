@@ -171,7 +171,7 @@ export const PARTNER_ZONE_ACTIONS = {
     // edited where they are written and read everywhere they apply; a second
     // form here would be a second place to change one number, and the first
     // time the two disagreed nobody would know which the score used.
-    { label: 'Edit capability weights', to: '/offers/audience-fit', linkNote: 'The rules a lead is scored against are your fit rules — edited on Offers · Audience fit, and read here.' },
+    { label: 'Edit capability rules', to: '/offers/audience-fit', linkNote: 'The rules a lead is scored against are your fit rules — edited on Offers · Audience fit, and read here.' },
   ],
   'pipeline/proposals': [
     // `opened_at` is the CLIENT'S column to set and no surface lets them, so
@@ -299,7 +299,8 @@ export const PARTNER_ZONE_ACTIONS = {
   // which stopped being the whole story when the directory's readings card got
   // the record form back: it opens that form on the first reading past ninety
   // days, or the first service line never read, and records nothing itself.
-  // (`MarketZone` supplied a handler for it that this table never named.)
+  // (The unmounted `MarketZone` body, deleted by D6285, supplied a handler for
+  // it that this table never named.)
   // `Attach to proposal` STAYS PROSE: a reading attaches from its own page,
   // and nothing on this one carries a reading or a sector onto a proposal.
   'research/markets': [

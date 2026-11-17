@@ -129,6 +129,10 @@ export const teamAgentsApi = {
   updateSkill: (uid, patch) => request(`/teams/skills/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   // D4533 (B1): an optional release note, kept on the version (400 release_note_invalid | release_note_too_long).
   publishSkill: (uid, { releaseNote } = {}) => request(`/teams/skills/${enc(uid)}/publish`, { method: 'POST', body: JSON.stringify(releaseNote ? { release_note: releaseNote } : {}) }),
+  // D4538 part 5 (#5965), SK-20: explicit per-conflict choices create a draft; never publish or change pins.
+  rebaseSkill: (uid, body) => request(`/teams/skills/${enc(uid)}/rebase`, { method: 'POST', body: JSON.stringify(body) }),
+  // D4538 part 6 (#5967): task-to-skill discovery for an agent the caller manages. Reads only; attaching stays setAgentSkills.
+  discoverSkills: (body) => request('/teams/skills/discover', { method: 'POST', body: JSON.stringify(body) }),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),

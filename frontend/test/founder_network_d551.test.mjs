@@ -17,7 +17,7 @@ import { renderedText } from './_renderedText.mjs';
 import { followUp, lastNote, strengthLabel } from '../src/lib/networkBook.js';
 import { RelationshipTable, profileBody } from '../src/pages/founder/FounderNetworkRelationships.jsx';
 import { OrganizationTable, strongest } from '../src/pages/founder/FounderNetworkOrganizations.jsx';
-import { PAIRINGS_REASON, coldestProject } from '../src/pages/founder/FounderNetworkDesk.jsx';
+import { coldestProject } from '../src/pages/founder/FounderNetworkDesk.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -81,7 +81,7 @@ test('organisations group the set field and name their strongest tie', () => {
   assert.match(t, /Verwood.*1.*Strong/s);
 });
 
-test('the desk: the re-engagement band drafts for the coldest contact\'s project, and pairings stay Not recorded', () => {
+test('the desk: the re-engagement band drafts for the coldest contact\'s project', () => {
   assert.equal(coldestProject([
     { project_id: 7, last_activity_at: new Date(Date.now() - 70 * 86400_000).toISOString() },
     { project_id: 9, last_activity_at: new Date(Date.now() - 95 * 86400_000).toISOString() },
@@ -92,9 +92,8 @@ test('the desk: the re-engagement band drafts for the coldest contact\'s project
   assert.match(desk, /surface="network\/re-engagement"\s*scopeKey=\{coldScope\}/);
   assert.match(desk, /surface="network\/intro-email"/);
   assert.match(desk, /\{fillsOn && coldScope \? <ZoneDraft/, 'the band draws with the switch off');
-  assert.match(desk, /<Empty title="Not recorded" body=\{PAIRINGS_REASON\} \/>/);
-  assert.match(PAIRINGS_REASON, /never between two third parties/);
-  assert.doesNotMatch(desk, /pending\.length \? <Propositions/, 'pending propositions shown as pairings again');
+  // #5310 (D5310): "Who should meet whom" is not on the NW1 canvas, so the card went; pairings still have no store.
+  assert.doesNotMatch(desk, /Who should meet whom/);
 });
 
 test('the worker registers both founder surfaces the desk names', () => {

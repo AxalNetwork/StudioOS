@@ -24,23 +24,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: |
-          artifact=''
-          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
-            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
-          fi
-          if [ -n "$artifact" ]; then
-            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
-              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
-            fi
-          fi
-          if [ ! -f test-timings.json ]; then
-            echo "::notice::No main timings artifact available; using equal weights."
-          fi
+        run: bash scripts/ci/download-test-timings.sh
       - name: Generate the exact-once plan
         id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          full_parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          parts=$(node --input-type=module -e '
+            import { tierFor } from "./scripts/lib/prTier.mjs";
+            const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
+            console.log(tier.parts === null ? process.argv[1] : JSON.stringify(tier.parts));
+          ' "$full_parts")
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -53,12 +49,19 @@ jobs:
           SPENDING_CAP_VERIFIED: ${{ vars.RUNNER_BENCHMARK_SPENDING_CAP_VERIFIED }}
           GITHUB8_READY: ${{ vars.RUNNER_BENCHMARK_GITHUB8_READY }}
           EPHEMERAL_READY: ${{ vars.RUNNER_BENCHMARK_EPHEMERAL_READY }}
+          CODEBUILD_READY: ${{ vars.RUNNER_BENCHMARK_CODEBUILD_READY }}
         run: |
           node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
           import { readFileSync } from 'node:fs';
           import { partsOf } from './scripts/test-drift-parts.mjs';
           import { benchmarkLanes } from './scripts/lib/runnerBenchmark.mjs';
-          const lanes = benchmarkLanes({ spendingCapVerified: process.env.SPENDING_CAP_VERIFIED, github8Ready: process.env.GITHUB8_READY, ephemeralReady: process.env.EPHEMERAL_READY });
+          const env = process.env;
+          const lanes = benchmarkLanes({
+            spendingCapVerified: env.SPENDING_CAP_VERIFIED, github8Ready: env.GITHUB8_READY,
+            ephemeralReady: env.EPHEMERAL_READY, codebuildReady: env.CODEBUILD_READY,
+            repository: env.GITHUB_REPOSITORY, event: env.GITHUB_EVENT_NAME, ref: env.GITHUB_REF,
+            runId: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT,
+          });
           const parts = partsOf(JSON.parse(readFileSync('package.json', 'utf8')).scripts);
           console.log('matrix=' + JSON.stringify({ include: lanes.flatMap(lane => parts.map(part => ({ ...lane, part: part.name }))) }));
           NODE
@@ -116,3 +119,16 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: bash scripts/ci/queue-ref-alive.sh
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
+
+  gate:
+    name: benchmark gate
+    if: always()
+    needs: [plan, benchmark]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require a successful plan and complete suite
+        env:
+          PLAN: ${{ needs.plan.result }}
+          SUITE: ${{ needs.benchmark.result }}
+        run: test "$PLAN" = success && test "$SUITE" = success

@@ -43,12 +43,13 @@ export function roomAccess(d) {
 
 /**
  * The deal rooms page's three views (D4815): every live deal, the ones this
- * investor may open, and the ones they asked into. `test` is over one live deal.
+ * investor may open, and the ones they asked into. `test` is over one live deal; `short` is the
+ * phone's segmented label (D6151, DE23).
  */
 export const ROOM_FILTERS = Object.freeze([
-  { key: 'all', label: 'All live deals', test: () => true },
-  { key: 'open', label: 'You can open', test: (d) => roomAccess(d) === 'open' },
-  { key: 'requested', label: 'Requested', test: (d) => Boolean(Number(d?.is_member)) },
+  { key: 'all', label: 'All live deals', short: 'All', test: () => true },
+  { key: 'open', label: 'You can open', short: 'Can open', test: (d) => roomAccess(d) === 'open' },
+  { key: 'requested', label: 'Requested', short: 'Requested', test: (d) => Boolean(Number(d?.is_member)) },
 ]);
 
 /** What each view says when it holds nothing; a list that was not read never reaches these. */
@@ -142,9 +143,41 @@ export const REFERENCE_STATUS = {
   cancelled: 'Cancelled',
 };
 
-/** Recording, transcript and summary: the Worker stubs all three (D609's 501s). */
-export const REFERENCE_ARTEFACTS = ['Recording', 'Transcript', 'Summary'];
-export const NOT_AVAILABLE_YET = 'Not available yet';
+/** D6183: a reference call keeps notes, and Eadwyn summarises them on press. Nothing is recorded or transcribed. */
+export const REFERENCE_SUMMARY = Object.freeze({
+  lead: 'Reference checks on the founders. Keep your notes from each call; Eadwyn can summarise them. No call is recorded. Only your firm sees these. Platform admins can also access them.',
+  none: 'Not recorded: not summarised yet.',
+  needNotes: 'Not recorded: write notes from the call first.',
+  stale: 'The notes changed after this summary.',
+  from: 'Eadwyn’s summary of your notes',
+  run: 'Summarise notes',
+  again: 'Summarise again',
+  busy: 'Summarising…',
+  failed: 'The notes were not summarised. Try again.',
+});
+/** Notes shorter than this are not summarised (the Worker's MIN_NOTES_CHARS). */
+export const SUMMARY_MIN_NOTES = 40;
+
+/** D6182: the canvas's pills under a check. */
+export const REFERENCE_PILLS = { consentGiven: 'Consent given', consentAsked: 'Consent asked', notesKept: 'Notes kept' };
+
+/** D6182: the dialog before a check is deleted. */
+export const REFERENCE_DELETE_CONFIRM = {
+  title: (name) => `Delete the reference from ${name}?`,
+  body: () => 'The check, its consent and its notes are removed from this deal for everyone who reads it. This cannot be undone. Only its author or an admin can delete it.',
+  back: 'Keep it',
+  act: 'Delete',
+  refused: 'The reference was not deleted. Nothing was changed. Try again.',
+};
+
+/** D6182: the dialog before consent is recorded. */
+export const REFERENCE_CONSENT_CONFIRM = {
+  title: (name) => `Record ${name}’s consent?`,
+  body: (name) => `This records that ${name} agreed to the reference call, now, with you as the person who recorded it. Record it only once they have said yes. No call is recorded or transcribed.`,
+  back: 'Back',
+  act: 'Record consent',
+  refused: 'Consent was not recorded. Nothing was changed. Try again.',
+};
 
 /** The syndicate's three statuses, in order. */
 export const SYNDICATE_FLOW = [

@@ -7,6 +7,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { ADMIN_READ_ONLY, isAdmin, narrativeAdminGate } from '../services/narrative/adminRead';
+import { narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
 import { activityFor } from '../services/cycleActivity';
 import { campaignOptions } from '../services/campaignOptions';
 import { hasRecords, RECORD_SPECS, specFor } from '../services/records';
@@ -34,8 +35,9 @@ export function nextFor(main: RecordSection[], actions: Array<Pick<RecordAction,
   for (const section of main) {
     for (const row of section.rows) {
       if (STATUS_NEXT.test(String(row.c ?? ''))) {
-        const key = typeof row.action === 'string' ? row.action : row.action?.key ?? null;
-        return { text: row.a + (row.b ? ' · ' + row.b : ''), action: key };
+        // D6113 (#6113): a row-addressed action keeps its body, so the CTA runs on that row (an entry step's Mark done).
+        const action = typeof row.action === 'string' ? row.action : row.action ? { key: row.action.key, body: row.action.body } : null;
+        return { text: row.a + (row.b ? ' · ' + row.b : ''), action };
       }
     }
   }
@@ -163,8 +165,8 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
       if (section.gate && !await allowed(section.gate, s.ctx.project, s.ctx.user, s.ctx.env)) continue;
       if (section.when && !section.when(s.id, record)) continue;
       const data = await section.read(s.ctx, s.id, record);
-      const rows = canWrite ? data.rows : data.rows.map(({ action: _action, ...row }) => row);
-      sections.push({ key: section.key, title: section.title,
+      const rows = canWrite ? data.rows : data.rows.map(({ action: _action, actions: _actions, ...row }) => row);
+      sections.push({ key: section.key, title: section.title, note: section.note,
         gate: section.publicGate ?? (section.gate === 'write' ? 'write' : 'read'), side: section.side, rows,
         empty: data.empty, action: canWrite ? data.action : undefined });
     }
@@ -197,7 +199,10 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
     if (!s.spec.formOptions) return c.json({});
     const query = Object.fromEntries(new URL(c.req.url).searchParams.entries());
     delete query.project;
-    return c.json(await s.spec.formOptions(s.ctx, query));
+    const options = await s.spec.formOptions(s.ctx, query);
+    // D5074 slice 3: the narrative's versions read carries the caller's capabilities; its writes refuse from the same map.
+    if (isNarrative(c)) return c.json({ ...(options as Record<string, unknown>), capabilities: narrativeCapabilities(await narrativeStanding(c, s.ctx.user, s.ctx.projectId)) });
+    return c.json(options);
   });
   return route;
 }

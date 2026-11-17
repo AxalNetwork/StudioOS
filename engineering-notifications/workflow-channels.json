@@ -17,6 +17,11 @@
       "channel": "#axalvc-actions-agent-stage-a"
     },
     {
+      "id": 419009745,
+      "path": ".github/workflows/archive-observer-deploy.yml",
+      "channel": "#axalvc-actions-archive-observer-deploy"
+    },
+    {
       "id": 280437834,
       "path": ".github/workflows/backup-d1.yml",
       "channel": "#axalvc-actions-backup-d1"
@@ -112,6 +117,11 @@
       "channel": "#axalvc-actions-form-lightbox-contracts"
     },
     {
+      "id": null,
+      "path": ".github/workflows/gateway-live-check.yml",
+      "channel": "#axalvc-actions-gateway-live-check"
+    },
+    {
       "id": 412302440,
       "path": ".github/workflows/github-alerts.yml",
       "channel": "#axalvc-actions-github-alerts"
@@ -125,6 +135,11 @@
       "id": 374048125,
       "path": ".github/workflows/labels-sync.yml",
       "channel": "#axalvc-actions-labels-sync"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-feeder.yml",
+      "channel": "#axalvc-actions-landing-feeder"
     },
     {
       "id": 415180957,

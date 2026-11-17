@@ -61,6 +61,17 @@ export function day(value) {
   return `${Number(m[3])} ${month} ${m[1]}`;
 }
 
+/**
+ * D6207 (#6207): an ISO instant → `14 Nov 2026, 10:32 UTC`, read in UTC (the
+ * Worker's `read_at`). Null for anything that is not an instant.
+ */
+export function dayTime(value) {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(value || ''));
+  if (!m || !Number.isFinite(Date.parse(String(value)))) return null;
+  const d = day(m[1]);
+  return d ? `${d}, ${m[2]}:${m[3]} UTC` : null;
+}
+
 /** Whole days from `from` to `to`, both ISO dates; null when either is missing. */
 export function daysBetween(from, to) {
   const a = Date.parse(`${String(from || '').slice(0, 10)}T00:00:00Z`);
@@ -184,10 +195,18 @@ export function performanceOf(analytics, positions) {
     value: String(count),
     note: unmarked == null ? null : `${count - unmarked} marked · ${unmarked} unmarked`,
   };
-  const asOf = a?.as_of ? `As of ${day(a.as_of)}` : 'As of the latest recorded marks';
+  // D6207 (#6207): a read cut at an explicit date says that date. A default
+  // read (`as_of` null) says the Worker's own date (`as_of_default`) and that
+  // it is the latest recorded marks, never the browser clock; an older Worker
+  // that sends neither keeps D4817's words.
+  let asOf = 'As of the latest recorded marks';
+  if (a?.as_of && day(a.as_of)) asOf = `As of ${day(a.as_of)}`;
+  else if (a?.as_of_default && day(a.as_of_default)) asOf = `As of ${day(a.as_of_default)} · latest recorded marks`;
+  const readAt = a ? dayTime(a.read_at) : null;
   const basis = [
     a ? (a.basis === 'gross' || a.basis == null ? 'Gross of fees and carry' : `Basis: ${a.basis}`) : 'Gross of fees and carry',
     asOf,
+    readAt ? `Read at ${readAt}` : null,
     marks?.newest ? `Newest mark ${day(marks.newest)}` : null,
     'Marks: latest per company on or before the as-of date',
     'Unmarked positions carry at cost',
@@ -217,7 +236,7 @@ export function healthFor(position, health) {
   if (item) {
     const state = BADGE[item.badge];
     if (!state) return { state: 'Not recorded', reason: 'The snapshot carries no badge.' };
-    return { state, date: item.snapshot_date || null, stale: item.stale === true, ageDays: isNum(item.age_days) ? Number(item.age_days) : null, intervention: Boolean(item.intervention) };
+    return { state, date: item.snapshot_date || null, previous: Object.hasOwn(item, 'previous_status') ? (BADGE[item.previous_status] || null) : undefined, changedAt: item.status_changed_at, stale: item.stale === true, ageDays: isNum(item.age_days) ? Number(item.age_days) : null, intervention: Boolean(item.intervention) };
   }
   const nm = (health.value.not_measured || []).find((n) => uid && n.uid === uid);
   if (nm && /insufficient|not_enough/.test(String(nm.state))) return { state: 'Not enough evidence', reason: nm.reason || 'Not enough evidence to score health.' };
@@ -275,9 +294,16 @@ export function valueAddSummaryOf(support) {
   const s = support.value;
   if (!s.totals) return { state: 'unreadable', reason: 'The support ledger\'s figures could not be read.' };
   const t = s.totals;
+  // D6203 (#6203): the Worker's introduction figures over the whole scope (D6202 `by_kind.intro`); a figure the
+  // read did not carry is null, never 0.
+  const intro = t.by_kind && typeof t.by_kind === 'object' && t.by_kind.intro && typeof t.by_kind.intro === 'object' ? t.by_kind.intro : {};
+  const count = (v) => (isNum(v) ? Number(v) : null);
   return {
     state: 'ok',
-    open: t.promised,
+    // D6203: open is both open states (promised and in progress), as the Value-add page counts it.
+    open: isNum(t.outstanding) ? Number(t.outstanding) : t.promised,
+    introductions: count(intro.delivered),
+    meetings: count(intro.meetings_held),
     delivered: t.delivered,
     withdrawn: t.withdrawn,
     supported: t.companies_supported,
@@ -304,6 +330,14 @@ export function runwayFor(position, updates) {
   return null;
 }
 
+function recentAttentionChange(health) {
+  if (health.state !== 'Attention' || !health.previous || health.previous === 'Attention' || health.ageDays == null) return null;
+  const daysToSnapshot = daysBetween(health.changedAt, health.date);
+  if (daysToSnapshot == null || daysToSnapshot < 0 || health.ageDays < 0 || daysToSnapshot + health.ageDays > 90) return null;
+  const changed = day(health.changedAt);
+  return changed ? `Health turned to Attention on ${changed} · first snapshot with this status` : null;
+}
+
 /**
  * The evidence for one company, each line `{ label, text, weight }` with
  * weight 3 urgent, 2 watch, 1 incomplete. A company with no evidence line is
@@ -316,6 +350,8 @@ export function evidenceFor(position, { health, compliance, updates }, reference
   if (h.state === 'Attention') lines.push({ label: 'Health', text: `Attention in the snapshot of ${day(h.date) || 'an undated day'}${h.intervention ? ' · flagged for intervention' : ''}`, weight: 3 });
   else if (h.state === 'Watch') lines.push({ label: 'Health', text: `Watch in the snapshot of ${day(h.date) || 'an undated day'}${h.intervention ? ' · flagged for intervention' : ''}`, weight: 2 });
   else if (h.state === 'Not enough evidence' || h.state === 'Not recorded') lines.push({ label: 'Health', text: h.reason, weight: 1 });
+  const change = recentAttentionChange(h);
+  if (change) lines.push({ label: 'Health', text: change, weight: 3 });
   if (h.stale && h.date) lines.push({ label: 'Health', text: `Snapshot ${h.ageDays != null ? `${h.ageDays} days old` : 'stale'} · ${day(h.date)}`, weight: 1 });
 
   const runway = runwayFor(position, updates);
@@ -397,6 +433,11 @@ export function companyRowsOf(reads) {
         stage: p.project?.stage || null,
         invested: money(p.total_invested),
         investedRaw: Number(p.total_invested) || 0,
+        // D6208: the sort keys, null where nothing is recorded, so a missing
+        // figure sorts last instead of sorting as a zero.
+        investedValue: isNum(p.total_invested) ? Number(p.total_invested) : null,
+        multipleValue: isNum(p.multiple) ? Number(p.multiple) : null,
+        lastValue: r.last ? String(r.last) : null,
         fmv: mark.kind === 'marked' ? money(p.fmv) : null,
         markDate: p.mark_as_of ? day(p.mark_as_of) : null,
         atCost: mark.kind === 'marked' ? null : money(p.total_invested),
@@ -413,11 +454,204 @@ export function companyRowsOf(reads) {
     .sort((a, b) => HEALTH.indexOf(a.health.state) - HEALTH.indexOf(b.health.state) || b.investedRaw - a.investedRaw || a.name.localeCompare(b.name));
 }
 
-/** Filter the table by a search string and a health state ('all' for every row). */
-export function filterRows(rows, { query = '', health = 'all' } = {}) {
+/**
+ * The value a Sector or Stage filter uses for a row that records none: the
+ * filter offers "Not recorded" as its own choice rather than hiding the row.
+ */
+export const NONE = '__none';
+
+/** The reporting states a row can carry (`reportingFor`), most urgent first. */
+export const REPORTING = ['Not received', 'Due', 'Received', 'Not recorded', 'Unreadable'];
+
+const matches = (want, have) => want === 'all' || (want === NONE ? !have : have === want);
+
+/**
+ * Filter the table by a search string and by Sector, Stage, Health and
+ * Reporting ('all' for every row). Sector and stage are the project's own
+ * (`companyRowsOf`); Reporting is the row's obligation for the measured
+ * period (`reportingFor`), the same word the Reporting column shows.
+ */
+export function filterRows(rows, {
+  query = '', health = 'all', sector = 'all', stage = 'all', reporting = 'all',
+} = {}) {
   const q = query.trim().toLowerCase();
   return rows.filter((r) => (!q || r.name.toLowerCase().includes(q) || String(r.sector || '').toLowerCase().includes(q))
-    && (health === 'all' || r.health.state === health));
+    && (health === 'all' || r.health.state === health)
+    && matches(sector, r.sector)
+    && matches(stage, r.stage)
+    && (reporting === 'all' || r.reporting.state === reporting));
+}
+
+/**
+ * The choices each filter offers, from the rows the book holds: a sector or
+ * stage nobody carries is not offered, and a row with none is reachable
+ * through "Not recorded". Reporting offers only the states present, in
+ * REPORTING order.
+ */
+export function filterOptionsOf(rows) {
+  const distinct = (pick) => {
+    const seen = new Map();
+    let none = false;
+    for (const r of rows) {
+      const v = pick(r);
+      if (v) seen.set(v, titleCase(v) || v); else none = true;
+    }
+    const list = [...seen].map(([value, text]) => ({ value, label: text })).sort((a, b) => a.label.localeCompare(b.label));
+    return none ? [...list, { value: NONE, label: NOT_RECORDED }] : list;
+  };
+  const present = new Set(rows.map((r) => r.reporting?.state));
+  return {
+    sector: distinct((r) => r.sector),
+    stage: distinct((r) => r.stage),
+    reporting: REPORTING.filter((s) => present.has(s)).map((s) => ({ value: s, label: s })),
+  };
+}
+
+/** The sort control's choices; `health` is the table's own order (`companyRowsOf`). */
+export const SORTS = [
+  { value: 'health', label: 'Health', words: 'health, then invested' },
+  { value: 'invested', label: 'Invested', words: 'invested, largest first' },
+  { value: 'multiple', label: 'Multiple', words: 'multiple, highest first' },
+  { value: 'updated', label: 'Last update', words: 'last update, newest first' },
+];
+
+const SORT_KEY = { invested: 'investedValue', multiple: 'multipleValue', updated: 'lastValue' };
+
+/**
+ * Sort the rows. A row with nothing recorded for the key sorts last, never as
+ * a zero; ties keep the health order.
+ */
+export function sortRows(rows, by = 'health') {
+  const key = SORT_KEY[by];
+  if (!key) return rows.slice();
+  const cmp = (a, b) => (typeof a === 'number' ? b - a : String(b).localeCompare(String(a)));
+  return rows.slice().sort((a, b) => {
+    const x = a[key];
+    const y = b[key];
+    if (x == null || y == null) return (x == null) - (y == null);
+    return cmp(x, y);
+  });
+}
+
+/**
+ * The words for the filters in force, in the order the controls sit:
+ * `['Search: “kit”', 'Sector: Robotics', …]`. Empty when nothing narrows.
+ */
+export function filterWordsOf(filters, options) {
+  const named = (list, value) => (list.find((o) => o.value === value) || {}).label || value;
+  const out = [];
+  const q = String(filters.query || '').trim();
+  if (q) out.push(`Search: “${q}”`);
+  if (filters.sector && filters.sector !== 'all') out.push(`Sector: ${named(options.sector, filters.sector)}`);
+  if (filters.stage && filters.stage !== 'all') out.push(`Stage: ${named(options.stage, filters.stage)}`);
+  if (filters.health && filters.health !== 'all') out.push(`Health: ${filters.health}`);
+  if (filters.reporting && filters.reporting !== 'all') out.push(`Reporting: ${filters.reporting}`);
+  return out;
+}
+
+/** The table's caption: the count, the filters in force, the sort and the basis. */
+export function tableCaptionOf(shown, total, filterWords, sort = 'health') {
+  const sorted = (SORTS.find((s) => s.value === sort) || SORTS[0]).words;
+  return [
+    `${shown} of ${total} ${total === 1 ? 'company' : 'companies'}`,
+    ...(filterWords.length ? [`filtered by ${filterWords.join(', ')}`] : []),
+    `sorted by ${sorted}`,
+    'values gross',
+  ].join(' · ');
+}
+
+/* ----------------------------------------------------------------- exports */
+
+/*
+ * D6208: what Export writes. Each builder returns `{ header, rows }` for
+ * `exportView` (`lib/csvExport.js`), or `{ reason }` when there is nothing to
+ * write yet. A cell never holds a zero, a blank or "Reading…" in place of a
+ * figure: a gap is written as the word the screen shows (Not recorded,
+ * Unreadable), so the file cannot claim more than the page does.
+ */
+
+/** The basis and as-of every exported row carries, from the performance read. */
+export function exportBasisOf(analytics) {
+  if (!analytics || analytics.state === 'loading') return null;
+  if (analytics.state !== 'ok') return { basis: 'Gross of fees and carry', asOf: UNREADABLE };
+  const a = analytics.value;
+  return {
+    basis: a.basis === 'gross' || a.basis == null ? 'Gross of fees and carry' : `Basis: ${a.basis}`,
+    asOf: a.as_of ? day(a.as_of) : 'Latest recorded marks',
+  };
+}
+
+const LOADING_NAMES = { positions: 'Positions', health: 'Health', compliance: 'Reporting', analytics: 'Performance' };
+
+/** The Overview's export: the rows shown, in the order shown, each with its basis and as-of. */
+export function companyExportOf(reads, rows, shown) {
+  const loading = Object.keys(LOADING_NAMES).filter((k) => !reads[k] || reads[k].state === 'loading');
+  if (loading.length) return { reason: `${loading.map((k) => LOADING_NAMES[k]).join(', ')} ${loading.length === 1 ? 'is' : 'are'} still loading, so there is nothing to export yet.` };
+  if (reads.positions.state !== 'ok' || !rows) return { reason: 'Positions could not be read, so there is nothing to export.' };
+  if (rows.length === 0) return { reason: 'No position is recorded, so there is nothing to export.' };
+  if (shown.length === 0) return { reason: 'No company matches these filters, so there is nothing to export.' };
+  const { basis, asOf } = exportBasisOf(reads.analytics);
+  return {
+    header: ['Company', 'Sector', 'Stage', 'Invested', 'Latest FMV', 'Mark date', 'Ownership', 'MOIC', 'Reporting', 'Period', 'Health', 'Last update', 'Basis', 'As of'],
+    rows: shown.map((r) => [
+      r.name,
+      r.sector ? titleCase(r.sector) || r.sector : NOT_RECORDED,
+      r.stage ? titleCase(r.stage) || r.stage : NOT_RECORDED,
+      r.invested || NOT_RECORDED,
+      r.fmv || (r.markReason ? 'Mark not usable' : 'No mark recorded'),
+      r.fmv ? (r.markDate || NOT_RECORDED) : (r.atCost ? `Carried at cost ${r.atCost}` : NOT_RECORDED),
+      r.ownership || NOT_RECORDED,
+      r.moic ? `${r.moic}${r.moicAtCost ? ' at cost' : ''}` : NOT_RECORDED,
+      r.reporting.state,
+      r.reporting.period || NOT_RECORDED,
+      r.health.state,
+      r.lastUpdate || (r.reporting.state === UNREADABLE ? UNREADABLE : NOT_RECORDED),
+      basis,
+      asOf,
+    ]),
+  };
+}
+
+/** Performance's quarter-end export: every quarter-end in the window, a gap written as its word. */
+export function quarterExportOf(win, series, analytics) {
+  if (!win || win.state === 'loading') return { reason: 'The quarter-end series is still loading, so there is nothing to export yet.' };
+  if (win.state === 'unreadable') return { reason: 'The quarter-end series could not be read, so there is nothing to export.' };
+  if (win.state !== 'ok') return { reason: `No quarter-end is recorded (${win.reason}), so there is nothing to export.` };
+  if (!series || series.points.some((p) => p.state === 'loading')) return { reason: 'Some quarter-ends are still loading, so there is nothing to export yet.' };
+  const basis = (exportBasisOf(analytics) || {}).basis || 'Gross of fees and carry';
+  return {
+    header: ['Quarter-end', 'Quarter', 'NAV', 'Paid-in', 'Distributed', 'TVPI', 'Mark coverage', 'Note', 'Basis'],
+    rows: series.points.map((p) => {
+      const gap = p.state === 'ok' ? null : pointWords(p);
+      return [
+        p.date,
+        quarterName(p.date) || p.label,
+        gap || p.navText,
+        gap || p.paidIn,
+        gap || p.distributed,
+        gap || p.tvpi.value,
+        gap || p.coverage,
+        p.reason || '',
+        basis,
+      ];
+    }),
+  };
+}
+
+/**
+ * Performance's cohort export: one row per vintage, as the table shows it.
+ * A cohort's carrying value is the positions read's latest recorded mark (or
+ * cost), not the performance read's as-of, so that is what its As of says.
+ */
+export function cohortExportOf(cohorts) {
+  if (!cohorts || cohorts.state === 'loading') return { reason: 'Positions are still loading, so there is nothing to export yet.' };
+  if (cohorts.state === 'unreadable') return { reason: 'Positions could not be read, so there is nothing to export.' };
+  if (cohorts.state !== 'ok') return { reason: `${cohorts.reason} There is nothing to export.` };
+  if (cohorts.rows.length === 0) return { reason: 'No position records a first-cheque date, so no cohort is drawn and there is nothing to export.' };
+  return {
+    header: ['Vintage', 'Companies', 'Invested', 'Carrying value', 'Carried at cost', 'Carrying ÷ invested', 'Basis', 'As of'],
+    rows: cohorts.rows.map((r) => [r.vintage, r.companies, r.invested, r.carrying, r.atCost, r.multiple || NOT_RECORDED, 'Gross of fees and carry', 'Latest recorded marks']),
+  };
 }
 
 /* ------------------------------------------------- positions register (PF-02) */
@@ -604,12 +838,10 @@ export function ageWords(days) {
 
 /**
  * The attention rules the addendum maps for Positions (PFA06), each with its
- * hits, or the state of the source it reads. `flips` is
- * `{ [uid]: true | false | 'unreadable' }` from each Attention company's
- * 90-day health history. `overview` says whether the rule also feeds the
- * Overview's queue.
+ * hits, or the state of the source it reads.
+ * `overview` says whether the rule also feeds the Overview's queue.
  */
-export function attentionRulesOf(reads, rows, flips = {}) {
+export function attentionRulesOf(reads, rows) {
   const { positions, health, compliance, updates } = reads;
   const list = rows || [];
   const byKey = new Map(list.map((r) => [r.key, r]));
@@ -633,18 +865,13 @@ export function attentionRulesOf(reads, rows, flips = {}) {
           : 'No update received',
       })),
   };
-  const red = list.filter((r) => r.health.state === 'Attention' && r.uid);
-  let healthFlip;
-  if (health.state !== 'ok') healthFlip = { state: health.state };
-  else if (red.some((r) => flips[r.uid] === undefined)) healthFlip = { state: 'loading' };
-  else {
-    healthFlip = {
-      state: 'ok',
-      partial: red.filter((r) => flips[r.uid] === 'unreadable').map((r) => r.name),
-      hits: red.filter((r) => flips[r.uid] === true)
-        .map((r) => ({ key: r.key, name: r.name, text: `Attention in the snapshot of ${day(r.health.date) || 'an undated day'}; an earlier snapshot inside 90 days was not` })),
-    };
-  }
+  const healthFlip = health.state !== 'ok' ? { state: health.state } : {
+    state: 'ok',
+    partial: list.filter(({ health: h }) => h.state === 'Attention' && (h.previous === undefined
+      || (h.previous && (h.ageDays == null || daysBetween(h.changedAt, h.date) == null)))).map((r) => r.name),
+    hits: list.map((r) => ({ key: r.key, name: r.name, text: recentAttentionChange(r.health) }))
+      .filter((r) => r.text),
+  };
   const below = positions.state !== 'ok' ? { state: positions.state } : {
     state: 'ok',
     hits: list.filter((r) => r.below).map((r) => ({ key: r.key, name: r.name, text: `${r.multiple || 'Multiple not recorded'} · ${r.basis || 'basis not recorded'}${r.markDate ? ` · ${r.markDate}` : ''}` })),
@@ -657,7 +884,7 @@ export function attentionRulesOf(reads, rows, flips = {}) {
   return [
     { key: 'runway', rule: 'Runway under 6 months', reason: 'Attention · short runway', source: 'Founder updates', retry: 'updates', overview: true, ...runway },
     { key: 'stale-update', rule: 'Update older than 30 days', reason: 'Watch · stale update', source: 'Reporting', retry: 'compliance', overview: false, ...staleUpdate },
-    { key: 'health-red', rule: 'Health turned red within 90 days', reason: 'Attention · recent health change', source: 'Health', retry: 'health', overview: false, ...healthFlip },
+    { key: 'health-red', rule: 'Health turned red within 90 days', reason: 'Attention · recent health change', source: 'Health', retry: 'health', overview: true, ...healthFlip },
     { key: 'below-cost', rule: 'Latest mark below cost', reason: 'Watch · marked down', source: 'Positions', retry: 'positions', overview: true, ...below },
     { key: 'no-evidence', rule: 'No positive scoring evidence', reason: 'Not enough evidence', source: 'Health', retry: 'health', overview: true, ...noEvidence },
   ];
@@ -756,6 +983,43 @@ export function quarterPointOf(date, read) {
     distributed: money(a.distributed) || NOT_RECORDED,
     tvpi: ratio(a.returns?.tvpi, a.tvpi, multiple),
     coverage: count != null && unmarked != null ? `${count - unmarked} of ${count}` : NOT_RECORDED,
+  };
+}
+
+/**
+ * D6207 (#6207): the last completed quarter-end the Overview compares the
+ * hero against — `quarterWindowOf`'s `last`, i.e. the reporting read's
+ * `period_until`, the Worker's date. Null until the window is readable and
+ * holds a quarter-end, so no read is made on a guess.
+ */
+export function lastQuarterEndOf(positions, compliance) {
+  const win = quarterWindowOf(positions, compliance);
+  return win.state === 'ok' ? win.last : null;
+}
+
+/**
+ * D6207 (#6207, reversing the D4817 parts 1 and 3 departure): the change in
+ * NAV from the last completed quarter-end to the latest book (the hero).
+ * `analytics` is the hero's read, `read` the quarter-end's. Null — no line,
+ * no number — unless both answered with a NAV: a failed read, a quarter-end
+ * that holds no book, or an empty hero book draws nothing.
+ *
+ * The words name both ends: the latest book is not a quarter-end, so the line
+ * says which quarter-end it is measured from.
+ */
+export function navChangeOf(analytics, date, read) {
+  if (!date || !analytics || analytics.state !== 'ok') return null;
+  const a = analytics.value;
+  if (!isNum(a.nav) || (isNum(a.position_count) && Number(a.position_count) === 0)) return null;
+  const point = quarterPointOf(date, read);
+  if (point.state !== 'ok') return null;
+  const delta = Number(a.nav) - point.nav;
+  const since = `since ${point.label} (quarter-end)`;
+  return {
+    date,
+    delta,
+    text: delta === 0 ? `NAV unchanged ${since}` : `NAV ${delta > 0 ? 'up' : 'down'} ${money(Math.abs(delta))} ${since}`,
+    note: `Latest book against the book read as of ${point.label}; capital invested since counts in the change.`,
   };
 }
 

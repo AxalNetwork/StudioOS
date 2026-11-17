@@ -240,10 +240,13 @@ private registries, destination checks, canary receipts and rollback.
 - [ ] `CF_OBSERVER_SECRET` — a separate random 32+ character secret for private
       `/status` reads. Only the independent observer receives this credential.
 
+- [ ] `WORKGRAPH_INGEST_TOKEN` – the HQ WorkGraph snapshot ingest (D5580 part 4, #5580). The hourly `pr-overlap.yml` job posts its advisory snapshot to `POST /api/admin/workgraph/snapshots` with this value as a bearer token, compared in constant time. Generate 48+ random characters (`openssl rand -hex 32`) and set the **same** value in two places: the Worker (`npx wrangler secret put WORKGRAPH_INGEST_TOKEN --config wrangler.toml --env production`) and the GitHub Actions secret of the same name (below). Unset on the Worker, the ingest answers 503 `workgraph_ingest_not_configured`; unset in Actions, the job skips the post with a notice. Either way the snapshot stays in the run's artifact, and `GET /api/admin/workgraph/in-flight` (Super Admin) says no scan has been posted. Rotation: put the new value in both places; a post between the two answers 401 and the next hourly run succeeds. Rollback: delete the Worker secret. Never logged.
+
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
 - [ ] `CLOUDFLARE_ACCOUNT_ID`
 - [ ] `SLACK_DEPLOY_WEBHOOK_URL` – optional, failure notifications.
+- [ ] `WORKGRAPH_INGEST_TOKEN` – optional, the same value as the Worker secret of that name (above); `pr-overlap.yml` posts each hourly snapshot with it (D5580 part 4).
 - [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
       independent receiver's observer secret. It is neither the Slack token nor
       the ingress secret. The observer remains off until `CF_HEARTBEAT_ENABLED`
@@ -256,6 +259,8 @@ D5676: the disabled independent archive observer needs separate writer (`ARCHIVE
 D5673: the disabled Cloudflare metadata reconciler requires a separately scoped `CF_OBSERVER_READ_TOKEN` (Workers Scripts Read) and `CF_SOURCE_POLL=on` only after owner approval; never reuse the script-edit token. Neither is provisioned by its source PR.
 
 D5675: the preview bot canary requires a distinct `MEETING_BOT_PREVIEW_SECRET` on the preview host and in the protected deploy workflow. It derives separate operator/callback/receipt keys and is never a production bot secret. Configure the host's `PREVIEW_CANARY_ORIGIN`, explicit preview audience and enable flag only after #5671's private preview route is verified. The workflow uses `MEETING_BOT_PREVIEW_ORIGIN` and `MEETING_BOT_PREVIEW_ROUTE_VERIFIED` owner variables. Missing values stop normal promotion. Keep all values out of issues and logs; see D5675 for first activation and emergency rollback. No secret or flag was changed by this implementation.
+
+D2403: a founder's own X connection uses a second HQ-owned "founders" X app, never HQ's posting app (`X_CLIENT_ID`). Its client goes under `X_FOUNDERS_CLIENT_ID` and `X_FOUNDERS_CLIENT_SECRET`, set as Worker secrets or from HQ › Integration keys (key `x`); until both are set the connector reads as not set up. Register `/api/integrations/oauth/x/callback` on that app with X.
 
 ## 5. Post-deploy checklist
 

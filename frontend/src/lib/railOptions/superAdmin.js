@@ -1,3 +1,4 @@
+import { FUND_ADMIN_ASK_CHIPS } from './admin.js';
 /**
  * D775 (#2101) — the Super Admin's boards and the options they offer, as the
  * AIRail canvas names them (`design/incoming/airail-every-page-data/canvas.json`,
@@ -77,7 +78,8 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H33', section: 'Platform', module: 'Monitoring', route: '/monitoring', files: ['pages/MonitoringPage.jsx'], rail: 'pages/MonitoringPage.jsx' },
   { id: 'H34', section: 'Platform', module: 'Telegram channels', route: '/admin/telegram', files: ['pages/admin/AdminTelegram.jsx'], rail: 'pages/admin/AdminTelegram.jsx' },
   { id: 'H35', section: 'Support', module: null, route: '/admin/hq-support', files: ['pages/hq/HqSupportPage.jsx'], rail: 'pages/hq/HqSupportPage.jsx' },
-  { id: 'H36', section: 'Security', module: null, route: '/admin/security', files: ['pages/hq/SecurityPage.jsx'], rail: 'pages/hq/SecurityPage.jsx' },
+  // D4708 part 3: the page's view moved into security/SecurityConsole.jsx, which mounts the rail.
+  { id: 'H36', section: 'Security', module: null, route: '/admin/security', files: ['pages/hq/SecurityPage.jsx', 'pages/hq/security/SecurityConsole.jsx'], rail: 'pages/hq/security/SecurityConsole.jsx' },
   { id: 'H37', section: 'Settings', module: null, route: '/account', files: ['pages/SettingsPage.jsx'], railAbsent: 'Owner request: Account and its settings sections deliberately have no AI rail on desktop or phone.' },
 ];
 
@@ -111,3 +113,8 @@ export const SUPER_ADMIN_RAIL_OPTIONS = Object.freeze([
   { page: 'Super Admin · Content · Publications', key: 'draft:publication-summary', label: 'Draft with AI', kind: 'write', handler: 'draft',
     source: { file: 'pages/admin/PublicationNew.jsx', match: 'publications.draft(' } },
 ]);
+
+/** D6397: the Fund Admin console has its own page and recorded-read tasks. */
+export const SUPER_ADMIN_FUND_ADMIN_ASK_CHIPS = Object.freeze(FUND_ADMIN_ASK_CHIPS.map(chip => ({
+  ...chip, page: 'Super Admin · Fund Admin', route: '/admin/fund-admin',
+})));

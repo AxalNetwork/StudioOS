@@ -9,6 +9,7 @@ import { effectiveVisibility } from '../services/userSettings';
 import { ARCHETYPES } from '../services/archetypeScoring';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import { updateFigures } from './portfolio_updates';
+import { MARKET_FIGURES, currentMarketFigures } from '../services/marketFigures';
 
 const r = new Hono<{ Bindings: Env }>();
 const notRecorded = (reason: string) => ({ state: 'not_recorded', reason });
@@ -98,16 +99,39 @@ async function team(env: Env, project: any) {
     values_band: { value: null, ...notRecorded('No recorded consent to share a team values band') } };
 }
 
+/**
+ * D6171 (#6171): TAM, SAM and SOM with their source and date, from each
+ * figure's current `market_figures` row (D6011). The source is the title of
+ * the venture's own market source the founder named, which `sources` below
+ * already lists, or fixed words: never a note, an input or a prompt.
+ */
+async function sizing(env: Env, project: any) {
+  const { values, current } = await currentMarketFigures(env, project.id);
+  const setters = [...new Set(MARKET_FIGURES.map(k => current[k]?.set_by).filter((x): x is number => x != null))];
+  const { results: team } = setters.length ? await env.DB.prepare(`SELECT u.id FROM users u
+    WHERE u.id IN (SELECT value FROM json_each(?)) AND (u.founder_id = ? OR EXISTS (SELECT 1 FROM project_members m
+      WHERE m.user_id = u.id AND m.project_id = ? AND m.status = 'accepted' AND m.removed_at IS NULL))`)
+    .bind(JSON.stringify(setters), project.founder_id, project.id).all<{ id: number }>() : { results: [] as { id: number }[] };
+  const onTeam = new Set(team.map(t => Number(t.id)));
+  return Object.fromEntries(MARKET_FIGURES.map(key => {
+    const value = values[key];
+    const row = current[key];
+    if (value == null) return [key, { value: null, source: null, as_of: null, reason: 'Not recorded' }];
+    if (!row) return [key, { value, source: null, as_of: null, reason: 'No source recorded for this figure' }];
+    const as_of = String(row.set_at).slice(0, 10);
+    if (row.source_title) return [key, { value, source: row.source_title, as_of, reason: null }];
+    const byTeam = row.set_by != null && onTeam.has(Number(row.set_by));
+    if (byTeam && row.method === 'typed') return [key, { value, source: 'typed', as_of, reason: null }];
+    const reason = !byTeam
+      ? (row.set_by == null ? 'No source named, and who entered it is not recorded' : 'Entered on the founder’s behalf; no source named')
+      : `The founder’s own ${row.method === 'bottom_up' ? 'bottom-up' : 'top-down'} sizing; no source named`;
+    return [key, { value, source: null, as_of, reason }];
+  }));
+}
+
 async function market(env: Env, project: any) {
   return {
-    sizing: await block(async () => {
-      const row = await env.DB.prepare('SELECT tam, sam, som FROM projects WHERE id = ?').bind(project.id).first<any>();
-      return Object.fromEntries(['tam', 'sam', 'som'].map(key => {
-        const value = row?.[key];
-        return [key, { value: typeof value === 'number' && Number.isFinite(value) ? value : null,
-          source: null, reason: value == null ? 'Not recorded' : 'No source recorded for this figure' }];
-      }));
-    }),
+    sizing: await block(() => sizing(env, project)),
     sources: await block(async () => (await env.DB.prepare('SELECT title, url, kind FROM market_sources WHERE project_id = ? ORDER BY id').bind(project.id).all()).results),
     who_pays: await block(async () => (await env.DB.prepare(`SELECT name, description, source FROM customer_segments
       WHERE project_id = ? AND archived_at IS NULL ORDER BY id`).bind(project.id).all()).results),
@@ -123,7 +147,7 @@ async function market(env: Env, project: any) {
 }
 
 async function traction(env: Env, project: any, user: { id: number; role: string }) {
-  return { history: await block(async () => {
+  const history = await block(async () => {
     // NDA is necessary, not a sharing grant. Drafts, private snapshots, legacy KPIs
     // and grants to a different investor are deliberately excluded for every role.
     const { results } = await env.DB.prepare(`SELECT id, period, metrics_json FROM portfolio_updates
@@ -145,9 +169,21 @@ async function traction(env: Env, project: any, user: { id: number; role: string
       return { month, state: figures.length ? 'reported' : 'not_reported', figures,
         reason: figures.length ? null : 'Not reported' };
     });
-  }), arr: { value: null, ...notRecorded('No founder-shared ARR recorded; MRR is not annualised') },
-  nrr: { value: null, ...notRecorded('No founder-shared NRR recorded') },
-  evidence: notRecorded('Shared evidence is not available in this view yet') };
+  });
+  const sharedMetric = (key: string, reason: string) => {
+    if (history.state !== 'recorded') return { value: null, state: history.state, reason: 'Shared figures are unreadable. Try again.' };
+    const months = history.data as Array<{ figures: Array<{ key: string; value: number | null; source: string | null; as_of: string | null }> }>;
+    for (const month of [...months].reverse()) {
+      const figure = month.figures.find((f) => f.key === key && f.value != null && f.source);
+      if (figure) return { ...figure, state: 'recorded' };
+    }
+    return { value: null, ...notRecorded(reason) };
+  };
+  const netRetention = sharedMetric('net_retention', 'No founder-shared NRR recorded');
+  return { history, arr: sharedMetric('arr', 'No founder-shared ARR recorded; MRR is not annualised'),
+    net_retention: netRetention,
+    // Retain the old read-only placeholder name for older clients; no metric is stored as nrr.
+    nrr: netRetention, evidence: notRecorded('Shared evidence is not available in this view yet') };
 }
 
 function handler(section: 'team' | 'market' | 'traction') {

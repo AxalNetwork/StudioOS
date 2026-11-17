@@ -71,9 +71,12 @@ test('the chip says "the Super Admin" to the holder and "you" to anyone else', (
   assert.equal(writesAs(undefined), 'you');
   assert.equal(previewNote(true), 'This changes this browser’s chrome only. Every write still goes out as the Super Admin.');
   assert.equal(previewNote(false), 'This changes this browser’s chrome only. Every write still goes out as you.');
+  assert.match(previewNote(true, 'investor'), /Return to HQ/);
+  assert.equal(previewNote(false, 'investor'), previewNote(false));
+  assert.equal(previewNote(true, 'founder'), previewNote(true));
   // The strip renders the note by the elevation, and no literal "Super Admin"
   // sits in the preview strip or menu for a non-holder to read.
-  assert.match(SWITCHER, /\{previewNote\(superAdmin\)\}/, 'the strip does not word the note by the elevation');
+  assert.match(SWITCHER, /\{previewNote\(superAdmin, selectedKey\)\}/, 'the strip does not word the note by the elevation');
   const strip = SWITCHER.slice(SWITCHER.indexOf('data-testid="preview-shell-strip"'));
   assert.doesNotMatch(strip.slice(0, strip.indexOf('</div>')), /Super Admin/, 'the strip names the Super Admin unconditionally');
 });
@@ -85,7 +88,10 @@ test('the selected and home keys follow the shell state, so the strip shows only
   assert.equal(homePreviewKey(true), 'hq');
   assert.equal(homePreviewKey(false), 'admin');
   assert.match(SWITCHER, /const previewing = selected && home && selected\.key !== home\.key;/);
-  assert.match(SWITCHER, /\{!isImpersonating && previewing && \(/, 'the strip is not confined to a preview');
+  // D4817 part 8 (#5311, PF-08): on a Portfolio board previewed as Investor the page draws the one
+  // preview banner (read-only, the same way back), so the strip stands down there and only there.
+  assert.match(SWITCHER, /\{!isImpersonating && previewing && !pageBanner && \(/, 'the strip is not confined to a preview');
+  assert.match(SWITCHER, /const pageBanner = pageOwnsPreviewBanner\(pathname, selectedKey\);/, 'the strip stands down only where the page draws its own banner');
   assert.match(SWITCHER, /Back to \{home\.label\}/, 'the way back is not the viewer\'s own shell (Back to HQ for the holder)');
   assert.match(SWITCHER, /onClick=\{\(\) => choose\(home\.key\)\}/);
 });

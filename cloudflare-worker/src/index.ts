@@ -611,7 +611,7 @@ app.use(
     // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
     // requests. Without it in the allowlist, the browser preflight blocks
     // every POST/PUT/PATCH/DELETE from the SPA in production.
-    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
+    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record', 'X-Axal-Preview-Shell'],
   }),
 );
 
@@ -2940,6 +2940,16 @@ export default {
             else console.warn(`[cron] usage report not sent ${detail}: ${r.reason}`);
           } catch (e) { taskFailed('usage report', e); }
         }
+        // D5949: the same 05:10 run reports what the branch has issued and spent
+        // against its promo ceiling, in its own block so either can fail alone.
+        if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 10) {
+          try {
+            const { pushPromoIssuedReport } = await import('./services/promoIssuedReport');
+            const r = await pushPromoIssuedReport(env, now);
+            if (r.sent) console.info(`[cron] promo issued report ${r.period}=${r.outcome}`);
+            else console.warn(`[cron] promo issued report not sent: ${r.reason}`);
+          } catch (e) { taskFailed('promo issued report', e); }
+        }
         // D1156: each branch reports only program aggregates daily, independent of revenue.
         if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 15) {
           try {
@@ -3123,6 +3133,16 @@ export default {
             }
           } catch (e) {
             taskFailed('project trash sweep', e);
+          }
+          // D6073 (#6073) — a data-room file thirty days in Trash: its objects, then its rows.
+          try {
+            const { purgeExpiredTrash } = await import('./services/dataRoomTrash');
+            const r = await purgeExpiredTrash(env, now);
+            if (r.scanned || r.purged || r.failed) {
+              console.info(`[cron] data room trash purge scanned=${r.scanned} purged=${r.purged} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('data room trash purge', e);
           }
         }
         // Task #5 (AV) — hourly Vectorize re-embed for axal-search.

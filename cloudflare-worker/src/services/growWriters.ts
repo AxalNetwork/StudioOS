@@ -596,14 +596,32 @@ export async function updatePartner(env: Env, pid: number, user: User, uid: stri
   return { uid };
 }
 
+/** D6112: how a `partner_revenue.source` reads beside its month. Only 'manual' (typed) exists today (migration 443). */
+export function partnerRevenueSource(source: unknown): string {
+  if (source === 'manual') return 'typed';
+  if (source === 'mercury') return 'From Mercury';
+  return String(source ?? '');
+}
+
+/**
+ * A month's partner-sourced revenue, typed. D6112 (#6112): typing replaces a
+ * typed month and never a month another source filled. Migration 443 allows
+ * only `source = 'manual'`, so no such month exists today; the read and the
+ * upsert's `WHERE` both hold the line for the day one does.
+ */
 export async function setPartnerRevenue(env: Env, pid: number, user: User, uid: string, month: string, b: Body) {
   if (!MONTH.test(month)) throw new Refused(400, 'month is YYYY-MM', 'month');
   const row = await owned<{ id: number }>(env, 'SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
   const amount = cents(b.amount_cents, 'amount_cents');
+  const prev = await env.DB.prepare('SELECT source FROM partner_revenue WHERE partner_id = ? AND month = ?').bind(row.id, month).first<{ source: string }>();
+  if (prev && prev.source !== 'manual') {
+    throw new Refused(409, `The ${month} figure came from ${prev.source === 'mercury' ? 'Mercury' : prev.source}, so it is kept and cannot be typed over`, 'month');
+  }
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO partner_revenue (partner_id, month, amount_cents, source, recorded_by) VALUES (?, ?, ?, 'manual', ?)
-       ON CONFLICT(partner_id, month) DO UPDATE SET amount_cents = excluded.amount_cents, recorded_by = excluded.recorded_by`,
+       ON CONFLICT(partner_id, month) DO UPDATE SET amount_cents = excluded.amount_cents, recorded_by = excluded.recorded_by
+       WHERE partner_revenue.source = 'manual'`,
     ).bind(row.id, month, amount, user.id),
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_revenue', summary: `Revenue entered for ${month}` })),
   ]);
@@ -685,7 +703,9 @@ export async function updateMarket(env: Env, pid: number, user: User, uid: strin
 
 export const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'culture', 'tax', 'other'] as const;
 export const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up', 'overdue', 'snoozed'] as const;
-const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'other', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
+// D6872 (#6872, owner answer B): compliance and other are stored as two event types, so one of each can fall on the
+// same day (UNIQUE(project_id, event_type, due_date)) and each reads back its own kind.
+const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'compliance', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
 /** Repeats, as the form says it, to `compliance_events.recurrence` (decision 1). */
 export const REPEATS = { once: 'one_time', monthly: 'monthly', quarterly: 'quarterly', yearly: 'annual' } as const;
 export const REPEATS_OF: Record<string, keyof typeof REPEATS> = { one_time: 'once', monthly: 'monthly', quarterly: 'quarterly', annual: 'yearly' };
@@ -694,6 +714,7 @@ export function obligationKind(event: Row): string {
   if (event.kind) return String(event.kind);
   if (event.event_type === 'board_meeting') return 'governance';
   if (event.event_type === 'risk' || event.event_type === 'culture') return String(event.event_type);
+  // D6872: a kind-less `compliance` or `other` row (Calendar, or older than D6872) reads as compliance, as before.
   return 'compliance';
 }
 
@@ -781,6 +802,72 @@ export async function updateObligation(env: Env, pid: number, user: User, id: nu
   } catch (error) { obligationClash(error, kind ?? obligationKind(row), due); }
   await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: row.id, action: 'grow_obligation_updated', summary: 'Obligation updated' });
   return { id: row.id };
+}
+
+// ── Remove (D6115) ──────────────────────────────────────────────────────────
+// A record added by mistake is deleted outright, never hidden (D6115): no
+// reader filters a deleted flag. One that holds history is refused with what
+// to do instead; the check is inside the DELETE itself, so a row that gains
+// history while it runs is never taken. A connector's ledger row is unlinked
+// and kept, so the connector does not land it again. The activity row is
+// written after the delete and outlives the record.
+
+export const PARTNER_KEPT = 'This partner has revenue or deals recorded, so it stays as history. Set its stage to Ended instead.';
+export const OBLIGATION_KEPT = 'This obligation has been held, so its past meetings stay as history. Mark it done instead.';
+
+/** Kept: revenue, a deal, or Mercury payments accepted onto it. */
+const PARTNER_DELETE_SQL = `DELETE FROM growth_partners WHERE id = ? AND project_id = ?
+  AND NOT EXISTS (SELECT 1 FROM partner_revenue WHERE partner_id = ?)
+  AND NOT EXISTS (SELECT 1 FROM growth_partner_deals WHERE partner_id = ?)
+  AND NOT EXISTS (SELECT 1 FROM mercury_partner_proposals WHERE growth_partner_id = ? AND project_id = ? AND state = 'accepted')`;
+/** Kept: a held occurrence. */
+const OBLIGATION_DELETE_SQL = `DELETE FROM compliance_events WHERE id = ? AND project_id = ?
+  AND NOT EXISTS (SELECT 1 FROM obligation_occurrences WHERE event_id = ?)`;
+
+const changed = (r: { meta?: { changes?: number } } | undefined) => Number(r?.meta?.changes ?? 0) > 0;
+
+export async function removePartner(env: Env, pid: number, user: User, uid: string): Promise<{ uid: string; removed: true }> {
+  const row = await owned<{ id: number; name: string }>(env, 'SELECT id, name FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
+  const [del] = await env.DB.batch([
+    env.DB.prepare(PARTNER_DELETE_SQL).bind(row.id, pid, row.id, row.id, row.id, pid),
+    env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL WHERE project_id = ? AND local_table = 'growth_partners' AND local_id = ?
+       AND NOT EXISTS (SELECT 1 FROM growth_partners WHERE id = ?)`).bind(pid, row.id, row.id),
+  ]);
+  // The row is the venture's (`owned`), so a delete that took nothing found its history.
+  if (!changed(del)) throw new Refused(409, PARTNER_KEPT);
+  await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_removed', summary: `Partner removed: ${row.name}` });
+  return { uid, removed: true };
+}
+
+/**
+ * A market holds plans and judgements only, so it is always removable; its entry
+ * steps and localisation go with it (`ON DELETE CASCADE`, which D1 enforces).
+ */
+export async function removeMarket(env: Env, pid: number, user: User, uid: string): Promise<{ uid: string; removed: true }> {
+  const row = await owned<{ id: number; name: string }>(env, 'SELECT id, name FROM markets WHERE uid = ? AND project_id = ?', uid, pid);
+  const del = await env.DB.prepare('DELETE FROM markets WHERE id = ? AND project_id = ?').bind(row.id, pid).run();
+  if (!changed(del)) throw new Refused(404, 'Not found');
+  await logGrowWrite(env, pid, user.id, { module: 'market-expansion', entityId: uid, action: 'grow_market_removed', summary: `Market removed: ${row.name}` });
+  return { uid, removed: true };
+}
+
+/**
+ * The one obligation delete: Grow's Remove and `DELETE /api/compliance/events/:id`
+ * both run it, each after its own write gate. A held obligation is refused; its
+ * agenda items go with it (they are its plan, not its record; `ON DELETE CASCADE`).
+ */
+export async function removeObligation(env: Env, pid: number, user: Pick<User, 'id'>, id: number): Promise<{ id: number; removed: true }> {
+  if (!Number.isSafeInteger(id) || id < 1) throw new Refused(404, 'Not found');
+  const row = await owned<{ id: number; title: string }>(env, 'SELECT id, title FROM compliance_events WHERE id = ? AND project_id = ?', id, pid);
+  const [del] = await env.DB.batch([
+    env.DB.prepare(OBLIGATION_DELETE_SQL).bind(row.id, pid, row.id),
+    env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL WHERE project_id = ? AND local_table = 'compliance_events' AND local_id = ?
+       AND NOT EXISTS (SELECT 1 FROM compliance_events WHERE id = ?)`).bind(pid, row.id, row.id),
+  ]);
+  if (!changed(del)) throw new Refused(409, OBLIGATION_KEPT);
+  await logGrowWrite(env, pid, Number(user.id), { module: 'durable-company-building', entityId: row.id, action: 'grow_obligation_removed',
+    summary: `Obligation removed: ${row.title}` });
+  return { id: row.id, removed: true };
 }
 
 export async function setChecklistItem(env: Env, pid: number, user: User, key: string, done: boolean) {
@@ -889,6 +976,56 @@ export async function addEntryStep(env: Env, pid: number, user: User, marketUid:
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_entry_step_added', summary: 'Entry step added' })),
   ]);
   return { uid: id };
+}
+
+/**
+ * D6113 (#6113): a step of this market, by its uid. The step's market must be
+ * the market named and that market the venture's, so a step of another
+ * market, or of another venture's, is a 404 before anything is written.
+ */
+async function entryStep(env: Env, pid: number, marketUid: string, stepUid: unknown) {
+  if (typeof stepUid !== 'string' || !stepUid) throw new Refused(404, 'Not found', 'step');
+  const row = await env.DB.prepare(
+    `SELECT s.id, s.text, s.owner_name, s.due_on, s.done_at FROM market_entry_steps s JOIN markets m ON m.id = s.market_id
+      WHERE s.uid = ? AND m.uid = ? AND m.project_id = ?`,
+  ).bind(stepUid, marketUid, pid).first<{ id: number; text: string; owner_name: string | null; due_on: string | null; done_at: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'step');
+  return row;
+}
+
+/**
+ * D6113 (#6113): a step's edit. Only the keys the body sends change; `done`
+ * marks the step done (keeping the day it was first done) or reopens it. One
+ * activity row on the market, named for what changed; never the step's text.
+ */
+export async function updateEntryStep(env: Env, pid: number, user: User, marketUid: string, stepUid: unknown, b: Body) {
+  const s = await entryStep(env, pid, marketUid, stepUid);
+  let text = s.text;
+  if (has(b, 'text')) { text = str(b.text, 300) ?? ''; if (!text) throw new Refused(400, 'A step says what is to be done', 'text'); }
+  const owner = has(b, 'owner_name') ? str(b.owner_name, 120) : s.owner_name;
+  const due = has(b, 'due_on') ? day(b.due_on, 'due_on') : s.due_on;
+  const done = has(b, 'done') ? switchOf(b.done === 'true' ? 1 : b.done === 'false' ? 0 : b.done, 'done') : null;
+  const doneAt = done == null ? s.done_at : done === 1 ? s.done_at ?? nowIso() : null;
+  const edited = has(b, 'text') || has(b, 'owner_name') || has(b, 'due_on');
+  const [action, summary] = !edited && done === 1 ? ['grow_entry_step_done', 'Entry step done']
+    : !edited && done === 0 ? ['grow_entry_step_reopened', 'Entry step reopened']
+      : ['grow_entry_step_updated', 'Entry step updated'];
+  await env.DB.batch([
+    env.DB.prepare("UPDATE market_entry_steps SET text = ?, owner_name = ?, due_on = ?, done_at = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(text, owner, due, doneAt, s.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action, summary })),
+  ]);
+  return { uid: String(stepUid), done: doneAt != null };
+}
+
+/** D6113 (#6113): removes a step of this market, logged on the market. */
+export async function removeEntryStep(env: Env, pid: number, user: User, marketUid: string, stepUid: unknown) {
+  const s = await entryStep(env, pid, marketUid, stepUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM market_entry_steps WHERE id = ?').bind(s.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_entry_step_removed', summary: 'Entry step removed' })),
+  ]);
+  return { uid: String(stepUid), deleted: true as const };
 }
 
 export const LOCALISATION_KEYS = ['language', 'payments', 'legal_entity'] as const;

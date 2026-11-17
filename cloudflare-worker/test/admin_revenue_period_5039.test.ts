@@ -35,7 +35,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
         async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
+        async all() { return { success: true, results: db.prepare(sql).all(...b) }; },
         async run() {
           const r = db.prepare(sql).run(...b);
           return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
@@ -149,6 +149,29 @@ test('period-window figures follow the period: token cost and usage coverage', a
   assert.equal(q4.body.usage_coverage.by_licence[0].reported, false, 'Q3\'s report was read as Q4\'s');
 });
 
+test('the summary reads subscription revenue for the requested period without network access', async t => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', () => { calls++; throw new Error('unexpected network access'); });
+  const db = freshDb();
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611100929_financial_events.sql'), 'utf8')
+    .replaceAll("strftime('%Y-%m-%dT%H:%M:%SZ', 'now')", "'2026-10-01T00:00:00Z'"));
+  db.prepare(
+    `INSERT INTO financial_events (uid, source, source_event_id, source_event_type, kind, livemode,
+       revenue_stream, currency, gross_cents, refund_cents, net_cents, occurred_at)
+     VALUES ('ledger-test', 'stripe', 'evt_test', 'invoice.paid', 'invoice', 1,
+       'tier', 'EUR', 725, 0, 725, '2026-11-01T00:00:00Z')`,
+  ).run();
+  const q3 = await call(db, SUPER, '?period=2026-Q3');
+  const q4 = await call(db, SUPER, '?period=2026-Q4');
+  assert.equal(q3.body.subscriptions.state, 'not_recorded');
+  assert.equal(q4.status, 200);
+  assert.equal(q4.body.subscriptions_available, true);
+  assert.deepEqual(q4.body.subscriptions.by_currency, [
+    { currency: 'EUR', gross_cents: 725, refund_cents: 0, net_cents: 725 },
+  ]);
+  assert.equal(calls, 0);
+});
+
 test('point-in-time figures do not follow the period, and the reply says which is which', async () => {
   const db = freshDb();
   const a = await call(db, SUPER, '?period=2025-Q1');
@@ -161,9 +184,10 @@ test('point-in-time figures do not follow the period, and the reply says which i
   assert.equal(SUMMARY_TEMPORAL.promos, 'as_of_now');
   assert.equal(SUMMARY_TEMPORAL.token_cost, 'period');
   assert.equal(SUMMARY_TEMPORAL.usage_coverage, 'period');
-  assert.equal(SUMMARY_TEMPORAL.subscriptions, 'not_recorded');
-  // Still never one cross-currency figure, and subscriptions still have none.
+  assert.equal(SUMMARY_TEMPORAL.subscriptions, 'period');
+  // The absent ledger fixture must leave just the subscriptions block unreadable.
   assert.equal(a.body.subscriptions_available, false);
+  assert.equal(a.body.subscriptions.state, 'unreadable');
   assert.ok(!/"total_cents"|"platform_revenue/.test(JSON.stringify(a.body)));
 });
 
@@ -173,4 +197,50 @@ test('quarterFromKey is exact, and agrees with quarterOf', () => {
   assert.equal(quarterFromKey('2026-Q5'), null);
   assert.equal(quarterFromKey('2026-Q4 '), null);
   assert.equal(quarterOf(new Date(Date.UTC(2026, 10, 8))).key, '2026-Q4');
+});
+
+// ── D5950 (#5950): the read model's metrics on the summary ─────────────────────
+
+test('D5950: every metric follows ?period, with no network access, and the named gaps stay gaps', async t => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', () => { calls++; throw new Error('unexpected network access'); });
+  const db = freshDb();
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611100929_financial_events.sql'), 'utf8')
+    .replaceAll("strftime('%Y-%m-%dT%H:%M:%SZ', 'now')", "'2026-10-01T00:00:00Z'"));
+  db.prepare(
+    `INSERT INTO financial_events (uid, source, source_event_id, source_event_type, kind, livemode,
+       revenue_stream, currency, gross_cents, refund_cents, net_cents, occurred_at)
+     VALUES ('ledger-test', 'stripe', 'evt_test', 'invoice.paid', 'invoice', 1,
+       'tier', 'EUR', 725, 0, 725, '2026-11-01T00:00:00Z')`,
+  ).run();
+  const q3 = await call(db, SUPER, '?period=2026-Q3');
+  const q4 = await call(db, SUPER, '?period=2026-Q4');
+  assert.equal(q4.status, 200, JSON.stringify(q4.body));
+  for (const [r, key] of [[q3, '2026-Q3'], [q4, '2026-Q4']] as const) {
+    for (const [name, m] of Object.entries(r.body.metrics as Record<string, any>)) {
+      assert.equal(m.period, key, `${name} did not follow ?period=${key}`);
+    }
+  }
+  assert.equal(q4.body.metrics.subscription_revenue.state, 'complete');
+  assert.deepEqual(q4.body.metrics.subscription_revenue.currencies, ['EUR']);
+  assert.equal(q3.body.metrics.subscription_revenue.state, 'not_recorded');
+  assert.equal(q4.body.metrics.revenue_per_subsidiary.pending_issue, 5947);
+  assert.equal(q4.body.metrics.ai_margin_per_licence.pending_issue, 5948);
+  // This fixture predates migration 202611150136: the promo metric alone is unreadable.
+  assert.equal(q4.body.metrics.promo_issued_per_licence.state, 'unreadable');
+  assert.equal(q4.body.metrics.refunds_and_disputes.state, 'complete');
+  assert.equal(SUMMARY_TEMPORAL.metrics, 'period');
+  assert.equal(calls, 0);
+});
+
+test('D5950: a plain admin and a member never see the metrics', async () => {
+  const db = freshDb();
+  for (const who of [PLAIN_ADMIN, MEMBER]) {
+    const r = await call(db, who, '?period=2026-Q4');
+    assert.notEqual(r.status, 200);
+    assert.equal(r.body.metrics, undefined, 'the read model leaked');
+  }
+  const ok = await call(db, SUPER, '?period=2026-Q4');
+  assert.equal(ok.status, 200);
+  assert.ok(ok.body.metrics, 'a Super Admin did not get the read model');
 });

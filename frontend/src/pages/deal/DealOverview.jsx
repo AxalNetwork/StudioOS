@@ -1,17 +1,19 @@
 /**
  * D1152 (#3057) — the investor's Overview (DL1) on today's reads: the
  * scorecard's scope strip (DL24a, live since D1257), what is new since you last looked (part 2),
- * the terms at a glance and the round (the deal read), your next step (part
- * 2's one next action) and the deck's slot. A card whose read fails says so
+ * the terms at a glance (the deal read) and, since D6165, the deck the venture
+ * granted you (`DealDeck.jsx`). Since D4815
+ * part 4 (DE04) the round's figures are the strip's and the one next action
+ * is the header's, so this file repeats neither. A card whose read fails says so
  * and leaves the others standing.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
-import { dealMoney, roundAsk } from '../../components/deals/dealMoney';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3 } from './DealFrame';
-import { DECK_SLOT, termsAtGlance, whatsNewOf } from './dealFrameModel';
+import { termsAtGlance, whatsNewOf } from './dealFrameModel';
+import { DealDeckCard } from './DealDeck';
 import { DealScoreStrip } from '../../components/scoring/scorecard/Scorecard';
 import { whatsNewOnce } from './dealVisit';
 
@@ -63,10 +65,7 @@ function WhatsNew({ dealId }) {
   );
 }
 
-export default function DealOverview({ deal, track, investor }) {
-  const cur = deal.currency || 'USD';
-  const committed = dealMoney(deal.capital_committed, cur);
-  const target = dealMoney(roundAsk(deal), cur);
+export default function DealOverview({ deal, investor }) {
   return (
     <div className="grid gap-3.5 lg:grid-cols-3" data-testid="deal-overview">
       <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-2">
@@ -89,21 +88,14 @@ export default function DealOverview({ deal, track, investor }) {
           {termsAtGlance(deal).map((t) => <Row key={t.label} {...t} />)}
           {investor && <Link to={`/deals/${deal.id}/terms`} className="mt-1 text-[12.5px] font-bold text-axal-violet-deep dark:text-violet-300">Full terms</Link>}
         </section>
+        {/* D4815 part 4 (DE04): the round's size and committed total are the strip's, and the one next
+            action is the header's, so neither is drawn again here. */}
         <section className={`${CARD} flex flex-col gap-2 px-4 py-4`} data-testid="deal-round">
           <h3 className={H3}>The round</h3>
-          <p className="m-0 font-mono text-[13px] font-bold text-axal-ink dark:text-gray-100">
-            {committed && target ? `Committed ${committed} of ${target}` : 'Committed and round size: Not recorded'}
-          </p>
-          <p className={`m-0 ${SUB}`}>Other investors’ names and amounts are not shown.</p>
+          <p className={`m-0 ${SUB}`}>The round size and the committed total are in the strip above. Other investors’ names and amounts are not shown.</p>
         </section>
-        {investor && track?.state === 'ready' && track.next && (
-          <section className="flex flex-col gap-2 rounded-axal-lg border border-axal-lavender-edge bg-axal-lavender px-4 py-4 dark:border-violet-800 dark:bg-violet-950/40" data-testid="deal-next-step">
-            <span className={EYE}>Your next step</span>
-            <h3 className={H3}>{track.next.label}</h3>
-            {track.why && <p className={`m-0 ${SUB}`}>{track.why}</p>}
-          </section>
-        )}
-        <Slot slot={DECK_SLOT} testId="deal-deck-slot" />
+        {/* D6165 (#6165): the investor's granted deck; a founder or staff member reads none here. */}
+        {investor && <DealDeckCard dealId={deal.id} />}
       </div>
     </div>
   );

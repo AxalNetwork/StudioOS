@@ -4,13 +4,15 @@ import { Star } from 'lucide-react';
 import { EmailAction } from '../../email/emailParts';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
+import { advisorDeliverableFilesApi } from '../../../lib/api/advisorDeliverableFiles';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unreadable, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass, zoneError,
 } from '../expertise/kit';
 import {
-  VERSION_STATUS_LABEL, VERSION_STATUS_TONE, cardReceiptLine, cardStatus, medianLabel, nudgeTargets,
-  reviewCoverage, seamLine, sentLine, statusCounts, versionTag,
+  VERSION_STATUS_LABEL, VERSION_STATUS_TONE, cardReceiptLine,
+  cardStatus, fileRefusal, isReadyItem, medianLabel, nudgeTargets, readyLine, readyRefusal, reviewCoverage, seamLine,
+  sentLine, statusCounts, versionTag,
 } from './deliveryTrail';
 import { formatDateTime } from '../advisory/kit';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -18,6 +20,7 @@ import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import DeliverablesByClient, { DeliverableEditor } from './DeliverablesByClient';
 import { AddVersionDialog, DeliverableSheet, SendConfirmDialog } from './DeliverableSheet';
+import { FileChoice } from './VersionFile';
 import { partialLine, readEveryPage } from './everyPage';
 
 /**
@@ -26,7 +29,7 @@ import { partialLine, readEveryPage } from './everyPage';
  * redirects to and which groups the cards by client. PR3's `unopened` is
  * still read, as the Sent chip it became.
  */
-const VIEWS = new Set(['all', 'draft', 'sent', 'opened', 'accepted', 'by_client', 'unopened']);
+const VIEWS = new Set(['all', 'draft', 'ready', 'sent', 'opened', 'accepted', 'by_client', 'unopened']);
 
 /**
  * Practice · Delivery, `/practice/delivery`: the Practice v2 canvas's Delivery
@@ -34,12 +37,16 @@ const VIEWS = new Set(['all', 'draft', 'sent', 'opened', 'accepted', 'by_client'
  * over PR3's collection (D571, D4684, D4712).
  *
  * ARTIFACT FIRST. The unit is a work-product CARD whose state is its latest
- * version's (Draft · Sent · Opened · Accepted, from that version's own stamps).
+ * version's (Draft · Ready · Sent · Opened · Accepted, from that version's own
+ * stamps).
  * `Open` brings up the detail sheet: the latest version, then the immutable
  * history with each version's own recipient and receipts. Add version is a
- * dialog that needs a change note and a document link; Send is a confirmation
- * that names the recipient and the document before anything goes. There is no
- * Ready chip: no Ready state is stored (D4874).
+ * dialog that needs a change note and a document, a file or a link (#5961,
+ * D4833-p3, over D5960), with an optional summary (D5959); Send is a confirmation
+ * that names the recipient and the document before anything goes. Ready
+ * (#4833 part 2, D4833-p2, over #5316's mark, D5316) is the advisor's own note
+ * that the latest unsent version is ready to send: marking it sends nothing,
+ * and the send clears it.
  *
  * THE POST-SESSION REVIEW LOOP STANDS ALONE, below and outside `ZoneBody`, with
  * its own loading, error and empty state, so it is reachable with no work
@@ -54,6 +61,9 @@ const VIEWS = new Set(['all', 'draft', 'sent', 'opened', 'accepted', 'by_client'
  * recorded, captures consent to record one, or holds a transcript of one, so
  * the zone states the gap instead of drawing a summariser over none of them.
  */
+
+/** The New work product form, empty. `file` is v1's document when it is a file (#5961). */
+const EMPTY_DRAFT = { title: '', client_name: '', engagement_id: '', summary: '', link_url: '', version_summary: '', file: null };
 
 export default function DeliveryZone() {
   // 'all' by default: a narrowed default would open the page mid-filter. A
@@ -76,7 +86,7 @@ export default function DeliveryZone() {
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ title: '', client_name: '', engagement_id: '', summary: '', link_url: '' });
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [nudging, setNudging] = useState(false);
   const [engagements, setEngagements] = useState([]);
   // #4833: one work product open in the detail sheet; one Add version dialog;
@@ -158,17 +168,19 @@ export default function DeliveryZone() {
   // One `Date.now()` per render, so every card on one paint measures its wait
   // against the same instant.
   const now = Date.now();
-  const counts = useMemo(() => statusCounts(items), [items]);
+  const counts = useMemo(() => statusCounts(items, state.totals), [items, state.totals]);
 
   /**
    * The chip row narrows in the page, on the LATEST version's own status
    * (`cardStatus`), because `profile_zone_filters.test.mjs` requires the page
-   * that mounts a live chip to name its key. `all` shows every card. There is
-   * no `ready`: nothing stores it (D4874).
+   * that mounts a live chip to name its key. `all` shows every card. `ready`
+   * narrows on the Worker's `ready_version` (`isReadyItem`), the set its
+   * `totals.ready` count is taken over (D4833-p2).
    */
   const visible = useMemo(() => {
     const rows = [...items];
     if (filter === 'draft') return rows.filter((i) => cardStatus(i) === 'draft');
+    if (filter === 'ready') return rows.filter((i) => isReadyItem(i));
     if (filter === 'sent') return rows.filter((i) => cardStatus(i) === 'sent');
     if (filter === 'opened') return rows.filter((i) => cardStatus(i) === 'opened');
     if (filter === 'accepted') return rows.filter((i) => cardStatus(i) === 'accepted');
@@ -220,21 +232,35 @@ export default function DeliveryZone() {
     () => api.updateMyAdvisorDeliverable(item.id, body),
     `Saved “${body.title}”.`, 'That work product could not be saved. Nothing was changed.');
 
-  const attachLink = (item, body) => write(`a-${item.id}`,
-    () => api.addMyAdvisorDeliverableVersion(item.id, body),
+  // #5961: a version whose document is a file goes as a form (D5960); a link, as JSON. A file the Worker
+  // refuses comes back as its sentence in the dialog, and nothing is saved.
+  const attachLink = (item, body, file = null) => write(`a-${item.id}`,
+    () => (file
+      ? advisorDeliverableFilesApi.addVersionWithFile(item.id, body, file)
+      : api.addMyAdvisorDeliverableVersion(item.id, body)),
     `Saved v${Number(item.latest_version?.version || item.version_count || 0) + 1} of “${item.title}” as a draft, not sent.`,
     'That version could not be saved. Nothing was recorded.');
 
+  // #5961: v1 may carry an optional summary (D5959) and a file instead of a link (D5960), never both.
   const create = () => act('new', async () => {
-    await api.createMyAdvisorDeliverable({
+    const body = {
       title: draft.title.trim(),
       client_name: draft.client_name.trim() || null,
       engagement_id: draft.engagement_id || null,
       summary: draft.summary.trim() || null,
-      link_url: draft.link_url.trim() || null,
-    });
+    };
+    const versionSummary = draft.version_summary.trim();
+    if (versionSummary) body.version_summary = versionSummary;
+    if (draft.file) {
+      if (draft.link_url.trim()) throw new Error('A version’s document is a link or a file, not both. Remove one.');
+      const refused = fileRefusal(draft.file);
+      if (refused) throw new Error(refused);
+      await advisorDeliverableFilesApi.createWithFile(body, draft.file);
+    } else {
+      await api.createMyAdvisorDeliverable({ ...body, link_url: draft.link_url.trim() || null });
+    }
     setAdding(false);
-    setDraft({ title: '', client_name: '', engagement_id: '', summary: '', link_url: '' });
+    setDraft(EMPTY_DRAFT);
   }, 'That work product could not be created.');
 
   // #4833: Send always goes through the confirmation; this is what it calls.
@@ -243,6 +269,31 @@ export default function DeliveryZone() {
     `Sent ${versionTag(item.latest_version)} of “${item.title}”.`,
     'That version could not be sent. Nothing was sent.');
   const askToSend = (item) => { setConfirming(item.id); setNote(null); };
+
+  /**
+   * #4833 part 2 (D4833-p2): mark the latest unsent version ready, or clear the
+   * mark. Neither sends anything. The answer goes back to the sheet that asked,
+   * which shows it beside the control; the list is read again either way, so
+   * a version sent in the meantime (409 `already_sent`) shows as sent.
+   */
+  const toggleReady = async (item, action) => {
+    const key = `r-${item.id}`;
+    setBusy(key); setNote(null);
+    try {
+      if (action.kind === 'clear') await api.clearMyAdvisorDeliverableVersionReady(item.id, action.version);
+      else await api.markMyAdvisorDeliverableVersionReady(item.id, action.version);
+      await load();
+      return {
+        ok: true,
+        text: action.kind === 'clear'
+          ? `${action.tag} of “${item.title}” is a draft again. Nothing was sent.`
+          : `${action.tag} of “${item.title}” is marked ready to send. Nothing was sent.`,
+      };
+    } catch (error) {
+      if (error?.code === 'already_sent' || error?.status === 409) await load();
+      return { ok: false, text: readyRefusal(error, action.tag) };
+    } finally { setBusy(''); }
+  };
   const confirmItem = confirming == null ? null : items.find((i) => i.id === confirming) || null;
   const reviseItem = revising == null ? null : items.find((i) => i.id === revising) || null;
 
@@ -301,18 +352,30 @@ export default function DeliveryZone() {
                   onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
               </Field>
               <Field label="Link">
-                <input className={inputClass} value={draft.link_url} placeholder="https://…"
+                <input className={inputClass} value={draft.link_url} placeholder="https://…" disabled={!!draft.file}
+                  data-testid="new-work-product-link"
                   onChange={(e) => setDraft({ ...draft, link_url: e.target.value })} />
+              </Field>
+              <div className="grid gap-1" role="group" aria-labelledby="new-work-product-file-label">
+                <span id="new-work-product-file-label" className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint dark:text-gray-400">
+                  Or a file
+                </span>
+                <FileChoice file={draft.file} testid="new-work-product-file" buttonClass={ghostButtonClass}
+                  onChoose={(f) => setDraft((d) => ({ ...d, file: f }))} />
+              </div>
+              <Field label="Summary · optional" hint="What v1 says, for the client. Leave it empty if the note says enough.">
+                <textarea rows={2} className={inputClass} value={draft.version_summary} data-testid="new-work-product-summary"
+                  onChange={(e) => setDraft({ ...draft, version_summary: e.target.value })} />
               </Field>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
               It opens at <strong>v1, not sent</strong>. Sending is its own step, because that is the
-              moment the client can start reading it. A v1 with no link is a draft that cannot be sent
-              until a version carries the document.
+              moment the client can start reading it. Its document is a link or a file, not both. A v1
+              with neither is a draft that cannot be sent until a version carries the document.
             </p>
             <button type="button" className={`${buttonClass} mt-2`}
               disabled={busy === 'new' || !draft.title.trim() || (!draft.engagement_id && !draft.client_name.trim())}
-              onClick={create}>
+              onClick={create} data-testid="new-work-product-save">
               Add as v1
             </button>
           </div>
@@ -367,8 +430,8 @@ export default function DeliveryZone() {
         })}
       />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-axal-faint dark:text-gray-400" data-testid="ready-not-recorded">
-          There is no Ready filter: Axal records drafts, sends, opens and acceptances, not a ready state.
+        <p className="text-[11px] text-axal-faint dark:text-gray-400" data-testid="ready-explained">
+          Ready is your own mark on a draft that is ready to send. It sends nothing; sending clears it.
         </p>
         <button type="button" className={ghostButtonClass} aria-pressed={grouped}
           onClick={() => setGrouped((g) => !g)} data-testid="group-by-client">
@@ -471,9 +534,9 @@ export default function DeliveryZone() {
           version was first opened, not how long it was read.
         </p>
         <p className="mt-2">
-          <strong>There is no Ready state and no file upload.</strong> A version is a draft until it is
-          sent, and its document is a web link. There is no consent-gated session summary either; see
-          the card above.
+          A version&rsquo;s document is a web link or a stored file, a PDF, JPEG or PNG of at most 10 MB. A
+          version is a draft until it is sent; marking it Ready tells you, not the client, that it can
+          go. There is no consent-gated session summary either; see the card above.
         </p>
       </StatedLimit>
 
@@ -483,6 +546,8 @@ export default function DeliveryZone() {
           onClose={() => { setOpenId(null); setEditing(null); }}
           onAddVersion={() => { setRevising(openItem.id); setNote(null); }}
           onSend={() => askToSend(openItem)}
+          onToggleReady={(action) => toggleReady(openItem, action)}
+          onDownloadFile={(v) => advisorDeliverableFilesApi.downloadVersionFile(openItem.id, v.version)}
           onEdit={() => setEditing(editing === openItem.id ? null : openItem.id)}>
           {editing === openItem.id && (
             <DeliverableEditor item={openItem} engagements={engagements} busy={busy === `e-${openItem.id}`}
@@ -606,6 +671,11 @@ export default function DeliveryZone() {
 function DeliverableCard({ item, now, onOpen }) {
   const latest = item.latest_version;
   const status = cardStatus(item);
+  // The version the Worker says is marked ready (`ready_version`), which is the
+  // latest one whenever the mark was set here; an older one says its number.
+  const readyVersion = isReadyItem(item)
+    ? (item.versions || []).find((v) => Number(v.version) === Number(item.ready_version)) || null
+    : null;
   return (
     <article data-testid={`row-pr3-${item.id}`} data-status={status}
       className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-axal-hairline bg-white p-3.5 dark:border-gray-700 dark:bg-gray-900/40">
@@ -618,6 +688,12 @@ function DeliverableCard({ item, now, onOpen }) {
         <p className="mt-1 text-[11px] tabular-nums text-cyan-700 dark:text-cyan-300" data-testid={`receipt-pr3-${item.id}`}>
           {cardReceiptLine(item, now)}
         </p>
+        {isReadyItem(item) && (
+          <p className="mt-1 text-[11px] text-axal-violet-deep dark:text-violet-300" data-testid={`ready-line-pr3-${item.id}`}>
+            {Number(item.ready_version) === Number(latest?.version) ? '' : `v${item.ready_version} · `}
+            {readyVersion ? readyLine(readyVersion) : `v${item.ready_version} marked ready to send`}
+          </p>
+        )}
         {item.client_user_email == null && item.client_user_id == null && status === 'draft' && (
           <p className="mt-1 text-[10.5px] text-amber-700 dark:text-amber-300">No client account — this cannot be sent</p>
         )}

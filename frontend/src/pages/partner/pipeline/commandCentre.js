@@ -11,7 +11,8 @@
  *   · Attention and risks are facts from recorded fields (ball, days since a move, days since a quote was sent,
  *     utilisation, days to renewal, fit score). Nothing records whether a client opened a proposal, so nothing
  *     here says "unopened"; it says no reply is recorded.
- *   · Recent movement has no store: nothing joins lead, proposal, negotiation and retainer events into one feed.
+ *   · Recent movement is D5942's recorded lifecycle feed (`GET /partner/pipeline/activity`), in the order the Worker
+ *     returns it, newest first (D4838 part 9, #5943). No event is derived here from a zone's fields.
  */
 import { usd, usdCents } from '../../../workspaces/boards/format.js';
 
@@ -46,6 +47,36 @@ export const SETUP_LINKS = {
   proposals: '/pipeline/proposals',
   demand: '/partner/insights',
 };
+
+/**
+ * THE RETAINER RULES, ONE COPY (#5939). The command centre's attention and risks and the Retainers zone's
+ * attention band read these, so the root and the zone cannot disagree about which retainer is low use: the zone
+ * once narrowed "under-consuming" at 60% while this file said 50, and an active retainer at 55% was an
+ * exception in one place and not the other.
+ *
+ *   · Active is the Worker's own `retainer.active` (D4693); an older answer without it falls back to "not
+ *     ended". A row with no retainer, or an ended one, is in none of the three.
+ *   · Utilisation is the Worker's figure or null. Null is not recorded (no hours logged, or not sold by the
+ *     hour) and is in neither consumption rule: it is never read as 0%.
+ */
+export const retainerActive = (r) => Boolean(r?.retainer) && Boolean(r.retainer.active ?? !r.retainer.ended_at);
+/** The recorded utilisation, or null where none is recorded. */
+export const retainerUtilPct = (r) => num(r?.utilisation_pct);
+/** Over its retained hours this period: above 100%. */
+export function isOverServiced(r) {
+  const pct = retainerUtilPct(r);
+  return retainerActive(r) && pct !== null && pct > 100;
+}
+/** Renewing inside the window: a recorded renewal 0 to `RENEWAL_WINDOW_DAYS` days away. */
+export function isRenewingSoon(r) {
+  const due = num(r?.retainer?.days_to_renewal);
+  return retainerActive(r) && due !== null && due >= 0 && due <= RENEWAL_WINDOW_DAYS;
+}
+/** Low use: a recorded utilisation below `LOW_USE_PCT`. A recorded 0% is low use; no record is not. */
+export function isLowUse(r) {
+  const pct = retainerUtilPct(r);
+  return retainerActive(r) && pct !== null && pct < LOW_USE_PCT;
+}
 
 /** Active rows on a read that lists them. */
 const activeCount = (src) => list(src).filter((r) => r && (r.is_active === true || r.is_active === 1)).length;
@@ -185,11 +216,11 @@ export function attentionItems({ leads, proposals, negotiations, retainers }) {
     });
   }
   for (const r of list(retainers)) {
-    const t = r?.retainer;
-    if (!t?.active) continue;
+    if (!retainerActive(r)) continue;
+    const t = r.retainer;
     const who = r.founder_name || r.need_title || 'Unnamed client';
-    const pct = num(r.utilisation_pct);
-    if (pct !== null && pct > 100) {
+    const pct = retainerUtilPct(r);
+    if (isOverServiced(r)) {
       out.push({
         key: `over-${r.engagement_id}`, rank: 1, sort: -pct, who,
         issue: `Retainer at ${Math.round(pct)}% of retained hours`, detail: 'over scope this period',
@@ -197,7 +228,7 @@ export function attentionItems({ leads, proposals, negotiations, retainers }) {
       });
     }
     const due = num(t.days_to_renewal);
-    if (due !== null && due >= 0 && due <= RENEWAL_WINDOW_DAYS) {
+    if (isRenewingSoon(r)) {
       const monthly = usdCents(num(t.current_monthly_cents));
       out.push({
         key: `renew-${r.engagement_id}`, rank: 2, sort: due, who,
@@ -221,8 +252,8 @@ export function attentionItems({ leads, proposals, negotiations, retainers }) {
     });
   }
   for (const r of list(retainers)) {
-    const pct = num(r?.utilisation_pct);
-    if (!r?.retainer?.active || pct === null || pct >= LOW_USE_PCT) continue;
+    if (!isLowUse(r)) continue;
+    const pct = retainerUtilPct(r);
     out.push({
       key: `low-${r.engagement_id}`, rank: 4, sort: pct,
       who: r.founder_name || r.need_title || 'Unnamed client',
@@ -249,13 +280,12 @@ export function attentionItems({ leads, proposals, negotiations, retainers }) {
 export function riskItems({ proposals, negotiations, retainers }) {
   const out = [];
   for (const r of list(retainers)) {
-    const t = r?.retainer;
-    if (!t?.active) continue;
+    if (!retainerActive(r)) continue;
     const who = r.founder_name || r.need_title || 'Unnamed client';
-    const due = num(t.days_to_renewal);
-    if (due !== null && due >= 0 && due <= RENEWAL_WINDOW_DAYS) out.push({ key: `r-renew-${r.engagement_id}`, who, text: `Renews in ${plural(due, 'day')}`, tag: 'Renewing' });
-    const pct = num(r.utilisation_pct);
-    if (pct !== null && pct > 100) out.push({ key: `r-over-${r.engagement_id}`, who, text: `Scope overrun · ${Math.round(pct)}%`, tag: 'Over scope' });
+    const due = num(r.retainer.days_to_renewal);
+    if (isRenewingSoon(r)) out.push({ key: `r-renew-${r.engagement_id}`, who, text: `Renews in ${plural(due, 'day')}`, tag: 'Renewing' });
+    const pct = retainerUtilPct(r);
+    if (isOverServiced(r)) out.push({ key: `r-over-${r.engagement_id}`, who, text: `Scope overrun · ${Math.round(pct)}%`, tag: 'Over scope' });
   }
   const inTerms = openNegotiationQuotes(negotiations);
   for (const q of list(proposals)) {
@@ -324,4 +354,39 @@ export function railSteps({ loading, failed, firstRun, steps, attention }) {
     items: attention.slice(0, 4).map((a) => ({ key: a.key, tone: 'act', text: `${a.who} · ${a.issue}`, to: a.to, action: a.action })),
     foot: 'Nothing in Pipeline is sent or changed without your click.',
   };
+}
+
+/**
+ * D4838 part 9 (#5943) — the words for each kind of event D5942's feed records (`routes/partner_pipeline.ts`).
+ * One list for Recent movement and the opportunity sheet's Activity tab. A kind not listed is left out, not guessed at.
+ */
+export const EVENT_WORDS = Object.freeze({
+  passed: 'Lead passed',
+  proposal_version: 'Proposal version recorded',
+  proposal_won: 'Proposal won',
+  proposal_lost: 'Proposal lost',
+  negotiation_moved: 'Negotiation last moved',
+  retainer_created: 'Retainer recorded',
+  retainer_ended: 'Retainer ended',
+});
+
+/** Recorded events only, in the feed's order (the Worker sorts newest first); `who` is the opportunity's title. */
+export function activityRows(items) {
+  return (Array.isArray(items) ? items : []).filter((e) => EVENT_WORDS[e?.kind]).map((e) => ({
+    key: e.key || `${e.kind}:${e.occurred_at}`, at: e.occurred_at, text: EVENT_WORDS[e.kind],
+    who: e.opportunity?.title || null,
+  }));
+}
+
+/** How many events Recent movement asks the feed for. */
+export const MOVEMENT_SHOWN = 8;
+
+/**
+ * Recent movement: `{ state: 'unreadable' }` for a failed read, else `{ state: 'ok', rows }`. An empty list over a
+ * read that answered means nothing has moved; it is never drawn from a stage, a date or a count on another read.
+ */
+export function movementView(source) {
+  if (source?.state !== 'ok') return { state: 'unreadable' };
+  const items = source.data?.items;
+  return { state: 'ok', rows: activityRows(Array.isArray(items) ? items : []).slice(0, MOVEMENT_SHOWN) };
 }

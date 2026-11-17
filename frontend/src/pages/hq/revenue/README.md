@@ -23,6 +23,8 @@ page. Drawer history and explicit branch checks read their scoped API directly.
 | `Promotions.jsx` | HQ saved, push accepted, explicit checkout read-back, issued, remaining and reporting; the scoped licence picker loads only when its editor opens. |
 | `StatementActionHistory.jsx` | Lazy, permission-gated, paged action receipts for the opened statement; unreadable and no recorded actions remain distinct. |
 | `PromotionReadback.jsx` | A manual branch check with a dated snapshot, reset when the selected ceiling changes. |
+| `AdvisoryRefundsDue.jsx` | Advisory refunds due in Billing exceptions (D5305): the tile, the block (open rows, then the collapsed Resolved list) and the “Mark refunded…” sheet, Scope → Review → Step-up → Result, which records a refund made in Stripe and moves no money. |
+| `advisoryRefundsModel.js` | Its pure rules: open and resolved split, the open count (a floor at the 200-row cap), Not recorded for a missing amount, the reason check, the drafted reason's blanks, each refusal's end and the Needs attention line. |
 
 Tested by `frontend/test/hq_revenue_v2_5039.test.mjs` (the cockpit),
 `frontend/test/hq_revenue_receivable_actions_5039.test.mjs` (the governed

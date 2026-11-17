@@ -22,9 +22,13 @@ band underneath.
 
 | File | Artboard | Route | Architecture |
 | --- | --- | --- | --- |
-| `ScreeningZone.jsx` | ID2 · Deals · Screening | `/deals/screening` | ANALYTICS. D1260: the deals you can read with each one's venture scorecard strip (`POST /api/venture-scores/batch`), and the pass taxonomy. No Lab score, tier or flag, and no memo |
+| `ScreeningZone.jsx` | ID2 · Deals · Screening, redrawn to Deals v2 board DE06 (D4815, #5909) | `/deals/screening` | DECISION TABLE. The deals you can read, each with its venture scorecard strip (`POST /api/venture-scores/batch`), thesis fit and your decision (Move to diligence, Pass with a reason, through your deal flow); the pass taxonomy is a secondary view behind a disclosure. No Lab score, tier or flag, and no memo |
+| `screeningModel.js` | — | — | The decision table's pure rules: the four summary figures, the Confidence cell and Your decision. Read by `ScreeningZone.jsx` and its test |
 | `CommitZone.jsx` | ID3 · Deals · Commit | `/deals/commit` | LEDGER |
-| `ClosingZone.jsx` | ID4 · Deals · Closing | `/deals/closing` | COLLECTION |
+| `ClosingZone.jsx` | ID4 · Deals · Closing, redrawn to DX8 board DE08 A (D4815 part 8) | `/deals/closing` | COLLECTION. A deal-first list under a five-figure strip |
+| `closingListModel.js` | (DX8) | — | The Closing zone's joins, pure: `closingKpis` and `closingRows`. The one file that changes when `GET /api/deals/closing-overview` (#6157) lands |
+| `ClosingWorkspace.jsx` | DX17 to DX26 · the closing workspace (D6866, #6866) | `/deals/closing?deal=<id>` | WORKSPACE. One deal's Checklist, Paper, Conditions, Transfer and Audit tabs, rendered by `ClosingZone.jsx` when `?deal=` is set; the checklist item side sheet; the before-close rules. Every read is a route main serves, scoped at the route |
+| `closingWorkspaceModel.js` | (DX17 to DX26) | — | The workspace's pure rules: status words and glyphs, Overdue, condition order, the transfer hold, the Audit merge, the close rules and the side sheet's patch. Read by `ClosingWorkspace.jsx` and its test |
 
 ## The rule for adding to this folder
 

@@ -7,14 +7,13 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Lightbox } from '../../ui';
-import { dd } from '../../lib/api';
 import { ddLifecycleApi } from '../../lib/api/ddLifecycle.js';
 import {
   LINK_LINE, MEMO_MAX, MEMO_PARTS, NOT_RECORDED, REQ_STATE_WORD, SOURCE_STATE_WORD, WHO, caseRefusal, conditionFlags, documentLists,
   fmtDay, icState, may, maySection, platformRows, reportRows, reqState, requestActions, requestTiles, sectionRow, teamRows, unstaffed,
 } from './ddCaseModel.js';
 import { dueOf } from './ddReviewModel.js';
-import { Block, DecisionStrip, Severity, Table, Td, Tile, CaseUnreadable, Who } from './DdCaseWork.jsx';
+import { Block, DecisionStrip, OpenLink, Severity, Table, Td, Tile, CaseUnreadable, Who } from './DdCaseWork.jsx';
 import { Note, btnCls, dangerCls, fieldCls, inputCls, muted, primaryCls } from './DdUi.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -82,23 +81,6 @@ export function RequestsTab({ data, open }) {
  * Documents (DDL7)
  * ------------------------------------------------------------------ */
 
-function OpenLink({ uid, kind, id, name }) {
-  const [refused, setRefused] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const go = async () => {
-    if (busy) return;
-    setBusy(true); setRefused(null);
-    try { const r = await dd.documentLink(uid, kind, id); if (r?.url) window.open(r.url, '_blank', 'noopener,noreferrer'); }
-    catch (e) { setRefused(caseRefusal(e, 'The file could not be opened.')); }
-    finally { setBusy(false); }
-  };
-  return (
-    <span className="flex flex-col">
-      <button type="button" className="w-fit text-left font-semibold text-violet-700 underline dark:text-violet-300" onClick={go} aria-label={`Open ${name}`}>{busy ? 'Opening…' : 'Open'}</button>
-      {refused ? <span role="alert" className="text-[12px] text-red-700 dark:text-red-300">{refused}</span> : null}
-    </span>
-  );
-}
 
 export function DocumentsTab({ uid, data, onRetry }) {
   const lists = documentLists(data);

@@ -12,10 +12,13 @@ export const cycleValidateApi = {
     return request(`/cycles/validate/modules/${encodeURIComponent(slug)}?${params}`);
   },
   marketReadiness: (projectId) => request(`/cycles/validate/market-readiness?${q(projectId)}`),
+  setInterviewSegment: (projectId, interviewId, segmentId) => request(`/cycles/validate/interviews/${encodeURIComponent(interviewId)}/segment?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ segment_id: segmentId }) }),
   setInterviewStage: (projectId, interviewId, stage) => request(`/cycles/validate/interviews/${interviewId}/stage?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ stage }) }),
   setWaitlistTarget: (projectId, value) => request(`/cycles/validate/waitlist-target?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   // D685 §5.12: the monthly interviews target Validate's phone meter reads; null clears it.
   setInterviewsTarget: (projectId, value) => request(`/cycles/validate/interviews-target?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  // D5997 (#5997): the venture's "Trying to learn:" line; null or '' clears it.
+  setObjective: (projectId, value) => request(`/cycles/validate/objective?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   setMarketMark: (projectId, item, done) => request(`/cycles/validate/market-marks/${encodeURIComponent(item)}?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ done }) }),
   addMarketSource: (projectId, data) => request(`/cycles/validate/market-sources?${q(projectId)}`, { method: 'POST', body: JSON.stringify(data) }),
   removeMarketSource: (projectId, sourceId) => request(`/cycles/validate/market-sources/${sourceId}?${q(projectId)}`, { method: 'DELETE' }),

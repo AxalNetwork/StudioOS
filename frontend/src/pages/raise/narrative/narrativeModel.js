@@ -33,6 +33,7 @@
  * grows the derivation when its read lands.
  */
 
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { SECTIONS } from './storyModel.js';
 
@@ -72,9 +73,8 @@ export const isNarrativeTab = (slug, id) => slug === SLUG && TAB_WORDS.has(Strin
  */
 export function tabSearch(search = '', version = null, withVersion = true) {
   const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const out = new URLSearchParams();
-  const project = from.get('project_id') || from.get('project');
-  if (project) out.set('project_id', project);
+  // D5074: the venture comes from the route helpers, in the one form (`ventureQuery.js`).
+  const out = new URLSearchParams(ventureSearch(ventureRef(search)?.id).replace(/^\?/, ''));
   const v = version ?? from.get('version');
   if (withVersion && v != null && /^\d+$/.test(String(v))) out.set('version', String(v));
   const s = out.toString();
@@ -181,6 +181,24 @@ export const homePart = (data) => (data?.parts?.narrative?.state === 'ok' ? data
 export const homeUnreadable = (data) => data?.parts?.narrative?.state === 'unreadable';
 
 export const CLAIMS_WAIT = 'Claims are counted once StudioOS checks each claim against its record.';
+export const CLAIMS_UNREADABLE = 'The claims could not be read.';
+
+/**
+ * D6068 (#6068): the Claims backed tile from the part's `claims`, D1264's claim
+ * store for the newest version (`claimTally.ts`): "n of m" once a check stored
+ * claims; a dash with the reason when the read failed, nothing was checked, or
+ * the part carries no tally (CLAIMS_WAIT). Never 0 for unknown.
+ */
+export function claimsTile(claims, newest = null) {
+  const tile = (value, sub, waits) => ({ key: 'claims', label: 'Claims backed', value, sub, waits });
+  const v = claims?.version ?? newest?.version;
+  if (claims?.state === 'unreadable') return tile(DASH, CLAIMS_UNREADABLE, true);
+  const total = claims?.total;
+  const backed = claims?.backed;
+  if (claims?.state !== 'ok' || !Number.isInteger(total) || !Number.isInteger(backed)) return tile(DASH, CLAIMS_WAIT, true);
+  if (total === 0) return tile(DASH, `Nothing checked yet in v${v}`, true);
+  return tile(`${backed} of ${total}`, `Backed by a record, in v${v}`, false);
+}
 export const ANSWERS_UNREADABLE = 'Which section answers each one could not be read.';
 const DASH = '—';
 
@@ -188,7 +206,7 @@ const versionName = (v) => `v${v.version} · ${v.audience || NOT_RECORDED}`;
 
 /**
  * NAR1's four tiles: Versions and Open mismatches from the part; Claims backed
- * (#2430) a dash with the reason, never 0. Objections answered (D913 option
+ * "n of m" from the claim store (D6068, `claimsTile`), a dash with the reason, never 0. Objections answered (D913 option
  * A) is "n of m": how many of the objections heard a saved section answers; a
  * dash with the reason when either read failed or none was heard.
  */
@@ -198,7 +216,7 @@ export function homeTiles(part) {
   const mismatches = Array.isArray(newest?.mismatches) ? newest.mismatches : [];
   return [
     { key: 'versions', label: 'Versions', value: String(versions.length), sub: versions[0] ? `Newest ${versionName(versions[0])}` : 'No version yet' },
-    { key: 'claims', label: 'Claims backed', value: DASH, sub: CLAIMS_WAIT, waits: true },
+    claimsTile(part?.claims, newest),
     {
       key: 'mismatches', label: 'Open mismatches',
       value: !newest || !newest.compared ? DASH : String(mismatches.length),
@@ -274,6 +292,9 @@ export function newVersionLine(values, versions) {
   const n = nextVersion(saved);
   const who = AUDIENCE[String(values?.investor_type ?? '')];
   const from = /^version-([1-9][0-9]{0,8})$/.exec(String(values?.start_from ?? ''));
+  // D6069: starting from the deck's words leaves the deck as it is, and says so.
+  const deck = /^deck-([1-9][0-9]{0,8})$/.exec(String(values?.start_from ?? ''));
+  if (deck) return `Creates v${n}${who ? ` for ${who}` : ''}. Pitch deck v${deck[1]} does not change.`;
   const kept = from ? from[1] : saved.length ? String(Math.max(...saved.map((v) => Number(v.version ?? v.value) || 0))) : null;
   return [`Creates v${n}${who ? ` for ${who}` : ''}.`, kept ? `Nothing in v${kept} changes.` : null].filter(Boolean).join(' ');
 }
@@ -308,6 +329,18 @@ export { NOT_RECORDED };
 
 /** An admin reads the narrative read only. Admins previewing another role through "View as" are that role here. */
 export const isNarrativeAdmin = (user, viewMode = null) => String(user?.role || '') === 'admin' && (!viewMode || viewMode === 'admin');
+
+/**
+ * D5074 slice 3 (#5074): who the viewer is on this narrative, from the versions read's `capabilities` alone
+ * (`cloudflare-worker/src/services/narrative/capabilities.ts`, the map the narrative's writes refuse from). `true`
+ * allows; no map, an unknown key or any other value allows nothing. `admin` is the reasoned read (notes, no writes);
+ * `readOnly` is "no narrative write"; `checks` is the founder's check against the records.
+ */
+export function narrativeStanding(capabilities) {
+  const caps = capabilities && typeof capabilities === 'object' ? capabilities : null;
+  const can = (key) => caps?.[key] === true;
+  return { known: !!caps, can, admin: can('admin_reason_required'), readOnly: !can('edit'), checks: can('check'), notes: can('note') };
+}
 
 export const READ_ONLY = 'Read only. Notes are visible to the founder.';
 export const REASON_TITLE = 'Why are you opening this narrative?';

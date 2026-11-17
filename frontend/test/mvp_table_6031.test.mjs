@@ -40,7 +40,8 @@ test('2. mounted: Set for a writer without a date, saving then re-reading; a fai
   // the error swallowed → no alert.
   const dated = await mountForm(h(MvpSummary, { facts: { done: 3, total: 7, blocked: 1, target_date: '2026-11-18', can_set_target: true }, save: async () => {} }));
   try {
-    assert.match(dated.text(), /3 of 7 must-haves complete\s*·\s*target 18 Nov 2026\s*·\s*1 blocked/);
+    // D6022 (#6022): a writer's recorded date offers Change in Set's place.
+    assert.match(dated.text(), /3 of 7 must-haves complete\s*·\s*target 18 Nov 2026\s*Change\s*·\s*1 blocked/);
     assert.equal(dated.by('mvp-summary-set'), undefined, 'a recorded date offers no Set');
     const bar = dated.nodes().find((n) => propsOf(n).role === 'progressbar');
     assert.deepEqual([propsOf(bar)['aria-valuenow'], propsOf(bar)['aria-valuemax']], [3, 7]);
@@ -95,7 +96,8 @@ test('4. the route mounts both on Prototype / MVP only, from Build\'s def; the w
   // Mutation checked: the def's key misspelt → no summary on the module; the route ignoring `def.phoneRows` → the default row.
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const above = moduleStatus === 'ready' && projectId && !narrativeAdmin \? fnOf\(def\.aboveRecords, slug\) : null;/);
-  assert.match(route, /: above \? above\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\) \}\) : null\}/);
+  // D6122 (#6122): the ctx also carries the table's query, so Company's due strip can filter it.
+  assert.match(route, /: above \? above\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\) : null\}/);
   assert.match(route, /const phoneRowOf = phone \? fnOf\(def\.phoneRows, slug\) : null;/);
   assert.match(route, /\.\.\.\(phoneRowOf \? \{ phoneRow: phoneRowOf \} : \{\}\)/);
   assert.doesNotMatch(route, /MvpSummary|mvpTable/, 'CycleRoute.jsx is a frozen hub (D5615): the imports live in defs/build.jsx');
