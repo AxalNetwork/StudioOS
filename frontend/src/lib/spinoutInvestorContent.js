@@ -40,7 +40,7 @@ export const HERO = {
   headline: THESIS.headline,
   sub:
     'The Spin-Out Lab is a 28-day company-formation environment. Founders enter with an idea and '
-    + 'leave incorporated, 83(b)-filed, cap-table-clean, with verified customer discovery and revenue '
+    + 'work through to an incorporation order, the 83(b) election, a clean cap table, customer discovery and revenue '
     + 'proof — and Axal VC underwrites them on observed execution, not a pitch.',
 };
 
@@ -165,7 +165,7 @@ export const CASE_ITEMS = [
 export const FINAL_CTA = {
   kicker: `First close · ${FUND.firstClose}`,
   headline: 'This is not pre-seed exposure. It is a formation system with an underwriting record.',
-  body: `Access is curated and application-based. Approved LPs see the full pipeline, capital accounts, and quarterly reporting; commitments at $${FUND.allocThresholdK}K carry allocation and decision rights on cohort demo days.`,
+  body: `Access is curated and application-based. Approved LPs see the full pipeline, capital accounts, and quarterly reporting; commitments at $${FUND.allocThresholdK}K carry decision rights on cohort demo days.`,
 };
 
 export const DISCLAIMER =

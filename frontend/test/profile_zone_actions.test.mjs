@@ -174,6 +174,8 @@ const PROFILES = {
     // mark-history Sheet). Each label here must still be on its artboard and
     // must not be in the table.
     withheld: { 'portfolio/positions': ['Add follow-on'] },
+    // #6276 adds a visible-row CSV beside the original canvas controls.
+    offCanvas: { 'research/benchmarking': ['Export'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -182,7 +184,7 @@ const PROFILES = {
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
     // is stored to export" was true until migration 312's receipts (D371).
     // 14 since D1243: `deals/pipeline`'s Export left with its zone.
-    exports: 14,
+    exports: 15,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -243,7 +245,11 @@ const PROFILES = {
     // drafts and issues a period at `/funds/:fundId/reporting/new`.
     // EIGHTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
     // stores the log and the page draws it; the op scrolls to that card.
-    handlers: 18,
+    // NINETEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
+    // hide over delete on #6274 (question 4 B); the Worker stamps `cleared_at`
+    // and `Show cleared` reads it back.
+    // D6276 also supplies New benchmark from the page.
+    handlers: 20,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,

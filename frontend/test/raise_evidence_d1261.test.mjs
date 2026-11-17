@@ -50,9 +50,10 @@ test('five Source labels with SCORING’s one grade mapping; strength apart; Typ
   for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
 });
 
-test('Raise’s rail: Overview, then Evidence, then Calls, then the modules; Evidence keeps the venture', () => {
+test('Raise’s rail: Overview, then Evidence, then the modules; Evidence keeps the venture', () => {
   const tabs = cycleTabs('raise', MODULES.raise, 'evidence', '?project_id=7');
-  assert.deepEqual(tabs.slice(0, 3).map((t) => [t.name, t.href, t.active]), [['Overview', '/raise?project_id=7', false], ['Evidence', '/raise/evidence?project_id=7', true], ['Calls', '/raise/capital-relationships/calls?project_id=7', false]]);
+  // D5081 part 5 (#5081, RA-12): Calls is Capital relationships' own tab, no longer a peer after Evidence.
+  assert.deepEqual(tabs.slice(0, 3).map((t) => [t.name, t.href, t.active]), [['Overview', '/raise?project_id=7', false], ['Evidence', '/raise/evidence?project_id=7', true], ['Fundraising readiness', '/raise/fundraising-readiness?project_id=7', false]]);
   assert.ok(!cycleTabs('build', MODULES.build).some((t) => t.key === 'evidence'), 'only Raise has Evidence');
 });
 

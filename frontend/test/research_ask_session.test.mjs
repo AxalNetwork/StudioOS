@@ -214,8 +214,14 @@ test('the scope chips are four separate statements, not one with a fragment spli
   // a keyset-continuation one. Written out rather than spliced, for exactly
   // the reason this test was written: a cursor predicate is the most tempting
   // thing in this handler to interpolate.
-  assert.equal((branches.match(/DB\.prepare\(/g) || []).length, 8,
-    'the four scopes are no longer four pairs of whole statements');
+  // D6272: TEN FOR FIVE. `cleared` joined them — the sessions Clear history
+  // hid — and `all` now leaves those out, each still a written-out predicate.
+  assert.equal((branches.match(/DB\.prepare\(/g) || []).length, 10,
+    'the five scopes are no longer five pairs of whole statements');
+  for (const predicate of ['session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL)',
+    'session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL)']) {
+    assert.equal(branches.split(predicate).length - 1, 2, `a cleared-history predicate is missing from a page: ${predicate}`);
+  }
   for (const scope of ['saved = 1', 'discarded = 1']) {
     assert.ok(branches.includes(scope), `the ${scope} scope lost its own written-out predicate`);
   }
@@ -233,7 +239,7 @@ test('the four chips reach the two things they can be', () => {
   // over `scope=all`'s window, so an archived answer past that window was
   // unreachable from the Archived tab — the one tab whose whole job is to find
   // them. It is a server read now, with its own statement and its own totals.
-  assert.match(ASK, /const SCOPES = new Set\(\['session', 'all', 'saved', 'discarded'\]\)/,
+  assert.match(ASK, /const SCOPES = new Set\(\['session', 'all', 'saved', 'discarded', 'cleared'\]\)/,
     'the scope set is gone, or Archived went back to being a client-side filter');
   assert.doesNotMatch(ASK, /discarded: \(t\) => t\.discarded === true,/,
     'Archived is a narrowing again, so it can only ever search the page in hand');
@@ -330,7 +336,11 @@ test('the AI band never runs on mount, and its surfaces are allow-listed', () =>
     return src.split('<ZoneDraft').slice(1)
       .map((seg) => seg.slice(0, seg.indexOf('/>')).match(/surface="([a-z/-]+)"/)?.[1])
       .filter(Boolean);
-  }), ...fromCycles])].sort();
+  }), ...fromCycles,
+  // D6888: a draft card that keeps nothing (the statement's cover note) is not a band and names its surface on its root.
+  ...execFileSync('grep', ['-rhoE', 'data-draft-surface="[a-z/-]+"', 'frontend/src'], { encoding: 'utf8' })
+    .split('\n').filter(Boolean).map((s) => s.slice('data-draft-surface="'.length, -1)),
+  ])].sort();
   assert.ok(mounted.length >= 6, `expected the band to be mounted on the artboards; found ${mounted.length}`);
   assert.deepEqual(allowed, mounted,
     'the worker’s draft surfaces and the pages that mount a band have diverged: '

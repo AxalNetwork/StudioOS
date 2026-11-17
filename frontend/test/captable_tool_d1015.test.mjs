@@ -243,7 +243,8 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?(?:!dataRoomOldFile && )?(?:!uofTab && )?(?:!capRelTab && )?!!projectId/);
   // D5079 (#5079): Home also reports a refused record read to the page, so
   // the page draws none of the cap table's data under the refusal.
-  assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} \/>/);
+  // D5081 part 3 (#5081): Home is handed the record read CycleRoute holds for the header's action.
+  assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} home=\{capTableOwnsHome \? capTableHome : null\} \/>/);
   const tool = read('frontend/src/pages/raise/captable/CapTableTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm)\(/);
   assert.doesNotMatch(tool, /equity-plan|getEquityPlan/, 'the tool file reads no plan itself: Option pool reads the venture\'s (D1023)');
