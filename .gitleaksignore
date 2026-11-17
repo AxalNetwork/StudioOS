@@ -304,5 +304,7 @@ e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_ac
 # #6473: a synthetic GitHub token literal in the landing bot model runner's
 # env-leak test (frontend/test/landing_bot_model_6473.test.mjs), which checks
 # that no environment value reaches a log or artifact. It was never a token
-# for anything. Scoped to this one finding, as D334's entry is.
+# for anything. Scoped to this one finding, as D334's entry is. The fixture
+# now builds the value at run time, so the merge queue's squashed commit holds
+# no literal; this entry covers the PR's own history only.
 ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.test.mjs:generic-api-key:177

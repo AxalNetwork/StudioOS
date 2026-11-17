@@ -174,7 +174,7 @@ test('#6473: a test that prints its environment shows no key in any log or artif
   const out = mkdtempSync(join(tmpdir(), 'lbm-out-'));
   const taskFile = join(out, 'task.json');
   writeFileSync(taskFile, JSON.stringify(taskOf({ verify: [['node', 'print-env.mjs']] })));
-  const env = { ...process.env, ANTHROPIC_API_KEY: KEY, OPENAI_API_KEY: KEY, GEMINI_API_KEY: KEY, GITHUB_TOKEN: 'ghs_FIXTURE0123456789abcdefghijkl', ACTIONS_RUNTIME_TOKEN: 'rt-FIXTURE' };
+  const env = { ...process.env, ANTHROPIC_API_KEY: KEY, OPENAI_API_KEY: KEY, GEMINI_API_KEY: KEY, GITHUB_TOKEN: `ghs_${'FIXTURE'.repeat(4)}`, ACTIONS_RUNTIME_TOKEN: 'rt-FIXTURE' };
   await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA }, { env, providers: { claude: stub('claude', fix) } });
   const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v') }, { env });
   assert.equal(v.passed, false);
