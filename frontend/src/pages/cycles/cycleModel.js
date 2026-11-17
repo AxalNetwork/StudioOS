@@ -29,9 +29,10 @@ export const CYCLES = {
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
     history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: true } },
   raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Build your deck',
-    // D1221 (#2458): Raise's history is Calls for Capital, Capital relationships' Calls tab.
-    history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships/calls', hash: '', live: true },
-    // D1261 (#2430): Evidence is Raise's own tab, after Overview and before Calls.
+    // D1221 (#2458) made Calls for Capital Raise's history tab. D5081 part 5 (#5081, RA-12): Calls, Commitments and
+    // Closing live inside Capital relationships, so Calls is that tool's own tab (`/raise/capital-relationships/calls`,
+    // unchanged) and no longer a peer of the Raise modules.
+    // D1261 (#2430): Evidence is Raise's own tab, after Overview.
     lead: { key: 'evidence', name: 'Evidence', path: '/raise/evidence' } },
   grow: { key: 'grow', name: 'Grow', question: 'How does this venture become larger and more enduring?', outcome: 'From Traction → Impact', action: 'Share an update',
     // D1056 (#2427): Grow's history is the Reporting desk, its own page, in place of Updates.
@@ -313,6 +314,38 @@ export function cycleTabs(cycle, cards, active = null, search = '', { back = nul
   const lead = CYCLES[cycle]?.lead;
   const leading = lead && cardTabs.length ? [{ key: lead.key, name: lead.name, href: `${lead.path}${s}`, active: active === lead.key }] : [];
   return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }].concat(leading, history, cardTabs);
+}
+
+/**
+ * D5081 part 5 (#5081, RA-12) — Raise's one navigation: four stages as headings over the modules, with no new
+ * route. A stage names tab keys; Overview leads with no heading, and a module the read sends that no stage names
+ * is drawn after the stages under no heading, so a new module is never dropped.
+ */
+export const RAISE_STAGES = [
+  { label: 'Prepare', keys: ['evidence', 'fundraising-readiness'] },
+  { label: 'Build the story', keys: ['investor-narrative', 'pitch-deck'] },
+  { label: 'Prepare diligence', keys: ['data-room', 'cap-table', 'use-of-funds'] },
+  { label: 'Run the raise', keys: ['capital-relationships'] },
+];
+
+/**
+ * A cycle's tabs as headed groups: `[{ label, tabs }]`, with `label` '' for a group drawn without a heading. Only
+ * Raise has stages (RA-12); every other cycle is one group with no heading, so its tabs are drawn as before. A stage
+ * none of whose modules came back is left out rather than drawn empty.
+ */
+export function cycleTabGroups(cycle, tabs) {
+  const list = Array.isArray(tabs) ? tabs : [];
+  if (cycle !== 'raise') return [{ label: '', tabs: list }];
+  const staged = new Set(RAISE_STAGES.flatMap((g) => g.keys));
+  const byKey = new Map(list.map((t) => [t.key, t]));
+  const groups = [{ label: '', tabs: list.filter((t) => !t.key) }];
+  for (const g of RAISE_STAGES) {
+    const inStage = g.keys.map((k) => byKey.get(k)).filter(Boolean);
+    if (inStage.length) groups.push({ label: g.label, tabs: inStage });
+  }
+  const rest = list.filter((t) => t.key && !staged.has(t.key));
+  if (rest.length) groups.push({ label: '', tabs: rest });
+  return groups.filter((g) => g.tabs.length);
 }
 
 /**
