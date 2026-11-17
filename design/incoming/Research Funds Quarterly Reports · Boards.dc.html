@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Funds Quarterly Reports · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Funds 4 of 5 · #7034 · extends Research v2 (#3701)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Fund quarterly reports — add a sourced quarter, correct one metric, and see exactly what changed</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Quarterly reports section of the private fund dossier at /research/funds/:uid (shell from brief 3, #7033). A founder adds a quarter from a published source, edits one metric later without losing the others, and reads a history whose chart and table agree. Saving only a 4.2% return keeps the saved NAV US$100,000, net IRR 9.4%, TVPI 1.4×, source and note. A quarter with no report is a gap in the chart and a row in the table, never 0 and never joined across. Keep, replace and clear are three visible intents; percent, multiple and US-dollar inputs carry their units. States follow Platform States (D5129), with Unavailable on screen. Boards are numbered FND-Q0 to FND-Q11 as the brief asks (component keys RFQ…). Violet dashed ◇ tags mark backend work on #7034; amber ⚑ tags mark owner choices, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026, 14:32 UTC · checked against main 87bf3ac4ac · “Atlas AI” is the synthetic dossier record of brief 3; every quarter, figure, source label and note is fictional sample content</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Funds Quarterly Reports Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FND-Q0', 'Journey, routes and paths', 'Route and state of every board and the data behind it; first-use, edit and recovery paths; the annotation key.', [W('RFQ00')]],
+      ['FND-Q1', 'Report list and history · 1440', 'Latest reported quarter with units, the chart with each quarter at its own position (2025 Q2 no report, 2026 Q2 return not recorded), and the accessible history table with Edit and Delete per row. Light and dark, then empty, loading and failed-to-load with Retry.', [F('RFQ01', 'Light', 1200), F('RFQ01B', 'Dark', 1200), C('RFQ01C', 'No reports yet · loading · failed to load', 1260, 490)]],
+      ['FND-Q2', 'Add quarter', 'The shared Sheet: reporting period, then source, then money (US$), rates (%) and multiple (×) as separate groups. Blank saves as Not recorded. Picking a quarter that exists opens the saved report, prefilled.', [F('RFQ02', false, 1200), C('RFQ02B', 'Selected quarter already exists', 1240, 530)]],
+      ['FND-Q3', 'Edit an existing quarter', 'Edit 2026 Q2: every field prefilled and marked Kept; the typed 4.2% is a New value with its previous state; the summary names the one change and everything kept. One primary: Save 1 change.', [F('RFQ03', 'Light', 1200), F('RFQ03D', 'Dark', 1200)]],
+      ['FND-Q4', 'Before/after partial edit', 'Before, edit and after side by side: only the return changes. Focus returns to the 2026 Q2 row and the change is announced. Keep, replace and explicit clear, and the menu that appears when a saved field is emptied.', [C('RFQ04', 'Before · edit · after', 1400, 830), C('RFQ04B', 'Keep, replace, clear', 1300, 500)]],
+      ['FND-Q5', 'Metric states', 'A value, a measured 0.0%, a permitted −2.1%, 1.4× as a multiple, US$100,000, Not recorded, No report, Unavailable and an invalid entry, each with its own look and its storage.', [C('RFQ05', false, 1300, 590)]],
+      ['FND-Q6', 'Missing quarter in the chart', 'Q1 and Q3 observed, Q2 missing: the line breaks, Q2 keeps its place, and the keyboard-accessible table lists Q2 as “No report”. Beside it, today’s chart joining Q1 to Q3.', [C('RFQ06', false, 1200, 660)]],
+      ['FND-Q7', 'Validation, conflict and retry', 'Error summary linked to each field with the entry kept; a per-field conflict review against the 14:30 revision; save failed, offline, session expired, and a save whose list re-read failed.', [F('RFQ07', 'Validation in the edit sheet', 1260), C('RFQ07B', 'Conflict', 800, 730), C('RFQ07C', 'Recovery states', 1340, 400)]],
+      ['FND-Q8', 'Delete and cancel', 'Scope → Review → Result for deleting a quarter, with Keep report as the default; closing an edit with unsaved changes.', [C('RFQ08', false, 1340, 720)]],
+      ['FND-Q9', 'Keyboard, focus and announcements', 'Focus sequence for every sheet and result, live-region wording, accessible names with units, chart keyboard model and phone ordering.', [W('RFQ09')]],
+      ['FND-Q10', 'Phone 390 · light and dark', 'List with chart and cards, the edit form with the changed field first, a validation error kept in place, the return to the saved card, a failed load with Retry and the chart as a table; dark list and edit.', [P('RFQ10A', 'List'), P('RFQ10B', 'Edit 2026 Q2'), P('RFQ10C', 'Validation'), P('RFQ10F', 'After save'), P('RFQ10G', 'Failed load · table'), P('RFQ10D', 'List · dark'), P('RFQ10E', 'Edit · dark')]],
+      ['FND-Q11', 'Handoff', 'What was checked on main, backend required on #7034 (partial update, create-only POST, revision check, field errors, currency dependency), frontend-only work, owner questions and reused components.', [W('RFQ11')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
