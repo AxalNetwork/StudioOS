@@ -305,8 +305,11 @@ test('Overview: the tool bar, Needs you, who owns, the tiles, the bars, the inst
     assert.match(bar, /Carta · synced 20 Oct 2026/);
     assert.match(bar, /409A · Valid until 3 Mar 2027/);
     assert.match(bar, /5 proposals waiting/);
-    // D1025 (#2862): Record an issuance is the owner's, in the tool bar.
-    assert.match(v.text(v.by('captable-record')), /Record an issuance/);
+    // D1025 (#2862): Record an issuance is the owner's. D5081 part 3 (#5081): on a desktop it is the module
+    // header's one primary, opening /new over Overview, and the tool bar does not draw it again.
+    assert.equal(v.text(v.by('cycle-action')), 'Record an issuance');
+    assert.equal(v.props(v.by('cycle-action')).href, '/raise/cap-table/new?project_id=3');
+    assert.ok(!v.by('captable-record'), 'one Record an issuance on the page');
     assert.equal(v.all('captable-need').length, 4);
     assert.match(v.text(v.by('captable-needs')), /A SAFE request from Mercury\. A SAFE for Harbor Seed Fund, \$250,000/);
     assert.equal(v.all('captable-group').length, 5);
