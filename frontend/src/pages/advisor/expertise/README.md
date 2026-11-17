@@ -22,6 +22,8 @@ The modules they share:
 | `pages.js` | `usePagedList` (D4689): reads a list a page at a time, appends `next_offset` on "Show more", merges rows by key, and draws "Showing N of total" only while rows remain. A failed next page keeps the rows already read. After a write a zone calls `refresh()`, not `load()`: it re-reads in place, as many rows as are shown, and the newest read wins (D4711). |
 | `expertiseModel.js` | What Services, Proof and Thinking say about themselves, pure (D4681): service states and edits, proof deletion lines, and each article's real state, audience and next step. |
 | `licenceRefusal.js` | The 403 `advisor_licence_required` read the same way on every Expertise and Practice zone (#5363): `zoneError` turns it into the surface's licence sentence, and `ZoneBody` shows that sentence with no Try again. |
+| `sectionStates.jsx` | D4828 (#4828): the states every zone draws on #5129's components (`SectionState`: loading by word, Unavailable with its own Try again, the licence refusal as Refused), the limit counter (`useLimit`) and `InlineSaveStatus`, the one save status (`SaveNote` is its shipped name). A zone passes `what="Your …"` to `ZoneBody` to draw them. |
+| `feedback.js` | D4828: the save sentences ("Profile updated.", "Not saved, your text is kept.") and how a field's limit is counted, the Worker's way: trimmed, refused over the limit and never cut. |
 
 **EVERY FIGURE IS THE WHOLE LIST (D4689).** The list routes answer one page and,
 beside it, `counts` over the whole list (Visibility: `requests`). Tiles and

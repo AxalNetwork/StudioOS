@@ -5,6 +5,7 @@ import { accentLinkClass, zonePath } from './shellConfig';
 import NoStoreYet from './NoStoreYet';
 import AlsoIn from './AlsoIn';
 import useBucketSources from './useBucketSources';
+import { BoardRows, BoardSectionState } from './BoardSectionStates';
 
 /**
  * The composed body a bucket ROOT renders when the canvas corpus draws one.
@@ -103,6 +104,7 @@ export default function BucketBoard({ bucket, role = 'founder', board, className
                   to={to}
                   role={role}
                   source={section.source ? byKey[section.source] : null}
+                  platform={board.states === 'platform' ? { refusals: board.refusals || null } : null}
                 />
               )}
           </div>
@@ -149,7 +151,7 @@ function ZoneCard({ zone, to, section }) {
   );
 }
 
-function Section({ section, zone, to, role, source }) {
+function Section({ section, zone, to, role, source, platform = null }) {
   const title = section.title || zone.label;
   // A gapped section states its reason and draws no table, no count and no
   // control. `gap` is the SAME object the zone's own page renders, handed over
@@ -168,10 +170,12 @@ function Section({ section, zone, to, role, source }) {
   return (
     <Card padding="lg" className={SECTION} id={section.anchor}>
       <Head title={title} to={to} sub={state === 'ready' ? section.summary?.(payload) : null} />
-      {state === 'loading' && (
+      {/* D4828 (EX-14): a board with `states: 'platform'` draws #5129's states (`BoardSectionStates.jsx`). */}
+      {platform ? <BoardSectionState title={title} state={state} source={source} refusals={platform.refusals} /> : null}
+      {!platform && state === 'loading' && (
         <div className="space-y-2" aria-busy="true"><Skeleton className="h-7" /><Skeleton className="h-20" /></div>
       )}
-      {state === 'error' && (
+      {!platform && state === 'error' && (
         <div role="alert">
           <p className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
             {source.error} Nothing is shown rather than an empty list, because an empty list here
@@ -186,7 +190,7 @@ function Section({ section, zone, to, role, source }) {
           )}
         </div>
       )}
-      {state === 'ready' && <Body section={section} payload={payload} to={to} />}
+      {state === 'ready' && <Body section={section} payload={payload} to={to} rowsOnPhone={Boolean(platform)} />}
     </Card>
   );
 }
@@ -203,7 +207,7 @@ function Head({ title, to, sub }) {
   );
 }
 
-function Body({ section, payload, to }) {
+function Body({ section, payload, to, rowsOnPhone = false }) {
   const rows = section.rows ? section.rows(payload) || [] : [];
   const note = section.footnote ? section.footnote(payload) : null;
   const n = section.total ? section.total(payload) : null;
@@ -221,6 +225,8 @@ function Body({ section, payload, to }) {
   const cols = section.cols || `repeat(${section.columns.length}, minmax(0, 1fr))`;
   return (
     <>
+      {/* D4828 (EX-04, EX-16): rows, not a sideways table, on a phone. */}
+      {rowsOnPhone ? <BoardRows slug={section.slug} columns={section.columns} cols={cols} rows={rows} /> : (
       <div className="overflow-x-auto">
         <div className="min-w-[520px]">
           <div className="grid gap-3" style={{ gridTemplateColumns: cols }}>
@@ -241,6 +247,7 @@ function Body({ section, payload, to }) {
           ))}
         </div>
       </div>
+      )}
       {note && <Note>{note}</Note>}
       <p className="mt-3 text-[11px]">
         {/* "View more · N" (the Detail Layer canvases' footer), and ONLY where

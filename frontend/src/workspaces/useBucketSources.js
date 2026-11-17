@@ -66,7 +66,9 @@ export default function useBucketSources(sources) {
       .then(() => latest.current[key]())
       .then(
         (data) => { if (current()) setByKey((prev) => ({ ...prev, [key]: { state: 'ready', data, error: null } })); },
-        () => { if (current()) setByKey((prev) => ({ ...prev, [key]: { state: 'error', data: null, error: SOURCE_UNREADABLE } })); },
+        // D4828: the refusal's code rides along (never its text), so a board can tell a
+        // refused read (no licence) from a failed one; the sentence stays the fixed one.
+        (e) => { if (current()) setByKey((prev) => ({ ...prev, [key]: { state: 'error', data: null, error: SOURCE_UNREADABLE, code: typeof e?.code === 'string' ? e.code : null } })); },
       );
   }, []);
 

@@ -7,6 +7,7 @@ import {
   buttonClass, inputClass,
 } from './kit';
 import { PROFILE_LIMITS } from '../../../lib/advisorLimits';
+import { SAVED, notSavedKept, overLimitKeys, overLimitLine } from './feedback';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -34,6 +35,12 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
  */
 
 const LIST_HINT = 'Comma separated. Leave blank to leave unrecorded.';
+
+/** D4828: each limited field's label, for the sentence a blocked save shows. */
+export const PROFILE_LIMIT_LABELS = {
+  display_name: 'Name', headline: 'Headline', bio: 'Bio', country: 'Country', timezone: 'Time zone',
+  availability_note: 'Availability', headshot_url: 'Headshot URL', linkedin_url: 'LinkedIn',
+};
 
 const splitList = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const joinList = (v) => (Array.isArray(v) ? v.join(', ') : '');
@@ -182,8 +189,12 @@ export default function ProfileZone() {
 
   const set = (key) => (e) => setDraft((d) => ({ ...d, [key]: e.target.value }));
 
+  // D4828 (EX-16): a field over its limit blocks the save; nothing is cut.
+  const over = overLimitKeys(draft, PROFILE_LIMITS);
+
   const save = async (e) => {
     e.preventDefault();
+    if (over.length) { setNote({ ok: false, text: overLimitLine(over, PROFILE_LIMIT_LABELS) }); return; }
     setSaving(true);
     setNote(null);
     try {
@@ -214,7 +225,7 @@ export default function ProfileZone() {
       // The form is reset from what the server stored, not from what was typed.
       setDraft(draftOf(saved));
       setState((c) => ({ ...c, profile: saved }));
-      setNote({ ok: true, text: 'Profile saved.' });
+      setNote({ ok: true, text: SAVED.profile });
     } catch (err) {
       if (err?.code === 'revision_conflict' || err?.status === 409) {
         const current = err?.data?.current;
@@ -224,7 +235,8 @@ export default function ProfileZone() {
       }
       // Named, not swallowed. The reported defect on the old surface was a
       // save that reported success while the worker discarded nine fields.
-      setNote({ ok: false, text: refusalText(err, 'The profile could not be saved. Nothing was changed.') });
+      // D4828 (EX-14): the form keeps what was typed, and the sentence says so.
+      setNote({ ok: false, text: notSavedKept(refusalText(err, 'The profile could not be saved.')) });
     } finally {
       setSaving(false);
     }
@@ -256,6 +268,7 @@ export default function ProfileZone() {
       error={state.error}
       onRetry={load}
       isEmpty={false}
+      what="Your profile"
     >
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
@@ -276,7 +289,7 @@ export default function ProfileZone() {
               aria-valuetext={completenessText(profileCompleteness(state.profile))}
               data-testid="advisor-profile-completeness">
               <div
-                className="h-full rounded-full bg-emerald-700 transition-all"
+                className="h-full rounded-full bg-emerald-700 transition-all motion-reduce:transition-none"
                 style={{ width: `${profileCompleteness(state.profile).pct}%` }}
               />
             </div>
@@ -309,19 +322,19 @@ export default function ProfileZone() {
             />
             <form onSubmit={save} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {fieldShown(view, 'display_name', state.profile) && (
-                <Field label="Name">
-                  <input className={inputClass} value={draft.display_name} maxLength={PROFILE_LIMITS.display_name} onChange={set('display_name')} />
+                <Field label="Name" limit={PROFILE_LIMITS.display_name}>
+                  <input className={inputClass} value={draft.display_name} onChange={set('display_name')} data-testid="advisor-profile-name" />
                 </Field>
               )}
               {fieldShown(view, 'headline', state.profile) && (
-                <Field label="Headline" hint="One line. e.g. “ex-Stripe payments PM”.">
-                  <input className={inputClass} value={draft.headline} maxLength={PROFILE_LIMITS.headline} onChange={set('headline')} />
+                <Field label="Headline" hint="One line. e.g. “ex-Stripe payments PM”." limit={PROFILE_LIMITS.headline}>
+                  <input className={inputClass} value={draft.headline} onChange={set('headline')} data-testid="advisor-profile-headline" />
                 </Field>
               )}
               {fieldShown(view, 'bio', state.profile) && (
                 <div className="sm:col-span-2">
-                  <Field label="Bio">
-                    <textarea rows={4} className={inputClass} value={draft.bio} maxLength={PROFILE_LIMITS.bio} onChange={set('bio')} />
+                  <Field label="Bio" limit={PROFILE_LIMITS.bio}>
+                    <textarea rows={4} className={inputClass} value={draft.bio} onChange={set('bio')} data-testid="advisor-profile-bio" />
                   </Field>
                 </div>
               )}
@@ -346,30 +359,30 @@ export default function ProfileZone() {
                 </Field>
               )}
               {fieldShown(view, 'country', state.profile) && (
-                <Field label="Country">
+                <Field label="Country" limit={PROFILE_LIMITS.country}>
                   <input className={inputClass} value={draft.country} onChange={set('country')} />
                 </Field>
               )}
               {fieldShown(view, 'timezone', state.profile) && (
-                <Field label="Time zone" hint="IANA name, e.g. America/Toronto.">
+                <Field label="Time zone" hint="IANA name, e.g. America/Toronto." limit={PROFILE_LIMITS.timezone}>
                   <input className={inputClass} value={draft.timezone} onChange={set('timezone')} />
                 </Field>
               )}
               {fieldShown(view, 'availability_note', state.profile) && (
                 <div className="sm:col-span-2">
-                  <Field label="Availability" hint="In your own words. This is a note, not a calendar — your bookable slots live under Practice.">
+                  <Field label="Availability" hint="In your own words. This is a note, not a calendar — your bookable slots live under Practice." limit={PROFILE_LIMITS.availability_note}>
                     <input className={inputClass} value={draft.availability_note} onChange={set('availability_note')}
                       placeholder="Two mornings a week, usually Tuesday and Thursday" />
                   </Field>
                 </div>
               )}
               {fieldShown(view, 'headshot_url', state.profile) && (
-                <Field label="Headshot URL">
+                <Field label="Headshot URL" limit={PROFILE_LIMITS.headshot_url}>
                   <input className={inputClass} value={draft.headshot_url} onChange={set('headshot_url')} />
                 </Field>
               )}
               {fieldShown(view, 'linkedin_url', state.profile) && (
-                <Field label="LinkedIn">
+                <Field label="LinkedIn" limit={PROFILE_LIMITS.linkedin_url}>
                   <input className={inputClass} value={draft.linkedin_url} onChange={set('linkedin_url')} />
                 </Field>
               )}
@@ -377,9 +390,15 @@ export default function ProfileZone() {
                 <p className="sm:col-span-2 text-[12px] text-axal-muted">No field is empty in your saved profile.</p>
               )}
               <div className="sm:col-span-2">
-                <button type="submit" className={buttonClass} disabled={saving}>
+                <button type="submit" className={`${buttonClass} w-full sm:w-auto`} disabled={saving || over.length > 0}
+                  aria-describedby={over.length ? 'advisor-profile-over-limit' : undefined} data-testid="advisor-profile-save">
                   {saving ? 'Saving…' : 'Save profile'}
                 </button>
+                {over.length ? (
+                  <p id="advisor-profile-over-limit" className="mt-2 text-[12px] text-axal-muted dark:text-gray-400" data-testid="advisor-profile-over-limit">
+                    {overLimitLine(over, PROFILE_LIMIT_LABELS)}
+                  </p>
+                ) : null}
                 <SaveNote note={note} testid="advisor-profile-note" />
               </div>
             </form>

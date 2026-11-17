@@ -342,20 +342,21 @@ export default function ProofZone() {
         filters={advisorZoneFilters('expertise/proof', { value: view, onChange: setView })}
         actions={advisorZoneActions('expertise/proof', { handlers: { openPublicPreview: preview }, view: { header: ['Proof', 'Kind', 'Detail', 'Attested', 'Consents recorded'], rows: shown, cells: (r) => [r.title, r.kind, r.detail, r.attested ? 'yes' : 'no', (r.consents || []).length] } })}
       />
-      <ZoneBody loading={state.loading} error={state.error} onRetry={load}
+      <ZoneBody loading={state.loading} error={state.error} onRetry={load} what="Your proof"
         notice={<StaleNote error={list.refreshError} onRetry={list.refresh} testid="advisor-proof-stale" />}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
           <p className="text-[12.5px] text-axal-muted">{`No claim is in this state. ${counts?.total ?? state.items.length} in total.`}</p>
         )}
-        <div className="space-y-3">
+        {/* D4828 (EX-04a): two proof cards a row on a tablet, one on a phone and on a desktop. */}
+        <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 lg:grid-cols-1" data-testid="advisor-proof-cards">
           {shown.map((row) => {
             const live = (row.consents || []).filter((c) => c.state === 'confirmed');
             const pending = (row.consents || []).filter((c) => c.state === 'pending');
             const withdrawn = (row.consents || []).filter((c) => c.state === 'withdrawn' || c.state === 'declined');
             const stale = (row.consents || []).filter((c) => c.state === 'needs_reconfirmation');
             return (
-              <Card key={row.id} padding="md">
+              <Card key={row.id} padding="md" className="min-w-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -402,7 +403,7 @@ export default function ProofZone() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button type="button" ref={keepRef} className={ghostButtonClass} onClick={() => closeConfirm(row.id)} data-testid={`advisor-proof-keep-${row.id}`}>Keep it</button>
                       <button type="button" disabled={deleting} onClick={() => remove(row)} data-testid={`advisor-proof-delete-confirm-${row.id}`}
-                        className="inline-flex min-h-[32px] items-center rounded-lg bg-axal-destructive px-3 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50">
+                        className="inline-flex min-h-[44px] items-center rounded-lg bg-axal-destructive px-3 text-[12px] font-bold text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:opacity-50 lg:min-h-[32px]">
                         {deleting ? 'Deleting…' : 'Delete for good'}
                       </button>
                     </div>

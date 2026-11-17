@@ -83,6 +83,7 @@ test('the inputs\' limits are the Worker\'s limits', () => {
   assert.equal(limits.LIST_MAX_ITEMS, Number(src.match(/LIST_MAX_ITEMS = (\d+)/)[1]));
   const cur = src.match(/SUPPORTED_CURRENCIES = \[([^\]]*)\]/)[1].match(/'([A-Z]{3})'/g).map((x) => x.slice(1, 4));
   assert.deepEqual(limits.SUPPORTED_CURRENCIES, cur);
-  assert.match(read('src/pages/advisor/expertise/ServicesZone.jsx'), /maxLength=\{SERVICE_LIMITS\.scope\}/);
-  assert.match(read('src/pages/advisor/expertise/ProfileZone.jsx'), /maxLength=\{PROFILE_LIMITS\.bio\}/);
+  // D4828: the limit is a counter that blocks the save, never a maxLength that cuts a paste.
+  assert.match(read('src/pages/advisor/expertise/ServicesZone.jsx'), /limit=\{SERVICE_LIMITS\.scope\}/);
+  assert.match(read('src/pages/advisor/expertise/ProfileZone.jsx'), /limit=\{PROFILE_LIMITS\.bio\}/);
 });
