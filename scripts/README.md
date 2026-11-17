@@ -46,6 +46,8 @@ represents a bug that reached production once:
 | `lib/noAnthropicInProd.mjs` | D5339's import-graph, reference-allowlist and assistant-mount rules, shared by the guard and its synthetic-tree tests. |
 | `pip_audit_gate.py` | #5526: audits the pinned Python requirements, retries transient PyPI advisory lookup failures, and preserves strict scan findings. |
 | `ci/test-tracer.mjs` | D5608: opt-in Node test dependency and timing preload. Set `TEST_TRACE_DIR` when invoking a suite part to record repo-relative paths, probes, subprocess visibility and wall time. |
+| `ci/test-tracer-hooks.mjs` | D5608: the tracer's off-thread module hooks — report each resolved repo module over a MessagePort and send `node:sqlite` through the shim. Off-thread because a synchronous `registerHooks` hook changed what `_deck-loader.mjs` tests rendered. |
+| `ci/test-tracer-sqlite.mjs` | D5608: `node:sqlite` with a `DatabaseSync` that records each file database a traced test opens. |
 | `ci/merge-test-deps.mjs` | D5608: merges process traces into commit-level dependency and timing JSON, reports untraced tests and counts opaque ones. |
 | `lib/prTier.mjs` | D5621: standalone PR tier selection and exact-head full-run evidence validation. |
 | `test-drift-parts.mjs` | Not a check: D4130. Cuts `npm run test:drift` into the parts CI runs in parallel, derived from `package.json` — the frontend and worker suites as `--test-shard` shards (`SHARDS`), everything else as `rest`. `--list` prints the parts; `<part>` runs one. `frontend/test/ci_suite_parts_4130.test.mjs` holds the union to the suite and ci.yml's matrix to the parts. Locally, run the whole suite with `npm run test:drift`. |

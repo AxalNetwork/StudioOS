@@ -168,3 +168,12 @@ test('ci.yml: test-deps merges after the suite, uploads test-deps-<sha> for 30 d
   // No other job waits on it either, so a failed merge only loses the artifact.
   assert.equal((ci.match(/needs:[^\n]*test-deps/g) || []).length, 0);
 });
+
+test('the tracer observes modules off-thread, never with a synchronous registerHooks hook', () => {
+  // With a synchronous hook in the test process, even one that passed every call
+  // through, data_room_d696 test 11 rendered the tool instead of the module page
+  // under _deck-loader.mjs's async hooks, and the merge queue ejected #6904.
+  const source = readFileSync(fileURLToPath(tracer), 'utf8');
+  assert.doesNotMatch(source.replace(/\/\/.*$/gm, ''), /registerHooks\s*\?*\.?\(/);
+  assert.match(source, /modules\.register\(new URL\('\.\/test-tracer-hooks\.mjs'/);
+});
