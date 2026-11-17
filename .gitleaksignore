@@ -298,3 +298,8 @@ e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_ac
 # #5791: the share-walkthrough frontend test used a base64-looking placeholder share token (synthetic, never a
 # credential). The fixture now uses 'synthetic-share-token-5791-not-a-jwt'. Scope this to the original finding.
 19ffa0d4df299a7c7523026e7c5e6aa8261c61ce:frontend/test/share_walkthrough_d5791.test.mjs:generic-api-key:32
+# #7073: false positives. scripts/agent-gateway-keys.mjs lists the NAMES of the
+# Actions secrets it reads (`keyVar: 'ANTHROPIC_API_KEY_2'`, `_3`); no value is
+# in the file. Scoped to these two findings in the commit that added them.
+5ca473a6086e9d4ecaa257b0010d64a1d8af2fb6:scripts/agent-gateway-keys.mjs:generic-api-key:31
+5ca473a6086e9d4ecaa257b0010d64a1d8af2fb6:scripts/agent-gateway-keys.mjs:generic-api-key:32
