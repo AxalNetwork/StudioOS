@@ -194,6 +194,7 @@ export const FUND_MODULES: readonly string[] = Object.freeze([
   'services/fundReports.ts',
   'services/fundRollup.ts',
   'services/fundSheets.ts',
+  'services/fundSnapshotFigures.ts',
   'services/fundStructure.ts',
   'services/fundStructurePaper.ts',
 ]);

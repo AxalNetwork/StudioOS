@@ -33,7 +33,7 @@ export default function SharedRoomFiles({ projectUid, listing, rawFiles = [], wi
       </div>
       {!view.rows.length ? <p className={SUB}>No file matches</p> : view.rows.map((file) => <div key={file.uid} className="flex min-w-0 flex-col gap-1 border-t border-axal-hairline pt-2 md:flex-row md:flex-wrap md:items-center md:gap-3 dark:border-gray-700" data-testid="deal-room-file">
         <strong className="min-w-0 flex-1 break-words text-[13px]">{file.name}</strong>
-        <span className={SUB}>{file.size} · {file.added}</span>
+        <span className={SUB} data-testid="deal-room-file-meta">{file.type} · {file.size} · {file.added}</span>
         <button type="button" className={`${BUTTON} text-violet-700 underline dark:text-violet-300`} disabled={downloads[file.uid]?.busy} onClick={() => onDownload(file)} aria-label={`Open ${file.name}`}>Open</button>
         {downloads[file.uid]?.err ? <p className="m-0 text-[12px] text-red-700 dark:text-red-300" role="alert">{downloads[file.uid].err}</p> : null}
       </div>)}
@@ -41,7 +41,7 @@ export default function SharedRoomFiles({ projectUid, listing, rawFiles = [], wi
         <span role="status" data-testid="room-page-range">{view.range}</span>
         <div className="flex gap-2"><button type="button" className={BUTTON} disabled={view.page <= 1} onClick={() => setPage(view.page - 1)} data-testid="room-page-prev">Previous</button><button type="button" className={BUTTON} disabled={view.page >= view.pages} onClick={() => setPage(view.page + 1)} data-testid="room-page-next">Next</button></div>
       </div>
-      <p className={SUB}>Content search covers all files in your listing. Each download uses the existing logged one-time link.</p>
+      <p className={SUB}>Search looks inside every file listed here. Each file opens through a one-time link.</p>
     </section>
   </div>;
 }
