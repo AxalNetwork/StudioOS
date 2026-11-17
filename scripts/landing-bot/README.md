@@ -13,6 +13,7 @@ its data, passes it in, and does only what these functions allow.
 | `keeper-plan.mjs` | The branch keeper's plan (#6474): which conflicted PRs a sweep may merge main into, and today's reserved pushes. Pure. |
 | `keeper-merge.mjs` | The branch keeper's merge: git with hooks, filters and LFS off, main's merge rules only, the plain-versus-union comparison and the README duplicate check. |
 | `keeper.mjs` | The branch keeper's entry point (`plan`, `apply`): reads, re-reads, merges, pushes, labels and comments. |
+| `model/` | The model runner (#6473): task validation and caps, the read-and-edit tools, the provider loop, the patch checks and the three SDK adapters, called by `.github/workflows/landing-bot-model.yml`. [Its README](model/README.md). |
 | `workflowGuard.mjs` | The test helper every bot workflow's test calls: `assertWorkflow(path)` fails when the workflow passes the App token to a dispatch call, dispatches a workflow outside `dispatchable`, or names an App or model secret outside the `landing-bot` and `repair` environments. |
 
 The tests are `frontend/test/landing_bot_core_6467.test.mjs`. They live there because `npm run test:frontend`
