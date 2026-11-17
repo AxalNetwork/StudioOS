@@ -2741,3 +2741,13 @@ Four board sets from the owner's Claude Design canvas "Axal VC – platform desi
 
 None is built yet. Companies, founders, partners, countries' details and amounts are sample content; government fees read Not recorded and legal and tax wording waits on counsel. Open owner questions on #6681 and #6682 are drawn as option A and marked ⚑.
 
+
+## Landed 2026-11-17 — Wellness: the member home at /wellbeing and the public presentation (#7117, #7121)
+
+Two board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-17 from the #7117 and #7121 briefs and the owner's Wellness direction of the same day, each as a page plus its boards:
+- **`Wellness Member Home Page.dc.html`**, **`Wellness Member Home · Boards.dc.html`**: Wellness · Member Home, Reflections and Bookings, WLM00 to WLMH (D7117).
+- **`Program Wellness Presentation Page.dc.html`**, **`Program Wellness Presentation · Boards.dc.html`**: Program · Wellness Presentation, PGW01 to PGW08, the eleventh in the #6965 series (D7121).
+
+**One edit, named.** Both pages drew the owner's dawn image as `./site/wellness-dawn.webp`; it now points at `/axal-vc-future.png`, the same image already served from `frontend/public/`. The presentation's other `./site/` references now point at `/site/` (`frontend/public/site/`). No other value was edited.
+
+None is built yet. Daily and monthly journals, recommendations and group sessions are drawn as planned (#7118, #7119, #7120). Every provider, session, date and price is sample content; the live provider roster is unverified. Open owner questions are marked ⚑ in each decision.

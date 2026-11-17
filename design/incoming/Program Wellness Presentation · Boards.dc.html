@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Program Wellness Presentation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Program · Wellness presentation and PDF deck · PGW01 to PGW08 · #7121, #6965, #7117</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Wellness as a shareable page and a five-slide PDF: from the header heart to private reflection, discovery and a session the member books</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A presenter opens Programs, selects Wellness and lands on its public, signed-out page at /programs/wellness, a different address from the private /wellbeing workspace: the name and one-sentence purpose first, “Eligible members · signed in” in words, “Download PDF” above the fold as an ink link to a committed file, and a light, warm availability panel whose one violet action is Open Wellbeing. The five sections follow the kit’s fixed order. The signature is one diagram: the heart in the header, private reflection, discovery, and the member’s own 1:1 booking, with who sees each step, the private boundary, and the planned daily and monthly journals, recommendations and group sessions drawn dashed under the step each extends. Warm off-white, sage and a small drawn dawn line follow the owner’s Wellness direction (17 Nov) inside the site kit; mindfulness and spiritual support are a member’s choice. Built with the program presentation kit from the Spin-Out Lab canvas (#6966) verbatim plus one availability word; the admin row and index are referenced there (PGS07, PGS08). No clinical outcome, endorsement, universal access, journal screenshot, expert or roster appears. Frontend only.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Tue 17 Nov 2026 · checked against main f62f025552 and PR #7122 · the edition date and og image path are bracketed; no real member, expert, session or entry is shown</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program Wellness Presentation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PGW-01', 'Wellness · public page · desktop 1440 · frontend only', '/programs/wellness signed out. Name and purpose first; Eligible members · signed in; Download PDF and Print; the warm panel with Open Wellbeing as the one violet action; then 1 Who it helps, 2 What they do (the heart → reflection → discovery → booking diagram), 3 How participation works (steps, now vs planned, choices), 4 Access required, 5 Next step with the PDF apart.', [F('PGW01', false, 5271)]],
+      ['PGW-02', 'Availability state · frontend only', 'No live read: the label comes from the /wellbeing guard (founder, admin). As drawn, “Eligible members · signed in”. Held: if the registry row’s “proposed / not open” (#7116) is the public wording, the label and panel say so and nothing reads as open.', [C('PGW02A', 'Eligible members · signed in · as drawn', 1440, 658), C('PGW02B', 'Proposed · not open · if the registry wording stands · held', 1440, 690)]],
+      ['PGW-03', 'Wellness · phone 390 · frontend only', 'Stacked in reading order: name, purpose, audience, Download PDF full width, Print, the panel with Open Wellbeing, the section nav, the four steps one under another with “Private to you” on the first two, the planned items, now vs planned, the doors and the PDF.', [C('PGW03', false, 390, 9591)]],
+      ['PGW-04', 'The PDF deck · 5 slides at 1920 × 1080', 'axal-vc-wellness-v1.pdf. 1 Cover with the dawn line · 2 Who it helps · 3 From the heart to a session you book (the diagram) · 4 Available now and planned · 5 Access and next step (conditions, two addresses, public URL, edition).', [C('PGW04A', '1 · Cover', 1920, 1080), C('PGW04B', '2 · Who it helps', 1920, 1080), C('PGW04C', '3 · What happens', 1920, 1080), C('PGW04D', '4 · Now and planned', 1920, 1080), C('PGW04E', '5 · Access and next step', 1920, 1080)]],
+      ['PGW-05', 'Grayscale print sheet', 'The five slides on a black-and-white printer: steps keep numbers, glyphs and “Seen by”; planned items keep dashes, ◌ and the word; export settings.', [C('PGW05', false, 1440, 1340)]],
+      ['PGW-06', 'Slide contact sheet', 'The deck in order with each slide’s text alternative, and how slides map to the page’s sections.', [C('PGW06', false, 1440, 780)]],
+      ['PGW-07', 'Share preview and entry points · frontend only', 'Link preview and head metadata for /programs/wellness, its index card, and the admin detail (#7116) with View presentation and Open My Wellbeing as two distinct actions.', [C('PGW07', false, 1440, 1067)]],
+      ['PGW-08', 'Handoff', 'Registry key, canonical URL, PDF path, editable source and edition; current vs planned; what main shows; contrast; ◇ dependencies; the owner’s open points.', [W('PGW08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
