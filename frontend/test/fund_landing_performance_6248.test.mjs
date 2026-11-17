@@ -14,7 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import InvestorFundLanding from '../src/pages/investor/InvestorFundLanding.jsx';
-import { performanceFigures, performanceHref, PERFORMANCE_FALLBACK_REASON } from '../src/pages/investor/investorFundLandingModel.js';
+import { performanceFigures, PERFORMANCE_FALLBACK_REASON } from '../src/pages/investor/investorFundLandingModel.js';
 
 const h = React.createElement;
 const FUNDS = [
@@ -47,7 +47,6 @@ test('#6248 model: each figure is its value, or Not recorded with the Worker rea
   assert.equal(failed.state, 'unreadable');
   assert.ok(failed.figures.every((f) => f.value === null && f.reason === null), 'a failed read gives no value and no reason');
   assert.equal(performanceFigures(null).state, 'loading');
-  assert.equal(performanceHref(8), '/funds/performance?fund=8');
 });
 
 async function mount(path, perf) {
@@ -96,7 +95,7 @@ test('#6248 mounted: a fund with complete marks shows its figures; the fixed sen
     assert.equal(v.textOf('fund-performance-rvpi'), 'RVPI1.25x');
     assert.equal(v.textOf('fund-performance-tvpi'), 'TVPI1.50x');
     assert.equal(v.textOf('fund-performance-irr'), 'IRR18.4%');
-    assert.equal(v.href('link-fund-performance'), '/funds/performance?fund=3');
+    assert.equal(v.href('link-fund-performance'), '/funds/performance', 'the one link, to the page of every fund (D6245)');
     const t = v.text();
     assert.doesNotMatch(t, /unavailable until the underlying records exist/);
     assert.doesNotMatch(t, /RVPI · on NAV/);
@@ -125,7 +124,7 @@ test('#6248 mounted: a failed performance read shows the read failure, not a cla
     assert.ok(v.has('text-fund-performance-unreadable'));
     assert.match(v.textOf('text-fund-performance-unreadable'), /Fund performance[\s\S]*This is not a claim that it is unrecorded\./);
     assert.ok(!v.has('fund-performance-nav_cents'), 'no figure claims Not recorded');
-    assert.equal(v.href('link-fund-performance'), '/funds/performance?fund=3');
+    assert.equal(v.href('link-fund-performance'), '/funds/performance', 'the one link, to the page of every fund (D6245)');
     assert.equal(v.textOf('text-fund-committed'), '$5.0M', 'the rest of the summary still draws');
   } finally { await v.close(); }
 });

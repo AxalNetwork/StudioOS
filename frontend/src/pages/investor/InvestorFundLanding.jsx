@@ -9,7 +9,7 @@ import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
 import { titleCase as caseLabel } from '../../lib/absence';
-import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, PERFORMANCE_UNREADABLE, collectedLine, fundZoneHref, lpCommitmentText, performanceFigures, performanceHref } from './investorFundLandingModel';
+import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, PERFORMANCE_UNREADABLE, collectedLine, fundZoneHref, lpCommitmentText, performanceFigures } from './investorFundLandingModel';
 import { fundPerformanceApi } from '../../lib/api/fundPerformance.js';
 import FundOverviewPanel from './FundOverviewParts';
 
@@ -51,7 +51,7 @@ const Unreadable = ({ what }) => <SharedUnreadable what={what} claim="This is no
 
 // #6248: NAV, RVPI, TVPI and IRR from the performance read, each its value or Not recorded with
 // the Worker's reason; a failed read says it failed and claims nothing.
-function Performance({ fundId, perf }) {
+function Performance({ perf }) {
   const view = performanceFigures(perf);
   return (
     <div className="i6-performance" data-testid="fund-performance-figures" data-state={view.state}>
@@ -67,10 +67,7 @@ function Performance({ fundId, perf }) {
             ))}
           </dl>
         )}
-      <p className="i6-footnote">
-        {view.asOf ? `As of ${view.asOf}. ` : ''}{view.basis ? `${view.basis} ` : ''}
-        <Link to={performanceHref(fundId)} data-testid="link-fund-performance">Open fund performance</Link>
-      </p>
+      {view.asOf || view.basis ? <p className="i6-footnote">{view.asOf ? `As of ${view.asOf}. ` : ''}{view.basis || ''}</p> : null}
     </div>
   );
 }
@@ -118,8 +115,10 @@ function FundDetail({ fund }) {
           <div><dt>Deployed</dt><dd>{fmtCents(fund.deployed_cents)}</dd></div>
           <div><dt>DPI</dt><dd>{fmtMultiple(fund.dpi) || <Unrecorded />}</dd></div>
         </dl>
-        <Performance fundId={fund.id} perf={detail.perf} />
+        <Performance perf={detail.perf} />
         <p>Every recorded amount originates in this fund’s operating record. Expense accruals are not recorded on Axal.</p>
+        {/* #6245: NAV and the multiples are read on Fund performance, from recorded marks and cash flows. */}
+        <Link to="/funds/performance" className="i6-perf-link" data-testid="link-fund-performance">Open fund performance <ArrowUpRight size={12} /></Link>
       </section>
 
       <div className="i6-grid">

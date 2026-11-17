@@ -69,4 +69,3 @@ export function performanceFigures(perf) {
 }
 
 /** The performance page, carrying the chosen fund. */
-export const performanceHref = (fundId) => fundZoneHref('/funds/performance', fundId);
