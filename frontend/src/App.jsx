@@ -3380,8 +3380,9 @@ function AppInner() {
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
       {/* #2333 — one publications list: /articles carries the briefs the
-          /insights index listed; each brief keeps its share link below. */}
-      <Route path="/insights" element={<Navigate to="/articles#briefs" replace />} />
+          /insights index listed; each brief keeps its share link below.
+          #6999: /insights lands on the list itself, not on a Briefs shelf that may be hidden. */}
+      <Route path="/insights" element={<Navigate to="/articles" replace />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       {/* D1244 (#2385) — the list's tabs and the case's tabs are addresses; the
