@@ -5,6 +5,7 @@ import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
+import { phoneStateRow } from './BuildStates.jsx';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
 import { ExportButton, Sources } from './CycleModulePage.jsx';
@@ -171,7 +172,7 @@ export default function PhoneModulePage({
   const title = data?.module?.records_title || name;
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
-  const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
+  const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href)); // D6010: `tool` may be several
   if (typeof home === 'function') {
     const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
     return (
@@ -198,7 +199,8 @@ export default function PhoneModulePage({
       const href = rowLinks(recs, r) ? recordHref(meta.key, slug, recordId(r), search) : null;
       const act = !href && typeof rowAction === 'function' ? rowAction(r) : null;
       return {
-        key: r.id ?? i, ...base, testid: 'phone-module-row',
+        // D4846 part 2 (#6032, BD14m): a row whose pill is a state draws that state's chip, as the desktop cell does.
+        key: r.id ?? i, ...phoneStateRow(base), testid: 'phone-module-row',
         ...(href ? { to: href } : act?.text && typeof act.onClick === 'function' ? { onClick: act.onClick } : {}),
       };
     }),

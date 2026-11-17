@@ -11,9 +11,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { SerialSaver, mergeDelta } from '../src/lib/serialSave.js';
 import { categorySwitches, notificationSaver, privacySaver, publicProfileSaver } from '../src/lib/settingsSavers.js';
+import { readAccountPage } from './_accountSource.mjs';
 
 /** A `send` whose requests the test answers by hand. */
 function server() {
@@ -149,7 +149,7 @@ test('category switches are drawn as delivery reads them; a mandatory one is loc
 });
 
 test('the page uses the savers and draws public-profile switches from what the profile shows', () => {
-  const page = readFileSync(new URL('../src/pages/SettingsPage.jsx', import.meta.url), 'utf8');
+  const page = readAccountPage();
   assert.match(page, /saver\.current = privacySaver\(r, setRow, flash\)/);
   assert.match(page, /saver\.current = notificationSaver\(next, setRow, flash, setFieldErrors\)/);
   assert.match(page, /saver\.current = publicProfileSaver\(data, setPp, flash\)/);
