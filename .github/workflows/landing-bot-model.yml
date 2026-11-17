@@ -6,6 +6,8 @@ name: Landing bot model runner
 # its output is the artifact `landing-bot-model-patch` (patch.json plus
 # manifest.json), which callers re-check with main's code before using.
 # scripts/landing-bot/model/README.md has the design and the caps.
+# #6475: a task with `merge_sha` runs in merge mode: each round merges that
+# commit into the branch first (stage.mjs) and edits the conflicted tree.
 
 on:
   workflow_call:
@@ -49,6 +51,7 @@ jobs:
     outputs:
       sha: ${{ steps.ref.outputs.sha }}
       rounds: ${{ steps.task.outputs.rounds }}
+      merge: ${{ steps.task.outputs.merge }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -91,6 +94,7 @@ jobs:
       round: 1
       previous: 0
       sha: ${{ needs.prepare.outputs.sha }}
+      merge: ${{ needs.prepare.outputs.merge == 'true' }}
 
   round2:
     needs: [prepare, round1]
@@ -100,6 +104,7 @@ jobs:
       round: 2
       previous: 1
       sha: ${{ needs.prepare.outputs.sha }}
+      merge: ${{ needs.prepare.outputs.merge == 'true' }}
 
   round3:
     needs: [prepare, round2]
@@ -109,6 +114,7 @@ jobs:
       round: 3
       previous: 2
       sha: ${{ needs.prepare.outputs.sha }}
+      merge: ${{ needs.prepare.outputs.merge == 'true' }}
 
   result:
     name: Publish the passing patch

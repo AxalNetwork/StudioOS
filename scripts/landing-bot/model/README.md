@@ -69,6 +69,21 @@ Every allowed file must also clear `pathGuard` in `../rules.mjs`, so no task can
 **Daily spend** (`LANDING_BOT_DAILY_MODEL_RUNS`) is the caller's check, through `budget()`, before it calls the
 runner.
 
+## Merge mode (#6475)
+
+A task with `merge_sha` (and `head_sha`) asks the runner to edit a merge that has not happened yet:
+
+- the round checks out the branch with its history (`filter: blob:none`);
+- a step before `edit` and before `verify` runs `stage.mjs` in its own process: it merges `merge_sha` with the
+  branch keeper's git settings and main's merge rules only, leaves the conflict markers in the tree, and writes a
+  report;
+- `edit.mjs` and `verify.mjs` refuse unless the report is that merge and its conflicted files are exactly the
+  task's allowed files (`stageProblems` in `task.mjs`);
+- a patch must resolve every allowed file and may leave no conflict marker (`checkChanges(..., { resolving: true })`).
+
+The staging step holds no model credential: the keys are set only on the `Edit` step. The modules the keyed step
+loads still start no process; staging never runs inside them.
+
 ## The rule for adding to it
 
 - A module the `edit` job loads never imports `child_process`; the test reads every one.

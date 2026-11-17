@@ -138,6 +138,11 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/landing-bot-conflict.yml",
+      "channel": "#axalvc-actions-landing-bot-conflict"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/landing-bot-keeper.yml",
       "channel": "#axalvc-actions-landing-bot-keeper"
     },

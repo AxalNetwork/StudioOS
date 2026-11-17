@@ -13,6 +13,8 @@ its data, passes it in, and does only what these functions allow.
 | `keeper-plan.mjs` | The branch keeper's plan (#6474): which conflicted PRs a sweep may merge main into, and today's reserved pushes. Pure. |
 | `keeper-merge.mjs` | The branch keeper's merge: git with hooks, filters and LFS off, main's merge rules only, the plain-versus-union comparison and the README duplicate check. |
 | `keeper.mjs` | The branch keeper's entry point (`plan`, `apply`): reads, re-reads, merges, pushes, labels and comments. |
+| `resolve-rules.mjs` | The conflict resolver's rules (#6475), pure: `gate()` and `afterStage()` before any model call, `checkResolution()` (both sides' added lines kept, no test dropped, no skip added, only the conflicted files), the verify commands and today's reservations. |
+| `resolve.mjs` | The conflict resolver's entry point (`plan`, `apply`): stages the merge, builds the model task, then re-checks the patch and the resolution with main's code and pushes a normal merge commit, or hands back. |
 | `model/` | The model runner (#6473): task validation and caps, the read-and-edit tools, the provider loop, the patch checks and the three SDK adapters, called by `.github/workflows/landing-bot-model.yml`. [Its README](model/README.md). |
 | `workflowGuard.mjs` | The test helper every bot workflow's test calls: `assertWorkflow(path)` fails when the workflow passes the App token to a dispatch call, dispatches a workflow outside `dispatchable`, or names an App or model secret outside the `landing-bot` and `repair` environments. |
 
@@ -92,3 +94,44 @@ succeeded. The next run counts today's reservations against `LANDING_BOT_DAILY_P
 | `LANDING_BOT_KEEPER_PER_SWEEP` | PRs merged per run. Unset is 0. Dispatch mode always takes the one named PR. |
 | `LANDING_BOT_DAILY_PUSHES` | Bot pushes per UTC day across all kinds. Unset is 0. |
 | `LANDING_BOT_QUIET_MIN` | Minutes a head must stay unchanged first; unset is 30. |
+
+## The conflict resolver
+
+`.github/workflows/landing-bot-conflict.yml` (#6475) is dispatched by the branch keeper with one PR number, when
+merging main leaves a real conflict. A model resolves the conflicted files only; it must keep both sides. Three jobs:
+
+- **`plan`** (`landing-bot` environment, a read-only token, an App token that reads metadata only, to learn the
+  bot's login). It calls no model. In order:
+  1. `gate()`: `eligible()`, `attempts()` (at most 2 resolver runs per PR, counted from the run names
+     `Conflict resolver for #<n>` and the bot's `Landing-Bot-Kind: conflict` commits) and `budget()`.
+  2. It stages the merge on a partial clone (`model/stage.mjs`, the keeper's git settings and main's merge rules
+     only) and runs `afterStage()`: no conflict where one side deleted or renamed the file, every conflicted file
+     clears `pathGuard()` (so no test, fixture, baseline, auth or money path ever reaches a model), and the conflict
+     is within `LANDING_BOT_MAX_CONFLICT_FILES` and `LANDING_BOT_MAX_CONFLICT_LINES`.
+  3. It builds the model task: the conflicted files as the only allowed files; each file's base, PR and main
+     versions and both changes' descriptions as data; and the verify commands (the three installs, the worker
+     typecheck or the frontend build for the side touched, and up to four tests that import a conflicted file).
+  4. It reserves today's model run and push in an artifact before the model is called.
+  A bot that is off, a PR labelled `bot:off` and an open breaker stop quietly. Anything else hands the PR back.
+- **`resolve`** is the model runner (#6473) in merge mode. It has no GitHub write.
+- **`apply`** (`landing-bot` environment, the App token, no model key, runs no PR code, scripts from main):
+  1. re-reads the PR (head, `bot:off`, mode, breakers);
+  2. stages the same merge at the same two commits;
+  3. re-checks the patch against the conflicted files' hashes;
+  4. runs `checkResolution()`;
+  5. commits a normal merge commit (`Landing-Bot-Kind: conflict`, `Landing-Bot-Provider: <provider>`);
+  6. re-reads once more, and pushes, never forced.
+  Then it removes `conflict`, labels `bot:resolved` and posts the resolution diff in the sticky comment. A head
+  that moved stops it quietly. Any other refusal is `giveUp()`: `needs-session` and one comment.
+
+**The owner lands every model-resolved pull request** (owner, 2026-11-16, on #6475). The feeder and the ejection
+handler never queue one.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_MAX_CONFLICT_FILES` | The most conflicted files a model is asked to resolve. Unset is 0: none. |
+| `LANDING_BOT_MAX_CONFLICT_LINES` | The most lines inside conflict blocks, across those files. Unset is 0: none. |
+| `LANDING_BOT_DAILY_MODEL_RUNS` | Resolver runs that may call a model per UTC day. Unset is 0. |
+
+Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`.
+
