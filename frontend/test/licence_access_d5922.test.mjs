@@ -22,10 +22,11 @@ import { installDocument } from './_contracts_dom.mjs';
 import { Detail } from '../src/pages/admin/licences/LicenceDetail.jsx';
 import {
   NONE, NOT_RECORDED, SEAT_USE_REASON, UNREADABLE,
-  accountState, addAdminAsk, addAdminOffer, adminRoleWord, adminsState, detachLine, removeAdminAsk,
+  accountState, addAdminOffer, adminRoleWord, adminsState, detachLine,
   seatChangeOffer, seatRows,
 } from '../src/pages/admin/licenceAccessModel.js';
 import { LICENCE_REASONS } from '../src/pages/admin/licenceReasonModel.js';
+import { licenceConsequence } from '../src/pages/admin/licenceConsequenceModel.js';
 
 const h = React.createElement;
 
@@ -92,18 +93,20 @@ test('Add administrator is offered on every status the Worker appoints on, and n
 });
 
 test('add and remove state their consequence before the reason, at the Worker\'s ten characters', () => {
-  const add = addAdminAsk(LICENCE, { email: ' new@example.test ', adminRole: 'delegate' });
-  assert.equal(add.min, 10);
-  assert.match(add.consequence, /^new@example\.test becomes a delegate administrator of AXL-FR-001/);
-  assert.match(add.consequence, /admin role and bound to this licence in one step/);
-  assert.match(add.consequence, /remove, then detach/);
-  assert.doesNotMatch(add.consequence, /suspended/);
-  assert.match(addAdminAsk({ ...LICENCE, status: 'suspended' }, { email: 'x@y', adminRole: 'principal' }).consequence, /^This licence is suspended/);
-  assert.equal(addAdminAsk(LICENCE, { email: 'x', adminRole: 'principal' }, 'From a request.').initial, 'From a request.');
-  const remove = removeAdminAsk(LICENCE, ADMINS.items[0]);
-  assert.equal(remove.min, LICENCE_REASONS.demoteAdmin.min);
-  assert.match(remove.consequence, /^C\. Martin loses the admin role now and can no longer administer AXL-FR-001/);
-  assert.match(remove.consequence, /stays bound to this licence until you detach it/);
+  // D4819 part 21 (#5928): add and remove now go through the one consequence sheet (licenceConsequenceModel.js).
+  const text = (sheet) => [...sheet.happens, ...sheet.affects].map((r) => `${r.text}. ${r.note || ''}`).join(' ') + ` ${sheet.undo.text}`;
+  const add = licenceConsequence('addAdmin', LICENCE, { target: { email: ' new@example.test ', adminRole: 'delegate' } });
+  assert.equal(add.reason.min, 10);
+  assert.match(text(add), /^new@example\.test becomes a delegate administrator of AXL-FR-001/);
+  assert.match(text(add), /admin role and bound to this licence in one step/);
+  assert.match(text(add), /remove the administrator, then detach/);
+  assert.doesNotMatch(text(add), /suspended/);
+  assert.match(text(licenceConsequence('addAdmin', { ...LICENCE, status: 'suspended' }, { target: { email: 'x@y', adminRole: 'principal' } })), /This licence is suspended/);
+  assert.equal(licenceConsequence('addAdmin', LICENCE, { target: { email: 'x', adminRole: 'principal', initial: 'From a request.' } }).reason.initial, 'From a request.');
+  const remove = licenceConsequence('removeAdmin', LICENCE, { target: ADMINS.items[0] });
+  assert.equal(remove.reason.min, LICENCE_REASONS.demoteAdmin.min);
+  assert.match(text(remove), /^C\. Martin loses the admin role now\. They can no longer administer AXL-FR-001/);
+  assert.match(text(remove), /stays bound to this licence until you detach it/);
   assert.match(detachLine(LICENCE), /^Detach unbinds this account from AXL-FR-001/);
 });
 
@@ -203,11 +206,10 @@ test('Remove… says what it will do before the reason, then sends the demote wi
   const v = await mount(w.handle);
   try {
     await v.clickNoFlush(v.within('licence-admin-11', 'licence-admin-remove'));
-    assert.ok(v.has('licence-reason-dialog'), 'the labelled reason dialog opens');
-    assert.match(v.textOf('licence-reason-consequence'), /C\. Martin loses the admin role now/);
-    const box = v.nodes().find((n) => n.tagName?.toLowerCase() === 'textarea');
-    await v.change(box, 'Left the French studio in October.');
-    await v.click('licence-reason-confirm');
+    assert.ok(v.has('licence-consequence-sheet'), 'the one consequence sheet opens (D4819 part 21)');
+    assert.match(v.textOf('licence-consequence-happens'), /C\. Martin loses the admin role now/);
+    await v.change('licence-consequence-field', 'Left the French studio in October.');
+    await v.click('licence-consequence-confirm');
     const call = w.calls.find(([m, p]) => m === 'POST' && p === '/admin/users/11/demote-admin');
     assert.ok(call, 'the demote is the existing write');
     assert.equal(JSON.parse(call[2]).reason, 'Left the French studio in October.');
@@ -222,10 +224,9 @@ test('Add administrator opens the form, states the consequence, and appoints wit
     await v.click('licence-admin-add');
     await v.change('licence-admin-email', 'new@example.test');
     await v.clickNoFlush('licence-admin-continue');
-    assert.match(v.textOf('licence-reason-consequence'), /new@example\.test becomes a principal administrator of AXL-FR-001/);
-    const box = v.nodes().find((n) => n.tagName?.toLowerCase() === 'textarea');
-    await v.change(box, 'Runs the French studio from January.');
-    await v.click('licence-reason-confirm');
+    assert.match(v.textOf('licence-consequence-happens'), /new@example\.test becomes a principal administrator of AXL-FR-001/);
+    await v.change('licence-consequence-field', 'Runs the French studio from January.');
+    await v.click('licence-consequence-confirm');
     const call = w.calls.find(([m, p]) => m === 'POST' && p === '/admin/licences/lic_fr/admins');
     assert.ok(call, 'the appointment is the existing write');
     assert.deepEqual(JSON.parse(call[2]), { email: 'new@example.test', admin_role: 'principal', reason: 'Runs the French studio from January.' });
@@ -271,11 +272,11 @@ test('the three absences render differently: None, Unreadable with Retry, and No
   } finally { await down.close(); }
 });
 
-test('a reason written elsewhere (a delegate request\'s) arrives in the dialog, still editable', async () => {
+test('a reason written elsewhere (a delegate request\'s) arrives in the sheet, still editable', async () => {
   const { renderToStaticMarkup } = await import('react-dom/server');
-  const { LicenceReasonDialog } = await import('../src/pages/admin/LicenceReasonDialog.jsx');
-  const ask = addAdminAsk(LICENCE, { email: 'd@example.test', adminRole: 'delegate' }, 'Delegate requested by the Administrator.');
-  const html = renderToStaticMarkup(h(LicenceReasonDialog, { ask, onDone: () => {} }));
+  const { LicenceConsequenceSheet } = await import('../src/pages/admin/LicenceConsequenceSheet.jsx');
+  const sheet = licenceConsequence('addAdmin', LICENCE, { target: { email: 'd@example.test', adminRole: 'delegate', initial: 'Delegate requested by the Administrator.' } });
+  const html = renderToStaticMarkup(h(LicenceConsequenceSheet, { sheet, onDone: () => {} }));
   assert.match(html, /<textarea[^>]*>Delegate requested by the Administrator\.<\/textarea>/);
-  assert.match(html, /data-testid="licence-reason-consequence"[^>]*>d@example\.test becomes a delegate administrator/);
+  assert.match(html, /d@example\.test becomes a delegate administrator/);
 });

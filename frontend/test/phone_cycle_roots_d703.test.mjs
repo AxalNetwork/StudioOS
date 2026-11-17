@@ -408,6 +408,11 @@ async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] 
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const ids = () => walk(container).map((n) => pr(n)['data-testid']).filter(Boolean);
+  // A lazy step (`/build`'s overview, D6028) resolves its import through the loader's hooks thread, which a
+  // busy runner can hold past six ticks; wait for its skeleton to go (bounded), never assert on the skeleton.
+  for (let i = 0; i < 200 && ids().includes('cycle-step-loading'); i += 1) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+  }
   return {
     reads, ids, all: (id) => ids().filter((x) => x === id),
     async unmount() { await act(async () => root.unmount()); globalThis.fetch = fetchBefore; globalThis.matchMedia = media; unstub(); restore(); resetStores(); },
@@ -476,7 +481,8 @@ test('14 (PR 1): ValidatePhoneFocus is gone; the route\'s phone branch reads use
   const header = overview.slice(overview.indexOf('export function CycleHeader'), overview.indexOf('export default function'));
   assert.ok(header.length > 0);
   assert.doesNotMatch(header, /\bmd:/, 'the header switches at lg, with the route');
-  assert.match(header, /hidden flex-wrap gap-1\.5 lg:flex/);
+  // D6029 (#6029): the desktop tabs still switch at lg, unless the sidebar lists the cycle's pages (Build, BD23).
+  assert.match(header, /hidden flex-wrap gap-1\.5 \$\{sidebarLists \? '' : 'lg:flex '\}items-center/);
   assert.match(header, /px-3\.5 lg:hidden/);
   for (const f of ['CycleRoute.jsx', 'CycleOverview.jsx', 'PhoneCycleRoot.jsx', 'validatePhone.js']) {
     assert.doesNotMatch(readFileSync(`frontend/src/pages/cycles/${f}`, 'utf8'), /matchMedia|innerWidth/, f);
