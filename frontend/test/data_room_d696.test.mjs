@@ -98,7 +98,10 @@ test('11. /raise/data-room answers investor first, then the retired modes forwar
 
 // --- 11. The module page -----------------------------------------------------------
 
-test('11. the founder’s Data room Home links to Upload for both legacy and current Add responses', async () => {
+test('11. the founder’s Data room Home is the tool: the module read is made, and no generic records or Add are drawn', async () => {
+  // D5081 part 4 (#5081, RA-19): Home owns its page, so the generic Files records and their Add (which this test
+  // used to follow to Upload for the legacy and current `records.add`) are not drawn; Upload is the tool's own
+  // (first use's set-up action, Files, a checklist item). Either Add response draws nothing generic.
   const view = await mounted('/raise/data-room?project_id=3', (u) => (u.includes('/auth/me') ? FOUNDER
     : u.includes('/cycles/raise/modules/data-room') ? moduleRead(
       u.includes('project=4') ? '/raise/data-room/new?project=4' : '/raise/data-room?mode=workspace',
@@ -106,21 +109,11 @@ test('11. the founder’s Data room Home links to Upload for both legacy and cur
   try {
     for (const project of [3, 4]) {
       if (project === 4) await view.go('/raise/data-room?project_id=4');
-      const expected = `/raise/data-room/new?project_id=${project}`;
-      // Wait for the asserted link, bounded, not a fixed number of ticks: the header's other reads (D5330's
-      // Working here) can land first under load, and six ticks were not always enough on CI.
-      await waitForRendered(() => view.links('records-add').some((link) => link.href === expected));
-      assert.ok(view.requests.some((u) => u.includes(`/cycles/raise/modules/data-room?project=${project}`)), 'the module read is made');
+      await waitForRendered(() => view.requests.some((u) => u.includes(`/cycles/raise/modules/data-room?project=${project}`)) && view.by('cycle-module').length === 1);
       assert.deepEqual(view.by('cycle-module').length, 1);
-      // #1657's Upload form is registered (D695), so the Add is the form's own address,
-      // whatever the read's `records.add` points at.
-      assert.deepEqual(view.links('records-add').map((l) => l.href), [expected], 'the Add opens the Upload form');
+      assert.deepEqual(view.links('records-add'), [], 'no generic Add under the tool');
       // D1109: the module page is the tool, so it has no door to the retired files tool or access view.
       assert.deepEqual(view.links('cycle-module-tool'), []);
-      // No add or tool on the page points back at the bare room.
-      for (const l of [...view.links('records-add'), ...view.links('cycle-module-tool')]) {
-        assert.doesNotMatch(l.href, /^\/raise\/data-room(\?project_id=\d+)?$/, l.href);
-      }
     }
   } finally { await view.close(); }
 });

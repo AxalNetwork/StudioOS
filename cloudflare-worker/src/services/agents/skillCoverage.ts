@@ -12,15 +12,20 @@
  *
  * D4536-p2 (#5969): `publishedEvaluation`, the published versions' evaluation across the catalogue, from the
  * published history alone (`agent_skill_version_evals`); never the draft history. See its section below.
+ *
+ * D5970 (#5970): `parseSkillFilters` and `matchesSkill`, the validated filters that narrow both blocks. See the last
+ * section below; which filter applies to which block is `FILTER_BLOCKS`.
  */
 import { RADAR_AXES } from '../skillsTaxonomySchema.ts';
 import { compareResults, pairOutcome, type PairOutcome, type ResultRow } from './skillEvalCompare.ts';
 
-/** One `agent_skills` row with its aggregates; `slug` is null for a company skill. */
+/** One `agent_skills` row with its aggregates; `slug` and `uid` are null for a company skill. */
 export type CoverageRow = {
   scope: 'hq' | 'company';
   status: 'draft' | 'published' | 'retired';
   slug: string | null;
+  /** D5970: what a `uid` filter matches; read for an HQ skill only. */
+  uid?: string | null;
   current_version: number;
   published_roles_json: string | null;
   published_tags_json: string | null;
@@ -50,6 +55,11 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
   adoption: AdoptionRow;
   /** HQ drafts whose required runs under the current evidence are not all recorded; null when this read did not compute them. */
   draftsWithoutCurrentEvaluation: number | null;
+  /**
+   * D5970: the rows were narrowed by a filter. A company skill's tags and roles are never read, so no filter can
+   * match it: its counts are unavailable, never 0. The library files and the drafts' evaluation are not filtered.
+   */
+  filtered?: boolean;
 }) {
   const byScope = { hq: counts(), company: counts() };
   const byRole = new Map<string, number>(ctx.roleKeys.map((k) => [k, 0]));
@@ -99,7 +109,9 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
   const seeded = [...library].filter((s) => hqSlugs.has(s));
 
   return {
-    by_scope: byScope,
+    by_scope: ctx.filtered
+      ? { hq: byScope.hq, company: { available: false, reason: 'A filtered read is HQ only: a company skill\'s tags and roles are never read.' } as Unavailable }
+      : byScope as { hq: Counts; company: Counts | Unavailable },
     by_role: ctx.roleKeys.map((role) => ({ role, published: byRole.get(role)! })),
     roles_without_published: ctx.roleKeys.filter((k) => byRole.get(k) === 0),
     by_area: RADAR_AXES.map((a) => {
@@ -112,17 +124,21 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
     published_untagged: untaggedPublished,
     drafts: {
       ...drafts,
-      without_current_evaluation: ctx.draftsWithoutCurrentEvaluation == null
-        ? { available: false, reason: 'Computed on the full list only (read without ?page).' } as Unavailable
-        : ctx.draftsWithoutCurrentEvaluation,
+      without_current_evaluation: ctx.filtered
+        ? { available: false, reason: 'Computed on the unfiltered full list only.' } as Unavailable
+        : ctx.draftsWithoutCurrentEvaluation == null
+          ? { available: false, reason: 'Computed on the full list only (read without ?page).' } as Unavailable
+          : ctx.draftsWithoutCurrentEvaluation,
     },
-    sources: {
-      library_files: library.size,
-      source_only: sourceOnly,
-      seeded: seeded.length,
-      seeded_published: seeded.filter((s) => hqSlugs.get(s)!.current_version >= 1).length,
-      authored_in_store: [...hqSlugs.keys()].filter((s) => !library.has(s)).length,
-    },
+    sources: ctx.filtered
+      ? { available: false, reason: 'The source library files are not filtered.' } as Unavailable
+      : {
+        library_files: library.size,
+        source_only: sourceOnly,
+        seeded: seeded.length,
+        seeded_published: seeded.filter((s) => hqSlugs.get(s)!.current_version >= 1).length,
+        authored_in_store: [...hqSlugs.keys()].filter((s) => !library.has(s)).length,
+      } as { library_files: number; source_only: string[]; seeded: number; seeded_published: number; authored_in_store: number } | Unavailable,
     adoption: {
       // Catalogue adoption: which agents pin a skill. Never a run count.
       links: ctx.adoption.links,
@@ -193,8 +209,11 @@ const NOT_EVALUATED: Unavailable = { available: false, reason: 'No result is rec
 export function publishedEvaluation(versions: readonly PublishedVersionRow[], rows: readonly VersionEvalRow[], ctx: {
   currentEvaluatorVersion: number;
   now: Date;
-  /** The latest campaign; null when none started; `unreadable` when the campaign tables could not be read. */
-  campaign: CampaignCoverageRow | null | 'unreadable';
+  /**
+   * The latest campaign; null when none started; `unreadable` when the campaign tables could not be read; `filtered`
+   * (D5970) when the read is filtered: a campaign's progress is the whole catalogue's.
+   */
+  campaign: CampaignCoverageRow | null | 'unreadable' | 'filtered';
 }) {
   const bySkill = new Map<string, VersionEvalRow[]>();
   for (const r of rows) {
@@ -299,6 +318,8 @@ export function publishedEvaluation(versions: readonly PublishedVersionRow[], ro
   const c = ctx.campaign;
   const campaign = c === 'unreadable'
     ? { available: false, reason: 'The evaluation campaigns could not be read.' } as Unavailable
+    : c === 'filtered'
+      ? { available: false, reason: 'A campaign\'s progress is the whole catalogue\'s; it is not filtered.' } as Unavailable
     : c == null
       ? { available: false, reason: 'No evaluation campaign has started (#4668).' } as Unavailable
       : {
@@ -340,3 +361,186 @@ type SkillRegressions = { since_previous_run: number; since_previous_version: nu
 type SkillIdentity = { evaluator_versions: number[]; on_current_evaluator: boolean; evaluator_not_recorded: number; case_text_not_recorded: number };
 
 export type PublishedEvaluation = ReturnType<typeof publishedEvaluation>;
+
+// ── D5970 (#5970): validated filters on the two blocks ──────────────────────────────────────────────────────────────
+//
+// Every filter is checked before anything is served: an unknown name or value is refused with a code, never read as
+// "all". A filter narrows the skills each block counts; one that matches nothing gives observed zeros for counts and
+// `{ available: false }` for measures that need a row, never the unfiltered figures. The paged `skills` list is not
+// filtered. Matching is in memory over rows the fixed reads already return, and the window and model are bound
+// parameters of the history read, so a filter adds no read and no per-skill query.
+
+/** The longest window on evaluation `run_at`, in whole UTC days counting both ends. */
+export const FILTER_WINDOW_MAX_DAYS = 366;
+export const FILTER_KEYS = ['scope', 'status', 'uid', 'version', 'category', 'tag', 'role', 'model', 'from', 'to'] as const;
+export type FilterKey = typeof FILTER_KEYS[number];
+/** Which filter narrows which block. `coverage` is the catalogue as it is now: it has no run time and no model. */
+export const FILTER_BLOCKS: Readonly<Record<'coverage' | 'published_evaluation', readonly FilterKey[]>> = {
+  coverage: ['scope', 'status', 'uid', 'version', 'category', 'tag', 'role'],
+  published_evaluation: FILTER_KEYS,
+};
+const STATUSES = ['draft', 'published', 'retired'] as const;
+const UID = /^[0-9a-f]{32}$/;
+const VERSION = /^[1-9][0-9]{0,5}$/;
+const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAY_MS = 86_400_000;
+
+export type SkillFilters = {
+  scope: 'hq' | null;
+  status: CoverageRow['status'] | null;
+  uid: string | null;
+  version: number | null;
+  /** A radar axis (`RADAR_AXES`): a skill matches when any tag of its current version is in it. */
+  category: string | null;
+  tag: string | null;
+  role: string | null;
+  model: string | null;
+  /** On evaluation `run_at`, UTC: `since` (the `from` day's 00:00:00) inclusive, `until` (the day after `to`) exclusive. */
+  window: { from: string; to: string; days: number; since: string; until: string } | null;
+};
+export type FilterRefusal = { ok: false; code: string; message: string };
+
+const dayMs = (s: string): number | null => {
+  const m = DAY.exec(s);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const ms = Date.UTC(y, mo - 1, d);
+  const t = new Date(ms);
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d ? ms : null;
+};
+const sqlTime = (ms: number) => `${new Date(ms).toISOString().slice(0, 10)} 00:00:00`;
+
+/**
+ * The query's filters, each checked: names against `FILTER_KEYS` (plus `allowed`, e.g. `page`), each given once;
+ * values against the taxonomy, the catalogue's roles, the model catalogue and their formats. `filters` is null when
+ * none is given, so an unfiltered read is the read it was before.
+ */
+export function parseSkillFilters(query: Record<string, string[]>, ctx: {
+  categories: readonly string[];
+  tags: { has(slug: string): boolean };
+  roleKeys: readonly string[];
+  modelIds: readonly string[];
+  allowed?: readonly string[];
+}): { ok: true; filters: SkillFilters | null } | FilterRefusal {
+  const no = (code: string, message: string): FilterRefusal => ({ ok: false, code, message });
+  const given = new Map<FilterKey, string>();
+  for (const [name, values] of Object.entries(query)) {
+    if (ctx.allowed?.includes(name)) continue;
+    if (!(FILTER_KEYS as readonly string[]).includes(name)) return no('filter_unknown', `There is no filter named "${name.slice(0, 40)}". The filters are: ${FILTER_KEYS.join(', ')}.`);
+    if (values.length !== 1) return no('filter_repeated', `Give the ${name} filter once.`);
+    given.set(name as FilterKey, values[0]);
+  }
+  if (!given.size) return { ok: true, filters: null };
+  const v = (k: FilterKey) => given.get(k) as string;
+  const f: SkillFilters = { scope: null, status: null, uid: null, version: null, category: null, tag: null, role: null, model: null, window: null };
+
+  if (given.has('scope')) {
+    if (v('scope') !== 'hq') return no('scope_not_served', 'This read serves HQ skills only: the scope filter takes "hq".');
+    f.scope = 'hq';
+  }
+  if (given.has('status')) {
+    if (!(STATUSES as readonly string[]).includes(v('status'))) return no('status_unknown', `The status filter takes one of: ${STATUSES.join(', ')}.`);
+    f.status = v('status') as SkillFilters['status'];
+  }
+  if (given.has('uid')) {
+    if (!UID.test(v('uid'))) return no('uid_malformed', 'A skill uid is 32 lower-case hexadecimal characters.');
+    f.uid = v('uid');
+  }
+  if (given.has('version')) {
+    if (!VERSION.test(v('version'))) return no('version_malformed', 'A version is a whole number from 1.');
+    f.version = Number(v('version'));
+  }
+  if (given.has('category')) {
+    if (!ctx.categories.includes(v('category'))) return no('category_unknown', 'That category is not in the skills taxonomy.');
+    f.category = v('category');
+  }
+  if (given.has('tag')) {
+    if (!ctx.tags.has(v('tag'))) return no('tag_unknown', 'That tag is not an active skill in the taxonomy.');
+    f.tag = v('tag');
+  }
+  if (given.has('role')) {
+    if (!ctx.roleKeys.includes(v('role'))) return no('role_unknown', 'That role is not one of the catalogue\'s agent roles.');
+    f.role = v('role');
+  }
+  if (given.has('model')) {
+    if (!ctx.modelIds.includes(v('model'))) return no('model_unknown', 'That model is not in the model catalogue.');
+    f.model = v('model');
+  }
+  if (given.has('from') || given.has('to')) {
+    if (!given.has('from') || !given.has('to')) return no('window_incomplete', 'A date range needs both from and to (YYYY-MM-DD, UTC).');
+    const from = dayMs(v('from')), to = dayMs(v('to'));
+    if (from == null || to == null) return no('window_malformed', 'Give from and to as calendar dates, YYYY-MM-DD (UTC).');
+    if (to < from) return no('window_reversed', 'The range ends before it starts.');
+    const days = (to - from) / DAY_MS + 1;
+    if (days > FILTER_WINDOW_MAX_DAYS) return no('window_too_long', `A date range covers at most ${FILTER_WINDOW_MAX_DAYS} days, both ends counted.`);
+    f.window = { from: v('from'), to: v('to'), days, since: sqlTime(from), until: sqlTime(to + DAY_MS) };
+  }
+  return { ok: true, filters: f };
+}
+
+/** A skill as the filters read it: its CURRENT published version's roles and tags, as coverage counts them. */
+export type MatchableSkill = {
+  scope: 'hq' | 'company'; status: string; uid?: string | null; current_version: number;
+  published_roles_json: string | null; published_tags_json: string | null;
+};
+
+/**
+ * Whether a skill passes the filters' skill-level terms. A company skill never does: its tags and roles are not read.
+ * Role, tag and category read the current published version, so a skill with no version matches none of them.
+ */
+export function matchesSkill(s: MatchableSkill, f: SkillFilters, category: ReadonlyMap<string, string>): boolean {
+  if (s.scope !== 'hq') return false;
+  if (f.status != null && s.status !== f.status) return false;
+  if (f.uid != null && s.uid !== f.uid) return false;
+  if (f.version != null && Number(s.current_version) !== f.version) return false;
+  if (f.role == null && f.tag == null && f.category == null) return true;
+  if (Number(s.current_version) < 1) return false;
+  if (f.role != null && !parse<string[]>(s.published_roles_json, []).includes(f.role)) return false;
+  const tags = parse<Array<{ slug: string }>>(s.published_tags_json, []);
+  if (f.tag != null && !tags.some((t) => t.slug === f.tag)) return false;
+  if (f.category != null && !tags.some((t) => category.get(t.slug) === f.category)) return false;
+  return true;
+}
+
+/** HQ's pins per linked HQ skill (active agents only), one row each; `agent_ids` is a comma list. */
+export type SkillLinkRow = { uid: string; links: number; agent_ids: string | null; behind_current: number };
+
+/** Coverage's adoption over the HQ skills in `rows`: every one unfiltered, the matched ones filtered. */
+export function adoptionOf(links: readonly SkillLinkRow[], rows: readonly CoverageRow[]): AdoptionRow {
+  const hq = new Map(rows.filter((r) => r.scope === 'hq' && r.uid).map((r) => [r.uid as string, r]));
+  const agents = new Set<string>();
+  const linked = new Set<string>();
+  let n = 0, behind = 0;
+  for (const l of links) {
+    if (!hq.has(l.uid)) continue;
+    linked.add(l.uid);
+    n += Number(l.links);
+    behind += Number(l.behind_current);
+    for (const a of String(l.agent_ids ?? '').split(',')) if (a) agents.add(a);
+  }
+  const unlinked = [...hq.values()].filter((r) => r.status === 'published' && !linked.has(r.uid as string)).length;
+  return { links: n, agents: agents.size, behind_current: behind, published_without_links: unlinked };
+}
+
+/** What the response says about its filters: the values applied, and which block each one narrowed. */
+export function filtersApplied(f: SkillFilters) {
+  const applied: Partial<Record<FilterKey, string | number>> = {};
+  for (const k of FILTER_KEYS) {
+    if (k === 'from' || k === 'to') { if (f.window) applied[k] = f.window[k]; continue; }
+    const value = f[k];
+    if (value != null) applied[k] = value;
+  }
+  const keys = FILTER_KEYS.filter((k) => k in applied);
+  const block = (b: keyof typeof FILTER_BLOCKS) => ({
+    applied: keys.filter((k) => FILTER_BLOCKS[b].includes(k)),
+    not_applicable: keys.filter((k) => !FILTER_BLOCKS[b].includes(k)),
+  });
+  return {
+    applied,
+    window: f.window ? { since: f.window.since, until: f.window.until, days: f.window.days, max_days: FILTER_WINDOW_MAX_DAYS } : null,
+    coverage: block('coverage'),
+    published_evaluation: block('published_evaluation'),
+    // The paged list is the catalogue's rows, never filtered here.
+    skills: { applied: [] as FilterKey[], not_applicable: keys },
+  };
+}
