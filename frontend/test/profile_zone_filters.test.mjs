@@ -133,7 +133,8 @@ const PROFILES = {
     // rather than inherited from its parent. Since D704 it mounts no zone:
     // `FounderValidateWorkspace`, which mounted the four `/validate/*` rows, is
     // deleted.
-    pages: ['frontend/src/pages/founder', 'frontend/src/workspaces', 'frontend/src/workspaces/founder'],
+    // D6118 (#6118): `grow/partnerships` is mounted by Partnerships' co-marketing part, named outright.
+    pages: ['frontend/src/pages/founder', 'frontend/src/workspaces', 'frontend/src/workspaces/founder', 'frontend/src/pages/cycles/PartnershipsCoMarketing.jsx'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
     // 30 → 26 (D704): the four `validate/*` zones are retired; see `excluded`.
     // 26 → 25: the owner removed `raise/liquidity` (2026-10-20), page and all.

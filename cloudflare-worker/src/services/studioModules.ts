@@ -105,7 +105,7 @@ export const CYCLE_PURPOSE: Readonly<Record<string, string>> = {
   'grow/distribution': 'Channels, and what they brought.',
   'grow/revenue-and-traction': 'MRR and paying customers, from your tools.',
   'grow/team-expansion': 'Roles open and filled.',
-  'grow/partner-network': 'Partners signed and in talks.',
+  'grow/partner-network': 'Partners by stage and the revenue they bring.',
   'grow/market-expansion': 'Markets served and entering.',
   'grow/durable-company-building': 'The checklist for a lasting company.',
 };
