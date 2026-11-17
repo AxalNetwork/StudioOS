@@ -10,6 +10,8 @@ its data, passes it in, and does only what these functions allow.
 | File | What it holds |
 | --- | --- |
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
+| `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
+| `ejection.mjs` | The ejection handler's sweep: one GraphQL read of the 100 most recently updated PRs, the CI evidence, labels, one comment, and `enqueuePullRequest`. |
 | `keeper-plan.mjs` | The branch keeper's plan (#6474): which conflicted PRs a sweep may merge main into, and today's reserved pushes. Pure. |
 | `keeper-merge.mjs` | The branch keeper's merge: git with hooks, filters and LFS off, main's merge rules only, the plain-versus-union comparison and the README duplicate check. |
 | `keeper.mjs` | The branch keeper's entry point (`plan`, `apply`): reads, re-reads, merges, pushes, labels and comments. |
@@ -91,3 +93,24 @@ succeeded. The next run counts today's reservations against `LANDING_BOT_DAILY_P
 | `LANDING_BOT_KEEPER_PER_SWEEP` | PRs merged per run. Unset is 0. Dispatch mode always takes the one named PR. |
 | `LANDING_BOT_DAILY_PUSHES` | Bot pushes per UTC day across all kinds. Unset is 0. |
 | `LANDING_BOT_QUIET_MIN` | Minutes a head must stay unchanged first; unset is 30. |
+
+## The ejection handler
+
+`.github/workflows/landing-bot-ejection.yml` (#6476) sweeps every 10 minutes. The #4571 guard forbids
+`workflow_run`, and a `pull_request` trigger would run a PR's own copy of the workflow. It classifies each new
+ejection, then:
+- **conflict:** asks the branch keeper; once the keeper's merge has cleared the conflict, the entry may be
+  restored;
+- **own failure:** labels `ejected` and asks red-PR repair (#5622) once it exists;
+- **timeout, manual, unknown:** labels `ejected` only;
+- **cascade, flake, infrastructure:** restores the entry on the same head (`enqueuePullRequest` with
+  `expectedHeadOid`), but only when all of these hold:
+  - a person queued it, or enabled auto-merge, and every later commit is a no-model merge of main;
+  - every check is green on that head;
+  - the PR passes `eligible()` and the breakers;
+  - `[alert] merge queue stalled` is not open;
+  - this PR has had fewer than 2 re-queues in 24 hours;
+  - the repository is under `LANDING_BOT_DAILY_REQUEUES`;
+  - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
+
+Otherwise it labels `ejected` with the reasons. One sticky comment says which.
