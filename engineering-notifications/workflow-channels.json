@@ -12,6 +12,11 @@
       "channel": "#axalvc-actions-agent-compute-preview"
     },
     {
+      "id": null,
+      "path": ".github/workflows/agent-gateway-keys.yml",
+      "channel": "#axalvc-actions-agent-gateway-keys"
+    },
+    {
       "id": 417193959,
       "path": ".github/workflows/agent-stage-a.yml",
       "channel": "#axalvc-actions-agent-stage-a"

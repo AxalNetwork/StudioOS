@@ -1099,10 +1099,17 @@ test('D7073: a malformed gateway refuses before any call or hold; a missing one 
     assert.equal(own.ok, true, JSON.stringify(own));
     assert.equal(holds(), 1);
 
-    // With the gateway set, an engine run goes through it.
+    // With the gateway set, an engine run is answered by the model accounts (#7073 part 2). With none set up, it is
+    // refused before anything is held or called; it never falls back to the router's default route.
     w.env.AGENT_AI_GATEWAY = 'agents';
+    const callsBefore = w.calls.length;
     const gated = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-with-gw-01', engine: true });
-    assert.equal(gated.ok, true, JSON.stringify(gated));
+    assert.deepEqual([gated.ok, (gated as any).status, (gated as any).code], [false, 503, 'accounts_unconfigured']);
+    assert.equal(w.calls.length, callsBefore, 'no model call');
+    assert.equal(holds(), 1, 'no new hold');
+    // The sponsor's own run still goes through the gateway on the router.
+    const ownGated = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-with-gw-02' });
+    assert.equal(ownGated.ok, true, JSON.stringify(ownGated));
   } finally { w.db.close(); }
 });
 
@@ -1118,7 +1125,8 @@ test('D7073: a model out of capacity is model_throttled and pauses nothing; a 42
     try {
       const uid = await addCfo(w);
       w.env.AGENT_AI_GATEWAY = 'agents';
-      const r = await agentRun(w.env, { agent: agentRow(w, uid), ...step, runUid: 'run-throttle-01', engine: true });
+      // #7073 part 2: an engine run no longer reaches the router, so the sponsor's own run carries this check.
+      const r = await agentRun(w.env, { agent: agentRow(w, uid), ...step, runUid: 'run-throttle-01' });
       assert.deepEqual([r.ok, (r as any).status, (r as any).code], [false, 503, code], message);
       assert.equal(agentRow(w, uid).status, 'active');
       assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_rail_proposals').get().n, 0);

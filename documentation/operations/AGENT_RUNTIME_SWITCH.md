@@ -103,12 +103,20 @@ provisioning still needs its own configured resources.
 The outstanding owner steps are the `agents` gateway (payload logging and
 caching off, $100 monthly limit), Workers Paid confirmation, HQ policy caps,
 and counsel's privacy and ToS review. See [AGENT_ENGINE_GO_LIVE.md](AGENT_ENGINE_GO_LIVE.md)
-for the staged rollout. `AGENT_AI_GATEWAY` remains unset; the monthly alert
-threshold is now explicitly `100000000` micro-USD in all three var tables.
-That var does not configure the gateway's hard limit: the owner sets $100 in
-the dashboard too.
+for the staged rollout. `AGENT_AI_GATEWAY` is `agents` in all three var tables
+(D7073-p2); the monthly alert threshold is explicitly `100000000` micro-USD in
+all three. That var does not configure the gateway's hard limit: the owner sets
+$100 in the dashboard too.
 
-Until `AGENT_AI_GATEWAY` is set, a run the engine starts is refused
+A run the engine starts is answered by the model accounts on that gateway —
+primary Claude, Claude 2, Claude 3, then OpenAI/Codex — through their stored
+keys ([D7073-p2](../architecture/decisions/D7073-p2.md)). Until the gateway's
+Run token (`AGENT_AI_GATEWAY_TOKEN`) and at least one alias are set, an engine
+run is refused `accounts_unconfigured` before anything is held. To store or
+rotate the keys, run **Agent gateway keys** (`agent-gateway-keys.yml`) from
+`main`: `plan` first, then `apply`. It prints no key.
+
+If `AGENT_AI_GATEWAY` is unset, a run the engine starts is refused
 `gateway_required` before anything is priced, held or sent to a model (D7073).
 A value that cannot name a gateway refuses every agent run
 (`gateway_misconfigured`). A sponsor's own run from the page is unchanged while

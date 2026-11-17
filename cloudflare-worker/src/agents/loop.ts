@@ -286,6 +286,11 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
   // D7073: a busy model, or a gateway that is not set up, ends this run and pauses nothing: the task is open
   // again for a later run. Neither is retried here, because a retried step replays its hold and runs nothing.
   if (r.code === 'model_throttled') return end(d, l, 'run', 'failed', 'model_throttled', 'The model was busy. The task is open again.');
+  // #7073 part 2: the model accounts. Not set up, all out of credit, or one that failed: the run ends, the task is
+  // open again, nothing is paused. A gateway spend limit is `gateway_limit` above, which pauses the platform.
+  if (['accounts_unconfigured', 'accounts_exhausted', 'account_failed', 'guard_blocked', 'guard_unavailable'].includes(r.code)) {
+    return end(d, l, 'run', 'failed', r.code, r.code === 'accounts_exhausted' ? 'Every model account is out of credit.' : 'The model accounts could not answer.');
+  }
   if (r.code === 'gateway_required' || r.code === 'gateway_misconfigured') {
     return end(d, l, 'run', 'failed', r.code, 'The agent gateway is not set up, so no model was reached.');
   }

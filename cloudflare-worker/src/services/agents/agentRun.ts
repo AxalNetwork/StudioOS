@@ -84,6 +84,8 @@ import { agentModels, planOk } from './modelOffers';
 import { allowlistRefusal } from './allowlists';
 import type { Env, User } from '../../types';
 import { inferenceStubOn } from '../ai/inferenceStub';
+import { accountSlots, runAccounts, slotQuote } from './agentAccounts';
+import { memberChargeMultiplier } from '../aiBudget';
 import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
 import { agentArea } from './adminReads';
 import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOptions, type TaskClass } from '../aiRouter';
@@ -440,6 +442,11 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   }
   if (!read.ok) return refused(env, a, read, input.module, input.option);
   if (read.block) c.opts.messages = [{ role: 'user', content: `${input.prompt}\n\n${read.block}` }];
+  // #7073 part 2 (D7073-p2): a run the engine started calls the model accounts through the `agents` gateway, in order.
+  // The Stage A preview's stub answers on the router's path below, so it never reaches a live account.
+  if (input.engine === true && !inferenceStubOn(env)) {
+    return accountRun(env, a, input, c, { runUid, runKey, shaped, skill });
+  }
   const gatewayId = agentGatewayId(env);
   const r = await run(env, { ...c.opts, rail: c.rail, surface: c.surface, idempotencyKey: holdKeyOf(runKey), executionId: runUid, gatewayId });
   if (!r.ok && r.refusal === 'step_replayed') {
@@ -489,4 +496,81 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     ...(engine === 'cloudflare_sdk' && loaded?.ok ? { skill_runtime: { runtime: loaded.runtime, fallback: loaded.fallback } } : {}),
   }, { usageLogId, proposalUid: proposal.uid });
   return { ok: true, proposal, charged: await chargedFor(env, usageLogId), usageLogId, runKey, replayed: false };
+}
+
+/** The answer a run's accounts give, at most this many tokens. */
+export const AGENT_MAX_TOKENS = 2048;
+const ACCOUNT_REFUSAL_STATUS: Record<string, number> = {
+  accounts_unconfigured: 503, accounts_exhausted: 402, account_failed: 424, gateway_limit: 503,
+  guard_blocked: 422, guard_unavailable: 503, step_lost: 409, insufficient_tokens: 402,
+};
+
+/**
+ * #7073 part 2: the engine's run on the model accounts (`agentAccounts.ts`), with the same checks the router path
+ * has: HQ's locks and the scope's allow-list per account model, the per-run ceiling against the dearest account,
+ * the sponsor's holds, the guard, one proposal per run key. Returns the run's result.
+ */
+async function accountRun(env: Env, a: AgentRow, input: AgentRunInput, c: Extract<Checked, { ok: true }>, ctx: {
+  runUid: string; runKey: string; shaped: { reads: Array<{ integration_uid: string; tool: string }> };
+  skill: { ok: true; skill: { id: number; uid: string }; version: { version: number } } | { ok: false } | null;
+}): Promise<AgentRunResult> {
+  const policy = await readPolicy(env);
+  if (!policy) return refused(env, a, no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.'), input.module, input.option);
+  const models = [...new Set(accountSlots(env as never).slots.map((s) => s.model))];
+  const allowedSet = new Set<string>();
+  for (const m of models) {
+    const unlocked = !policy.locks.some((l) => l.model === m);
+    if (unlocked && !(await allowlistRefusal(env, c.scope, m, []))) allowedSet.add(m);
+  }
+  const allowed = (m: string) => allowedSet.has(m);
+  const request = {
+    system: c.opts.systemPrompt,
+    messages: (c.opts.messages ?? []).map((m) => ({ role: m.role === 'assistant' ? 'assistant' as const : 'user' as const, content: String(m.content) })),
+    maxTokens: AGENT_MAX_TOKENS,
+  };
+  if (policy.per_run_ceiling_microusd != null) {
+    const multiplier = await memberChargeMultiplier(env, c.opts.userId);
+    const dearest = Math.max(0, ...accountSlots(env as never, allowed).slots.map((s) => slotQuote(s, request, multiplier)));
+    if (dearest > policy.per_run_ceiling_microusd) {
+      return refused(env, a, no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(policy.per_run_ceiling_microusd / 1e6).toFixed(2)}. Nothing was charged.`), input.module, input.option);
+    }
+  }
+  const r = await runAccounts(env, {
+    who: { userId: c.opts.userId, surface: c.surface, railPage: c.rail.page, railOption: c.rail.option ?? undefined, recordRef: c.rail.record ?? undefined, agentId: a.id },
+    task: c.opts.task, executionId: ctx.runUid, request, guardText: String(c.opts.guardText ?? input.prompt), allowed,
+  });
+  const account = (x: { slot: number; alias: string; model: string }) => ({ slot: x.slot, alias: x.alias, model: x.model });
+  if (!r.ok) {
+    if (r.code === 'step_lost') {
+      const lost: AgentStepLost = { ...no(409, 'step_lost', r.message), code: 'step_lost', holdStatus: 'settled', runKey: ctx.runKey };
+      await refused(env, a, lost, input.module, input.option);
+      return lost;
+    }
+    try {
+      await logEvent(env, a.id, a.sponsor_user_id, 'refused', {
+        code: r.code, module: input.module, option: input.option,
+        accounts: r.attempts.map((x) => ({ ...account(x), outcome: x.outcome, billed: x.billed })),
+      });
+    } catch { /* the refusal still answers */ }
+    return no(ACCOUNT_REFUSAL_STATUS[r.code] ?? 424, r.code, r.message);
+  }
+  if (ctx.skill?.ok) await tagUsage(env, r.usageLogId, ctx.skill.skill.id, ctx.skill.version.version);
+  let proposal: RailProposal;
+  try {
+    proposal = await proposeRail(env, {
+      userId: c.opts.userId, page: c.row.pageKey, option: c.row.optionKey, record: input.record ?? null,
+      kind: 'draft', payload: { text: r.output }, model: r.model, usageLogId: r.usageLogId, agentId: a.id,
+      taskId: input.taskId ?? null, runKey: ctx.runKey,
+    });
+  } catch {
+    return refused(env, a, no(500, 'proposal_not_saved', 'The agent ran, but its proposal could not be saved.'), input.module, input.option);
+  }
+  const tools = ctx.shaped.reads.map((t) => ({ integration_uid: t.integration_uid, tool: t.tool }));
+  // The account that answered is named by slot, alias and model; never a key, a token or the prompt.
+  await logEvent(env, a.id, a.sponsor_user_id, 'run', {
+    module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}),
+    ...(ctx.skill?.ok ? { skill: { uid: ctx.skill.skill.uid, version: ctx.skill.version.version } } : {}),
+    account: account(r), accounts_tried: r.attempts.length,
+  }, { usageLogId: r.usageLogId, proposalUid: proposal.uid });
+  return { ok: true, proposal, charged: await chargedFor(env, r.usageLogId), usageLogId: r.usageLogId, runKey: ctx.runKey, replayed: false };
 }
