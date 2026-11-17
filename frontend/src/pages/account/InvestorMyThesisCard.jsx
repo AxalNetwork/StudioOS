@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Loader2, Save } from 'lucide-react';
 import InvestorProfileReadState from './InvestorProfileReadState.jsx';
 import Card from './AccountCard.jsx';
+import InvestorProfileDetails from './InvestorProfileDetails.jsx';
 
 // Positive thesis for investors and members with a completed investor profile.
 export default function InvestorMyThesisCard({ flash, role, investorProfile, linked = false }) {
@@ -75,7 +76,7 @@ export default function InvestorMyThesisCard({ flash, role, investorProfile, lin
       cardRef={cardRef}
       id="my-thesis"
       title="My thesis"
-      description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches."
+      description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches, and the onboarding answers you can correct."
     >
       <div className="space-y-5">
         <div>
@@ -116,6 +117,7 @@ export default function InvestorMyThesisCard({ flash, role, investorProfile, lin
             {saving === 'thesis' ? 'Saving…' : 'Save thesis'}
           </button>
         </div>
+        <InvestorProfileDetails profile={profile} busy={busy} saving={saving} save={save} flash={flash} />
       </div>
     </Card>
   );
