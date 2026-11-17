@@ -94,7 +94,7 @@ test('Documents mounts the new listing only after the existing access gate admit
         assert.equal(Boolean(node(view, 'shared-room-files')), granted);
         assert.equal(Boolean(node(view, 'room-name-filter')), granted);
         assert.deepEqual(reads, granted ? ['p-6185'] : []);
-        if (!granted) assert.match(view.text(), /not opened their data room to you/);
+        if (!granted) assert.match(view.text(), /not opened the data room to you/);
       } finally { await view.unmount(); }
     }
   } finally { dealWorkroomApi.roomAccess = original.access; dealWorkroomApi.sharedRoom = original.room; api.esignList = original.paper; }
