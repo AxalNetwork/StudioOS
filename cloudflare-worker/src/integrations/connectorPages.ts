@@ -242,6 +242,27 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://developers.tiktok.com/docs/en/login-kit-web' },
     verified_on: null,
   },
+  // D2403 part 2 (#2403): the sign-in only. The Grow feeds are part 3 and Post to X is part 4; until then the page
+  // names no tool, and the registry claims no feed (`xFeeds.ts`, `x_connector_2403.test.ts`).
+  x: {
+    tagline: 'Connect your own X account: read first, publishing off until you turn it on.',
+    long_description: [
+      'Sign in with X to let Axal read your follower count and your own posts’ figures. Connecting asks X for read permissions only.',
+      'Publishing is off. Turning it on is a second sign-in that adds posting permissions; nothing is ever posted until you press Post, and you can retract it. Available on paid founder plans.',
+      'Disconnecting revokes Axal’s access at X.',
+    ],
+    tools: [],
+    never_does: ['StudioOS never posts, replies, likes or follows on X by itself.', 'StudioOS never reads your followers’ identities or other people’s posts.'],
+    prompts: [],
+    prompts_reason: notRead('X'),
+    made_by: AXAL,
+    service: { name: 'X', href: 'https://x.com' },
+    sign_in: { kind: 'oauth', label: 'Sign in with X', key_help_href: null },
+    endpoints: { sign_in: 'https://x.com/i/oauth2/authorize', api: 'https://api.x.com/2' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code' },
+    verified_on: null,
+  },
   google_search_console: {
     tagline: 'Choose the Search Console property for this company, read only.',
     long_description: ['Sign in with Google to list the Search Console properties you can see, then choose one for this company. This release connects your account and binds the property. Search imports come later.'],
@@ -1054,7 +1075,7 @@ export function trustFor(key: string, variant?: string): Trust | null {
 }
 
 /** The same pattern as `CONNECTOR_KEY_RE` (`services/eadwynConnectors.ts`); the test holds them equal. */
-const PAGE_KEY_RE = /^[a-z][a-z0-9_]{1,39}$/;
+const PAGE_KEY_RE = /^[a-z][a-z0-9_]{0,39}$/;
 const HUB = '/account/connectors';
 
 /** A connector's page path, from a registry key or a page key; the hub for anything unknown. */
