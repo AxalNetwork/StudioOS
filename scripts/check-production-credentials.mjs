@@ -25,15 +25,37 @@ function readExpression(expression, names, errors) {
   }
 }
 
+/** Scan once so quoted braces and malformed expressions cannot cause regex backtracking. */
+function readEmbeddedExpressions(value, names, errors) {
+  let start = -1;
+  let quoted = false;
+  for (let i = 0; i < value.length; i++) {
+    if (start === -1) {
+      if (value[i] === '$' && value[i + 1] === '{' && value[i + 2] === '{') {
+        start = i + 3;
+        i += 2;
+      }
+      continue;
+    }
+    if (value[i] === "'") {
+      if (quoted && value[i + 1] === "'") i++;
+      else quoted = !quoted;
+    } else if (!quoted && value[i] === '}' && value[i + 1] === '}') {
+      readExpression(value.slice(start, i), names, errors);
+      start = -1;
+      i++;
+    }
+  }
+  if (start !== -1) errors.add('unterminated Actions expression cannot be checked');
+}
+
 function secretReads(mapping, catalog) {
   const names = new Set();
   const errors = new Set();
   function visit(key, value) {
     if (typeof value === 'string') {
       if (key === 'if' && !value.includes('${{')) readExpression(value, names, errors);
-      for (const match of value.matchAll(/\$\{\{((?:'(?:[^']|'')*'|[^'}]|\}(?!\}))*)\}\}/g)) {
-        readExpression(match[1], names, errors);
-      }
+      readEmbeddedExpressions(value, names, errors);
     } else if (value && typeof value === 'object') {
       for (const [child, item] of Object.entries(value)) visit(child, item);
     }

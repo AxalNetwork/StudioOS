@@ -1,5 +1,6 @@
 /** D7145: fixture workflows must keep production credentials inside their recorded job environments. */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { checkProductionCredentials } from '../check-production-credentials.mjs';
 
@@ -97,4 +98,29 @@ test('handles implicit if, multiline scripts and quoted examples without countin
   assert.deepEqual(audit(base.replace('      - run: test', script)), []);
   const example = 'format(\'secrets.HQ_RPC_SECRET\', github.actor)';
   assert.deepEqual(audit(workflow({ extra: 'run-name: "${{ ' + example + ' }}" # ${{ secrets.HQ_RPC_SECRET }}' })), []);
+  for (const read of [
+    "${{ format('it''s }} safe', secrets.CLOUDFLARE_API_TOKEN) }}",
+    "${{ secrets.UNRELATED }} / ${{ secrets['CLOUDFLARE_API_TOKEN'] }}",
+  ]) assert.deepEqual(audit(workflow({ read })), []);
+});
+
+test('unterminated interpolations fail closed without blocking the guard', () => {
+  for (const read of ['${{ secrets.CLOUDFLARE_API_TOKEN }', "${{ 'unterminated }}"]) {
+    assert.match(audit(workflow({ read })).join(), /unterminated Actions expression/);
+  }
+  const moduleUrl = new URL('../check-production-credentials.mjs', import.meta.url).href;
+  const script = `
+    import assert from 'node:assert/strict';
+    import { checkProductionCredentials } from ${JSON.stringify(moduleUrl)};
+    const source = ${JSON.stringify(workflow())};
+    const hostile = '$' + '{{{{' + "'".repeat(20_001);
+    const candidate = source.replace(${JSON.stringify(ref)}, hostile);
+    const issues = checkProductionCredentials([['release.yml', candidate]], ${JSON.stringify({ secrets: [token, ops], jobs: [row] })});
+    assert.match(issues.join('\\n'), /unterminated Actions expression/);
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module'], {
+    input: script, encoding: 'utf8', timeout: 10_000,
+  });
+  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });
