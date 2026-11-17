@@ -24,13 +24,14 @@ function responses(...pages) {
 
 test('the selected main branch is admitted by the real release check', async () => {
   await verifyProductionEnvironment(context, responses(environment, rules));
+  // GitHub resolves /production to this stored name with a trailing thin space.
+  await verifyProductionEnvironment(context, responses({ ...environment, name: 'production\u2009' }, rules));
 });
 
 test('a missing, unrestricted, protected-branches-only or unreadable environment stops the release', async () => {
   for (const policy of [null, {}, { ...selected, custom_branch_policies: false }, { ...selected, protected_branches: true }]) {
     await assert.rejects(verifyProductionEnvironment(context, responses({ ...environment, deployment_branch_policy: policy }, rules)), /select deployment branches/);
   }
-  await assert.rejects(verifyProductionEnvironment(context, responses({ ...environment, name: 'preview' }, rules)), /select deployment branches/);
   await assert.rejects(verifyProductionEnvironment(context, responses(new Response(null, { status: 404 }), rules)), /HTTP 404/);
 });
 

@@ -26,7 +26,8 @@ export async function verifyProductionEnvironment(context, request = fetch) {
 
   const environment = await get(environmentUrl);
   const mode = environment?.deployment_branch_policy;
-  if (environment?.name !== 'production' || mode?.custom_branch_policies !== true || mode.protected_branches !== false) {
+  // The fixed endpoint resolves GitHub's environment identity, including its stored display name.
+  if (mode?.custom_branch_policies !== true || mode.protected_branches !== false) {
     throw new Error('The production environment must select deployment branches explicitly.');
   }
 

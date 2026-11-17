@@ -4,9 +4,11 @@ The machine-readable inventory is the guard's source of truth. It records one ro
 
 ## Live environment names observed
 
-The read-only GitHub environment listing on 2026-11-17 returned `landing-bot`, `production\u2009` and `staging\u2009`. The escaped suffix denotes a trailing U+2009 THIN SPACE in each stored name. The visually similar production environment had `deployment_branch_policy: null` and an empty `protection_rules` list. The list had no exact `production`, `production-ops` or `agent-compute-preview` entry.
+The read-only GitHub environment listing on 2026-11-17 returned `landing-bot`, `production\u2009` and `staging\u2009`. The escaped suffix denotes a trailing U+2009 THIN SPACE in each stored name. The existing production environment had `deployment_branch_policy: null` and an empty `protection_rules` list. The list had no `production-ops` or `agent-compute-preview` entry.
 
-Create and configure the exact ASCII environment names used by the workflows before merging. Keep the earlier environment's deployment history available during the transition. GitHub creates an environment automatically when a workflow names one that is absent, so the source change alone cannot establish its branch restriction or secrets. [GitHub environment settings](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
+A direct read of the fixed `/repos/AxalNetwork/StudioOS/environments/production` endpoint resolved to that existing environment, ID `21311264734`, with its stored trailing-space name. Configure this resolved environment's policies and secrets, preserving its deployment history. [Production environment endpoint](https://api.github.com/repos/AxalNetwork/StudioOS/environments/production)
+
+Create `production-ops` with the name declared in the workflows and configure its policy and secrets before merging. GitHub creates an environment automatically when a workflow names one that is absent, so the source change alone cannot establish its branch restriction or secrets. [GitHub environment settings](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
 
 The compute preview remains subject to its existing owner-gated setup. Before enabling it, the owner must create its exact environment, independent-review protection, main-only branch restriction and preview-only credential.
 
@@ -78,7 +80,7 @@ Keep the dedicated publish workflows' current enablement gates. Pre-provision th
 
 ### 1. Configure the environments
 
-In repository Settings → Environments, create or configure the exact ASCII names `production` and `production-ops` as follows. Check the names character-for-character, including trailing whitespace, before adding secrets.
+In repository Settings → Environments, configure the existing production environment resolved by `/repos/AxalNetwork/StudioOS/environments/production` and create `production-ops` as declared in the workflows. Apply these settings to both environments before adding their credentials.
 
 | Setting | Value |
 | --- | --- |
@@ -88,7 +90,7 @@ In repository Settings → Environments, create or configure the exact ASCII nam
 | Required reviewers | Empty |
 | Wait timer | 0 |
 
-The production preflight reads both the environment and its branch-policy endpoint using the job's `GITHUB_TOKEN` with `actions: read`. It fails for a missing/unreadable environment, the wrong policy mode, extra policies, a wildcard, or a tag named `main`. It runs before the first Cloudflare credentialed step. Retain the independent-review gate for `agent-compute-preview` and restrict its deployment branch to `main` as well. [GitHub environment settings](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
+The production preflight reads the fixed `/repos/AxalNetwork/StudioOS/environments/production` endpoint and its `/deployment-branch-policies` child using the job's `GITHUB_TOKEN` with `actions: read`. That fixed endpoint identifies the production environment, including the stored name observed above. The preflight requires exactly one literal `main` branch policy and fails for a missing/unreadable environment, the wrong policy mode, extra policies, a wildcard, or a tag named `main`. It runs before the first Cloudflare credentialed step. Retain the independent-review gate for `agent-compute-preview` and restrict its deployment branch to `main` as well. [GitHub environment settings](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
 
 ### 2. Install the environment credentials
 
