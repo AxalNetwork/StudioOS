@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -224,4 +224,21 @@ test('#6473: no workflow but the runner\'s round names the repair environment', 
     if (f === 'landing-bot-model-round.yml') assert.deepEqual(names, ['repair', null]);
     else assert.ok(!names.includes('repair') && !/environment:\s*\n?\s*(?:name:\s*)?['"]?repair\b/.test(read(new URL(f, dir))), f);
   }
+});
+
+test('#6473: verify refuses an allowed file that became a symbolic link, and reads nothing through it', async () => {
+  // Mutation checked: opening without O_NOFOLLOW reads the link's target and this test fails.
+  const dir = repo();
+  const out = mkdtempSync(join(tmpdir(), 'lbm-out-'));
+  const taskFile = join(out, 'task.json');
+  writeFileSync(taskFile, JSON.stringify(taskOf({ verify: [['node', '-e', '0']] })));
+  const r = await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA }, { env: {}, providers: { claude: stub('claude', fix) } });
+  assert.equal(r.outcome, 'patched');
+  // The file the patch was made from is swapped for a link to the same text after the edit job.
+  const target = join(dir, 'frontend/src/pages/sum.js');
+  renameSync(target, join(dir, 'moved.js'));
+  symlinkSync(join(dir, 'moved.js'), target);
+  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v') }, { env: process.env });
+  assert.equal(v.passed, false);
+  assert.ok(v.problems.includes('frontend/src/pages/sum.js is a symbolic link'), JSON.stringify(v.problems));
 });

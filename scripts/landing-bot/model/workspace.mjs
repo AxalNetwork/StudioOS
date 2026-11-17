@@ -8,7 +8,7 @@
  * There is deliberately no tool that runs anything: no shell, no npm, no
  * tests. This module starts no process.
  */
-import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { safeRelativePath } from './task.mjs';
@@ -59,10 +59,15 @@ export function createWorkspace(root, { allowed = [], data = {} } = {}) {
       let text = null;
       try {
         const real = inTree(p);
-        const st = lstatSync(real);
-        if (!st.isFile()) throw new ToolError(`not a file: ${p}`);
-        if (st.size > MAX_FILE) throw new ToolError(`file too large to read: ${p}`);
-        text = readFileSync(real, 'utf8');
+        // Check and read the same open file: a path swapped for a link or a bigger file after the check is not read.
+        let fd;
+        try { fd = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW); } catch { throw new ToolError(`not a file: ${p}`); }
+        try {
+          const st = fstatSync(fd);
+          if (!st.isFile()) throw new ToolError(`not a file: ${p}`);
+          if (st.size > MAX_FILE) throw new ToolError(`file too large to read: ${p}`);
+          text = readFileSync(fd, 'utf8');
+        } finally { closeSync(fd); }
       } catch (e) {
         if (!(e instanceof ToolError) || !/^no such file/.test(e.message)) throw e;
       }

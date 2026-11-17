@@ -9,7 +9,7 @@
  * Writes `<out>/verify.json`: { passed, problems?, failure_text? }.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseTask, HARD } from './task.mjs';
@@ -45,11 +45,16 @@ export function verifyMain({ task: taskPath, work, patch: patchDir, out }, { env
   const patch = JSON.parse(readFileSync(join(patchDir, 'patch.json'), 'utf8'));
   const manifest = JSON.parse(readFileSync(join(patchDir, 'manifest.json'), 'utf8'));
   const linked = [];
+  // One open per file, not a check then a read: a link is refused by the open itself (O_NOFOLLOW), so it cannot be
+  // swapped in between.
   const readBefore = (p) => {
-    const abs = join(work, p);
-    if (!existsSync(abs)) return null;
-    if (lstatSync(abs).isSymbolicLink()) linked.push(p);
-    return readFileSync(abs, 'utf8');
+    let fd;
+    try { fd = openSync(join(work, p), constants.O_RDONLY | constants.O_NOFOLLOW); } catch (e) {
+      if (e.code === 'ENOENT') return null;
+      if (e.code === 'ELOOP') { linked.push(p); return null; }
+      throw e;
+    }
+    try { return readFileSync(fd, 'utf8'); } finally { closeSync(fd); }
   };
   const problems = checkPatch(patch, manifest, task.allowed_files, readBefore);
   for (const p of linked) problems.push(`${p} is a symbolic link`);
