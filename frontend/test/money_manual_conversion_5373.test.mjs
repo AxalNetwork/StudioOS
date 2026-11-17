@@ -112,6 +112,7 @@ const ALLOW = [
     "cloudflare-worker/src/services/fundReportDrafts.ts": 1,
     "cloudflare-worker/src/services/fundReports.ts": 1,
     "cloudflare-worker/src/services/fundRollup.ts": 2,
+    "cloudflare-worker/src/services/fundSnapshotFigures.ts": 1,
     "cloudflare-worker/src/services/queueWorker.ts": 1,
     "cloudflare-worker/src/services/mercury/investorFeeds.ts": 3,
     "cloudflare-worker/src/services/mercury/match.ts": 2,

@@ -1,5 +1,6 @@
 /**
- * D1152 (#3057) — the investor's Overview (DL1) on today's reads. Since D4815
+ * D1152 (#3057) — the investor's Overview (DL1) on today's reads. Since D6165
+ * it carries the deck the venture granted the investor (`DealDeck.jsx`). Since D4815
  * part 4 (DE04) the round's figures are the strip's and the one next action
  * is the header's, so this file repeats neither.
  *
@@ -22,8 +23,9 @@ import { dealViewsApi } from '../../lib/api/dealViews.js';
 import { tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3 } from './DealFrame';
 import {
-  CASE_TAGS, DECK_SLOT, caseNotes, missingEvidence, scoreSummary, termsAtGlance, thesisFitOf, whatsNewList, whatsNewOf,
+  CASE_TAGS, caseNotes, missingEvidence, scoreSummary, termsAtGlance, thesisFitOf, whatsNewList, whatsNewOf,
 } from './dealFrameModel';
+import { DealDeckCard } from './DealDeck';
 import { DealStrip, useScopeStrips } from '../../components/scoring/scorecard/Scorecard';
 import { FOUNDER_PAGE, stripOf } from '../../components/scoring/scorecard/scorecardModel';
 import { whatsNewOnce } from './dealVisit';
@@ -271,7 +273,8 @@ export default function DealOverview({ deal, investor, position = null }) {
             <h3 className={H3}>The round</h3>
             <p className={`m-0 ${SUB}`}>The round size and the committed total are in the strip above. Other investors’ names and amounts are not shown.</p>
           </section>
-          <Slot slot={DECK_SLOT} testId="deal-deck-slot" />
+          {/* D6165 (#6165): the investor's granted deck; a founder or staff member reads none here. */}
+          {investor && <DealDeckCard dealId={deal.id} />}
         </div>
       </div>
     </div>
