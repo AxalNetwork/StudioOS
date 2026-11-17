@@ -13,6 +13,9 @@
  */
 import { dealMoney, roundAsk } from '../../components/deals/dealMoney';
 import { NOT_RECORDED } from '../../lib/absence';
+import { FLAG_STATE_WORD, icState, openFlags, sectionWork } from '../duediligence/ddCaseModel.js';
+import { DEPTH_WORD, SEVERITY_WORD } from '../duediligence/ddListModel.js';
+import { verdictWord } from '../duediligence/ddReviewModel.js';
 
 export { NOT_RECORDED };
 const DAY = 86400000;
@@ -37,7 +40,12 @@ export function dayOf(s) {
 
 // ---------------------------------------------------------------- DL7 Diligence
 
-export const casePath = (uid) => `/admin/due-diligence/${encodeURIComponent(uid)}`;
+/**
+ * The case's own page, under the address every diligence reader opens (D6180,
+ * #6180): `/due-diligence/:uid`, never the `/admin/` one, and a tab word only
+ * when the door is for one tab (the Memo and the reports are on Sign-off).
+ */
+export const casePath = (uid, tab = '') => `/due-diligence/${encodeURIComponent(uid)}${tab ? `/${tab}` : ''}`;
 
 const STAGE_WORD = { not_started: 'Not started', in_review: 'In review', ready: 'Ready for a decision', decided: 'Decided', archived: 'Archived' };
 const RISK_WORD = { low: 'Low risk', moderate: 'Moderate risk', medium: 'Moderate risk', high: 'High risk', critical: 'Critical risk' };
@@ -80,6 +88,84 @@ export function caseCard(row, detail, userId) {
   };
 }
 
+/**
+ * D6180: the open flags on the case read (`flags`: findings, and checklist
+ * items marked flag or fail), severest first, each with its severity and its
+ * state in words, never a colour alone. Every state but Closed is open, as on
+ * the case's Flags tab. A read with no list is not "none": `rows` is null.
+ */
+const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+export function openFlagRows(detail) {
+  if (!detail || !Array.isArray(detail.flags)) return { line: 'Open flags not recorded', rows: null };
+  const titles = new Map((detail.sections || []).map((s) => [Number(s.id), s.title]));
+  const rows = [...openFlags(detail.flags)]
+    .sort((a, b) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9) || String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .map((f) => ({
+      key: `${f.kind}-${f.id ?? f.checklist_item_id}`,
+      title: f.title || NOT_RECORDED,
+      severity: SEVERITY_WORD[f.severity] ? `${SEVERITY_WORD[f.severity]} severity` : 'Severity not recorded',
+      state: FLAG_STATE_WORD[f.state] || NOT_RECORDED,
+      section: titles.get(Number(f.section_id)) || (f.section_id == null ? 'Case-wide' : NOT_RECORDED),
+    }));
+  return { line: rows.length ? `${rows.length} open flag${rows.length === 1 ? '' : 's'}` : 'No open flags', rows };
+}
+
+/** D6180: each section's progress on the case read: items worked of its checklist, and its verdict. */
+export function sectionProgress(detail) {
+  return (detail?.sections || []).map((s) => {
+    const w = sectionWork(detail.checklist, s.id);
+    return {
+      id: s.id, title: s.title || NOT_RECORDED,
+      line: w.total ? `${w.worked} of ${w.total} items worked` : 'No checklist items',
+      pct: w.total ? Math.round((w.worked / w.total) * 100) : null,
+      verdict: verdictWord(s.verdict),
+    };
+  });
+}
+
+/**
+ * D6180: the case's next step towards IC, on the case read. The Worker sends a
+ * case to IC (`POST /dd/cases/:uid/ic`) only for its lead or an Admin, and
+ * only after Proceed or Proceed with conditions is recorded, so the button is
+ * offered exactly when the case page's own rule (`icState`) says it may be.
+ * "Ready for a decision" comes before that decision: the card says so and
+ * opens Sign-off, where the decision is recorded. Before that stage, or with
+ * no read, nothing is drawn.
+ */
+export function icStep(row, detail) {
+  if (!detail?.case || detail.case.scoped) return null;
+  const ic = icState(detail.case, detail);
+  if (ic.state === 'sent') return { state: 'sent', text: ic.text, href: '/deals/commit' };
+  if (ic.state === 'ready') return { state: 'ready', text: ic.text };
+  if (row?.stage === 'ready') {
+    return { state: 'decide', text: 'Every section has a verdict. Record Proceed or Proceed with conditions on the case before it goes to IC.', href: casePath(row.uid, 'sign-off') };
+  }
+  if (row?.stage === 'decided') return { state: 'waits', text: ic.text };
+  return null;
+}
+
+/** D6180: the doors to the case's Memo and reports, both on its Sign-off tab, for the readers the Worker lets read them. */
+export function caseDoors(row, detail) {
+  if (!detail?.case || detail.case.scoped) return [];
+  const doors = [];
+  if (detail.allowed?.report) doors.push({ key: 'report', label: 'Reports', href: casePath(row.uid, 'sign-off') });
+  if (detail.allowed?.memo_read) doors.push({ key: 'memo', label: 'Memo', href: casePath(row.uid, 'sign-off') });
+  return doors;
+}
+
+/**
+ * D6180: the template depths offered when a case is opened (`GET
+ * /dd/templates`), each with its current item count. A picker is drawn only
+ * when more than one is offered; otherwise the case opens at Standard.
+ */
+export function templateChoices(read) {
+  const list = read?.status === 'ready' && Array.isArray(read.data?.templates) ? read.data.templates : [];
+  return list.filter((t) => t && DEPTH_WORD[t.depth]).map((t) => {
+    const n = Number(t.current?.item_count);
+    return { depth: t.depth, label: DEPTH_WORD[t.depth], line: Number.isFinite(n) ? `${n} checklist item${n === 1 ? '' : 's'}` : 'Item count not recorded' };
+  });
+}
+
 /** Requests to the founder, from the case read, each with how long it has waited and its due date (D1248). */
 export function requestRows(detail, nowMs = Date.now()) {
   return (detail?.requests || []).map((r) => {
@@ -115,14 +201,24 @@ export const QUESTIONS_SLOT = {
 /**
  * The room's door in one of DL8's three access states, from the room-access
  * read and, once granted, the shared room read. Withheld files are a count.
+ *
+ * D4815 DX10 (#5907, board DE10): four access states and a fifth for a read
+ * that failed, in DE10's words:
+ *   not_opened   A · "The founder has not opened the data room to you." · Ask for access
+ *   behind_nda   B · "You have access. 6 files require an NDA." · Sign NDA
+ *   nda_pending  C · "Waiting for signatures." (its own state, never B's footnote)
+ *   open / nda_on_file   D · folders, search and files
+ *   unreadable   E · "Data room access could not be confirmed." · Try again, never Ask
+ * DE10 also draws a signed count ("2 of 3 signed"); the access read carries
+ * the NDA's status only, so no count is drawn.
  */
 export function roomStateOf(access, room) {
   if (!access || access.status === 'loading') return { state: 'loading' };
-  if (access.status === 'unreadable') return { state: 'unreadable', what: 'Your access to the data room' };
+  if (access.status === 'unreadable') return { state: 'unreadable', what: 'Data room access', line: 'Data room access could not be confirmed.' };
   const a = access.data || {};
   if (!a.granted) {
     const r = a.request;
-    let line = 'The founder has not opened their data room to you.';
+    let line = 'The founder has not opened the data room to you.';
     let canAsk = true;
     if (r?.state === 'open') { line = `You asked for access on ${dayOf(r.created_at) || 'a date not recorded'}. The founder decides; you’ll get a notice either way.`; canAsk = false; }
     else if (r?.state === 'declined') line = `The founder declined your request on ${dayOf(r.decided_at) || 'a date not recorded'}${r.decline_reason ? `: ${r.decline_reason}` : '.'}`;
@@ -140,12 +236,23 @@ export function roomStateOf(access, room) {
   }
   if (withheld > 0) {
     const pending = a.nda?.status === 'out_for_signature';
+    // C: the NDA is out for signature. Its own state, so nothing offers Sign NDA twice.
+    if (pending) {
+      return {
+        state: 'nda_pending',
+        line: 'Waiting for signatures.',
+        sub: `${withheld} file${withheld === 1 ? ' opens' : 's open'} once every party has signed.${until}`,
+        withheld,
+        ndaPending: true,
+        canSign: false,
+      };
+    }
     return {
       state: 'behind_nda',
-      line: `You have access. ${withheld} file${withheld === 1 ? ' is' : 's are'} behind an NDA.${until}`,
+      line: `You have access. ${withheld} file${withheld === 1 ? ' requires' : 's require'} an NDA.${until}`,
       withheld,
-      ndaPending: pending,
-      canSign: !pending && a.founder_user_id != null,
+      ndaPending: false,
+      canSign: a.founder_user_id != null,
     };
   }
   return { state: 'open', line: `You have access. No file you can open here needs an NDA.${until}`, withheld: 0 };
@@ -160,7 +267,42 @@ export function roomListing(data) {
   const files = Array.isArray(data?.files) ? data.files : [];
   const folders = (Array.isArray(data?.folders) ? data.folders : []).map((f) => ({ uid: f.uid, name: f.name, count: files.filter((x) => x.folder_uid === f.uid).length }));
   const loose = files.filter((x) => !x.folder_uid || !folders.some((f) => f.uid === x.folder_uid)).length;
-  return { folders, loose, files: files.map((f) => ({ uid: f.uid, name: f.name, folder_uid: f.folder_uid || null, type: f.content_type || NOT_RECORDED, size: sizeOf(f.size_bytes), added: dayOf(f.created_at) || NOT_RECORDED })) };
+  return { folders, loose, files: files.map((f) => ({ uid: f.uid, name: f.name, folder_uid: f.folder_uid || null, type: fileTypeOf(f.content_type, f.name), size: sizeOf(f.size_bytes), added: dayOf(f.created_at) || NOT_RECORDED })) };
+}
+
+/**
+ * D4815 DX10 (#5907): a file's type in a reader's word (DE10's Type column:
+ * PDF, Excel, Archive), from its stored content type, else its extension.
+ * Neither recorded is "Not recorded"; a known type with no word is "File".
+ */
+const TYPE_BY_MIME = [
+  [/^application\/pdf$/, 'PDF'],
+  [/spreadsheet|ms-excel|^text\/csv$/, 'Spreadsheet'],
+  [/wordprocessing|msword|opendocument\.text/, 'Document'],
+  [/presentation|ms-powerpoint/, 'Slides'],
+  [/zip|x-7z|x-rar|x-tar|gzip/, 'Archive'],
+  [/^image\//, 'Image'],
+  [/^video\//, 'Video'],
+  [/^audio\//, 'Audio'],
+  [/^text\//, 'Text'],
+];
+const TYPE_BY_EXT = {
+  pdf: 'PDF', xlsx: 'Spreadsheet', xls: 'Spreadsheet', csv: 'Spreadsheet', numbers: 'Spreadsheet',
+  docx: 'Document', doc: 'Document', pages: 'Document', odt: 'Document',
+  pptx: 'Slides', ppt: 'Slides', key: 'Slides',
+  zip: 'Archive', '7z': 'Archive', rar: 'Archive', gz: 'Archive', tar: 'Archive',
+  png: 'Image', jpg: 'Image', jpeg: 'Image', gif: 'Image', webp: 'Image',
+  mp4: 'Video', mov: 'Video', mp3: 'Audio', wav: 'Audio', txt: 'Text', md: 'Text',
+};
+export function fileTypeOf(contentType, name) {
+  const mime = String(contentType || '').toLowerCase().split(';')[0].trim();
+  if (mime) {
+    const hit = TYPE_BY_MIME.find(([re]) => re.test(mime));
+    if (hit) return hit[1];
+  }
+  const ext = /\.([a-z0-9]{1,8})$/i.exec(String(name || ''))?.[1]?.toLowerCase();
+  if (ext && TYPE_BY_EXT[ext]) return TYPE_BY_EXT[ext];
+  return mime ? 'File' : NOT_RECORDED;
 }
 
 export function sizeOf(bytes) {

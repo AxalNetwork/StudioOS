@@ -298,7 +298,9 @@ test('CT23a at desktop width: the table, the side column with its bars, and no p
     assert.equal(v.count('captable-holder-card'), 0);
     assert.equal(v.count('captable-phone-overview'), 0);
     assert.equal(v.count('captable-bars'), 1);
-    assert.ok(!hasClass(v.cls(v.by('captable-record')), 'flex-1'));
+    // D5081 part 3 (#5081): on a desktop Record an issuance is the module header's, so the tool bar has none.
+    assert.ok(!v.by('captable-record'));
+    assert.ok(v.by('cycle-action'));
   } finally { await v.close(); }
 });
 
