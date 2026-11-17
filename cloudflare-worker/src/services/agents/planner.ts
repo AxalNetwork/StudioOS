@@ -21,6 +21,10 @@
  * ACCEPT. One proposal is one plan. A manager may remove or retitle items
  * first; every kept item becomes a task in ONE D1 batch with `source_kind =
  * 'plan'`, its dependencies included, so a failure creates none.
+ *
+ * RECRUITS (D7075, #7075). An item whose role has no agent on the team is
+ * unassigned, as before, and the same batch files a recruit request for that
+ * role (`recruits.ts`): a manager approves or declines it.
  */
 import type { Env, User } from '../../types';
 import { quoteRun, run, type TaskClass } from '../aiRouter';
@@ -34,6 +38,7 @@ import type { GoalRow } from './goals';
 import { personaOf } from './personas';
 import { heldFor } from './runActivity';
 import { chargedFor } from './agentRun';
+import { recruitStatements } from './recruits';
 
 /**
  * #4394 (TM10c, TM10d): the agent that plans, by its persona only, never a job
@@ -303,7 +308,7 @@ const addDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString
  * task, its dependencies and its event in ONE batch. A failed batch rolls
  * back the claim too, without a second write to release it.
  */
-export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid: unknown, edits: PlanEdits, user: User): Promise<{ ok: true; tasks: string[] } | PlanRefusal> {
+export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid: unknown, edits: PlanEdits, user: User): Promise<{ ok: true; tasks: string[]; recruits: string[] } | PlanRefusal> {
   if (typeof proposalUid !== 'string' || !proposalUid) return { ok: false, status: 400, code: 'invalid_plan', message: 'Name the plan to accept.' };
   const row = await env.DB.prepare(
     `SELECT uid, status, payload_json FROM ai_rail_proposals WHERE uid = ? AND rail_option = ? AND record_ref = ?`,
@@ -327,6 +332,10 @@ export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid:
     const a = 'role_key' in it.suggested_assignee ? agents.find((x) => x.role_key === (it.suggested_assignee as any).role_key) ?? null : null;
     assignees.push(a && !(await agentFits(env, a, it.module, null)) ? a.id : null);
   }
+  // D7075: a role the team has no agent for at all (not even a paused one) becomes a recruit request.
+  const onTeam = new Set(((await env.DB.prepare(
+    "SELECT DISTINCT role_key FROM team_agents WHERE scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ? AND status <> 'removed'",
+  ).bind(s.kind, companyId ?? 0, projectId ?? 0).all<{ role_key: string }>()).results || []).map((r) => r.role_key));
 
   // This private marker exists only inside the transaction. A losing claim
   // inserts no tasks; the final statement replaces it with the public decision.
@@ -355,6 +364,10 @@ export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid:
       ).bind(uids[i], uids[d]));
     }
   });
+  const missing = kept.items.flatMap((it, i) => ('role_key' in it.suggested_assignee && !onTeam.has(it.suggested_assignee.role_key)
+    ? [{ role_key: it.suggested_assignee.role_key, taskUid: uids[i] }] : []));
+  const recruits = recruitStatements(env, s, { proposalUid: row.uid, marker, userId: Number(user.id), missing });
+  statements.push(...recruits);
   statements.push(env.DB.prepare(
     'UPDATE ai_rail_proposals SET decided_payload_json = ? WHERE uid = ? AND decided_payload_json = ?',
   ).bind(decision, row.uid, marker));
@@ -364,7 +377,7 @@ export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid:
   } catch {
     return { ok: false, status: 503, code: 'plan_not_saved', message: 'The plan’s tasks could not be saved, so none were. Try again.' };
   }
-  return { ok: true, tasks: uids };
+  return { ok: true, tasks: uids, recruits: [...new Set(missing.map((m) => m.role_key))] };
 }
 
 // ─────────────────────────────────────────────────────────────── discard
