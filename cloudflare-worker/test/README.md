@@ -352,6 +352,7 @@ catalogue version only in the fixture.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 | `network_intro_offers_6637.test.ts` | D6637: real migrated SQLite authorization, consent, failure and concurrency regressions. |
 
+| `licence_agreement_revision_6562.test.ts` | D6562: recorded rendered-input snapshots, truthful comparisons, independent readiness, legacy uncertainty, frozen text and unready-send refusal over the full migrated schema. |
 | `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |

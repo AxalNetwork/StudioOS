@@ -268,7 +268,9 @@ async function ensureSchema(env: Env): Promise<void> {
        responded_at TEXT,
        notes TEXT,
        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+       offer_cents INTEGER CHECK (offer_cents IS NULL OR (offer_cents > 0 AND offer_cents <= 1000000000000000)),
+       respond_by TEXT CHECK (respond_by IS NULL OR respond_by GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]')
      )`,
     `CREATE INDEX IF NOT EXISTS idx_raise_pro_rata_round ON raise_pro_rata(round_id)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_raise_pro_rata_holder ON raise_pro_rata(round_id, holder_email) WHERE holder_email IS NOT NULL`,
@@ -1092,6 +1094,19 @@ export const COMMIT_STATUSES = ['soft', 'signed', 'wired'];
 export const INSTRUMENTS = ['safe', 'note', 'equity'];
 const PRO_RATA_STATES = ['offered', 'taking', 'waived', 'expired'];
 
+/**
+ * D6908: the offer to one holder, in cents (`offer_amount` in the round's
+ * units). `undefined` leaves it as it is; '' or null clears it; anything not
+ * a positive amount is refused by the caller.
+ */
+function offerCents(v: unknown): number | null | undefined | 'bad' {
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0 || n > 10_000_000_000_000) return 'bad';
+  return Math.round(n * 100);
+}
+
 function ymd(v: unknown): string | null {
   if (v == null || v === '') return null;
   const s = String(v).slice(0, 10);
@@ -1361,14 +1376,17 @@ r.post('/raise-pro-rata', async (c) => {
     if (!Number.isFinite(stake) || stake < 0 || stake > 100) {
       return c.json({ detail: 'prior_stake_pct must be between 0 and 100' }, 400);
     }
+    const offer = offerCents(body.offer_amount);
+    if (offer === 'bad') return c.json({ detail: 'offer_amount must be a positive amount' }, 400);
     const res = await c.env.DB.prepare(
-      `INSERT INTO raise_pro_rata (uid, project_id, round_id, holder_name, holder_email, prior_stake_pct, state, offered_at, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'offered', ?, ?, ?, ?)`,
+      `INSERT INTO raise_pro_rata (uid, project_id, round_id, holder_name, holder_email, prior_stake_pct, state, offered_at, notes, created_at, updated_at,
+                                   offer_cents, respond_by)
+       VALUES (?, ?, ?, ?, ?, ?, 'offered', ?, ?, ?, ?, ?, ?)`,
     ).bind(
       newUid(), pid, round.id, name,
       body.holder_email ? String(body.holder_email).toLowerCase().slice(0, 200) : null,
       stake, ymd(body.offered_at), body.notes ? String(body.notes).slice(0, 4000) : null,
-      nowIso(), nowIso(),
+      nowIso(), nowIso(), offer ?? null, ymd(body.respond_by),
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM raise_pro_rata WHERE id = ?').bind(lastInsertId(res)).first<any>();
     return c.json(fresh, 201);
@@ -1402,8 +1420,15 @@ r.put('/raise-pro-rata/:id', async (c) => {
     // Any state change away from 'offered' is a response; stamp it once.
     const responded = state !== 'offered' && !row.responded_at ? nowIso() : row.responded_at;
 
+    // D6908: the offer to this holder and the day to answer by, as the founder records them.
+    const offer = offerCents(body.offer_amount);
+    if (offer === 'bad') return c.json({ detail: 'offer_amount must be a positive amount' }, 400);
+    if (body.respond_by !== undefined && body.respond_by !== null && body.respond_by !== '' && !ymd(body.respond_by)) {
+      return c.json({ detail: 'respond_by must be a day, YYYY-MM-DD' }, 400);
+    }
     await c.env.DB.prepare(
-      `UPDATE raise_pro_rata SET holder_name=?, holder_email=?, prior_stake_pct=?, taking_amount=?, state=?, offered_at=?, responded_at=?, notes=?, updated_at=? WHERE id=?`,
+      `UPDATE raise_pro_rata SET holder_name=?, holder_email=?, prior_stake_pct=?, taking_amount=?, state=?, offered_at=?, responded_at=?, notes=?,
+              offer_cents=?, respond_by=?, updated_at=? WHERE id=?`,
     ).bind(
       body.holder_name !== undefined ? String(body.holder_name).trim().slice(0, 200) || row.holder_name : row.holder_name,
       body.holder_email !== undefined ? (body.holder_email ? String(body.holder_email).toLowerCase().slice(0, 200) : null) : row.holder_email,
@@ -1412,6 +1437,8 @@ r.put('/raise-pro-rata/:id', async (c) => {
       body.offered_at !== undefined ? ymd(body.offered_at) : row.offered_at,
       responded,
       body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : row.notes,
+      offer === undefined ? row.offer_cents ?? null : offer,
+      body.respond_by !== undefined ? ymd(body.respond_by) : row.respond_by ?? null,
       nowIso(), row.id,
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM raise_pro_rata WHERE id = ?').bind(row.id).first<any>();
