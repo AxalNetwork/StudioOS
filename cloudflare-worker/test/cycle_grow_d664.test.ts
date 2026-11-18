@@ -144,6 +144,7 @@ async function fixture() {
   db.exec(ddl('125')); db.exec(file('437')); db.exec(file('202611091055'));
   db.exec(file('443'));
   db.exec(file('462'));
+  db.exec(file('202611161128_6865')); // D6865: the feedback's contact link and origin
   db.exec(file('202611041912'));
   db.exec(file('507'));
   db.exec(file('580'));

@@ -57,6 +57,9 @@ export default function ProgramsTable({ status, scope = 'studio', programs, reas
   const notRecorded = <Unrecorded>Not recorded</Unrecorded>;
   return (
     <SectionCard title={studio ? 'Programs' : 'Assigned to you'} meta={status === 'ready' && rows.length ? `${rows.length}` : null} testid={`programs-${scope}`}>
+      <Link to="/admin/programs/learning" className="mb-3 inline-block text-[12.5px] font-semibold text-axal-violet-deep underline dark:text-violet-300">
+        Learning overview in Programs
+      </Link>
       {block || (
         <>
           <div className={`hidden border-b border-axal-hairline pb-2 text-[10px] font-extrabold uppercase tracking-axal-label text-axal-faint dark:border-gray-800 dark:text-gray-500 ${GRID}`} aria-hidden="true">

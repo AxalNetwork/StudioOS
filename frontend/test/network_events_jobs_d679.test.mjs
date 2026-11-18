@@ -111,8 +111,10 @@ test('no sample event, circle, job, company, person or program fact from the can
       assert.ok(!body.includes(s), `${FILES[key]} carries the canvas sample "${s}"`);
     }
   }
-  // The static program list in data/network.js is invented; the page no longer reads it.
-  assert.doesNotMatch(code(SRC.events), /\bPROGRAMS\b|PROGRAM_CATEGORIES|AUDIENCES/, 'the curated program list is not drawn');
+  // Public Events keeps its real format filters; the retired preview catalogue must not return.
+  const network = code(read('frontend/src/data/network.js'));
+  assert.doesNotMatch(network, /export const (PROGRAMS|PROGRAM_CATEGORIES|AUDIENCES)\b/);
+  assert.match(SRC.events, /import \{ FORMATS \} from '\.\.\/\.\.\/data\/network'/);
 });
 
 test('every list is a live read', () => {

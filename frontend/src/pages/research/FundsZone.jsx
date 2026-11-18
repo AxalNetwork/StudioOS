@@ -300,6 +300,9 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
     }
     setParams(p, { replace: true });
   };
+  // D7166 (RFD-01): the empty list's two ways forward. Browse opens the Directory with its search focused.
+  const browse = () => { pick('directory'); setTimeout(() => document.getElementById('fd-q')?.focus(), 0); };
+  const addByHand = () => document.getElementById('fz-add-name')?.focus();
 
   // One read per page: the newest 500 by created_at was the whole list, and
   // every count was over those 500. Now the Worker pages and counts.
@@ -375,7 +378,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
       // D4613: the directory uid makes a repeat of this add idempotent on the Worker.
       const row = await api.research.fundCreate({ name: fund.name, source_url: fund.website || null, catalogue_uid: fund.uid });
       if (row?.uid) setCreated((rows) => ({ ...rows, [fund.uid]: row.uid }));
-      setDirectoryNote({ uid: fund.uid, ok: true, text: row?.existing ? `${fund.name} is already on My funds.` : `${fund.name} added to My funds.` });
+      setDirectoryNote({ uid: fund.uid, ok: true, text: row?.existing ? `${fund.name} is already on your shortlist.` : `${fund.name} saved to your shortlist.` });
       await load();
     } catch (e) {
       setDirectoryNote({ uid: fund.uid, ok: false, text: e?.detail || e?.message || 'That did not save.' });
@@ -438,7 +441,8 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         <p data-testid="my-funds-count-scope" className="text-[11.5px] text-axal-muted dark:text-gray-400">
           {countScopeLine(data) || 'No figure is shown until the read answers.'}
         </p>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {/* D7166 (RFD-01): an empty list shows no counters, never a row of zeros. */}
+        <div className={listState === 'ok' && !narrowed && !items.length ? 'hidden' : 'grid grid-cols-2 gap-3 lg:grid-cols-5'}>
           <FundStat label="Researched" value={data?.saved_count ?? data?.researched_count} note="every fund you saved" phase={listState} />
           <FundStat label="Right stage" value={data?.right_stage_count} note="your read · they write where you are" phase={listState} />
           <FundStat
@@ -475,6 +479,12 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
             <NothingYet
               title="No fund is on your list yet"
               body="Start from the Directory and choose a vehicle, or add a fund by hand. What you record stays private to you."
+              action={(
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={buttonClass} onClick={browse} data-testid="funds-browse-directory">Browse fund directory</button>
+                  <button type="button" className={ghostButtonClass} onClick={addByHand}>Add a fund by hand</button>
+                </div>
+              )}
             />
           )}
         >
@@ -656,7 +666,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
           <h3 className="text-sm font-extrabold tracking-tight">Add a fund</h3>
           <form className="mt-3 grid gap-3 md:grid-cols-3" onSubmit={add}>
             <Field label="Fund">
-              <input className={inputClass} value={form.name} maxLength={200} required
+              <input id="fz-add-name" className={inputClass} value={form.name} maxLength={200} required
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </Field>
             <Field label="Their thesis, in their words">

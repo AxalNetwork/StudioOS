@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Introductions Workspace and Inbox · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Introductions · #7063 · continues #6256 (NW3, NW8.1) and #4799</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Introductions desk — what needs you first, a history that pages, and notification links that open the exact record</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Network › Introductions (/network/introductions) for a member who opens it asking “What needs my attention?”. It continues the approved Network v2 investor addendum (#6256): the header with one primary and Ask beside it, the four links, the request sheet, the state words and the one Eadwyn rail (#5130). Frames are named NW3-intro-desk beside the original NW3 and NW8.1 ids; keys carry the NID prefix. The investor sees From your team, Curated matches and Your asks, each with its own count and unit. Asked of you and Follow-ups due are read on their own, so the Team and Status filters never hide them. “20 shown of 201” appears only where the server gives a whole-list total. A notification link opens its exact record through a scoped lookup, carries the target through sign-in, and returns the member to the same filters, scroll and focus. Platform States (D5129) throughout. Violet dashed ◇ tags mark backend work; neither tag is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main c59a9f2f66 · [Rhea Okoro], [Harbor Lane Capital], [Morgan Vale], [Elm Studio] and every person, company and figure (201 requests, 1 asked of you, 2 follow-ups due, 4 of 11 matches, 4 credits, 2 of 3 asks) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Introductions Workspace and Inbox Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW3-intro-desk · entry', 'Desk · investor (NW3)', 'The page opens on what needs the member: a Needs you now strip, then From your team with Asked of you (1, from [Morgan Vale]) and Follow-ups due (2, [Elm Studio] 4 days late) above the history. The history shows 20 of 201 with Load 20 more. Curated matches (4 awaiting of 11, Accept uses 1 credit) and Your asks (1 Pending, each ask uses 1). Request an introduction is the one primary; Offer one is separate (◇ #6637).', [F('NID01', false, 1580)]],
+      ['NW3-intro-desk · filtered history', 'Filtered to Declined', 'Status: Declined shows 20 of 38. Asked of you and Follow-ups due stay, unfiltered and labelled so.', [F('NID01B', false, 1180)]],
+      ['NW3-intro-desk · licences', 'Other licences', 'Founder, advisor and operating partner see only the groups and actions their licences grant. Asks stay investor only. Groups not granted are not drawn.', [C('NID02', false, 1400, 440)]],
+      ['NW3-intro-desk · HQ / support', 'Support session, read-only', 'From your team is refused by the server without disclosing anything. Curated matches and Your asks are read-only in the page; the server does not refuse those writes yet (◇).', [F('NID03', false, 960)]],
+      ['NW3-intro-desk · states', 'States for each read', 'Loading without zeros, first use, no filter matches, partial read failure on each read with Retry, missing optional fields, a refused team filter, and a failed save that keeps the note. Then paging: loading, failed, loaded 40, end, a refused page marker, and the 200 cap on matches and asks (◇).', [C('NID04', 'Desk reads', 1400, 850), C('NID04B', 'Paging and counts', 1400, 650)]],
+      ['NW3-intro-desk · linked record', 'Notification to the exact record', 'A notification names a record from July: outside the 20 shown and outside the Declined filter. Sign-in carries the target. A direct lookup opens it as the record sheet over the unchanged desk. Then the return, Not available only after a 404, Unavailable with Retry, and a proposition link older than the 200 read (◇).', [C('NID05A', 'Notification · sign-in · lookup', 1400, 470), F('NID05B', 'Record sheet over the filtered desk', 1180), C('NID05C', 'Return and lookup outcomes', 1400, 560)]],
+      ['NW3-intro-desk · request vs proposition', 'Teammate request or curated match', 'The same URL with kind=request opens a free teammate request; kind=proposition opens a curated match that uses 1 credit to accept. Where each lands for founder, advisor, investor and support.', [C('NID06', false, 1400, 560)]],
+      ['NW3-intro-desk · entry and Eadwyn', 'Request an introduction and Eadwyn', 'The page primary opens the existing request sheet (target path in #7065, teammate detail in #7066). Eadwyn quotes the cost of a follow-up draft for [Elm Studio]; the member accepts it into the composer, edits or discards it.', [C('NID07', 'Header and request sheet', 1400, 400), C('NID07B', 'Eadwyn rail', 360, 640)]],
+      ['NW3-intro-desk · tablet', 'Tablet 768', 'The desk in one column with the strip, both unfiltered groups, the history and Curated matches.', [C('NID08', false, 768, 1610)]],
+      ['NW8.1 · NW3-intro-desk · phone', 'Phone 390', 'Entry with the three counts, a linked record with the next action in view, the filtered history with Load 20 more, sign-in that carries the target, and the decision for [Morgan Vale]. 44 px targets, sticky primary.', [P('NID09A', 'Entry'), P('NID09B', 'Linked record'), P('NID09C', 'Filtered history'), P('NID09D', 'Sign-in'), P('NID09E', 'Asked of you')]],
+      ['NW3-intro-desk · dark', 'Dark', 'The desk and the phone linked record on the dark tokens; states keep their words and shapes.', [F('NID10', 'Desk · dark', 1580), P('NID10B', 'Linked record · dark')]],
+      ['Prototype', 'Frames, keyboard and focus', 'Each frame’s role, entry point, next action and data, then keyboard order, focus return and announcements.', [W('NID11')]],
+      ['Handoff', 'Handoff', 'What main does today, frontend-only work, backend required (◇), existing components and what is open.', [W('NIDH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
