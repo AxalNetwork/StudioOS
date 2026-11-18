@@ -23,8 +23,9 @@ import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
 import MarketFigureHistory from '../MarketFigureHistory';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
-import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection } from '../ValidateSections';
+import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection, ThemeRecordParts } from '../ValidateSections';
 import HypothesisRecord from '../HypothesisRecord';
+import { painThemesApi } from '../../../lib/api/painThemes.js';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
@@ -234,6 +235,8 @@ const validate = {
       onExport={() => api.exportValidatePainMap(ctx.projectId)}
       // #1692's `attach` on the theme record, so the theme's activity logs it.
       onAssign={(themeId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', themeId, 'attach', body).then(ctx.reload)}
+      // #6006 (V17): the selection bar's one bulk write, to a theme or a new one.
+      onAssignMany={(body) => painThemesApi.assignMany(ctx.projectId, body).then(ctx.reload)}
       newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
     experiments: (data, ctx) => (
       <>
@@ -261,6 +264,12 @@ const validate = {
   // what the read sends, with the session's working parts inside it.
   recordPage: toFnMap({
     'customer-research': (read, ctx) => <InterviewRecord read={read} {...ctx} />,
+    // #6006 (V19): the theme's sources, links, Used on slide and handoffs under the Worker's sections.
+    'problem-discovery': (read, ctx) => <div className="space-y-3">
+      <RecordView record={read} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
+        onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+      <ThemeRecordParts parts={read?.parts} projectId={ctx.projectId} canWrite={Array.isArray(read?.actions) && read.actions.length > 0} />
+    </div>,
     // D1069 (#2939, VB2a): after a given Proceed or Pivot, "Plan the build" above the record.
     verdict: (read, ctx) => <VerdictRecordWithPlan read={read} render={(record) => (
       <RecordView record={record} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
