@@ -1,9 +1,10 @@
 # Public claims record — partner verification and the 28-day Spin-Out Lab (#5513)
 
-A redacted record of two measurable public claims, the evidence on `main` behind each, and the wording proposed in its place. It is **proposed, pending the owner's answer** on #5513. Nothing in it is approved wording until the owner fills in the owner fields and confirms the answer. It holds no customer data.
+A redacted record of two measurable public claims, the evidence on `main` behind each, and the approved wording. It holds no customer data.
 
-- **Prepared:** 2026-11-16, slot S21, from `main` at the time of the draft PR.
-- **Decision:** `documentation/architecture/decisions/D5513.md`.
+- **Status: approved.** The owner answered all five questions on 2026-11-17 (#5513). The wording for claims 1 and 2 shipped in #6929. The fixed outcome figures and the Demo Day testimonials came down in the follow-up PR (D5513-p2).
+- **Prepared:** 2026-11-16, slot S21. **Updated:** 2026-11-17.
+- **Decisions:** `documentation/architecture/decisions/D5513.md`, `D5513-p2.md`.
 - **Out of scope here:** pricing claims (#4655) and the homepage counters (#1549).
 
 ## Claim 1 — "verified" partners
@@ -33,9 +34,9 @@ A redacted record of two measurable public claims, the evidence on `main` behind
   - This covers formation (incorporation) partners only, not the wider network of advisors and operators. Production rows were not inspected for this record.
 - **"Verified partner badge" is a partner plan feature.** It is a badge awarded by the network score (`partnerEarnings.js:109`, `recomputeNetworkScore`), not an identity or licence check. It is shown to partners inside the product, not as a public claim about the network. No change is proposed; the owner may want it renamed.
 
-### Proposed wording
+### Approved wording
 
-The coordinator's answer A was "'verified' means the partner passed the in-product partner proof flow". The trace shows that flow is not a verification of the partner, so A does not hold as written. The proposal keeps "verified" only where a check is recorded:
+The coordinator's answer A was "'verified' means the partner passed the in-product partner proof flow". The trace shows that flow is not a verification of the partner, so A does not hold as written. The approved wording keeps "verified" only where a check is recorded:
 
 - **Hero:** "venture tools, a global partner network, and capital…" ("verified" dropped).
 - **Pillar:** "Partners, advisors, and operators working with founders across borders, each approved before they are listed, not a vendor directory."
@@ -44,8 +45,9 @@ The coordinator's answer A was "'verified' means the partner passed the in-produ
 
 | Field | Value |
 |---|---|
-| Owner | _(owner to fill)_ |
-| Review date | _(owner to fill)_ |
+| Approved wording | The hero and pillar wording above; no KYB filter (shipped in #6929) |
+| Owner | The owner (Axal VC), per the 2026-11-17 answer on #5513 |
+| Review date | The next quarterly review after 2026-11-17 |
 | Re-review trigger | Any change to `directory_listed` approval, to the #6692 verification rule, or a KYB status being recorded for partners |
 
 ## Claim 2 — "28 days", idea to incorporated company
@@ -70,13 +72,12 @@ The coordinator's answer A was "'verified' means the partner passed the in-produ
 - **"Incorporated" is recorded at payment, not at registration.** D585: `incorporation_completed` is recorded when the founder's incorporation order is paid (`paid`, `packet_processing`, `packet_ready` or `filed`), and that also graduates the founder. A paid order is not a registered company: when the state or registry registers it depends on the jurisdiction and the filer. Owner decision 7b on #6680 may change this.
 - **Measured outcomes.**
   - `SpinoutLabInvestorPage.jsx` shows "Incorporated on time" from the live programme read (`on_time_pct`), measured at payment per D585.
-  - **When that read is unavailable, the page falls back to fixed figures in `frontend/src/lib/spinoutFundModel.js:130–134` (`graduates: 37`, `onTimeIncorpPct: 86`, `alumniRaisedM: 8.6`).**
-  - The fund brief and quarterly report view models (`fundBriefViewModel.js:98–100`, `quarterlyReportViewModel.js`) always use those fixed figures.
-  - No source for them was found. The file itself notes that they conflict with the brochure's "12 companies built to date" and "$2.4M".
-  - **These are unsupported outcome figures.** They are recorded here for the owner and not changed by this PR, because the fund brief has its own owner. See the open question.
+  - **Until 2026-11-17, when that read was unavailable, the page fell back to fixed figures** in `spinoutFundModel.js` (`graduates: 37`, `onTimeIncorpPct: 86`, `alumniRaisedM: 8.6`). So did the LP workspace hero and the fund brief, through `programFigures`. The investor page's studio-proof tiles also carried fixed figures: 92%, "34 of 37 graduates", 89%, 62%, 24 days, 30%, "11 of 37 graduates backed". No source was found for any of them.
+  - **Removed (owner, 2026-11-17; D5513-p2).** `PROGRAM` is gone from `spinoutFundModel.js` and the tiles carry no values. Every one of those figures now comes from the `GET /api/spinout-lab/fund-metrics` program block, or reads "Not recorded" ("Unreadable" when the read failed), until a source is recorded.
+  - The quarterly report view model never printed these three. It still draws other fixed tables from the model (cohort graduation counts, NAV and IRR progression, sector exposure). Those are fund-reporting figures outside this record, raised separately.
 - **Per-country formation time** will come from #6692's case events (payment to registration). No measured data was read for this record.
 
-### Proposed wording (answer A: it is the programme's length)
+### Approved wording (answer A: it is the programme's length)
 
 - **List item (homepage and founders door):** "The Spin-Out Lab is a 28-day programme from idea to an incorporation order; when the company is registered depends on eligibility and the jurisdiction".
 - **Founders door chapter:** "The 28-day Spin-Out Lab works an idea through to an incorporation order."
@@ -88,8 +89,9 @@ The coordinator's answer A was "'verified' means the partner passed the in-produ
 
 | Field | Value |
 |---|---|
-| Owner | _(owner to fill)_ |
-| Review date | _(owner to fill)_ |
+| Approved wording | "a 28-day programme from idea to an incorporation order; when the company is registered depends on eligibility and the jurisdiction" (shipped in #6929) |
+| Owner | The owner (Axal VC), per the 2026-11-17 answer on #5513 |
+| Review date | The next quarterly review after 2026-11-17 |
 | Re-review trigger | A change to `COHORT_WEEKS`, to D585's milestone timing (decision 7b), or measured registration times from #6692 that support a stronger statement |
 
 ## Criterion 3 — endorsements and identifiable examples
@@ -97,13 +99,13 @@ The coordinator's answer A was "'verified' means the partner passed the in-produ
 - **`/lp/spinout-demo-day` (`SpinoutDemoDayPage.jsx:170–185`)** shows named testimonials ("Oliver K., Angel Investor, Frontier Tech LP"; "Yasmin T., Founder, Cohort 3, Spin-Out Lab Graduate").
   - No authorisation, consent or source for them was found.
   - The partner proof flow (`partner_offers.ts`) is the existing consent path for a testimonial.
-  - **Proposed:** remove them, or replace them with consented proof items. This PR does not change them; this is for the owner.
+  - **Removed (owner, 2026-11-17; D5513-p2).** The "Past Attendees" section and its three named testimonials are off the page. They return only with recorded consent and a source, through the partner proof flow.
 - **No other identifiable example** backing either claim was found on the public pages.
 
-## Open question for the owner
+## Owner answers (2026-11-17)
 
-1. **Partners:** confirm the proposed wording ("verified" dropped; listings "approved before they are listed"; the KYB filter removed). Or say that "verified" should return only for formation partners, with the #6692 check named.
-2. **28 days:** confirm A, that it is the programme's length and that incorporation is an order, with registration timing subject to eligibility and jurisdiction. Or supply cases for B (an achieved outcome).
-3. **Fixed outcome figures:** the fund brief, the quarterly report view and the investor page fallback show 37 graduates, 86% incorporated on time and $8.6M raised. Supply their source, or have them removed or replaced by the live read.
-4. **Demo Day testimonials:** keep them with consent and a source, or remove them.
-5. **Owner and dates:** who owns these claims, and the review date for each.
+1. **Partners:** drop "verified". Listings read "approved before they are listed", and the KYB filter is removed. Shipped in #6929.
+2. **28 days:** the programme's length, with the wording in claim 2. Shipped in #6929.
+3. **Fixed outcome figures** (37 graduates, 86%, $8.6M): removed. Only the live read is shown, or nothing, until a source is recorded. The investor page's other fixed studio-proof figures follow the same rule. Done in D5513-p2.
+4. **Demo Day testimonials:** taken down until consent and a source are recorded. Done in D5513-p2.
+5. **Owner and review date:** the owner, with review at the next quarterly review. Recorded in the tables above.
