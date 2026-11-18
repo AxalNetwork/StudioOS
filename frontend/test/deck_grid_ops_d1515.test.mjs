@@ -210,7 +210,7 @@ test('3. the history: 100 steps, typing and Accept all are one step each, a new 
   ({ doc: td, history: th } = perform(td, th, { type: 'setFlag', index: 0, key: 'notes', value: 'a' }, { coalesce: 'notes:c1', at: 0 }));
   ({ doc: td, history: th } = perform(td, th, { type: 'setTheme', theme: { kind: 'sand' } }, { at: 100 }));
   ({ doc: td, history: th } = undo(td, th));
-  ({ doc: td, history: th } = perform(td, th, { type: 'setFlag', index: 0, key: 'notes', value: 'ab' }, { coalesce: 'notes:c1', at: 200 }));
+  ({ history: th } = perform(td, th, { type: 'setFlag', index: 0, key: 'notes', value: 'ab' }, { coalesce: 'notes:c1', at: 200 }));
   assert.deepEqual(historyCounts(th), { undo: 1, redo: 0 }, 'the undone theme can no longer be redone');
   // A refused op records nothing.
   const refused = perform(d, hh, { type: 'setStructure', index: 0, structure: 'not-one' });

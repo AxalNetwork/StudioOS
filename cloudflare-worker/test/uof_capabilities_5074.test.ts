@@ -46,7 +46,7 @@ function fixture(){
 // D5069: a write names the revision it read. These tests are about other things, so the
 // helper reads the scenario's stored revision for them; the stale-revision tests pass their own.
 function revisionFor(f:any,method:string,path:string,b:any){
-  if(!b||typeof b!=='object'||'expected_revision' in b) return b;
+  if (!b || typeof b !== 'object' || 'expected_revision' in b) return b;
   // D5375: a hire edit names the hire's own revision.
   const hr=/^\/hires\/([0-9]+)(?:\?|$)/.exec(path);
   if(hr&&method==='PATCH'){const h=f.db.prepare('SELECT revision FROM use_of_funds_hires WHERE id=?').get(Number(hr[1])) as any;return h?{...b,expected_revision:Number(h.revision)}:b;}
@@ -76,7 +76,6 @@ async function call(f:any,method:string,path:string,b?:unknown,who=1,extra:Recor
 const lines=SECTION_KEYS.map((key,i)=>({key,share_pct:i===0?100:0}));
 const input=(name='Lean')=>({name,amount_to_raise_cents:120000,target_runway_months:12,start_month:'2027-01',raise_month:'2027-01',cash_cents:0,lines});
 const rows=(f:any,sql:string)=>JSON.parse(JSON.stringify(f.db.prepare(sql).all()));
-async function created(f:any,b:any=input(),who=1){const r=await call(f,'POST','/scenarios',b,who);assert.equal(r.status,201,JSON.stringify(r.body));return r.body;}
 
 const FOUNDER=1,OTHER_FOUNDER=2,ADMIN=3,INVESTOR=5;
 const FOUNDER_MAP=uofCapabilities({admin:false,founderAccount:true,support:false});

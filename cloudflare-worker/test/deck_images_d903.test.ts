@@ -34,7 +34,6 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { overlayContrast as panelContrast } from '../../frontend/src/pages/raise/pitch/imageContrast.js';
 import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
 const JWT_SECRET = 'synthetic-d903-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 // A 1 × 1 PNG, as FLUX's `{ image: base64 }` would carry it.

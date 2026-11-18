@@ -26,7 +26,6 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
 const scratch = mkdtempSync(join(tmpdir(), 'deck-new-d1599-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });

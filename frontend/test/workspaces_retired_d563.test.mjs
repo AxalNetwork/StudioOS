@@ -220,7 +220,7 @@ test('the pages removed on 2026-10-21 only forward, and no row or Also in names 
     '/services': /<MarketplaceRedirect role=\{user\?\.role\} founderTab="services" to="\/offers\/catalog" \/>/,
     '/needs': /<MarketplaceRedirect role=\{user\?\.role\} founderTab="needs" to="\/pipeline\/leads" \/>/,
   };
-  for (const [route, forward] of Object.entries(FORWARDS)) {
+  for (const route of Object.keys(FORWARDS)) {
     const block = routeBlock(APP, route);
     assert.equal(block, null, `${route} retired by D2319`);
     assert.ok(!(route in PAGE_HOMES), `${route} still has a home`);

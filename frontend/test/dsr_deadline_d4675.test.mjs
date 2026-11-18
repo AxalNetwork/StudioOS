@@ -13,12 +13,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { securityRaw } from './_securitySource.mjs';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { buildOverview } from '../src/pages/hq/security/overviewModel.js';
 import { remainingOf, openState, dueDayOf } from '../src/pages/hq/security/privacyModel.js';
 
-const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CLOCK = { rule: 'calendar_month', label: 'One calendar month from receipt, to the end of that UTC day' };
 const row = (days_left, deadline_at = '2026-02-28T23:59:59.999Z') => ({
   id: 1, email: 'subject@example.test', kind: 'erasure', requested_at: '2026-01-31 10:00:00',

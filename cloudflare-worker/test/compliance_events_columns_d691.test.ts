@@ -16,7 +16,6 @@ import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const SECRET = 'd691-only-test-jwt-secret-0123456789';
 const OWNER = 691;
 const PROJECT = 691;

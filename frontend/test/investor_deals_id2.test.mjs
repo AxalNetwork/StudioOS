@@ -40,7 +40,6 @@ const ROUTE = read('cloudflare-worker/src/routes/deals.ts');
 const RESEARCH = read('cloudflare-worker/src/routes/research.ts');
 const ROUTES = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
 const WORKSPACE = codeOnly(read('frontend/src/pages/investor/InvestorDealsWorkspace.jsx'));
-const SCHEMA = read('cloudflare-worker/sql/schema_baseline.sql');
 const CANVAS = read('design/canvases/integrated/Pages · Investor Deals.dc.html');
 
 /** The ID2 fixture object alone, bounded at both ends. */

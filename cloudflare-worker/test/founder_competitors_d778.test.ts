@@ -36,7 +36,6 @@ import { __setPublicResolverForTest } from '../src/services/webFetch.ts';
 __setPublicResolverForTest(async () => ['93.184.216.34']);
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-d778-competitors-0123456789';
 const FOUNDER = 1;
 

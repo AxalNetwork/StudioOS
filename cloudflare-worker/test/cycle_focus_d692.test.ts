@@ -32,7 +32,6 @@ import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const day = (offset: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + offset); return d.toISOString().slice(0, 10); };
 const TODAY = day(0);
 

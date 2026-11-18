@@ -23,7 +23,6 @@ import { modelProblems } from '../src/services/decks/slideModel.ts';
 import { fullRecords, wordsFor } from './fixtures/pitchStoryFixtures.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
 const scratch = mkdtempSync(join(tmpdir(), 'deck-visuals-d903-'));
 const seed = join(scratch, 'schema.sqlite');
 {

@@ -33,7 +33,6 @@ import {
 
 const h = React.createElement;
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
 /* ------------------------------------------------------------------ *
  * Fixtures, in the shapes the Worker sends

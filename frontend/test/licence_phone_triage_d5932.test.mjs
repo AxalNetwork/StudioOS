@@ -274,7 +274,7 @@ test('L20 mounted: the triage rows are touch targets (56px rows, a 48px primary)
 test('L20 page: search leads the licence view on a phone and returns to the ledger with the query', async () => {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
-  globalThis.fetch = async (u, options = {}) => worker()(String(u), options);
+  globalThis.fetch = async (u) => worker()(String(u));
   globalThis.matchMedia = media(true);
   const container = document.createElement('div'); document.body.appendChild(container);
   const v = harness(container);

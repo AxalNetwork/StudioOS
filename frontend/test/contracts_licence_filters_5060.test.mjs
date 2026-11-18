@@ -41,15 +41,6 @@ const context = (o = {}) => ({
 });
 const executed = { id: 1, uid: 'env-1', source: 'esign', title: 'Spin-Out Lab Programme Licence', doc_type: 'program_licence', status: 'signed', raw_status: 'completed',
   signed_at: '2026-10-03T10:00:00Z', sent_at: '2026-10-01T10:00:00Z', envelope_uuid: 'env-1', provider: 'native', recipient_name: 'Studio North SAS', agreement: context() };
-const neverSent = { id: 2, uid: 'licence_agreement:lpa_2', source: 'licence_agreement', title: 'Perks — Program licence — AXL-001', doc_type: 'program_licence', status: 'draft', raw_status: 'draft',
-  envelope_uuid: null, recipient_name: 'Studio North SAS',
-  agreement: context({ agreement_uid: 'lpa_2', package_key: null, package_name: null, package_version: null, program_key: 'perks', program_name: 'Perks', legal_status: 'draft', legal_status_label: 'Draft',
-    sent_at: null, signed_at: null, envelope_uuid: null, provider: null, document_available: false, document_reason: 'Not sent: there is no envelope or signed document yet.' }) };
-const superseded = { id: 3, uid: 'env-3', source: 'esign', title: 'Learning Programme Schedule', doc_type: 'program_schedule', status: 'signed', raw_status: 'completed',
-  signed_at: '2026-09-01T10:00:00Z', sent_at: '2026-08-28T10:00:00Z', envelope_uuid: 'env-3', provider: 'native', recipient_name: 'Studio North SAS',
-  agreement: context({ agreement_uid: 'lpa_3', agreement_type: 'program_schedule_addendum', agreement_type_label: 'Program schedule / addendum', package_key: null, package_name: null, package_version: null,
-    program_key: 'learning', program_name: 'Learning', legal_status: 'superseded', legal_status_label: 'Superseded', is_current: false, envelope_uuid: 'env-3', document_available: false,
-    document_reason: 'No signed PDF is on file for this envelope yet.', links: { licence: '/admin/licences/lic_1', program_access: '/admin/licences/programs/studio/lic_1', package: null, package_reason: null } }) };
 const plain = { id: 4, uid: 'doc-1', source: 'documents', title: 'SAFE — Acme', doc_type: 'safe', status: 'sent', raw_status: 'sent', created_at: '2026-07-01T00:00:00Z' };
 
 /**

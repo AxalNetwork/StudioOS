@@ -17,7 +17,7 @@ import imports from '../src/routes/imports.ts';
 import {backfillMemberFileSizes} from '../src/services/memberFileSizeBackfill.ts';
 import {memberFileStatement} from '../src/services/memberFiles.ts';
 import { loadSchema } from './_schema_once.mjs';
-const ROOT=new URL('../sql/',import.meta.url),SECRET='synthetic-storage-test-secret-'.repeat(3);
+const SECRET='synthetic-storage-test-secret-'.repeat(3);
 const build=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});
 loadSchema(build);
 const ddl=build.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all().map(x=>String(x.sql));build.close();

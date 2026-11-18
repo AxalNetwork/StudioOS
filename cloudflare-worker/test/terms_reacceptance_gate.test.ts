@@ -302,7 +302,7 @@ test('the switch is off and can only be set to a version the writer can satisfy'
   // does not exist. When set, it must not be later than the page's date, or
   // accepting would record an earlier version and the screen would never clear.
   assert.equal(TERMS_REACCEPT_FROM, null, 'TERMS_REACCEPT_FROM is set: is counsel\'s text on /terms?');
-  if (TERMS_REACCEPT_FROM !== null) assert.ok(TERMS_REACCEPT_FROM <= V3);
+  if (TERMS_REACCEPT_FROM !== null) assert.ok(String(TERMS_REACCEPT_FROM) <= String(V3));
 });
 
 test('the route asks the second question only when a version is set, bound, and reports why', () => {

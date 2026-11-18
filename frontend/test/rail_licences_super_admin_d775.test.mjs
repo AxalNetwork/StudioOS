@@ -9,14 +9,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { codeOnly } from './_codeOnly.mjs';
 import { pageKeyFor } from '../src/lib/railPages.js';
 import { SUPER_ADMIN_BOARDS, SUPER_ADMIN_RAIL_OPTIONS, boardPage } from '../src/lib/railOptions/superAdmin.js';
 import { licencePageSource } from './_licencePage.mjs';
 
-const read = (p) => codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src', p), 'utf8'));
 
 test('H1 Licences is one board on its own route, with no option', () => {
   const boards = SUPER_ADMIN_BOARDS.filter((b) => b.section === 'Licences');

@@ -126,7 +126,6 @@ test('over 50 megapixels is refused, from the header', () => {
 
 // ─────────────────────────────────────────────────────────── the routes
 
-const root = new URL('../sql/', import.meta.url);
 const JWT_SECRET = 'synthetic-d1506-only-not-a-real-credential'.repeat(2);
 
 async function fixture() {

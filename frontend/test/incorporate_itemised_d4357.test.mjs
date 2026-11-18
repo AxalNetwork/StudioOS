@@ -17,7 +17,6 @@ import IncorporateFlow from '../src/pages/incorporate/IncorporateFlow.jsx';
 import { NEVER_CHECKED, amountText, dayLabel, quoteRows, sourceText, totalText } from '../src/pages/incorporate/itemisedQuoteModel.js';
 
 const h = React.createElement;
-const read = (p) => readFileSync(p, 'utf8');
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 
 const JURISDICTIONS = { jurisdictions: [

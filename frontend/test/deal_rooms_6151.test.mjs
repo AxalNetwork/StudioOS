@@ -111,7 +111,7 @@ const press = async (v, id) => { const n = by(v, id)[0]; assert.ok(n, `missing $
 // Mutation checked: writing before the review is confirmed (fails); the result not naming the room (fails);
 // a 402 that does not re-read the allowance (fails).
 test('DE20: Request an invitation is Review → Result, and a 402 re-reads the allowance and names the next plan', async () => {
-  const original = api.dealroomJoin; const calls = []; const results = []; let rereads = 0;
+  const original = api.dealroomJoin; const calls = []; let rereads = 0;
   api.dealroomJoin = async (id) => { calls.push(id); return { ok: true }; };
   const v = await mountContracts(h(DealRoomsList, {
     dealsState: { loading: false, error: false, deals: [DEAL] }, quotaState: QUOTA, onChanged: async () => { rereads += 1; },

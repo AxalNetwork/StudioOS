@@ -39,14 +39,13 @@ import { LANE_CONSOLES, NO_QUEUE_CONSOLES } from '../src/pages/admin/adminStudio
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import ProgramsCatalogue from '../src/pages/admin/programs/ProgramsCatalogue.jsx';
 import MentorCohortAccess from '../src/pages/admin/programs/MentorCohortAccess.jsx';
-import ReferAndEarn from '../src/pages/admin/programs/ReferAndEarn.jsx';
 import ProgramPage from '../src/pages/admin/programs/ProgramPage.jsx';
 import HeldProgramsRedirect from '../src/pages/admin/programs/HeldProgramsRedirect.jsx';
 import AdvisorCohortsRedirect from '../src/pages/admin/programs/AdvisorCohortsRedirect.jsx';
 import ReferEarnRedirect from '../src/pages/admin/programs/ReferEarnRedirect.jsx';
 import {
   CAPS, FROZEN, HQ_READS_COMMISSIONS, MOVED_NOTICES,
-  NOT_RECORDED, PAGES, PROGRAMS, SCOPE_LABEL, SCOPE_PICK_STUDIO,
+  PAGES, PROGRAMS, SCOPE_LABEL, SCOPE_PICK_STUDIO,
   SCOPE_TITLE, SCOPE_UNREAD, SUSPENDED, TRY_AGAIN, WAITING_LABEL, ageText, approveBody, bandOf, cohortName, cycleForStrip,
   etStamp, laneFrom, learningFigures, learningJoin, mentorFigures, mentorNeeds, movedNotice, openReferrals, perkPrice,
   perkQueueFrom, referralOverview, refusalText, rejectBody, routeFor, scopeChip, waitingForYou, weekLines, withoutMoved,
@@ -445,7 +444,6 @@ function worker(o = {}) {
   };
 }
 
-const down = () => response({ error: 'down' }, 503);
 const SUPER = { id: 901, role: 'admin', is_super_admin: 1, name: 'HQ', email: 'hq@example.com' };
 
 async function mounted(url, page, handle, { user = null } = {}) {

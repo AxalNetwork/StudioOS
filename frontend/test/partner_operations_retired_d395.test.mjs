@@ -53,7 +53,7 @@ const SUCCESSOR = {
 // ── The redirects ───────────────────────────────────────────────────────────
 
 test('D2319 retires the unused Partner operations aliases', () => {
-  for (const [from, to] of Object.entries(SUCCESSOR)) {
+  for (const from of Object.keys(SUCCESSOR)) {
     const line = routeLine(from);
     assert.equal(line, null, `${from} retired by D2319`);
   }

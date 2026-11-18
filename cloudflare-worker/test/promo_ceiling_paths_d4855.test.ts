@@ -23,8 +23,6 @@ import { loadSchema } from './_schema_once.mjs';
 const JWT_SECRET = 'd4855-unit-test-jwt-secret-0123456789-abcdef';
 const SUPER = 1, JANE = 10, MEMBER = 20, OTHER = 21;
 const PERIOD = quarterKey(new Date());
-const NOW = Date.UTC(2026, 10, 3, 12, 0, 0);
-const DAY = 86_400_000;
 let refuseIntent = false;
 
 // ── Stripe, stubbed ─────────────────────────────────────────────────────────

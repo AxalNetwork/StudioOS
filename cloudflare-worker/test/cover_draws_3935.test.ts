@@ -29,7 +29,6 @@ import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
 const JWT_SECRET = 'synthetic-3935-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';

@@ -24,7 +24,6 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import partnersRoute from '../src/routes/admin_referral_partners.ts';
-import { todayUtc } from '../src/services/referralPartnerTerms.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { loadSchema } from './_schema_once.mjs';
@@ -44,7 +43,6 @@ const DB_TEXT = /constraint|SQLITE|UNIQUE|FOREIGN KEY|NOT NULL|D1_ERROR/i;
 // ── 1. Referral partner terms ─────────────────────────────────────────────
 
 const SUPER = 1, ADMIN_P = 2, PIA = 10;
-const TODAY = todayUtc();
 const YESTERDAY = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });

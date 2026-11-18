@@ -78,7 +78,7 @@ async function mount(Tab, url, projectId = 3) {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
   const reads = [];
-  globalThis.fetch = async (u, o = {}) => { if (!o.method || o.method === 'GET') reads.push(String(u).replace(/^.*\/api/, '')); return handle(String(u), o); };
+  globalThis.fetch = async (u, o = {}) => { if (!o.method || o.method === 'GET') reads.push(String(u).replace(/^.*\/api/, '')); return handle(String(u)); };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);

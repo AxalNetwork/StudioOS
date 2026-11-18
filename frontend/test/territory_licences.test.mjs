@@ -30,8 +30,6 @@ const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
 const SQL = 'cloudflare-worker/sql/migrations/187_territory_licences.sql';
-const ROUTE = 'cloudflare-worker/src/routes/admin_licences.ts';
-const PAGE = 'frontend/src/pages/admin/AdminLicences.jsx';
 
 /* ---------------------------------------------------------------- *
  * Exclusivity                                                       *

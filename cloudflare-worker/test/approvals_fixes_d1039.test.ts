@@ -5,7 +5,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
@@ -19,7 +19,6 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const read = (p: string) => readFileSync(p, 'utf8');
 const scratch = mkdtempSync(join(tmpdir(), 'approvals-d1039-'));
 const seed = join(scratch, 'chain.sqlite');
 {

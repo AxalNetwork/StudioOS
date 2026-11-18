@@ -17,8 +17,6 @@
  */
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -29,8 +27,6 @@ import portfolioUpdates from '../src/routes/portfolio_updates.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const ROOT = process.cwd();
-const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 const DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   loadSchema(db);
@@ -55,9 +51,8 @@ const realFetch = globalThis.fetch;
 beforeEach(() => { fetches = 0; globalThis.fetch = (async () => { fetches += 1; throw new Error('no network in D1061'); }) as any; });
 afterEach(() => { globalThis.fetch = realFetch; assert.equal(fetches, 0, 'fetch was called'); });
 
-const ADMIN = 1, FOUNDER = 3, STRANGER_FOUNDER = 4, INV_A = 6, INV_B = 7, INV_C = 8, COFOUNDER = 9, ADVISOR = 10;
+const FOUNDER = 3, INV_A = 6, INV_B = 7, INV_C = 8;
 const ROLE: Record<number, string> = { 1: 'admin', 3: 'founder', 4: 'founder', 6: 'investor', 7: 'investor', 8: 'investor', 9: 'founder', 10: 'advisor' };
-const TODAY = new Date().toISOString().slice(0, 10);
 const Q = { label: '2026-Q3', start: '2026-07-01', end: '2026-09-30', due: '2026-11-14' };
 const PERIOD_A = 'a'.repeat(32), PERIOD_B = 'b'.repeat(32), PERIOD_B2 = 'c'.repeat(32), PERIOD_C = 'd'.repeat(32);
 
@@ -128,7 +123,6 @@ async function call(env: any, method: string, path: string, as: number, body?: u
   try { json = JSON.parse(text); } catch { /* not JSON */ }
   return { status: res.status, body: json, text, bytes: buf, headers: res.headers };
 }
-const all = (db: DatabaseSync, sql: string) => JSON.parse(JSON.stringify(db.prepare(sql).all()));
 const one = (db: DatabaseSync, sql: string) => JSON.parse(JSON.stringify(db.prepare(sql).get() ?? null));
 const fig = (list: any[], key: string) => list.find((f) => f.key === key);
 /** The required figures the fixture cannot give, each left out with a reason, and the Mercury burn shared. */

@@ -31,7 +31,6 @@ import {
 
 const SCOPE: Scope = { tenantId: 7, companyId: 70, projectId: 700 };
 const COMPANY: Scope = { tenantId: 7, companyId: 70, projectId: null };
-const ALICE: Actor = { kind: 'person', userId: 11 };
 const BOB: Actor = { kind: 'person', userId: 12 };
 const WRITER: Actor = { kind: 'agent', agentRunId: 'run_writer', onBehalfOfUserId: 11, chargeId: 'chg_1' };
 const D = (ch: string) => ch.repeat(64);

@@ -8,15 +8,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CEILING_ENFORCEMENT, CeilingEditor, ceilingFacts } from '../src/pages/hq/RevenuePage.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 import { revenuePageSource } from './_revenuePage.mjs';
 
-const root = new URL('../../', import.meta.url);
-const read = (p) => readFileSync(new URL(p, root), 'utf8');
 const PAGE = codeOnly(revenuePageSource());
 const NOW = '2026-Q4';
 const row = (o = {}) => ({

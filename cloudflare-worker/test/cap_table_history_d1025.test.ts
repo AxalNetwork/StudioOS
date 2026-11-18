@@ -12,8 +12,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
@@ -21,8 +19,6 @@ import captable from '../src/routes/captable.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '../..');
 const JWT_SECRET = 'unit-test-jwt-secret-d1025-0123456789';
 
 // 1 admin · 4 owner · 5 co-founder · 6 advisor · 9 another venture's founder

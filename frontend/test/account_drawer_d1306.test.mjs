@@ -169,8 +169,6 @@ async function mounted(el, { handle = handler() } = {}) {
   return {
     requests, has: (id) => Boolean(byId(id)), textOf: (id) => text(byId(id)), props: (id) => props(byId(id)), node: byId,
     click,
-    // D1305: a row's changes sit in its ⋯ menu (`accounts-menu-<id>`), one item each.
-    menu: async (id, item) => { await click(`accounts-menu-${id}`); await click(`accounts-menu-${id}-${item}`); },
     type: async (id, value) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onChange({ target: { value } }); }); await flush(); },
     // D1305: each row's actions are its ⋯ menu in All accounts (`accounts-menu-<id>`), not row buttons.
     menu: async (row, item) => {
