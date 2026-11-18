@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# D7326: deterministic additive worldwide manager import from the dated
+# primary-source evidence manifest. `--check` verifies the committed migration;
+# served manager aliases/hosts, explicitly recorded vehicle-number suffixes and
+# retired UIDs suppress duplicates, while existing data and source verdicts
+# remain intact.
 """D7326: reproduce the additive, primary-source worldwide manager migration.
 
 Run without arguments to write the unmerged migration, or with --check to
