@@ -27,7 +27,7 @@ on:
       check:
         description: 'Which check to run now'
         type: choice
-        options: [main-red, queue, queue-stalled, future-clock, workflow-failures]
+        options: [main-red, queue, queue-stalled, future-clock, workflow-failures, file-backup]
         default: queue
       attempts:
         description: 'Verified completion hint batch: JSON array of up to 20 [run_id, attempt] pairs'
@@ -321,3 +321,43 @@ jobs:
           FUTURE_CLOCK_DAYS: '7'
           FUTURE_CLOCK_DIR: ${{ runner.temp }}/fc
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  file-backup:
+    name: File recovery heartbeat
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      vars.FILE_RECOVERY_ENABLED == 'true' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '7 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.check == 'file-backup'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-health-file-backup
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Read only the file heartbeat metadata
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FILE_RECOVERY_HEALTH_ACCESS_KEY_ID: ${{ secrets.FILE_RECOVERY_HEALTH_ACCESS_KEY_ID }}
+          FILE_RECOVERY_HEALTH_SECRET_ACCESS_KEY: ${{ secrets.FILE_RECOVERY_HEALTH_SECRET_ACCESS_KEY }}
+        run: python3 scripts/file-recovery-independent.py read-heartbeat --out "$RUNNER_TEMP/file-recovery-heartbeat.json"
+      - name: Reconcile one file backup health episode
+        if: always()
+        run: node scripts/github-alerts.mjs file-backup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+          FILE_RECOVERY_ENABLED: ${{ vars.FILE_RECOVERY_ENABLED }}
+          FILE_DR_SECOND_COPY_ENABLED: ${{ vars.FILE_DR_SECOND_COPY_ENABLED }}
+          FILE_RECOVERY_HEARTBEAT_FILE: ${{ runner.temp }}/file-recovery-heartbeat.json

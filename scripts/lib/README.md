@@ -109,3 +109,6 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `sectionDraftGate.mjs` | D5985 (#5985): whether a reproduced section defect may get one automatic draft fix: section-triage's `cases` as the allowlist, trusted reproduced evidence, #5681's excluded inputs, no self-generated events, existing claims and PRs, the attempt, branch, PR and concurrency budget, and the stop switch. Emits five fixed job fields or one reason code. Tested in `sectionDraftGate.test.mjs`. |
 
 | `localFiles7255.test.mjs` | D7255: private-file permissions, link refusals, descriptor-bound edits and CLI recovery regressions with disposable local fixtures. |
+
+| `fileRecoveryHealth.mjs` | D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. |
+| `fileRecoveryHealth.test.mjs` | D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. |

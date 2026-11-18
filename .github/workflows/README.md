@@ -205,4 +205,14 @@ It uses synthetic queue responses and has no production credentials.
 | `agent-compute-image.yml` | D4557: read-only PR image validation; no publishing, credentials or deployment. |
 | `agent-compute-preview.yml` | D4557: owner-dispatched, independently protected, exact-main disabled preview host deployment; no broker enablement. |
 
-| `file-recovery.yml` | D6428: gated approved-class R2 archive, checksum verification and synthetic suppression-aware restore drill. Disabled until counsel/#6650/configuration approval; live restore awaits #6654. | Daily 02:30 UTC and manual dispatch, only with `FILE_RECOVERY_ENABLED=true` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, separate `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID`/`FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY` and `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID`/`FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY`; nonsecret `FILE_RECOVERY_REGISTRY` variable |
+| `file-recovery.yml` | D6428/D6653: gated approved-class R2 archive, optional encrypted outside-account copy, per-run heartbeat and an isolated outside-preview restore drill. Disabled until counsel/#6650/configuration approval; live restore awaits #6654. | Daily 02:30 UTC and manual dispatch, only with `FILE_RECOVERY_ENABLED=true` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, separate `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID`/`FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY` and `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID`/`FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY`; nonsecret `FILE_RECOVERY_REGISTRY` variable |
+
+D6653 extends `file-recovery.yml` with `snapshot` and `synthetic-proof` dispatch
+modes. The proof and monthly `dr-drill.yml` file job use only
+`FILE_DR_PREVIEW_*` bucket/credential configuration and an ephemeral age key.
+The `github-alerts.yml` hourly `file-backup` job uses only
+`FILE_RECOVERY_HEALTH_*` metadata-reader credentials and GitHub/Slack health
+reporting scopes. Production outside copying uses separate `FILE_DR_COPY_*`
+writer credentials and the D1-style `DR_COPY_*` variables. Unconfigured copying
+skips with a notice; an explicitly enabled incomplete configuration fails.
+See the D6653 runbook section for approval, retention and role details.
