@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-const workflow = readFileSync(new URL('../../.github/workflows/pr-preview.yml', import.meta.url), 'utf8');
+const workflow = readFileSync(new URL('../../.github/workflows/pr-preview-deploy.yml', import.meta.url), 'utf8');
 const job = workflow.slice(workflow.indexOf('\n  delete:\n'));
 const script = job.split('\n        run: |\n')[1].replace(/^ {10}/gm, '');
 

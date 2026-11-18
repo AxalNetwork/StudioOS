@@ -18,8 +18,10 @@ import { isolatePreviewTraffic, requirePreview } from './_helpers.js';
  * every control in the hub or the page a 44px target, and on a page the
  * header's one action at the band's full width (#1992, PR 2).
  *
- * Runs against the PR preview (`pr-preview.yml`, the `login-e2e` job); skips
- * locally when PLAYWRIGHT_BASE_URL is unset.
+ * Runs against the PR's preview build (`pr-preview.yml`, the `login-e2e` job:
+ * the artifact the trusted deploy ships, served by `wrangler dev` from
+ * wrangler.pr-preview.toml, D7146); skips locally when PLAYWRIGHT_BASE_URL is
+ * unset.
  */
 
 const USER = { id: 9753, email: 'e2e.connectors@example.test', name: 'E2E Founder', role: 'founder', tier: 'growth' };

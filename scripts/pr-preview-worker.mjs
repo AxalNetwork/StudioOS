@@ -17,8 +17,9 @@
  *     shell.
  *
  * No bindings beyond the assets binding, no environment, no data. The preview
- * is deployed on every push to the pull request and deleted when it closes
- * (.github/workflows/pr-preview.yml).
+ * is built on every push to the pull request (.github/workflows/pr-preview.yml),
+ * deployed from main by .github/workflows/pr-preview-deploy.yml (D7146), and
+ * deleted when it closes.
  */
 export default {
   async fetch(request, env) {

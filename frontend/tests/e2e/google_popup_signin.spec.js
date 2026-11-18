@@ -14,8 +14,10 @@ import { isolatePreviewTraffic, requirePreview } from './_helpers.js';
  * where a success lands, and that every other path still ends on the
  * same-tab redirect.
  *
- * Runs against the PR preview: `.github/workflows/pr-preview.yml`'s
- * `login-e2e` job points PLAYWRIGHT_BASE_URL at the Worker it just deployed.
+ * Runs against the PR preview build: `.github/workflows/pr-preview.yml`'s
+ * `login-e2e` job serves the artifact the trusted deploy ships with
+ * `wrangler dev` and the preview's own config (D7146), and points
+ * PLAYWRIGHT_BASE_URL at it.
  * The preview has no API (`/api/*` is a 404), which is why every Google route
  * is stubbed here. Skips locally when PLAYWRIGHT_BASE_URL is unset.
  */
