@@ -6,7 +6,6 @@ import { matchRoutes, MemoryRouter } from 'react-router-dom';
 import FounderGrowFocus from '../src/pages/founder/FounderGrowFocus.jsx';
 import FounderGrowCustomers from '../src/pages/founder/FounderGrowCustomers.jsx';
 import FounderGrowTalent from '../src/pages/founder/FounderGrowTalent.jsx';
-import FounderGrowPartnerships from '../src/pages/founder/FounderGrowPartnerships.jsx';
 import FounderGrowLaunch from '../src/pages/founder/FounderGrowLaunch.jsx';
 import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
@@ -17,7 +16,6 @@ const pages = {
   focus: FounderGrowFocus,
   customers: FounderGrowCustomers,
   talent: FounderGrowTalent,
-  partnerships: FounderGrowPartnerships,
   launch: FounderGrowLaunch,
 };
 
@@ -48,6 +46,8 @@ test('GR-04 entry points and existing module, Distribution and Reporting deep li
 
   for (const path of ['/grow', '/grow/update', '/grow/reporting', '/grow/reporting/duties', '/build/brand']) check(path);
   for (const slug of Object.keys(pages)) check('/grow/' + slug);
+  // D6118 (GR-09): Partnerships is Partner network's module page; the module's own address forwards to it.
+  check('/grow/partnerships');
   check('/grow/reporting/report-123', '/grow/reporting/:id');
   check('/grow/reporting/report-123/edit', '/grow/reporting/:id/edit');
 
@@ -56,7 +56,7 @@ test('GR-04 entry points and existing module, Distribution and Reporting deep li
     'partner-network', 'market-expansion', 'durable-company-building'];
   for (const slug of legacy) assert.ok(modules.has(slug), slug + ' must remain a recognized Grow module');
   for (const slug of modules) {
-    check('/grow/' + slug, '/grow/:slug');
+    check('/grow/' + slug, slug === 'partner-network' ? '/grow/partner-network' : '/grow/:slug');
     check('/grow/' + slug + '/new', '/grow/:slug/new');
     check('/grow/' + slug + '/record-123', '/grow/:slug/:id');
   }
