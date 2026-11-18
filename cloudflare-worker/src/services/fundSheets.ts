@@ -1625,7 +1625,7 @@ export async function importFundsFromSheet(
     await stampSheetClock(env, user.id, 'pushed', tab.title);
     return { run, replayed: false };
   }
-  let cells: PendingCell[] = pending;
+  let cells: PendingCell[];
   try {
     await writeCells(token, link.spreadsheet_id, tab.title, pending);
     cells = await readPendingCells(token, link.spreadsheet_id, tab.title, pending);
