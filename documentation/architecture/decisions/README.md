@@ -59,17 +59,3 @@ collided in.
 
 <!-- files:begin -->
 <!-- files:end -->
-| `D5602.md` | Advisory PR scan scope, retained main finding fingerprints, one redacted shared incident and permission/rollback boundaries. |
-| `D5666.md` | Observational session attribution and persistent PR/incident routing. |
-| `D5663.md` | Verified future-clock evidence and persistent health delivery intent. |
-| `D5664.md` | Independent signed metadata capture, immutable ledger and explicit source gaps. |
-| `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
-| `D5665-p2.md` | Preserve simultaneous head, tested, candidate, landed and deployment-target SHA roles in Slack records. |
-| `D5670.md` | Cloudflare source coverage, ownership and staged acceptance. |
-| `D5671.md` | Authenticated Cloudflare delivery and explicit route isolation. |
-| `D5672.md` | Existing platform signals and conservative incident attribution. |
-| `D5680.md` | Restricted operational security triage without public disclosure. |
-| `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
-| `D5721.md` | Census public Help for every signed-in rail profile without changing routing or authorization. |
-| `D5035.md` | HQ Support’s durable recent decisions, branch delivery outcomes, manual resend and regression coverage. |
-| `D5495.md` | Deterministic concurrent Trust Publish replay coverage over the merged repair. |
