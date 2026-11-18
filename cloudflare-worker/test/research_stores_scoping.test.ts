@@ -24,7 +24,10 @@ const sheetService = read('cloudflare-worker/src/services/fundSheets.ts');
 // Sheets sync writes the same owner-scoped table from a service module. A
 // statement that forgot its WHERE would be just as bad there, so both files
 // are one corpus for the owner filter.
-const routes = `${handlers}\n${sheetService}`;
+// D6278: the benchmark row's DTO moved to services/researchBenchmarks.ts.
+const benchService = read('cloudflare-worker/src/services/researchBenchmarks.ts')
+  + '\n' + read('cloudflare-worker/src/routes/research_benchmark_funds.ts');
+const routes = `${handlers}\n${sheetService}\n${benchService}`;
 const funds = read('cloudflare-worker/sql/migrations/216_research_funds.sql');
 const bench = read('cloudflare-worker/sql/migrations/217_research_benchmarks.sql');
 const sheetMig = read('cloudflare-worker/sql/migrations/274_research_fund_sheets.sql');

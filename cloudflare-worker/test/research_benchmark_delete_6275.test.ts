@@ -43,6 +43,8 @@ function freshDb() {
   );`);
   db.exec(tableFrom('217', 'research_benchmarks'));
   db.exec(tableFrom('303', 'research_benchmark_constituents'));
+  // D6278: the fund-link columns PATCH clears on a hand edit.
+  db.exec(stripForeignKeys(readFileSync(resolve(MIGRATIONS, '202611180253_6278_research_benchmark_fund.sql'), 'utf8')));
   db.prepare('INSERT INTO users (id, role) VALUES (?, ?)').run(OWNER, 'investor');
   db.prepare('INSERT INTO users (id, role) VALUES (?, ?)').run(OTHER, 'investor');
   const b = db.prepare(
