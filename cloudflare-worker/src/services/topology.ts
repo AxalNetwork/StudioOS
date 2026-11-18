@@ -293,9 +293,9 @@ export const DEPLOY_WORKFLOWS = [
     deploys: 'the independent studioos-merge-control Worker, its repository coordinator and Queue consumer',
   },
   {
-    file: 'pr-preview.yml',
-    trigger: 'on each pull request',
-    deploys: 'a preview Worker per pull request, serving the SPA with no bindings',
+    file: 'pr-preview-deploy.yml',
+    trigger: 'after each preview build finishes, from main (D7146)',
+    deploys: 'a preview Worker per pull request, serving the SPA its credential-free build produced, with no bindings',
   },
 ] as const;
 
