@@ -185,13 +185,6 @@ export function evidenceMatches(item, { area, source, claim }) {
     && (!claim || item.claims.some((row) => row.state === claim));
 }
 
-export function sharedClaimTally(items, claims) {
-  if (!items.ok || !claims.ok) return null;
-  const visible = new Map(items.rows.flatMap((item) => item.claims.map((claim) => [claim.uid, claim.state])));
-  const backed = [...visible.values()].filter((state) => state === 'backed').length;
-  return `${backed} of ${visible.size} shared ${visible.size === 1 ? 'claim is' : 'claims are'} backed by a record.`;
-}
-
 /** A coverage tile: area, kind, Source, count and the newest date. No value. */
 export const coverageTile = (g) => ({
   area: g.area, kind: kindWord(g.kind), source: sourceWord(g.source_label), count: Number.isSafeInteger(g.count) ? g.count : null,
