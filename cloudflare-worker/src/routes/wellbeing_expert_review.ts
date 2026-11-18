@@ -112,18 +112,23 @@ reviews.put('/experts/me/credentials/files', async (c) => {
     if (!valid) return refuse(c, 415, { code: 'file_type_mismatch', message: 'The file bytes do not match the declared type.' });
     const uid = crypto.randomUUID(); const key = `wellbeing/credentials/${row.id}/${uid}.${CREDENTIAL_TYPES[type]}`;
     const name = (c.req.header('x-file-name') || `Credential.${CREDENTIAL_TYPES[type]}`).replace(/[\x00-\x1f\x7f/\\]/g, '_').slice(0, 200);
-    // D6651: credential evidence is a record, written once under a fresh key; when its row is not
-    // written it stays unreferenced (a record key is never deleted from request code).
+    // D6651: credential evidence is a record, written once under a fresh key. When its row is not
+    // written, the file this request just stored is named by nothing and leaves through the one
+    // record-erasure path as `unreferenced`; a cleanup failure never masks the answer.
     await putRecordOrThrow(c.env.FILES, key, bytes, { httpMetadata: { contentType: type } });
-    const saved = await c.env.DB.batch([
-      c.env.DB.prepare(`INSERT INTO expert_credential_files(uid, expert_id, file_key, file_name, file_type, file_size, uploaded_by)
-        SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM expert_credential_files WHERE expert_id = ?) < 10`)
-        .bind(uid, row.id, key, name, type, size, user.id, row.id),
-      c.env.DB.prepare(`UPDATE experts SET verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL,
-        decline_reason = NULL, decision_token = NULL, review_version = review_version + 1 WHERE id = ?
-        AND EXISTS (SELECT 1 FROM expert_credential_files WHERE uid = ?)`).bind(row.id, uid),
-    ]);
-    if (Number(saved[0].meta?.changes) !== 1) return refuse(c, 409, { code: 'file_limit', message: 'Ten credential files are already recorded. Remove an old one first.' });
+    const dropStored = () => eraseRecordObjects(c.env.FILES!, key, 'unreferenced').catch(() => { /* inaccessible orphan; no DB reference */ });
+    let saved: D1Result[];
+    try {
+      saved = await c.env.DB.batch([
+        c.env.DB.prepare(`INSERT INTO expert_credential_files(uid, expert_id, file_key, file_name, file_type, file_size, uploaded_by)
+          SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM expert_credential_files WHERE expert_id = ?) < 10`)
+          .bind(uid, row.id, key, name, type, size, user.id, row.id),
+        c.env.DB.prepare(`UPDATE experts SET verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL,
+          decline_reason = NULL, decision_token = NULL, review_version = review_version + 1 WHERE id = ?
+          AND EXISTS (SELECT 1 FROM expert_credential_files WHERE uid = ?)`).bind(row.id, uid),
+      ]);
+    } catch (e) { await dropStored(); throw e; }
+    if (Number(saved[0].meta?.changes) !== 1) { await dropStored(); return refuse(c, 409, { code: 'file_limit', message: 'Ten credential files are already recorded. Remove an old one first.' }); }
     return c.json({ files: await credentialFiles(c.env, row.id) }, 201);
   });
 });

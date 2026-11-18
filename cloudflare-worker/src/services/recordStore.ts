@@ -9,8 +9,9 @@
  * refusal; the object already there keeps its bytes.
  *
  * There is no delete here. A route that "replaces" a record writes a new key and points its
- * row at the newest one. The only deletes of a record key are the legally required ones in
- * `recordErasure.ts` (#6652 A, completed by #6654). `scripts/check-record-writes.mjs` fails
+ * row at the newest one. The only deletes of a record key are in `recordErasure.ts` (#6652 A,
+ * completed by #6654): the legally required ones, and the rollback of an object the same
+ * request just stored and no row names (`unreferenced`). `scripts/check-record-writes.mjs` fails
  * the build on a direct `.put(` or `.delete(` of a record prefix anywhere else.
  */
 

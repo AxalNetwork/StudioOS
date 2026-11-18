@@ -1086,18 +1086,25 @@
     {
       "site": "cloudflare-worker/src/services/recordErasure.ts | eraseRecordObjects | delete | keys",
       "classes": [
+        "files-advisor-deliverables",
         "files-agent-compute",
         "files-build-proof",
         "files-data-room",
         "files-deck-reviews",
+        "files-fund-notices",
+        "files-governance",
+        "files-grow-minutes",
         "files-kyb",
         "files-kyc",
+        "files-mark-request-evidence",
+        "files-mercury-statements",
+        "files-reports",
         "files-research",
         "files-validate-audio",
         "files-wellbeing-credentials",
         "files-wg-v1"
       ],
-      "evidence": "D6651: the one record-erasure path. Its callers pass stored keys whose rows were written only by these record writers: routes/research.ts (research/), routes/kyb_admin.ts (kyb/), routes/deck_reviewer.ts (deck-reviews/), routes/cycle_build.ts and services/records/build.ts (build-proof/), routes/wellbeing_expert_review.ts (wellbeing/credentials/), services/agents/computeBridge.ts (agent-compute/), services/dataRoomTrash.ts and services/google/raise.ts (data-room/), services/interviewSessions.ts (validate-audio/), services/r2.ts deleteKycDocument (kyc/), services/workGraphReconcile.ts (wg/v1/). Each caller's earlier site was reviewed under D6650; a new caller of this path is a review of this entry."
+      "evidence": "D6651: the one record-erasure path. Its callers pass stored keys whose rows were written only by these record writers: routes/research.ts (research/), routes/kyb_admin.ts (kyb/), routes/deck_reviewer.ts (deck-reviews/), routes/cycle_build.ts and services/records/build.ts (build-proof/), routes/wellbeing_expert_review.ts (wellbeing/credentials/), services/agents/computeBridge.ts (agent-compute/), services/dataRoomTrash.ts and services/google/raise.ts (data-room/), services/interviewSessions.ts and durable-objects/meeting-bot-run.ts (validate-audio/), services/r2.ts deleteKycDocument (kyc/), services/workGraphReconcile.ts (wg/v1/). Rollbacks (reason unreferenced) pass the fresh key the same request just stored: routes/admin_governance.ts (governance/), routes/captable.ts, routes/cycle_use_of_funds.ts, services/google/raise.ts and services/mercury/raiseFeeds.ts (data-room/), routes/kyb_admin.ts (kyb/), routes/kyc.ts via deleteKycDocument (kyc/), routes/mark_requests.ts (mark-request-evidence/), routes/reporting_reports.ts (reports/), routes/wellbeing_expert_review.ts (wellbeing/credentials/), routes/advisors_deliverables.ts (advisor-deliverables/), services/fundNoticeStore.ts (fund-notices/), services/growWriters.ts (grow-minutes/), services/mercury/investorFeeds.ts (mercury-statements/), services/records/build.ts (build-proof/). Each caller's earlier site was reviewed under D6650; a new caller of this path is a review of this entry."
     },
     {
       "site": "cloudflare-worker/src/services/rehearsalAudio.ts | deleteRehearsalAudio | delete | row.audio_r2_key",

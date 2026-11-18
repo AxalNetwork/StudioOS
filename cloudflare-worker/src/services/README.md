@@ -26,8 +26,10 @@ storage readers and guards must consume it rather than copy figures.
 `recordStore.ts` and `recordErasure.ts` (D6651, #6651) are the only code that
 writes or deletes an R2 object under a `record` prefix of the D6650 inventory. A
 record is written once (`putRecord` refuses an existing key), a replacement is a
-new key, and the only delete is `eraseRecordObjects` with a stated reason, the
-door #6654's suppression ledger completes. `scripts/check-record-writes.mjs`
+new key (the replaced object is kept), and the only delete is
+`eraseRecordObjects` with a stated reason, the door #6654's suppression ledger
+completes; a failed write's rollback of the object it just stored goes through
+it as `unreferenced`. `scripts/check-record-writes.mjs`
 fails the build on any other put or delete of a record prefix.
 
 `storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls

@@ -14,7 +14,7 @@
  *   · the "not both" check dropped → "a link and a file together: 400"
  *   · /queue ordered newest first → "the queue reads oldest first"
  *   · /:uid/evidence without the requester check → "another investor reads 404"
- *   · (D6651) a delete restored to the insert's catch → "a refused insert deletes nothing"
+ *   · the orphan erase dropped from the insert's catch → "a refused insert leaves no file"
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/mark_request_evidence_6909.test.ts
@@ -165,19 +165,19 @@ test('POST: a link and a file together, a wrong type, an empty or too large file
   assert.equal(files.objects.size, 0);
 });
 
-test('POST: a second open request is 409 before the file is stored; a refused insert files nothing and deletes nothing', async () => {
+test('POST: a second open request is 409 before the file is stored; a refused insert leaves no file', async () => {
   const db = fixture(); const files = fakeR2();
   assert.equal((await quiet(() => call(db, files, HOLDER, 'POST', '', { project_uid: 'p7', kind: 'mark', reason: 'first' }))).status, 201);
   const again = await call(db, files, HOLDER, 'POST', '', undefined, formOf({ project_uid: 'p7', kind: 'mark', reason: 'second' }, pdf()));
   assert.equal(again.status, 409);
   assert.equal(files.objects.size, 0, 'the open-request check runs before the upload');
-  // Force the insert to fail after the upload. D6651: evidence is a record, never deleted as a rollback; it stays unreferenced.
+  // Force the insert to fail after the upload: the stored file, named by no row, is erased as `unreferenced` (D6651).
   db.exec(`CREATE TRIGGER t_fail BEFORE INSERT ON portfolio_mark_requests BEGIN SELECT RAISE(ABORT, 'synthetic_insert_failure'); END;`);
   const failed = await quiet(() => call(db, files, HOLDER, 'POST', '', undefined, formOf({ project_uid: 'p9', kind: 'mark', reason: 'x' }, pdf())));
   assert.notEqual(failed.status, 201, 'the insert was refused');
   assert.equal(count(db), 1, 'only the first request is stored');
-  assert.equal(files.objects.size, 1, 'a refused insert deletes nothing');
-  assert.equal(count(db), 1, 'and no row names the stored file');
+  // mutation: orphan erase dropped → one object left.
+  assert.equal(files.objects.size, 0, 'a refused insert leaves no file');
 });
 
 test('the store: evidence is one kind, all-or-nothing for a file, and frozen once written', () => {

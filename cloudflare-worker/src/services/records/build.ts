@@ -31,6 +31,7 @@ import {
   SYSTEM_ACTION_LABEL, SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, disconnectedReason, systemActionIntent, systemStateOf, type SystemState,
 } from '../systemsState';
 import { putRecordOrThrow } from '../recordStore';
+import { eraseRecordObjects } from '../recordErasure';
 
 type Any = Record<string, any>;
 type Section = { rows: Row[]; empty?: string; action?: string };
@@ -464,7 +465,9 @@ async function uploadProof(ctx: RecordContext, id: string, f: Filing, body: Body
   try {
     await ctx.env.DB.batch([write, logRow(ctx, 'company-creation', id, 'build_proof_uploaded', 'Proof uploaded')]);
   } catch (e) {
-    // D6651: the object stays unreferenced; a record key is never deleted as a rollback.
+    // D6651: the batch is one transaction, so no row names the object this request just stored: it
+    // leaves through the one record-erasure path as `unreferenced`.
+    try { await eraseRecordObjects(files, key, 'unreferenced'); } catch { /* the object is unreferenced either way */ }
     throw e;
   }
   await noteStorageLanded(ctx.env, storage);

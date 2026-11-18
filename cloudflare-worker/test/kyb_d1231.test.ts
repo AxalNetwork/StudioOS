@@ -196,8 +196,8 @@ test('documents and decisions roll back when their audit cannot be saved; partia
   try {
     f.breakRead('INSERT INTO activity_logs');
     assert.equal((await f.call('/account-3/documents','POST',{ kind: 'other', data_uri: 'data:application/pdf;base64,JVBERg==' })).status, 503);
-    // D6651: a record is never deleted as a rollback; the stored document stays, and no row names it.
-    assert.equal(f.objects.size, 1);
+    // D6651: the document this request just stored, named by no row, is erased as `unreferenced`.
+    assert.equal(f.objects.size, 0);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM kyb_documents').get()?.n, 0);
     assert.equal((await approve(f,'account-3',{ ...checks, unchecked_owner_reason: 'Awaiting identity.' } as any)).status, 503);
     assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM kyb_cases WHERE status='approved'").get()?.n, 0);
@@ -209,7 +209,7 @@ test('documents and decisions roll back when their audit cannot be saved; partia
     assert.equal((await f.call(`/account-3/documents/${up.body.uid}`)).status, 404, 'tombstoned bytes must not be streamable while cleanup retries');
     f.failDeletes(false);
     assert.equal((await f.call('/account-3/reject','PATCH',{ reason: 'Registry mismatch.' })).status, 200);
-    assert.equal(f.objects.size, 1, 'the recorded document is purged; only the unreferenced rollback object remains');
+    assert.equal(f.objects.size, 0, 'the recorded document is purged');
   } finally { f.db.close(); }
 });
 

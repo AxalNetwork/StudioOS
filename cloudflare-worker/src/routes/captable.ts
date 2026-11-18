@@ -70,6 +70,7 @@ import {
   type RegisterScope,
 } from '../services/capTableRegister';
 import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -1519,7 +1520,9 @@ captable.post('/register/:projectId/snapshot', async (c) => {
       }),
     ]);
   } catch (e) {
-    // D6651: the stored file stays unreferenced; a record key is never deleted from request code.
+    // D6651: this request just stored the file under a fresh key and no row names it: it leaves through
+    // the one record-erasure path as `unreferenced`; a cleanup failure never masks the refusal.
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
     return refuse(c, 500, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.', raw: e });
   }
   await noteStorageLanded(c.env, storage);

@@ -2,9 +2,11 @@
  * D6651 (#6651) — the single path that deletes `record`-class R2 objects.
  *
  * Record files are write-once (`recordStore.ts`): request code never overwrites one and never
- * deletes one as housekeeping (a rollback, a replacement). What remains is deletion the law or
- * a stated retention promise requires — a member removing their own file, a retention sweep
- * (call audio, compute artifacts), a Trash purge, an erasure request. #6652 (owner's answer A)
+ * deletes a replaced one. What remains is deletion the law or a stated retention promise
+ * requires — a member removing their own file, a retention sweep (call audio, compute
+ * artifacts), a Trash purge, an erasure request — and the rollback of an object the same
+ * failed request just created and no row ever named (`unreferenced`), so a failed write leaves
+ * no orphaned personal data behind. #6652 (owner's answer A)
  * puts those through one audited Worker path; #6654 builds its suppression ledger. This module
  * is that path's one door: each call names its reason, and every delete is logged with the
  * reason and the number of objects, never a key. #6654 adds the ledger row in the same
@@ -24,8 +26,10 @@ export type RecordErasureReason =
   /** Erasure of a person's or scope's data (a DSR or account/scope removal). */
   | 'erasure_request'
   /**
-   * An object the same failed operation just created with `putRecordOrThrow` and never served, where a stated
-   * rule forbids keeping such bytes (D4557: a cancelled, revoked or losing compute completion keeps no output).
+   * A rollback: an object the same failed request (or call) just created with a successful write-once put, that no
+   * row names and nothing ever served — a row write that failed, conflicted or hit a limit after the bytes landed, or
+   * a cancelled, revoked or losing compute completion (D4557). Never an object that existed before the request, and
+   * never a content-addressed blob another row may share.
    */
   | 'unreferenced';
 

@@ -987,7 +987,7 @@ test('test 10: each closing write logs one row with its project, entity type and
   }
 });
 
-test('test 10: a closing write whose log fails is not written, and an upload leaves no row pointing at its object', async () => {
+test('test 10: a closing write whose log fails is not written, and an upload leaves no object', async () => {
   for (const w of CLOSING) {
     const db = recordsA(seeded());
     db.exec(`UPDATE users SET subscription_tier = 'growth' WHERE id = ${FOUNDER}`);
@@ -996,8 +996,8 @@ test('test 10: a closing write whose log fails is not written, and an upload lea
     const r = await w.run(db);
     assert.equal(r.status, 500, `${w.name}: ${JSON.stringify(r.body)}`);
     assert.equal(one(db, w.state), before, `${w.name}: the write did not land without its log`);
-    // D6651: a record is never deleted as a rollback. An upload's object stays, unreferenced: the row above is unchanged.
-    for (const key of bucket(db).store.keys()) assert.ok(!one(db, w.state).includes(key), `${w.name}: no row points at the stored object`);
+    // D6651: the object the failed upload just stored, named by no row, leaves through eraseRecordObjects ('unreferenced').
+    assert.equal(bucket(db).store.size, 0, `${w.name}: no stored object is left behind`);
     db.close();
   }
 });

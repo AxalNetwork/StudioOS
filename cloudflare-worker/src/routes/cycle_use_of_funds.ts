@@ -14,6 +14,7 @@ import { uofCan, uofCapabilities, uofStanding, type UofCapabilities } from '../s
 import { exportAudit, planCsv, planPdf, readBasePlan } from '../services/useOfFunds/exportPlan';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean;caps:UofCapabilities}}>();
 r.use('*',async(c,next)=>{
@@ -175,7 +176,9 @@ r.post('/snapshot',async c=>{
     ]);
   } catch (e) {
     console.error('[use-of-funds] snapshot not filed:',(e as Error).name);
-    // D6651: the stored file stays unreferenced; a record key is never deleted from request code.
+    // D6651: this request just stored the file under a fresh key and no row names it: it leaves through
+    // the one record-erasure path as `unreferenced`.
+    await eraseRecordObjects(c.env.FILES,key,'unreferenced').catch(()=>{});
     return c.json({code:'snapshot_not_filed',detail:'The plan could not be added to the data room. Nothing was filed; try again in a moment.'},500);
   }
   await noteStorageLanded(c.env,storage);

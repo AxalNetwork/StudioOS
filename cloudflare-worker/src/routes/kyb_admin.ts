@@ -427,7 +427,8 @@ kyb.post('/:id/documents', async c => {
   await materialize(c, row);
   const documentUid = uid(), key = `kyb/${scope(c.env)}/${row.uid}/${documentUid}.${MIME[match[1]]}`;
   // D6651: a verification document is a record, written once under a fresh key. When the row is not
-  // written the file stays unreferenced: a record key is never deleted from request code.
+  // written, the file this request just stored is named by nothing and leaves through the one
+  // record-erasure path as `unreferenced`; a cleanup failure never masks the answer.
   const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: match[1] } });
   if (!stored.ok) return conflict(c);
   try {
@@ -439,8 +440,9 @@ kyb.post('/:id/documents', async c => {
         SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`)
         .bind(documentUid, row.uid, b.kind, key, match[1], bytes.length, user.id),
     ]);
-    if (!changed) return conflict(c);
+    if (!changed) { await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {}); return conflict(c); }
   } catch {
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
     return c.json({ error: 'document_not_saved', detail: 'The document was not saved. Try again.' }, 503);
   }
   return c.json({ uid: documentUid, kind: b.kind, size_bytes: bytes.length }, 201);

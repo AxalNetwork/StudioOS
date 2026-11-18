@@ -282,15 +282,15 @@ test('the PDF snapshot: "As of", into the data room under NDA, seen by nobody, w
   assert.equal((await call(f, FOUNDER, '/register/10/snapshot', 'POST', {})).status, 503);
 });
 
-test('a snapshot whose file row fails files nothing; its stored object is kept, unreferenced (D6651)', async () => {
+test('a snapshot whose file row fails leaves no stored object', async () => {
   const f = fixture();
   f.db.exec('DROP TABLE data_room_files');
   const quiet = console.error; console.error = () => {};
   try {
     const r = await call(f, FOUNDER, '/register/10/snapshot', 'POST', {});
     assert.equal(r.status, 500);
-    // D6651: a record is never deleted as a rollback. The object stays, and no data room row names it.
-    assert.equal(f.files.size, 1);
+    // D6651: the object this request just stored, named by no row, is erased as `unreferenced`.
+    assert.equal(f.files.size, 0);
   } finally { console.error = quiet; }
 });
 

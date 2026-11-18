@@ -45,6 +45,7 @@ import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { notify } from '../services/notify';
 import { putRecordOrThrow } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -216,9 +217,9 @@ r.post('/', async (c) => {
       ).bind(uid, proj.id, user.id, kind, reason, now, now, link, fileKey, fileName,
         fileKey ? file!.size : null, fileKey ? String(file!.type).toLowerCase() : null).run();
     } catch (e) {
-      // The row was not written: the stored file has nothing pointing at it. D6651: it stays unreferenced;
-      // a record key is never deleted from request code.
-      if (fileKey) console.warn('[mark_requests] evidence_left_unreferenced');
+      // The row was not written: the file this request just stored has nothing pointing at it. D6651: it
+      // leaves through the one record-erasure path as `unreferenced`.
+      if (fileKey) { try { await eraseRecordObjects(c.env.FILES!, fileKey, 'unreferenced'); } catch { console.warn('[mark_requests] orphan_evidence_not_deleted'); } }
       // Two submits at once: the partial unique index keeps one; the other is the 409 above.
       if (/UNIQUE constraint failed/i.test(String((e as Error)?.message || ''))) {
         const again = await c.env.DB.prepare(OPEN_ONE)

@@ -20,6 +20,7 @@ import {
 import { ALLOWED_DECLARED, MAX_UPLOAD_BYTES, sniffType } from './company_documents';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -197,11 +198,16 @@ async function storeVersionFile(c: Context<{ Bindings: Env }>, advisorId: number
 }
 
 /**
- * The row write failed after the bytes were stored. D6651: a record key is never deleted from request
- * code, so the bytes stay unreferenced (never a row pointing nowhere); the failure is only logged.
+ * A write failed after the bytes were stored: take them back out (best effort), then fail as the write did.
+ * D6651: only while no version row names the key (a later statement can fail after the version row landed),
+ * and through the one record-erasure path as `unreferenced` — this request created the object under a fresh key.
  */
-async function dropStored(_c: Context<{ Bindings: Env }>, stored: StoredFile | null) {
-  if (stored) console.warn('[advisors_deliverables] stored file left unreferenced after a failed row write');
+async function dropStored(c: Context<{ Bindings: Env }>, stored: StoredFile | null) {
+  if (!stored || !c.env.FILES) return;
+  try {
+    const named = await c.env.DB.prepare('SELECT 1 AS x FROM advisor_deliverable_versions WHERE file_key = ?').bind(stored.key).first();
+    if (!named) await eraseRecordObjects(c.env.FILES, stored.key, 'unreferenced');
+  } catch { /* orphaned bytes, never a row pointing nowhere */ }
 }
 
 /**

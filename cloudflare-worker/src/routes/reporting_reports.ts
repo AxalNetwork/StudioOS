@@ -52,6 +52,7 @@ import {
   requiredFiguresOf, storedFigures, type Choice, type ReportFigure, type TypedFigure,
 } from '../services/reportFigures';
 import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 class Refusal extends Error {
   status: number; code: string; sentence: string; extra: Record<string, unknown>;
@@ -632,15 +633,22 @@ r.post('/reports/:uid/documents', async (c) => {
   const docUid = newUid();
   const key = `reports/${project.uid}/${row.uid}/${docUid}.pdf`;
   const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((x) => x.toString(16).padStart(2, '0')).join('');
-  // D6651: a statement is a record, written once under a fresh key. When its row is not written the
-  // file stays unreferenced: a record key is never deleted from request code.
+  // D6651: a statement is a record, written once under a fresh key. When its row is not written, the
+  // file this request just stored is named by nothing and leaves through the one record-erasure path
+  // as `unreferenced`.
   const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: 'application/pdf' } });
   if (!stored.ok) throw new Refusal(409, 'record_exists', 'This statement is already stored. Nothing was attached.');
-  await c.env.DB.prepare(
-    `INSERT INTO report_documents (uid, update_id, project_id, file_key, filename, content_type, size_bytes, sha256, label, uploaded_by)
-     SELECT ?, ?, ?, ?, ?, 'application/pdf', ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM portfolio_updates WHERE id = ? AND sent_at IS NULL)`,
-  ).bind(docUid, row.id, row.project_id, key, filename, bytes.length, digest, label, user.id, row.id).run();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO report_documents (uid, update_id, project_id, file_key, filename, content_type, size_bytes, sha256, label, uploaded_by)
+       SELECT ?, ?, ?, ?, ?, 'application/pdf', ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM portfolio_updates WHERE id = ? AND sent_at IS NULL)`,
+    ).bind(docUid, row.id, row.project_id, key, filename, bytes.length, digest, label, user.id, row.id).run();
+  } catch (e) {
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => null);
+    throw e;
+  }
   if (!(await c.env.DB.prepare('SELECT 1 FROM report_documents WHERE uid = ?').bind(docUid).first())) {
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => null);
     throw new Refusal(409, 'report_sent', 'This report was sent. Correct it as a new revision to change its statements.');
   }
   return c.json({ ok: true, document: { uid: docUid, filename, label, size_bytes: bytes.length } }, 201);

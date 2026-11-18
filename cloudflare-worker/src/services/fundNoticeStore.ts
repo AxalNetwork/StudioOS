@@ -29,6 +29,7 @@ import { readPaperChoice } from './legalPaperCss';
 import { LPs } from '../models/funds';
 import { claimLpRowsByEmail } from './lpClaim';
 import { putRecordOrThrow } from './recordStore';
+import { eraseRecordObjects } from './recordErasure';
 
 export interface NoticeRow {
   id: number;
@@ -328,7 +329,9 @@ export async function noticeFile(env: Env, notice: NoticeRow & { superseded: num
      ON CONFLICT (notice_id, stamp) DO NOTHING`,
   ).bind(fileUid, notice.id, stamp, await sha256Bytes(rendered.bytes), rendered.bytes.length, notice.page_size, await paperSha256(), key).run();
   if (!(res.meta?.changes && res.meta.changes > 0)) {
-    // Another download kept its file first: serve the winner's. D6651: ours stays unreferenced, never served.
+    // Another download kept its file first: drop ours and serve the winner's. D6651: this call just stored
+    // ours under a fresh key and no row names it, so it leaves through the one record-erasure path.
+    try { await eraseRecordObjects(env.FILES, key, 'unreferenced'); } catch { /* the object is orphaned, never served */ }
     const winner = await kept();
     if (winner) return { bytes: winner, filename };
   }

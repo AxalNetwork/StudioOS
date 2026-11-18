@@ -52,6 +52,7 @@ import { confirmationOf, evidenceOf, isHighRisk } from '../services/governanceHi
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const governance = new Hono<{ Bindings: Env }>();
 const UID = /^[0-9a-f-]{36}$/;
@@ -491,7 +492,7 @@ governance.post('/documents/:uid/versions', async (c) => {
   const version = Number(last?.v ?? 0) + 1;
   const key = versionKey(doc.entity_key as GovernanceEntity, doc.uid, version, type);
   // D6651: a version file is written once under a fresh key; when another upload took this number first,
-  // its file stands untouched, the row insert below refuses this one, and nothing is replaced or deleted.
+  // its file stands untouched and the row insert below refuses this one.
   const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: type }, customMetadata: { governance_uid: doc.uid, version: String(version) } });
   if (!stored.ok) return refuse(c, 409, { code: 'version_conflict', message: 'Another version was uploaded at the same moment. Reload and upload again.' });
   try {
@@ -501,8 +502,10 @@ governance.post('/documents/:uid/versions', async (c) => {
     ).bind(doc.uid, version, signed ? 1 : 0, key, sha, bytes.length, type, note, Number(user.id),
       copy?.ok ? copy.signed_on : null, copy?.ok ? copy.signatory : null, copy?.ok ? Number(user.id) : null, copyOf).run();
   } catch {
-    // Another upload took this number first: its row stands, and this file is not recorded. The
-    // file stays unreferenced (D6651: a record key is never deleted from request code).
+    // Another upload took this number first: its row stands, and this file is not recorded. D6651: this
+    // request created the file under its own fresh key and no row names it, so it leaves through the
+    // one record-erasure path as `unreferenced`.
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
     return refuse(c, 409, { code: 'version_conflict', message: 'Another version was uploaded at the same moment. Reload and upload again.' });
   }
   await c.env.DB.prepare('UPDATE governance_documents SET updated_by = ?, updated_at = ? WHERE uid = ?').bind(Number(user.id), now(), doc.uid).run();

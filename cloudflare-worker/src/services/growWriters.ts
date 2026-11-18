@@ -23,6 +23,7 @@ import { mintDownloadToken } from './signedDownload';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
 import { onCompanyTeam } from './obligationOwner';
 import { putRecordOrThrow } from './recordStore';
+import { eraseRecordObjects } from './recordErasure';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null; extra: Record<string, unknown> | null;
@@ -1199,7 +1200,9 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
       summary: months ? `Held on ${heldOn}; next due ${next}` : `Held on ${heldOn}; completed` })),
   ];
   try { await env.DB.batch(statements); } catch (error) {
-    // D6651: the stored file stays unreferenced, never served; a record key is never deleted as a rollback.
+    // D6651: the batch is one transaction, so no row names the file this request just stored: it leaves
+    // through the one record-erasure path as `unreferenced`.
+    if (key && env.FILES) { try { await eraseRecordObjects(env.FILES, key, 'unreferenced'); } catch { /* the stored file is orphaned, never served */ } }
     obligationClash(error, obligationKind(e), next);
   }
   if (storage) await noteStorageLanded(env, storage);

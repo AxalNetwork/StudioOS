@@ -269,6 +269,7 @@ async function copyFile(env: Env, a: { integrationId: number; projectId: number;
   const old = ledger?.local_id != null
     ? await env.DB.prepare('SELECT id, r2_key FROM data_room_files WHERE id = ? AND project_id = ?').bind(ledger.local_id, a.projectId).first<{ id: number; r2_key: string }>()
     : null;
+  let named = false; // a data_room_files row now names `key`: it is kept even when the ledger write fails
   try {
     if (old) {
       await env.DB.batch([
@@ -283,11 +284,14 @@ async function copyFile(env: Env, a: { integrationId: number; projectId: number;
            created_at, updated_at, access_tier, source_kind, source_ref)
          VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 'connector', 'google_drive')`,
       ).bind(uid, a.projectId, name, key, contentType, bytes.byteLength, COPY_ACCESS.visibility, a.user.id, COPY_ACCESS.access_tier).run();
+      named = true;
       const id = Number(ins.meta?.last_row_id);
       await env.DB.prepare(LEDGER).bind(a.integrationId, a.projectId, 'data_room', 'drive_copy', ext, 'data_room_files', id).run();
     }
   } catch (e) {
-    // D6651: the stored copy stays unreferenced; a record key is never deleted as a rollback.
+    // D6651: the copy this request just stored is named by no row: it leaves through the one
+    // record-erasure path as `unreferenced`; a cleanup failure never masks the original error.
+    if (!named) await eraseRecordObjects(env.FILES, key, 'unreferenced').catch(() => {});
     throw e;
   }
   await noteStorageLanded(env, storage);
