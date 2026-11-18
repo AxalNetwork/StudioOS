@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 import { keyOf } from '../../src/pages/raise/pitch/deckAutosave.js';
 import { prepare } from './_editor.mjs';
 
+// #7247: a handler here awaits `route.fetch()`; if the test ends while that request is in flight, the await throws
+// "route.fetch: Test ended" and fails a passing test. Unrouting waits for running handlers and drops that error.
+test.afterEach(async ({ page }) => {
+  // A test that closed its own tab has no routes left to wait for.
+  if (!page.isClosed()) await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const first = 'draft-one';
 const second = 'draft-two';
 
