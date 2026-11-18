@@ -540,7 +540,10 @@ test('D4558 drill: a failed chunk names the tables it writes and their parents, 
 test('D4558 workflow: the backup is read back before its manifest and heartbeat are written; a failed backup pages', () => {
   const at = (s) => BACKUP_WF.indexOf(s);
   assert.ok(at('scripts/d1-backup-manifest.mjs "${ARGS[@]}"') > at('wrangler d1 export'), 'the manifest is built from the export');
-  assert.ok(at('--file readback.sql') > at('--content-type \'application/sql\''), 'the upload is read back');
+  const upload = at('bash scripts/d1-backup-upload.sh "${BACKUP_FILENAME}"');
+  assert.ok(upload >= 0 && at('--file readback.sql') > upload, 'the uploaded SQL is read back');
+  const publish = BACKUP_WF.slice(at('- name: Upload to R2'), at('- name: Independent encrypted copy'));
+  assert.doesNotMatch(publish, /^\s*continue-on-error:\s*true|^\s*if:.*(?:always|failure|cancelled)\(\)/m, 'readback and heartbeat require the preceding step to succeed');
   assert.ok(at('${BACKUP_KEY%.sql}.manifest.json" \\') > at('sha256sum readback.sql'), 'the manifest is written after the check');
   assert.ok(at('heartbeat-d1.json \\') > at('${BACKUP_KEY%.sql}.manifest.json" \\'), 'the heartbeat is written last');
   assert.match(BACKUP_WF, /if \[\[ "\$\{WANT\}" != "\$\{GOT\}" \]\]; then[\s\S]*?exit 1/);

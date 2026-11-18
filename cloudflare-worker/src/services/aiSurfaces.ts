@@ -36,6 +36,8 @@ export const AI_SURFACE = {
   validate: '/validate',
   /** Validate · Customer research's Interviews — transcribing an interview recording (D704: the page became the module). */
   validateInterviews: '/validate/customer-research',
+  /** Validate · Verdict — Eadwyn reads the evidence offered for one decision (D6862, `routes/verdict_summary.ts`). */
+  validateVerdict: '/validate/verdict',
   /** Research · Ask — the grounded answer (`POST /api/research/ask`). */
   researchAsk: '/research/ask',
   /** Research · Companies — the competitor analysis (`/api/competitors/*`). */

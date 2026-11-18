@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Ranked Signals and Evidence · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Markets · #7038 · Research v2 addendum, Markets brief 3 of 4</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Markets — Top-ranked signals with their confidence, dated evidence and sources</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Top-ranked signals card on /research/markets, for a founder or investor deciding whether a signal merits deeper research. It continues the Research v2 canvas (shell, cards and Markets directory) and the Platform States vocabulary. Rank sets the order; confidence is a separate 0–100% score for how well the recorded evidence backs a signal, never a probability of success. View evidence opens the signal in context (side sheet at 1440, bottom sheet at 390) with Why now, each source, its observation date and its URL or recorded citation, and returns focus and the directory state on close. Live, empty, illustrative, loading and failed reads each have their own words and action; a failed read never claims the store is empty. Violet dashed ◇ tags mark Worker changes; amber ⚑ marks an owner decision (option A drawn).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · [Halden Grid], [Voltmark AG], [Kirimachi Robotics], the markets, signals, source.example URLs and every score are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Markets Ranked Signals and Evidence Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RMS-01', 'Markets · ranked signals, collapsed', 'The Markets directory with the Top-ranked signals card beside the sector groups, movers and geographies. Each row: rank, title, sector and geography when recorded, the signal’s update date, confidence as a number with a neutral meter, and View evidence. Rank #2 scores 100% and #3 scores 0%: order and confidence are separate.', [F('RMS01', false, 1000)]],
+      ['RMS-02', 'View evidence · desktop side sheet', 'The signal in context: rank, sector and geography, signal updated, newest evidence observed, confidence with what it measures, Why now, and four evidence items newest first with source name, observation date and Open source, or the recorded citation where no URL exists. Open sector profile only where a tracked sector matches. A live signal with no evidence says so next to it.', [F('RMS02', false, 1000), F('RMS02B', 'Rank 3 · live signal with no evidence, no sector profile', 1000), C('RMS02C', 'Evidence item and read variants', 1340, 406)]],
+      ['RMS-03', 'Confidence · 82, 100, 0, missing', 'API 82 renders 82%. 100 and a measured 0 are Values; null is Not recorded; an evidence read failure is Unavailable. Plain-language meaning, format and wording rules; nothing relies on colour or hover.', [C('RMS03', false, 1440, 402)]],
+      ['RMS-04', 'Read states', 'Live, live but empty, illustrative examples, loading and read failed, side by side with the response each comes from. The failed read keeps the other Markets panels usable, says “Could not load signals” and offers Retry.', [C('RMS04', false, 1800, 958), F('RMS04B', 'Read failed · other panels usable', 1000), F('RMS04C', 'Illustrative examples · labelled', 1000)]],
+      ['RMS-05', 'Clickable path', 'Scan, open in context, check a source, go deeper, close and resume, keyboard first: focus moves to the sheet heading and back to the same View evidence; ?signal= sits beside the directory’s URL state.', [C('RMS05', false, 1800, 506)]],
+      ['RMS-06', 'Phone 390', 'The collapsed card, the evidence bottom sheet, the failed read with the rest of Markets still usable, illustrative examples, and the no-evidence signal in dark mode. Targets are 44px.', [P('RMS06A', false), P('RMS06B', 'Evidence sheet'), P('RMS06C', 'Could not load signals'), P('RMS06D', 'Illustrative examples'), P('RMS06E', 'Dark · no evidence recorded')]],
+      ['RMS-07', 'Dark mode · desktop', 'The collapsed card with keyboard focus on View evidence, and the open sheet with the confidence explanation expanded, on the dark tokens.', [F('RMS07B', 'Collapsed · focus visible', 1000), F('RMS07', 'Evidence sheet open', 1000)]],
+      ['RMS-08', 'Handoff', 'What main does today (the 8200% scale bug, evidence already in GET /api/signals, read errors turned into examples), the Worker error contract and tests (◇), frontend-only work and tests, the owner decision (⚑), and interaction and accessibility notes.', [W('RMS08'), W('RMS08B')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
