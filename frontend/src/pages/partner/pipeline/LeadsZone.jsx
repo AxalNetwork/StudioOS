@@ -331,7 +331,7 @@ export default function PartnerLeadsZone() {
         loading={state.loading}
         error={unlinked ? null : state.error}
         onRetry={load}
-        notice={<>{unlinked ? <NoPartnerProfile /> : !state.loading && !state.error ? <PipelineSetupStatus /> : null}<PipelineReadStatus state={state} onRetry={load} /></>}
+        notice={<>{unlinked ? <NoPartnerProfile /> : !state.loading && !state.error ? <PipelineSetupStatus leads={state.data} /> : null}<PipelineReadStatus state={state} onRetry={load} /></>}
         isEmpty={unlinked || (items.length === 0 && passed.length === 0)}
         empty={(
           <NothingYet

@@ -56,8 +56,8 @@ test('empty catalogue and fit-rule reads have distinct setup messages', async ()
   api.listPartnerFitRules = async () => ({ items: [] });
   let view;
   try {
-    view = await mountContracts(h(PipelineSetupStatus));
-    assert.match(view.text(), /No active services in your catalogue/);
+    view = await mountContracts(h(PipelineSetupStatus, { leads: { scoring: 'none' } }));
+    assert.match(view.text(), /No active services configured for this firm/);
     assert.match(view.text(), /No active fit rules configured/);
   } finally {
     await view?.unmount();
@@ -81,4 +81,21 @@ test('an authorization refusal keeps the draft and identifies the missing permis
     const input = view.nodes().find(node => node.tagName === 'INPUT');
     assert.equal(view.props(input).value, 'Kept draft');
   } finally { await view.unmount(); }
+});
+
+test('a colleague with an empty catalogue sees no missing-services warning when firm services score leads', async () => {
+  const originalServices = api.listServiceOfferings;
+  const originalRules = api.listPartnerFitRules;
+  api.listServiceOfferings = async () => ({ items: [] });
+  api.listPartnerFitRules = async () => ({ items: [] });
+  let view;
+  try {
+    view = await mountContracts(h(PipelineSetupStatus, { leads: { scoring: 'fit_rules' } }));
+    assert.doesNotMatch(view.text(), /No active services|Firm services are not confirmed/);
+    assert.match(view.text(), /No active fit rules configured/);
+  } finally {
+    await view?.unmount();
+    api.listServiceOfferings = originalServices;
+    api.listPartnerFitRules = originalRules;
+  }
 });

@@ -27,7 +27,7 @@ export function PipelineReadStatus({ state, onRetry }) {
   return (
     <div role="status" data-testid="pipeline-refresh-status"
       className="mb-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12px] text-axal-muted dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-      {state.refreshing ? 'Refreshing. Your current view and draft stay open.' : 'Unreadable refresh. Showing the last successful read; your draft is still here.'}
+      {state.refreshing ? 'Refreshing. Showing the last successful read.' : 'Unreadable refresh. Showing the last successful read.'}
       {state.refreshError && onRetry ? <button type="button" onClick={onRetry} className="ml-2 font-semibold underline">Try again</button> : null}
     </div>
   );
