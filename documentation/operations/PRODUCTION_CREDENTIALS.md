@@ -37,6 +37,7 @@ The inventory includes the application-only `WORKGRAPH_INGEST_TOKEN`, because th
 | Workflow | Job | Triggers | Environment |
 | --- | --- | --- | --- |
 | `agent-compute-preview.yml` | `deploy_disabled_host` | manual | `agent-compute-preview` |
+| `agent-gateway-keys.yml` | `keys` | manual | `production-ops` |
 | `agent-stage-a.yml` | `stage-a` | manual | `production-ops` |
 | `archive-observer-deploy.yml` | `deploy` | main push, manual | `production` |
 | `backup-d1.yml` | `backup` | schedule, manual | `production-ops` |
@@ -51,11 +52,9 @@ The inventory includes the application-only `WORKGRAPH_INGEST_TOKEN`, because th
 | `meeting-bot-deploy.yml` | `deploy` | main push, manual | `production` |
 | `merge-control-deploy.yml` | `deploy` | main push, manual | `production` |
 | `pr-overlap.yml` | `report` | schedule, manual | `production-ops` |
-| `pr-preview.yml` | `deploy` | pull request | temporary exception, #7146 |
-| `pr-preview.yml` | `delete` | pull request closed | temporary exception, #7146 |
 | `schema-rehearsal.yml` | `rehearse` | manual | `production-ops` |
 
-Run `npm run test:guards` when editing the inventory or any workflow. The guard checks all workflow files, catches unlisted consuming jobs and missing listed jobs, matches each job's credential set and environment, and forbids listed secrets in PR-triggered workflows. The exception is restricted to the existing deploy/delete jobs and generic token in `pr-preview.yml`. Remove that exception with the #7146 migration.
+Run `npm run test:guards` when editing the inventory or any workflow. The guard checks all workflow files, catches unlisted consuming jobs and missing listed jobs, matches each job's credential set and environment, and forbids listed secrets in PR-triggered workflows. The exception is restricted to the existing deploy/delete jobs and generic token in `pr-preview.yml`. The #7146 migration has removed both consumers from `pr-preview.yml`; neither remains in the inventory. The historical exception has no current caller.
 
 ## Token permissions
 
@@ -64,6 +63,7 @@ Cloudflare account-owned tokens support granular Worker roles. Use individual-Wo
 | Credential location | Permission names and resource boundary |
 | --- | --- |
 | `production / CLOUDFLARE_API_TOKEN` | `Editor` on the existing `studioos` Worker, `Workers Routes Write` for its zone, `D1 Write` for migrations and schema access, and `Queues Read` for the queue preflight |
+| `production-ops / AGENT_GATEWAY_ADMIN_TOKEN` | Dedicated identity for the approved `agents` gateway provider configuration and Secrets Store secret create/update and metadata checks; provision and verify before applying. Do not widen the D1/R2 operations token. |
 | `production-ops / CLOUDFLARE_API_TOKEN` | `D1 Write` for export, rehearsal/restore creation, import and cleanup, plus `Workers R2 Storage Write` for Wrangler's REST object operations |
 | `production / MEETING_BOT_CLOUDFLARE_API_TOKEN` | `Editor` on the existing `studioos-meeting-bot-preview` and `studioos-meeting-bot`, plus `Containers Write` for their container |
 | `production / ARCHIVE_OBSERVER_CLOUDFLARE_API_TOKEN` | `Editor` on the existing target declared in `cloudflare-archive-observer/wrangler.jsonc` |
