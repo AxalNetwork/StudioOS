@@ -8,5 +8,7 @@ export const dealContextApi = {
   notes: (id, { limit = 25, offset = 0, tag = '' } = {}) => request(`/deals/${encodeURIComponent(id)}/notes?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
   addNote: (id, body) => request(`/deals/${encodeURIComponent(id)}/notes`, { method: 'POST', body: JSON.stringify(body) }),
   editNote: (id, uid, body) => request(`/deals/${encodeURIComponent(id)}/notes/${encodeURIComponent(uid)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  // #6173 (D6173): the investment case — thesis fit, main evidence, open questions and risks, missing — each block its state.
+  investmentCase: (id) => request(`/deals/${encodeURIComponent(id)}/case`),
   deleteNote: (id, uid) => request(`/deals/${encodeURIComponent(id)}/notes/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
 };

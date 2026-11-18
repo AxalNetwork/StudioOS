@@ -49,7 +49,8 @@ function Question({ n, title, children, testId }) {
 }
 
 export function LicenceConsequenceSheet({ sheet, onDone }) {
-  const [text, setText] = useState('');
+  // D4819 part 21: a reason written elsewhere (a delegate request's) arrives as `initial`, still editable.
+  const [text, setText] = useState(() => String(sheet.reason.initial ?? ''));
   const fieldId = useId();
   const ruleId = useId();
   const field = useRef(null);

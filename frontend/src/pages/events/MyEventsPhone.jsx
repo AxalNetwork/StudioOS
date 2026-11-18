@@ -5,6 +5,9 @@
 // screen (MEV18b) is the ticket drawer as a page (`TicketDrawer` with `page`).
 // MyEventsPage draws the frame, the bar and the tabs; every read comes in
 // from it, so this file makes no read of its own but the check-in itself.
+// ME11a (#5869, D3724 §gaps 16): Upcoming carries "Recommended for you" as a
+// sideways row (`RecommendedRow` with `layout="swipe"`), from the read and the
+// actions the page passes, the same ones the desktop row uses.
 // The rules and words are in myEventsPhoneModel.js.
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -15,7 +18,8 @@ import { goingGroups, hostingSoon, joinState, nextEvent, placeOf, seatSourceLabe
 import { ticketPath } from './eventDrawersModel';
 import { EMPTY, calendarItems, needsYouRows, onDay, placeMenu } from './myEventsTabsModel';
 import { AddToCalendar, CARD, EmptyCard, EventLine, NeedsYouCard, Pill, RowMenu } from './MyEventsTabs';
-import { POINT, checkInLine, checkInResult, weekStrip } from './myEventsPhoneModel';
+import { POINT, checkInLine, checkInResult, phoneRowState, weekStrip } from './myEventsPhoneModel';
+import RecommendedRow from './RecommendedRow';
 // The 44 × 44px rule under the phone root (`PHONE_ROOT`), imported where the phone's parts live.
 import './myEventsPhone.css';
 
@@ -91,10 +95,22 @@ function PhoneNext({ ticket, now, onAdd }) {
 }
 
 /**
- * MEV18a: Upcoming on a phone. Needs you, the week strip, the next event and
- * Going as cards; the week's day filters Going. Add to calendar is a sheet.
+ * ME11a (#5869): Recommended for you on a phone. The desktop row's states with
+ * no Suggested card under them; recommendations turned off in Tune draw nothing.
  */
-export function PhoneUpcoming({ attending, hosting, invitations, explorer, now, api, onAnswer, onPick }) {
+export function PhoneRecommended({ read, act, explorer }) {
+  if (!read) return null;
+  const state = phoneRowState(read);
+  if (state.hidden) return null;
+  return <RecommendedRow read={read} act={act} explorer={explorer} layout="swipe" state={state} />;
+}
+
+/**
+ * MEV18a: Upcoming on a phone. Needs you, Recommended for you (ME11a), the
+ * week strip, the next event and Going as cards; the week's day filters
+ * Going. Add to calendar is a sheet.
+ */
+export function PhoneUpcoming({ attending, hosting, invitations, explorer, now, api, onAnswer, onPick, recommended = null, recommendAct = {} }) {
   const zone = viewerZone();
   const { upcoming } = splitTickets(attending, now);
   const next = nextEvent(upcoming);
@@ -109,6 +125,7 @@ export function PhoneUpcoming({ attending, hosting, invitations, explorer, now, 
   return (
     <div className="flex flex-col gap-3" data-testid="my-events-phone-upcoming">
       <NeedsYouCard needs={needs} onAnswer={onAnswer} />
+      <PhoneRecommended read={recommended} act={recommendAct} explorer={explorer} />
       <WeekStrip items={items} chosen={chosen} onChoose={setChosen} explorer={explorer} now={now} zone={zone} />
       {nothing ? <EmptyCard copy={EMPTY.upcoming} to={tabHref({ path: '/discover' })} testId="my-events-nothing" /> : null}
       {next ? <PhoneNext ticket={next} now={now} onAdd={setAdding} /> : null}

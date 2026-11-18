@@ -12,6 +12,7 @@ import { hashEmail } from '../util/hashEmail';
 import { pushLicenceToBranch, deploymentCodeFor } from '../services/licencePush';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
+import { logAdminAction } from '../services/adminAudit';
 import { str, byUid, logEvent, pushOutcome, transitionRefusal, activationBlockers, staleRequest } from '../services/licenceLedgerCore';
 import type { LicenceRow } from '../services/licenceLedgerCore';
 import type { TerminationOps } from '../services/licenceSyncView';
@@ -126,6 +127,26 @@ r.post('/:uid/reinstate', async (c) => {
     await logEvent(c.env, licence.id, 'reinstated', admin.id, undefined, null,
       { before: { status: 'suspended' }, after: { status: 'active' } }, pushOutcome(pushed));
     return c.json({ ok: true, status: 'active', pushed } satisfies LicenceTransitionResult);
+  } catch (e) { return mapError(c, e); }
+});
+
+// D4819 part 21 (#5928, board L18): "Retry branch sync". A write whose push did not land is partial: HQ holds the
+// change and the branch does not yet. The scheduled retry (`retryPendingLicencePushes`) owns that, but an operator
+// looking at a partial outcome can push the current copy now. It changes nothing at HQ: it allocates the next revision,
+// pushes it, and records what the branch answered, as every write does. Never repeats the write that went partial.
+// Recorded in the admin audit log, not `licence_events`: that table's CHECK lists the events that change a licence,
+// and widening it is an append-only table rebuild (migration 266) for an act that changes nothing.
+r.post('/:uid/sync/retry', async (c) => {
+  try {
+    const admin = await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    if (licence.status === 'draft') return c.json({ error: 'not_issued', message: 'A draft licence has no branch copy to sync yet.' }, 409);
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_sync_retried', {
+      licence_uid: licence.uid, revision: pushed.revision ?? null, outcome: pushOutcome(pushed), failure_code: pushed.failure_code ?? null,
+    });
+    return c.json({ ok: true, status: licence.status as LicenceTransitionResult['status'], pushed } satisfies LicenceTransitionResult);
   } catch (e) { return mapError(c, e); }
 });
 
