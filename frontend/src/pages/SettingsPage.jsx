@@ -408,7 +408,7 @@ function AccountPanes({ safeActive, location, data, setData, flash, patch, reloa
       )}
       {safeActive === 'security-privacy' && (
         <>
-          {location.hash === '#my-thesis' && <InvestorMyThesisCard investorProfile={investorProfile} key={location.key} flash={flash} role={data?.role} linked />}
+          {data?.role !== 'investor' && location.hash === '#my-thesis' && <InvestorMyThesisCard investorProfile={investorProfile} key={location.key} flash={flash} role={data?.role} linked />}
           <AuthSection data={data} flash={flash} reload={reloadAccount} />
           {/* The canvas draws no privacy section. These cards stay on this
               pane, under their own label: the worker's cohort-access
@@ -416,9 +416,15 @@ function AccountPanes({ safeActive, location, data, setData, flash, patch, reloa
           <SectionLabel as="h2" className="pt-2">Privacy</SectionLabel>
           <PrivacyCoreCard flash={flash} />
           <CohortAdvisorAccessCard flash={flash} />
-          <InvestorSignalsContributionCard investorProfile={investorProfile} flash={flash} role={data?.role} />
-          {location.hash !== '#my-thesis' && <InvestorMyThesisCard investorProfile={investorProfile} flash={flash} role={data?.role} />}
-          <InvestorThesisEditorCard investorProfile={investorProfile} flash={flash} role={data?.role} />
+          {data?.role === 'investor' ? (
+            <Link className="text-sm font-semibold text-violet-700 underline dark:text-violet-300" to="/account/portfolio/settings#my-thesis">Firm Settings and thesis</Link>
+          ) : (
+            <>
+              <InvestorSignalsContributionCard investorProfile={investorProfile} flash={flash} role={data?.role} />
+              {location.hash !== '#my-thesis' && <InvestorMyThesisCard investorProfile={investorProfile} flash={flash} role={data?.role} />}
+              <InvestorThesisEditorCard investorProfile={investorProfile} flash={flash} role={data?.role} />
+            </>
+          )}
           <MarketIntelContributionCard flash={flash} />
           <PrivacySection data={data} patch={patch} flash={flash} />
         </>
