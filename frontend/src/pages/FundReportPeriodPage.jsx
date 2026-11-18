@@ -4,6 +4,7 @@ import WorkspaceShell from '../workspaces/WorkspaceShell';
 import WorkerRail from '../ui/WorkerRail';
 import { api } from '../lib/api';
 import { parseStamp } from '../ui/parseStamp.js';
+import { fundReportDeliveryLabel, fundReportDeliveryTime } from '../lib/fundReportDelivery';
 import { useLeaveGuard } from '../lib/leaveGuard';
 import { fundReportsApi } from '../lib/api/fundReports.js';
 import { fundReportingApi } from '../lib/api/fundReporting.js';
@@ -132,7 +133,12 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
   };
   return <>
     {form.corrects_period_id && <p>This period corrects <Link to={`/funds/${data.fund.id}/reporting/${form.corrects_period_id}`}>{form.corrects_period || `period ${form.corrects_period_id}`}</Link>. The original remains issued.</p>}
-    {issued && <article className="fd-card"><h2>Issued · read-only</h2><dl><div><dt>Issued at</dt><dd><Recorded value={form.issued_at} reason="The issue timestamp was not recorded." /></dd></div><div><dt>Issued by</dt><dd><Recorded value={form.issued_by} reason="The issuing actor was not recorded." /></dd></div></dl><p>Issuing cannot be undone. Record a correcting period to change this report.</p></article>}
+    {issued && <article className="fd-card"><h2>Issued · read-only</h2><dl><div><dt>Issued at</dt><dd><Recorded value={form.issued_at} reason="The issue timestamp was not recorded." /></dd></div><div><dt>Issued by</dt><dd><Recorded value={form.issued_by} reason="The issuing actor was not recorded." /></dd></div>
+      {data.can_manage && <div><dt>{data.period.lps_notified_at ? 'LPs notified at' : 'LP notices'}</dt><dd>
+        {data.period.lps_notified_at && <time dateTime={data.period.lps_notified_at}>{fundReportDeliveryTime(data.period)} · </time>}
+        {fundReportDeliveryLabel(data.period)}
+      </dd></div>}
+    </dl><p>Issuing cannot be undone. Record a correcting period to change this report.</p></article>}
     {!Object.values(form.narrative).some(rows => rows.length) && <p>This period has no content yet.</p>}
     <section className="fd-facts fd-period" aria-label="Reporting period"><article className="fd-card"><label>Period label<input aria-label="Period label" maxLength={100} value={form.period} readOnly={!editable || Boolean(form.id)} disabled={pending} onChange={e => change('period', e.target.value)} /></label></article>
       <article className="fd-card"><label>Start date<input aria-label="Start date" type="date" value={form.period_start} readOnly={!editable} disabled={pending} onChange={e => change('period_start', e.target.value)} /></label>{!form.period_start && <Recorded value={null} reason="The start date has not been set for this period." />}</article>
@@ -172,7 +178,7 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
       {issued && data.can_manage && !admin && <Link to={`/funds/${data.fund.id}/reporting/new?corrects=${form.id}`}>Issue a correcting period</Link>}
       <Link to={`/funds/${data.fund.id}`}>Back to fund</Link></div>
     {deleting && <div className="fd-confirm"><div className="fd-card" role="dialog" aria-modal="true" aria-labelledby="fd-delete-title"><h2 id="fd-delete-title">Delete this draft?</h2><p>This removes the draft and any unsaved edits.</p><div className="fd-actions"><button type="button" disabled={pending} autoFocus onClick={() => setDeleting(false)}>Keep draft</button><button type="button" disabled={pending} onClick={deleteDraft}>Confirm deletion</button></div></div></div>}
-    {confirm && <div className="fd-confirm"><div className="fd-card" role="dialog" aria-modal="true" aria-labelledby="fd-issue-title"><h2 id="fd-issue-title">Issue this period?</h2><p>Issuing cannot be undone. LPs can read the issued report. Any change requires a separate correcting period.</p><div className="fd-actions"><button type="button" disabled={pending} autoFocus onClick={() => setConfirm(false)}>Keep draft</button><button type="button" disabled={pending} onClick={() => save(true)}>Confirm issue</button></div></div></div>}
+    {confirm && <div className="fd-confirm"><div className="fd-card" role="dialog" aria-modal="true" aria-labelledby="fd-issue-title"><h2 id="fd-issue-title">Issue this period?</h2><p>Issuing cannot be undone. LPs can read the issued report. Eligible LP accounts receive an in-app notice. Any change requires a separate correcting period.</p><div className="fd-actions"><button type="button" disabled={pending} autoFocus onClick={() => setConfirm(false)}>Keep draft</button><button type="button" disabled={pending} onClick={() => save(true)}>Confirm issue</button></div></div></div>}
   </>;
 }
 

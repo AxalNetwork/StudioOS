@@ -36,7 +36,6 @@ import { __setPublicResolverForTest } from '../src/services/webFetch.ts';
 __setPublicResolverForTest(async () => ['93.184.216.34']);
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-d778-competitors-0123456789';
 const FOUNDER = 1;
 
@@ -130,6 +129,8 @@ test('D778: each press with no rail context names its inventoried option, and th
   // option; the crawl's rail not passed to the positioning run.
   const db = fixture();
   for (const press of await pressAll(db)) {
+    // D7176 (owner answer A): Refresh sources re-fetches the stored pages and runs no model.
+    if (press.option === COMPANIES_OPTIONS.sources) { assert.deepEqual(press.rows, [], 'refresh ran a model'); continue; }
     assert.ok(press.rows.length > 0, `${press.option}: no run was logged`);
     for (const r of press.rows) {
       assert.deepEqual([r.rail_page, r.rail_option, r.record_ref], [COMPANIES_PAGE, press.option, at(press.id)], press.option);
@@ -154,6 +155,7 @@ test('D778: a mounted rail\'s page and the press\'s option win; the browser\'s r
     'X-Rail-Page': encodeURIComponent(page), 'X-Rail-Option': encodeURIComponent(sent(option)), 'X-Rail-Record': 'project:999',
   }));
   for (const press of presses) {
+    if (press.option === COMPANIES_OPTIONS.sources) { assert.deepEqual(press.rows, [], 'refresh ran a model'); continue; }
     assert.ok(press.rows.length > 0, press.option);
     for (const r of press.rows) assert.deepEqual([r.rail_page, r.rail_option, r.record_ref], [page, sent(press.option), at(press.id)], press.option);
   }

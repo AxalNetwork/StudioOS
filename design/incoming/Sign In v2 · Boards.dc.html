@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign In v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Auth · /login · #6956 · new canvas (SGN-00 onward) · builds in #6958, Apple in #6957, verification in #6959</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Sign in — Email, Apple, Google on the first view; a centered card on desktop, a bottom sheet on phones</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The signed-out /login page, for visitors and for members sent back from a protected page. The first view shows one heading, exactly three full-width buttons (Continue with Email, Continue with Apple, Continue with Google, in that order) and one quiet Create an account link, over the real twilight city artwork (frontend/public/auth/login-background.webp). Everything the current page shows at once moves into the Email branch: a method chooser (Email me a sign-in link, Use a passkey, Use an authenticator code), then only the fields that method needs. Turnstile appears only in the link and code steps, and only when Cloudflare asks for interaction. Apple and Google hand off straight from the first view; their consent screens are theirs, drawn as dashed placeholders. Desktop is one compact card at 1440 × 900; phones get a content-height sheet that rises on arrival, closes to the artwork with a Sign in button, and keeps the field and its button above the keyboard at 390 and 320. Type, purple and tokens come from AuthShell / authV2. Violet dashed ◇ tags mark Sign in with Apple, which does not exist on main (#6957); amber ⚑ tags mark owner decisions, drawn as the proposed option.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main e245cd0df9 · maya.okafor@example.com, sam@example.com and the code 482913 are fictional; the artwork is the production asset</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Sign In v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SGN-00', 'Journey and rules', 'First view to completion or retry for Email (link, passkey, code), Apple and Google; the rules every step follows; the annotation key and the three sizes.', [W('SGN00')]],
+      ['SGN-01', 'Desktop 1440 · first view', 'One compact card centered over the scene: “Sign in to Axal VC”, Email, Apple, Google, and Create an account as one quiet link. Then the protected-destination example: a member sent from /grow/hiring sees the existing “Sign in to continue to Grow” heading and who it is for.', [F('SGN01', false, 900), F('SGN01B', 'Protected destination · Grow', 900)]],
+      ['SGN-02', 'Phone 390 · the sheet', 'On arrival the sheet rises from the bottom over a modest scrim, rounded top, skyline visible above it. Close reveals the artwork with a visible Sign in button that reopens it. Reduced motion fades instead of rising. Protected destination on the phone.', [P('SGN02A', 'Arrival · rising'), P('SGN02B', 'At rest'), P('SGN02C', 'Closed · Sign in reopens'), P('SGN02D', 'Reduced motion'), P('SGN02E', 'Protected destination')]],
+      ['SGN-03', 'Email · method chooser', 'Three plain actions in the same card. Opening it sends nothing and starts no device prompt. Without WebAuthn the passkey row is left out. Back returns focus to Continue with Email; a kept destination rides along.', [F('SGN03', false, 900), C('SGN03B', 'No passkey support · Back · destination', 1340, 572)]],
+      ['SGN-04', 'Email · sign-in link', 'Address, conditional Turnstile, Send; invalid address; sending; sent with the 60 s resend cooldown; resend available; change address; the expired-link retry; verification that could not load; rate limits; a send the queue refused.', [F('SGN04', 'Address with verification asked', 900), C('SGN04B', 'No check · invalid · sending', 1340, 487), C('SGN04C', 'Sent · resend · expired link', 1340, 551), C('SGN04D', 'Verification failed · rate limited · not sent', 1340, 613)]],
+      ['SGN-05', 'Email · authenticator code', 'Address, a labelled 6-digit field with Paste (a recovery code also works there), Turnstile, Sign in and the existing account recovery link. Wrong code, no authenticator yet (switch to a link, address kept) and verification that could not load.', [F('SGN05', false, 900), C('SGN05B', 'Wrong code · no authenticator · no verification', 1340, 782)]],
+      ['SGN-06', 'Email · passkey', 'No address needed for a discoverable passkey. The card waits while the browser’s own prompt is up (dashed placeholder). Cancelled, not recognised and expired each return to Try passkey again.', [F('SGN06', false, 900), C('SGN06B', 'Cancelled · not recognised · expired', 1340, 412)]],
+      ['SGN-07', 'Google', 'Straight from the first view: Google’s window opens (or this tab, when the window is off or blocked); the button reads Waiting for Google… and stays live. Then signing in, cancelled, a different account, an address Google can’t prove, blocked window, not configured and rate limited.', [F('SGN07', 'Google’s window open', 900), C('SGN07B', 'Signing in · cancelled · different account · needs email proof', 1760, 509), C('SGN07C', 'Window blocked · not configured · too many attempts', 1340, 491)]],
+      ['SGN-08', 'Apple ◇ #6957', 'Straight from the first view to Apple, and back: signed in, cancelled, Apple didn’t confirm, and a private relay address that matches no account. None of this exists on main.', [F('SGN08', 'Taking you to Apple', 900), C('SGN08B', 'Return states', 1760, 541)]],
+      ['SGN-09', 'Completion and page-level errors', 'Signed in, opening the kept destination. Offline, account inactive and a security check, each with its next action.', [F('SGN09', false, 900), C('SGN09B', 'Offline · inactive · security check', 1340, 537)]],
+      ['SGN-10', 'Phone 390 · journeys', 'The same steps in the sheet with Back and Close: chooser, link with the keyboard open, sent, code, passkey with the system sheet, Google redirect, Apple cancelled, signed in.', [P('SGN10A', 'Email chooser'), P('SGN10B', 'Link · keyboard open'), P('SGN10C', 'Sent · cooldown'), P('SGN10D', 'Authenticator code'), P('SGN10E', 'Passkey · system sheet'), P('SGN10F', 'Google · this tab'), P('SGN10G', 'Apple cancelled'), P('SGN10H', 'Signed in')]],
+      ['SGN-11', 'Phone 320 · keyboard open', 'The sheet takes the visual viewport and scrolls inside itself, so the focused field and its button stay above the keyboard. The first view at 320 without the keyboard.', [C('SGN11A', '320 · address, keyboard open', 320, 568), C('SGN11B', '320 · code, keyboard open', 320, 568), C('SGN11C', '320 · first view', 320, 568)]],
+      ['SGN-12', 'Motion and reduced motion', 'Durations and easing for arrival, close, reopen and step changes, the reduced-motion equivalent of each, and where focus lands.', [W('SGN12')]],
+      ['SGN-13', 'Accessibility annotations', 'Focus order and the focus ring on the first view; then focus and return focus, keyboard, Escape and Back, accessible names, live status, safe-area insets, scrolling with the keyboard open, targets and contrast.', [F('SGN13', 'Focus order', 900), W('SGN13B')]],
+      ['SGN-14', 'Handoff', 'What was checked on main, the tokens and components to reuse, what needs engineering (#6957, #6958, #6959), the owner decisions, frontend-only work and what is still open.', [W('SGN14')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

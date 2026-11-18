@@ -57,7 +57,12 @@ test('the config: flat, on workers.dev, no route, no cron, no browser, every ide
   const vars = sections.find((s) => s.name === 'vars').kv;
   for (const [k, v] of Object.entries(STAGE_A_VARS)) assert.equal(vars.get(k), JSON.stringify(v), k);
   assert.ok(!sections.some((s) => s.name === 'durable_objects.bindings' && s.kv.has('script_name')), 'no other Worker\'s Durable Object');
-  assert.ok(r.dropped.includes('durable_objects.bindings:MEETING_BOT_CONTAINER'));
+  // D7147 part 2: staging has no meeting-bot binding, so there is none to drop; one added back is still dropped.
+  assert.ok(!r.dropped.includes('durable_objects.bindings:MEETING_BOT_CONTAINER'));
+  const PIPE = '[[env.preview.durable_objects.bindings]]\nname       = "PIPELINE_ROOM"';
+  assert.equal(TOML.split(PIPE).length, 2);
+  const withBot = stageASections(TOML.replace(PIPE, '[[env.preview.durable_objects.bindings]]\nname = "MEETING_BOT_CONTAINER"\nclass_name = "MeetingBotContainer"\nscript_name = "studioos-meeting-bot-preview"\n\n' + PIPE), RUN, IDS);
+  assert.ok(withBot.dropped.includes('durable_objects.bindings:MEETING_BOT_CONTAINER'));
   assert.ok(r.dropped.includes('browser') && r.dropped.includes('triggers'));
   const plan = toCreate(r);
   assert.equal(plan.d1, 'studioos-rehearsal-abc123-src');

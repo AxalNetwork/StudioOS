@@ -23,7 +23,10 @@
  *            run step is answered by E2's idempotency: the same proposal, or
  *            `step_lost` with nothing more charged. `spend_limit`, `ai_paused`
  *            and `agent_cap_reached` pause the agent; `gateway_limit` sets the
- *            platform circuit breaker.
+ *            platform circuit breaker. D7073: `model_throttled` (the model
+ *            was out of capacity) and `gateway_required` /
+ *            `gateway_misconfigured` end the run with the task open again,
+ *            and pause nothing. Every run from here is `engine: true`.
  *   propose  the run and the task wait for a decision; the sponsor and the
  *            managers hear of it (in-app, `proactive_nudges`).
  *   wait     the Workflow's `waitForEvent('decision', 7 days)`.
@@ -269,7 +272,7 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
   const sk = await sessionSkill(d.env, l.task);
   if (sk.kind === 'refused') return end(d, l, 'run', 'refused', sk.code, sk.message);
   const r = await d.agentRun(d.env, {
-    agent: l.agent, module: l.task.module!, option: l.task.option!, prompt: b.prompt, taskId: l.task.id, runUid: uid,
+    agent: l.agent, module: l.task.module!, option: l.task.option!, prompt: b.prompt, taskId: l.task.id, runUid: uid, engine: true,
     ...(sk.kind === 'skill' ? { skill: sk.uid, skillVersion: sk.version } : {}),
   });
   if (r.ok) {
@@ -282,6 +285,17 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
     // The platform circuit breaker: the engine reads `paused` until a person clears it.
     try { await d.env.RATE_LIMITS.put(BREAKER_KEY, 'gateway_limit'); } catch { console.warn('[agents] breaker_unwritable'); }
     return end(d, l, 'run', 'failed', 'gateway_limit', 'The platform\'s agent limit was reached.');
+  }
+  // D7073: a busy model, or a gateway that is not set up, ends this run and pauses nothing: the task is open
+  // again for a later run. Neither is retried here, because a retried step replays its hold and runs nothing.
+  if (r.code === 'model_throttled') return end(d, l, 'run', 'failed', 'model_throttled', 'The model was busy. The task is open again.');
+  // #7073 part 2: the model accounts. Not set up, all out of credit, or one that failed: the run ends, the task is
+  // open again, nothing is paused. A gateway spend limit is `gateway_limit` above, which pauses the platform.
+  if (['accounts_unconfigured', 'accounts_exhausted', 'account_failed', 'guard_blocked', 'guard_unavailable'].includes(r.code)) {
+    return end(d, l, 'run', 'failed', r.code, r.code === 'accounts_exhausted' ? 'Every model account is out of credit.' : 'The model accounts could not answer.');
+  }
+  if (r.code === 'gateway_required' || r.code === 'gateway_misconfigured') {
+    return end(d, l, 'run', 'failed', r.code, 'The agent gateway is not set up, so no model was reached.');
   }
   const pause = RUN_PAUSES[r.code];
   if (pause) {

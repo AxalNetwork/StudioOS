@@ -595,7 +595,7 @@ export default function BuildPlan({ tab = 'plan', projectId, projectStatus = 're
               <p className={MUTED}>{OP_LINE}</p>
             </header>
           )
-          : <CycleHeader cycle="build" cards={cards} active="plan" action={action} title={TITLE} sub={readOnly ? READ_ONLY_LINE : LINE} search={ventureSearch(s)} />}
+          : <CycleHeader cycle="build" cards={cards} active={tab === 'progress' ? 'progress' : 'plan'} action={action} title={TITLE} sub={readOnly ? READ_ONLY_LINE : LINE} search={ventureSearch(s)} />}
       {pill}
       {/* D4602 (BD14m): on a phone the plan's pages carry Build's own tabs; an Operating Partner keeps Progress only. */}
       {phone && !partner ? <BuildPhoneNav active={tab} search={s} /> : <PlanTabBar active={tab} search={s} only={partner ? 'progress' : null} />}
