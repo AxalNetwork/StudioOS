@@ -4,6 +4,7 @@ import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import { useWrite } from './CapTableDialog';
 import { MERCURY_ID, closeView, mercuryView, proposalView, toBps } from './historyModel';
+import { vestingWords } from './poolModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { safeRaiseError, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -185,6 +186,7 @@ function RecordProposal({ projectId, row, record, role, onClose, onDone }) {
         <button key="a" type="button" className={actionPrimary} onClick={accept} disabled={write.busy} data-testid="captable-proposal-accept">Accept</button>,
       ] : [<button key="c" type="button" className={actionGhost} onClick={onClose}>Close</button>]}>
       <p className={`m-0 ${INK}`} data-testid="captable-proposal-line">{v.line}</p>
+      {row.kind === 'grant' && 'vesting' in row ? <p className={`m-0 ${INK}`} data-testid="captable-proposal-vesting"><span className={MUTED}>Vesting · </span>{vestingWords(row.vesting)}</p> : null}
       {row.correction_reason ? <p className={`m-0 ${MUTED}`}>Reason given: {row.correction_reason}</p> : null}
       {owner
         ? <input className={INPUT} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="Why you dismiss it (optional)" aria-label="Reason to dismiss" />

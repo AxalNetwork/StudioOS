@@ -147,7 +147,7 @@ test('saved proposals stay behind the Mercury team boundary and remain scoped to
     const own = await growAttention(f.x(), true, { user: { id: 1, founder_id: 11 } });
     assert.deepEqual(own.signals.partner_proposals, { state: 'recorded', value: 1 });
     assert.equal(own.items[0].key, 'partner_proposal');
-    assert.equal(own.items[0].href, '/grow/partner-network?project_id=1');
+    assert.equal(own.items[0].href, '/grow/partnerships?project_id=1'); // D6118: one Partnerships page
     const outsider = await growAttention(f.x(), true, { user: { id: 9, founder_id: null } });
     assert.deepEqual(outsider.signals.partner_proposals, { state: 'restricted', value: null });
     assert.equal(outsider.items.some((i) => i.key === 'partner_proposal'), false);

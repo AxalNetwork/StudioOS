@@ -25,8 +25,8 @@ addresses are `../dealPageModel.js` (D1148).
   permission (DL22).
 - `DealOverview.jsx` — the investor's Overview (DL1): the scorecard strip's
   slot (DL24a), what is new since you last looked, the terms at a glance
-  less the strip's two, the round (its figures are the strip's) and the
-  deck's slot.
+  less the strip's two, the round (its figures are the strip's) and, since
+  D6165, the deck the venture granted you (`DealDeck.jsx`).
 - `DealNotes.jsx` — DL14: your firm's notes (part 2's store; only a note's
   author edits or deletes it, each in an in-page dialog), Ask on New note
   (#4046: Eadwyn drafts the words, placed "Not saved" until your Save, then
@@ -41,6 +41,14 @@ addresses are `../dealPageModel.js` (D1148).
 - `DealWorkTabs.jsx` — D1153 (#3058, part 5): Diligence (DL7), Documents and
   data room (DL8, DL9), Terms (DL10) and Commitment and closing (DL11–DL13),
   each change behind an in-page dialog.
+- `DealDeck.jsx` and `dealDeckModel.js` — D6165 (#6165): the deck the
+  venture granted this investor on this deal (D1587's `GET
+  /api/deals/:id/deck`). `DealDeckCard`, on Overview and on Documents, shows
+  the title, the version and "frozen as of", the Worker's own sentence when
+  nothing is granted, or Unreadable with Try again; Open the deck draws the
+  returned slides read-only through the share link's card view
+  (`../raise/pitch/DeckCardView.jsx`) in the shared Lightbox. Investors only;
+  it writes nothing.
 - `DealPaper.jsx` — D6184 (#6184): one envelope on Documents' Deal paper card:
   its signed count, Download once fully signed (the Worker's refusal shown in
   the row), and how to sign, which points to the emailed link and never

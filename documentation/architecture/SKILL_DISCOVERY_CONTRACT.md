@@ -1,6 +1,6 @@
 # Skill discovery: the recommendation contract (D4538, #4538)
 
-This is the request and response a task-to-skill recommendation uses. It describes what the ranker must return, not a built route: no route serves it yet. The decision behind it, and the company-extension model, are in `decisions/D4538.md`. The labelled query set that measures it is in `skill-discovery/queries.v1.json`.
+This is the request and response a task-to-skill recommendation uses. `POST /api/teams/skills/discover` (`cloudflare-worker/src/routes/team_skills.ts`, #5967, `decisions/D4538-p6.md`) serves it to a caller who can manage the agent; it reads only. The decision behind it, and the company-extension model, are in `decisions/D4538.md`. The labelled query set that measures it is in `skill-discovery/queries.v1.json`.
 
 The gate and ranking stages 1 to 3 are built as a pure service, `cloudflare-worker/src/services/agents/skillDiscovery.ts`. Its relevance method and measured numbers are in `decisions/D4538-p4.md`.
 

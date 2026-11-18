@@ -92,16 +92,16 @@ function Sources({ sync, host }) {
 }
 
 /**
- * Retry sync, drawn where L15 puts it but disabled: no Worker route re-sends a
- * copy on demand (D5924), and a button that pressed into nothing would be a
- * claim. The reason sits beside it, not only on hover.
+ * Retry sync, where L15 puts it. D5924 drew it disabled because no route re-sent a copy on demand; D4819 part 21
+ * (#5928) added one, so it sends when the page passes `onRetry`, and stays disabled (with its reason) when not.
+ * What it does sits beside it, not only on hover.
  */
-function RetrySync({ nextTry }) {
+function RetrySync({ nextTry, onRetry, busy }) {
   return (
     <div className="flex flex-col gap-1 sm:items-end">
       <button
-        type="button" disabled data-testid="licence-sync-retry" aria-describedby="licence-sync-retry-reason"
-        className={`${BUTTON} cursor-not-allowed bg-indigo-600 text-white opacity-50`}
+        type="button" disabled={!onRetry || busy} onClick={onRetry || undefined} data-testid="licence-sync-retry" aria-describedby="licence-sync-retry-reason"
+        className={`${BUTTON} bg-indigo-600 text-white disabled:cursor-not-allowed disabled:opacity-50`}
       >
         <RotateCw size={13} aria-hidden="true" /> Retry sync
       </button>
@@ -125,7 +125,7 @@ function ReadAgain({ onReread, busy }) {
 }
 
 /** The card for where the branch stands: L14 when synced, L15 when a copy is owed. */
-function SyncCard({ board, busy, onReread }) {
+function SyncCard({ board, busy, onReread, onRetry }) {
   const { state } = board;
   if (state === 'unreadable') {
     return (
@@ -153,7 +153,7 @@ function SyncCard({ board, busy, onReread }) {
             </h3>
             <p data-testid="licence-sync-lead" className="mt-1 break-words text-[13px] text-amber-900 dark:text-amber-200">{lead}</p>
           </div>
-          <RetrySync nextTry={state === 'pending' ? board.nextTry : null} />
+          <RetrySync nextTry={state === 'pending' ? board.nextTry : null} onRetry={onRetry} busy={busy} />
         </div>
         <dl className="space-y-2 p-4">
           {state === 'pending' && (
@@ -225,7 +225,7 @@ function SyncCard({ board, busy, onReread }) {
  * `deployment_available`, `onReread` re-reads the licence, and `now` is the
  * clock the ages are read against.
  */
-export function LicenceSyncStrip({ sync, busy, onResume, part, deployment, deploymentAvailable, onReread, now }) {
+export function LicenceSyncStrip({ sync, busy, onResume, part, deployment, deploymentAvailable, onReread, onRetry = null, now }) {
   const t = sync?.termination;
   const strip = part !== 'termination';
   const termination = part !== 'strip';
@@ -241,7 +241,7 @@ export function LicenceSyncStrip({ sync, busy, onResume, part, deployment, deplo
         <div className="mt-4 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:p-4 dark:border-gray-800 dark:bg-gray-950" data-testid="licence-sync-strip" data-state={board.state}>
           <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500 dark:text-gray-400">Branch sync</div>
           {!noBranch && <Sources sync={deploymentAvailable === false ? null : sync} host={host} />}
-          <SyncCard board={board} busy={busy} onReread={onReread} />
+          <SyncCard board={board} busy={busy} onReread={onReread} onRetry={onRetry} />
         </div>
       )}
       {termination && t && t.status !== 'complete' && (
