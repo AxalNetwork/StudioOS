@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Relationships Founder Add Person · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network › Relationships · #7058 · brief 3 of 6 (#7050) · extends #4799 NW1.2, NW2 and NW2.3</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Relationships — a founder adds a person to their own contacts, and reviews a match</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Founder Add person for Network (/network and /network/relationships). One sheet, opened from the first-run overview (NW1.2 step 2) and from My relationships (NW2), saves a person to the member’s own contacts through the existing POST /api/contacts/book. It contacts nobody and sends no invitation, and every result says so. Only the name is required; organization, title, email and LinkedIn profile are optional. Errors keep what was typed, Save sends once, and closing returns to the list with its search and filters. When the email or LinkedIn profile matches a contact already held, the save returns a review and the sheet extends the NW2.3 duplicate review: what was just added, the existing record, why it matched, and Merge, Keep both or Dismiss. A name alone is never a match. Import LinkedIn Connections.csv, Invite to Axal and an investor’s tie request are drawn as separate journeys. It reuses the approved shell, header, tabs, Person Sheet and state words from #4799 and #6256; keys carry the NRF prefix and section ids continue the NW numbering. Violet dashed ◇ tags mark backend work; there are no owner picks.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main c59a9f2f66 · founder [Lena Sato] at [Kelp Bio], [Morgan Vale], [Ari Lane], [Priya Nair], [Jules Avery] and every person, company and figure (a search for “Studio”: 4 people, then 5 after the save) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Relationships Founder Add Person Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW2.4', 'Two entries, one sheet', 'Add person enabled beside Import LinkedIn Connections.csv in My relationships, with the list searched for “Studio”; and step 2 of the first-run overview. Both open the same sheet.', [F('NRF01', 'My relationships', 1000), F('NRF01B', 'First-run overview', 1180)]],
+      ['NW2.5', 'Add person form', 'Name required; organization, title, email and LinkedIn profile optional. The promise first: saving adds them to your own contacts, nobody is contacted. Import and Invite sit apart. Then field validation (page checks and a server field error), saving once, a recoverable failure with entries kept, and a refused support session.', [F('NRF02', 'Form over the filtered list', 1000), C('NRF02B', 'Field validation and the rules on main', 1400, 680), C('NRF02C', 'Saving · could not save · refused', 1400, 720)]],
+      ['NW2.6', 'Saved: the named person opens', 'The save answers contacted: false. The Person Sheet opens on [Morgan Vale]; the list behind keeps “Studio” and now shows 5. A name-only save, and two people who share a display name, with no review.', [F('NRF03', 'Enriched save', 1000), C('NRF03B', 'Name only · same name, different people', 1220, 820)]],
+      ['NW2.3a', 'Duplicate review after a save', 'Extends NW2.3. The returned review: just added, the existing record, the reason (same LinkedIn profile or same email), and Merge into existing, Keep both or Dismiss. Both records stay until a decision. Then the shared Possible duplicates list, and the read-failed, already-decided, merged and kept results.', [F('NRF04', 'Same LinkedIn profile', 1000), C('NRF04B', 'Same email, different names · Possible duplicates', 1400, 460), C('NRF04C', 'Review results and errors', 1400, 280)]],
+      ['NW2.7', 'Separate journeys', 'Add person, Import LinkedIn Connections.csv, Invite to Axal and an investor’s tie request, each with who sees it, what it sends and its route.', [C('NRF05', false, 1400, 390)]],
+      ['NW8.2', 'Phone 390', 'The form with the email keyboard and the actions pinned above it, a validation error, the saved person, and the duplicate review. 44 px targets.', [P('NRF06A', 'Form · email keyboard'), P('NRF06B', 'Validation'), P('NRF06C', 'Saved'), P('NRF06D', 'Possible match')]],
+      ['NW9.2', 'Tablet 768', 'My relationships with the Add person sheet over it.', [C('NRF07', false, 768, 1024)]],
+      ['NW10.3', 'Dark', 'Validation and the duplicate review on the dark tokens; states keep their words and shapes.', [F('NRF08', 'Form · validation · dark', 1000), F('NRF08B', 'Duplicate review · dark', 1000)]],
+      ['A11y', 'Accessibility', 'Focus order and return, screen-reader announcements, phone keyboard types and recovery rules.', [W('NRF09')]],
+      ['Handoff', 'Handoff', 'What was checked on main, what was preserved, the frontend-only work, and what needs the backend (◇).', [W('NRFH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

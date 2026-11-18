@@ -6,6 +6,7 @@
  * <part> --plan-file <path> validates exact-once coverage before executing
  * the current package command with explicit files. No node count sharding.
  * --list prints names only; local npm run test:drift remains unchanged.
+ * --plan --equal-weights reads no timings file (D7108 part 2: merge_group).
  *
  * D6464 (#6464): under merge_group only, a node:test command also writes its
  * failed tests (lib/failedTestsReporter.mjs). When it fails and every failed
@@ -30,6 +31,12 @@ export const SHARDS = Object.freeze({
 
 /** The name of the part that runs every step of test:drift not in SHARDS. */
 export const REST = 'rest';
+
+/**
+ * D7108 part 2: `--plan --equal-weights` plans with no timings at all. The
+ * merge-queue shards use it, so their plan is a pure function of the commit.
+ */
+export const EQUAL_WEIGHTS = '--equal-weights';
 
 const SHARD_NAME = (script, i, n) => `${script.replace(/^test:/, '')}-${i}-of-${n}`;
 
@@ -194,8 +201,10 @@ function main(argv) {
   const arg = argv[0];
   if (arg === '--plan') {
     // A missing timings artifact means equal weights; malformed data is a failed plan.
+    // D7108 part 2: --equal-weights pins the input to {} and reads no file, so
+    // every merge-queue shard computes the same plan from its checkout alone.
     let timings = {};
-    try {
+    if (argv[1] !== EQUAL_WEIGHTS) try {
       const input = JSON.parse(readFileSync(resolve(root, argv[1]), 'utf8'));
       // #5608 emits commit metadata plus per-test wallMs/exitCode.
       timings = timingsOf(input);

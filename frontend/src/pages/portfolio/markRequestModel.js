@@ -245,3 +245,35 @@ export function queueRows(items, today) {
 export function declineProblem(note) {
   return answerProblem({ state: 'declined', note });
 }
+
+// ---------------------------------------------------------------------------
+// D6909 part 3 (#6909, PRM22 B/C, PRM18 header): Record a mark from the queue
+// answers that request; the request's state shows in the mark-history header.
+// ---------------------------------------------------------------------------
+
+/** The line above the mark's write flow when HQ opened it from a queue row (PRM22 B). */
+export function answeringLine(row) {
+  if (!row) return null;
+  const when = row.requestedOn ? ` · requested ${row.requestedOn}` : '';
+  return `Answers the request from ${row.requester || 'an investor'} · ${row.kind || 'Request'}${when}`;
+}
+
+/**
+ * What the receipt says about the request once the mark is saved (PRM22 C). `outcome` is
+ * 'answered', 'failed' or null (not tried). A failed answer never hides the mark: it was saved.
+ */
+export function answeredWords(outcome, row) {
+  if (!row || !outcome) return null;
+  const who = row.requester || 'the investor';
+  if (outcome === 'answered') return `Request from ${who} answered with this mark. They see Answered · mark recorded.`;
+  return `The mark is saved, but the request from ${who} was not answered. Resolve it below with this mark.`;
+}
+
+/** The mark-history header chip (PRM18): a glyph and a word for each state, never colour alone. */
+export function headerChip(req) {
+  const s = requestStatusOf(req);
+  if (!s) return null;
+  const glyph = s.state === 'requested' ? '◷' : s.state === 'resolved' ? '✓' : '✕';
+  const tone = s.state === 'requested' ? 'is-pending' : s.state === 'resolved' ? 'is-ok' : 'is-none';
+  return { glyph, tone, label: s.label, note: s.state === 'declined' ? s.note : null };
+}
