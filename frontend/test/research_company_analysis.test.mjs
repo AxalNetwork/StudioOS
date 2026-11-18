@@ -71,7 +71,9 @@ test('the model label is not called a recommendation', () => {
   assert.ok(CANVAS.includes('Recommended next actions'));
   assert.doesNotMatch(page, /Recommend/);
   assert.doesNotMatch(component, /Recommended next actions/);
-  assert.match(page, /Next steps the run listed/);
+  // D7175 (canvas D7041): the run's next steps are drawn as questions, apart from findings.
+  assert.match(page, /Suggested research questions/);
+  assert.doesNotMatch(page, /Next steps the run listed/);
 });
 
 test('three states, three shapes: a failed read, a failed run, a finished run', () => {
