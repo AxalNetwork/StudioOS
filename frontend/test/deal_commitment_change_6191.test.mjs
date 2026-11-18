@@ -98,7 +98,7 @@ test('Change amount opens on the live commitment and saving without touching the
     assert.equal(m.value('commit-notes'), 'Subject to IC on Thursday');
     await m.type('commit-amount', '75000');
     await m.press(/Save the change/);
-    assert.deepEqual(sent, [[7, { amount: 75000, notes: 'Subject to IC on Thursday' }]], 'the note is sent back unchanged');
+    assert.deepEqual(sent, [[7, { amount: 75000, notes: 'Subject to IC on Thursday', route_preference: null }]], 'the note is sent back unchanged (D6195: and no preference stays none)');
     assert.deepEqual(done, [undefined]);
   } finally { await m.unmount(); api.createCommitment = saved; }
 });
@@ -114,7 +114,7 @@ test('A new commitment still starts at the minimum with no note', async () => {
     assert.equal(m.value('commit-amount'), 25000);
     assert.equal(m.value('commit-notes'), '');
     await m.press(/Confirm Commitment/);
-    assert.deepEqual(sent, [{ amount: 25000, notes: null }]);
+    assert.deepEqual(sent, [{ amount: 25000, notes: null, route_preference: null }], 'D6195: no preference is sent as none, never Direct');
   } finally { await m.unmount(); api.createCommitment = saved; }
 });
 

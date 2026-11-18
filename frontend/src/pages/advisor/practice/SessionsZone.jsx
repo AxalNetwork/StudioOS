@@ -1,7 +1,7 @@
 import { centsToInput } from '../../../lib/moneyInput.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Card } from '../../../ui';
+import { useSearchParams } from 'react-router-dom';
+import { Card, Skeleton } from '../../../ui';
 import { api } from '../../../lib/api';
 import { railProposalsApi } from '../../../lib/api/railProposals.js';
 import {
@@ -16,7 +16,7 @@ import {
   KIND_LABEL, KIND_TONE, VIEW_DAYS, blackoutLabel, bookedNote, groupByDay,
   narrowSlots, openNote, ruleNote, ruleValue, slotCounts, slotKind, slotTime, windowFrom,
 } from './sessionGrid';
-import { bookingView, formatDateTime, slotMinutes } from '../advisory/kit';
+import { bookingView, offerLine } from '../advisory/kit';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import LabHostApplyCard from '../../../components/officehours/LabHostApplyCard';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -26,45 +26,40 @@ import SessionTypesPanel from './SessionTypesPanel';
 import BookingLinksPanel from './BookingLinksPanel';
 import { PublishAvailabilityCard, SessionLifecyclePanel } from './SessionActions';
 import { readEveryPage } from './everyPage';
+import { bookingLinkUrl } from './practiceTools';
+import { moneyState, priceClass, sessionCounts, sessionsFor, shareTarget } from './sessionFeed';
 
 /**
- * Practice · Sessions — canvas PR4, `/practice/sessions`, tagged **FEED**.
+ * Practice · Sessions — `/practice/sessions`, built to board PX-05 of the
+ * Practice v2 canvas (D4874) by #4832 (D4832): OPERATIONS FIRST, SCHEDULING
+ * SETUP SECOND.
  *
- * IT IS A CALENDAR, AND IT USED TO BE A BILLING LEDGER. The artboard's blurb is
- * the whole brief — "The full calendar, the rules that generate it, and the
- * booking links that fill it" — and the page that stood here drew none of
- * those three. It drew the per-session money that migration 205 added, which
- * is a real capability and stays (below), but it was answering a different
- * question from the one the zone is for.
+ * THE TOP OF THE PAGE IS THE ADVISOR'S DAY. The header carries Block time (the
+ * primary) and Share booking link, and the chip row is Upcoming · Past ·
+ * Cancelled over the bookings read. Each booking is a card (client, topic,
+ * time, status, the offer it was booked on, its recorded price) with Open,
+ * Complete, No-show and Cancel session (`SessionLifecyclePanel`). PAST IS TIME
+ * THAT HAS PASSED (`sessionFeed.sessionTab`), never a wider forward window.
  *
- * WHAT THE GRID IS, and why the counts are not obvious. A slot can be several
- * things at once in the raw row, so `sessionGrid.slotKind` fixes a precedence
- * and every tile derives from one pass over one list. The order matters in one
- * place especially: `held` comes BEFORE `booked`, because the artboard's own
- * "Booked, next 14 d" tile excludes the held slot and its gate note says why —
- * *"it is counted under held rather than under booked. A slot that silently
- * fails to charge is worse than one that says so."*
+ * THE PRICE IS WHAT THE BOOKING RECORDS. Free is a recorded $0, Included is
+ * D5316's recorded state, Unpriced is no amount, and a missing price is never
+ * Free. Collected, Billed and Written off are a separate money state. Open
+ * holds the price record (`BillingEditor`): migration 205's `amount_cents` and
+ * `billing_state` have exactly one writer in the product and it is here, with
+ * #5358's confirmed reprice step and the Included control (#5316).
  *
- * NOTHING ON THIS PAGE CHARGES ANYONE. Session types carry prices and a booking
- * link can say it needs a verified payout account, but no money moves: the
- * take-rate and payout account arrive in migration 241 and the Stripe Connect
- * service leg after that, in test mode behind a production flag. So
- * `payment_state` is rendered as the reason a booking could NOT be charged and
- * never as a receipt. D75.
+ * YOUR HOURS sit below the feed: the published slots the bookings are made
+ * into, with their own window (two weeks, a month, past hours, unpaid held),
+ * the four tiles and the publish card. The grid reads `GET /me/slots`, not the
+ * public `GET /:uid/slots`, because `recording_state`, `payment_state` and
+ * `blocked_reason` must not reach a founder browsing this calendar.
  *
- * THE OPERATIONAL STATE IS THE ADVISOR'S ALONE. The grid reads `GET /me/slots`,
- * not the public `GET /:uid/slots`, because `recording_state`, `payment_state`
- * and `blocked_reason` must not reach a founder browsing this calendar — one
- * would tell them the payout account is unverified and another is a private
- * note about why an hour is not for sale.
+ * SCHEDULING SETUP is its own section, last: Availability, Session types and
+ * Booking links. Practice Sessions owns booking configuration (owner's answer
+ * on #4832, 2026-11-09); Expertise links to a session type read-only.
  *
- * THE BILLING SECTION STAYED, and the rule is the one PR3b followed: an
- * artboard that does not draw a working feature is not an instruction to delete
- * it. Migration 205's `amount_cents` and `billing_state` have exactly one
- * writer in the product and it is here. Its copy still says Axal settles
- * nothing, which remains TRUE after this PR and stops being true the day the
- * production charging flag flips — that reconciliation belongs to PR5a, with
- * the rest of the contradictions, not to a calendar.
+ * NOTHING ON THIS PAGE CHARGES ANYONE. A held slot is rendered as the reason a
+ * booking could NOT be charged and never as a receipt. D75.
  */
 
 const STATE_LABEL = {
@@ -74,13 +69,6 @@ const STATE_LABEL = {
   written_off: 'Written off',
   // #5316 (D5316): recorded as included in an engagement; no price of its own.
   included: 'Included',
-};
-const STATE_TONE = {
-  unpriced: 'neutral',
-  billed: 'warn',
-  collected: 'ok',
-  written_off: 'danger',
-  included: 'neutral',
 };
 // `unpriced` is absent from the picker on purpose: it is where a session
 // STARTS, not somewhere an advisor moves one. Clearing the amount is how you
@@ -125,7 +113,26 @@ const CLOSED_BLOCK = Object.freeze({
   sourceFrom: '', sourceUntil: '', timezone: '',
 });
 
+/**
+ * #4832: the hours grid's own window. Two weeks and Month ask the server for a
+ * different span; Past hours asks for the window that just ended (#4702);
+ * Unpaid held narrows what is loaded. It was the zone's chip row until the
+ * row became Upcoming · Past · Cancelled over the sessions themselves.
+ */
+const HOURS_VIEWS = [
+  ['two_weeks', 'Two weeks'],
+  ['month', 'Month'],
+  ['past', 'Past hours'],
+  ['unpaid_held', 'Unpaid held'],
+];
+
+const SECTION_TITLE = 'text-[13px] font-extrabold tracking-tight';
+const TAP = 'min-h-[44px] sm:min-h-0';
+
 export default function SessionsZone() {
+  // The zone's chip row: which sessions the feed shows.
+  const [tab, setTab] = useState('upcoming');
+  // The hours grid's own window.
   const [view, setView] = useState('two_weeks');
   const [slots, setSlots] = useState({ loading: true, error: '', items: [] });
   const [rules, setRules] = useState(EMPTY_RULES);
@@ -134,7 +141,7 @@ export default function SessionsZone() {
   // different absences. The card names which one it is, and the editor is
   // withheld for the first (see RulesBody).
   // #4713 (D4713): 'loading' until the first read settles, then 'read' or
-  // 'unreadable'. The editor exists ONLY for 'read': before that the form would
+  // 'unreadable'. The editor can SAVE only for 'read': before that the form would
   // hold the empty defaults, and the route replaces the whole rule set.
   const [rulesRead, setRulesRead] = useState('loading');
   const [types, setTypes] = useState([]);
@@ -146,21 +153,15 @@ export default function SessionsZone() {
   const [typesRead, setTypesRead] = useState(true);
   const [linksRead, setLinksRead] = useState(true);
   const [bookings, setBookings] = useState({ loading: true, error: '', items: [] });
-  const [editing, setEditing] = useState(null);
   const [billingNotice, setBillingNotice] = useState(null);
   const [blocking, setBlocking] = useState(false);
   const [blockNote, setBlockNote] = useState(null);
+  const [shareNote, setShareNote] = useState(null);
   const [publishOpen, setPublishOpen] = useState(false);
 
   const loadSlots = useCallback(async (forView) => {
     setSlots((c) => ({ ...c, loading: true, error: '' }));
     try {
-      // EACH CHIP KEY IS NAMED HERE, in the page that mounts the chip row,
-      // rather than looked up from a map in the sibling module. A key resolved
-      // one import away lets a chip be declared live over a page that cannot
-      // serve it, and `profile_zone_filters.test.mjs` enforces the rule — it
-      // caught `month` on the first draft of this page, which read its window
-      // from `VIEW_DAYS[forView]` and so never mentioned the key at all.
       const days = forView === 'month' ? VIEW_DAYS.month
         : forView === 'past' ? VIEW_DAYS.past
           : forView === 'unpaid_held' ? VIEW_DAYS.unpaid_held
@@ -174,10 +175,10 @@ export default function SessionsZone() {
   }, []);
 
   const loadRest = useCallback(async () => {
-    // TOLERATED, NOT REQUIRED. The grid is the page; the three cards beside it
-    // are configuration. A reader whose rules fail to load should still see
-    // their calendar, and each card says its own absence rather than taking
-    // the page down with it.
+    // TOLERATED, NOT REQUIRED. The feed is the page; the three setup cards are
+    // configuration. A reader whose rules fail to load should still see their
+    // sessions, and each card says its own absence rather than taking the
+    // page down with it.
     const [r, t, l] = await Promise.all([
       api.getMyAdvisorAvailability().catch(() => null),
       api.listMyAdvisorSessionTypes().catch(() => null),
@@ -213,30 +214,36 @@ export default function SessionsZone() {
   // their ids from the first paint, so the element is there once the lists are.
   useScrollToHash(restLoading);
 
-  const onSaved = useCallback(() => { setEditing(null); loadBookings(); }, [loadBookings]);
+  const onSaved = useCallback(() => { loadBookings(); }, [loadBookings]);
   const onBillingChanged = (note) => { setBillingNotice(note); onSaved(); };
 
-  // NARROWING LIVES IN THE PAGE, not in `sessionGrid`. A chip declared live in
-  // `advisorZoneFilters.js` must be served by the page that mounts the chip
-  // row — `profile_zone_filters.test.mjs` enforces it, because a predicate one
-  // import away lets a chip be declared live over a page that cannot serve it.
-  const visible = useMemo(() => narrowSlots(slots.items, view), [slots.items, view]);
-  const counts = useMemo(() => slotCounts(visible), [visible]);
-  const days = useMemo(() => groupByDay(visible), [visible]);
+  // THE CHIP ROW'S THREE VIEWS, each named here because the page that mounts
+  // the row must serve it (`profile_zone_filters.test.mjs`): 'upcoming',
+  // 'past' and 'cancelled', counted over every booking read. A failed read
+  // has no counts at all, never zeros.
+  const now = Date.now();
+  const counted = sessionCounts(bookings.items, now);
+  const tabCounts = { upcoming: counted.upcoming, past: counted.past, cancelled: counted.cancelled };
+  const shownSessions = sessionsFor(bookings.items, tab, now);
 
-  // The artboard's fourth tile. The cap is a RULE, not a count, so it reads
-  // from the rules card and says "Not set" rather than 0 when nobody set one.
+  // NARROWING LIVES IN THE PAGE, not in `sessionGrid`.
+  const hours = useMemo(() => narrowSlots(slots.items, view), [slots.items, view]);
+  const counts = useMemo(() => slotCounts(hours), [hours]);
+  const days = useMemo(() => groupByDay(hours), [hours]);
+
+  // The fourth tile. The cap is a RULE, not a count, so it reads from the rules
+  // card and says "Not set" rather than 0 when nobody set one.
   const capValue = ruleValue(rules?.weekly_paid_cap);
 
-  // D1424 (#3700) and D1596 (#3869): "Block a date range" opens this page's
-  // own Block form instead of three `window.prompt`s. It is where a Block
-  // card accepted in the Ask panel puts its exact range here (D5364): the panel
-  // sends the advisor here with the card's uid and instants in the address,
-  // this page fills date/time inputs in their zone and takes the keys out, and the
+  // D1424 (#3700) and D1596 (#3869): Block time opens this page's own Block
+  // form instead of three `window.prompt`s. It is where a Block card accepted
+  // in the Ask panel puts its exact range here (D5364): the panel sends the
+  // advisor here with the card's uid and instants in the address, this page
+  // fills date/time inputs in their zone and takes the keys out, and the
   // proposal is decided (`railProposalsApi.decide`) only after `POST
-  // /api/advisors/me/slots/block` succeeds. Cancelling leaves the card
-  // waiting in Ask. Nothing is blocked until the advisor presses Block. The
-  // reason stays the advisor's own words and is never filled.
+  // /api/advisors/me/slots/block` succeeds. Cancelling leaves the card waiting
+  // in Ask. Nothing is blocked until the advisor presses Block. The reason
+  // stays the advisor's own words and is never filled.
   const [blockForm, setBlockForm] = useState(() => ({ ...CLOSED_BLOCK }));
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -306,7 +313,7 @@ export default function SessionsZone() {
       // and got eleven days needs to know which request was not honoured.
       const done = res.skipped_booked
         ? `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}. ${res.skipped_booked} `
-          + `already booked and left alone — cancel those under Run your sessions if you mean to.`
+          + `already booked and left alone — cancel those from their session cards if you mean to.`
         : `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}.`;
       // D1596 §4 step 3: the card is decided only now that Block has written. A
       // decide that fails leaves the block in place, says so, and leaves the
@@ -324,48 +331,83 @@ export default function SessionsZone() {
     } finally { setBlocking(false); }
   }, [blockForm, loadSlots, rules?.timezone, view]);
 
+  // #4832: Share booking link copies the one active link, or sends the reader
+  // to the Booking links card to choose; it never picks one of several for them.
+  const shareBookingLink = useCallback(async () => {
+    if (restLoading) { setShareNote({ ok: false, text: 'Your booking links are still loading. Try again in a moment.' }); return; }
+    const target = shareTarget(links, linksRead);
+    const toLinks = () => document.getElementById?.('booking-links')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    if (target.kind === 'unreadable') {
+      setShareNote({ ok: false, text: 'Your booking links could not be read, so there is nothing to share from here. Try again under Booking links.' });
+      toLinks();
+      return;
+    }
+    if (target.kind === 'none') {
+      setShareNote({ ok: false, text: 'You have no active booking link yet. Create one under Scheduling setup, Booking links.' });
+      toLinks();
+      return;
+    }
+    if (target.kind === 'many') {
+      setShareNote({ ok: true, text: `You have ${target.count} active booking links. Copy the one you want under Booking links.` });
+      toLinks();
+      return;
+    }
+    const url = bookingLinkUrl(target.link.slug);
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareNote({ ok: true, text: `Copied ${url}.` });
+    } catch {
+      setShareNote({ ok: false, text: `That could not be copied. Select the address to copy it: ${url}` });
+    }
+  }, [links, linksRead, restLoading]);
+
+  const timed = shownSessions.filter((b) => b.startsAt);
   const exportCalendar = useCallback(() => {
-    // Built from rows already on screen, so nothing leaves the browser and no
-    // endpoint is needed. One VEVENT per slot the current view shows. The
-    // builder is shared with the Cohorts calendar (lib/ics.js, D393).
+    // Built from the session cards on screen, so nothing leaves the browser and
+    // no endpoint is needed. One VEVENT per session the current tab shows that
+    // has a time. The builder is shared with the Cohorts calendar (lib/ics.js, D393).
     downloadIcs(buildIcs({
       prodId: '-//Axal//Practice Sessions//EN',
-      events: visible.map((s) => ({
-        uid: s.uid || s.id, start: s.starts_at, end: s.ends_at,
-        summary: KIND_LABEL[slotKind(s)] || 'Session', description: s.notes || '',
+      events: timed.map((b) => ({
+        uid: `booking-${b.uid || b.id}`, start: b.startsAt, end: b.endsAt || b.startsAt,
+        summary: [b.topic || 'Session', b.counterpartyName].filter(Boolean).join(' · '),
+        description: b.note || '',
       })),
     }), 'axal-sessions.ics');
-  }, [visible]);
+  }, [timed]);
 
   // Hoisted out of the JSX: `profile_zone_actions.test.mjs` scans the
   // `advisorZoneActions(...)` call for identifiers, and prose inside it has
   // been read as an undeclared one before (PR3b, `Opens`).
   const opsHandlers = {
     blockRange: { onClick: blockRange, busy: blocking },
-    exportCalendar: { onClick: exportCalendar, disabled: visible.length === 0,
-      title: visible.length === 0 ? 'nothing in this view to export' : undefined },
+    shareBookingLink: { onClick: shareBookingLink },
+    exportCalendar: { onClick: exportCalendar, disabled: timed.length === 0,
+      title: timed.length === 0 ? 'no session with a time in this tab to export' : undefined },
   };
 
-  const billable = useMemo(
-    () => bookings.items.filter((b) => ['completed', 'confirmed'].includes(b.status)),
-    [bookings.items],
-  );
+  const billable = bookings.items.filter((b) => ['completed', 'confirmed'].includes(b.status));
   // #5316 (D5316): a session included in an engagement has no price and is not unpriced.
   const unpriced = billable.filter((b) => b.amount_cents == null && b.billing_state !== 'included').length;
+
+  const renderOpen = (b) => <SessionDetail booking={b} onSaved={onSaved} onChanged={onBillingChanged} />;
 
   return (
     <div className="space-y-4">
       <ZoneHeading
         title="Sessions"
-        blurb="The full calendar, the rules that generate it, and the booking links that fill it."
+        blurb="Your calendar and booking setup."
         action={counts.held > 0 ? <Pill tone="warn">{counts.held} held unpaid</Pill> : null}
       />
 
       <ZoneToolbar
         role="advisor"
-        filters={advisorZoneFilters('practice/sessions', { value: view, onChange: setView })}
+        filters={advisorZoneFilters('practice/sessions', {
+          value: tab, onChange: setTab, counts: bookings.loading || bookings.error ? {} : tabCounts,
+        })}
         actions={advisorZoneActions('practice/sessions', { handlers: opsHandlers })}
       />
+      <SaveNote note={shareNote} />
 
       {blockForm.open && (
         <Card padding="lg">
@@ -394,8 +436,8 @@ export default function SessionsZone() {
                 onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })} />
             </Field>
             <div className="flex flex-wrap items-center gap-2 sm:col-span-3">
-              <button type="submit" className={buttonClass} disabled={blocking}>{blocking ? 'Blocking…' : 'Block'}</button>
-              <button type="button" className={ghostButtonClass} onClick={() => setBlockForm({ ...CLOSED_BLOCK })}>Cancel</button>
+              <button type="submit" className={`${buttonClass} ${TAP}`} disabled={blocking}>{blocking ? 'Blocking…' : 'Block'}</button>
+              <button type="button" className={`${ghostButtonClass} ${TAP}`} onClick={() => setBlockForm({ ...CLOSED_BLOCK })}>Cancel</button>
               {blockForm.error ? <span className="text-[12px] text-rose-700 dark:text-rose-300" role="alert">{blockForm.error}</span> : null}
             </div>
           </form>
@@ -403,180 +445,152 @@ export default function SessionsZone() {
       )}
       <SaveNote note={blockNote} />
 
+      {/* ── The operational feed (PX-05 A) ─────────────────────────────── */}
+      <Card padding="md" data-testid="sessions-feed">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className={SECTION_TITLE}>
+            {tab === 'past' ? 'Past sessions' : tab === 'cancelled' ? 'Cancelled sessions' : 'Upcoming sessions'}
+          </h3>
+          {unpriced > 0 && <Pill tone="warn">{unpriced} unpriced</Pill>}
+        </div>
+        <SaveNote note={billingNotice} />
+        <div className="mt-3">
+          <ZoneBody loading={bookings.loading} error={bookings.error} onRetry={loadBookings} isEmpty={false}>
+            <SessionLifecyclePanel bookings={bookings.items} loading={bookings.loading} onChanged={loadBookings}
+              tab={tab} now={now} renderOpen={renderOpen} />
+          </ZoneBody>
+        </div>
+        <p className="mt-3 max-w-2xl text-[11px] leading-relaxed text-axal-faint">
+          Prices are your own record of what you charged and whether you were paid. Nothing is billed,
+          invoiced or collected through Axal — this is bookkeeping, not a payment rail.
+        </p>
+      </Card>
+
       {/* D377 — Spin-Out Lab founders see only approved hosts. */}
       <LabHostApplyCard kind="advisor" />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Booked" value={counts.booked} note={bookedNote(counts)} />
-        <Stat label="Open slots" value={counts.open} note={openNote(counts)} />
-        <Stat label="Held unpaid" value={counts.held}
-          note={counts.held ? 'booked while payout pending' : 'nothing is waiting on a payout account'} />
-        {/* A CAP NOBODY SET IS NOT A CAP OF ZERO. Zero means "accept no paid
-            sessions" and is a decision; absent means the question was never
-            answered, and rendering it as a number would put words in the
-            advisor's mouth (D56/D68). */}
-        <Stat label="Weekly cap"
-          value={rulesRead === 'loading' ? <Unrecorded>Reading…</Unrecorded>
-            : (capValue ?? <Unrecorded>{rulesRead === 'read' ? 'Not set' : 'Not recorded'}</Unrecorded>)}
-          note={rulesRead === 'loading' ? 'reading your rules'
-            : rulesRead === 'read'
-              ? (capValue ? 'paid sessions, self-set' : 'no cap on paid sessions')
-              : 'your rules could not be read'} />
-      </div>
-
-      <PublishAvailabilityCard open={publishOpen} onToggle={() => setPublishOpen((v) => !v)}
-        onPublished={() => loadSlots(view)} />
-
-      <ZoneBody loading={slots.loading} error={slots.error} onRetry={() => loadSlots(view)}
-        isEmpty={!slots.loading && !slots.error && days.length === 0}
-        empty={<NothingYet
-          title="No slots in this window"
-          body="This grid shows the hours you have published. Publish availability above; the rules below decide how many hours exist to begin with."
-          action={<button type="button" className={`${buttonClass} min-h-[44px] sm:min-h-0`} onClick={() => setPublishOpen(true)}>Publish availability</button>}
-        />}>
-        <Card padding="md">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-[13px] font-extrabold tracking-tight">The grid</h3>
-            <span className="text-[10.5px] text-axal-faint">Recording state per slot</span>
-          </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            {days.map((day) => (
-              <div key={day.key} data-testid={`day-pr4-${day.key}`}
-                className="rounded-[11px] border border-axal-hairline bg-axal-ground p-2.5 dark:border-gray-700 dark:bg-gray-900/40">
-                <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                  {day.label}
-                </div>
-                <div className="mt-2 grid gap-1.5">
-                  {day.slots.map((s) => <SlotCard key={s.id} slot={s} />)}
-                </div>
-              </div>
+      {/* ── Your hours: the published slots the bookings are made into ─── */}
+      <section aria-labelledby="sessions-hours" className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 id="sessions-hours" className={SECTION_TITLE}>Your hours</h3>
+          <div role="group" aria-label="Hours window" className="flex flex-wrap gap-1.5" data-testid="hours-window">
+            {HOURS_VIEWS.map(([key, label]) => (
+              <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}
+                data-testid={`hours-${key}`}
+                className={`${TAP} rounded-full border px-3 py-1 text-[11.5px] font-semibold ${view === key
+                  ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-500 dark:bg-emerald-600'
+                  : 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
+                {label}
+              </button>
             ))}
           </div>
-          {slots.truncated && (
-            <p className="mt-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300" data-testid="slots-truncated">
-              This window holds more than 500 slots, so only the first 500 are shown. Narrow the window to see the rest.
-            </p>
-          )}
-          {counts.held > 0 && (
-            <p className="mt-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
-              A held slot is booked and <strong>not charged</strong>: it was taken while the payout
-              account was still unverified. Both sides see it as unpaid, and it is counted under
-              held rather than under booked. A slot that silently fails to charge is worse than one
-              that says so.
-            </p>
-          )}
-        </Card>
-      </ZoneBody>
-
-      {/* D571 — THE TWO CARDS THE OPS CANVAS DRAWS AS SCREENS OF THEIR OWN.
-          `/practice/session-types` (A2) and `/practice/booking-links` (A3)
-          redirect to these two ids. Each card was a read-only list over
-          migration 240's stores; each body is now the canvas's editor, so the
-          two addresses and this page answer from one place. The session types
-          table needs the width, so it is no longer one of three columns. */}
-      <SessionLifecyclePanel bookings={bookings.items} loading={bookings.loading} onChanged={loadBookings} />
-
-      <Card padding="md" id="session-types" className="scroll-mt-24">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-[13px] font-extrabold tracking-tight">Session types</h3>
-          <span className="text-[10.5px] text-axal-faint">What can be booked</span>
         </div>
-        <SessionTypesPanel types={types} loading={restLoading} read={typesRead} onChanged={loadRest} />
-      </Card>
 
-      <div className="grid gap-3 lg:grid-cols-3">
-        <Card padding="md">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-[13px] font-extrabold tracking-tight">Availability rules</h3>
-            <span className="text-[10.5px] text-axal-faint">Configuration</span>
-          </div>
-          <RulesBody rules={rules} read={rulesRead} onSaved={loadRest} />
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">{ruleNote(counts)}</p>
-        </Card>
-
-        <Card padding="md" id="booking-links" className="scroll-mt-24 lg:col-span-2">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-[13px] font-extrabold tracking-tight">Booking links</h3>
-            <span className="text-[10.5px] text-axal-faint">Only here</span>
-          </div>
-          <BookingLinksPanel links={links} types={types} loading={restLoading} read={linksRead}
-            typesRead={typesRead} onChanged={loadRest} />
-        </Card>
-      </div>
-
-      {/* ── What each session was worth ───────────────────────────────────
-          Kept, not ported away. The artboard does not draw it and migration
-          205's two columns have exactly one writer in the product, which is
-          this form. Deleting it because a drawing omits it would remove the
-          only way to answer the question Earnings then sums. */}
-      <Card padding="md">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-[13px] font-extrabold tracking-tight">What each session was worth</h3>
-          {unpriced > 0 && <Pill tone="warn">{unpriced} unpriced</Pill>}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Booked" value={counts.booked} note={bookedNote(counts)} />
+          <Stat label="Open slots" value={counts.open} note={openNote(counts)} />
+          <Stat label="Held unpaid" value={counts.held}
+            note={counts.held ? 'booked while payout pending' : 'nothing is waiting on a payout account'} />
+          {/* A CAP NOBODY SET IS NOT A CAP OF ZERO. Zero means "accept no paid
+              sessions" and is a decision; absent means the question was never
+              answered, and rendering it as a number would put words in the
+              advisor's mouth (D56/D68). */}
+          <Stat label="Weekly cap"
+            value={rulesRead === 'loading' ? <Unrecorded>Reading…</Unrecorded>
+              : (capValue ?? <Unrecorded>{rulesRead === 'read' ? 'Not set' : 'Not recorded'}</Unrecorded>)}
+            note={rulesRead === 'loading' ? 'reading your rules'
+              : rulesRead === 'read'
+                ? (capValue ? 'paid sessions, self-set' : 'no cap on paid sessions')
+                : 'your rules could not be read'} />
         </div>
-        <p className="mt-1.5 max-w-2xl text-[11.5px] leading-relaxed text-axal-faint">
-          Your own record of what you charged and whether you were paid. Nothing is billed,
-          invoiced or collected through Axal — this is bookkeeping, not a payment rail.
-        </p>
-        <SaveNote note={billingNotice} />
-        <ZoneBody loading={bookings.loading} error={bookings.error} onRetry={loadBookings}
-          isEmpty={billable.length === 0}
+
+        <PublishAvailabilityCard open={publishOpen} onToggle={() => setPublishOpen((v) => !v)}
+          onPublished={() => loadSlots(view)} />
+
+        <ZoneBody loading={slots.loading} error={slots.error} onRetry={() => loadSlots(view)}
+          isEmpty={!slots.loading && !slots.error && days.length === 0}
           empty={<NothingYet
-            title="No sessions to price yet"
-            body="Sessions appear here once a booking is confirmed. The lifecycle — held, no-show, cancel — is run in Run your sessions above. This records only what each session was worth."
-            action={<Link to="/practice/opportunities" className="text-emerald-700 underline">Accept a request →</Link>}
+            title="No slots in this window"
+            body="This grid shows the hours you have published. Publish availability above; your availability rules decide how many hours exist to begin with."
+            action={<button type="button" className={`${buttonClass} ${TAP}`} onClick={() => setPublishOpen(true)}>Publish availability</button>}
           />}>
-          <div className="mt-3 space-y-3">
-            {billable.map((b) => (
-              <div key={b.id} data-testid={`billing-pr4-${b.id}`}
-                className="rounded-[9px] border border-axal-hairline p-3 dark:border-gray-700">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-extrabold">{b.topic || 'Session'}</span>
-                      <Pill tone={STATE_TONE[b.billing_state] || 'neutral'}>
-                        {STATE_LABEL[b.billing_state] || b.billing_state}
-                      </Pill>
-                    </div>
-                    <div className="mt-0.5 text-[11.5px] text-axal-faint">
-                      {b.counterpartyName || <Unrecorded>Counterparty not recorded</Unrecorded>}
-                      {b.startsAt && ` · ${formatDateTime(b.startsAt)}`}
-                      {slotMinutes({ starts_at: b.startsAt, ends_at: b.endsAt }) != null
-                        && ` · ${slotMinutes({ starts_at: b.startsAt, ends_at: b.endsAt })} min`}
-                    </div>
+          <Card padding="md">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className={SECTION_TITLE}>The grid</h3>
+              <span className="text-[10.5px] text-axal-faint">Recording state per slot</span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {days.map((day) => (
+                <div key={day.key} data-testid={`day-pr4-${day.key}`}
+                  className="rounded-[11px] border border-axal-hairline bg-axal-ground p-2.5 dark:border-gray-700 dark:bg-gray-900/40">
+                  <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+                    {day.label}
                   </div>
-                  <div className="text-right">
-                    <div className="text-[15px] font-extrabold tabular-nums">
-                      {money(b.amount_cents) ?? <Unrecorded />}
-                    </div>
-                    <button type="button" className={`${ghostButtonClass} mt-2`}
-                      onClick={() => { setBillingNotice(null); setEditing(editing === b.id ? null : b.id); }}>
-                      {editing === b.id ? 'Close' : (b.amount_cents == null ? 'Set a price' : 'Change')}
-                    </button>
+                  <div className="mt-2 grid gap-1.5">
+                    {day.slots.map((s) => <SlotCard key={s.id} slot={s} />)}
                   </div>
                 </div>
-                {editing === b.id && <BillingEditor booking={b} onSaved={onSaved} onChanged={onBillingChanged} />}
-              </div>
-            ))}
-            <p className="text-[11px] leading-relaxed text-axal-faint">
-              Only confirmed and completed sessions are listed. A request you have not answered yet
-              has no agreed session to price, and a cancelled or no-show session has no amount to
-              record. The full booking history, including all three, is in{' '}
-              <a href="#session-lifecycle" className="text-emerald-700 underline">Run your sessions</a>.
-            </p>
-          </div>
+              ))}
+            </div>
+            {slots.truncated && (
+              <p className="mt-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300" data-testid="slots-truncated">
+                This window holds more than 500 slots, so only the first 500 are shown. Narrow the window to see the rest.
+              </p>
+            )}
+            {counts.held > 0 && (
+              <p className="mt-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                A held slot is booked and <strong>not charged</strong>: it was taken while the payout
+                account was still unverified. Both sides see it as unpaid, and it is counted under
+                held rather than under booked. A slot that silently fails to charge is worse than one
+                that says so.
+              </p>
+            )}
+            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">{ruleNote(counts)}</p>
+          </Card>
         </ZoneBody>
-      </Card>
+      </section>
 
-      {/* NO AI BAND, for the same reason Delivery has none and stated again
-          rather than left as an absence a reader has to notice. PR4's artboard
-          draws no AI instrument at all — the batch summariser belongs to PR3 —
-          and the premise both would need is still missing: nothing records
-          that a session was recorded, captures consent to record one, or holds
-          a transcript. `recording_state` names the consent; it does not
-          produce the recording. */}
+      {/* ── Scheduling setup (PX-05 A, below the feed) ──────────────────
+          D571: `/practice/session-types` and `/practice/booking-links`
+          redirect to the two ids below. Practice Sessions owns booking
+          configuration (owner's answer on #4832). */}
+      <section aria-labelledby="scheduling-setup" data-testid="scheduling-setup"
+        className="space-y-3 border-t border-axal-hairline pt-4 dark:border-gray-700">
+        <h2 id="scheduling-setup" className="text-[16px] font-extrabold tracking-tight">Scheduling setup</h2>
+        <div className="grid gap-3 lg:grid-cols-3">
+          <Card padding="md" id="availability" className="scroll-mt-24">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className={SECTION_TITLE}>Availability</h3>
+              <span className="text-[10.5px] text-axal-faint">The rules that generate your hours</span>
+            </div>
+            <RulesBody rules={rules} read={rulesRead} onSaved={loadRest} />
+          </Card>
+
+          <Card padding="md" id="session-types" className="scroll-mt-24 lg:col-span-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className={SECTION_TITLE}>Session types</h3>
+              <span className="text-[10.5px] text-axal-faint">What can be booked</span>
+            </div>
+            <SessionTypesPanel types={types} loading={restLoading} read={typesRead} onChanged={loadRest} />
+          </Card>
+
+          <Card padding="md" id="booking-links" className="scroll-mt-24 lg:col-span-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className={SECTION_TITLE}>Booking links</h3>
+              <span className="text-[10.5px] text-axal-faint">Only here</span>
+            </div>
+            <BookingLinksPanel links={links} types={types} loading={restLoading} read={linksRead}
+              typesRead={typesRead} onChanged={loadRest} />
+          </Card>
+        </div>
+      </section>
+
+      {/* NO AI BAND, stated rather than left as an absence a reader has to
+          notice: nothing records that a session was recorded, captures consent
+          to record one, or holds a transcript. `recording_state` names the
+          consent; it does not produce the recording. */}
       <StatedLimit title="No batch summary on this page">
-        A session summary would need a recording and a transcript, and Axal does not record advisory
+        A session summary would need a recording and a transcript, and Axal does not record
         sessions: a slot can carry a consent state, but no recording or transcript is kept to
         summarise. The chip says what was agreed, not
         what was captured.
@@ -623,6 +637,56 @@ function SlotCard({ slot }) {
   );
 }
 
+/**
+ * #4832: what Open shows on a session card — who, the terms it was booked on,
+ * the note, and what each session was worth: the recorded price and its money
+ * state, with the price record (`BillingEditor`) for a confirmed or completed
+ * session. A request not answered yet has no agreed session to price, and a
+ * cancelled or no-show session has no amount to record.
+ */
+function SessionDetail({ booking: b, onSaved, onChanged }) {
+  const price = priceClass(b);
+  const paid = moneyState(b);
+  const priceable = ['completed', 'confirmed'].includes(b.status);
+  return (
+    <div className="space-y-2" data-testid={`billing-pr4-${b.id}`}>
+      <dl className="grid gap-1.5 text-[12px] sm:grid-cols-[140px_minmax(0,1fr)]">
+        <dt className="text-axal-faint">Client</dt>
+        <dd className="min-w-0 break-words">
+          {b.counterpartyName || <Unrecorded>Counterparty not recorded</Unrecorded>}
+          {b.counterpartyEmail && b.counterpartyEmail !== b.counterpartyName ? ` · ${b.counterpartyEmail}` : ''}
+        </dd>
+        <dt className="text-axal-faint">Booked on</dt>
+        <dd className="min-w-0 break-words">{offerLine(b.offer) ?? <Unrecorded>Terms not recorded</Unrecorded>}</dd>
+        <dt className="text-axal-faint">What each session was worth</dt>
+        <dd className="min-w-0 font-bold tabular-nums">
+          {money(b.amount_cents) ?? <Unrecorded />}
+          <span className="font-normal text-axal-faint"> · {price.label}{paid ? ` · ${paid.label}` : ''}</span>
+        </dd>
+        {b.note && <><dt className="text-axal-faint">Note</dt><dd className="min-w-0 whitespace-pre-wrap break-words">{b.note}</dd></>}
+      </dl>
+      {priceable
+        ? <BillingEditor booking={b} onSaved={onSaved} onChanged={onChanged} />
+        : (
+          <p className="text-[11.5px] leading-relaxed text-axal-faint">
+            Only confirmed and completed sessions are priced. A request you have not answered yet has no
+            agreed session to price, and a cancelled or no-show session has no amount to record.
+          </p>
+        )}
+    </div>
+  );
+}
+
+/**
+ * The Availability card (PX-05 A) and its editor (PX-05 B).
+ *
+ * #4832: EDIT AVAILABILITY IS OFFERED BEFORE THE RULES HAVE LANDED, AND SAVE
+ * IS NOT. The route replaces the whole rule set (#4713), so a form saved
+ * before the read would write its empty defaults over what the advisor
+ * configured. While the read is in flight the editor shows the skeleton and
+ * "Save stays disabled until it has loaded"; once read, the fields carry the
+ * stored rules; if the read failed there is no editor at all.
+ */
 function RulesBody({ rules, read: readState, onSaved }) {
   const loadingRules = readState === 'loading';
   const read = readState === 'read';
@@ -641,6 +705,7 @@ function RulesBody({ rules, read: readState, onSaved }) {
 
   const save = async (e) => {
     e.preventDefault();
+    if (!read) return;
     setBusy(true); setNote(null);
     try {
       // EVERY FIELD, EVERY TIME. The route replaces the rule set rather than
@@ -666,30 +731,33 @@ function RulesBody({ rules, read: readState, onSaved }) {
     } finally { setBusy(false); }
   };
 
+  // PX-05's five rows. A weekly schedule is not a stored rule: hours are
+  // published one slot at a time (Your hours), so it says so rather than
+  // drawing a pattern nobody set.
   const rows = [
-    ['Weekly paid cap', ruleValue(rules?.weekly_paid_cap)],
-    ['Buffer between sessions', ruleValue(rules?.buffer_minutes, ' min')],
+    ['Weekly schedule', null, 'No weekly pattern is stored. Your hours are the slots you publish.'],
     ['Minimum notice', ruleValue(rules?.min_notice_hours, ' h')],
-    ['Blackout', (rules?.blackouts || []).map(blackoutLabel).filter(Boolean).join(', ') || null],
+    ['Buffers', ruleValue(rules?.buffer_minutes, ' min')],
+    ['Blackouts', (rules?.blackouts || []).map(blackoutLabel).filter(Boolean).join(', ') || null],
+    ['Session limits', rules?.weekly_paid_cap == null ? null : `${ruleValue(rules.weekly_paid_cap)} paid / week`],
   ];
 
   return (
     <>
-      <dl className="mt-3 grid gap-1.5">
-        {rows.map(([k, v]) => (
+      <dl className="mt-3 grid gap-1.5" data-testid="availability-rules">
+        {rows.map(([k, v, why]) => (
           <div key={k} className="flex items-baseline justify-between gap-3">
             <dt className="text-[11.5px] text-axal-faint">{k}</dt>
-            <dd className="text-[12px] font-bold tabular-nums">
-              {loadingRules ? <Unrecorded>Reading…</Unrecorded> : (v ?? <Unrecorded>{read ? 'Not set' : 'Not recorded'}</Unrecorded>)}
+            <dd className="min-w-0 text-right text-[12px] font-bold tabular-nums">
+              {loadingRules ? <Unrecorded>Reading…</Unrecorded>
+                : (v ?? (why && read
+                  ? <Unrecorded reason={why}>Not recorded</Unrecorded>
+                  : <Unrecorded>{read ? 'Not set' : 'Not recorded'}</Unrecorded>))}
             </dd>
           </div>
         ))}
       </dl>
-      {loadingRules ? null : read ? (
-        <button type="button" className={`${ghostButtonClass} mt-3`} onClick={() => setOpen((v) => !v)}>
-          {open ? 'Close' : 'Change the rules'}
-        </button>
-      ) : (
+      {readState === 'unreadable' ? (
         // NO EDITOR OVER A RULE SET WE COULD NOT READ. The route REPLACES the
         // whole set rather than merging, so saving this form after a failed
         // read would write four empty fields and an empty blackout list over
@@ -701,9 +769,30 @@ function RulesBody({ rules, read: readState, onSaved }) {
           would replace the whole rule set — including blackouts this page never received — with
           what the form shows. Reload to try again.
         </StatedLimit>
+      ) : (
+        <button type="button" className={`${ghostButtonClass} ${TAP} mt-3`} onClick={() => setOpen((v) => !v)}
+          data-testid="edit-availability">
+          {open ? 'Close' : 'Edit availability'}
+        </button>
+      )}
+      {open && loadingRules && (
+        <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700" data-testid="availability-editor-loading">
+          <div aria-busy="true" className="space-y-2">
+            <Skeleton className="h-3.5 w-1/2" />
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-3.5 w-2/5" />
+          </div>
+          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint" role="status">
+            Loading your current schedule… Save stays disabled until it has loaded, so defaults can’t replace it.
+          </p>
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
+            <button type="button" className={`${ghostButtonClass} ${TAP}`} onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className={`${buttonClass} ${TAP}`} disabled aria-disabled="true">Save availability</button>
+          </div>
+        </div>
       )}
       {read && open && (
-        <form onSubmit={save} className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
+        <form onSubmit={save} className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700" data-testid="availability-editor">
           <div className="grid gap-3">
             <Field label="Weekly paid cap" hint="Leave empty for no cap. Zero means you accept no paid sessions.">
               <input className={inputClass} value={cap} inputMode="numeric"
@@ -718,9 +807,12 @@ function RulesBody({ rules, read: readState, onSaved }) {
                 onChange={(e) => setNotice(e.target.value)} placeholder="24" />
             </Field>
           </div>
-          <button type="submit" className={`${buttonClass} mt-3`} disabled={busy}>
-            {busy ? 'Saving…' : 'Save the rules'}
-          </button>
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <button type="button" className={`${ghostButtonClass} ${TAP}`} onClick={() => setOpen(false)}>Cancel</button>
+            <button type="submit" className={`${buttonClass} ${TAP}`} disabled={busy}>
+              {busy ? 'Saving…' : 'Save availability'}
+            </button>
+          </div>
           <SaveNote note={note} />
         </form>
       )}
@@ -733,6 +825,10 @@ const BILLING_REFUSALS = new Map([
   ['settled_price', 'This session was marked Collected or Written off. Its price cannot be changed or cleared.'],
   ['booking_changed', 'This session changed while you were editing. Review the refreshed record before trying again.'],
   ['fee_snapshot_missing', 'The fee details are missing. Confirm the current price to record them at today’s rate.'],
+  // #4832 (D5316's two refusals of the Included record).
+  ['included_has_no_price', 'A session included in an engagement has no price of its own.'],
+  ['priced_line', 'This session has a price. Clear it first: a session included in an engagement is not billed.'],
+  ['included_line', 'This session is recorded as included in an engagement. Choose what happened to it to change that.'],
 ]);
 
 function BillingEditor({ booking, onSaved, onChanged }) {
@@ -750,6 +846,7 @@ function BillingEditor({ booking, onSaved, onChanged }) {
   const stored = booking.amount_cents == null ? null : Number(booking.amount_cents);
   const priceLocked = ['collected', 'written_off'].includes(booking.billing_state);
   const missingFee = stored != null && (booking.take_rate_bps === null || booking.platform_cut_cents === null);
+  const included = booking.billing_state === 'included';
 
   const record = async (body) => {
     if (writing.current) return;
@@ -789,8 +886,14 @@ function BillingEditor({ booking, onSaved, onChanged }) {
 
   return (
     <form data-testid="session-billing-editor" onSubmit={save} className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
+      {included && (
+        <p className="mb-2 text-[11.5px] leading-relaxed text-axal-faint" data-testid="session-billing-included">
+          Recorded as included in an engagement: it has no price of its own and counts in no billed total.
+          Record an amount to bill it separately instead.
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Amount" hint="What you charged for this session.">
+        <Field label="Amount" hint="What you charged for this session. Enter 0 for a free session.">
           <input data-testid="session-billing-amount" className={inputClass} value={amount} inputMode="decimal" disabled={priceLocked || busy || Boolean(pending)}
             onChange={(e) => setAmount(e.target.value)} placeholder="300" />
         </Field>
@@ -801,17 +904,25 @@ function BillingEditor({ booking, onSaved, onChanged }) {
         </Field>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="submit" className={buttonClass} disabled={busy || Boolean(pending)}>
+        <button type="submit" className={`${buttonClass} ${TAP}`} disabled={busy || Boolean(pending)}>
           {busy ? 'Recording…' : 'Record'}
         </button>
+        {/* #4832 (D5316): Included is recorded only on a line with no price; a
+            priced one (a $0 Free one too) is refused 409 priced_line. */}
+        {stored == null && !included && !priceLocked && (
+          <button type="button" className={`${ghostButtonClass} ${TAP}`} disabled={busy || Boolean(pending)}
+            data-testid="session-billing-include" onClick={() => record({ billing_state: 'included' })}>
+            Included in an engagement
+          </button>
+        )}
         {stored != null && !priceLocked && (
-          <button type="button" className={ghostButtonClass} disabled={busy || Boolean(pending)}
+          <button type="button" className={`${ghostButtonClass} ${TAP}`} disabled={busy || Boolean(pending)}
             onClick={() => { setNote(null); setPending({ amount_cents: null, billing_state: 'unpriced', reprice: true }); }}>
             Clear the price
           </button>
         )}
         {stored != null && !priceLocked && (missingFee || note?.text === BILLING_REFUSALS.get('fee_snapshot_missing')) && (
-          <button type="button" className={ghostButtonClass} disabled={busy || Boolean(pending)}
+          <button type="button" className={`${ghostButtonClass} ${TAP}`} disabled={busy || Boolean(pending)}
             onClick={() => setPending({ amount_cents: stored, billing_state: booking.billing_state, reprice: true })}>
             Confirm the current price
           </button>
@@ -822,10 +933,10 @@ function BillingEditor({ booking, onSaved, onChanged }) {
         <p>Stored price: {money(stored)}. {pendingAmount == null
           ? 'Clearing the price also clears the recorded fee rate and cut.'
           : `Confirm ${money(pendingAmount)}. The fee rate and cut will be recorded at today’s rate.`}</p>
-        <button type="button" className={buttonClass} disabled={busy} onClick={() => record(pending)}>
+        <button type="button" className={`${buttonClass} ${TAP}`} disabled={busy} onClick={() => record(pending)}>
           {pendingAmount == null ? 'Confirm clear' : 'Confirm price'}
         </button>
-        <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => setPending(null)}>Cancel price change</button>
+        <button type="button" className={`${ghostButtonClass} ${TAP}`} disabled={busy} onClick={() => setPending(null)}>Cancel price change</button>
       </div>}
       <SaveNote note={note} />
     </form>
