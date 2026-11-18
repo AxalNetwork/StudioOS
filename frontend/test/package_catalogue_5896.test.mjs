@@ -173,8 +173,8 @@ test('/admin/licences/packages outranks /admin/licences/:uid, is HQ only, and th
   assert.match(app, /<StripLink to="\/admin\/licences\/packages">Axal VC packages<\/StripLink>/);
 });
 
-test('the client reads only, with ?all=1 for the catalogue and encoded keys', () => {
+test('the client reads with ?all=1 for the catalogue and encoded keys; it has no DELETE (D5897 §4 adds the writes)', () => {
   const src = readFileSync(new URL('../src/lib/api/licencePackages.js', import.meta.url), 'utf8');
   assert.match(src, /request\('\/admin\/licence-packages\?all=1'\)/);
-  assert.doesNotMatch(src, /method:\s*'(POST|PUT|DELETE)'/);
+  assert.doesNotMatch(src, /method:\s*'DELETE'/);
 });

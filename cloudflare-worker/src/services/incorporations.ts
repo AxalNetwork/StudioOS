@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 import { enqueueJob } from './queue';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { syncIncorporationMilestoneForOrder } from './labIncorporationMilestone';
 import { ensureCaseForOrder, transition } from './formationCase';
 
@@ -9,10 +9,12 @@ const MIGRATED = new WeakMap<object, boolean>();
 export async function ensureIncorporationsSchema(env: Env): Promise<void> {
   if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
+    // D6687 (#6687): the shape migration 202611161616_6687 rebuilds: project_id nullable, the
+    // order's subject company, and the CHECK that one of the two is set.
     `CREATE TABLE IF NOT EXISTS incorporations (
       id                     INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id                INTEGER NOT NULL,
-      project_id             INTEGER NOT NULL,
+      project_id             INTEGER,
       jurisdiction_id        TEXT NOT NULL,
       company_name           TEXT NOT NULL,
       registered_agent_name  TEXT,
@@ -24,7 +26,16 @@ export async function ensureIncorporationsSchema(env: Env): Promise<void> {
       status                 TEXT NOT NULL DEFAULT 'pending_payment',
       created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      paid_at                TIMESTAMP
+      paid_at                TIMESTAMP,
+      packet_document_id     INTEGER REFERENCES documents(id),
+      packet_ready_at        TEXT,
+      packet_ready_by        INTEGER REFERENCES users(id),
+      filed_on               TEXT,
+      filed_recorded_at      TEXT,
+      filed_by               INTEGER REFERENCES users(id),
+      company_id             INTEGER REFERENCES company_profiles(id),
+      subject_company_id     INTEGER REFERENCES company_profiles(id),
+      CHECK (project_id IS NOT NULL OR subject_company_id IS NOT NULL)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_incorporations_user_status ON incorporations(user_id, status)`,
     // D6686 (#6686) — the formation case store. Declared by migration
@@ -94,17 +105,6 @@ export async function ensureIncorporationsSchema(env: Env): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_formation_case_events_case ON formation_case_events(case_id, id)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_formation_case_events_revision
   ON formation_case_events(case_id, to_revision) WHERE to_revision IS NOT NULL`,
-    // Migration 411 (D601) — the packet and the filing, recorded by an admin.
-    // Declared there; these are the D235 safety net for a database the runner
-    // has not reached yet. "duplicate column" is swallowed below.
-    'ALTER TABLE incorporations ADD COLUMN packet_document_id INTEGER',
-    'ALTER TABLE incorporations ADD COLUMN packet_ready_at TEXT',
-    'ALTER TABLE incorporations ADD COLUMN packet_ready_by INTEGER',
-    'ALTER TABLE incorporations ADD COLUMN filed_on TEXT',
-    'ALTER TABLE incorporations ADD COLUMN filed_recorded_at TEXT',
-    'ALTER TABLE incorporations ADD COLUMN filed_by INTEGER',
-    // Migration 685 (D1415) — the company a filed incorporation created or filled.
-    'ALTER TABLE incorporations ADD COLUMN company_id INTEGER',
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }
@@ -113,12 +113,30 @@ export async function ensureIncorporationsSchema(env: Env): Promise<void> {
       if (!/duplicate column|already exists/i.test(msg)) throw e;
     }
   }
+  // The columns later migrations added, for a database the runner has not reached (D235). Through
+  // runSchemaBootstrap (D5343): it reads the table's columns once and issues no ALTER for one that exists.
+  await runSchemaBootstrap(env, [
+    // Migration 411 (D601): the packet and the filing, recorded by an admin.
+    'ALTER TABLE incorporations ADD COLUMN packet_document_id INTEGER',
+    'ALTER TABLE incorporations ADD COLUMN packet_ready_at TEXT',
+    'ALTER TABLE incorporations ADD COLUMN packet_ready_by INTEGER',
+    'ALTER TABLE incorporations ADD COLUMN filed_on TEXT',
+    'ALTER TABLE incorporations ADD COLUMN filed_recorded_at TEXT',
+    'ALTER TABLE incorporations ADD COLUMN filed_by INTEGER',
+    // Migration 685 (D1415): the company a filed incorporation created or filled.
+    'ALTER TABLE incorporations ADD COLUMN company_id INTEGER',
+    // D6687: the company the order is for.
+    'ALTER TABLE incorporations ADD COLUMN subject_company_id INTEGER',
+  ]);
   MIGRATED.set(bindingKey(env), true);
 }
 
 export interface CreatePendingArgs {
   user_id: number;
-  project_id: number;
+  /** D6687: the venture the order is for, or null when its subject is a company. */
+  project_id: number | null;
+  /** D6687: the company the order is for (`subject_company_id`), when it has no venture. */
+  subject_company_id?: number | null;
   jurisdiction_id: string;
   company_name: string;
   registered_agent_name?: string | null;
@@ -131,12 +149,12 @@ export interface CreatePendingArgs {
 export async function createPendingIncorporation(env: Env, args: CreatePendingArgs): Promise<number> {
   await ensureIncorporationsSchema(env);
   const res = await env.DB.prepare(
-    `INSERT INTO incorporations (user_id, project_id, jurisdiction_id, company_name,
+    `INSERT INTO incorporations (user_id, project_id, subject_company_id, jurisdiction_id, company_name,
       registered_agent_name, registered_agent_address, amount_cents, currency,
       stripe_session_id, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment')`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment')`,
   ).bind(
-    args.user_id, args.project_id, args.jurisdiction_id, args.company_name,
+    args.user_id, args.project_id ?? null, args.subject_company_id ?? null, args.jurisdiction_id, args.company_name,
     args.registered_agent_name ?? null,
     args.registered_agent_address ?? null,
     args.amount_cents, args.currency, args.stripe_session_id,
@@ -208,7 +226,10 @@ export async function recordPaidIncorporation(
 // ---------------------------------------------------------------------------
 export interface CreateOrderArgs {
   user_id: number;
-  project_id: number;
+  /** D6687: the venture the order is for, or null when its subject is a company. */
+  project_id: number | null;
+  /** D6687: the company the order is for, when it has no venture. */
+  subject_company_id?: number | null;
   jurisdiction_id: string;
   company_name: string;
   registered_agent_name?: string | null;
@@ -220,11 +241,11 @@ export interface CreateOrderArgs {
 export async function createPendingIncorporationOrder(env: Env, args: CreateOrderArgs): Promise<number> {
   await ensureIncorporationsSchema(env);
   const res = await env.DB.prepare(
-    `INSERT INTO incorporations (user_id, project_id, jurisdiction_id, company_name,
+    `INSERT INTO incorporations (user_id, project_id, subject_company_id, jurisdiction_id, company_name,
       registered_agent_name, registered_agent_address, amount_cents, currency, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment')`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment')`,
   ).bind(
-    args.user_id, args.project_id, args.jurisdiction_id, args.company_name,
+    args.user_id, args.project_id ?? null, args.subject_company_id ?? null, args.jurisdiction_id, args.company_name,
     args.registered_agent_name ?? null,
     args.registered_agent_address ?? null,
     args.amount_cents, args.currency,

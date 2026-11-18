@@ -34,10 +34,23 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      - name: Validate owner-approved preview configuration before deployment
+        env:
+          MEETING_BOT_PREVIEW_SECRET_PRESENT: ${{ secrets.MEETING_BOT_PREVIEW_SECRET != '' }}
+          MEETING_BOT_PREVIEW_ORIGIN: ${{ vars.MEETING_BOT_PREVIEW_ORIGIN }}
+          MEETING_BOT_PREVIEW_ROUTE_VERIFIED: ${{ vars.MEETING_BOT_PREVIEW_ROUTE_VERIFIED }}
+        run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs --check-settings
       - name: Verify the exact main candidate
         env:
+          STUDIOOS_RELEASE_CHECK: bot-initial
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --wait
+      - name: Validate preview signing secret before image build
+        env:
+          MEETING_BOT_PREVIEW_SECRET: ${{ secrets.MEETING_BOT_PREVIEW_SECRET }}
+          MEETING_BOT_PREVIEW_ORIGIN: ${{ vars.MEETING_BOT_PREVIEW_ORIGIN }}
+          MEETING_BOT_PREVIEW_ROUTE_VERIFIED: ${{ vars.MEETING_BOT_PREVIEW_ROUTE_VERIFIED }}
+        run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs --preflight
       - run: npm ci --prefix cloudflare-worker
       - name: Build and verify image before any deployment
         env:
@@ -46,14 +59,9 @@ jobs:
         run: node scripts/build-meeting-bot-image.mjs
       - name: Recheck the candidate before publishing the bot
         env:
+          STUDIOOS_RELEASE_CHECK: bot-before-preview
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once
-      - name: Validate owner-approved preview configuration before deployment
-        env:
-          MEETING_BOT_PREVIEW_SECRET: ${{ secrets.MEETING_BOT_PREVIEW_SECRET }}
-          MEETING_BOT_PREVIEW_ORIGIN: ${{ vars.MEETING_BOT_PREVIEW_ORIGIN }}
-          MEETING_BOT_PREVIEW_ROUTE_VERIFIED: ${{ vars.MEETING_BOT_PREVIEW_ROUTE_VERIFIED }}
-        run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs --preflight
       - name: Deploy preview bot host only
         env:
           MEETING_BOT_PREVIEW_ORIGIN: ${{ vars.MEETING_BOT_PREVIEW_ORIGIN }}
@@ -70,6 +78,7 @@ jobs:
         run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs
       - name: Recheck the candidate after preview verification
         env:
+          STUDIOOS_RELEASE_CHECK: bot-after-preview
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once
       - name: Promote verified revision to production

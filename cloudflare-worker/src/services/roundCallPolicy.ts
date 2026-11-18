@@ -24,6 +24,16 @@ export function validClose(value: unknown): value is string {
 export function writableCall(call: { state: string; target_close: string }, today: string): boolean {
   return call.state === 'sent' && call.target_close >= today;
 }
+/**
+ * D6160 (#6160): the state an investor's list shows, from the recorded state and
+ * the close date — the same rule `writableCall` applies to a write. A call
+ * waiting on counsel (an extension) is paused; a sent call past its close date
+ * is closed (D6159 Q4, drawn as option A); a draft is never listed.
+ */
+export function effectiveCallState(call: { state: string; target_close: string }, today: string): 'open' | 'paused' | 'closed' {
+  if (call.state === 'awaiting_counsel') return 'paused';
+  return writableCall(call, today) ? 'open' : 'closed';
+}
 export function counselApproved(call: { terms_hash: string; counsel_approved_hash: string | null; counsel_approved_by?: number | null; counsel_approved_at?: string | null; counsel_approval_reference?: string | null }): boolean {
   return !!call.counsel_approved_by && !!call.counsel_approved_at && !!call.counsel_approval_reference
     && call.counsel_approved_hash === call.terms_hash;
