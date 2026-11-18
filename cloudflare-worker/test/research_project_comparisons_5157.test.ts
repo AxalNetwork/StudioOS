@@ -44,6 +44,7 @@ function fixture() {
   db.exec(sql('migrations/378_research_fund_directory_rebuild.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_directory \(.*?\);/)![0]);
   db.exec(sql('migrations/406_research_fund_sources.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_sources \([\s\S]*?\n\);/)![0]);
   db.exec(sql(MIGRATION));
+  db.exec(sql('migrations/202611180051_7177_research_comparison_request_id.sql'));
   db.exec("INSERT INTO users (id,email,name,role) VALUES (701,'owner@example.test','Owner','founder'),(702,'other@example.test','Other','founder')");
   db.exec(`INSERT INTO research_company_directory (uid,name,website,country,founded_year,sector,source_name,source_url,as_of,
       employee_count,employee_as_of,last_funding_amount,last_funding_currency,last_funding_date,last_funding_type,metrics_source_name,metrics_source_url,metrics_updated_at) VALUES
