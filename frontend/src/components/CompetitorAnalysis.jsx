@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { recordedRelevance } from '../pages/research/companyCandidateRead';
+import { subjectFromQuery } from '../pages/research/companyProfileRead.js';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { useRailOption, useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions/index.js';
@@ -136,6 +137,11 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   const bare = embedded || chromeless;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // D7180 (D7041, D7046): the directory company a profile's link opened setup
+  // with. It rides with the run as `subject_uid`; Clear drops it for this setup.
+  const linkedSubject = useMemo(() => (embedded ? null : subjectFromQuery(searchParams)), [embedded, searchParams]);
+  const [subjectCleared, setSubjectCleared] = useState(false);
+  const subject = subjectCleared ? null : linkedSubject;
   const sectionRef = useRef(null);
   // The run form, so the first-run card can send a reader to the control that
   // actually puts a row in this store rather than describing it.
@@ -215,7 +221,8 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
         const ps = Array.isArray(projs) ? projs : projs?.projects || [];
         setProjects(ps);
         applySaved(list);
-        if (ps.length) {
+        // A profile's subject keeps the run a custom one: the startup list does not take it over.
+        if (ps.length && !searchParams.get('subject')) {
           setMode('startup');
           setProjectId(String(ps[0].id));
         }
@@ -260,6 +267,17 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     const website = searchParams.get('website');
     if (!market) return;
     setMode('custom');
+    const linked = subjectFromQuery(searchParams);
+    if (linked) {
+      // With a subject, the website is the subject's and stays on its card;
+      // Market / industry takes the sector label and Geography the country.
+      setInputs((prev) => ({
+        ...prev,
+        market: (linked.sector || market).slice(0, 200),
+        geography: linked.country || prev.geography,
+      }));
+      return;
+    }
     setInputs((prev) => ({
       ...prev,
       market: market.slice(0, 200),
@@ -299,6 +317,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       const payload = { ...inputs };
       if (mode === 'startup' && projectId) { payload.project_id = projectId; payload.mode = 'startup'; }
       else payload.mode = 'custom';
+      if (subject && payload.mode === 'custom') payload.subject_uid = subject.uid;
       const full = await api.competitors.analyze(payload, railPressHeaders(pressKey.analyze));
       // A dropped run has still written its analysis: list it, don't open it.
       if (runFor.current !== run) { applySaved(await api.competitors.list().catch(() => READ_FAILED)); return; }
@@ -537,6 +556,18 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           </div>
         )}
 
+        {subject && mode === 'custom' && (
+          <div data-testid="analysis-subject" className="mb-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/60 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-gray-500 dark:text-gray-400">Subject company</span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-gray-300 dark:border-gray-700 px-2 py-0.5 text-[11px] font-bold text-gray-600 dark:text-gray-300"><i aria-hidden="true" className="not-italic">▣</i>Directory company</span>
+              <button type="button" onClick={() => setSubjectCleared(true)} className="ml-auto min-h-[32px] text-xs font-semibold text-violet-700 dark:text-violet-300 underline">Clear subject</button>
+            </div>
+            <div className="mt-1 text-sm font-bold text-gray-900 dark:text-gray-100">{subject.name || subject.uid}</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">{[subject.website || 'Website: not recorded', subject.country || 'Country: not recorded', subject.sector || 'Sector label: not recorded'].join(' · ')}</div>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">Kept with the analysis, so Direct and Adjacent are about this company. Nothing runs until you press Analyze.</p>
+          </div>
+        )}
         <div className="mb-3">
           <label className={LABEL}>Market / industry *</label>
           <input value={inputs.market} onChange={(e) => setInput('market', e.target.value)} placeholder="e.g. AI sales enablement for SMBs" className={INPUT} />

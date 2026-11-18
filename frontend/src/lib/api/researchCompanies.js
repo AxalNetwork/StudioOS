@@ -21,4 +21,7 @@ const qs = (params = {}) => {
 export const researchCompaniesApi = {
   list: (params) => request(`/research/company-directory${qs(params)}`),
   get: (uid) => request(`/research/company-directory/${encodeURIComponent(uid)}`),
+  // D7180: one evidence collection on its own (`funding_rounds`, `employment`,
+  // `financials` or `sources`), so its Retry does not re-read the company.
+  part: (uid, part) => request(`/research/company-directory/${encodeURIComponent(uid)}${qs({ part })}`),
 };

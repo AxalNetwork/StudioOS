@@ -210,10 +210,18 @@ export function relatedSignals(sectorSignals = [], countrySignals = []) {
 /** The Companies list, filtered to one sector label. */
 export const sectorLabelHref = (sectorLabel) => `/research/companies?sector_label=${encodeURIComponent(sectorLabel)}`;
 
-/** The competitor-analysis form, prefilled with this company. */
+/**
+ * The competitor-analysis setup, opened with this company as its subject
+ * (D7041, D7046, #7180): `subject` is the directory uid the run keeps,
+ * `market` and `website` name it, and `sector` and `country` fill Market /
+ * industry and Geography. Blank fields are left out.
+ */
 export const analysisHref = (company) => {
   const p = new URLSearchParams({ tab: 'analyses', market: company?.name || '' });
   if (company?.website) p.set('website', company.website);
+  if (company?.uid) p.set('subject', company.uid);
+  if (company?.sector && String(company.sector).trim()) p.set('sector', String(company.sector).trim());
+  if (company?.country) p.set('country', company.country);
   return `/research/companies?${p.toString()}`;
 };
 
@@ -225,7 +233,7 @@ export const analysisHref = (company) => {
 export function buildCompetitorsRedirect(search) {
   const from = new URLSearchParams(search || '');
   const to = new URLSearchParams({ tab: 'analyses' });
-  for (const k of ['market', 'website']) {
+  for (const k of ['market', 'website', 'subject', 'sector', 'country']) {
     const v = from.get(k);
     if (v) to.set(k, v);
   }
