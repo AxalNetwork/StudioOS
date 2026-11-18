@@ -151,9 +151,12 @@ export function withoutFilter(f, key) {
 /**
  * The list's state from one read: 'loading' until it answers, 'unreadable'
  * when it fails (never zero companies), 'empty' when nothing matches, else 'ready'.
+ * D7179 (RCD05): a later read that still holds the last rows is 'updating',
+ * and a refusal (401, 403) is 'refused', not a failed read.
  */
 export function listState({ loading, error, data }) {
-  if (loading) return 'loading';
+  if (loading) return data?.items?.length ? 'updating' : 'loading';
+  if (error && (error.status === 401 || error.status === 403)) return 'refused';
   if (error || !data) return 'unreadable';
   return (data.items || []).length ? 'ready' : 'empty';
 }
