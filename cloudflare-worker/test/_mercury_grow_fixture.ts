@@ -71,6 +71,7 @@ export async function growDb() {
   await ensureIntegrationsSchema(env);
   await ensureProjectMetricsSchema(env);
   db.exec(file('521'));
+  db.exec(file('202611151923_6315'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');
   u.run(COFOUNDER, 'founder', 11, 'Cole', 'cole@co.example');

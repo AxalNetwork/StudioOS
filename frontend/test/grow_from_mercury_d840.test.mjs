@@ -110,6 +110,8 @@ test('Accept, Dismiss and Delete each call their route once, then reload; a refu
   const p = await mount('partner-network', PARTNERS, () => { reloads += 1; });
   try {
     await p.click('mercury-accept-9');
+    assert.deepEqual(calls, [], 'Accept first asks for confirmation');
+    await p.click('mercury-accept-confirm');
     assert.deepEqual(calls, [['accept', 101, 9]]);
     assert.equal(reloads, 1);
     await p.click('mercury-dismiss-9');

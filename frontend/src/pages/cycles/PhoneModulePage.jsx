@@ -112,6 +112,7 @@ export default function PhoneModulePage({
   records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
   // D6031: a module's own phone row (Prototype / MVP's carries Due, Test, Built and Tested); `phoneRow` by default.
   phoneRow: rowOf = phoneRow,
+  showAboveRecordsWhenEmpty = false,
   // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
   sources = null, sourcesAction = null, asks = null,
   // D5081 (#5081, RA-14): a tool that owns its page; its `subnav` is the page, as on the desktop (`CycleModulePage`).
@@ -234,9 +235,9 @@ export default function PhoneModulePage({
         {interviewLine && <p className="m-0 mt-2.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
       </section>
 
+      {/* Partnerships can have a pending proposal before the first partner exists. */}
+      {showRecords && aboveRecords && (!zero || showAboveRecordsWhenEmpty) && <div className="mt-[22px]">{aboveRecords}</div>}
       {showRecords && <>{!zero && <>
-      {/* #3938 (D1478 part 9): a control that acts on the records themselves, as on the desktop page. */}
-      {aboveRecords && <div className="mt-[22px]">{aboveRecords}</div>}
       {controls && <div className="mt-[22px] flex flex-col gap-2" data-testid="phone-module-controls">
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
