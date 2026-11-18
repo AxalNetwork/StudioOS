@@ -465,7 +465,23 @@ export function fromWorkerSkill(c) {
     run_cost_microusd: Number.isFinite(c.run_cost_microusd) ? c.run_cost_microusd : null,
     updated_at: c.updated_at || null,
     can_write: !!c.can_write,
+    // #5964 (D4538 part 2): the Axal skill and version an extension was copied from; null for a standalone skill.
+    based_on: c.based_on && typeof c.based_on === 'object' && typeof c.based_on.skill_uid === 'string'
+      ? { skill_uid: c.based_on.skill_uid, version: Number.isSafeInteger(c.based_on.version) ? c.based_on.version : null }
+      : null,
+    // #5964: a writer's unpublished edits differ from the version shown (the compare page says they are not in it).
+    draft_differs: !!c.draft && draftKey(c.draft) !== draftKey(c),
+    // #5964: the role labels, read only by the compare page's Roles part (the tab itself never prints a role).
+    role_labels: (Array.isArray(c.roles) ? c.roles : []).map((r) => (typeof r === 'string' ? r : r?.label || r?.key)).filter(Boolean),
   };
+}
+
+/** The parts a draft and its published version share, as one comparable value. */
+function draftKey(p) {
+  const tools = (Array.isArray(p.tools) ? p.tools : []).map((t) => (typeof t === 'string' ? t : t?.key));
+  const tags = (Array.isArray(p.tags) ? p.tags : []).map((t) => [t?.slug ?? t?.skill_slug, t?.level]);
+  const roles = (Array.isArray(p.roles) ? p.roles : []).map((r) => (typeof r === 'string' ? r : r?.key));
+  return JSON.stringify([p.name, p.purpose, p.steps, tools, p.output_kind, tags, roles]);
 }
 
 /** `GET /api/teams/skills?company=` → `{ can_edit, figures, skills }`: Axal's and the company's, one list. */
@@ -474,6 +490,8 @@ export function fromWorkerLibrary(r) {
   const co = (Array.isArray(r?.company?.skills) ? r.company.skills : []).map(fromWorkerSkill).filter(Boolean);
   return {
     can_edit: !!r?.company?.can_write,
+    // #5964: the company's name, for the compare page's "Why … extended it" and the Extend dialog.
+    company_name: typeof r?.company?.name === 'string' ? r.company.name : null,
     figures: { skills: { axal: hq.length, company: r?.company ? co.length : 0 }, agents_with_skills: null, updates_available: null },
     skills: [...hq, ...co],
   };

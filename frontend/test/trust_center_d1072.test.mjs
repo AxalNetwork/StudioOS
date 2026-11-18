@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  CHECKED_WAIT, DISCLOSURE_GAPS, PUBLIC_PATHS, RESPONSE_TIMES, SECURITY, TABS, YOUR_TRUST, documentRows, statusLine, tabOf,
+  CHECKED_WAIT, DISCLOSURE_GAPS, PUBLIC_PATHS, RESPONSE_TIMES, SECURITY, TABS, YOUR_TRUST, documentRows, tabOf,
 } from '../src/pages/site/trustCenterModel.js';
 import { isPublicPath } from '../src/lib/api.js';
 import { LEGAL_FOOTER_LINKS } from '../src/lib/siteLinks.js';
@@ -39,8 +39,7 @@ test('every fact is checked as Not recorded, every gap says why, and nothing cla
   assert.ok(all.some((f) => f.text === 'Last recovery drill' && !f.recorded));
   assert.doesNotMatch(text, /SOC ?2|ISO ?27001|certified/i);
   assert.deepEqual(RESPONSE_TIMES[0], ['Critical', '4 business hours', 'every 24 hours', '7 days']);
-  assert.equal(statusLine('operational'), 'All systems operational');
-  assert.equal(statusLine(undefined), 'Status not known', 'an unknown status is never "operational"');
+  // #7002: the status words moved to lib/statusSummary.js, shared with /status (status_trust_7002.test.mjs).
   const docs = documentRows({ terms: 'July 8, 2026', privacy: null, risk: 'March 31, 2026' });
   assert.deepEqual(docs.map((d) => d.updated), ['July 8, 2026', null, 'March 31, 2026', null, null]);
   assert.equal(docs.find((d) => d.name === 'Data Processing Addendum').to, null, 'not published, not linked');

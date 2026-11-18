@@ -146,8 +146,30 @@ async function callLines(env: Env, callUid: string) {
   const call = await env.DB.prepare('SELECT id, fund_id, call_number FROM fund_capital_calls WHERE uid = ?')
     .bind(callUid).first<{ id: number; fund_id: number; call_number: number }>();
   if (!call) throw new NoticeRefusal(404, 'source_not_found', 'No capital call here.');
-  const lines = (await env.DB.prepare('SELECT id FROM capital_calls WHERE fund_call_id = ? ORDER BY id').bind(call.id).all<{ id: number }>()).results || [];
+  const lines = (await env.DB.prepare('SELECT id, status FROM capital_calls WHERE fund_call_id = ? ORDER BY id').bind(call.id).all<{ id: number; status: string }>()).results || [];
+  // D6238: a withdrawn call asks nobody for anything, so it has no notice to preview or issue.
+  if (lines.length && lines.every((l) => l.status === 'withdrawn')) {
+    throw new NoticeRefusal(409, 'call_withdrawn', 'This call was withdrawn, so it has no notice to issue.');
+  }
   return { call, lines };
+}
+
+/**
+ * D6238: the notices issued on one call's lines, for the fund's general
+ * partner on the call page. Summaries only (type, reference, amount, date,
+ * superseded): never the figures or the PDF, which stay the admin's and the
+ * LP's. Read from the one notice record, `legal_notices`, by the source each
+ * call-line notice is built from (`call_line:<id>`).
+ */
+export async function callNoticeSummaries(env: Env, fundId: number, callId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT n.*, EXISTS (SELECT 1 FROM legal_notices s WHERE s.supersedes_id = n.id) AS superseded
+       FROM legal_notices n
+      WHERE n.fund_id = ? AND n.notice_type = 'capital_call_notice'
+        AND n.source_ref IN (SELECT 'call_line:' || cc.id FROM capital_calls cc WHERE cc.fund_call_id = ?)
+      ORDER BY n.id DESC LIMIT 500`,
+  ).bind(fundId, callId).all<NoticeRow & { superseded: number }>();
+  return (rows.results || []).map(noticeSummary);
 }
 
 /** Each line's figures, and one digest over them. Refuses on the first line that cannot issue. */

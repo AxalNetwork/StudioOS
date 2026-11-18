@@ -23,7 +23,7 @@ import './site/network.css';
  *
  * #2333 — the one publications list. The HQ briefs (`admin_publications`) that
  * the retired `/insights` index listed are the Briefs section below the
- * articles; `/insights` forwards to `/articles#briefs`, and each brief still
+ * articles; `/insights` forwards to `/articles` (#6999), and each brief still
  * opens at its share link, `/insights/public/:slug`.
  */
 
@@ -228,7 +228,7 @@ export function Briefs() {
       });
     return () => { cancelled = true; };
   }, []);
-  // `/insights` lands here as `/articles#briefs`; scroll once the list is drawn.
+  // An old `/articles#briefs` link still scrolls to the shelf once it is drawn.
   useEffect(() => {
     if (hash === '#briefs' && items) document.getElementById('briefs')?.scrollIntoView?.();
   }, [hash, items]);
@@ -236,17 +236,17 @@ export function Briefs() {
   return <BriefsView items={items} failed={failed} />;
 }
 
-/** The Briefs section for one read: `items` null while loading. */
+/**
+ * The Briefs section for one read: `items` null while loading. #6999: with no published brief (or
+ * still loading) the shelf and its heading are not drawn; a failed read still says so.
+ */
 export function BriefsView({ items, failed = false }) {
+  if (!failed && (items === null || items.length === 0)) return null;
   return (
     <section id="briefs" aria-labelledby="ax-art-briefs-h" data-testid="articles-briefs">
       <h2 id="ax-art-briefs-h" className="ax-lbl-q ax-nw-panel-k ax-art-k">Briefs</h2>
-      {items === null ? (
-        <EmptyNote>Loading…</EmptyNote>
-      ) : failed ? (
+      {failed ? (
         <EmptyNote>Unreadable: the briefs could not be read, so this is not a claim that there are none.</EmptyNote>
-      ) : items.length === 0 ? (
-        <EmptyNote>No published briefs yet.</EmptyNote>
       ) : (
         <div className="ax-art-grid">
           {items.map((p) => {
