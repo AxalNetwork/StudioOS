@@ -49,7 +49,8 @@ test('the list is closed and well formed', () => {
   // D937: sent cohort notices keep the old Lab address working permanently.
   // D938: /admin forwards every old console tab, and #2375 keeps it for good.
   // D4254, #4853: the old Pitch addresses (/raise/pitch-deck and /raise/pitch-deck/new) stay for bookmarks and sent links.
-  assert.deepEqual(keep, ["/admin", "/admin/spinout-lab", "/dashboard", "/help/:id", "/integrations", "/lp/customer-discovery", "/lp/founder", "/lp/investor", "/lp/partner", "/notifications", "/notifications/*", "/plans-and-pricing", "/product-testing", "/raise/pitch-deck", "/raise/pitch-deck/new", "/refer", "/settings", "/settings/:section", "/support", "/tickets/:id", "/wellbeing/expert-dashboard"]);
+  // D6118: /grow/partner-network forwards to the one Partnerships page; sent digests carry it.
+  assert.deepEqual(keep, ["/admin", "/admin/spinout-lab", "/dashboard", "/grow/partner-network", "/help/:id", "/integrations", "/lp/customer-discovery", "/lp/founder", "/lp/investor", "/lp/partner", "/notifications", "/notifications/*", "/plans-and-pricing", "/product-testing", "/raise/pitch-deck", "/raise/pitch-deck/new", "/refer", "/settings", "/settings/:section", "/support", "/tickets/:id", "/wellbeing/expert-dashboard"]);
 });
 
 
