@@ -94,6 +94,25 @@ test('a rerun on an old creation is discovered in the history sweep without back
   assert.deepEqual(f.reports.map(x => [x.run.id, x.run.run_attempt]), [[3, 2]]);
 });
 
+test('reconciliation inspects successful main releases, including late completions, without writing issues for green runs', async () => {
+  const release = run(10, { workflow_id: 348320146, path: '.github/workflows/cloudflare-worker-deploy.yml',
+    head_repository: { full_name: repo }, head_branch: 'main', event: 'push', conclusion: 'success' });
+  const older = { ...release, id: 11, created_at: iso(now - 8 * hr), updated_at: iso(now - hr) };
+  const unrelated = [run(12, { conclusion: 'success' }), { ...release, id: 13, workflow_id: 1 },
+    { ...release, id: 14, event: 'pull_request' }, { ...release, id: 15, head_branch: 'develop' },
+    { ...release, id: 16, head_repository: { full_name: 'fork/StudioOS' } }, { ...release, id: 17, conclusion: 'cancelled' }];
+  const f = fixture([release, older, ...unrelated]);
+  const observed = [];
+  f.observe = (run, evidence) => observed.push([run.id, evidence]);
+  f.hints = async () => ({ superseded: true, supersededStage: 'initial' });
+  const state = { version: 1, activation: now - 2 * hr, until: now - 300000, auditBefore: now - 7 * hr, tracked: [] };
+  await reconcileFailures(f, state, now);
+  assert.deepEqual(observed.filter(([, evidence]) => evidence.superseded).map(([id]) => id), [10, 11]);
+  assert.deepEqual(f.calls.filter(path => path.includes('/jobs?')),
+    [10, 11].map(id => root + '/' + id + '/attempts/1/jobs?per_page=100&page=1'));
+  assert.deepEqual(f.reports, []);
+});
+
 test('an incomplete source or rejected write never advances the input checkpoint', async () => {
   const state = { version: 1, activation: now - hr, until: now - 300000, tracked: [] };
   const f = fixture([run(1)]);

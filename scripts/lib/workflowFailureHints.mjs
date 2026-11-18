@@ -44,6 +44,13 @@ const releaseChecks = {
   ],
 };
 
+// The reconciler needs job metadata on green runs only for this trusted workflow.
+export function isSuccessfulProductionRun(run) {
+  return run.conclusion === 'success' && run.path === '.github/workflows/cloudflare-worker-deploy.yml' &&
+    files.get(run.workflow_id) === run.path && run.head_branch === 'main' && ['push', 'workflow_dispatch'].includes(run.event) &&
+    [run.repository, run.head_repository].every(repo => repo?.full_name === catalog.repository);
+}
+
 async function notices(api, root, job) {
   if (job.check_run_url !== 'https://api.github.com' + root + '/check-runs/' + job.id) return [];
   const annotations = await api(root + '/check-runs/' + job.id + '/annotations?per_page=100');
@@ -56,7 +63,30 @@ function onlyFailedStep(job, name) {
   return failed.length === 1 && failed[0].name === name && failed[0].conclusion === 'failure';
 }
 
+async function releaseNotice(api, root, run, job, stage) {
+  const prefix = ['superseded', stage, run.id, run.run_attempt, run.head_sha, ''].join(' ');
+  const messages = new Set((await notices(api, root, job))
+    .filter(row => row.title === 'StudioOS release outcome v1').map(row => row.message));
+  if (messages.size !== 1) return {};
+  const [message] = messages;
+  if (typeof message !== 'string' || !message.startsWith(prefix)) return {};
+  const replacement = message.slice(prefix.length);
+  return sha(replacement) && replacement !== run.head_sha ? { superseded: true, supersededStage: stage } : {};
+}
+
 async function releaseSupersession(api, root, run, jobs, filename) {
+  if (isSuccessfulProductionRun(run)) {
+    const [, jobName, stepName] = releaseChecks[filename][0];
+    const [, deployName] = releaseChecks[filename][1];
+    const executed = jobs.filter(job => job.conclusion !== 'skipped');
+    const [admission] = executed;
+    if (executed.length !== 1 || admission.name !== jobName || admission.conclusion !== 'success' ||
+        jobs.filter(job => job.name === deployName && job.conclusion === 'skipped').length !== 1 ||
+        !Array.isArray(admission.steps) || !admission.steps.every(step => ['success', 'skipped'].includes(step.conclusion))) return {};
+    const checks = admission.steps.filter(step => step.name === stepName);
+    if (checks.length !== 1 || checks[0].conclusion !== 'success') return {};
+    return releaseNotice(api, root, run, admission, 'initial');
+  }
   if (run.head_branch !== 'main' || !['push', 'workflow_dispatch'].includes(run.event) || run.conclusion !== 'failure') return {};
   const failed = jobs.filter(job => bad.has(job.conclusion));
   if (failed.length !== 1) return {};
@@ -66,15 +96,7 @@ async function releaseSupersession(api, root, run, jobs, filename) {
   // A post-preview supersession can follow a successful preview publish. Confirm promotion was skipped.
   if (filename === 'meeting-bot-deploy' && !job.steps.some(step =>
     step.name === 'Promote verified revision to production' && step.conclusion === 'skipped')) return {};
-  const [stage] = match;
-  const prefix = ['superseded', stage, run.id, run.run_attempt, run.head_sha, ''].join(' ');
-  const messages = new Set((await notices(api, root, job))
-    .filter(row => row.title === 'StudioOS release outcome v1').map(row => row.message));
-  if (messages.size !== 1) return {};
-  const [message] = messages;
-  if (typeof message !== 'string' || !message.startsWith(prefix)) return {};
-  const replacement = message.slice(prefix.length);
-  return sha(replacement) && replacement !== run.head_sha ? { superseded: true, supersededStage: stage } : {};
+  return releaseNotice(api, root, run, job, match[0]);
 }
 
 const queueProducer = /^(?:frontend \(build\)|worker \(typecheck\)|api ↔ worker drift|suite \((?:frontend-[12]-of-2|worker-[1-6]-of-6|rest)\))$/;

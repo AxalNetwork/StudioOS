@@ -39,6 +39,8 @@ jobs:
     if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 100
+    outputs:
+      decision: ${{ steps.candidate.outputs.decision }}
     permissions:
       contents: read
       actions: read
@@ -51,14 +53,16 @@ jobs:
         with:
           node-version: '22'
       - name: Wait for all six required checks
+        id: candidate
         env:
           STUDIOOS_RELEASE_CHECK: initial
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --wait
+        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --wait-for-decision
 
   deploy:
     name: build and deploy studioos Worker
     needs: admission
+    if: needs.admission.outputs.decision == 'verified'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -312,10 +316,12 @@ jobs:
           PUBLISH: ${{ steps.publish.outcome }}
         run: |
           mkdir -p "$RUNNER_TEMP/release-evidence"
-          # Wrangler can collect a local profiler trace when Cloudflare rejects startup.
-          if [ -d cloudflare-worker/.wrangler/tmp ]; then
-            find cloudflare-worker/.wrangler/tmp -type f -name worker.cpuprofile -exec cp {} "$RUNNER_TEMP/release-evidence/publish-startup.cpuprofile" \;
-          fi
+          # Wrangler writes rejection profiles beside the production wrangler.toml.
+          for profile in .wrangler/tmp/startup-profile-*/worker.cpuprofile; do
+            if [ -f "$profile" ]; then
+              cp "$profile" "$RUNNER_TEMP/release-evidence/publish-startup.cpuprofile"
+            fi
+          done
           {
             printf 'Candidate `%s`\n\n' "$GITHUB_SHA"
             printf '| Phase | Outcome |\n| --- | --- |\n'
