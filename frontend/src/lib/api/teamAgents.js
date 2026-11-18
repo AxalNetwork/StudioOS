@@ -74,6 +74,8 @@
 //   GET  /api/teams/skills?company=<uid>          → { roles, hq: [SkillCard], company: { uid, name, skills, can_write } | null, can_write_hq }
 //   GET  /api/teams/skills/:uid                   → { skill: SkillCard + { skill_md }, versions, agents }
 //                                                   (D4533: versions[].release_note, null when none was written)
+//   POST /api/teams/skills/:uid/extend            { company, reason, version?, name? } → 201 { skill, base } (#5964, D4538 part 2)
+//   GET  /api/teams/skills/:uid/base              → { lineage } (null for a standalone skill)
 // `:scope` is 'company' (its uid) or 'project' (its id). A person is { uid, name },
 // never an email. `month_spend` is { available: false } when it cannot be read:
 // the page says "Not recorded", never 0.
@@ -129,6 +131,12 @@ export const teamAgentsApi = {
   updateSkill: (uid, patch) => request(`/teams/skills/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   // D4533 (B1): an optional release note, kept on the version (400 release_note_invalid | release_note_too_long).
   publishSkill: (uid, { releaseNote } = {}) => request(`/teams/skills/${enc(uid)}/publish`, { method: 'POST', body: JSON.stringify(releaseNote ? { release_note: releaseNote } : {}) }),
+  // #5964 (D4538 part 2, D5963): a company extension of an Axal skill. `POST /teams/skills/:uid/extend` takes the HQ skill's
+  // uid and `{ company, reason, version?, name? }` → 201 `{ skill, base }`; `GET /teams/skills/:uid/base` → `{ lineage }`,
+  // null for a standalone skill.
+  extendSkill: (uid, { company, reason, version, name } = {}) =>
+    request(`/teams/skills/${enc(uid)}/extend`, { method: 'POST', body: JSON.stringify({ company, reason, ...(version != null ? { version } : {}), ...(name != null ? { name } : {}) }) }),
+  skillBase: (uid) => request(`/teams/skills/${enc(uid)}/base`),
   // D4538 part 5 (#5965), SK-20: explicit per-conflict choices create a draft; never publish or change pins.
   rebaseSkill: (uid, body) => request(`/teams/skills/${enc(uid)}/rebase`, { method: 'POST', body: JSON.stringify(body) }),
   // D4538 part 6 (#5967): task-to-skill discovery for an agent the caller manages. Reads only; attaching stays setAgentSkills.
