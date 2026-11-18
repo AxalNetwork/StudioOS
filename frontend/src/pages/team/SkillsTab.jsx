@@ -9,6 +9,7 @@ import { day } from '../account/companies/companiesModel.js';
 import SkillEnergy from '../../ui/SkillEnergy.jsx';
 import { AreaDot, CostLine, SkillCard, SkillImage, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
 import { AssignSkillSheet, NewSkillSheet } from './SkillSheets.jsx';
+import { BasedOnLine, ExtendSkillSheet } from './SkillExtension.jsx';
 import {
   AREAS, SORTS, areaCounts, areaFromParam, assignGroups, authorLine, companySkillsTitle, directory, groups, outputWords, scopeLine, skillAreas, skillFileName,
 } from './skillsModel.js';
@@ -217,7 +218,7 @@ export function UsingAgents({ block }) {
 }
 
 /** SK2: one skill's page. */
-export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetry, canAssign }) {
+export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetry, canAssign, companyUid = null, companyName = null, canExtend = false, onExtend }) {
   const [copied, setCopied] = useState('');
   if (!block) return <Loading />;
   if (!block.available) return block.unreadable ? <SkillsUnreadable what="This skill" onRetry={onRetry} /> : <HonestBlock>{block.reason}</HonestBlock>;
@@ -236,9 +237,13 @@ export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetr
           <b className="text-[16px] text-axal-ink dark:text-gray-100">{s.name}</b>
           <span className={MUTED}>{[s.scope === 'hq' ? 'From Axal' : authorLine(s).replace(/^By /, ''), Number.isFinite(s.version) && s.version > 0 ? `v${s.version}` : 'Draft', areas].filter(Boolean).join(' · ')} · <UsedBy n={s.used_by} /></span>
           <CostLine s={s} />
+          {/* #5964 (D5963): an extension's line, "Based on Axal vN · Compare with Axal" (only when `based_on` is set). */}
+          <BasedOnLine basedOn={s.based_on} companyUid={companyUid} skillUid={s.uid} />
           {s.status === 'retired' ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="skill-retired-line">{s.scope === 'hq' ? 'Axal retired this skill.' : 'Retired.'} Agents still pinned to it keep working at their version.</span> : null}
         </span>
         {s.markdown ? <button type="button" className={BTN_SECONDARY} onClick={copy} data-testid="skill-copy">Copy SKILL.md</button> : null}
+        {/* #5964: a company editor extends a published Axal skill: a draft copy for the company, Axal's skill unchanged. */}
+        {canExtend && s.scope === 'hq' && s.status === 'published' && onExtend ? <button type="button" className={BTN_SECONDARY} onClick={() => onExtend(s)} data-testid="skill-page-extend">Extend for {companyName || 'your company'}…</button> : null}
         {can ? <button type="button" className={BTN_PRIMARY} onClick={() => onAssign(s)} data-testid="skill-page-assign">Assign to agents…</button> : null}
       </div>
       {copied ? <p role="status" className={`m-0 ${MUTED}`}>{copied}</p> : null}
@@ -335,6 +340,8 @@ export default function SkillsTab({ scope, agentsBlock }) {
   let body;
   if (skillUid) {
     body = <SkillPage block={page} agentsBlock={using} canAssign={canAssign} backTo={inDirectory ? (area ? area.name : 'All areas') : 'Areas'}
+      companyUid={scope.kind === 'company' ? companyUid : null} companyName={companyName} canExtend={scope.kind === 'company' && !!companyUid && !!value?.can_edit}
+      onExtend={(s) => setSheet({ kind: 'extend', skill: s })}
       onBack={() => go({ skill: null })} onAssign={(s) => setSheet({ kind: 'assign', skill: s })}
       onRetry={() => { setPage(null); agents.skill(skillUid).then(setPage); }} />;
   } else if (!lib) {
@@ -368,6 +375,11 @@ export default function SkillsTab({ scope, agentsBlock }) {
       {notice ? <p role="status" className="m-0 w-fit rounded-axal-md bg-axal-ink px-3 py-2 text-[13px] text-white dark:bg-gray-100 dark:text-gray-900" data-testid="skills-notice">{notice}</p> : null}
       {body}
       {sheet?.kind === 'assign' ? <AssignSkillSheet skill={sheet.skill} personaOf={personaOf} onClose={() => setSheet(null)} onDone={(words) => { setSheet(null); setNotice(words); load(); }} /> : null}
+      {sheet?.kind === 'extend' ? (
+        <ExtendSkillSheet base={{ uid: sheet.skill.uid, name: sheet.skill.name, current_version: sheet.skill.version, version: sheet.skill.version }}
+          company={{ uid: companyUid, name: companyName }} onClose={() => setSheet(null)}
+          onCreated={(made, base) => { setSheet(null); setNotice(`Draft created from Axal v${base?.version ?? sheet.skill.version}. Agents can’t use it until you publish.`); load(); if (made?.uid) go({ skill: made.uid }); }} />
+      ) : null}
       {sheet?.kind === 'new' ? <NewSkillSheet scope={scope} onClose={() => setSheet(null)} onSaved={(s) => { setSheet(null); load(); if (s?.uid) go({ skill: s.uid }); }} /> : null}
     </div>
   );

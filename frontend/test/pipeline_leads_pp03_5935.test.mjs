@@ -124,10 +124,13 @@ test('cards follow the canvas order: name, provenance, reasons, fit, budget, nee
     const card = byTestId(m, 'lead-card')[0];
     const text = textOf(card);
     const at = (s) => { const i = text.indexOf(s); assert.ok(i >= 0, `missing ${s}`); return i; };
-    const order = [at('Lumen Pay'), at('Marketplace need'), at('SaaS · match'), at('Strong fit · 100'), at('Budget'), at('$15K–$20K'), at('Need'), at('Pass')];
+    const order = [at('Lumen Pay'), at('Marketplace need'), at('SaaS · match'), at('Strong fit · 100'), at('Budget'), at('$15K–$20K'), at('Need'), at('Draft proposal'), at('Pass')];
     assert.deepEqual([...order].sort((a, b) => a - b), order, `out of order: ${text}`);
     assert.equal(buttons(m, 'Accept').length, 0);
-    assert.equal(buttons(m, 'Draft proposal').length, 0, 'no Draft proposal until the owner answers');
+    // #5936 (D4838 part 10): the owner answered A, so Draft proposal is the card's primary action, before Pass.
+    const draft = buttons(m, 'Draft proposal');
+    assert.equal(draft.length, 1, 'one Draft proposal per card');
+    assert.match(m.props(draft[0]).className, /min-h-\[44px\]/);
     const pass = buttons(m, 'Pass')[0];
     assert.match(m.props(pass).className, /min-h-\[44px\]/);
     assert.match(m.props(pass).className, /\bw-full\b/, 'full width on a phone');
