@@ -22,6 +22,7 @@ import { EVENT_TYPE_FILTERS } from '../../lib/eventTypes';
 import { formatEventPrice } from '../../lib/money';
 import { studioLicenceEnquiryPath } from '../../lib/siteFirm';
 import { COHORT_WEEKS, openCohortCopy, useCohortPlaces } from '../../lib/spinoutLab';
+import { numberWord } from '../../lib/numberWords';
 import { EVENTS_COPY, eventDateParts, eventTypeTone } from '../../lib/siteNetwork2';
 import '../site/network2.css';
 
@@ -30,7 +31,7 @@ const TYPE_LABEL = Object.fromEntries(EVENT_TYPES.filter((t) => t.id).map((t) =>
 const FORMAT_LABEL = Object.fromEntries(FORMATS.map((f) => [f.id, f.label]));
 const WHEN_OPTIONS = [{ value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }];
 
-/** The Lab's sprint length, from the cohort timing the Worker runs, never typed. */
+/** The Lab's sprint length, computed from the cohort timing the Worker runs. */
 const COHORT_DAYS = COHORT_WEEKS * 7;
 
 // One server page. The feed used to be requested with the API's default
@@ -97,7 +98,8 @@ export function LabProgramCard() {
       <span className="ax-chip ax-n2-chip-green">Applications open</span>
       <h3 className="ax-n2-program-t">{cohort ? `Spin-Out Lab · Cohort ${cohort.cohortNum}` : 'Spin-Out Lab · Next cohort'}</h3>
       <p className="ax-n2-program-d">
-        The {COHORT_DAYS}-day formation programme. Idea to incorporated, 83(b)-filed, cap-table-clean, with verified discovery and revenue proof.
+        {/* #6990: what the programme is, never what it promises. */}
+        A {numberWord(COHORT_WEEKS)}-week programme for founders testing an idea or a new product. By application.
       </p>
       <dl className="ax-n2-facts">
         {facts.map((f) => (

@@ -28,7 +28,9 @@ page in a child component inside it:
   `../ReferralReview.jsx`.
 - `ProgramPage.jsx` — workspace "Programs": Perks (`/admin/programs/perks`,
   `/how-it-runs`, `/queue`, `/activity`), Learning (`/admin/programs/learning`,
-  `/how-it-runs`, `/people`, `/activity`), Referral partners
+  `/how-it-runs`, `/people`, `/activity`; D5887 adds `/availability`,
+  `/participation` and `/settings`, routed by
+  `frontend/src/routes/adminProgramsLearning.jsx`), Referral partners
   (`/admin/programs/referral-partners`, `/how-it-runs`, `/queue`, `/activity`),
   Investor cohort access (`/admin/programs/investor-cohorts`, `/activity`) and
   the one-page `/admin/programs/ai-native-venture`. D963 (#2796) completes the
@@ -73,7 +75,7 @@ The pieces they draw with:
   review a dialog (D962).
 - `LearningPages.jsx` — Learning's Overview (tiles, Completion by program,
   Enrolments per week, the programs table with assigned admins), People and
-  the learner's record (D962).
+  the learner's record (D962), and Participation on its own enrolments (D5887).
 - `ReferralPartners.jsx` — Referral partners (PG7, D963): Overview's segment
   chips, four tiles, Introductions by outcome, Commission by month, Standard
   rules, D923's links and the partners table with its row menu; the Queue of

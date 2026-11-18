@@ -79,5 +79,6 @@ HEAD metadata after deployment; the migration never reads or deletes objects.
 
 | `migrations/202611151226_6562_agreement_revision.sql` | D6562: nullable rendered terms/schedule revisions and contractual input snapshot on licence contracts; legacy agreements remain unknown. |
 | `migrations/202611151315_6272_ask_history_cleared.sql` | D6272 (#6272): `research_ask_sessions.cleared_at` — Ask's Clear history hides the caller's sessions and Restore sets it back to NULL; nothing is deleted. Additive, no backfill. |
+| `migrations/202611161505_6195_commitment_route_preference.sql` | D6195 (#6195): `commitments.route_preference` (direct, syndicate, fund or NULL) — the investor's preference only; the studio sets the closing line's route. Additive, no backfill; NULL reads "No preference recorded". |
 | `migrations/202611150148_5454_deal_preparations.sql` | D5454 (#5454, ADP-01): `deal_preparations` (issuer company and project scope, deployment scope, independent preparation and publication states, revision pointers) and immutable `deal_preparation_revisions` (triggers). A never-released draft owns no deal row (CHECK). New tables, re-runnable, no backfill. |
 | `migrations/202611161619_6960_package_service_delivery.sql` | D6960 (#6960) adds an optional, versioned HQ service description to a package item. |

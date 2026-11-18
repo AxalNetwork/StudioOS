@@ -39,7 +39,7 @@ import FromMercury from './FromMercury';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import { markRequestsApi } from '../../lib/api/markRequests';
-import { requestsByCompany } from '../portfolio/markRequestModel';
+import { requestsByCompany, companyRequests } from '../portfolio/markRequestModel';
 import MarkRequestPanel, { RequestChip } from './MarkRequestPanel';
 import { HealthStatus, ObligationStatus, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
 import {
@@ -141,7 +141,7 @@ function FmvCell({ r }) {
 function MarkDateCell({ r, onOpen, requests }) {
   const label = r.mark.kind === 'marked' ? (r.markDate || NOT_RECORDED) : NOT_RECORDED;
   const body = r.uid ? (
-    <button type="button" className="pf-link-button pf-mark-open" onClick={() => onOpen(r)} aria-label={`Mark history for ${r.name}`} data-testid={`button-mark-history-${r.key}`}>{label}</button>
+    <button type="button" className="pf-link-button pf-mark-open" onClick={() => onOpen(r)} aria-label={`${label}, mark history for ${r.name}`} data-testid={`button-mark-history-${r.key}`}>{label}</button>
   ) : <span className={r.mark.kind === 'marked' && r.markDate ? 'pf-mono' : 'pf-not-recorded'}>{label}</span>;
   return (
     <>
@@ -347,6 +347,8 @@ function MarkDrawer({ drawer, reference, asOf, onClose, onRetry, requests, onSen
         </section>
         {row.uid ? (
           <MarkRequestPanel key={row.key} row={row} read={requests} request={requests.state === 'ok' ? requests.byCompany.get(row.uid) : null}
+            list={requests.state === 'ok' ? companyRequests(requests.items, row.uid) : []}
+            latest={history && history.rows.length ? { date: history.rows[0].date, age: ageWords(history.ageDays) } : null}
             startOpen={drawer.requestOpen} onSend={(draft) => onSendRequest(row, draft)} onRetry={onRetryRequests} />
         ) : null}
         {row.uid ? <Link className="pf-btn" to={companyHref(row.uid)} data-testid="link-mark-drawer-company">Open {row.name}</Link> : null}
@@ -453,20 +455,28 @@ export default function InvestorPortfolioPositions() {
   }, []);
 
   // The investor's own requests, a read of their own (D6205).
-  const [requests, setRequests] = useState({ state: 'loading', byCompany: new Map() });
+  const [requests, setRequests] = useState({ state: 'loading', items: [], byCompany: new Map() });
   const readRequests = useCallback(() => {
     setRequests((r) => ({ ...r, state: 'loading' }));
     markRequestsApi.list().then(
-      (res) => setRequests(Array.isArray(res?.items) ? { state: 'ok', byCompany: requestsByCompany(res.items) } : { state: 'unreadable', byCompany: new Map() }),
-      () => setRequests({ state: 'unreadable', byCompany: new Map() }),
+      (res) => setRequests(Array.isArray(res?.items) ? { state: 'ok', items: res.items, byCompany: requestsByCompany(res.items) } : { state: 'unreadable', items: [], byCompany: new Map() }),
+      () => setRequests({ state: 'unreadable', items: [], byCompany: new Map() }),
     );
   }, []);
   useEffect(() => { readRequests(); }, [readRequests]);
   // Sent, the new request is the company's; refused as already open, the open one is.
   const sendRequest = useCallback(async (row, draft) => {
-    const put = (req) => setRequests((r) => ({ ...r, byCompany: new Map(r.byCompany).set(row.uid, req) }));
+    // D6909: the stored row is the Receipt's, and joins the company's list.
+    const put = (req) => setRequests((r) => ({
+      ...r, byCompany: new Map(r.byCompany).set(row.uid, req),
+      items: [req, ...(r.items || []).filter((it) => it && it.uid !== req.uid)],
+    }));
     try {
-      put(await markRequestsApi.create({ projectUid: row.uid, kind: draft.kind, reason: draft.reason }));
+      const stored = await markRequestsApi.create({
+        projectUid: row.uid, kind: draft.kind, reason: draft.reason, evidenceUrl: draft.evidenceUrl, evidenceFile: draft.evidenceFile,
+      });
+      put(stored);
+      return stored;
     } catch (err) {
       if (err?.code === 'request_open' && err?.data?.request) put(err.data.request);
       throw err;
