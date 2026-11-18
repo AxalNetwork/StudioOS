@@ -41,9 +41,11 @@ const BASE = {
 
 /** Whether the button with this test id is `aria-disabled`. */
 const off = (markup, testid) => {
-  const tag = markup.match(new RegExp(`<button[^>]*data-testid="${testid}"[^>]*>`));
+  const at = markup.indexOf(`data-testid="${testid}"`);
+  const start = at < 0 ? -1 : markup.lastIndexOf('<button', at);
+  const tag = start < 0 || markup.slice(start, at).includes('>') ? null : markup.slice(start, markup.indexOf('>', at) + 1);
   assert.ok(tag, `no ${testid} button`);
-  return /aria-disabled="true"/.test(tag[0]);
+  return tag.includes('aria-disabled="true"');
 };
 const primaries = (markup) => (markup.match(/bg-axal-violet px-3/g) || []).length;
 
