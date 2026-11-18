@@ -74,7 +74,7 @@ const MARKET = read('m1', [
   ['size_cents', ''], ['size_currency', ''], ['size_source', ''],
 ], [{ key: 'change-decision', label: 'Change decision', kind: 'form', form: { fields: [{ key: 'decision', kind: 'CH', value: 'not_yet' }] } }], 'm1');
 const OBLIGATION = read(9, [
-  ['title', 'Delaware franchise tax'], ['kind', 'tax'], ['due_at', '2027-03-01'], ['owner_name', 'Sam'], ['repeats', 'yearly'],
+  ['title', 'Delaware franchise tax'], ['kind', 'tax'], ['due_at', '2027-03-01'], ['owner_user_id', '12'], ['repeats', 'yearly'],
   ['remind_days', ['30', '7']], ['status', 'overdue'],
 ]);
 
@@ -172,7 +172,7 @@ test('Edit obligation opens with title, kind, due date, owner, repeats, reminder
     assert.equal(ui.valueOf('title'), 'Delaware franchise tax');
     assert.deepEqual(ui.valueOf('kind'), ['tax']);
     assert.equal(ui.valueOf('due_at'), '2027-03-01');
-    assert.equal(ui.valueOf('owner_name'), 'Sam');
+    assert.deepEqual(ui.valueOf('owner_user_id'), ['12'], 'D6790: the picked team member, kept as a choice before the team list answers');
     assert.deepEqual(ui.valueOf('repeats'), ['yearly']);
     assert.deepEqual(ui.valueOf('remind'), ['30', '7'], 'every stored reminder, including ones the Add does not offer');
     assert.deepEqual(ui.valueOf('status'), ['overdue']);

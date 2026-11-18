@@ -49,7 +49,9 @@ export type CompanyOutcome =
   | { created: false; reason: 'no_owner_account' };
 
 type OrderFacts = {
-  id: number; project_id: number; company_name: string | null; jurisdiction_id: string | null;
+  id: number; project_id: number | null; company_name: string | null; jurisdiction_id: string | null;
+  /** D6687: the company the order is for, when its subject is a company. */
+  subject_company_id?: number | null;
   registered_agent_name: string | null; registered_agent_address: string | null;
 };
 type ProjectFacts = { id: number; founder_id: number | null; company_id: number | null; slug: string | null };
@@ -86,7 +88,11 @@ const clean = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : nu
 export async function filingCompanyStatements(
   env: Env, order: OrderFacts, filedOn: string, adminId: number,
 ): Promise<{ statements: D1PreparedStatement[]; outcome: CompanyOutcome }> {
-  const project = await env.DB.prepare('SELECT id, founder_id, company_id, slug FROM projects WHERE id = ?').bind(order.project_id).first<ProjectFacts>();
+  const project = order.project_id == null ? null
+    : await env.DB.prepare('SELECT id, founder_id, company_id, slug FROM projects WHERE id = ?').bind(order.project_id).first<ProjectFacts>();
+  // D6687: an order for a company fills that company; an order for a venture, the venture's company (or a new one).
+  const subjectCompany = order.subject_company_id ?? null;
+  const target = subjectCompany ?? project?.company_id ?? null;
   const legal = mappedLegal(order.jurisdiction_id);
   const name = clean(order.company_name);
   const agent = clean(order.registered_agent_name);
@@ -94,12 +100,12 @@ export async function filingCompanyStatements(
   const country = legal.jurisdiction ? legal.jurisdiction.slice(0, 2) : null;
   const guard = [order.id] as const;
 
-  // ── The venture is already in a company: fill only what is empty. ──
-  if (project?.company_id != null) {
+  // ── The subject company, or the venture's company: fill only what is empty. No venture is moved. ──
+  if (target != null) {
     const co = await env.DB.prepare(
       `SELECT id, uid, archived_at, legal_name, legal_form, jurisdiction, incorporation_date, registered_agent_name
          FROM company_profiles WHERE id = ?`,
-    ).bind(project.company_id).first<CompanyFacts>();
+    ).bind(target).first<CompanyFacts>();
     if (co) {
       const link = env.DB.prepare(LINKED_LAST).bind(co.id, ...guard);
       if (co.archived_at) return { statements: [link], outcome: { uid: co.uid, created: false, filled: [], reason: 'archived' } };
@@ -128,6 +134,8 @@ export async function filingCompanyStatements(
       statements.push(link);
       return { statements, outcome: { uid: co.uid, created: false, filled } };
     }
+    // D6687: a subject company that is gone creates nothing in its place.
+    if (subjectCompany != null) return { statements: [], outcome: { created: false, reason: 'no_owner_account' } };
   }
 
   // ── The venture has no company: create one for its owner. ──

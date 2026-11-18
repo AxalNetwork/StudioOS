@@ -8,7 +8,9 @@
  *   diligence checker) left with it, client methods included.
  * - `/insights` folds into `/articles`, whose Briefs section lists what the
  *   Insights index listed. Each brief keeps its share link,
- *   `/insights/public/:slug`.
+ *   `/insights/public/:slug`. #6999: `/insights` ends on `/articles` with no
+ *   hash, and the Briefs shelf (heading included) is not drawn while it has
+ *   no brief to show.
  *
  * Both old addresses forward with `<Navigate replace>` and are counted in the
  * redirect inventory until #2319 retires them. Each check below is
@@ -69,8 +71,8 @@ function removed(s) {
 function forwards(s) {
   assert.doesNotMatch(s.app, /<Route path="\/advisory" element=\{guard\(\['admin', 'founder'\], <Navigate to="\/build\/team\?mode=workspace&tab=advisors" replace \/>\)\} \/>/,
     '/advisory forwards to Team › Advisors behind its old guard');
-  assert.match(s.app, /<Route path="\/insights" element=\{<Navigate to="\/articles#briefs" replace \/>\} \/>/,
-    '/insights forwards to the Briefs section of /articles');
+  assert.match(s.app, /<Route path="\/insights" element=\{<Navigate to="\/articles" replace \/>\} \/>/,
+    '/insights forwards to /articles, with no hash (#6999)');
   assert.doesNotMatch(s.redirects, /\{ path: '\/advisory' \}/, '/advisory is counted');
   assert.match(s.redirects, /\{ path: '\/insights' \}/, '/insights is counted');
   // The share link, the reader and authoring stay pages.
@@ -119,7 +121,7 @@ test('D2319 retires Advisory, preserves opened Insights and keeps sharing and au
   const line = (src, path) => src.split('\n').find((l) => l.includes(`<Route path="${path}"`));
   mutationChecked(forwards, s, [
     ['app', `\n<Route path="/advisory" element={guard(['admin', 'founder'], <Navigate to="/build/team?mode=workspace&tab=advisors" replace />)} />`, 'retired advisory mount'],
-    ['app', (a) => a.replace(line(a, '/insights'), line(a, '/insights').replace('/articles#briefs', '/articles')), 'insights target'],
+    ['app', (a) => a.replace(line(a, '/insights'), line(a, '/insights').replace('"/articles"', '"/articles#briefs"')), 'insights target'],
     ['app', (a) => a.replace(line(a, '/insights/public/:slug'), ''), 'share link'],
     ['app', (a) => a.replace(line(a, '/articles/draft'), ''), 'draft'],
     ['app', (a) => a.replace(line(a, '/articles/edit/:id'), ''), 'edit'],
@@ -153,17 +155,19 @@ function briefsStates(view) {
   const failed = view({ items: [], failed: true });
   assert.match(failed, /Unreadable/, 'a failed read says Unreadable');
   assert.doesNotMatch(failed, /No published briefs/, 'and never claims there are none');
-  assert.match(view({ items: [] }), /No published briefs yet\./, 'an empty read says so');
-  assert.match(view({ items: null }), /Loading…/);
+  // #6999: an empty read and a read still loading draw no shelf and no heading.
+  assert.equal(view({ items: [] }), '', 'no briefs: no shelf');
+  assert.equal(view({ items: null }), '', 'loading: no shelf');
 }
 
-test('the Briefs section draws each brief, an empty read and a failed read honestly', () => {
+test('the Briefs section draws each brief and a failed read; with none it is absent (#6999)', () => {
   briefsStates(render);
   const broken = [
     [(p) => render({ ...p, items: p.items?.map((b) => ({ ...b, slug: 'other' })) }), 'wrong link'],
     [(p) => render(p.failed ? { items: [] } : p), 'failure drawn as empty'],
     [(p) => render(p.items?.length ? { items: [] } : p), 'items dropped'],
-    [(p) => render(p.items === null ? { items: [] } : p), 'no loading state'],
+    [(p) => (p.items && !p.items.length && !p.failed ? '<section id="briefs"><h2>Briefs</h2>No published briefs yet.</section>' : render(p)), 'empty shelf drawn'],
+    [(p) => (p.items === null ? '<section id="briefs"><h2>Briefs</h2>Loading…</section>' : render(p)), 'loading shelf drawn'],
   ];
   for (const [view, label] of broken) assert.throws(() => briefsStates(view), assert.AssertionError, label);
 });

@@ -10,6 +10,14 @@ export { EVENT_TYPE_IDS as EVENT_TYPES } from './eventTypes';
 export const EVENT_VISIBILITIES = ['public', 'unlisted', 'private'] as const;
 export const LOCATION_KINDS = ['virtual', 'physical', 'in_person', 'hybrid'] as const;
 
+/**
+ * #5869 (D3724 §gaps 7): where an event comes from. The owner decided Axal
+ * events only (D1487, question 1), so every row is Axal's and no column says
+ * otherwise. The field is on every shaped event so the cards read it rather
+ * than assume it; an external source would be a new value here.
+ */
+export const EVENT_SOURCE_AXAL = 'axal' as const;
+
 export function slugify(input: string): string {
   const base = (input || '')
     .toLowerCase()
@@ -87,6 +95,7 @@ export function shapeEvent(row: any, opts: { includePrivate?: boolean; includeJo
     cover_focal: coverJson(row.cover_focal_json),
     cover_crops: coverJson(row.cover_crops_json),
     topics: eventTopics(row.topics_json),
+    source: EVENT_SOURCE_AXAL,
     starts_at: row.starts_at,
     ends_at: row.ends_at ?? null,
     timezone: row.timezone ?? 'UTC',
