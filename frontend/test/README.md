@@ -220,6 +220,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 | `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
 | `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
+| `network_picker_6636.test.mjs` | D6636: mounted picker selection, eligibility and submission. |
 
 | `licence_agreement_replacement_6562.test.mjs` | D6562: rendered replacement readiness, frozen preview and hash, honest unknown comparison and send gating. |
 | `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
