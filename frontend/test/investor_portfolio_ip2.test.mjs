@@ -288,9 +288,9 @@ test('the three ops reasons are each true about their own object', () => {
   assert.match(PORTFOLIO, /portfolio_update_chases/, 'the chase log store is gone');
   assert.match(PORTFOLIO, /type: 'portfolio_update_chase'/, 'the founder notification is gone');
   assert.match(API, /portfolioChase: \(projectIds\) =>/, 'api.js lost the chase write');
-  // The page chases its own overdue set and nothing else.
-  assert.match(P, /const overdueRows = rows\.filter\(\(row\) => row\.reported === false\);/,
-    'the overdue set is no longer the companies the reporting read says have not reported');
+  // The page chases the Worker's overdue set and nothing else (D6204: past the due day, unreported).
+  assert.match(P, /const overdueRows = rows\.filter\(\(row\) => row\.overdue === true\);/,
+    'the overdue set is no longer the Worker\'s overdue set');
   assert.match(P, /api\.portfolioChase\(overdueRows\.map\(\(row\) => row\.projectId\)\)/,
     'Chase all overdue must hand the route the page’s own overdue set');
   // The founder-side fan-out is untouched by any of this.

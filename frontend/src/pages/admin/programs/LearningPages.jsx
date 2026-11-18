@@ -7,8 +7,8 @@ import {
 } from './parts';
 import { LEARNERS_PAGE } from './useProgramReads';
 import {
-  FINISHED_LINE, LEARNER_FOOT, completionRows, enrolledLine, enrolmentsFrom, finishedTotal, learnerRows, refusalSentence,
-  shortDay,
+  FINISHED_LINE, LEARNER_FOOT, completionRows, enrolledLine, enrolmentsFrom, finishedTotal, learnerRows, learningParticipationTiles,
+  refusalSentence, shortDay,
 } from './programPagesModel';
 import {
   ASSIGNED_TO_YOU, ENROLMENTS_NOTE, LEARNING_ADMIN_LINE, NOT_RECORDED, enrolmentWord, learnersFrom, learningFigures,
@@ -114,6 +114,20 @@ export function LearningOverview({ reads, superAdmin }) {
           : <Link to="/learning/programs" className={`${LINK} self-start`}>Open your programs</Link>}
       </Card>
     </div>
+  );
+}
+
+/**
+ * D5887 (#5887): Participation, the generic shell's core section, on Learning's own reads (R9's active enrolments and
+ * P4's enrolments per week). The people behind the enrolments are not recorded, so that tile says so, never 0.
+ */
+export function LearningParticipation({ reads, superAdmin }) {
+  return (
+    <Card title="Participation" meta={superAdmin ? null : ASSIGNED_TO_YOU} testId="programs-learning-participation">
+      <div className="grid gap-3.5 sm:grid-cols-3">
+        {learningParticipationTiles(reads.learning, reads.weekly).map((t) => <Tile key={t.key} t={t} onRetry={reads.reload} />)}
+      </div>
+    </Card>
   );
 }
 

@@ -16,6 +16,7 @@ import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Clock, Info, Loader2 } 
 import { request } from '../lib/api';
 import { overallStatus } from '../lib/statusOverall';
 import { DAY_WORDS, recordLine } from '../lib/statusHistory';
+import { OVERALL_WORDS, statusSummary, summaryLines } from '../lib/statusSummary';
 import { usePageMeta } from '../lib/seo';
 
 const STATUS_PILL = {
@@ -82,6 +83,9 @@ export default function StatusPage() {
   // which is why the `unknown` pill below has never been reachable.
   const overall = overallStatus(services);
   const OverallIcon = STATUS_PILL[overall].icon;
+  // #7002: the same summary /trust draws from this record (lib/statusSummary.js).
+  const summary = data ? statusSummary(data) : null;
+  const lines = summaryLines(summary);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,11 +103,21 @@ export default function StatusPage() {
             <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${STATUS_PILL[overall].bg}`}>
               <OverallIcon className={STATUS_PILL[overall].color} size={18} aria-hidden="true" />
               <span className={`font-semibold ${STATUS_PILL[overall].color}`}>
-                {overall === 'operational' ? 'All monitored services operational' : STATUS_PILL[overall].label}
+                {OVERALL_WORDS[overall] || STATUS_PILL[overall].label}
               </span>
             </div>
           )}
         </header>
+
+        {!loading && !error && lines.length > 0 && (
+          <section aria-label="What is affected" className="mb-8 rounded-2xl border border-gray-200 bg-white p-4 text-sm text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200" data-testid="status-summary" data-card>
+            {lines.map((l) => (
+              <p key={l.key} className="m-0 py-0.5" data-testid={`status-summary-${l.key}`}>
+                {l.href ? <a href={l.href} className="font-semibold text-violet-700 hover:underline dark:text-violet-300">{l.text}</a> : l.text}
+              </p>
+            ))}
+          </section>
+        )}
 
         {loading && (
           <div className="flex items-center gap-2 text-gray-500"><Loader2 className="animate-spin" size={18} /> Loading status…</div>
@@ -150,7 +164,7 @@ export default function StatusPage() {
               ) : (
                 <div className="space-y-3">
                   {incidents.map((inc) => (
-                    <article key={inc.id} className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900" data-card>
+                    <article key={inc.id} id={`incident-${inc.id}`} className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900" data-card>
                       <header className="flex items-center justify-between gap-3 flex-wrap mb-2">
                         <h3 className="font-semibold text-gray-900 dark:text-gray-100">{inc.title}</h3>
                         <div className="flex items-center gap-2">

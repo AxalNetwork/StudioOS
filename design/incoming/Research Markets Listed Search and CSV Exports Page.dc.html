@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Listed Search and CSV Exports · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.st-bh{display:flex;gap:14px;align-items:flex-start}
+.st-bh h1{font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.st-bh p{font-size:13px;color:var(--mu);margin-top:4px;max-width:1060px;line-height:1.55}
+.st-id{font:700 11px var(--mo);padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--bg);white-space:nowrap;margin-top:2px}
+.st-sec{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px}
+.st-sh{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.st-note{font-size:12px;color:var(--mu)}
+.st-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.st-sep{width:1px;height:20px;background:var(--hair2);margin:0 6px}
+.st-gray{filter:grayscale(1)}
+/* chips */
+.st-c{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu);vertical-align:middle}
+.st-c svg{flex:none}
+.st-nr{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-na{color:var(--mu);background:transparent;border-color:transparent;padding-left:2px}
+.st-un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed;border-width:1.5px}
+.st-un svg{color:var(--neg)}
+.st-rf{color:var(--ink);background:var(--raised);border-color:var(--ink);border-width:1px}
+.st-stale{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed;border-width:1.5px}
+.st-part{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-pv{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dashed;border-width:1.5px;font-style:italic}
+.st-nc{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-l-ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.st-l-am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-l-mu{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.st-l-fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.st-retry{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);color:var(--vt);background:transparent;border:0;padding:2px 4px;border-radius:6px;vertical-align:middle}
+.st-unin{display:inline-flex;align-items:center;gap:4px;color:var(--neg);font-weight:800}
+.st-nrin{color:var(--mu);font-style:italic;font-weight:600}
+.st-nain{color:var(--mu)}
+.st-why{display:block;font-size:12px;color:var(--mu);line-height:1.45}
+.st-route{font:700 12px var(--sg)}
+.st-zero{color:var(--ink)!important;font-weight:800}
+.st-cellnr{color:var(--mu)}
+.st-stack{font:800 20px var(--mo);letter-spacing:-.02em}
+.st-eng{display:inline-flex;font:700 11px var(--mo);color:var(--vt);background:var(--lav);border:1px dashed var(--lavE);border-radius:6px;padding:1px 6px}
+.st-spec{font:500 11px var(--mo)}
+/* tiles */
+.st-tiles{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+.st-t5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.st-tw{display:flex;flex-direction:column;gap:6px;min-width:0}
+.st-cap2{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.st-tile{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px;min-height:150px;align-items:flex-start}
+.st-tl{font-size:12px;color:var(--mu);font-weight:600}
+.st-tv{font:800 26px var(--mo);letter-spacing:-.03em;line-height:1.1;color:var(--ink)}
+.st-ts{display:flex;flex-direction:column;gap:5px;align-items:flex-start;font-size:12px}
+.st-tna{opacity:1}
+.st-big-nr{color:var(--mu);font-weight:500}
+.st-big-un{display:inline-grid;place-items:center;width:30px;height:30px;border:1.5px dashed var(--hair2);border-radius:8px;font:800 18px var(--sg);color:var(--neg)}
+.st-big-rf{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid var(--ink);border-radius:8px;font:700 18px var(--sg);color:var(--ink);background:var(--raised)}
+.st-provv{color:var(--mu);font-style:italic}
+.st-wh{font:700 15px var(--sg);color:var(--mu);font-style:italic}
+.st-withheld{border-style:dashed}
+.st-mini{min-height:120px}
+.st-sk{display:inline-block;height:12px;border-radius:5px;background:var(--skel)}
+/* prose */
+.st-prose{font-size:14px;line-height:1.7;padding:6px 0;border-bottom:1px solid var(--hair)}
+.st-prose:last-child{border-bottom:0}
+/* tables */
+.st-tb{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.45}
+.st-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1.5px solid var(--ink)}
+.st-tb td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.st-tb .n{text-align:right;font-family:var(--mo)}
+.st-tb code,.st-dict code,.st-sec code,.st-bh code,.st-rules code,.st-opt code,.st-foot2 code{font:500 11px var(--mo);background:var(--raised);border:1px solid var(--hair);padding:0 4px;border-radius:4px}
+.st-dict{background:var(--card);border-radius:12px;overflow:hidden}
+.st-dict td:first-child{font-weight:800;white-space:nowrap}
+.st-dict td:first-child small{display:block;font:600 10px var(--mo);color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+.st-dict td:nth-child(4){font:700 13px var(--mo);color:var(--mu);white-space:nowrap}
+.st-modrow td{background:var(--raised)}
+.st-in th{border-bottom:1px solid var(--hair2)}
+.st-none-ex{font-size:12px;color:var(--mu)}
+.st-foot2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;font-size:12px;color:var(--mu);line-height:1.5}
+.st-foot2 b{color:var(--ink)}
+/* lists */
+.st-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair)}
+.st-list li:first-child{border-top:0}
+.st-list li>span:first-child{display:flex;flex-direction:column}
+.st-list small{font-size:12px;color:var(--mu)}
+.st-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.st-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.st-lb{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-height:190px}
+.st-lbh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-lbh b{font-size:14px}
+.st-cnt{font:700 11px var(--mo);padding:1px 7px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--ink)}
+.st-none{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:9px;background:var(--raised);font-size:13px}
+.st-unbox,.st-rfbox{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.5}
+.st-unbox{border:1.5px dashed var(--hair2);background:var(--card)}
+.st-unbox svg{color:var(--neg);margin-top:3px}
+.st-unbox div,.st-rfbox div{display:flex;flex-direction:column;gap:3px;flex:1}
+.st-unbox span,.st-rfbox span{color:var(--mu)}
+.st-rfbox{border:1px solid var(--ink);background:var(--raised)}
+.st-rfbox svg{margin-top:3px}
+.st-pb{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;background:var(--amBg);border:1px solid var(--amE);color:var(--ink);font-size:12.5px;line-height:1.45}
+.st-pb svg{color:var(--amT);flex:none}
+.st-pb>span{flex:1}
+.st-skl>div{display:flex;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.st-skl>div:first-child{border-top:0}
+/* charts */
+.st-ch{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.st-chh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-chh b{font-size:14px}
+.st-ch svg{font-family:var(--sg)}
+.st-rule{font:700 13px var(--sg);padding:12px 14px;border-left:3px solid var(--vi);background:var(--card);border-radius:0 9px 9px 0}
+/* composite */
+.st-comp{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.st-ch2{display:flex;justify-content:space-between;align-items:flex-end}
+.st-ch2 h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.st-comp .st-tile{background:var(--raised)}
+.st-rules{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5;list-style:disc!important;padding-left:18px!important}
+.st-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:500 11.5px var(--mo);color:var(--mu)}
+/* phone */
+.st-pt{display:flex;justify-content:space-between;padding:12px 18px 8px;font:700 12px var(--sg);border-bottom:1px solid var(--hair);background:var(--card)}
+.st-plist{background:var(--card);border:1px solid var(--hair);border-radius:12px}
+.st-plist>div{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:12px;border-top:1px solid var(--hair)}
+.st-plist>div:first-child{border-top:0}
+.st-plist span{font-size:12.5px}
+/* do / don't */
+.st-dd{display:flex;flex-direction:column;gap:8px}
+.st-ddt{font:800 14px var(--sg)}
+.st-ddp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st-dn,.st-do{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px}
+.st-dn{border:1.5px solid var(--negE);background:var(--negBg)}
+.st-do{border:1.5px solid var(--posE);background:var(--posBg)}
+.st-ddl{display:inline-flex;align-items:center;gap:5px;font:800 11px var(--mo);text-transform:uppercase;letter-spacing:.05em}
+.st-dn .st-ddl{color:var(--neg)}
+.st-do .st-ddl{color:var(--pos)}
+/* options */
+.st-opt{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.st-opt p{font-size:12.5px;line-height:1.55;color:var(--mu)}
+.st-opt b{font-size:15px}
+.st-on{border:2px solid var(--vi)}
+.st-ol{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt)}
+.st-code{font:500 12px/1.6 var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;white-space:pre-wrap;margin:0;color:var(--ink)}
+.st-whyi{font-size:12px;color:var(--mu)}
+.st-ch svg text{font-family:'Space Grotesk',system-ui,sans-serif}
+.st-ch svg text[font-family]{font-family:'Roboto Mono',ui-monospace,monospace}
+.st-plist~.st-lb{min-height:0}
+
+/* RML · Research Markets · Listed search and CSV exports (#7037) */
+.rml-tabs{display:flex;gap:4px;border-bottom:1px solid var(--hair);align-items:flex-end}
+.rml-tabs button{min-height:42px;padding:0 14px;border:0;background:transparent;font:600 13.5px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:8px;align-items:center}
+.rml-tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.rml-tabs button span{font:600 11px var(--mo);color:var(--mu)}
+.rml-tabs .rml-cov{margin-left:auto;align-self:center;font-size:11.5px;color:var(--mu);display:inline-flex;gap:6px;align-items:center;padding-bottom:6px}
+.rml-tb{display:grid;grid-template-columns:minmax(0,1fr) auto 230px;gap:14px;align-items:end}
+.rml-tb.two{grid-template-columns:minmax(0,1fr) 260px}
+.rml-lb{display:block;font:700 12px var(--sg);color:var(--ink);margin-bottom:6px}
+.rml-lb small{font:500 11px var(--mo);color:var(--mu);margin-left:6px}
+.rml-in{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 6px 0 12px;border:1.5px solid var(--hair2);border-radius:10px;background:var(--card);font-size:13.5px;color:var(--ink)}
+.rml-in.e0{color:var(--mu)}
+.rml-in .x{margin-left:auto;display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:var(--mu);font-size:13px}
+.rml-in.fv{border-color:var(--vi)}
+.rml-seg{display:inline-flex;padding:3px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);gap:2px}
+.rml-seg button{min-height:34px;padding:0 12px;border:0;border-radius:8px;background:transparent;font:600 12.5px var(--sg);color:var(--mu);white-space:nowrap;display:inline-flex;gap:5px;align-items:center}
+.rml-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair2)}
+.rml-seg button[aria-disabled=true]{text-decoration:line-through;opacity:.7}
+.rml-sel{display:flex;justify-content:space-between;align-items:center;min-height:40px;padding:0 12px;border:1px solid var(--hair2);border-radius:10px;background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.rml-fc{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 6px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:700 12px var(--sg)}
+.rml-fc button{border:0;background:transparent;color:var(--vt);width:22px;height:22px;border-radius:999px;padding:0}
+.rml-rb{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
+.rml-cnt{min-width:0}
+.rml-cnt h2{font-size:15px;font-weight:800;letter-spacing:-.01em;display:inline-flex;gap:8px;align-items:baseline;padding:2px 4px;margin-left:-4px}
+.rml-cnt h2 .mo{font-family:var(--mo)}
+.rml-cnt h2 small{font:600 13px var(--sg);color:var(--mu)}
+.rml-cnt p{font-size:12.5px;color:var(--mu);margin-top:3px;max-width:760px;line-height:1.5}
+.rml-cnt p b{color:var(--ink)}
+.rml-xp{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none}
+.rml-xp small{font:500 11px var(--mo);color:var(--mu);text-align:right;max-width:330px;line-height:1.45}
+.rml-tw{border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.rml-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.rml-tbl caption{text-align:left;padding:0}
+.rml-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.rml-tbl td{padding:8px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.rml-tbl tr.hl td{background:var(--lav)}
+.rml-tbl tr.det td{background:var(--raised);padding:12px 14px}
+.rml-tbl .n{text-align:right;font-family:var(--mo)}
+.rml-tk{font:700 12.5px var(--mo);white-space:nowrap}
+.rml-co b{font-weight:700}
+.rml-cik{display:block;font:500 10.5px var(--mo);color:var(--mu);margin-top:1px}
+.rml-src{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 3px;border-radius:6px;font:700 11px var(--sg);border:1px solid var(--hair2);background:var(--raised);color:var(--ink);white-space:nowrap}
+.rml-src i{display:grid;place-items:center;width:15px;height:15px;border-radius:4px;background:var(--ink);color:var(--card);font:800 9px var(--mo);font-style:normal}
+.rml-src.ed{background:var(--card)}
+.rml-src.ed i{background:transparent;color:var(--ink);border:1.5px solid var(--ink);width:13px;height:13px}
+.rml-lnk{font:700 12px var(--sg);color:var(--vt)!important;display:inline-flex;gap:3px;align-items:center;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+.rml-nol{font-size:11.5px;color:var(--mu);font-style:italic}
+.rml-dup{display:inline-flex;gap:4px;align-items:center;padding:0 7px;border-radius:999px;border:1px solid var(--lavE);background:var(--card);color:var(--vt);font:700 10.5px var(--sg);margin-left:6px;white-space:nowrap}
+.rml-disc{border:1px solid var(--hair);background:var(--card);color:var(--ink);border-radius:8px;min-height:30px;padding:0 9px;font:600 12px var(--sg);white-space:nowrap}
+.rml-disc[aria-expanded=true]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.rml-dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 18px;font-size:12.5px}
+.rml-dl dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);margin-bottom:2px}
+.rml-dl dd{margin:0}
+.rml-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu)}
+.rml-pg .pb{display:flex;gap:6px}
+.rml-pg .btn[disabled]{opacity:.45}
+.rml-more td{font:500 11.5px var(--mo);color:var(--mu);text-align:center;background:var(--raised)}
+.rml-cap{font:500 11px var(--mo);color:var(--mu);line-height:1.6}
+.rml-cap a{color:var(--vt)!important;text-decoration:underline}
+.rml-ann{border:1.5px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5;color:var(--mu);display:flex;flex-direction:column;gap:5px}
+.rml-ann b{color:var(--ink)}
+.rml-ann .r{display:flex;gap:8px;align-items:flex-start}
+.rml-n{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:999px;background:var(--ink);color:var(--card);font:700 10px var(--mo);flex:none;font-style:normal}
+.rml-flag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed var(--amD);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap}
+.rml-url{font:500 11.5px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:8px;padding:6px 10px;word-break:break-all}
+.rml-foc{outline:2px solid var(--vi)!important;outline-offset:3px;border-radius:6px}
+.rml-fold{display:flex;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--hair);font-size:12px;color:var(--mu);background:var(--card)}
+.rml-fold b{color:var(--ink)}
+.rml-csv{width:100%;border-collapse:collapse;font:500 11px var(--mo)}
+.rml-csv th{background:var(--raised);font:700 11px var(--mo);text-align:left;padding:6px 8px;border:1px solid var(--hair);white-space:nowrap;color:var(--ink)}
+.rml-csv td{padding:5px 8px;border:1px solid var(--hair);white-space:nowrap;color:var(--ink)}
+.rml-csv td.rml-nrc{color:var(--mu);font-style:italic}
+.rml-csv .rn{color:var(--mu);background:var(--raised);text-align:right;width:28px}
+.rml-file{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:500 12px var(--mo)}
+.rml-file i{display:grid;place-items:center;width:26px;height:30px;border-radius:5px;border:1.5px solid var(--hair2);font:800 8.5px var(--mo);font-style:normal;color:var(--mu)}
+.rml-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rml-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.rml-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.rml-st{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.rml-st h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.rml-st p{font-size:12.5px;line-height:1.5}
+.rml-sk{height:12px;border-radius:6px;background:var(--skel)}
+.rml-skr{display:grid;grid-template-columns:60px 1.6fr 1fr 1fr;gap:12px;padding:8px 0;border-bottom:1px solid var(--hair)}
+.rml-ok{display:inline-flex;gap:6px;align-items:center;font:700 12px var(--sg);color:var(--pos)}
+.rml-err{display:inline-flex;gap:6px;align-items:center;font:700 12px var(--sg);color:var(--neg)}
+.rml-kb{display:inline-grid;place-items:center;min-width:22px;height:20px;padding:0 5px;border-radius:5px;border:1px solid var(--hair2);border-bottom-width:2px;font:700 10.5px var(--mo);color:var(--ink);background:var(--card)}
+.rml-ord{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.rml-ord li{display:grid;grid-template-columns:26px 210px minmax(0,1fr);gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.rml-ord li:last-child{border-bottom:0}
+.rml-ord li span{color:var(--mu)}
+/* phone */
+.rml-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.rml-pc .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.rml-pc .r1 b{font-size:14.5px;line-height:1.3}
+.rml-pc .r2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rml-pc .exp{min-height:44px;border:1px solid var(--hair);border-radius:9px;background:var(--card);font:600 12.5px var(--sg);color:var(--ink);display:flex;justify-content:space-between;align-items:center;padding:0 12px}
+.rml-pc .exp[aria-expanded=true]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.rml-pc dl{display:grid;grid-template-columns:110px minmax(0,1fr);gap:7px 10px;font-size:12.5px;padding-top:4px}
+.rml-pc dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.rml-pc dd{margin:0}
+.rml-pbar{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--hair);padding:10px 16px 18px;display:flex;flex-direction:column;gap:8px;z-index:3}
+.rml-pbar .pg{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;font:600 12px var(--mo);color:var(--mu)}
+.rml-pbar .pg span{text-align:center}
+.rml-pseg{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.rml-pseg button{min-height:40px;padding:0 6px;font-size:12px}
+.rml-ph .ph .btn{flex:none}
+.cv .rml-tbl a,.cv .rml-pc a{color:var(--vt)}
+.rml-xd{display:inline-flex;align-items:center;padding:0 7px;border-radius:999px;border:1px solid var(--posE);background:var(--posBg);color:var(--pos);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.dk .rml-xd{border-color:#a7f3d0;background:#ecfdf5;color:#047857}
+.rml-tbl code,.rml-ann code,.foot code,.rml-cap code{font:500 11px var(--mo);background:var(--raised);padding:0 3px;border-radius:4px}
+.rml-tbl .nr{white-space:nowrap}
+.rml-tbl td.w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.rml-st>.st-c,.rml-st>div>.st-c{align-self:flex-start}
+.rml-tbl,.rml-csv{color:var(--ink)}
+.rml-tbl td{color:var(--ink);font-family:var(--sg)}
+.rml-tbl td.rml-tk{font-family:var(--mo)}
+.rml-pb>*{flex-shrink:0}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "RML04", "options": ["RMLJ", "RML02", "RML03", "RML03B", "RML04", "RML04B", "RML05", "RML06", "RML06B", "RML07", "RML07B", "RML08", "RML09", "RML10A", "RML10B", "RML10C", "RML10D", "RML11", "RML11B", "RMLH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'RML04';
+    const dark = ['RML11', 'RML11B'].indexOf(B) >= 0;
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const NR = '<span class="nr">Not recorded</span>';
+    const PT = (t) => '<span class="ptag" title="Needs engineering">◇ ' + t + '</span>';
+    const FL = (t) => '<span class="rml-flag" title="Owner decision">⚑ ' + t + '</span>';
+
+    /* ---------- Platform States chips (st.js vocabulary) ---------- */
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const G = {
+      nr: SV('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"/>'),
+      un: SV('<path d="M6 1.6v6" stroke="currentColor" stroke-width="2.2"/><circle cx="6" cy="10.2" r="1.2" fill="currentColor"/>'),
+      none: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      x: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      re: SV('<path d="M9.8 4.4A4.2 4.2 0 1 0 10 7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 1.6v3.2H7.2" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      dup: SV('<path d="M1.5 4h7M6.5 1.8L8.7 4 6.5 6.2M10.5 8h-7M5.5 5.8L3.3 8l2.2 2.2" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      ext: SV('<path d="M7 1.5h3.5V5M10.5 1.5L5.5 6.5M9 7.5v3H1.5V3h3" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      dl: SV('<path d="M6 1.5v6M3.2 5L6 7.8 8.8 5M1.8 10.5h8.4" fill="none" stroke="currentColor" stroke-width="1.6"/>')
+    };
+    const chip = (k, label) => ({ nr: '<span class="st-c st-nr">' + G.nr + (label || 'Not recorded') + '</span>', un: '<span class="st-c st-un">' + G.un + (label || 'Unavailable') + '</span>', none: '<span class="st-c st-nr" style="border-style:solid">' + G.none + (label || 'None') + '</span>' })[k];
+    const XD = '<span class="rml-xd">Existing data</span>';
+
+    /* ---------- sample data (fictional) ---------- */
+    const SIG_N = 412, ED_N = 7184, BOTH = 38, ALL = SIG_N + ED_N;
+    const SIG_DATE = '12 Nov 2026', ED_DATE = '7 Oct 2026';
+    const ED_URL = 'https://www.sec.gov/files/company_tickers_exchange.json';
+    const ED_LIC = 'US government work, not subject to copyright in the United States (17 U.S.C. § 105)';
+    const DEF = [
+      ['AVGN', 'Avengard Power AG', 'XETRA', 'Germany', 'Energy storage', '$10B and above', '10,001 and above'],
+      ['TKMR', 'Takamura Robotics KK', 'TSE', 'Japan', 'Robotics', '$10B and above', '10,001 and above'],
+      ['BRMK', 'Bramwick Freight plc', 'LSE', 'United Kingdom', 'Logistics software', '$1B–$10B', '5,001–10,000'],
+      ['HLDN', 'Halden Storage Holdings', 'Nasdaq', 'United States', 'Energy storage', '$1B–$10B', '1,001–5,000'],
+      ['NWLB', 'Northway Labs Inc.', 'NYSE', 'United States', 'Logistics software', '$1B–$10B', '1,001–5,000'],
+      ['SKRA', 'Sakura Automation KK', 'TSE', 'Japan', 'Robotics', '$300M–$1B', '1,001–5,000'],
+      ['QRYD', 'Quarrydale Software', 'Nasdaq', 'United States', 'Developer tools', '$300M–$1B', '501–1,000'],
+      ['LRKB', 'Larkfield Biosciences', 'Nasdaq', 'United States', 'Biotech', '$300M–$1B', null]
+    ];
+    const HL_SIG = DEF[3];
+    const HL_ED = ['HLDN', 'Halden Storage Holdings', 'Nasdaq', '0001849203', null];
+    const E2 = [
+      ['MRDE', 'Meridale Energy Corp', 'NYSE', '0001761034', null],
+      ['MRWP', 'Merrow Energy Partners LP', 'NYSE', '0001582297', null],
+      ['NGTE', 'Northgate Energy Inc.', 'Nasdaq', '0001903318', null],
+      ['OKHE', 'Oakhollow Energy Co', 'NYSE', '0001045527', null],
+      ['PLME', 'Pellmar Energy Holdings', 'Nasdaq', '0001877640', null],
+      ['QLNT', 'Quillon Energy Trust', 'NYSE', '0000913482', null],
+      ['RDFE', 'Redfern Energy Inc.', 'NYSE American', '0001698205', null],
+      ['SLME', 'Saltmarsh Energy Corp', 'Nasdaq', '0001934551', null],
+      ['SBKE', 'Stonebrook Energy Ltd', 'NYSE', '0001520873', null],
+      ['TLSE', 'Tallis Energy Systems', 'Nasdaq', '0001811962', null],
+      ['TNBE', 'Thornbury Energy Inc.', null, '0001956027', null],
+      ['VWER', 'Valewood Energy Resources', 'NYSE', '0001377104', null],
+      ['WSEG', 'Westerly Energy Group', 'NYSE', '0001109488', ['WSEG-PA', 'NYSE']],
+      ['YRWE', 'Yarrow Energy Inc.', 'Nasdaq', '0001988316', null]
+    ];
+    const DE = [
+      ['AVGN', 'Avengard Power AG', 'XETRA', 'Germany', 'Energy storage', '$10B and above', '10,001 and above'],
+      ['LQLG', 'Lindqvist Logistik SE', 'XETRA', 'Germany', 'Logistics software', '$1B–$10B', '1,001–5,000'],
+      ['RHSP', 'Rheinfeld Speicher AG', 'XETRA', 'Germany', 'Energy storage', '$300M–$1B', '501–1,000']
+    ];
+    const MK_N = 186, MK_DATE = '2 Nov 2026';
+    const MK = [['Energy storage', 'Energy', 'energy-storage', 1284], ['Data storage', 'Data infrastructure', 'data-storage', 947], ['Grid-scale battery storage', 'Energy', 'grid-scale-battery-storage', 612], ['Cold-chain storage', null, 'cold-chain-storage', 208], ['Hydrogen storage', 'Energy', 'hydrogen-storage', 133], ['Thermal energy storage', 'Energy', 'thermal-energy-storage', 96]];
+    const MK_SUM = MK.reduce((s, m) => s + m[3], 0);
+    const T = (t) => '[' + t + ']';
+    const N = (n) => '[' + n + ']';
+    const FILE_L = 'listed-companies-page-2-14-rows-2026-11-16.csv';
+    const FILE_M = 'markets-6-rows-2026-11-16.csv';
+
+    /* ---------- shell (Research v2 RS-03, founder) ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const RNAV = ['Overview', 'My Research', 'Markets', 'Companies', 'Funds', 'Library', 'Ask'];
+    const rnav = (cur) => '<nav aria-label="Research" style="display:flex;flex-direction:column;gap:2px;margin:2px 0 0 18px;border-left:1px solid var(--hair);padding-left:6px">' + J(RNAV.map(t => '<a href="#" style="min-height:30px;font-size:12.5px;font-weight:' + (t === cur ? '800' : '600') + ';color:' + (t === cur ? 'var(--vt)' : 'var(--mu)') + ';display:flex;align-items:center;padding:0 10px;border-radius:8px' + (t === cur ? ';background:var(--lav)' : '') + '"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><button type="button" class="selb" style="font-size:12px;width:100%;font-family:var(--sg);color:var(--ink)" aria-label="Company or project: [Halden Grid]"><span>[Halden Grid]</span><span aria-hidden="true">▾</span></button></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Research' ? ' style="color:var(--ink);font-weight:800"' : '') + '>' + t + '</a>' + (t === 'Research' ? rnav(cur) : ''))) + '</nav></aside>';
+    const top = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies, Licences" aria-haspopup="menu">AM</button></div></div>';
+    const rail = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Eadwyn</span></aside>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="rsh" style="min-height:' + (o.h || 900) + 'px">' + side('Markets') + '<div class="mn">' + top + '<main class="bd" style="gap:16px">' + body + '</main></div>' + rail + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const askBtn = '<button type="button" class="btn ea"><i aria-hidden="true">E</i>Ask Eadwyn</button>';
+    const head = () => '<div class="crumb"><a href="#">Research</a>/<b>Markets</b></div><header class="ph1"><div><h1>Markets</h1><p>The markets of the Axal sector taxonomy, and the companies known to be listed, each with the source it came from.</p></div><div class="acts">' + askBtn + '</div></header>';
+    const tabs = (cur) => '<div class="rml-tabs" role="tablist" aria-label="Markets"><button type="button" role="tab" aria-selected="' + (cur === 'dir') + '" tabindex="' + (cur === 'dir' ? 0 : -1) + '">Market directory <span>' + MK_N + ' markets</span></button><button type="button" role="tab" aria-selected="' + (cur === 'listed') + '" tabindex="' + (cur === 'listed' ? 0 : -1) + '">Listed companies <span>' + fmt(ALL) + ' listing records</span></button><span class="rml-cov">Government ownership ' + chip('nr') + ' no source records who owns a company</span></div>';
+
+    /* ---------- listed: toolbar, rows, pager ---------- */
+    const SRC = ['All sources', 'Signal companies', 'SEC EDGAR'];
+    const srcSeg = (cur, off) => '<div><span class="rml-lb" id="srcl">Source</span><div class="rml-seg" role="radiogroup" aria-labelledby="srcl">' + J(SRC.map(s => '<button type="button" role="radio" aria-checked="' + (s === cur) + '"' + (off === s ? ' aria-disabled="true" title="Left out while a country filter is on"' : '') + '>' + (s === cur ? '<span aria-hidden="true">✓</span>' : '') + s + '</button>')) + '</div></div>';
+    const searchF = (q, o) => { o = o || {}; return '<div><label class="rml-lb" for="lq">' + (o.label || 'Search name or ticker') + '<small>' + (o.hint || 'name contains · ticker starts with') + '</small></label><div class="rml-in' + (q ? '' : ' e0') + (o.focus ? ' fv' : '') + '" id="lq" role="searchbox"><span aria-hidden="true">⌕</span>' + (q || o.ph || 'e.g. HLDN or Halden') + (q ? '<button type="button" class="x" aria-label="Clear search">✕</button>' : '') + '</div></div>'; };
+    const sortF = (v, lab) => '<div><span class="rml-lb">' + (lab || 'Sort') + '</span><button type="button" class="rml-sel" style="width:100%" aria-haspopup="listbox">' + v + '<span aria-hidden="true">▾</span></button></div>';
+    const tbL = (q, src, sort) => '<div class="rml-tb">' + searchF(q) + srcSeg(src) + sortF(sort || 'Market cap, largest first') + '</div>';
+    const srcChip = (k) => k === 's' ? '<span class="rml-src"><i aria-hidden="true">S</i>Signal companies</span>' : '<span class="rml-src ed"><i aria-hidden="true">E</i>SEC EDGAR</span>';
+    const edLink = (t) => '<a class="rml-lnk" href="#" title="' + ED_URL + ' · opens in a new tab">' + (t || 'Source file') + G.ext + '<span style="position:absolute;left:-9999px">(opens in a new tab)</span></a>';
+    const noLink = '<span class="rml-nol">No link recorded</span>';
+    const DUP = '<span class="rml-dup">' + G.dup + 'Same ticker, 2 sources</span>';
+    const disc = (open, who) => '<button type="button" class="rml-disc" aria-expanded="' + (!!open) + '" aria-label="' + (open ? 'Hide' : 'Show') + ' details for ' + who + '">Details ' + (open ? '▴' : '▾') + '</button>';
+    const sigRow = (r, o) => { o = o || {}; return '<tr' + (o.hl ? ' class="hl"' : '') + '><td class="rml-tk">' + T(r[0]) + '</td><td class="rml-co"><b>' + N(r[1]) + '</b>' + (o.dup ? DUP : '') + '</td><td>' + (r[2] || NR) + '</td><td>' + (r[3] || NR) + '</td><td>' + (r[4] || NR) + '</td><td>' + (r[5] || NR) + '</td><td>' + (r[6] || NR) + '</td><td>' + srcChip('s') + '<div style="margin-top:3px">' + noLink + '</div></td><td style="text-align:right">' + disc(false, T(r[0])) + '</td></tr>'; };
+    const edRow = (r, o) => { o = o || {}; return '<tr' + (o.hl ? ' class="hl"' : '') + '><td class="rml-tk">' + T(r[0]) + '</td><td class="rml-co"><b>' + N(r[1]) + '</b>' + (o.dup ? DUP : '') + '<span class="rml-cik">CIK ' + r[3] + '</span></td><td>' + (r[2] || NR) + '</td><td>' + NR + '</td><td>' + NR + '</td><td>' + NR + '</td><td>' + NR + '</td><td>' + srcChip('e') + '<div style="margin-top:3px">' + edLink() + '</div></td><td style="text-align:right">' + disc(o.open, T(r[0])) + '</td></tr>'; };
+    const LH = '<thead><tr><th scope="col">Ticker</th><th scope="col">Company</th><th scope="col">Exchange</th><th scope="col">Country</th><th scope="col">Sector</th><th scope="col">Market cap band</th><th scope="col">Employees</th><th scope="col">Source</th><th scope="col"><span style="position:absolute;left:-9999px">Details</span></th></tr></thead>';
+    const pager = (txt, prev, next, foc) => '<div class="rml-pg" style="border-top:1px solid var(--hair)"><span>' + txt + '</span>' + (prev === null ? '' : '<span class="pb"><button type="button" class="btn bsm"' + (prev ? '' : ' disabled aria-disabled="true"') + '>‹ Previous</button><button type="button" class="btn bsm' + (foc ? ' rml-foc' : '') + '"' + (next ? '' : ' disabled aria-disabled="true"') + '>Next ›</button></span>') + '</div>';
+    const xp = (label, scope, o) => { o = o || {}; return '<div class="rml-xp"><button type="button" class="btn ' + (o.off ? '' : 'p') + '"' + (o.off ? ' disabled aria-disabled="true" style="opacity:.6"' : '') + '>' + G.dl + label + '</button><small>' + scope + '</small></div>'; };
+    const rbar = (h2, p, x, o) => { o = o || {}; return '<div class="rml-rb"><div class="rml-cnt" aria-live="polite"><h2 tabindex="-1"' + (o.foc ? ' class="rml-foc"' : '') + '>' + h2 + '</h2>' + (p ? '<p>' + p + '</p>' : '') + '</div>' + (x || '') + '</div>'; };
+    const caps = () => '<div class="rml-cap">Signal companies · ' + fmt(SIG_N) + ' listed companies · bands as the source sets them · updated ' + SIG_DATE + '<br>SEC EDGAR · ' + fmt(ED_N) + ' companies · read ' + ED_DATE + ' · ' + ED_LIC + ' · <a href="#">sec.gov/files/company_tickers_exchange.json ↗</a> · EDGAR records ticker, name, exchange and CIK only, so country, sector, market cap and employees are Not recorded for its rows</div>';
+    const ann = (items, title) => '<div class="rml-ann"><b>' + (title || 'Interaction notes') + '</b>' + J(items.map((t, i) => '<div class="r"><i class="rml-n">' + (i + 1) + '</i><span>' + t + '</span></div>')) + '</div>';
+    const url = (u) => '<div class="rml-url"><span class="eye" style="margin-right:8px">URL</span>' + u + '</div>';
+    const card = (inner) => '<section class="cd" style="gap:14px" aria-label="Markets">' + inner + '</section>';
+
+    /* ---------- boards: listed ---------- */
+    const listedDefault = () => head() + card(tabs('listed') + tbL('', 'All sources')
+      + rbar(fmt(ALL) + ' <small>listing records</small>', 'All sources, no search. <b>' + fmt(SIG_N) + '</b> from Signal companies, with bands, and <b>' + fmt(ED_N) + '</b> from SEC EDGAR. <b>' + BOTH + '</b> tickers are in both sources, so each appears once per source and is counted twice. The company directory does not record listing status.', xp('Export this page · 50 rows', 'Rows 1–50 in the order shown · all sources'))
+      + '<div class="rml-tw"><table class="rml-tbl"><caption style="position:absolute;left:-9999px">Listed companies, rows 1 to 50 of 7,596</caption>' + LH + '<tbody>' + J(DEF.map(r => sigRow(r))) + '<tr class="rml-more"><td colspan="9">Rows 9–50 continue · every row on page 1 is a signal company, by market cap · SEC EDGAR rows begin at row 413, by name</td></tr></tbody></table>' + pager('Rows 1–50 of ' + fmt(ALL) + ' · page 1 of 152', false, true) + '</div>' + caps())
+      + '<div class="rml-g2">' + ann(['Tabs keep their own counts; the Listed count is every listing record in both stores, one row per source.', 'Search, Source and Sort each change the list on the Worker (<code>q</code>, <code>source</code>, <code>sort</code>); any change returns to page 1.', 'Export names what it writes: this page, its row count, in the order shown. It never writes the market directory from this tab.']) + '<div style="display:flex;flex-direction:column;gap:8px">' + url('/research/markets?tab=listed') + '<p class="foot">Opening the tab writes <code>tab=listed</code>. Default search, source, sort and page 1 stay out of the URL.</p></div></div>';
+
+    const listedHLDN = () => head() + card(tabs('listed') + tbL('HLDN', 'All sources')
+      + rbar('2 <small>listing records for “HLDN”</small>', '<b>1</b> from Signal companies and <b>1</b> from SEC EDGAR. ' + T('HLDN') + ' is one ticker in two sources: each keeps its own row with what that source records. The rows are not merged.', xp('Export this page · 2 rows', 'Both ' + T('HLDN') + ' records, one per source, in the order shown'))
+      + '<div class="rml-tw"><table class="rml-tbl"><caption style="position:absolute;left:-9999px">Listing records for HLDN</caption>' + LH + '<tbody>' + sigRow(HL_SIG, { dup: true, hl: true }) + edRow(HL_ED, { dup: true, hl: true, open: true })
+      + '<tr class="det"><td colspan="9"><dl class="rml-dl"><div><dt>CIK</dt><dd class="rml-tk" style="font-weight:600">0001849203</dd></div><div><dt>Other listings</dt><dd>' + chip('none') + '</dd></div><div><dt>Read from SEC EDGAR</dt><dd class="w">' + ED_DATE + '</dd></div><div><dt>Source</dt><dd>' + edLink('company_tickers_exchange.json') + '</dd></div><div style="grid-column:span 2"><dt>Not recorded by this source</dt><dd>Country, sector, market cap band and employees. EDGAR’s file lists ticker, name, exchange and CIK.</dd></div><div style="grid-column:span 2"><dt>Licence</dt><dd>' + ED_LIC + '</dd></div></dl></td></tr></tbody></table>' + pager('Rows 1–2 of 2 · one page', null) + '</div>' + caps())
+      + '<div class="rml-g2">' + ann(['“Same ticker, 2 sources” is worked out from the rows on this page. A count across all pages of a search ' + PT('#7037 · per-query overlap') + '; today the Worker gives the overlap for the whole store (' + BOTH + ').', 'The source link is the one the Worker returns, EDGAR’s ticker file, and opens in a new tab. Signal companies return no link, so the row says so. ' + FL('Per-company EDGAR page · drawn A: file only'), 'Details is a disclosure: Enter or Space opens it; the expanded row is read after the row it belongs to.']) + '<div style="display:flex;flex-direction:column;gap:8px">' + url('/research/markets?tab=listed&amp;q=HLDN') + '<p class="foot">Search writes <code>q</code> with history replace, so Back leaves Markets in one step, and a refresh shows these two rows again.</p></div></div>';
+
+    const cmpTwo = () => crop('<span class="eye">RML-03 · Two records for one ticker · what each source records</span><div class="rml-tw"><table class="rml-tbl"><thead><tr><th scope="col" style="width:200px">Attribute</th><th scope="col">' + srcChip('s') + '</th><th scope="col">' + srcChip('e') + '</th></tr></thead><tbody>'
+      + J([['Ticker', '<span class="rml-tk">' + T('HLDN') + '</span>', '<span class="rml-tk">' + T('HLDN') + '</span>'], ['Company', N('Halden Storage Holdings'), N('Halden Storage Holdings')], ['Exchange', 'Nasdaq', 'Nasdaq'], ['CIK', NR, '<span class="rml-tk" style="font-weight:600">0001849203</span>'], ['Country', 'United States', NR], ['Sector', 'Energy storage', NR], ['Market cap band', '$1B–$10B', NR], ['Employees', '1,001–5,000', NR], ['Other listings', NR, chip('none')], ['Date', '<span class="w">Updated ' + SIG_DATE + '</span>', '<span class="w">Read ' + ED_DATE + '</span>'], ['Source link', noLink, edLink('company_tickers_exchange.json')], ['Licence', NR, 'US government work (17 U.S.C. § 105)']].map(r => '<tr><th scope="row" style="text-align:left;font:600 12px var(--sg);color:var(--mu);background:transparent;text-transform:none;letter-spacing:0;padding:8px 10px;border-bottom:1px solid var(--hair)">' + r[0] + '</th><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>')) + '</tbody></table></div>'
+      + '<p class="foot">Nothing is copied across: the EDGAR row does not borrow the signal company’s bands, and the signal row does not borrow EDGAR’s CIK. A blank is never shown; each gap says Not recorded. An empty <code>other_listings</code> list is None, because EDGAR records it.</p>', 1200);
+
+    const E2H = '<thead><tr><th scope="col">Ticker</th><th scope="col">Company</th><th scope="col">CIK</th><th scope="col">Exchange</th><th scope="col">Other listings</th><th scope="col">Source</th><th scope="col"><span style="position:absolute;left:-9999px">Details</span></th></tr></thead>';
+    const e2Row = (r) => '<tr><td class="rml-tk">' + T(r[0]) + '</td><td class="rml-co"><b>' + N(r[1]) + '</b></td><td class="w">' + r[3] + '</td><td>' + (r[2] || NR) + '</td><td>' + (r[4] ? '<span class="rml-tk" style="font-weight:600">' + T(r[4][0]) + '</span> <span class="mu">' + r[4][1] + '</span>' : chip('none')) + '</td><td>' + srcChip('e') + ' ' + edLink() + '</td><td style="text-align:right">' + disc(false, T(r[0])) + '</td></tr>';
+    const page2 = () => head() + card(tabs('listed') + tbL('energy', 'SEC EDGAR', 'Name, A to Z')
+      + rbar('64 <small>listing records for “energy” · SEC EDGAR · rows 51–64, page 2 of 2</small>', 'SEC EDGAR records ticker, name, exchange and CIK. Its rows carry no country, sector, market cap band or employees.', xp('Export this page · 14 rows', 'Rows 51–64 · SEC EDGAR · “energy” · name A to Z'), { foc: true })
+      + '<div class="rml-tw"><div class="rml-fold">' + chip('nr') + '<span><b>Country, Sector, Market cap band, Employees</b> are Not recorded for every row in this view, so their columns are folded. The export keeps them, marked Not recorded.</span><button type="button" class="btn t bsm" style="margin-left:auto">Show folded columns</button></div><table class="rml-tbl"><caption style="position:absolute;left:-9999px">SEC EDGAR listing records for energy, rows 51 to 64 of 64</caption>' + E2H + '<tbody>' + J(E2.map(e2Row)) + '</tbody></table>' + pager('Rows 51–64 of 64 · page 2 of 2', true, false) + '</div>'
+      + '<div class="rml-cap">SEC EDGAR · 64 of ' + fmt(ED_N) + ' companies match “energy” · read ' + ED_DATE + ' · ' + ED_LIC + '</div>')
+      + '<div class="rml-g2">' + ann(['After Next, focus moves to the result heading (outlined): “Rows 51 to 64 of 64, page 2 of 2” is read once. Focus never stays on a Next that has become disabled.', 'Changing the search, the source or the sort returns to page 1 and drops <code>page</code> from the URL.', 'Refresh and Back restore this view: tab, search, source, sort and page all come from the URL, and the Worker is asked for <code>offset=50</code>.', 'Export this page writes exactly these 14 rows, in this order, with every column including the folded ones.']) + '<div style="display:flex;flex-direction:column;gap:8px">' + url('/research/markets?tab=listed&amp;q=energy&amp;source=sec_edgar&amp;sort=name&amp;page=2') + '<p class="foot">Page size is the Worker’s 50 (<code>LISTED_PAGE</code>). Page 2 asks for <code>limit=50&amp;offset=50</code> and receives 14 rows; the 64 is the Worker’s <code>total</code>, never a count of the page.</p></div></div>';
+
+    const exportStates = () => crop('<span class="eye">RML-04 · Export: ready, completed, error, and when no file is offered</span><div class="rml-g3">'
+      + '<div class="rml-st"><h3>Ready</h3>' + xp('Export this page · 14 rows', 'Rows 51–64 · SEC EDGAR · “energy” · name A to Z') + '<p class="mu">The label states the scope and the count before anything is written.</p></div>'
+      + '<div class="rml-st"><h3>Completed</h3>' + xp('Export this page · 14 rows', 'Rows 51–64 · SEC EDGAR · “energy” · name A to Z') + '<div role="status" class="rml-ok">' + G.ok + 'Downloaded · 14 rows</div><div class="rml-file"><i aria-hidden="true">CSV</i>' + FILE_L + '</div></div>'
+      + '<div class="rml-st"><h3>Error</h3>' + xp('Export this page · 14 rows', 'Rows 51–64 · SEC EDGAR · “energy” · name A to Z') + '<div role="alert" class="nt r" style="padding:9px 11px"><span class="ic" aria-hidden="true">✕</span><div><b>The file could not be created in this browser.</b><div>Nothing was downloaded. The rows on screen are unchanged.</div></div><span class="bt"><button type="button" class="btn bsm">' + G.re + 'Try again</button></span></div></div>'
+      + '<div class="rml-st"><h3>Loading</h3>' + xp('Export this page · loading', 'Waits for the rows; no file of headers only', { off: true }) + '<p class="mu">Disabled with the reason in the label, not only in a tooltip.</p></div>'
+      + '<div class="rml-st"><h3>Zero rows</h3>' + xp('Export this page · 0 rows', 'No listing record matches, so there is nothing to export', { off: true }) + '<p class="mu">No other file is offered in its place: the market directory is never exported from this tab.</p></div>'
+      + '<div class="rml-st"><h3>Failed read</h3>' + xp('Export · not available', 'The listed companies could not be read', { off: true }) + '<p class="mu">' + chip('un') + ' Retry is beside the message, not on the export.</p></div>'
+      + '</div><p class="foot">The file is written in the browser from the rows already read (<code>lib/csvExport.js</code> <code>exportView</code>, UTF-8 with a BOM). <code>downloadCsv</code> returning false is the Error case. Completed and Error are announced; the button keeps its label so a second press writes the same file again.</p>', 1340);
+
+    const countryFilter = () => crop('<span class="eye">RML-05 · A country or sector filter leaves SEC EDGAR out, and says why</span>'
+      + '<div class="rml-tb" style="grid-template-columns:minmax(0,1fr) auto 200px 200px">' + searchF('') + srcSeg('All sources', 'SEC EDGAR') + sortF('Germany', 'Country') + sortF('Any sector', 'Sector') + '</div>'
+      + '<div style="display:flex;gap:8px;align-items:center"><span class="rml-fc">Country: Germany<button type="button" aria-label="Remove country filter">✕</button></span><button type="button" class="btn t bsm">Clear filters</button></div>'
+      + rbar('3 <small>listing records in Germany · Signal companies only</small>', '<b>SEC EDGAR is left out while a country filter is on.</b> EDGAR records no country for its ' + fmt(ED_N) + ' companies, so none of them can match. A sector filter works the same way. Remove the filter to see EDGAR rows again.', xp('Export this page · 3 rows', 'Germany · Signal companies · market cap, largest first'))
+      + '<div class="rml-tw"><table class="rml-tbl">' + LH + '<tbody>' + J(DE.map(r => sigRow(r))) + '</tbody></table>' + pager('Rows 1–3 of 3 · one page', null) + '</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><span class="foot">The Worker already takes <code>country</code> and <code>sector</code> and drops EDGAR when either is set; no screen offers them yet. Drawing them is frontend work.</span></div>', 1340);
+
+    /* ---------- boards: market directory ---------- */
+    const mkRow = (m, max) => '<tr><td><a href="#" style="font-weight:700;color:var(--ink)">' + m[0] + '</a></td><td>' + (m[1] || '<span class="mu">Not mapped</span>') + '</td><td><div style="display:grid;grid-template-columns:minmax(0,1fr) 64px;gap:10px;align-items:center"><span aria-hidden="true" style="height:8px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden"><i style="display:block;height:100%;width:' + Math.round(m[3] / max * 100) + '%;background:var(--vi)"></i></span><span class="n" style="font-weight:600">' + fmt(m[3]) + '</span></div></td><td class="w">' + m[2] + '</td></tr>';
+    const directory = () => head() + card(tabs('dir')
+      + '<div class="rml-tb two">' + searchF('storage', { label: 'Search markets or sectors', hint: 'name contains' }) + sortF('Company count, highest first', 'Sort markets by') + '</div>'
+      + rbar('6 <small>of ' + MK_N + ' markets match “storage”</small>', '<b>' + fmt(MK_SUM) + '</b> companies, as the taxonomy source counts them. A company count is not market size.', xp('Export filtered markets · 6 rows', 'In the order shown: company count, highest first · “storage”'))
+      + '<div class="rml-tw"><table class="rml-tbl"><caption style="position:absolute;left:-9999px">Markets matching storage</caption><thead><tr><th scope="col">Market</th><th scope="col">Tracked sector</th><th scope="col" style="width:330px">Companies (taxonomy count)</th><th scope="col">Slug</th></tr></thead><tbody>' + J(MK.map(m => mkRow(m, MK[0][3]))) + '</tbody></table></div>'
+      + '<div class="rml-cap">research_market_directory · Axal sector taxonomy · as of ' + MK_DATE + ' · counts are not market size and are not independently verified</div>')
+      + '<div class="rml-g2">' + ann(['Today the zone’s Export writes every market the page read (the first 100), whatever the search or sort, and the same markets file on the Listed tab. It becomes “Export filtered markets”: the rows shown, in the order shown.', 'If a search matches more markets than one read holds, the export pages through <code>GET /api/research/markets?q=&amp;sort=&amp;dir=</code> (the Worker already takes them) so the file has every match. The count in the label is the Worker’s <code>total</code>.', 'Opening a market and pressing Back returns to “storage”, sorted the same way (<code>?q=</code>, <code>?sort=</code> are already in the URL on main).']) + '<div style="display:flex;flex-direction:column;gap:8px">' + url('/research/markets?q=storage') + '<p class="foot">The default sort, company count highest first, is left out of the URL, as <code>writeMarketQuery</code> does today.</p></div></div>';
+
+    const csvT = (hd, rows) => '<div style="overflow:hidden;border-radius:8px"><table class="rml-csv"><thead><tr><th class="rn"></th>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map((r, i) => '<tr><td class="rn">' + (i + 1) + '</td>' + J(r.map(c => c === 'Not recorded' ? '<td class="rml-nrc">Not recorded</td>' : '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table></div>';
+    const MKH = ['Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug'];
+    const mkCsv = () => crop('<span class="eye">RML-06 · The market file after a sector search</span><div class="rml-file"><i aria-hidden="true">CSV</i>' + FILE_M + '<span class="mu" style="margin-left:auto;font-weight:500">6 rows + header · company count, highest first</span></div>'
+      + csvT(MKH, MK.map(m => [m[0], fmt(m[3]).replace(',', ''), m[1] || 'Not mapped', m[2]]))
+      + '<p class="foot">The same four columns the zone exports today (<code>ResearchWorkspace.jsx</code>): name, <code>supplied_count</code>, <code>mi_sector</code> or “Not mapped”, slug. What changes is which rows: the 6 the view shows, in its order, instead of the first 100 read. Numbers are written without separators.</p>', 1000);
+
+    const LCH = ['Ticker', 'Company', 'Exchange', 'Source', 'CIK', 'Country', 'Sector', 'Market cap band', 'Employee band', 'Other listings', 'Source date', 'Source link'];
+    const lRow = (r) => [T(r[0]), N(r[1]), r[2] || 'Not recorded', 'SEC EDGAR', r[3], 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', r[4] ? T(r[4][0]) + ' (' + r[4][1] + ')' : 'None', '2026-10-07', 'sec.gov/…/company_tickers_exchange.json'];
+    const listCsv = () => crop('<span class="eye">RML-07 · The listing file from page 2 · same rows, same order as RML-04</span><div class="rml-file"><i aria-hidden="true">CSV</i>' + FILE_L + '<span class="mu" style="margin-left:auto;font-weight:500">14 rows + header · rows 51–64 of 64 · SEC EDGAR · “energy” · name A to Z</span></div>'
+      + csvT(LCH, E2.map(lRow))
+      + '<p class="foot">A 13th column, Licence, follows Source link on every row (EDGAR’s licence sentence; Not recorded for signal companies); it is cut here for width. The [HLDN] search writes 2 rows: the signal company with its bands and Not recorded CIK, then the EDGAR row with its CIK and Not recorded bands. ' + FL('“Not recorded” written in cells · drawn A') + '</p>', 1480);
+
+    /* ---------- states ---------- */
+    const skel = () => J([0, 1, 2, 3].map(() => '<div class="rml-skr" aria-hidden="true"><span class="rml-sk"></span><span class="rml-sk"></span><span class="rml-sk"></span><span class="rml-sk"></span></div>'));
+    const stBox = (t, tag, inner) => '<div class="rml-st"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3>' + t + '</h3>' + tag + '</div>' + inner + '</div>';
+    const states = () => crop('<span class="eye">RML-08 · States on the Listed companies tab, then the Market directory tab · each says what happened and what to do next</span><div class="rml-g3">'
+      + stBox('Default', XD, '<b style="font-size:14px">' + fmt(ALL) + ' listing records</b><p class="mu">Page 1, all sources, market cap largest first. Rows and the two source captions as RML-02.</p>')
+      + stBox('Loading', XD, '<div role="status" class="mu" style="font-size:12.5px">Reading the listed companies…</div>' + skel() + '<span class="raw">Count shows “Counting…”, never 0 · Export: loading</span>')
+      + stBox('Matches', XD, '<b style="font-size:14px">2 listing records for “HLDN”</b><p class="mu">1 from Signal companies and 1 from SEC EDGAR. Both rows carry “Same ticker, 2 sources”.</p>')
+      + stBox('No matches', '<span class="rml-xd">Existing data · new copy</span>', chip('none', 'No match') + '<p><b>No listing record matches “HLDX” in SEC EDGAR.</b></p><p class="mu">Check the ticker, or search all sources. A ticker matches from its first letter.</p><div><button type="button" class="btn bsm">Clear filters</button></div><span class="raw">Clears search, source, country and sector · keeps the tab · page 1</span>')
+      + stBox('Failed read', XD, chip('un') + '<p><b>The listed companies could not be read.</b></p><p class="mu">This is not a sign there are none; try again. Your search “energy”, SEC EDGAR, page 2 is kept.</p><div><button type="button" class="btn bsm">' + G.re + 'Retry</button></div><span class="raw">Worker 503 listed_companies_unreadable · Export: not available</span>')
+      + stBox('Nothing recorded yet', XD, chip('none') + '<p><b>No listed companies are recorded yet.</b></p><p class="mu">Both stores are empty: a successful read, not an error. Export: 0 rows, disabled.</p>')
+      + stBox('Retrying', XD, '<div role="status" class="mu" style="font-size:12.5px">Reading again…</div>' + skel() + '<span class="raw">On success focus moves to the result heading</span>')
+      + stBox('Directory · no match', XD, '<p><b>No market matches “quantum storage”.</b></p><p class="mu">Check the spelling, or search another sector.</p><div><button type="button" class="btn bsm">Clear search</button></div><span class="raw">Export filtered markets · 0 rows, disabled</span>')
+      + stBox('Directory · failed read', XD, chip('un') + '<p><b>The markets could not be read.</b></p><p class="mu">This is not a sign there are none.</p><div><button type="button" class="btn bsm">' + G.re + 'Retry</button></div><span class="raw">Export: not available · no listing file offered instead</span>')
+      + '</div><p class="foot">“Existing data” means the Worker already returns what the state needs; the work is in the page. Every state keeps the tab, the search and the filters on screen so the reader can see what produced it.</p>', 1440);
+
+    /* ---------- keyboard ---------- */
+    const keyboard = () => crop('<span class="eye">RML-09 · Keyboard order on the Listed companies tab, and focus after pagination</span><div class="rml-g2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">'
+      + '<div style="display:flex;flex-direction:column;gap:10px"><ol class="rml-ord">' + J([['Tabs', '<span class="rml-kb">←</span> <span class="rml-kb">→</span> move between the two tabs, <span class="rml-kb">Home</span> <span class="rml-kb">End</span>; one Tab stop'], ['Search name or ticker', 'Typing updates after a pause; <span class="rml-kb">Esc</span> clears; returns to page 1'], ['Clear search ✕', 'Only when the field has text; focus returns to the field'], ['Source', 'Radio group: one Tab stop, arrows choose; returns to page 1'], ['Sort', 'Native select; returns to page 1'], ['Export this page', 'Label carries scope and count'], ['Row: source link', 'Opens in a new tab, said in its name'], ['Row: Details', 'Disclosure; expanded content follows the row'], ['Previous', 'Skipped when disabled'], ['Next', 'Skipped when disabled']].map((r, i) => '<li><i class="rml-n">' + (i + 1) + '</i><b>' + r[0] + '</b><span>' + r[1] + '</span></li>')) + '</ol><p class="foot">The result heading is not a Tab stop. It takes focus only after paging, Retry and Clear filters (tabindex −1), so a screen-reader user hears what changed.</p></div>'
+      + '<div style="display:flex;flex-direction:column;gap:12px"><div class="rml-st"><h3>1 · Before · Next has focus on page 1</h3>' + pager('Rows 1–50 of 64 · page 1 of 2', false, true, true) + '</div>'
+      + '<div class="rml-st"><h3>2 · After · the heading has focus on page 2</h3>' + rbar('64 <small>listing records · rows 51–64, page 2 of 2</small>', '', '', { foc: true }) + '<div class="rml-url" style="font-size:11px">aria-live polite: “Rows 51 to 64 of 64, page 2 of 2”</div><p class="mu" style="font-size:12px">The list scrolls to the heading. Next is now disabled, so focus could not stay on it; Tab from the heading reaches Export, then the first row.</p></div>'
+      + '<div class="rml-st"><h3>3 · Clear filters</h3><p style="font-size:12px">Focus moves to the search field, now empty; the heading announces the new count.</p></div>'
+      + '<div class="rml-st"><h3>Focus ring</h3><p style="font-size:12px">2px violet outline, 3px offset, on every control in light and dark (RML-11). Targets 40px on desktop, 44px on phone.</p></div></div></div>', 1340);
+
+    /* ---------- phone ---------- */
+    const phone = (title, body, extra) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative;overflow:hidden"><div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Open Eadwyn" style="color:#7c3aed">E</button></div><div class="pbd rml-pb" style="overflow:hidden;gap:12px">' + body + '</div>' + (extra || '') + '</div></div>';
+    const ptabs = (cur) => '<div class="rml-tabs" role="tablist" aria-label="Markets" style="overflow:hidden"><button type="button" role="tab" aria-selected="' + (cur === 'dir') + '" style="padding:0 10px;min-height:44px">Market directory</button><button type="button" role="tab" aria-selected="' + (cur === 'listed') + '" style="padding:0 10px;min-height:44px">Listed companies</button></div>';
+    const pSearch = (q, lab) => '<div><label class="rml-lb" for="pq">' + (lab || 'Search name or ticker') + '</label><div class="rml-in" id="pq" role="searchbox" style="min-height:44px"><span aria-hidden="true">⌕</span>' + q + '<button type="button" class="x" aria-label="Clear search" style="width:40px;height:40px">✕</button></div></div>';
+    const pFilt = (n, src) => '<button type="button" class="btn" style="min-height:44px;justify-content:space-between;width:100%" aria-haspopup="dialog"><span>Filters' + (n ? ' · ' + n : '') + '</span><span class="mu" style="font-weight:600">Source: ' + src + ' ▾</span></button>';
+    const pCard = (r, k, o) => { o = o || {}; const ed = k === 'e'; return '<article class="rml-pc"><div class="r1"><b>' + N(r[1]) + '</b></div><div class="r2"><span class="rml-tk">' + T(r[0]) + '</span>' + srcChip(k) + (o.dup ? '<span class="rml-dup" style="margin-left:0">' + G.dup + '2 sources</span>' : '') + '</div>'
+      + '<button type="button" class="exp" aria-expanded="' + (!!o.open) + '">' + (o.open ? 'Fewer details' : 'More details') + '<span aria-hidden="true">' + (o.open ? '▴' : '▾') + '</span></button>'
+      + (o.open ? '<dl><dt>Exchange</dt><dd>' + (r[2] || NR) + '</dd><dt>CIK</dt><dd class="rml-tk" style="font-weight:600">' + (ed ? r[3] : NR) + '</dd><dt>Country</dt><dd>' + (ed ? NR : r[3]) + '</dd><dt>Sector</dt><dd>' + (ed ? NR : r[4]) + '</dd><dt>Market cap</dt><dd>' + (ed ? NR : r[5]) + '</dd><dt>Employees</dt><dd>' + (ed ? NR : r[6]) + '</dd><dt>Read</dt><dd class="w">' + (ed ? ED_DATE : 'Updated ' + SIG_DATE) + '</dd></dl>' + (ed ? '<a class="btn" href="#" style="min-height:44px">Open source file' + G.ext + '</a>' : '<span class="rml-nol">No source link recorded</span>') : '')
+      + '</article>'; };
+    const pBar = (pg, x, prev, next) => '<div class="rml-pbar">' + (pg ? '<div class="pg"><button type="button" class="btn"' + (prev ? '' : ' disabled aria-disabled="true" style="opacity:.45"') + '>‹ Previous</button><span>' + pg + '</span><button type="button" class="btn"' + (next ? '' : ' disabled aria-disabled="true" style="opacity:.45"') + '>Next ›</button></div>' : '') + '<button type="button" class="btn p" style="min-height:48px">' + G.dl + x + '</button></div>';
+    const phHLDN = () => phone('Markets', ptabs('listed') + pSearch('HLDN') + pFilt(0, 'All sources') + '<div aria-live="polite"><b style="font-size:15px">2 listing records for “HLDN”</b><p class="mu" style="font-size:12.5px;margin-top:2px">1 from Signal companies, 1 from SEC EDGAR. One ticker, two records, never merged.</p></div>' + pCard(HL_SIG, 's', { dup: true }) + pCard(HL_ED, 'e', { dup: true, open: true }), pBar('', 'Export this page · 2 rows'));
+    const phPage2 = () => phone('Markets', ptabs('listed') + pSearch('energy') + pFilt(1, 'SEC EDGAR') + '<div aria-live="polite"><b style="font-size:15px;outline:2px solid var(--vi);outline-offset:3px;border-radius:6px" tabindex="-1">64 listing records · rows 51–64</b><p class="mu" style="font-size:12.5px;margin-top:2px">SEC EDGAR · “energy” · name A to Z. Country, sector, market cap and employees: Not recorded for these rows.</p></div>' + J(E2.slice(0, 4).map(r => pCard(r, 'e'))), pBar('Page 2 of 2', 'Export this page · 14 rows', true, false));
+    const phSheet = () => phone('Markets', ptabs('listed') + pSearch('energy') + pFilt(1, 'SEC EDGAR'), '<div class="dim2"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fs"><div class="grab" aria-hidden="true"></div><div style="padding:12px 18px 20px;display:flex;flex-direction:column;gap:12px"><h2 id="fs" style="font-size:17px;font-weight:800">Filters</h2>'
+      + '<fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:6px"><legend class="rml-lb">Source</legend>' + J([['All sources', 'Both stores, one row per source', false], ['Signal companies', 'With country, sector and bands', false], ['SEC EDGAR', 'Ticker, name, exchange and CIK only', true]].map(s => '<label style="display:flex;gap:10px;align-items:flex-start;min-height:48px;padding:8px 10px;border:1px solid ' + (s[2] ? 'var(--vi)' : 'var(--hair)') + ';border-radius:10px;' + (s[2] ? 'background:var(--lav)' : '') + '"><input type="radio" name="ps"' + (s[2] ? ' checked' : '') + ' style="accent-color:#7c3aed;margin-top:3px"><span><b style="font-size:13.5px">' + s[0] + '</b><br><span class="mu" style="font-size:12px">' + s[1] + '</span></span></label>')) + '</fieldset>'
+      + '<div><span class="rml-lb">Sort</span><button type="button" class="rml-sel" style="width:100%;min-height:44px">Name, A to Z<span aria-hidden="true">▾</span></button></div>'
+      + '<p class="mu" style="font-size:12px">Applying returns to page 1.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn" style="min-height:48px">Reset</button><button type="button" class="btn p" style="min-height:48px">Apply</button></div></div></div>');
+    const phDir = () => phone('Markets', ptabs('dir') + pSearch('storage', 'Search markets or sectors') + '<button type="button" class="btn" style="min-height:44px;justify-content:space-between">Sort: company count, highest first<span aria-hidden="true">▾</span></button><div aria-live="polite"><b style="font-size:15px">6 of ' + MK_N + ' markets match “storage”</b><p class="mu" style="font-size:12.5px;margin-top:2px">' + fmt(MK_SUM) + ' companies, as the taxonomy counts them. Not market size.</p></div>'
+      + J(MK.map(m => '<a href="#" class="rml-pc" style="flex-direction:row;justify-content:space-between;align-items:center;min-height:56px;color:var(--ink)"><span><b style="font-size:14px">' + m[0] + '</b><br><span class="mu" style="font-size:12px">' + (m[1] || 'Not mapped') + '</span></span><span class="rml-tk">' + fmt(m[3]) + '</span></a>')), pBar('', 'Export filtered markets · 6 rows'));
+
+    /* ---------- docs ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const journey = () => dk('<h1>Listed companies and scoped exports · journey, URL and annotation key</h1><p>Research · Markets (<code>/research/markets</code>) for any licence that holds Research. This addendum continues the Research v2 canvas (RS-03) and its sibling #7036, which owns the shared directory layout and the investor thesis. Every company, ticker, CIK, count and date here is fictional sample data.</p>'
+      + '<h2>The main task, frame by frame</h2>' + tbl(['Step', 'What the reader does', 'Frame'], [['1', 'Opens Markets and chooses the Listed companies tab', 'RML-02 (desktop) · RML-10A (phone)'], ['2', 'Types HLDN: two listing records, one per source, each labelled', 'RML-03 · RML-10A'], ['3', 'Opens Details on the SEC EDGAR row, then its source file in a new tab', 'RML-03 · RML-03B'], ['4', 'Searches “energy”, picks SEC EDGAR, sorts by name, goes to page 2', 'RML-04 · RML-10B · RML-10C'], ['5', 'Exports this page: 14 rows, same order, every column', 'RML-04B · RML-07'], ['6', 'Refreshes or comes Back: the same page 2 returns', 'RML-04 URL note'], ['7', 'On Market directory, searches “storage” and exports the 6 filtered markets', 'RML-06 · RML-06B · RML-10D']])
+      + '<h2>URL contract</h2>' + tbl(['Parameter', 'Values', 'Rule'], [['<code>tab</code>', '<code>listed</code>; absent = Market directory', 'Switching tabs keeps each tab’s own parameters'], ['<code>q</code>', 'up to 120 characters', 'Both tabs; the Worker matches name anywhere and ticker from its start'], ['<code>source</code>', '<code>signal_companies</code> · <code>sec_edgar</code>; absent = all', 'Listed only'], ['<code>sort</code>', 'Listed: <code>-market_cap</code> (default) · <code>market_cap</code> · <code>name</code> · <code>-name</code>. Directory: today’s values', 'Default left out'], ['<code>country</code>, <code>sector</code>', 'ISO code, sector name', 'Listed, when offered (RML-05); either one leaves EDGAR out'], ['<code>page</code>', '2 and up; absent = 1', 'Any change to q, source, sort, country or sector drops it'], ['History', 'replace', 'As the directory does today, so Back leaves Markets in one step and returns from a profile to the same view']])
+      + '<h2>Annotation key</h2><p>' + PT('#7037 · backend') + ' needs a Worker change. ' + FL('Owner decision') + ' is a policy question, drawn as option A. <span class="rml-xd">Existing data</span> means the Worker already returns it. Tags are annotations, not product copy. States follow Platform States (D5129): Not recorded, None and Unavailable each keep a word and a glyph and are never drawn as 0.</p>');
+    const mapping = () => dk('<h1>CSV column mapping</h1><p>Both files are written in the browser by <code>exportView</code> from the rows the view holds, in the order shown, as UTF-8 with a BOM. The label, the row count, the order and the columns describe the same records.</p>'
+      + '<h2>Export filtered markets · Market directory</h2>' + tbl(['Column', 'From', 'When missing'], [['Market', '<code>name</code>', 'Always present'], ['Companies (taxonomy count)', '<code>supplied_count</code>', 'Always present; written without separators'], ['Tracked sector', '<code>mi_sector</code>', '“Not mapped”'], ['Slug', '<code>slug</code>', 'Always present']]) + '<p>Rows: the markets matching the search, in the current sort, every match (paged from the Worker if more than one read). File: <code>' + FILE_M + '</code>.</p>'
+      + '<h2>Export this page · Listed companies</h2>' + tbl(['Column', 'Signal companies row', 'SEC EDGAR row'], [['Ticker', '<code>symbol</code>', '<code>symbol</code> (EDGAR ticker)'], ['Company', '<code>name</code>', '<code>name</code>'], ['Exchange', '<code>exchange</code> or Not recorded', '<code>exchange</code> or Not recorded'], ['Source', 'Signal companies', 'SEC EDGAR'], ['CIK', 'Not recorded', '<code>cik</code>'], ['Country', '<code>country</code> or Not recorded', 'Not recorded'], ['Sector', '<code>sector</code> or Not recorded', 'Not recorded'], ['Market cap band', '<code>market_cap_band</code> or Not recorded', 'Not recorded'], ['Employee band', '<code>employee_band</code> or Not recorded', 'Not recorded'], ['Other listings', 'Not recorded', '<code>other_listings</code> as “TICKER (EXCHANGE)”, “; ” between; None when empty'], ['Source date', '<code>updated_at</code> (date)', '<code>as_of</code>'], ['Source link', 'Not recorded', '<code>source_url</code>'], ['Licence', 'Not recorded', '<code>licence</code>']]) + '<p>Rows: this page only, as many as the label says. File: <code>listed-companies-page-&lt;n&gt;-&lt;rows&gt;-rows-&lt;date&gt;.csv</code>, e.g. <code>' + FILE_L + '</code>. ' + FL('Write “Not recorded” in cells, not blanks · drawn A') + '</p>');
+    const handoff = () => dk('<h1>Handoff · #7037</h1>'
+      + '<h2>Checked on main (87bf3ac4ac)</h2>' + tbl(['File', 'What it showed'], [['<code>routes/research_markets.ts</code> <code>GET /listed-companies</code>', 'Takes <code>q</code> (name contains, ticker starts with), <code>source</code> (signal_companies, sec_edgar), <code>sector</code>, <code>country</code>, <code>sort</code> (name, -name, market_cap, -market_cap; default -market_cap), <code>limit</code> (default 50, max 100), <code>offset</code>. Signal rows first, then EDGAR by name. A sector or country filter leaves EDGAR out. Returns <code>total</code>, <code>store_total</code>, per-source totals, EDGAR <code>not_recorded</code> fields, licence, URL and the store-wide overlap. A failed read is 503 <code>listed_companies_unreadable</code>.'], ['<code>pages/research/MarketDirectoryZone.jsx</code>', 'Tabs Private, Public, Government in React state, not the URL. <code>PublicPanel</code> has no search, source or sort control; its offset lives in state; it shows CIK, Not recorded and the EDGAR link. The directory keeps <code>q</code> and <code>sort</code> in the URL and filters the 100 markets it read.'], ['<code>workspaces/ResearchWorkspace.jsx</code>, <code>zoneActionBuilder.js</code>, <code>lib/csvExport.js</code>', 'The zone Export (“Export · this view”) always writes <code>markets.data.items</code>: up to 100 markets, unfiltered, in read order, on either tab. Columns Market, Companies (taxonomy count), Tracked sector, Slug. Named <code>markets-&lt;n&gt;-rows-&lt;date&gt;.csv</code>.'], ['<code>migrations/412_research_public_companies_edgar.sql</code>', 'Every EDGAR row’s <code>source_url</code> is the ticker file, not a company page.']])
+      + '<h2>Preserved</h2><p>The Worker’s paging (50 a page, signal companies first, then EDGAR), its counts and refusal sentence, the two source captions with EDGAR’s licence and file link, <code>&lt;Unrecorded /&gt;</code> for missing values, the directory’s <code>?q=</code> and <code>?sort=</code>, and <code>exportView</code>’s file naming and BOM.</p>'
+      + '<h2>Frontend only</h2><p>Tab names Market directory and Listed companies (shared with #7036); tab, q, source, sort and page in the URL; the search, source and sort controls; page-1 reset; the result count line and source explanation; per-page duplicate marker; Details disclosure; folded all-Not-recorded columns; focus after paging; scoped export labels and the listing mapping; the directory export writing the filtered, sorted rows (paging the existing <code>/api/research/markets?q=&amp;sort=&amp;dir=</code> when needed); export states; country and sector controls if offered; phone cards, filter sheet and dark tokens.</p>'
+      + '<h2>Requires engineering</h2><p>' + PT('#7037 · per-query overlap') + ' How many tickers in the current search appear in both sources, across all pages. The Worker gives only the store-wide overlap today. Without it the page marks duplicates on the page it shows, which the boards draw.</p>'
+      + '<h2>Pending the owner</h2><p>' + FL('Q1') + ' Link EDGAR rows to a per-company sec.gov page built from the CIK? Drawn A: keep the recorded source file link only. ' + FL('Q2') + ' Write “Not recorded” in CSV cells rather than leaving them blank? Drawn A: write the words.</p>'
+      + '<h2>Accessibility</h2>' + tbl(['Area', 'Rule'], [['Search', 'Visible label “Search name or ticker” with the matching rule as hint; Esc clears'], ['Source', 'Radio group with a visible label; a source left out by a filter says why in words'], ['Tables', 'Caption with the rows shown; th scope; Not recorded is a word with a dashed box'], ['Paging', 'Focus to the result heading, polite announcement; disabled buttons skipped'], ['Links', 'Source links say they open a new tab'], ['Status', 'Source, duplicate, None, Not recorded and Unavailable never rely on colour'], ['Touch', '44px on phone, 48px for the export and the sheet actions']]));
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'RMLJ') html = journey();
+    else if (B === 'RML02') html = page(listedDefault(), { h: 1240 });
+    else if (B === 'RML03') html = page(listedHLDN(), { h: 1080 });
+    else if (B === 'RML03B') html = cmpTwo();
+    else if (B === 'RML04') html = page(page2(), { h: 1500 });
+    else if (B === 'RML04B') html = exportStates();
+    else if (B === 'RML05') html = countryFilter();
+    else if (B === 'RML06') html = page(directory(), { h: 940 });
+    else if (B === 'RML06B') html = mkCsv();
+    else if (B === 'RML07') html = mapping();
+    else if (B === 'RML07B') html = listCsv();
+    else if (B === 'RML08') html = states();
+    else if (B === 'RML09') html = keyboard();
+    else if (B === 'RML10A') html = phHLDN();
+    else if (B === 'RML10B') html = phPage2();
+    else if (B === 'RML10C') html = phSheet();
+    else if (B === 'RML10D') html = phDir();
+    else if (B === 'RML11') html = page(page2(), { h: 1500 });
+    else if (B === 'RML11B') html = phHLDN();
+    else if (B === 'RMLH') html = handoff();
+    else html = page(page2(), { h: 1500 });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

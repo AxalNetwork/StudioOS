@@ -16,7 +16,7 @@
  *   · "Activity", with "Show all";
  *   · "Actions", a danger action in red.
  */
-import { createContext, useContext } from 'react';
+import { createContext, Suspense, useContext } from 'react';
 import { PhoneRows } from '../../ui';
 import { isPlainClick } from './cycleModel.js';
 import { declaredActions, dispatchOf, pillView, rowAction, rowView, sectionId, toneOf } from './recordModel.js';
@@ -24,6 +24,7 @@ import { declaredActions, dispatchOf, pillView, rowAction, rowView, sectionId, t
 import { NR } from './CycleModulePage.jsx';
 import { RecordHeaderRow, useRecordHeader } from './RecordHeader.jsx';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
+import { sectionExtra } from './recordSectionExtras.js';
 const PILL = {
   v1: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
   v2: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
@@ -142,7 +143,10 @@ export function RecordPills({ pills = [] }) {
   })}</> : null;
 }
 
-export function RecordSection({ section, side = false, cycleName, moduleName, declarations = new Map(), ...handlers }) {
+export function RecordSection({ section, side = false, cycleName, moduleName, declarations = new Map(), record = null, ...handlers }) {
+  // D6862: a part this section draws below its rows (Verdict's Memo: who the decision is shared with).
+  const Extra = record ? sectionExtra(record, section) : null;
+  const extra = Extra ? <Suspense fallback={null}><Extra record={record} /></Suspense> : null;
   const action = rowAction(section.action, declarations);
   const rows = section.rows ?? [];
   if (useRecordPhone()) {
@@ -166,6 +170,7 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
     const lovable = rows.map((raw) => rowView(raw)).filter((row) => row.lovable && (row.lovable.can_launch || row.lovable.opened_at));
     return <>
       <PhoneGroup id={sectionId(cycleName, moduleName, section.title)} testid="record-section" label={section.title} rows={phoneRows} note={section.note} />
+      {extra}
       {lovable.map((row, index) => <div key={`lovable-${index}`} className="flex flex-col gap-1 text-[12.5px]" data-testid="record-lovable-row">
         <p className="m-0 text-axal-ink dark:text-gray-200">{text(row.a)}</p><BuildInLovable lovable={row.lovable} /></div>)}
     </>;
@@ -198,6 +203,7 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
       </div>;
     })}
     {section.note && <p className="m-0 px-4 pb-3 pt-2 text-[12px] text-axal-muted dark:text-gray-400">{section.note}</p>}
+    {extra}
   </section>;
 }
 
@@ -237,7 +243,7 @@ function RecordNext({ next, declarations, handlers }) {
 
 export default function RecordView({ record, activity, cycleName, moduleName, ...handlers }) {
   const declarations = declaredActions(record);
-  const context = { cycleName, moduleName, declarations, ...handlers };
+  const context = { cycleName, moduleName, declarations, record, ...handlers };
   if (useRecordPhone()) {
     const phoneActivity = activity ?? record.activity;
     return <div className="flex flex-col gap-[18px]" data-testid="record-view" data-phone="true">

@@ -517,7 +517,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             <div className="mb-2 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">
               {P.live
                 ? 'Live program telemetry · computed from graduate records'
-                : 'Operator-maintained track record · live telemetry unavailable'}
+                : 'Program track record not recorded yet · appears once graduate records hold it'}
             </div>
           <div className="flex flex-wrap gap-6">
             {[

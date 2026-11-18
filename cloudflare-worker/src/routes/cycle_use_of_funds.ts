@@ -53,7 +53,8 @@ r.get('/plan',async c=>{
 r.get('/scenarios',async c=>{
   const s=c.get('uof'); await base(c.env,s);
   const rows=await c.env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id=? ORDER BY is_base DESC,id').bind(s.projectId).all<any>();
-  return c.json({items:await Promise.all((rows.results??[]).map(row=>view(c.env,s,row)))});
+  // D5074 part 6: the scenarios and compare reads carry the caller's map too, so Runway's pages draw from it.
+  return c.json({items:await Promise.all((rows.results??[]).map(row=>view(c.env,s,row))),capabilities:c.get('caps')});
 });
 r.get('/scenarios/:id',async c=>c.json(await view(c.env,c.get('uof'),await scenario(c.env,c.get('uof'),idOf(c.req.param('id'))))));
 r.post('/scenarios',async c=>c.json(await saveScenario(c.env,c.get('uof'),null,await body(c)),201));
@@ -83,7 +84,7 @@ r.get('/compare',async c=>{
   const s=c.get('uof');
   const items=await Promise.all(ids.map(async id=>view(c.env,s,await scenario(c.env,s,id))));
   const [today,committed]=await Promise.all([runwayToday(c.env,s,c.get('mercury')),committedRead(c.env,s,c.get('mercury'))]);
-  return c.json({today,committed,scenarios:items,source:'Modelled',reason:'Today is the measured record. Scenarios are models, not runway today.'});
+  return c.json({today,committed,scenarios:items,source:'Modelled',reason:'Today is the measured record. Scenarios are models, not runway today.',capabilities:c.get('caps')});
 });
 r.get('/milestones',async c=>{
   const s=c.get('uof');const sc=await scenario(c.env,s,c.req.query('scenario_id')==null?await base(c.env,s):idOf(c.req.query('scenario_id')));
