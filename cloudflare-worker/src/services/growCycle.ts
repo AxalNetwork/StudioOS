@@ -257,9 +257,35 @@ export async function channelRows(x: Ctx): Promise<ChannelRow[]> {
   });
 }
 
+/** D5867: "TikTok reach this month: N views across n posts", with its source and date. */
+export interface TikTokReach { views: number; posts: number; as_of: string; source: string; text: string }
+
+/**
+ * D5867 (#5867): the month's TikTok reach, from `tiktok_video_facts`: the views of the public videos posted this
+ * month whose views TikTok gave. A video with no view count is not counted, and no such video means no line (null),
+ * never 0. It is a line beside the funnel, never a funnel step: a view is not a visit.
+ */
+export async function tiktokReach(env: Env, projectId: number, month: string): Promise<TikTokReach | null> {
+  try {
+    const r = await env.DB.prepare(
+      `SELECT COUNT(*) AS posts, SUM(views) AS views, MAX(as_of) AS as_of FROM tiktok_video_facts
+        WHERE project_id = ? AND views IS NOT NULL AND substr(posted_on, 1, 7) = ?`,
+    ).bind(projectId, month).first<{ posts: number; views: number | null; as_of: string | null }>();
+    const posts = Number(r?.posts ?? 0);
+    if (!r || !posts || r.views == null || !r.as_of) return null;
+    const views = Number(r.views);
+    const asOf = String(r.as_of).slice(0, 10);
+    return {
+      views, posts, as_of: asOf, source: 'From TikTok',
+      text: `TikTok reach this month: ${views.toLocaleString('en-US')} views across ${posts} post${posts === 1 ? '' : 's'}`,
+    };
+  } catch { return null; }
+}
+
 export async function distributionCard(x: Ctx): Promise<CardBody> {
   const rows = await channelRows(x);
   const month = new Date(x.now).toISOString().slice(0, 7);
+  const tiktok = await tiktokReach(x.env, x.projectId, month);
   const signups = await x.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM waitlist_signups WHERE project_id = ? AND substr(created_at, 1, 7) = ?`,
   ).bind(x.projectId, month).first<{ n: number }>();
@@ -271,12 +297,12 @@ export async function distributionCard(x: Ctx): Promise<CardBody> {
     { stage: 'Paying', value: paying ? paying.paying_accounts : null, source: paying ? snapSource(paying.source) : null,
       reason: paying ? null : 'Not recorded: no snapshot records paying customers' },
   ];
-  if (!rows.length) return { state: 'empty', range: 'This month', series: { channels: [], funnel }, next: { text: 'Add channel', href: `${x.href('distribution')}&add=1` }, reason: 'No channels yet. Cost per customer by channel appears here.' };
+  if (!rows.length) return { state: 'empty', range: 'This month', series: { channels: [], funnel, tiktok }, next: { text: 'Add channel', href: `${x.href('distribution')}&add=1` }, reason: 'No channels yet. Cost per customer by channel appears here.' };
   const priced = rows.filter((r) => r.cac_cents != null && r.state !== 'paused').sort((a, b) => (b.cac_cents as number) - (a.cac_cents as number));
   const worst = priced.length >= 2 ? priced[0] : null;
   return {
     state: priced.length ? 'ok' : 'not_recorded', range: 'This month',
-    series: { channels: rows.map((r) => ({ name: r.name, cac_cents: r.cac_cents, reason: r.cac_reason })), funnel },
+    series: { channels: rows.map((r) => ({ name: r.name, cac_cents: r.cac_cents, reason: r.cac_reason })), funnel, tiktok },
     next: worst ? { text: `Pause ${worst.name}: CAC ${usd(worst.cac_cents as number)}.`, href: x.href('distribution') } : null,
     reason: priced.length ? null : 'Not recorded: no channel has both spend and an attributed customer this month', source: 'Channels (spend typed: manual)', as_of: iso(x.now),
   };

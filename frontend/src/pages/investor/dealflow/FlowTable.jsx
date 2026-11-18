@@ -16,6 +16,7 @@ import {
   COLUMNS, PAGE_SIZE, SCOPE_SHORT, SHORT_LINE, enteredWord, pageNumbers, pageOf, pagesFor, previewOf, shortDayOf, stageWord, stripScopes,
 } from './flowModel';
 import { MAX_COMPARE } from './dealFlowModel';
+import { AssignToMe } from './OwnerControls';
 
 const MUTED = 'text-[12px] text-axal-muted dark:text-gray-400';
 const STICKY = 'sticky z-10 bg-white dark:bg-gray-900';
@@ -52,7 +53,8 @@ function Cell({ col, row, words, onAdd }) {
     case 'scorecard': return row.scores.state === 'locked' ? <ScopeStrip locked /> : <ScopeStrip scopes={stripScopes(row.scores)} />;
     case 'fit': return <FitCell fit={row.fit} testId={`dealflow-cell-${row.id}-fit`} />;
     case 'days': return <DaysCell row={row} />;
-    case 'owner': return <OwnerCell row={row} />;
+    // D6145 (#6145): "Assign to me" beside the owner, where the row is in the flow and not already the investor's.
+    case 'owner': return <span className="inline-flex items-center gap-2"><OwnerCell row={row} /><AssignToMe row={row} testId={`dealflow-cell-${row.id}-assign`} /></span>;
     case 'entered': return row.enteredVia ? <span className="flex flex-col"><span>{enteredWord(row.enteredVia)}</span>{row.enteredAt && <span className={MUTED}>{shortDayOf(row.enteredAt)}</span>}</span> : <span className={MUTED}>—</span>;
     default: return <ScopeCell scores={row.scores} scope={col.id} words={words} testId={`dealflow-cell-${row.id}-${col.id}`} />;
   }

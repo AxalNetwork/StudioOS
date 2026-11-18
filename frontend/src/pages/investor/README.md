@@ -41,6 +41,11 @@ the generic route wrapper once a canvas has graduated.
   `GET /api/investor-profile/me`, with "Edit in Settings ›" to the My thesis
   card (`/account/security-privacy`), "No thesis set" when empty and
   "Your thesis could not be read · Try again" on a failed read.
+  D6129 (#6129) adds the profile's own chips and a struck-through Excludes group.
+- `investorHomeModel.js` (D6129, #6129) holds Investor Studio home v2's
+  rules, pure, with `today` handed in: Needs you's rows and order, Funds per
+  fund, Returns, Thesis fit's chips and Arrivals. Its modules are drawn by
+  `../studio/tiles/investorHomeModules.jsx`.
 - The seven Portfolio and Fund zone pages draw their header through
   `frontend/src/workspaces/ZoneHeader.jsx` inside a `ZonePrimaryScope` (D1424), so the zone's
   indigo primary (Chase all overdue, Log support, Add LP, New call) sits in the

@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
 import WriteFlow from './portfolio/WriteFlow.jsx';
 import MarkRequestsAdmin from './portfolio/MarkRequestsAdmin.jsx';
+import MarkRequestQueue from './portfolio/MarkRequestQueue.jsx';
 import { markRequestsApi } from '../lib/api/markRequests';
 
 const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
@@ -34,6 +35,9 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   // the write flow just stored is the one a Resolve starts on.
   const [requests, setRequests] = useState({ state: 'loading', items: [] });
   const [justRecorded, setJustRecorded] = useState(null);
+  // D6909 part 2 (PRM22): every open request across companies, oldest first, above the register.
+  const [queue, setQueue] = useState({ state: 'loading', items: [] });
+  const [queueNote, setQueueNote] = useState(null);
 
   // Task #83 — when we arrive from an IC "invest" decision the startup + round
   // are handed over via router state; prefill the form and open it so the admin
@@ -59,6 +63,32 @@ export default function PortfolioPositionsPage({ embedded = false }) {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+
+  const loadQueue = () => {
+    if (!isAdmin) return;
+    setQueue((cur) => ({ state: 'loading', items: cur.items }));
+    markRequestsApi.queue().then(
+      (res) => setQueue(Array.isArray(res?.items) ? { state: 'ok', items: res.items } : { state: 'unreadable', items: [] }),
+      () => setQueue({ state: 'unreadable', items: [] }),
+    );
+  };
+  useEffect(loadQueue, [isAdmin]);
+  // Decline: the queue is read again either way, so a request answered meanwhile leaves it.
+  const declineFromQueue = async (row, note) => {
+    try { await markRequestsApi.answer(row.uid, { state: 'declined', note }); }
+    finally { loadQueue(); }
+  };
+  const evidenceFromQueue = async (row) => {
+    setQueueNote(null);
+    try {
+      const { blob, filename } = await markRequestsApi.downloadEvidence(row.uid);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename || 'evidence'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setQueueNote(e?.message || 'The evidence file could not be downloaded.'); }
+  };
 
   const loadRequests = (projectUid) => {
     if (!isAdmin || !projectUid) return;
@@ -107,7 +137,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   // a request answered meanwhile shows as answered rather than as a failure.
   const answerRequest = async (req, answer) => {
     try { await markRequestsApi.answer(req.uid, answer); }
-    finally { loadRequests(detail?.project?.uid); }
+    finally { loadRequests(detail?.project?.uid); loadQueue(); }
   };
   const openFlow = (kind) => setFlow((cur) => ({ kind, n: (cur?.n || 0) + 1 }));
   // The page's clock, read when a draft opens: the flow's model reads none.
@@ -167,6 +197,13 @@ export default function PortfolioPositionsPage({ embedded = false }) {
         </form>
       )}
 
+      {isAdmin ? (
+        <>
+          <MarkRequestQueue read={queue} today={today()} onRetry={loadQueue} onRecord={(r) => openDetail(r.projectUid)}
+            onDecline={declineFromQueue} onEvidence={evidenceFromQueue} />
+          {queueNote ? <p role="alert" className="-mt-4 mb-4 text-sm text-rose-700 dark:text-rose-300" data-testid="mark-queue-evidence-error">{queueNote}</p> : null}
+        </>
+      ) : null}
       {loading ? (
         <div className="text-gray-500 text-center py-16">Loading…</div>
       ) : items.length === 0 ? (

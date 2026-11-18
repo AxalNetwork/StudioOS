@@ -24,6 +24,7 @@ import MarketFigureHistory from '../MarketFigureHistory';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
 import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection } from '../ValidateSections';
+import HypothesisRecord from '../HypothesisRecord';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
@@ -266,9 +267,9 @@ const validate = {
         onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
     )} />,
     // D1083 (#2948, LV5–LV7): From Lovable under the claim's record, one slot per experiment.
+    // D6016 (#6016, V8): computed state and the founder's decision apart, evidence split by direction.
     experiments: (read, ctx) => <div className="space-y-3">
-      <RecordView record={read} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
-        onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+      <HypothesisRecord read={read} {...ctx} />
       {read?.parts?.lovable && <FromLovable part={read.parts.lovable} cycle="validate" projectId={ctx.projectId} onRetry={ctx.reload} />}
     </div>,
   }),

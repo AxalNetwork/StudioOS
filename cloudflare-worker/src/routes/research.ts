@@ -2064,10 +2064,15 @@ const DRAFT_SURFACES: Record<string, {
       'Check the client’s stated budget against the firm’s stated floor and say plainly whether it clears it. Where either number is absent, say which is missing rather than estimating it.',
       'Never invent a capability, a rate or a timeline. A lead the firm’s rules exclude is not a lead to draft for — say so and stop.',
     ].join(' '),
-    gather: async (c, userId) => {
+    gather: async (c, userId, scope) => {
       const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
         .bind(userId).first<{ partner_id: number | null }>();
       if (!me?.partner_id) return [];
+      // D4838 part 10 (#5936): the opportunity sheet's Draft proposal names ONE lead by its need id
+      // as `scope`. A scope that was sent must resolve to one of this firm's open leads or draft
+      // nothing — never fall through to the whole list. No scope is the Leads page's band, as before.
+      const leadId = scope === '' ? 0 : Number(scope);
+      if (scope !== '' && !(Number.isInteger(leadId) && leadId > 0)) return [];
       // The open leads, plus the two things a shape recommendation needs: what
       // this firm sells and what it says it will not take.
       const [leads, offerings, rules] = await Promise.all([
@@ -2077,10 +2082,11 @@ const DRAFT_SURFACES: Record<string, {
              FROM founder_needs n
              LEFT JOIN founders f ON f.id = n.founder_id
             WHERE n.status = 'open'
+              AND (? = 0 OR n.id = ?)
               AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
             ORDER BY n.created_at DESC LIMIT 25`
-        ).bind(me.partner_id, me.partner_id).all<any>(),
+        ).bind(leadId, leadId, me.partner_id, me.partner_id).all<any>(),
         // THE SAME `service_offerings` MISTAKE THAT TOOK /pipeline/leads DOWN,
         // twice in one string. The table keys on `owner_user_id REFERENCES
         // users(id)` and has never had a `partner_id`, so `o.partner_id` was
@@ -2116,6 +2122,8 @@ const DRAFT_SURFACES: Record<string, {
         `FIRM BUDGET FLOOR: ${floor ? `$${Math.round(Number(floor.floor_cents) / 100).toLocaleString('en-US')}` : 'NOT STATED — do not estimate one'}`,
         `FIRM EXCLUSIONS: ${(rules.results || []).filter((r: any) => r.kind !== 'budget_floor' && r.kind !== 'best_fit').map((r: any) => r.value).join('; ') || 'none stated'}`,
       ];
+      // A named lead that is not one of this firm's open leads drafts nothing (409 nothing_to_draft).
+      if (leadId && !(leads.results || []).length) return [];
       return context.concat((leads.results || []).map((l: any) =>
         `LEAD — ${l.client || 'client not recorded'}: ${l.title}; `
         + `${l.description || 'no description given'}; `

@@ -406,7 +406,27 @@ export const ROUTES = [
   { key: 'syndicate', title: 'Through a syndicate', line: 'You join a syndicate on this deal, and its lead signs for its members.' },
   { key: 'fund', title: 'Through a fund', line: 'A fund you are in invests, and you hold your share through it.' },
 ];
-export const ROUTE_NOTE = 'The studio sets the route in the closing room. No preference is recorded here yet.';
+/** D6195: the owner's rule (#6195), said wherever the preference shows. */
+export const ROUTE_NOTE = 'This is your preference. The studio sets the route in the closing room.';
+export const ROUTE_NONE = 'No preference recorded';
+/** D6195: a stored preference in words, or null for none (never Direct by default). */
+export function routePreferenceWord(key) {
+  return ROUTES.find((r) => r.key === key)?.title || null;
+}
+/**
+ * D6195: the investor's own preference for the Terms tab, from `myCommitment`'s answer.
+ * Loading and unreadable are said as such: an unread preference is never shown as none.
+ */
+export function termsPreference(mine) {
+  if (!mine || mine.state === 'loading') return { state: 'loading', key: null, line: null };
+  if (mine.state === 'unreadable') return { state: 'unreadable', key: null, line: 'Your preference could not be read just now. That is not a claim that you have none.' };
+  if (mine.state === 'none') return { state: 'none', key: null, line: `${ROUTE_NONE}. You can record one when you commit.` };
+  return { state: 'ready', key: mine.preference || null, line: preferenceLine(mine.preference) };
+}
+/** D6195: the investor's preference as the Terms and Commitment tabs say it. */
+export function preferenceLine(pref) {
+  return routePreferenceWord(pref) || ROUTE_NONE;
+}
 
 // ---------------------------------------------------------------- DL11–DL13 Commitment and closing
 
@@ -445,6 +465,8 @@ export function myCommitment(read, currency = 'USD', dealId = undefined) {
     confirmed: live.status === 'confirmed',
     recorded: `Recorded ${dayOf(live.created_at) || 'on a date not recorded'}`,
     note: live.notes ? String(live.notes) : null,
+    // D6195: the stored preference key (direct, syndicate, fund) or null for none recorded.
+    preference: routePreferenceWord(live.route_preference) ? live.route_preference : null,
     // D1155: the row itself, for D752's proof door on your own commitment.
     row: live,
     history,

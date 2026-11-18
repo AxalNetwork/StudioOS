@@ -13,7 +13,7 @@ import { setSuppressAuthRedirect } from '../../lib/api';
 import { influencerProgramApi } from '../../lib/api/influencerProgram';
 import ApplySheet, { ApplicationStatus } from './ApplySheet';
 import {
-  BONUS_MILESTONES, REGISTER_TO_APPLY, SECTION_PATH, TIERS_UNREAD, commonDuration, rateRange, standing, tierRows,
+  BONUS_MILESTONES, HERO_LINE, REGISTER_TO_APPLY, SECTION_PATH, STRATEGIC_NOTE, TIERS_UNREAD, hasStrategicTier, rateLine, standing, tierRows,
 } from './influencerPublicModel';
 
 const FAQ = [
@@ -56,11 +56,8 @@ export default function InfluencersPage() {
   }, [search, state?.kind]);
 
   const list = tiers.status === 'ready' ? tiers.data?.tiers || [] : [];
-  const range = rateRange(list);
-  const duration = commonDuration(list);
-  const earnLine = range
-    ? `${range} of each subscription${duration ? `, for ${duration} per member` : ''}.`
-    : 'A share of each subscription, for the paid invoices your tier sets.';
+  // D6993: one line from the tiers read, beside Apply and in "Earn"; a failed read shows no number.
+  const earnLine = rateLine(tiers);
 
   let apply;
   if (!user) apply = <ButtonLink to={REGISTER_TO_APPLY} data-testid="influencers-apply">Apply</ButtonLink>;
@@ -69,10 +66,15 @@ export default function InfluencersPage() {
   else apply = null;
 
   return (
-    <SitePage title="Influencers" description="Earn recurring revenue by bringing people to Axal VC. Share your own handle; when someone subscribes through it, you earn part of every invoice.">
+    <SitePage title="Influencers" description={`Earn recurring revenue by bringing people to Axal VC. ${HERO_LINE}`}>
       <PageHero eyebrow="Axal VC Influencers" title="Earn recurring revenue by bringing people to Axal VC." id="influencers-h"
-        copy={['Share your own handle. When someone subscribes through it, you earn part of every invoice they pay.']}
-        actions={apply} />
+        copy={[HERO_LINE]}
+        actions={(
+          <>
+            {apply}
+            {earnLine ? <span className="ax-phero-copy" style={{ margin: 0, alignSelf: 'center' }} data-testid="influencers-rate-line">{earnLine}</span> : null}
+          </>
+        )} />
 
       {user && me.status === 'ready' ? (
         <Section narrow>
@@ -88,7 +90,7 @@ export default function InfluencersPage() {
         <div className="ax-grid-3" data-testid="influencers-how">
           <div className="ax-card"><h3>1 · Apply</h3><p>Tell us where you publish and who reads you. We reply within 5 business days.</p></div>
           <div className="ax-card"><h3>2 · Share your handle</h3><p>axal.vc/@you, with channel links and an offer from HQ.</p></div>
-          <div className="ax-card"><h3>3 · Earn</h3><p data-testid="influencers-earn">{earnLine}</p></div>
+          <div className="ax-card"><h3>3 · Earn</h3><p data-testid="influencers-earn">{earnLine || 'Reading the tiers…'}</p></div>
         </div>
       </Section>
 
@@ -108,6 +110,7 @@ export default function InfluencersPage() {
             </table>
           </div>
         ) : null}
+        {tiers.status === 'ready' && hasStrategicTier(list) ? <p className="ax-empty" data-testid="influencers-strategic-note">{STRATEGIC_NOTE}</p> : null}
       </Section>
 
       <Section>

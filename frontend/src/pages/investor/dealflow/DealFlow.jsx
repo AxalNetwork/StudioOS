@@ -45,6 +45,7 @@ import NewForYou from './NewForYou';
 import OtherDealActivity from './OtherDealActivity';
 import { ZonePrimary } from '../../../workspaces/ZoneActions';
 import PeekDrawer from './PeekDrawer';
+import { FlowOwnerContext, meOf } from './OwnerControls';
 import { CommitDialog, MoveBackDialog, PassDialog } from './StageDialogs';
 import { moveKind, unreadSources } from './movesModel';
 
@@ -270,6 +271,9 @@ export default function DealFlow({ view, scope }) {
   const [weights, retryWeights] = useRead(() => ventureScoresApi.weights(), []);
   // D4815 part 3: the strip's one read, the inbox New for you already lists; not made under New for you itself.
   const [inbox, retryInbox] = useRead(() => (lists ? dealFlowApi.inbox() : Promise.resolve(null)), [lists]);
+  // D6145 (#6145): who a deal can be given to, for the peek's picker and "Assign to me".
+  const [owners, retryOwners] = useRead(() => (lists ? dealFlowApi.owners() : Promise.resolve(null)), [lists]);
+  const me = meOf(owners);
   const [entries, setEntries] = useState(null);
   useEffect(() => { setEntries(flow.kind === 'ok' ? flow.data?.items || [] : null); }, [flow]);
 
@@ -328,6 +332,28 @@ export default function DealFlow({ view, scope }) {
   };
   const peekRow = dialog?.kind === 'peek' ? rows.find((r) => r.id === dialog.id) || null : null;
   const saveNote = async (row, note) => { replaceEntry(await dealFlowApi.update(row.id, { note })); };
+  /**
+   * D6145: an owner change, then a toast with Undo. The row is the Worker's answer, so the board, the table and the
+   * Owner filter follow it at once. The peek's picker passes `rethrow` to keep a refusal in its own row.
+   */
+  const assignOwner = async (row, ownerId, { rethrow = false, undoing = false } = {}) => {
+    const before = row.owner ? Number(row.owner.id) : null;
+    setBusy(true);
+    try {
+      const next = await dealFlowApi.update(row.id, { owner_user_id: ownerId });
+      replaceEntry(next);
+      const owner = next?.owner || null;
+      const text = !owner ? `${row.name} is unassigned.`
+        : Number(owner.user_id) === me ? `You own ${row.name} now.` : `${owner.name || 'A colleague'} owns ${row.name} now.`;
+      setToast({ kind: 'moved', text, undo: undoing ? null : () => assignOwner({ ...row, owner: ownerId == null ? null : { id: ownerId } }, before, { undoing: true }) });
+    } catch (e) {
+      reportError('DealFlow:owner', e);
+      if (rethrow) throw e;
+      setToast({ kind: 'refused', text: e?.message || `${row.name} could not be assigned. Nothing changed.` });
+    } finally { setBusy(false); }
+  };
+  // With no firm every deal is the investor's own: no shortcut (`me` null hides it).
+  const ownerCtx = { me: owners.data?.scope === 'firm' ? me : null, busy, onAssign: (row, id) => { if (!busy) assignOwner(row, id); } };
 
   const viewList = views.kind === 'unreadable' ? 'failed' : views.data;
   const controls = lists && (
@@ -409,7 +435,7 @@ export default function DealFlow({ view, scope }) {
       <DealFlowToolbar view={view} scope={scope} hrefFor={(v) => settingsHref({ ...v, settings })} onWeightsSaved={retryWeights} />
       {controls}
       {lists && <AttentionStrip read={inbox} onRetry={retryInbox} newHref={settingsHref({ view, scope: 'new', settings })} />}
-      {body}
+      <FlowOwnerContext.Provider value={ownerCtx}>{body}</FlowOwnerContext.Provider>
       {toast && (
         <div className={`flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 text-[13px] ${toast.kind === 'refused' ? 'border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'}`} role={toast.kind === 'refused' ? 'alert' : 'status'} data-testid="dealflow-toast">
           <span>{toast.text}</span>
@@ -437,7 +463,8 @@ export default function DealFlow({ view, scope }) {
         <DeleteViewDialog view={dialog.view} onClose={() => setDialog(null)} onDeleted={() => { setDialog(null); retryViews(); if (viewUid === dialog.view.uid) navigate(settingsHref({ view, scope, settings }), { replace: true }); }} />
       )}
       {peekRow && (
-        <PeekDrawer row={peekRow} pass={entries?.find((entry) => String(entry.deal_id) === String(peekRow.id))?.pass || null} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote} />
+        <PeekDrawer row={peekRow} pass={entries?.find((entry) => String(entry.deal_id) === String(peekRow.id))?.pass || null} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote}
+          owners={owners} onRetryOwners={retryOwners} onAssign={(r, id) => assignOwner(r, id, { rethrow: true })} />
       )}
       {dialog?.kind === 'pass' && (
         <PassDialog row={dialog.row} invited={passAnswersInvitation(dialog.row)} onClose={() => setDialog(null)}

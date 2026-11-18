@@ -247,6 +247,18 @@ test('HQ can describe and remove a draft HQ service, reloading only the edited v
   assert.deepEqual(writes[1][3], { expected_description: 'HQ runs one testing panel.', delivery: { kind: 'studio_operation' } });
   assert.doesNotMatch(page.text(), /HQ service · HQ runs/);
   assert.match(page.text(), /Product testing · Studio operation · Run by HQ/);
+
+  licencePackagesApi.publish = async () => {
+    versions[0] = { ...VB_V2, status: 'active' };
+    versions[1] = { ...VB_V1, status: 'retired' };
+    return { package: versions[0], retired_version: 1 };
+  };
+  await page.click('Publish…');
+  const { act } = await import('react');
+  await act(async () => page.props(page.nodes().find((n) => n.tagName === 'TEXTAREA')).onChange({ target: { value: 'Publish reviewed delivery terms' } }));
+  await page.click('Publish');
+  await page.flush(); await page.flush();
+  assert.doesNotMatch(page.text(), /Edit delivery/, 'publication refreshes each history detail before offering draft-only editing');
 });
 
 test('a refused save preserves the draft input; conflicting publication reloads the version and removes editing', async (t) => {
@@ -297,10 +309,10 @@ test('/admin/licences/packages outranks /admin/licences/:uid, is HQ only, and th
   assert.match(app, /<StripLink to="\/admin\/licences\/packages">Axal VC packages<\/StripLink>/);
 });
 
-test('the client reads all versions and writes only delivery on an encoded package, version and item', () => {
+test('the client reads with ?all=1 for the catalogue and encoded keys; it has no DELETE (D5897 §4 adds the writes)', () => {
   const src = readFileSync(new URL('../src/lib/api/licencePackages.js', import.meta.url), 'utf8');
   assert.match(src, /request\('\/admin\/licence-packages\?all=1'\)/);
+  assert.doesNotMatch(src, /method:\s*'DELETE'/);
   assert.match(src, /versions[/][$][{]enc[(]version[)][}][/]items[/][$][{]enc[(]program[)][}][/]delivery/);
   assert.match(src, /method: 'PATCH', body: JSON.stringify[(]body[)]/);
-  assert.doesNotMatch(src, /method:\s*'(POST|PUT|DELETE)'/);
 });

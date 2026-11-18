@@ -11,6 +11,8 @@ import {
 import {
   LAB_TRACKS, TOOL_COUNT, arsenalFor, leadsWithFor,
 } from '../lib/spinoutLabArsenal';
+import { DIMENSIONS } from '../lib/scoringViewModel';
+import { FOUNDER_DIMENSIONS } from '../lib/founderDimensions';
 import {
   WEEKS, TERMS, JURISDICTIONS, DELIVERABLES, COMMUNITY, SUPPORT,
   FIT, NOT_FIT, TOOL_EXAMPLE_READS, EXAMPLE_LABEL, numberWord, numberWordCap,
@@ -270,13 +272,14 @@ export function BriefDocument({ brief, err, stats = [] }) {
             {numberWordCap(days)} days · {numberWord(WEEKS.length)} evidence gates · {numberWord(TOOL_COUNT)} tools
           </div>
           <h1 className="m-0 mt-2.5 text-[34px] font-black tracking-[-.035em] leading-[1.05] max-w-[620px] text-balance">
-            Idea in on the first. Incorporated, validated, funded company out on the twenty‑ninth.
+            {/* #6990: activities, never a promised outcome. */}
+            {numberWordCap(COHORT_WEEKS)} weeks to test demand, build your pitch and prepare for investor conversations.
           </h1>
           <p className="text-[13.5px] leading-[1.65] mt-3.5 max-w-[580px] mb-0" style={{ color: 'rgba(255,255,255,.78)' }}>
             A structured company-formation programme run inside the Axal VC platform. Founders
-            arrive at one of {numberWord(LAB_TRACKS.length)} starting points and leave with a
-            working entity, a cap table that holds, evidence a buyer will pay, and a deck built
-            from their own recorded data.
+            arrive at one of {numberWord(LAB_TRACKS.length)} starting points and spend the
+            programme talking to buyers, setting up an entity and a cap table where they need
+            one, and building a deck from their own recorded data.
           </p>
           <div className="flex flex-wrap gap-2 mt-[18px]" data-testid="brief-live-chips">
             {liveChips.map((c) => (
@@ -416,7 +419,7 @@ export function BriefDocument({ brief, err, stats = [] }) {
       >
         <div className="px-[42px] pt-[34px] flex-1 flex flex-col">
           <Eyebrow accent>The arsenal</Eyebrow>
-          {/* TOOL_COUNT, never typed — the heading invites the reader to count. */}
+          {/* TOOL_COUNT, read from the arsenal — the heading invites the reader to count. */}
           <h2 className="m-0 mt-1.5 text-[24px] font-black tracking-[-.025em] leading-[1.15]" data-testid="brief-arsenal-heading">
             {numberWordCap(TOOL_COUNT)} working tools. Count them.
           </h2>
@@ -525,8 +528,10 @@ export function BriefDocument({ brief, err, stats = [] }) {
                 Two advisors, matched to measured gaps.
               </h2>
               <p className="text-[11px] leading-[1.5] mt-1.5 mb-0" style={{ color: BODY }}>
-                Matching runs against the founder profile and the nine-dimension venture score, so
-                an advisor covers a weakness the record shows rather than a sector label.
+                {/* #6990: each model with its own count, read from the code that defines it. */}
+                Matching runs against the founder profile ({numberWord(FOUNDER_DIMENSIONS.length)} dimensions)
+                and the venture score ({numberWord(DIMENSIONS.length)} dimensions), so an advisor covers
+                a weakness the record shows rather than a sector label.
               </p>
               <div className="flex flex-col gap-1.5 mt-2.5" data-testid="brief-support">
                 {SUPPORT.map((s) => (
@@ -646,9 +651,9 @@ export default function SpinoutLabBriefPage() {
   const stats = [
     { value: companiesLabel(companies), label: 'Built to date' },
     { value: raised === null ? "—" : raised, label: 'Total capital raised by graduates' },
-    // Derived, not typed: the programme's length, the same arithmetic the rest
-    // of the brief spells out.
-    { value: `${COHORT_WEEKS * 7} days`, label: 'Average time to incorporation' },
+    // #6990: the programme's length, derived from the cohort timing. It is not a
+    // measured average, so it is not labelled as one.
+    { value: `${COHORT_WEEKS * 7} days`, label: 'Programme length' },
   ];
 
   useEffect(() => {

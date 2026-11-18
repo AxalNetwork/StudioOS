@@ -52,6 +52,16 @@ function id3() {
   return CANVAS.slice(a, b);
 }
 
+/** Deals v2 board DE07 (canvas DX7), the `commit` renderer alone. */
+const DEALS_V2 = read('design/incoming/Deals v2 Page.dc.html');
+function de07() {
+  const a = DEALS_V2.indexOf('const commit = (empty) =>');
+  assert.ok(a >= 0, 'the DX7 renderer is gone from the Deals v2 canvas');
+  const b = DEALS_V2.indexOf('/* ---------- closing', a);
+  assert.ok(b > a, 'the closing renderer no longer follows DX7');
+  return DEALS_V2.slice(a, b);
+}
+
 /** One route handler from `ic.ts`, bounded by the next registration. */
 function handler(start) {
   const a = IC.indexOf(start);
@@ -60,26 +70,25 @@ function handler(start) {
   return IC.slice(a, b > a ? b : IC.length);
 }
 
-test('the zone draws the artboard’s instrument, column for column', () => {
-  const board = id3();
-  const head = /head:\[([^\]]*)\]/.exec(board);
-  assert.ok(head, 'the ID3 artboard no longer declares an instrument head');
-  const columns = head[1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(columns, ['Partner', 'Vote', 'Rationale']);
-
-  const at = ZONE.indexOf("head={['Partner'");
-  assert.ok(at >= 0, 'the vote ledger’s head is gone');
-  assert.deepEqual(
-    /head=\{\[([^\]]*)\]\}/.exec(ZONE.slice(at))[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')),
-    columns,
-    'the ledger head drifted from the artboard',
-  );
-  const cols = /cols:'([^']*)'/.exec(board);
-  assert.ok(cols, 'the artboard no longer declares a grid');
-  assert.ok(ZONE.includes(`"${cols[1]}"`), `the ledger grid is not the artboard's ${cols[1]}`);
-  // The artboard's own title for it, so a rename there fails here.
-  assert.match(board, /instTitle:'Vote ledger'/);
-  assert.match(Z, /title="Vote ledger"/);
+test('the zone draws the DX7 board’s tables, column for column (D4815, #5910)', () => {
+  // WAS ID3's three-column "Vote ledger". #5910 redrew the page to Deals v2
+  // board DE07, so the columns are read off that board rather than retyped.
+  const board = de07();
+  const heads = [...board.matchAll(/<thead><tr>((?:<th>[^<]*<\/th>)+)<\/tr><\/thead>/g)]
+    .map((m) => [...m[1].matchAll(/<th>([^<]*)<\/th>/g)].map((t) => t[1]));
+  assert.equal(heads.length, 2, 'DE07 no longer draws a vote table and a conditions table');
+  assert.deepEqual(heads[0], ['Partner', 'Vote', 'Rationale', 'Recorded']);
+  const head = (first) => {
+    const at = ZONE.indexOf(`head={['${first}'`);
+    assert.ok(at >= 0, `the ${first} table’s head is gone`);
+    return /head=\{\[([^\]]*)\]\}/.exec(ZONE.slice(at))[1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
+  };
+  assert.deepEqual(head('Partner'), heads[0], 'the vote table drifted from DE07');
+  // The conditions table is the board's, with the issue's Decision column
+  // before Recorded: conditions are listed across every decision in scope.
+  assert.deepEqual(heads[1], ['Condition', 'Status', 'Owner', 'Recorded']);
+  assert.deepEqual(head('Condition'), ['Condition', 'Status', 'Owner', 'Decision', 'Recorded'],
+    'the conditions table drifted from DE07 plus its Decision column');
 });
 
 test('a recusal renders as itself, declaration beside it, out of the tally', () => {
@@ -100,14 +109,17 @@ test('a recusal renders as itself, declaration beside it, out of the tally', () 
   // property as before the build, now covering the fourth value.
   const board = id3();
   assert.match(board, /recused/i, 'the artboard changed and this guard is now checking nothing');
-  assert.match(Z, /pill: v\.vote, pillTone: VOTE_TONE\[v\.vote\]/,
-    'the vote pill is no longer the stored value verbatim');
-  const tone = /const VOTE_TONE = \{([^}]*)\}/.exec(Z);
-  assert.ok(tone, 'the vote tone table is gone');
+  assert.match(Z, /<VoteMark vote=\{v\.vote\} \/>/,
+    'the vote mark is no longer drawn from the stored value');
+  // #5910: the words for each stored value, one entry per value the column
+  // admits. The rendered difference between recused and abstain is pinned
+  // behaviourally in `deals_v2_commit_dx7_5910.test.mjs`.
+  const words = /export const VOTE_WORDS = \{([\s\S]*?)\n\};/.exec(Z);
+  assert.ok(words, 'the vote words table is gone');
   assert.deepEqual(
-    tone[1].split(',').map((s) => s.split(':')[0].trim()).filter(Boolean).sort(),
+    [...words[1].matchAll(/^\s+(\w+): \{/gm)].map((m) => m[1]).sort(),
     ['abstain', 'no', 'recused', 'yes'],
-    'the vote tone table no longer matches the column’s vocabulary',
+    'the vote words table no longer matches the column’s vocabulary',
   );
   // The tally excludes the recusal and says so beside it.
   assert.match(Z, /recused \(out of the tally\)/, 'the tally text must name the exclusion');
@@ -229,7 +241,8 @@ test('the rationale tile checks the artboard’s claim instead of repeating it',
   const room = handler("r.get('/commit-room'");
   assert.match(room, /enforced: true/, 'the route stopped saying the requirement is enforced');
   assert.match(Z, /label="Rationales"/);
-  assert.match(Z, /rationaleNote\(room\.rationale\)/);
+  // #5910: the tile counts the decision on the card, under the rule the route reports.
+  assert.match(Z, /rationaleNote\(\{ recorded: ballot\.rationales, total: ballot\.voted, enforced: room\.rationale\?\.enforced \}\)/);
   // Blank-but-present is absent: a rationale of spaces is not a reason. BOTH
   // counters must agree — the running total and the per-decision summary — or
   // the strip and the table disagree about the same votes. A file-wide match
@@ -238,7 +251,7 @@ test('the rationale tile checks the artboard’s claim instead of repeating it',
   assert.equal(trims.length, 2,
     `expected both rationale counters to reject a blank, found ${trims.length}`);
   // And an absent one renders as unrecorded rather than as an empty cell.
-  assert.match(Z, /v\.rationale \? \{ text: v\.rationale \} : \{ nr: true \}/);
+  assert.match(Z, /\{v\.rationale \? <span[^>]*>\{v\.rationale\}<\/span> : <NotRecorded \/>\}/);
 });
 
 test('none of the artboard’s fixture partners or figures reaches the page', () => {
@@ -257,22 +270,27 @@ test('none of the artboard’s fixture partners or figures reaches the page', ()
   assert.doesNotMatch(Z, /\|\|\s*0\b(?!\s*\})/, 'an absent figure falls back to 0 outside a tally');
 });
 
-test('the strip counts five recorded things, and the attendee tile is labelled honestly', () => {
-  // The artboard's fourth tile is `Conditions` — over a store that exists now
-  // (migration 334), so the tile is drawn and counts the OPEN ones: a met or
-  // waived condition no longer blocks anything.
-  const board = id3();
-  assert.match(board, /label:'Conditions'/, 'the artboard changed its fourth tile');
-  assert.ok(/label="Conditions"/.test(Z), 'the zone dropped the Conditions tile the store now serves');
-  assert.match(Z, /String\(openConditions\.length\)/, 'the Conditions tile must count the open ones');
-  for (const label of ['Decisions', 'Votes cast', 'Rationales', 'In the room']) {
-    assert.ok(Z.includes(`label="${label}"`), `the strip lost its ${label} tile`);
-  }
-  // AND THE ROSTER IS NOT A VOTING ENTITLEMENT. `ic_meeting_attendees` is an
-  // invitation list; calling it "eligible voters" would invent a governance
-  // rule the product does not enforce.
-  assert.match(board, /label:'Eligible voters'/, 'the artboard changed its first tile');
-  assert.ok(!/Eligible voters/.test(Z), 'the zone claims a voting roster it does not have');
+test('the strip is DE07’s five tiles, and eligible voters are never counted from invitees', () => {
+  // WAS ID3's record-wide strip (Decisions, Votes cast, Conditions,
+  // Rationales, In the room). #5910 draws DE07's, read off the board.
+  const board = de07();
+  const strip = /\[\['Current decision'[\s\S]*?\]\]\.map/.exec(board);
+  assert.ok(strip, 'DE07 no longer draws its strip');
+  const labels = [...strip[0].matchAll(/\['([^']+)', '[^']*'\]/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ['Current decision', 'Votes cast', 'Open conditions', 'Rationales', 'Meeting']);
+  const at = Z.indexOf('export function CommitStrip(');
+  assert.ok(at >= 0, 'the strip component is gone');
+  const stripSrc = Z.slice(at, Z.indexOf('\n}\n', at));
+  const drawn = [...stripSrc.matchAll(/label="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(drawn, labels, 'the strip drifted from DE07');
+  assert.match(stripSrc, /String\(open\)/, 'the Open conditions tile must count the open ones');
+  // AND THE ROSTER IS NOT A VOTING ENTITLEMENT. DE07 draws "6 eligible";
+  // no voting roster is stored, so eligible voters read Not recorded, and
+  // `ic_meeting_attendees` (an invitation list) is never counted as voters.
+  assert.match(board, /6 eligible/, 'the board changed its eligible count');
+  assert.match(Z, /<dt>Eligible voters<\/dt><dd><NotRecorded \/><\/dd>/,
+    'eligible voters must read Not recorded: no voting roster is stored');
+  assert.equal((Z.match(/Eligible voters/g) || []).length, 1, 'eligible voters are drawn somewhere else too');
   assert.match(Z, /invited, not entitled to vote/);
   const room = handler("r.get('/commit-room'");
   assert.match(room, /An invitation to the meeting, not an entitlement to vote/);

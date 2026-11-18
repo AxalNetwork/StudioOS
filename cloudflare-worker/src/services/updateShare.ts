@@ -17,6 +17,11 @@
  *               to the module item it is for.
  *   REPLIES     a reply lands as an item in the module that asked. A module
  *               with no store yet keeps the reply on the ask and says why.
+ *   AUDIENCE    D5867 (#5867): the founder's TikTok followers over the period,
+ *   FACT        from `tiktok_account_facts`, as a fact Eadwyn may draft from,
+ *               with "TikTok · followers, as of <date>". No snapshot in the
+ *               period, no fact: never a 0. It is a fact, never a line on its
+ *               own: the founder keeps or drops the drafted line and sends.
  */
 import type { Env } from '../types';
 import { run as runAI } from './aiRouter';
@@ -152,20 +157,53 @@ export function cleanLines(raw: unknown, field: string): Line[] {
 }
 
 /** A fact Eadwyn may draft from: stored data of the period, with its source. */
-export interface Fact { kind: 'metric' | 'shipped' | 'role' | 'contacts'; text: string; source: LineSource }
+export interface Fact { kind: 'metric' | 'shipped' | 'role' | 'contacts' | 'audience'; text: string; source: LineSource }
 
 export interface ShippedItem { label: string; shipped_on: string; kind: 'roadmap' | 'feedback'; customers?: number }
 
+/** One dated TikTok follower count (`tiktok_account_facts`). */
+export interface FollowerCount { snapshot_date: string; followers: number }
+/** The counts an update's period reads: the last one before it, and the first and last in it. */
+export interface PeriodFollowers { before: FollowerCount | null; first: FollowerCount | null; last: FollowerCount | null }
+
+const counted = (n: number) => n.toLocaleString('en-US');
+
+/**
+ * D5867: "TikTok followers 1,240 → 1,610 this period", from the count before the period (or its first) to its last.
+ * One count only: "TikTok followers: 1,610". No count in the period: no fact.
+ */
+export function audienceFact(f: PeriodFollowers): Fact | null {
+  if (!f.last) return null;
+  const from = f.before ?? (f.first && f.first.snapshot_date < f.last.snapshot_date ? f.first : null);
+  const text = from ? `TikTok followers ${counted(from.followers)} → ${counted(f.last.followers)} this period` : `TikTok followers: ${counted(f.last.followers)}`;
+  return { kind: 'audience', text, source: { label: `TikTok · followers, as of ${f.last.snapshot_date}`, ref: 'revenue_and_traction', as_of: f.last.snapshot_date } };
+}
+
+/** The period's follower counts. A snapshot with no follower count is skipped; no table reads as none. */
+export async function periodFollowers(env: Env, projectId: number, start: string, end: string): Promise<PeriodFollowers> {
+  const FROM = 'SELECT snapshot_date, followers FROM tiktok_account_facts WHERE project_id = ? AND followers IS NOT NULL AND ';
+  try {
+    const last = await env.DB.prepare(FROM + 'snapshot_date BETWEEN ? AND ? ORDER BY snapshot_date DESC LIMIT 1').bind(projectId, start, end).first<FollowerCount>();
+    if (!last) return { before: null, first: null, last: null };
+    return {
+      before: await env.DB.prepare(FROM + 'snapshot_date < ? ORDER BY snapshot_date DESC LIMIT 1').bind(projectId, start).first<FollowerCount>(),
+      first: await env.DB.prepare(FROM + 'snapshot_date BETWEEN ? AND ? ORDER BY snapshot_date LIMIT 1').bind(projectId, start, end).first<FollowerCount>(),
+      last,
+    };
+  } catch { return { before: null, first: null, last: null }; }
+}
+
 const dayMonth = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
-/** The period's facts: metric figures, roles open, customers captured. */
+/** The period's facts: metric figures, the TikTok audience (D5867), roles open, customers captured. */
 export function periodFacts(metrics: Metric[], openRoles: Array<{ title: string; opened: string | null }>,
-  contactsInPeriod: number | null, periodEnd: string, shipped: ShippedItem[] = []): Fact[] {
+  contactsInPeriod: number | null, periodEnd: string, shipped: ShippedItem[] = [], audience: Fact | null = null): Fact[] {
   const facts: Fact[] = [];
   for (const m of metrics) {
     if (m.value == null) continue;
     facts.push({ kind: 'metric', text: `${m.label}: ${m.value}${m.unit === 'pct' ? '%' : ''}`, source: { label: `${m.source} · ${m.label}`, ref: 'revenue_and_traction', as_of: m.as_of } });
   }
+  if (audience) facts.push(audience);
   for (const item of shipped) facts.push({ kind: 'shipped', text: `${item.label} shipped${item.customers ? `, asked for by ${item.customers} customers` : ''}`,
     source: { label: `${item.kind === 'roadmap' ? 'Product roadmap' : 'Product improvement'} · ${item.label} shipped ${dayMonth(item.shipped_on)}`,
       ref: item.kind === 'roadmap' ? 'roadmap' : 'product_feedback', as_of: item.shipped_on } });
@@ -207,7 +245,7 @@ export function parseDraft(output: string, facts: Fact[]): { highlights: Line[];
  * by hand".
  */
 export async function draftLines(env: Env, userId: number, facts: Fact[]) {
-  if (!facts.some((f) => f.kind === 'metric' || f.kind === 'shipped')) return { status: 'nothing' as const, highlights: [], lowlights: [] };
+  if (!facts.some((f) => f.kind === 'metric' || f.kind === 'shipped' || f.kind === 'audience')) return { status: 'nothing' as const, highlights: [], lowlights: [] };
   const prompt = [
     'Draft a monthly company update\'s highlights and lowlights from these facts only.',
     'Each line must draw on exactly one fact, named by its number. Never add a figure the facts do not hold.',

@@ -58,6 +58,12 @@ const PEOPLE: Array<[number, string, string, number | null]> = [
 ];
 const MONTH = new Date().toISOString().slice(0, 7);
 const TODAY = new Date().toISOString().slice(0, 10);
+/**
+ * Obligation 51's due date. The record's state is `due < today` on the real clock, so a date in this
+ * decade turned "Scheduled" into "Overdue" the day after it (2026-11-30 would have, on 2026-12-01).
+ * "Not yet due" is what the fixture means, so it is due far ahead; a quarter on is DUE_NEXT, two DUE_AFTER.
+ */
+const DUE = '2999-11-30', DUE_NEXT = '3000-02-28', DUE_AFTER = '3000-05-28';
 
 /**
  * The baseline and every later migration, built once into a file each test copies (seeds included).
@@ -101,7 +107,7 @@ function fixture() {
     (3, 'chb1', ${A}, 'Search', 'search', NULL, NULL, NULL, ${FOUNDER})`);
   db.exec(`INSERT INTO channel_spend (channel_id, month, spend_cents) VALUES (1, '${MONTH}', 50000)`);
   db.exec(`INSERT INTO contacts (uid, project_id, audience, name, email, utm_json, created_at) VALUES
-    ('ct1', ${A}, 'customer', 'Ines Reyes', 'ines@example.test', '{"utm_source":"newsletter"}', datetime('now'))`);
+    ('ct1', ${A}, 'customer', 'Ines Reyes', 'ines@example.test', '{"utm_source":"newsletter"}', '${TODAY} 00:00:00')`);
   db.exec(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, team, status) VALUES
     (31, 'lantern-engineer', ${FOUNDER}, ${A}, 'Engineer', 'Engineering', 'draft'), (32, 'mill-designer', ${OTHER_FOUNDER}, ${B}, 'Designer', NULL, 'draft'),
     (33, 'lantern-analyst', ${COFOUNDER}, ${A}, 'Analyst', NULL, 'published')`);
@@ -114,7 +120,7 @@ function fixture() {
   db.exec(`INSERT INTO markets (id, uid, project_id, name, demand_score, demand_source, created_by) VALUES
     (1, 'mka1', ${A}, 'Portugal', 7, 'Interviews', ${FOUNDER}), (2, 'mka12', ${B}, 'Chile', NULL, NULL, ${OTHER_FOUNDER})`);
   db.exec(`INSERT INTO compliance_events (id, project_id, jurisdiction, event_type, title, due_date, kind, recurrence, remind_days_json, reminders_sent_json, created_by_user_id) VALUES
-    (51, ${A}, 'Unspecified', 'board_meeting', 'Board meeting', '2026-11-30', 'governance', 'quarterly', '[14]', '[14]', ${FOUNDER}),
+    (51, ${A}, 'Unspecified', 'board_meeting', 'Board meeting', '${DUE}', 'governance', 'quarterly', '[14]', '[14]', ${FOUNDER}),
     (52, ${B}, 'Unspecified', 'annual_report', 'Annual report', '2026-12-01', NULL, 'annual', NULL, '[]', ${OTHER_FOUNDER}),
     (53, ${A}, 'Unspecified', 'other', 'Insurance renewal', '2026-12-15', 'compliance', 'one_time', NULL, '[]', ${FOUNDER})`);
   db.exec(`INSERT INTO obligation_occurrences (id, uid, event_id, held_on, minutes_file_key) VALUES
@@ -312,7 +318,7 @@ test('6: Edit carries the PATCH\'s fields with their current values', async () =
   const mk = edit(await rec(db, 'market-expansion', 'mka1'));
   assert.equal(mk.demand_score, 7); assert.equal(mk.demand_source, 'Interviews');
   const ob = edit(await rec(db, 'durable-company-building', 51));
-  assert.equal(ob.title, 'Board meeting'); assert.equal(ob.due_at, '2026-11-30'); assert.equal(ob.repeats, 'quarterly'); assert.deepEqual(ob.remind_days, ['14']);
+  assert.equal(ob.title, 'Board meeting'); assert.equal(ob.due_at, DUE); assert.equal(ob.repeats, 'quarterly'); assert.deepEqual(ob.remind_days, ['14']);
   // And Edit writes what the PATCH writes.
   assert.equal((await patch(db, 'partner-network', 'pta1', { stage: 'terms', name: 'Lantern Resellers EU', ignored: 'x' })).status, 200);
   assert.deepEqual({ ...db.prepare("SELECT name, stage FROM growth_partners WHERE uid = 'pta1'").get() as any }, { name: 'Lantern Resellers EU', stage: 'terms' });
@@ -474,7 +480,7 @@ test('7: Mark held moves a quarterly obligation three calendar months and resets
   assert.equal(r.status, 200, JSON.stringify(r.body));
   // 30 Nov + 3 months is clamped to 28 Feb.
   assert.deepEqual({ ...db.prepare('SELECT id, due_date, completion_status, reminders_sent_json FROM compliance_events WHERE id = 51').get() as any },
-    { id: 51, due_date: '2027-02-28', completion_status: 'pending', reminders_sent_json: '[]' });
+    { id: 51, due_date: DUE_NEXT, completion_status: 'pending', reminders_sent_json: '[]' });
   assert.deepEqual({ ...db.prepare("SELECT held_on, notes, minutes_file_key, size_bytes FROM obligation_occurrences WHERE event_id = 51 ORDER BY id DESC LIMIT 1").get() as any },
     { held_on: '2026-11-29', notes: 'Quorum met', minutes_file_key: null, size_bytes: null });
   const once = await act(db, 'durable-company-building', 53, 'mark-held', { held_on: '2026-12-14' });
@@ -504,13 +510,13 @@ test('7: Mark held stores minutes under the venture\'s prefix, and a clash answe
   wrong.set('minutes', new File(['x'], 'minutes.txt', { type: 'text/plain' }));
   assert.equal((await act(db, 'durable-company-building', 51, 'mark-held', undefined, { form: wrong, env: { FILES } })).status, 415);
   // Another governance obligation already due on the next date.
-  db.exec(`INSERT INTO compliance_events (project_id, jurisdiction, event_type, title, due_date, kind, recurrence) VALUES (${A}, 'Unspecified', 'board_meeting', 'Spare board', '2027-05-28', 'governance', 'one_time')`);
+  db.exec(`INSERT INTO compliance_events (project_id, jurisdiction, event_type, title, due_date, kind, recurrence) VALUES (${A}, 'Unspecified', 'board_meeting', 'Spare board', '${DUE_AFTER}', 'governance', 'one_time')`);
   const before = (db.prepare('SELECT COUNT(*) AS n FROM obligation_occurrences').get() as any).n;
   const clash = await act(db, 'durable-company-building', 51, 'mark-held', { held_on: '2027-02-27' });
   assert.equal(clash.status, 409);
-  assert.match(clash.body.detail, /Another governance obligation is already due on 2027-05-28\. Pick another date\./);
+  assert.match(clash.body.detail, new RegExp(`Another governance obligation is already due on ${DUE_AFTER}\\. Pick another date\\.`));
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM obligation_occurrences').get() as any).n, before);
-  assert.equal((db.prepare('SELECT due_date FROM compliance_events WHERE id = 51').get() as any).due_date, '2027-02-28');
+  assert.equal((db.prepare('SELECT due_date FROM compliance_events WHERE id = 51').get() as any).due_date, DUE_NEXT);
 });
 
 test('7: Mark told sets told_at and returns a mailto draft to writers only', async () => {

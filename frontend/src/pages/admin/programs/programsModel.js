@@ -67,6 +67,10 @@ export const LEARNING_PATH = '/admin/programs/learning';
 export const LEARNING_HOW_PATH = '/admin/programs/learning/how-it-runs';
 export const LEARNING_PEOPLE_PATH = '/admin/programs/learning/people';
 export const LEARNING_ACTIVITY_PATH = '/admin/programs/learning/activity';
+// D5887 (#5887): Learning runs in the generic shell (PG03a), so it gains the shell's three other core sections.
+export const LEARNING_AVAILABILITY_PATH = '/admin/programs/learning/availability';
+export const LEARNING_PARTICIPATION_PATH = '/admin/programs/learning/participation';
+export const LEARNING_SETTINGS_PATH = '/admin/programs/learning/settings';
 export const PARTNERS_PATH = '/admin/programs/referral-partners';
 export const PARTNERS_HOW_PATH = '/admin/programs/referral-partners/how-it-runs';
 // D963 (#2796): Referral partners' Queue and Activity, and Investor cohort access's Activity.
@@ -421,11 +425,17 @@ export const PAGES = Object.freeze({
     title: 'Learning', workspace: 'Programs',
     line: 'Programs of courses, videos, exercises and exams for a region or a group.',
     facts: [`Who: ${LEARNING_WHO}`, 'Join: Open or by invitation', 'Cycle: self-paced'],
+    // D5887 (#5887): the generic shell's six core sections in PG03's order and words, with the Learners module
+    // (`learners`, MODULE_PATHS) between Participation and History. The four addresses D953 and D962 gave Learning
+    // keep their paths: How it runs is Playbook, People is Learners, Activity is History.
     tabs: [
       { key: 'overview', label: 'Overview', path: LEARNING_PATH },
-      { key: 'how', label: 'How it runs', path: LEARNING_HOW_PATH },
-      { key: 'people', label: 'People', path: LEARNING_PEOPLE_PATH },
-      { key: 'activity', label: 'Activity', path: LEARNING_ACTIVITY_PATH },
+      { key: 'how', label: 'Playbook', path: LEARNING_HOW_PATH },
+      { key: 'availability', label: 'Availability & grants', path: LEARNING_AVAILABILITY_PATH },
+      { key: 'participation', label: 'Participation', path: LEARNING_PARTICIPATION_PATH },
+      { key: 'people', label: 'Learners', path: LEARNING_PEOPLE_PATH, module: 'learners' },
+      { key: 'activity', label: 'History', path: LEARNING_ACTIVITY_PATH },
+      { key: 'settings', label: 'Settings', path: LEARNING_SETTINGS_PATH },
     ],
   },
   'referral-partners': {

@@ -39,6 +39,25 @@ export const CYCLES = {
     history: { key: 'reporting', name: 'Reporting', path: '/grow/reporting', hash: '', live: true } },
 };
 
+/**
+ * D6029 (#6029, BD23): each Build module's subtitle, the founder outcome it serves (BD23's "After" column),
+ * in place of a line describing its records.
+ */
+export const BUILD_MODULE_OUTCOMES = Object.freeze({
+  'solution-design': 'Decide what you are building, and tie every feature to the evidence behind it.',
+  'prototype-mvp': 'Ship the smallest product that tests what Validate proved.',
+  'product-roadmap': 'Decide what ships now, next and later, and show what shipped.',
+  'founding-team': 'Agree who builds the company, and on what terms.',
+  'company-creation': 'Get the company formed, then keep its filings current.',
+  'operating-systems': 'Run the company on connected systems and a weekly rhythm.',
+});
+
+/** A module page's subtitle: Build's outcome line (BD23); elsewhere its caption and how to move between modules. */
+export function moduleSubtitle(cycle, slug, caption) {
+  if (cycle === 'build' && BUILD_MODULE_OUTCOMES[slug]) return BUILD_MODULE_OUTCOMES[slug];
+  return [caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ');
+}
+
 export const CARD_STATES = ['ok', 'empty', 'too_little', 'not_recorded', 'unreadable'];
 
 /** The fewest points a line is drawn through; fewer is `too_little` (D656). */

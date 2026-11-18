@@ -124,12 +124,14 @@ test('no seat count is typed: every one drawn is the stored cohort.places', () =
   assert.match(LAB_ROUTE, /places: max,/);
 });
 
-test('founder-to-founder asks are stated as absent, never drawn', () => {
+test('founder-to-founder asks are never drawn; the panel names the routes that exist', () => {
   // The canvas draws three sample questions. No table holds a founder-to-
-  // founder request, and /cohort deliberately returns no founder identity, so
-  // there is nobody to address one to. The panel has to say that.
-  assert.match(INTRO, /Founder-to-founder asks/);
-  assert.match(INTRO, /does not exist yet/);
+  // founder request, and /cohort deliberately returns no founder identity.
+  // #6990: the engineering note saying so left the visitor's page; the panel
+  // names the routes to an answer that do exist.
+  assert.match(INTRO, /Getting an answer/);
+  assert.match(INTRO, /Office hours and matched advisors are the routes to an answer/);
+  assert.doesNotMatch(INTRO, /does not exist yet/);
   // And it must not have grown a list to render.
   assert.doesNotMatch(INTRO_CODE, /const ASKS\b|asks\s*=\s*\[/);
 });

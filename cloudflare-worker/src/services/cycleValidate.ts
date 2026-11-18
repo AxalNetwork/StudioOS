@@ -1175,8 +1175,9 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'newest', label: 'Newest' }],
   },
   experiments: {
-    // D4585: the status counts interviews only (the approved policy), so the column says so.
-    cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
+    // D6016 (#6016, V7): the Hypotheses list in the canvas's columns. Relationships carries D4585's interview-only support
+    // (support, contradiction and unknown fit together); Distinct sources counts interviews, organizations and other evidence.
+    cols: ['Code', 'Claim', 'Evidence state', 'Relationships', 'Distinct sources', 'Sprint', 'Owner', 'Source'],
     filters: [
       { key: 'status', label: 'Status', options: [
         opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('contested', 'Contested'), opt('refuted', 'Refuted'),

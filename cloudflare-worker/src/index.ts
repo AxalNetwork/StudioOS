@@ -3274,6 +3274,20 @@ export default {
             taskFailed('hubspot sync', e);
           }
         }
+        // D5867 (#5867) — the daily TikTok sync. Hourly at :41, and a connection already synced today (UTC) is
+        // skipped, so each linked connection lands at most one snapshot a day and a failed hour is retried the next.
+        // Totals only in the log: no figure, title or open_id.
+        if (now.getUTCMinutes() === 41) {
+          try {
+            const { syncAllTiktokIntegrations } = await import('./services/tiktok/daily');
+            const r = await syncAllTiktokIntegrations(env, now.getTime());
+            if (r.scanned > 0) {
+              console.info(`[cron] tiktok sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed} skipped=${r.skipped} snapshots=${r.snapshots} videos=${r.videos} kept_deleted=${r.kept_deleted}`);
+            }
+          } catch (e) {
+            taskFailed('tiktok sync', e);
+          }
+        }
         // Task #3 — Calendly 15-minute reconcile. Webhooks deliver real-time
         // booking events; this is the safety-net for portals where webhooks
         // are dropped or disabled.

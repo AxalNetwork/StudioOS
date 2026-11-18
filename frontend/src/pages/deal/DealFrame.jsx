@@ -19,7 +19,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Check, ExternalLink, Globe } from 'lucide-react';
 import { Lightbox, Unreadable, actionPrimary, actionGhost, usePhoneWidth } from '../../ui';
 import { HeaderMenuItem, MoreMenu } from '../../ui/AdminPageHeader';
-import { NO_PERMISSION, NOT_FOUND, DEAL_UNREADABLE, progressChip } from './dealFrameModel';
+import { NO_PERMISSION, NOT_FOUND, DEAL_UNREADABLE, ROUTE_NOT_RECORDED, progressChip } from './dealFrameModel';
 import { dealGroupsFor, dealViewsIn, groupHref, groupOf, tabHref } from '../dealPageModel';
 
 export const CARD = 'rounded-axal-lg border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
@@ -230,7 +230,7 @@ export function StageTrack({ track, onRetry, onRespond }) {
  */
 export function YourPosition({ position, dealId, onRetry }) {
   return (
-    <section className={`${CARD} flex flex-col gap-2 px-4 py-3.5`} aria-label="Your position" data-testid="deal-position">
+    <section className={`${CARD} flex h-full flex-col gap-2 px-4 py-3.5`} aria-label="Your position" data-testid="deal-position">
       <h2 className={H3}>Your position</h2>
       {position.state === 'loading' && <p className={`m-0 ${SUB}`}>Reading your commitment…</p>}
       {position.state === 'unreadable' && <Unreadable what="Your commitment" claim="That is not a claim that you have none." onRetry={onRetry} />}
@@ -241,6 +241,9 @@ export function YourPosition({ position, dealId, onRetry }) {
           <dd className={`m-0 ${MONO} font-bold text-axal-ink dark:text-gray-100`} data-testid="deal-position-amount">{position.amount} · {position.status}</dd>
           <dt className="text-axal-muted dark:text-gray-400">Firm</dt>
           <dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="deal-position-firm">{position.firm}</dd>
+          <dt className="text-axal-muted dark:text-gray-400">Route</dt>
+          {/* D4815 part 41 (#5904): DE04 draws a route ("Direct"); the commitments read carries none. */}
+          <dd className="m-0 text-axal-muted dark:text-gray-400" title={ROUTE_NOT_RECORDED} data-testid="deal-position-route">Not recorded</dd>
         </dl>
       )}
       <Link to={groupHref(dealId, 'investment')} className={`${BTN_S} w-fit`} data-testid="deal-position-open">Open investment</Link>

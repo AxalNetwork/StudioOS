@@ -23,7 +23,7 @@ import ProgramFrame from './ProgramFrame';
 import { InfluencerTabs, LearningTabs, PartnersTabs, PerksTabs } from './ProgramTabs';
 import { ApplicationsTab, InfluencersTab, OffersTab, PayoutsTab, SettingsTab } from './InfluencerPages';
 import { KEY as INFLUENCER_KEY, LANDING as INFLUENCER_LANDING } from './influencersModel';
-import { LearningOverview, LearningPeople } from './LearningPages';
+import { LearningOverview, LearningParticipation, LearningPeople } from './LearningPages';
 import { PerksOverview, PerksParticipation, PerksQueue } from './PerksPages';
 import { Availability, Modules, OnRegistry, Participation, Settings } from './ProgramShellSections';
 import { shellModules } from './genericProgramModel';
@@ -69,17 +69,32 @@ function Perks({ tab, superAdmin }) {
   );
 }
 
+/**
+ * D5887 (#5887): Learning runs in the generic program shell (PG03a), the second of the nine to move, as D5313 moved
+ * Perks. Overview is its tiles, charts and programs table above the shell's Capability modules; Playbook is How it
+ * runs (D962); Availability & grants and Settings are the shell's sections, Participation is Learning's own
+ * enrolments; the Learners module is People, at `/people` as MODULE_PATHS has it; History is the Activity read. Every
+ * address it had keeps its path. The registry read is the frame's, so a failed one marks only the sections that need it.
+ */
 function Learning({ tab, superAdmin }) {
   const [programUid, setProgramUid] = useState(null);
   const [learnerOffset, setLearnerOffset] = useState(0);
   const reads = useLearningReads(tab, programUid, learnerOffset);
   const detail = useProgramDetail('learning');
   return (
-    <ProgramFrame detail={detail} program="learning" superAdmin={superAdmin} tabs={<LearningTabs />}>
-      {tab === 'overview' ? <LearningOverview reads={reads} superAdmin={superAdmin} /> : null}
+    <ProgramFrame detail={detail} program="learning" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<LearningTabs />}>
+      {tab === 'overview' ? (
+        <>
+          <LearningOverview reads={reads} superAdmin={superAdmin} />
+          <Modules modules={shellModules('learning', detail.read)} />
+        </>
+      ) : null}
       {tab === 'how' ? <PlaybookEditor program="learning" superAdmin={superAdmin} detail={detail} testId="programs-learning-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <LearningParticipation reads={reads} superAdmin={superAdmin} /> : null}
       {tab === 'people' ? <LearningPeople reads={reads} programUid={programUid} onPick={(uid) => { setProgramUid(uid); setLearnerOffset(0); }} offset={learnerOffset} onPage={setLearnerOffset} /> : null}
       {tab === 'activity' ? <ActivityTab program="learning" testId="programs-learning-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="learning" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
     </ProgramFrame>
   );
 }

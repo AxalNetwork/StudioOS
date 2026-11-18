@@ -556,6 +556,15 @@ export async function investorEvidence(env:Env,projectId:number,investorUserId:n
   await logOpenEvidence(env,projectId,investorUserId);
   return view;
 }
+/** #6173 (D6173): the investment case's Main evidence, the coverage this investor's `investorEvidence` read shows, by
+ *  the same audience, NDA and sharing rules. Counts by area, kind and source only, never an item; not logged as an open,
+ *  since nothing is opened (the Evidence block's own read logs `open_evidence`). `null` when the investor is no audience. */
+export async function investorEvidenceCoverage(env:Env,projectId:number,investorUserId:number){
+  const aud=await evidenceAudience(env,projectId,investorUserId);
+  if(!aud)return null;
+  const view=await sharedView(env,projectId,aud,await evidenceNda(env,projectId,investorUserId));
+  return {coverage:view.coverage,partial:view.partial};
+}
 /** D6167 (#6167, D4631's `staff` audience): an Admin or an Operating Partner on the deal page reads the projection an
  *  investor reads, never the founder's own pack: what the founder shared beyond Private, through every grant's folders,
  *  not as a committed investor. `nda` is the caller's: the admin is exempt, the venture's NDA binds a partner (D4631). */

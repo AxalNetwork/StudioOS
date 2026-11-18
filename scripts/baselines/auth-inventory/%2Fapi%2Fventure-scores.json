@@ -20,13 +20,6 @@
     "test": "cloudflare-worker/test/authz_venture_scores_d4570.test.ts",
     "note": "The venture's founders, Operating Partners and Admins read it; staff reads are logged. Any advisor, a removed co-founder, an investor and another venture's founder get 403 naming nothing."
   },
-  "GET /api/venture-scores/deal/:dealId": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "verified",
-    "test": "cloudflare-worker/test/authz_venture_scores_d4570.test.ts",
-    "note": "An investor reads only through a deal they are invited to or committed on, only while the founder's investor switch is on, masked until a pairwise NDA with the founder, and never with an analyst note; an investor off the deal gets 403 naming nothing. Anyone else is held to the venture read's rule."
-  },
   "POST /api/venture-scores/:projectId/corrections": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
