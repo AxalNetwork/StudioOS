@@ -106,6 +106,9 @@ export const POLICY_REFUSALS = {
   not_paused: 'AI agents are not paused.',
   policy_unreadable: 'The AI policy could not be read. Nothing was changed.',
   invalid_halt: `Say halted or cleared, with a reason of up to 64 characters.`,
+  // D7074: the capacity ceilings (aiPolicy.ts capacityCeilingsOf).
+  invalid_ceiling: 'Each ceiling is a whole number in its range, up to 500 elastic runs and 50 lanes, or blank to stop offering it.',
+  lanes_need_run_ceiling: 'Set the per-run ceiling first. Sub-agents share their agent’s monthly cap, and without a per-run ceiling one run’s cost has no bound.',
   forbidden: 'Only a Super Admin can do this.',
 };
 export const policyRefusal = (e) => wordsFor(POLICY_REFUSALS, e, 'The change could not be saved. Read the current policy before trying again.');

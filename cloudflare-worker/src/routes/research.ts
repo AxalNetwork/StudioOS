@@ -52,6 +52,7 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkDetail, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
 import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
@@ -80,7 +81,8 @@ import {
   parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
   SUGGESTED_SHEET_URL,
 } from '../services/fundSheets';
-import { refuse } from '../util/refusal';
+import { refuse, refusalBody } from '../util/refusal';
+import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldError } from '../services/researchFundReports';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
@@ -4108,7 +4110,10 @@ research.get('/company-directory/:uid', async (c) => {
 // Public fund catalog (D535). Spreadsheet observations are reported fund-size
 // snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
 // Search, filters, sort and paging run on the server (services/researchFundDirectory.ts).
-const FUND_DIRECTORY_SOURCE = 'Public fund spreadsheets (EuroTech VC Funds; Deep Tech Investors Mapping)';
+// D7166 (#7166): the source names the lists served, from the answer itself, so a
+// list taken down for its terms (D597) is never named as a source.
+const fundDirectorySource = (sources: Array<{ name: string }>) =>
+  sources.length ? `Public fund lists (${sources.map((s) => s.name).join('; ')})` : 'Public fund lists';
 const FUND_DIRECTORY_BOUNDARY = 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.';
 
 research.get('/fund-directory', async (c) => {
@@ -4122,7 +4127,7 @@ research.get('/fund-directory', async (c) => {
   }
   try {
     const page = await listDirectory(c.env, query);
-    return c.json({ ...page, source: FUND_DIRECTORY_SOURCE, source_boundary: FUND_DIRECTORY_BOUNDARY });
+    return c.json({ ...page, source: fundDirectorySource(page.sources), source_boundary: FUND_DIRECTORY_BOUNDARY });
   } catch {
     // A failed read says so; it is never an empty directory.
     return c.json({ detail: 'Unreadable', reason: 'The fund directory could not be read' }, 503);
@@ -4439,45 +4444,47 @@ research.post('/funds/:uid/reports', async (c) => {
   ).bind(fundUid, user.id).first();
   if (!fund) return c.json({ detail: 'Not found' }, 404);
   const body = await c.req.json<any>().catch(() => ({}));
-  const period = String(body.period || '').trim();
-  if (!/^\d{4}-Q[1-4]$/.test(period)) return c.json({ detail: 'Period must use YYYY-Q1 through YYYY-Q4.' }, 400);
-  const sourceUrl = clampText(body.source_url, 500);
-  if (!sourceUrl) return c.json({ detail: 'A source URL is required for a quarterly report.' }, 400);
-  const uid = newUid();
-  const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO research_fund_reports
-       (uid, fund_uid, owner_user_id, period, report_date, fund_size_cents,
-        nav_cents, quarterly_return_bps, net_irr_bps, tvpi_bps, source_url,
-        report_url, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (fund_uid, owner_user_id, period) DO UPDATE SET
-       report_date = excluded.report_date,
-       fund_size_cents = excluded.fund_size_cents,
-       nav_cents = excluded.nav_cents,
-       quarterly_return_bps = excluded.quarterly_return_bps,
-       net_irr_bps = excluded.net_irr_bps,
-       tvpi_bps = excluded.tvpi_bps,
-       source_url = excluded.source_url,
-       report_url = excluded.report_url,
-       notes = excluded.notes,
-       updated_at = excluded.updated_at`
-  ).bind(
-    uid, fundUid, user.id, period, clampText(body.report_date, 30),
-    clampInt(body.fund_size_cents), clampInt(body.nav_cents),
-    clampInt(body.quarterly_return_bps), clampInt(body.net_irr_bps),
-    clampInt(body.tvpi_bps), sourceUrl, clampText(body.report_url, 500),
-    clampText(body.notes, 2000), now, now,
-  ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
-            quarterly_return_bps, net_irr_bps, tvpi_bps,
-            source_url, report_url, notes, created_at, updated_at
-       FROM research_fund_reports
-      WHERE fund_uid = ? AND owner_user_id = ? AND period = ?`
-  ).bind(fundUid, user.id, period).first();
-  return c.json(row, 201);
+  // D7169: create-only. A saved period answers `period_exists` with its row,
+  // so the page opens it instead of overwriting it.
+  const out = await createReport(c.env.DB as any, user.id, fundUid, body, newUid(), nowIso());
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'period_exists') {
+    return c.json(refusalBody({
+      code: 'period_exists',
+      message: `${out.report.period} already has a report. Open it to change it.`,
+      extra: { report_uid: out.report.uid, report: out.report },
+    }), 409);
+  }
+  return c.json(out.report, 201);
 });
+
+// D7169: partial update. A field absent from the body keeps its value, null
+// clears it; the row's `updated_at` travels as If-Match.
+research.patch('/funds/:uid/reports/:reportUid', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const body = await c.req.json<any>().catch(() => ({}));
+  const out = await patchReport(c.env.DB as any, user.id, fundUid, c.req.param('reportUid'), body, readIfMatch(c.req.header('If-Match')));
+  if (out.kind === 'not_found') return c.json({ detail: 'Not found' }, 404);
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'revision_required') {
+    return c.json(refusalBody({ code: 'revision_required', message: 'Send the report\'s updated_at as If-Match so a newer save is not overwritten.' }), 428);
+  }
+  if (out.kind === 'report_changed') {
+    return c.json(refusalBody({
+      code: 'report_changed',
+      message: `${out.report.period} changed after you opened it. Review both versions before saving.`,
+      extra: { report: out.report },
+    }), 409);
+  }
+  return c.json({ ...out.report, changed: out.changed });
+});
+
+const reportFieldRefusal = (c: any, errors: FieldError[]) => c.json(refusalBody({
+  code: 'invalid_report_field',
+  message: fieldErrorSentence(errors),
+  extra: { field: errors[0].field, errors },
+}), 400);
 
 research.delete('/funds/:uid/reports/:reportUid', async (c) => {
   const user = await requireAuth(c);
@@ -4569,29 +4576,6 @@ async function writeBriefIntoNote(env: Env, userId: number, fundUid: string, bri
 // ---------------------------------------------------------------------------
 // Benchmarks (migration 217)
 // ---------------------------------------------------------------------------
-
-interface BenchRow {
-  id: number; uid: string; owner_user_id: number; metric: string;
-  our_value: string | null; peer_value: string | null; peer_source: string | null;
-  peer_sample_size: number | null; peer_as_of: string | null; reading: string | null;
-  created_at: string; updated_at: string;
-}
-
-const benchDto = (r: BenchRow) => ({
-  uid: r.uid,
-  metric: r.metric,
-  our_value: r.our_value,
-  peer_value: r.peer_value,
-  peer_source: r.peer_source,
-  peer_sample_size: r.peer_sample_size,
-  peer_as_of: r.peer_as_of,
-  reading: r.reading,
-  // Derived, not stored: a row is only a COMPARISON when the peer figure has
-  // its base. Without it the row is a metric being tracked, which is a
-  // different and lesser claim, and the zone renders the two differently.
-  is_comparison: Boolean(r.peer_value && r.peer_source && r.peer_sample_size),
-  created_at: r.created_at,
-});
 
 research.get('/benchmarks', async (c) => {
   const user = await requireAuth(c);
@@ -4685,58 +4669,11 @@ research.delete('/benchmarks/:uid', async (c) => {
 // A THIN BASE IS THIS ROW'S OWN n, not the list's minimum: the detail page's
 // banner reads the comparison in front of it.
 
-const BENCH_THIN_AT = 10;
-const BENCHMARK_NOT_FOUND = 'This benchmark is not on your list.';
-const PEER_BASE_REQUIRED = 'A peer figure needs its source and its sample size. A benchmark presented '
-  + 'without its base is arithmetic wearing a metric’s clothes.';
-
-interface ConstituentRow {
-  id: number; uid: string; benchmark_id: number; owner_user_id: number;
-  name: string; value: string | null; as_of: string | null; position: number; created_at: string;
-}
-
-const constituentDto = (r: ConstituentRow) => ({
-  uid: r.uid, name: r.name, value: r.value, as_of: r.as_of, created_at: r.created_at,
-});
-
-/** The caller's benchmark by uid, or null. */
-async function ownedBenchmark(env: Env, userId: number, uid: string): Promise<BenchRow | null> {
-  const row = await env.DB.prepare(
-    `SELECT * FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, userId).first<BenchRow>();
-  return row || null;
-}
-
-/** The detail read: the row, its constituents, and what the page says about them. */
-async function benchmarkDetail(env: Env, userId: number, row: BenchRow) {
-  const cons = await env.DB.prepare(
-    `SELECT * FROM research_benchmark_constituents
-      WHERE benchmark_id = ? AND owner_user_id = ?
-      ORDER BY position ASC, id ASC`
-  ).bind(row.id, userId).all<ConstituentRow>();
-  const constituents = (cons.results || []).map(constituentDto);
-  const item = { ...benchDto(row), updated_at: row.updated_at };
-  const n = item.is_comparison ? Number(row.peer_sample_size) : null;
-  return {
-    item,
-    constituents,
-    // Only a comparison has a sample to be thin, or a count to disagree with.
-    thin: n !== null && n < BENCH_THIN_AT,
-    sample_note: n !== null && n < BENCH_THIN_AT
-      ? `The smallest peer set behind this comparison is ${n}. A median over a set that size moves with one member and should not be presented as a market rate.`
-      : null,
-    count_mismatch: n !== null && constituents.length > 0 && constituents.length !== n,
-    mismatch_note: n !== null && constituents.length > 0 && constituents.length !== n
-      ? `${constituents.length} ${constituents.length === 1 ? 'constituent is' : 'constituents are'} named against a stored sample of ${n}.`
-      : null,
-  };
-}
-
 research.get('/benchmarks/:uid', async (c) => {
   const user = await requireAuth(c);
   const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
   if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
-  return c.json(await benchmarkDetail(c.env, user.id, row));
+  return c.json(await benchmarkDetail(c, user, row));
 });
 
 research.patch('/benchmarks/:uid', async (c) => {
@@ -4773,17 +4710,24 @@ research.patch('/benchmarks/:uid', async (c) => {
       }, 409);
     }
   }
+  // D6278: a figure typed by hand is no longer the fund's recorded one, so an
+  // edit that changes "Ours" drops the link to where it was copied from.
+  const handEdited = has('our_value') && next.our_value !== row.our_value;
   await c.env.DB.prepare(
     `UPDATE research_benchmarks
         SET metric = ?, our_value = ?, peer_value = ?, peer_source = ?, peer_sample_size = ?,
-            peer_as_of = ?, reading = ?, updated_at = ?
+            peer_as_of = ?, reading = ?, updated_at = ?,
+            fund_id = CASE WHEN ? THEN NULL ELSE fund_id END,
+            our_value_metric = CASE WHEN ? THEN NULL ELSE our_value_metric END,
+            our_value_as_of = CASE WHEN ? THEN NULL ELSE our_value_as_of END
       WHERE id = ? AND owner_user_id = ?`
   ).bind(
     next.metric, next.our_value, next.peer_value, next.peer_source, next.peer_sample_size,
-    next.peer_as_of, next.reading, nowIso(), row.id, user.id,
+    next.peer_as_of, next.reading, nowIso(), handEdited ? 1 : 0, handEdited ? 1 : 0, handEdited ? 1 : 0,
+    row.id, user.id,
   ).run();
   const fresh = await ownedBenchmark(c.env, user.id, row.uid);
-  return c.json(await benchmarkDetail(c.env, user.id, fresh as BenchRow));
+  return c.json(await benchmarkDetail(c, user, fresh as BenchRow));
 });
 
 research.post('/benchmarks/:uid/constituents', async (c) => {
@@ -4810,7 +4754,7 @@ research.post('/benchmarks/:uid/constituents', async (c) => {
     newUid(), row.id, user.id, name, clampText(b.value, 100), clampText(b.as_of, 40),
     last?.p == null ? 0 : Number(last.p) + 1, nowIso(),
   ).run();
-  return c.json(await benchmarkDetail(c.env, user.id, row), 201);
+  return c.json(await benchmarkDetail(c, user, row), 201);
 });
 
 research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
@@ -4823,7 +4767,7 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
   if (!res.meta?.changes) {
     return c.json({ error: 'constituent_not_found', message: 'That constituent is not on this benchmark.' }, 404);
   }
-  return c.json(await benchmarkDetail(c.env, user.id, row));
+  return c.json(await benchmarkDetail(c, user, row));
 });
 
 // ---------------------------------------------------------------------------

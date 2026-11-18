@@ -114,6 +114,8 @@ export interface Env {
   // Used by the boot guards in auth.ts to decide whether to throw on missing
   // secrets vs warn-and-fallback.
   ENVIRONMENT?: string;
+  /** Fixed recipient of the scheduled production HQ magic-link insert probe. */
+  MAGIC_INSERT_CANARY_EMAIL?: string;
   /** D5059: opt-in for member program entry checks after existing grants have been reconciled. */
   PROGRAM_ENTITLEMENT_ENFORCEMENT?: string;
   // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
@@ -391,8 +393,21 @@ export interface Env {
   AGENT_SKILL_RUNTIME?: string;
   /** D4594 part 2 (#4594): `deterministic` answers every model call from a fixed stub, read only when ENVIRONMENT is `preview` (`inferenceStubOn`). Set only on the hosted Stage A throwaway Worker; declared nowhere in wrangler.toml. */
   AGENT_INFERENCE_STUB?: string;
-  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
+  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. D7073: an engine run with none is refused `gateway_required`, and a value that cannot name a gateway refuses every run. */
   AGENT_AI_GATEWAY?: string;
+  /** D7073-p2 (#7073): the `agents` gateway's Run token, sent as `cf-aig-authorization` on the accounts' calls. A secret. Unset: engine runs are refused `accounts_unconfigured`. */
+  AGENT_AI_GATEWAY_TOKEN?: string;
+  /** D7073-p2: the stored-key aliases of the model accounts on the `agents` gateway, in order (never `default`). Unset skips the slot. */
+  AGENT_CLAUDE_ALIAS_1?: string;
+  AGENT_CLAUDE_ALIAS_2?: string;
+  AGENT_CLAUDE_ALIAS_3?: string;
+  AGENT_OPENAI_ALIAS?: string;
+  /** D7073-p2: the Claude accounts' model, a priced `PROVIDER_MODELS` id (`anthropic/claude-sonnet-5-5`). */
+  AGENT_CLAUDE_MODEL?: string;
+  /** D7073-p2: the OpenAI account's model, the review's own variable (`gpt-5.3-codex`); priced by the catalogue or AGENT_OPENAI_RATES. */
+  OPENAI_MODEL?: string;
+  /** D7073-p2: USD per 1M tokens for an OPENAI_MODEL the catalogue does not price, as JSON {tokens_in, tokens_cached, tokens_out}. */
+  AGENT_OPENAI_RATES?: string;
   /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
   AGENT_COMPUTE?: string;
   /** D4557: the master key run grants are derived from, per job. A secret, at least 32 characters; unset keeps compute off. */

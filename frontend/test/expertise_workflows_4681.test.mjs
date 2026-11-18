@@ -96,7 +96,8 @@ test('Services edits a saved service in place: one PATCH, no delete and recreate
   try {
     await f.flush();
     assert.ok(f.text().includes(SERVICE_NOT_PUBLIC), 'says a service is not public and not bookable');
-    assert.ok(!f.text().includes('Hidden'), 'no "Hidden" state that implies a public listing');
+    // D4824: the publication state is the stored one (D5315 part 3); a row without it is a Draft.
+    assert.equal(textOf(f.by('advisor-service-publication-3')), 'Draft');
     await act(f.by('advisor-service-edit-3'));
     const form = f.by('advisor-service-form-3');
     assert.ok(form, 'the edit form opens on the row');

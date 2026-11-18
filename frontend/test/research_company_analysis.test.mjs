@@ -15,7 +15,14 @@ import {
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 const CANVAS = read('../../design/canvases/integrated/Pages · Company analysis.dc.html');
-const page = read('../src/pages/research/CompanyAnalysis.jsx');
+// D7176: the dossier's section headings live in its draft module, beside the page.
+const page = read('../src/pages/research/CompanyAnalysis.jsx') + read('../src/pages/research/companyAnalysisDraft.js');
+// D7176 (canvas D7042) supersedes these labels of canvas 90eb4cf2: the page renders the newer canvas's words.
+const SUPERSEDED = {
+  'Re-run': 'Rerun discovery',
+  Markdown: 'Markdown (.md)',
+  'Re-run replaces discovered rows and keeps origin=manual.': 'A rerun replaces nothing until you accept its changes',
+};
 const app = read('../src/App.jsx');
 const component = read('../src/components/CompetitorAnalysis.jsx');
 const candidate = read('../src/pages/research/CompanyCandidate.jsx');
@@ -47,7 +54,7 @@ test('the page renders every element the canvas draws', () => {
     'What this page will not do',
     'Nothing here is a relationship, a headcount, or a comparable.',
     'Re-run replaces discovered rows and keeps origin=manual.',
-  ]) bothEnds(s, s.replace('Gaps &amp;', 'Gaps &').replace('editable · max 200', 'editable, max 200'));
+  ]) bothEnds(s, SUPERSEDED[s] ?? s.replace('Gaps &amp;', 'Gaps &').replace('editable · max 200', 'editable, max 200'));
   // The inputs row, the tiles and the table's columns.
   for (const k of ['Market', 'Customer', 'Geography', 'Depth', 'Known competitors']) {
     assert.ok(CANVAS.includes(`k:'${k}'`), k);

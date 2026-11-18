@@ -195,6 +195,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/publish.ts': ['AI_SURFACE.growPublish'], // #4046: Publish to…'s post text (POST /api/publish/ask), which writes nothing
   'services/decks/dataroomExtract.ts': ['AI_SURFACE.raiseDataRoom'], // D1602: owner-approved document extraction
   'routes/data_room_proposals.ts': ['AI_SURFACE.raiseDataRoom'], // D4170 (#4170): Eadwyn's data room proposals, a quoted run over file names
+  'routes/raise_share_drafts.ts': ['AI_SURFACE.raiseEvidence', 'AI_SURFACE.raiseReadiness'], // D6897 part 3: Eadwyn's pack selection, and the snapshot's covering line
   'routes/founder_validate.ts': ['AI_SURFACE.validate', 'AI_SURFACE.validateInterviews'],
   // D657 — a session's final transcript, on the same page as the interview log.
   // D685 (#1584) moved the call into the processing service the route and the job share.

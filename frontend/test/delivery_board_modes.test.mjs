@@ -34,7 +34,6 @@ const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
 
 const CANVAS = raw('design/canvases/integrated/Pages · Partner Delivery.dc.html');
-const zoneRaw = raw('frontend/src/pages/partner/delivery/BoardZone.jsx');
 const zone = read('frontend/src/pages/partner/delivery/BoardZone.jsx');
 const worker = raw('cloudflare-worker/src/routes/partner_delivery.ts');
 const filters = read('frontend/src/workspaces/partnerZoneFilters.js');

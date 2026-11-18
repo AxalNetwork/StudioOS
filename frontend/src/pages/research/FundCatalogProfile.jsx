@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Plus } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Card } from '../../ui';
 import { api } from '../../lib/api';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
@@ -48,10 +48,16 @@ const GHOST = 'inline-flex items-center gap-1 rounded-lg border border-axal-hair
  * `fund` is { loading, error, status, data }; `list` is the founder's own
  * shortlist read, { loading, error, existing }.
  */
-export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, adding = false, notice = null, onRetry = () => {}, research = null }) {
+export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, adding = false, notice = null, onRetry = () => {}, research = null, backTo = null }) {
   // The directory is the Funds page's second tab (D593); `/research/funds`
   // alone opens My funds.
-  const back = (
+  // D7166 (RFD-04C): opened from a directory row, Back to results returns to
+  // that same query and names the row, so the directory can focus it again.
+  const back = backTo && /^\/research\/funds(\?|$)/.test(backTo.path) ? (
+    <Link to={backTo.path} state={{ selected: backTo.selected }} className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">
+      <ArrowLeft size={13} /> Back to results
+    </Link>
+  ) : (
     <Link to="/research/funds?view=directory" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">
       <ArrowLeft size={13} /> Fund directory
     </Link>
@@ -116,7 +122,7 @@ export function FundCatalogView({ fund, list = { loading: false, error: null, ex
           )}
           {!list.loading && !list.error && (list.existing
             ? <Link to={`/research/funds/${encodeURIComponent(list.existing.uid)}`} className="rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white dark:bg-violet-600">Open your dossier →</Link>
-            : <button type="button" onClick={onAdd || undefined} disabled={!onAdd || adding} aria-busy={adding || undefined} data-testid="fund-catalog-add" className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-violet-600"><Plus size={14} aria-hidden="true" /> {adding ? 'Adding…' : 'Add to my funds'}</button>)}
+            : <button type="button" onClick={onAdd || undefined} disabled={!onAdd || adding} aria-busy={adding || undefined} data-testid="fund-catalog-add" className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-violet-600"><Plus size={14} aria-hidden="true" /> {adding ? 'Saving…' : 'Save to shortlist'}</button>)}
         </div>
       </div>
       {notice && <p role={notice.ok ? 'status' : 'alert'} data-testid="fund-catalog-notice" className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{notice.text}</p>}
@@ -137,6 +143,9 @@ export function FundCatalogView({ fund, list = { loading: false, error: null, ex
 
 export default function FundCatalogProfile({ role = 'founder' }) {
   const { id } = useParams();
+  const location = useLocation();
+  // D7166: where Back to results returns — the directory query this profile was opened from.
+  const backTo = typeof location.state?.back === 'string' ? { path: location.state.back, selected: location.state.selected || id } : null;
   const [fund, setFund] = useState({ loading: true, error: null, status: null, data: null });
   const [list, setList] = useState({ loading: true, error: null, existing: null });
   const [notice, setNotice] = useState(null);
@@ -178,7 +187,7 @@ export default function FundCatalogProfile({ role = 'founder' }) {
     try {
       const row = await api.research.fundCreate({ name: item.name, source_url: item.website || null, catalogue_uid: item.uid || id });
       setList({ loading: false, error: null, existing: row });
-      setNotice({ ok: true, text: row?.existing ? 'Already on My funds.' : 'Added to My funds.' });
+      setNotice({ ok: true, text: row?.existing ? 'Already on your shortlist.' : 'Saved to your shortlist.' });
     } catch (e) {
       setNotice({ ok: false, text: e?.message || 'That fund did not save.' });
     } finally {
@@ -193,7 +202,7 @@ export default function FundCatalogProfile({ role = 'founder' }) {
       title={name || 'Fund profile'}
       activeSlug="funds"
     >
-      <FundCatalogView fund={fund} list={list} onAdd={add} adding={adding} notice={notice} onRetry={load}
+      <FundCatalogView fund={fund} list={list} onAdd={add} adding={adding} notice={notice} onRetry={load} backTo={backTo}
         research={canAddToResearch(role) ? (item) => <ResearchActions kind="fund" item={{ uid: item.uid || id, name: item.name }} addLabel="Add to my research" /> : null} />
     </WorkspaceShell>
   );

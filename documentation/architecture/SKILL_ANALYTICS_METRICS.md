@@ -37,7 +37,7 @@ The counts are always the whole catalogue's: a `?page=` read pages `skills`, nev
 | `adoption.links`, `agents` | `agent_skill_links` on HQ skills, agents not `removed` | — | now | — | always; **adoption, not usage** | HQ |
 | `adoption.pinned_behind_current` | links whose `version` < the skill's `current_version` | — | now | `adoption.links` | always | HQ |
 | `adoption.published_without_links` | published HQ skills no active agent pins | — | now | published HQ skills | always; not "unused", which needs runs | HQ |
-| `overlap` | — | — | — | — | `{ available: false }`: suggestions are not computed yet. When they are, they are labelled suggestions, never duplicates | HQ |
+| `overlap` | `agent_skills`, current `agent_skill_versions` | unordered pair of immutable versions | current published catalogue | pairs sharing a primary tag, output kind and role | `{ available: false }` when the read fails or the filtered population exceeds 250; an observed empty scan returns no suggestions | HQ |
 | `executions` | — | — | — | — | `{ available: false }` until #4667 gives a reliable run status | HQ |
 
 Definitions that matter:
@@ -172,6 +172,6 @@ Refusals are `400` with the code in `error` and a sentence in `message`. None fa
 - `window_reversed`: `to` before `from`.
 - `window_too_long`: over 366 days.
 
-The number of reads stays fixed: the filters are matched in memory over rows the five reads already return, and the model and window are bound parameters of the history read. No filter adds a read or a per-skill query.
+The filters are matched in memory over the coverage and evaluation populations. Model and window are bound parameters of the history read. Overlap reuses the filtered catalogue population and reads its version metadata in one bounded query. Model and window do not apply to overlap. The scan returns up to 20 possible overlaps, with the full suggestion count and the number of rows skipped for missing metadata. See [D4536 part 3](decisions/D4536-p3.md) for the scoring rule.
 
 Not yet: a company administrator's read of their own company's analytics (a company scope, checked server-side and never taken from the client), and the filters on the usage measures, which wait on #4667.

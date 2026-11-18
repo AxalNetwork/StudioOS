@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Relationships Startup Leads · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network › Relationships · #7061 · brief 6 of 6 · extends #4799 NW2 and #6256 NW2.2</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Relationships — My relationships and Leads from your pages, counted apart, with startup switching and activity that says where it came from</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A founder’s Network › Relationships (/network/relationships) holds two lists. My relationships is the founder’s own book, private and not tied to a startup. Leads from your pages is the selected startup’s signups and invites, labelled with the startup, its source and a server count, and with “of 200 loaded” on anything counted over the loaded page. Switching startup never shows one startup’s rows, totals or export under the other’s name: the section empties, reads, and drops any late answer for the startup it left. Last interaction is a logged reply; a signup with no reply reads No interaction recorded and is never Going cold; Going cold needs a dated exchange over 60 days old; Needs attention is an overdue follow-up only; Strength is the founder’s own setting. Each section loads, fails, goes stale and retries on its own, and a failed read never draws 0. Shell, header, links, state words and sheets are copied from the approved Network canvases (#4799, #6256); keys carry the NRL prefix. Violet dashed ◇ tags mark backend work, amber ⚑ tags the owner pick drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 14:02 · checked against main c59a9f2f66 · [Lena Sato], [Kelp Bio], [Quill Analytics] and every person, company and figure (142 people; 214 leads, 200 loaded; 37 leads) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Relationships Startup Leads Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NRL1', 'Relationships · the two lists', 'My relationships (142 people, private to you, not tied to a startup) above Leads from your pages for [Kelp Bio]: the scope strip names the startup, the source pages and the server count of 214, with 200 loaded. Server type filter over the whole startup; Going cold, Needs attention and No interaction recorded over the loaded page, said in the chip. The never-contacted signup [Kai Holm] (85 days) reads No interaction recorded; [Jun Park]’s reply of 73 days ago reads Going cold; [Gus Demo]’s overdue follow-up is the only Needs attention.', [F('NRL1', false, 1640)]],
+      ['NRL1B', 'Activity labels that explain their source', 'Why each label shows, for the three fixtures, and the legend: signed up or added, last interaction, follow-ups and strength set by you are four columns, never one score.', [C('NRL1B', false, 1400, 760)]],
+      ['NRL2', 'Switching from [Kelp Bio] to [Quill Analytics] while a page loads', 'The page just after the switch, then the four steps: the next page of [Kelp Bio] in flight, the switch, its late answer dropped, [Quill Analytics] read (37, all loaded). A table says what the list, total, next page, filters, export and My relationships show at each step. Then the switch whose read fails, and switching back.', [F('NRL2', 'Right after the switch', 1180), C('NRL2B', 'Four steps', 1400, 1180), C('NRL2C', 'Read fails · switch back', 1400, 330)]],
+      ['NRL3', 'One page of leads: filters, counts and export', 'Going cold over the 200 loaded with the 14 not checked, every figure with its unit, and the Export dialog: all 214 (reads the rest first), the 9 shown, or the 200 loaded, with the scope written into the file.', [C('NRL3', false, 1400, 790)]],
+      ['NRL4', 'Independent section states', 'Loading, first use, filtered-empty (in the loaded page and in the whole book), a failed next page that keeps the 200, Stale with its age, refreshing with rows kept, and Try again in three steps.', [C('NRL4A', 'Loading · first use · filtered-empty', 1400, 760), C('NRL4B', 'Partial failure · stale · retry', 1400, 620)]],
+      ['NRL5', 'A failed sibling keeps the rest usable', 'Leads could not be read while My relationships works; on the Person sheet notes fail while follow-ups work (and the same for Your contacts on other licences); on the partner firm book the roster fails while the book works, and a failed book shows Could not be read instead of 0, 0 and 0. Activity count and date replace Strong, Working, Thin.', [F('NRL5', 'Leads failed · book usable', 1180), C('NRL5B', 'Notes vs follow-ups', 1400, 520), C('NRL5C', 'Firm book vs roster', 1400, 560)]],
+      ['NRL6', 'Tablet 768', 'Both lists reflow to three columns; long names and organizations wrap; follow-ups list every open one; the rail is the E in the top bar.', [C('NRL6', false, 768, 1210)]],
+      ['NRL7', 'Phone 390', 'A two-way switch between the lists, cards with 44 px targets: My relationships, Leads with the scope and long content, the switch in progress, a lead with three follow-ups, and search with the keyboard open while Leads failed.', [P('NRL7A', 'My relationships'), P('NRL7B', 'Leads · one page loaded'), P('NRL7C', 'Switching'), P('NRL7D', 'Lead with follow-ups'), P('NRL7E', 'Keyboard open · leads failed')]],
+      ['NRL8', 'Desktop table with long content', 'Fixed columns, two-line wrap for names and organizations, up to three follow-ups in the cell with the rest on the sheet, and where columns go below 1180 px.', [C('NRL8', false, 1400, 470)]],
+      ['NRL9', 'Dark', 'NRL1 and the switch on the dark tokens; every state keeps its glyph and word.', [F('NRL9', 'Two lists · dark', 1640), F('NRL9B', 'Switching · dark', 1180)]],
+      ['NRL10', 'Accessibility and interaction', 'Keyboard order, focus return, announcements per section, the mobile keyboard, error recovery and the clickable path through the frames.', [W('NRL10')]],
+      ['Handoff', 'Handoff', 'What was checked on main, what was preserved, frontend-only work, backend required (◇), the owner pick drawn (⚑) and what is open.', [W('NRLH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

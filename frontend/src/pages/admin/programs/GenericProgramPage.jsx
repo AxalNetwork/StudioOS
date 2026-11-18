@@ -79,6 +79,8 @@ function Overview({ programKey, detail }) {
   const caps = capabilityRows(data.capabilities);
   const approved = data.approved_proposal;
   const known = PAGES[programKey];
+  const modules = moduleRows(programKey, data.program);
+  const personalWellbeing = modules.rows.some((m) => m.key === 'wellbeing' && m.path);
   return (
     <div className="flex flex-col gap-4" data-testid="programs-generic-overview">
       <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} data-testid="programs-generic-metadata">
@@ -86,7 +88,7 @@ function Overview({ programKey, detail }) {
         <Rows rows={metadataRows(data.program)} testId="programs-generic-meta" />
       </section>
 
-      <Modules modules={moduleRows(programKey, data.program)} />
+      <Modules modules={modules} />
 
       <section className={`${CARD} flex flex-col gap-2 px-[18px] py-4`} data-testid="programs-generic-capabilities">
         <h2 className={H2}>Declared capabilities</h2>
@@ -100,7 +102,8 @@ function Overview({ programKey, detail }) {
           </ul>
         ) : <p className={`m-0 ${SUB}`}>{NO_CAPABILITIES}</p>}
         <p className={`m-0 ${SUB}`} data-testid="programs-generic-screens">
-          {known ? <>Operating screen: <Link to={`/admin/programs/${programKey}`} className="font-bold text-axal-violet underline dark:text-violet-300">{known.title}</Link></> : NO_OPERATING_SCREEN}
+          {known ? <>Operating screen: <Link to={`/admin/programs/${programKey}`} className="font-bold text-axal-violet underline dark:text-violet-300">{known.title}</Link></>
+            : personalWellbeing ? 'My Wellbeing opens your personal check-ins and support options.' : NO_OPERATING_SCREEN}
         </p>
       </section>
 

@@ -29,13 +29,17 @@ const historyQuery = `query($owner: String!, $repo: String!, $number: Int!) {
 // #6467 binds repair kinds to commits from the landing App. A label can be removed;
 // refusing incomplete attribution and all unclassified bot commits preserves the owner lane.
 // An original agent session acting under a user identity is distinct from an automated repair.
-export function repairStatus(commits) {
+export function repairStatus(commits, {botLogin} = {}) {
   if (!Array.isArray(commits) || !commits.length) return null;
   let unknown = false;
   for (const c of commits) {
     if (!SHA.test(c?.sha ?? '') || typeof c.commit?.message !== 'string') return null;
     const kind = /^Landing-Bot-Kind:[ \t]*([^\r\n]+)$/im.exec(c.commit.message);
-    if (kind && ['red-pr', 'conflict', 'main-repair'].includes(kind[1].trim().toLowerCase())) return true;
+    if (kind && ['red-pr', 'conflict', 'main-repair', 'scan-fix'].includes(kind[1].trim().toLowerCase())) return true;
+    // Owner, 2026-11-17 (audit P1): the branch keeper's merge of main is no-model. It counts as such only when it is
+    // a two-parent merge made by the landing App itself (LANDING_BOT_LOGIN); unset, it stays uncertain and is refused.
+    if (kind && kind[1].trim().toLowerCase() === 'keeper' && botLogin && c.parents?.length === 2 &&
+        [c.author, c.committer].some(actor => actor?.login === botLogin && actor?.type === 'Bot')) continue;
     if (kind || [c.author, c.committer].some(actor => !positive(actor?.id) || actor.type !== 'User')) unknown = true;
   }
   return unknown ? null : false;
@@ -63,7 +67,7 @@ async function loadList() {
 }
 
 export function createGitHubReader({repo, token, fetchImpl = fetch, classify = classifyDiff,
-  loadOrderedList = loadList} = {}) {
+  loadOrderedList = loadList, botLogin} = {}) {
   if (!/^[\w-]+\/[\w.-]+$/.test(repo ?? '') || !token) throw new Error('A repository and read token are required');
   const [owner, name] = repo.split('/');
   let calls = 0;
@@ -145,8 +149,36 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
     return alerts.items;
   }
   const checkRunsFor = sha => pages(`commits/${sha}/check-runs?filter=latest`, 'check_runs', 3);
+  // main's required contexts, each kept only from the app its rule names (source restrictions).
+  const sourceMatched = (rules, checks) => {
+    const contexts = rules.filter(r => r.type === 'required_status_checks').flatMap(r => r.parameters.required_status_checks);
+    return checks.filter(c => contexts.filter(ctx => ctx.context === c.name)
+      .every(ctx => !positive(ctx.integration_id) || ctx.integration_id === c.app?.id));
+  };
   return {
     get,
+    /**
+     * Audit 2026-11-17 (P0): the evidence that a PR's current head may re-enter the queue. Every context main's rules
+     * require, from the app the rule names, `success` on this exact head (skipped and neutral are not green), and a
+     * full-suite job proven to be ci.yml's pull_request run for this PR and head. Check runs are read to the end of
+     * their pages; one unrelated success can qualify nothing.
+     */
+    async readHeadEvidence(number, expectedSha) {
+      if (!positive(number)) throw new Error('Invalid pull request number');
+      const policy = await import('../lib/landPr.mjs');
+      const pull = await get(`pulls/${number}`);
+      const headSha = pull.head?.sha;
+      if (pull.number !== number || !SHA.test(headSha ?? '')) throw new Error('Incomplete PR head for the evidence read');
+      if (expectedSha && headSha !== expectedSha) return {headSha, ok: false, fullSuitePassed: false, required: null, detail: 'the head moved since it was read'};
+      const [rules, checks] = await Promise.all([get('rules/branches/main'), checkRunsFor(headSha)]);
+      if (!Array.isArray(rules)) throw new Error('Unreadable main rules');
+      const {required} = policy.mainRules(rules);
+      const req = policy.requiredChecks(required, sourceMatched(rules, checks), headSha);
+      const fullSuitePassed = Boolean(await checkSource(number, headSha, checks, FULL_SUITE, CI_PATH));
+      const ok = req.ok && fullSuitePassed;
+      const detail = ok ? req.detail : [req.ok ? null : req.detail, fullSuitePassed ? null : 'no trusted full-suite run on this head'].filter(Boolean).join('; ');
+      return {headSha, ok, fullSuitePassed, required: req, detail};
+    },
     async readLandingDecision(number) {
       if (!positive(number)) throw new Error('Invalid pull request number');
       const policy = await import('../lib/landPr.mjs');
@@ -162,9 +194,7 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
       if (!Array.isArray(rules) || files.length !== pull.changed_files) throw new Error('Incomplete landing decision facts');
       // Source restrictions are part of required checks on StudioOS. Preserve those
       // when passing the matching runs into the shared name-based decision helper.
-      const contexts = rules.filter(r => r.type === 'required_status_checks').flatMap(r => r.parameters.required_status_checks);
-      const matchingChecks = checks.filter(c => contexts.filter(ctx => ctx.context === c.name)
-        .every(ctx => !positive(ctx.integration_id) || ctx.integration_id === c.app?.id));
+      const matchingChecks = sourceMatched(rules, checks);
       const source = await checkSource(number, head, checks, policy.POLICY_CHECK, policy.POLICY_WORKFLOW);
       const pr = {number, state: pull.state, merged: pull.merged, draft: pull.draft, base_ref: pull.base?.ref,
         head_sha: head, auto_merge: pull.auto_merge};
@@ -232,7 +262,7 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
         if (typeof f.filename !== 'string' || !f.filename) throw new Error('Unreadable PR file');
         return {path: f.filename, previousPath: f.previous_filename};
       });
-      return {pull, files, commits, headSha, number, fullSuitePassed, modelRepaired: repairStatus(commits),
+      return {pull, files, commits, headSha, number, fullSuitePassed, modelRepaired: repairStatus(commits, {botLogin}),
         alreadyQueued: history.isInMergeQueue || Boolean(pull.auto_merge), priorQueueEntry: history.timelineItems.totalCount > 0};
     },
   };

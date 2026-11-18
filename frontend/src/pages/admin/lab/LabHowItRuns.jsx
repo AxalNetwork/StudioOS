@@ -34,6 +34,7 @@ export default function LabHowItRuns({ superAdmin = false }) {
     <nav aria-label="On this page" className={`${CARD} flex flex-col gap-2 self-start p-4`}>
       <h2 className={H2}>On this page</h2>
       {sections.map((s) => <a className={LINK} key={s.key} href={`#lab-playbook-${s.key}`}>{s.title}</a>)}
+      <a className={LINK} href="#lab-cohort-activities">Cohort activities</a>
       <a className={LINK} href="#lab-monthly-checklist">What you do each month</a><a className={LINK} href="#lab-admin-tools">Admin tools</a>
     </nav>
     <div className="flex min-w-0 flex-col gap-4">
@@ -54,6 +55,28 @@ export default function LabHowItRuns({ superAdmin = false }) {
         <p className={`${SUB} whitespace-pre-wrap break-words`}>{s.body || 'Not recorded — HQ has not written this section in this version.'}</p>
         {s.key === 'calendar' && <><p className={SUB}>The clock is fixed independently of the playbook.</p>{CALENDAR.map((t) => <p className={SUB} key={t}>{t}</p>)}<Link className={LINK} to={`${LAB_PATH}/cohorts`}>Open the live cohort calendar</Link></>}
       </section>)}
+      <section id="lab-cohort-activities" className={`${CARD} flex flex-col gap-3 p-4`} aria-labelledby="lab-cohort-activities-title">
+        <h2 id="lab-cohort-activities-title" className={H2}>Cohort activities</h2>
+        <dl className="m-0 grid gap-3">
+          <div>
+            <dt className="font-semibold">Office hours</dt>
+            <dd className={`m-0 ${SUB}`}>
+              <Link className={LINK} to={`${LAB_PATH}/hosts`}>Review host applications</Link> or{' '}
+              <Link className={LINK} to="/spinout-lab/office-hours">view bookable hosts</Link> in the participant workspace.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold">Co-founder matching</dt>
+            <dd className={`m-0 ${SUB}`}>Founders can search for a co-founder and send a request in{' '}
+              <Link className={LINK} to="/spinout-lab/cofounder-match">Co-founder Match</Link>.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold">Demo Day</dt>
+            <dd className={`m-0 ${SUB}`}>Check <Link className={LINK} to="/events">published events</Link> for an announced cohort showcase.</dd>
+          </div>
+        </dl>
+      </section>
       <section id="lab-monthly-checklist" className={`${CARD} p-4`}><h2 className={H2}>What you do each month</h2>
         <ul className="flex list-none flex-col gap-3 p-0">{CHECKLIST.map(([when, what, path]) => <li key={when}><span className={SUB}>{when}</span><br /><Link className={LINK} to={`${LAB_PATH}${path}`}>{what}</Link></li>)}</ul>
       </section>

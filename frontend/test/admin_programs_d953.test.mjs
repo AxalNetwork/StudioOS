@@ -39,14 +39,13 @@ import { LANE_CONSOLES, NO_QUEUE_CONSOLES } from '../src/pages/admin/adminStudio
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import ProgramsCatalogue from '../src/pages/admin/programs/ProgramsCatalogue.jsx';
 import MentorCohortAccess from '../src/pages/admin/programs/MentorCohortAccess.jsx';
-import ReferAndEarn from '../src/pages/admin/programs/ReferAndEarn.jsx';
 import ProgramPage from '../src/pages/admin/programs/ProgramPage.jsx';
 import HeldProgramsRedirect from '../src/pages/admin/programs/HeldProgramsRedirect.jsx';
 import AdvisorCohortsRedirect from '../src/pages/admin/programs/AdvisorCohortsRedirect.jsx';
 import ReferEarnRedirect from '../src/pages/admin/programs/ReferEarnRedirect.jsx';
 import {
   CAPS, FROZEN, HQ_READS_COMMISSIONS, MOVED_NOTICES,
-  NOT_RECORDED, PAGES, PROGRAMS, SCOPE_LABEL, SCOPE_PICK_STUDIO,
+  PAGES, PROGRAMS, SCOPE_LABEL, SCOPE_PICK_STUDIO,
   SCOPE_TITLE, SCOPE_UNREAD, SUSPENDED, TRY_AGAIN, WAITING_LABEL, ageText, approveBody, bandOf, cohortName, cycleForStrip,
   etStamp, laneFrom, learningFigures, learningJoin, mentorFigures, mentorNeeds, movedNotice, openReferrals, perkPrice,
   perkQueueFrom, referralOverview, refusalText, rejectBody, routeFor, scopeChip, waitingForYou, weekLines, withoutMoved,
@@ -138,7 +137,8 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
   assert.deepEqual(routeFor('/admin/programs/investor-cohorts'), { program: 'investor-cohorts', tab: 'overview' });
   assert.deepEqual(routeFor('/admin/programs/investor-cohorts/activity'), { program: 'investor-cohorts', tab: 'activity' });
   assert.deepEqual(routeFor('/admin/programs/referral-partners/queue'), { program: 'referral-partners', tab: 'queue' });
-  assert.deepEqual(routeFor('/admin/programs/ai-native-venture'), { program: 'ai-native-venture', tab: 'page' });
+  // D5895 (#5895): AI-native Venture runs in the generic shell, so its own address is Overview.
+  assert.deepEqual(routeFor('/admin/programs/ai-native-venture'), { program: 'ai-native-venture', tab: 'overview' });
   // D4298 (#4298): Influencers' seven tabs; the bare address is its overview, which opens Applications.
   assert.deepEqual(routeFor('/admin/programs/influencer'), { program: 'influencer', tab: 'overview' });
   assert.deepEqual(routeFor('/admin/programs/influencer/applications'), { program: 'influencer', tab: 'applications' });
@@ -157,8 +157,9 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     'referral-partners': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Referral queue', 'History', 'Settings'],
     // D4298 (#4298): Influencers (IN11).
     influencer: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Applications', 'Influencers', 'Offers', 'Payouts', 'History', 'Settings'],
+    // D5895 (#5895): AI-native Venture runs in the generic shell (PG03a): its six core sections, no module tab.
+    'ai-native-venture': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'History', 'Settings'],
     'investor-cohorts': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'History', 'Settings'],
-    'ai-native-venture': [],
   });
   assert.equal(movedNotice('/admin/programs', '?moved=held'), 'Programs has a new address. Update your bookmark.');
   assert.equal(movedNotice('/admin/programs/mentor-cohorts/people', '?moved=advisor-cohorts'), 'Advisor cohort access is now Mentor cohort access, under Programs.');
@@ -443,7 +444,6 @@ function worker(o = {}) {
   };
 }
 
-const down = () => response({ error: 'down' }, 503);
 const SUPER = { id: 901, role: 'admin', is_super_admin: 1, name: 'HQ', email: 'hq@example.com' };
 
 async function mounted(url, page, handle, { user = null } = {}) {
@@ -568,14 +568,14 @@ test('Referral partners links D923\'s tabs, with Commissions for a Super Admin o
   } finally { await hq.close(); }
   const investor = await mounted('/admin/programs/investor-cohorts', ProgramPage, worker());
   try {
-    assert.match(investor.textOf('programs-investor-banner'), /^Not running yet\./);
+    assert.match(investor.textOf('programs-investor-banner'), /current assignment and a signed cohort NDA/);
     assert.ok(investor.has('programs-tabs'), 'Overview and Activity');
-    assert.equal(investor.textOf('programs-header-status'), '○Not built yet');
+    assert.match(investor.textOf('programs-header-status'), /Reading…$/, 'the registry detail has not answered');
   } finally { await investor.close(); }
   const ai = await mounted('/admin/programs/ai-native-venture', ProgramPage, worker());
   try {
     assert.equal(ai.textOf('programs-header-line'), 'Founders build an AI-native company with Eadwyn and the studio’s tools.', 'OD-AIN A');
-    assert.ok(!ai.has('programs-tabs'));
+    assert.ok(ai.has('programs-tabs'), 'D5895: the shell strip');
     assert.ok(!/\[A venture program/.test(ai.text()), 'the bracketed sample never ships');
   } finally { await ai.close(); }
 });
