@@ -70,9 +70,11 @@ function valueText(key, c) {
 export function cellView(key, cell, member) {
   if (!member || member.state !== 'listed' || !member.values) return { state: 'absent', text: null, reason: memberNote(member) };
   if (!cell) return { state: 'unreadable', text: null, reason: 'Unreadable' };
+  // D7177: the Worker's per-cell Unreadable stays Unreadable, never Not recorded.
+  if (cell.status === 'unreadable') return { state: 'unreadable', text: null, reason: cell.reason || 'Unreadable' };
   if (cell.status !== 'recorded') return { state: 'not_recorded', text: NOT_RECORDED, reason: cell.reason || NOT_RECORDED };
   const { text, detail = null } = valueText(key, cell);
-  if (text == null) return { state: 'not_recorded', text: NOT_RECORDED, reason: 'Not recorded: the value is held in a form this page cannot show' };
+  if (text == null) return { state: 'unreadable', text: null, reason: 'Unreadable: the value is held in a form this page cannot show' };
   const source = cell.source?.name || null;
   return {
     state: 'recorded',
@@ -139,6 +141,11 @@ export const COMPARISON_ERRORS = {
   title_required: 'A comparison needs a title.',
   title_too_long: 'Keep the title under 160 characters.',
   invalid_uid: 'That entry cannot be added.',
+  // D7177: Add to research's own limit, and the save's request id.
+  too_many: 'Add to research takes up to 25 at a time. Remove some and try again.',
+  request_id_reused: 'This sheet already saved a comparison in another project. Close it and start again.',
+  invalid_request_id: 'This sheet cannot be saved. Close it and start again.',
+  question_required: 'A new project needs a question.',
 };
 export const comparisonError = (err, fallback) => COMPARISON_ERRORS[err?.code] || err?.message || fallback;
 
