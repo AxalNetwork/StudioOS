@@ -1,4 +1,12 @@
 /**
+ * D6312: the coordinator's rules apart from GitHub: the labels an issue ends
+ * with (one state, `needs-*` only when blocked, standard slots only), the
+ * least-loaded slot for a new task (never S01, S18 or S32), whether an issue
+ * moved since the snapshot, the run markers that make writes idempotent, the
+ * status note, the weekly delta, and canvas digests and board ids. Owned by
+ * `../coordinator.mjs` and `../land-canvas.mjs`; tested in
+ * `coordinator.test.mjs`.
+ *
  * #6312: the coordinator's decisions, apart from GitHub. Which labels an issue
  * ends with, which slot gets a new task, whether an issue moved since the
  * snapshot, whether a write already happened, what a status note says, which

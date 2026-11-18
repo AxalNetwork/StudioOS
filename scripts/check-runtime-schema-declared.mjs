@@ -1,5 +1,32 @@
 #!/usr/bin/env node
 /**
+ * A schema object that a runtime `CREATE … IF NOT EXISTS` in
+ * `cloudflare-worker/src` can create and that no migration declares. Such a
+ * statement is a safety net for a DECLARED object; when it is the only
+ * declaration, the first request to reach it in production creates a name the
+ * repo's fresh build lacks, and every deploy after that fails step 9
+ * (`check-baseline-drift.mjs`). It happened: `admin_publications`' D95
+ * bootstrap ran in production on 2026-09-24 and six consecutive main deploys
+ * went red with the same three names (D235). So this builds the database
+ * exactly as step 9 does — it imports `postCutoffMigrations` and `buildFresh`
+ * from `check-baseline-drift.mjs`, so the two cannot build different databases
+ * — then executes every literal runtime `CREATE TABLE`, `CREATE INDEX`, `CREATE
+ * TRIGGER`, `ADD COLUMN` and `RENAME` against a copy, to a fixed point,
+ * expanding a loop over a literal array into one statement per entry. Anything
+ * that appears is a finding, and since D359 that includes a column: the columns
+ * of every table and their declared types are read before and after the fixed
+ * point, so an `ADD COLUMN` no migration declares is caught although it adds no
+ * name. So is a statement that REMOVES or RENAMES an object or column the build
+ * has. A column waiting on its migration number is recorded under `columns` in
+ * the ledger with the type it adds, re-proved on every run and stale once
+ * declared; an undeclared object can never be recorded. A statement SQLite
+ * refuses on every database the repo builds, and one whose SQL is built at
+ * runtime and cannot be executed here, are on record in
+ * `runtime-schema-declared-baseline.json` with a reviewed reason; a refusal is
+ * re-proved on every run against its recorded text, and the gate fails on a
+ * stale entry as well as a new one. Covered by
+ * `cloudflare-worker/test/runtime_schema_declared_d235.test.ts`.
+ *
  * Fails the build when the worker's own runtime DDL can create a schema object
  * the repo's fresh build does not have — or take one away.
  *

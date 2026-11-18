@@ -1,4 +1,10 @@
-/** D5532: profile a prepared release bundle locally before any production mutation. */
+/**
+ * D5532: locally profile a trusted production-shaped bundle and record its
+ * startup, health and artifact evidence.
+ *
+ * D5532: profile a prepared release bundle locally before any production
+ * mutation.
+ */
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';

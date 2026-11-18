@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * #6326: the `schema-change` skill's helper. `name --issue N --slug s` prints
+ * the new migration's path by the current UTC minute (D4106, D5398); `preflight
+ * [--base origin/main] [--issue N]` checks the branch's new migrations (name,
+ * identity, stamp, SQL) and the runtime DDL it adds; `checks` runs every schema
+ * guard in `test:guards` order plus `migration-immutability-gate.mjs` and
+ * prints pass or FAIL per guard. Reads git and the disk only.
+ *
  * #6326: the schema-change skill's helper. `name` and `preflight` read the
  * disk and git only; `checks` also fetches origin/main (through the
  * immutability gate). It never calls the GitHub API, writes a file, commits,

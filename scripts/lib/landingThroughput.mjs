@@ -1,3 +1,7 @@
+// D5623: native/batch capacity arithmetic, binary-bisection cost and strict
+// 14-day decision trigger; `landingThroughput.test.mjs` checks arithmetic,
+// evidence and table parity.
+//
 // D5623: pure capacity and binary-bisection cost model; a decision trigger, never a queue controller.
 const positive = (name, value, zero = false) => {
   if (!Number.isFinite(value) || (zero ? value < 0 : value <= 0)) throw new RangeError(`${name} must be ${zero ? 'nonnegative' : 'positive'} and finite`);

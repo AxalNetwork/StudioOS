@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+// D1541 (#3779): writes the deck icon set from the installed `lucide-react`
+// (ISC), sorted, so a second run writes the same bytes. No network. D4574 H3
+// (#4574): TWO files — `cloudflare-worker/src/services/decks/iconNames.json`
+// (the set's licence record, the asset path and the names, imported by
+// `elements.ts`) and `frontend/public/deck-icons/lucide-<version>.json` (the
+// nodes and the licence text, a static asset the Worker reads). `node
+// scripts/gen-deck-icon-set.mjs`.
+//
 // D1541 (#3779) — writes the deck icon set from the installed lucide-react:
 // every icon's SVG nodes (its `key`s dropped), and the set's licence record
 // (ISC, its copyright and the Feather notice it keeps). No network. The output

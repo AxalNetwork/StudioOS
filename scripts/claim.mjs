@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/**
+ * D5617: atomic claim refs, renewal, release, inspection and comment-only
+ * expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held,
+ * 4 label fallback required.
+ */
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { capBlockers, formatWip, localWipLabels, parseWipCap, readWip } from './lib/claimWip.mjs';

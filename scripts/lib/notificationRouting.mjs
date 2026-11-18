@@ -1,3 +1,6 @@
+// D5666: observational ownership and routing from claims, live rules and
+// existing CI digest.
+//
 // D5666: observational v1 policy adapter; authorities are atomic claims, live required rules and the existing CI digest.
 import { createHash } from 'node:crypto';
 import { parseClaim, isExpired } from './claims.mjs';

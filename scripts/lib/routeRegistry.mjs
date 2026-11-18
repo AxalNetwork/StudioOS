@@ -1,4 +1,12 @@
 /**
+ * #4105: the Worker's self-mounting route modules read as text — each `mount`
+ * export parsed, `_registry.ts`'s exact text, the routes it adds for the static
+ * readers, and everything wrong with the descriptors (a `before` nobody mounts,
+ * a cycle, a router also mounted by hand) or the registry's generator (not
+ * deterministic, or its output tracked by git, D5612). Owned by
+ * `../build-route-registry.mjs`; read by `../check-api-drift.mjs` and the
+ * Worker's api_drift and route_registry tests.
+ *
  * #4105 — the Worker's self-mounting route modules, read as text.
  *
  * A module under `cloudflare-worker/src/routes/` may export

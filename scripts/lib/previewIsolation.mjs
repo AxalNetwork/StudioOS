@@ -1,4 +1,8 @@
 /**
+ * #4566: the preview isolation matrix and its fail-closed preflight, over
+ * `branchConfig.mjs`'s TOML parser and an owner's read-only observation. Owned
+ * by `../check-preview-isolation.mjs`.
+ *
  * #4566 (Agent capacity A0) — is a preview environment provably separate from
  * production? The isolation matrix and the fail-closed preflight, pure: no
  * filesystem, no network, no Cloudflare call. `scripts/check-preview-isolation.mjs`

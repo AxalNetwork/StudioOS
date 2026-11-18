@@ -1,4 +1,10 @@
-/** Owner's 2026-10-21 Founder pricing. Offline planner for existing audited
+/**
+ * Offline Founder price requests from D1430’s owner table, shared
+ * recurring-price planner; emits audited change/create/archive requests with
+ * reasons and stable change keys. Run with `--catalog
+ * /path/to/catalog-export.json`; no production access.
+ *
+ * Owner's 2026-10-21 Founder pricing. Offline planner for existing audited
  * admin catalogue routes; never calls Stripe, D1 or the production API. */
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';

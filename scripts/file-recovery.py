@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# D6428: approved-class-only, lock-verified R2 snapshots and
+# suppression-required restore primitive; live activation waits for
+# counsel/#6650/#6654.
 """D6428: append-only, checksum-verified R2 file snapshots for counsel-approved record classes only.
 
 Live copies require an approved registry and a verified seven-year destination

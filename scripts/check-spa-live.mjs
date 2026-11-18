@@ -1,5 +1,15 @@
 #!/usr/bin/env node
 /**
+ * Every SPA shell route on both hosts returns the rendered shell (200 + `<div
+ * id="root">` + a hashed `/assets/*.js`) with the static security headers
+ * `docs/_headers` sets. Run as `npm run deploy`'s `postdeploy` hook and
+ * 6-hourly by `.github/workflows/post-deploy-smoke.yml`. Of the API it probes
+ * `/api/health`, `/api/auth/google/config`, and (D754) an unsigned `POST
+ * /api/channels/whatsapp/webhook`, which must never answer 2xx
+ * (`lib/webhookGuard.mjs`; the owner's side is
+ * `documentation/operations/WHATSAPP.md`) — nothing that signs anyone in, which
+ * is why it stayed green straight through the magic-link outage below.
+ *
  * Task #16 — Post-deploy live SPA smoke check.
  *
  * Task #15 added a BUILD-TIME guard (`scripts/check-spa-build.mjs` in the
