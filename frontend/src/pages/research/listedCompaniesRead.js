@@ -24,12 +24,13 @@
  * question 2, answer A), never a blank.
  */
 
+import { NOT_RECORDED } from '../../lib/absence.js';
+
 /** The Worker's page size for the listed companies (D595): one page per read. */
 export const LISTED_PAGE = 50;
 /** The Worker's own cap on `offset` (`LISTED_MAX_OFFSET`), as a page number. */
 const MAX_PAGE = Math.floor(200_000 / LISTED_PAGE) + 1;
 
-export const NOT_RECORDED = 'Not recorded';
 
 /** The Worker's sort keys, in the canvas's words. The first is the default. */
 export const LISTED_SORTS = [
