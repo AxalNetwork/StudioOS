@@ -237,7 +237,7 @@ test('envelope creation throwing → 500 envelope_creation_failed', async () => 
   const { deps, calls } = makeDeps({
     createEnvelope: async () => { throw new Error('docusign down'); },
   });
-  // Capture the expected console.error: D278 sends DocuSign's text there.
+  // Capture the expected console.error: D7256 logs the refusal by its code only.
   const origErr = console.error;
   const logged = [];
   console.error = (...a) => { logged.push(a.map(String).join(' ')); };
@@ -245,13 +245,13 @@ test('envelope creation throwing → 500 envelope_creation_failed', async () => 
     const r = await requestIntroLogic(ENV, INVESTOR, { founder_user_id: 200 }, deps);
     assert.equal(r.status, 500);
     assert.equal(r.body.error, 'envelope_creation_failed');
-    // RE-AIMED BY D278: the member reads our sentence; the thrown text is in
-    // the log beside the code and nowhere in the body.
+    // RE-AIMED BY D278, then D7256: the member reads our sentence; the log
+    // carries the code, and the thrown text is in neither the log nor the body.
     assert.match(r.body.message, /NDA could not be sent/);
     assert.doesNotMatch(JSON.stringify(r.body), /docusign down/);
     assert.equal(r.body.upstream, undefined);
-    assert.ok(logged.some((l) => l.includes('envelope_creation_failed') && l.includes('docusign down')),
-      'the provider text was not logged beside the code');
+    assert.ok(logged.some((l) => l.includes('envelope_creation_failed')), 'the refusal is logged by its code');
+    assert.ok(!logged.some((l) => l.includes('docusign down')), 'the provider text stays out of the log');
     assert.equal(calls.upsertPairwise.length, 0);
     assert.equal(calls.notify.length, 0);
   } finally {

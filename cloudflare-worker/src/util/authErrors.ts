@@ -21,6 +21,12 @@
  */
 import { BRANCH_ONLY, BRANCH_SUSPENDED, HQ_AUTHORING_ONLY, HQ_ONLY } from './branch';
 
+/** D7256: how `app.onError` logs a throw this table does not map, by event and
+ *  error kind only. It reaches `index.ts` through this module, which that
+ *  handler already imports, because `index.ts` is a frozen hub (D5615) and takes
+ *  no new import. */
+export { reportPrivateError } from './errorPrivacy';
+
 /** The sentence `requireStepUp` throws. A constant so the two readers below
  *  cannot drift from it the way a typed-in copy would. */
 export const STEP_UP_REQUIRED = 'step_up_required';
