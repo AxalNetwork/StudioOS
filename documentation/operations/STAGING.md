@@ -66,7 +66,7 @@ This compares what `[env.preview]` declares with production's
 | R2 | `COMPANY_LOGOS` | `studioos-company-logos` | `studioos-company-logos-preview` | Named, to create |
 | R2 | `BACKUPS` | `studioos-backups` | not declared | Not needed |
 | Durable Objects | 10 classes in this Worker (`PIPELINE_ROOM` … `WORK_GRAPH_LEASE`), tags `v1`–`v8` | in `studioos` | the same classes in `studioos-preview` | Created by the first deploy |
-| Durable Object | `MEETING_BOT_CONTAINER` | script `studioos-meeting-bot` | script `studioos-meeting-bot-preview` | **Another Worker. It is not known to exist. See open question 2.** |
+| Durable Object | `MEETING_BOT_CONTAINER` | script `studioos-meeting-bot` | not declared | **Dropped by owner decision** (2026-11-18, D7147 part 2): staging binds no meeting-bot host while `MEETING_BOT = "off"`. |
 | Analytics Engine | `ANALYTICS` | `studioos_metrics` | `studioos_metrics_preview` | Created by the first write |
 | Workers AI | `AI` | account-wide | account-wide | Cannot be isolated. Stubbed (step 7). |
 | Browser Run | `BROWSER` | account-wide | account-wide | Cannot be isolated. It must stay unused. |
@@ -215,6 +215,14 @@ They are fixed by D4566 and D7147.
    `MCP_SERVER_ENABLED = "false"`, `API_KEYS_ENABLED = "false"`,
    `ROUND_CALLS_ENABLED = "false"`, the WhatsApp and Telegram switches, and an
    empty AI Gateway slug.
+   **No meeting-bot binding.** By owner decision (2026-11-18, D7147 part 2,
+   amending D886 for staging), `[env.preview]` declares no
+   `MEETING_BOT_CONTAINER`, so staging never reaches a bot host. The guard
+   (`botBindingProblem` in `scripts/lib/meetingBotBinding.mjs`, run by
+   `meetingBotDeploy.test.mjs` and the Teams matrix row
+   `site_binds_its_own_bot_host`) allows a preview with no binding only while
+   `MEETING_BOT = "off"`. A preview binding, if one comes back, may name only
+   `studioos-meeting-bot-preview`, never production's host or a local class.
 5. **Inference is the stub.** Every deploy passes
    `--var AGENT_INFERENCE_STUB:deterministic`. The stub is honoured only when
    `ENVIRONMENT = "preview"` (D4594). `wrangler.toml` must never name that
@@ -275,7 +283,9 @@ SCRATCH=$(mktemp -d)   # create commands run here, away from wrangler.toml, so n
    Until it prints `[]`, **never run `npm run deploy:preview`**. The
    provisioning token has no zone permission, so a mistaken deploy fails
    instead of moving the hosts. Do not rely on that alone.
-3. **The meeting-bot binding is settled** (open question 2).
+3. **No meeting-bot binding.** `[env.preview]` declares no
+   `MEETING_BOT_CONTAINER` and keeps `MEETING_BOT = "off"` (open question 2,
+   settled).
 4. `node scripts/check-preview-isolation.mjs --static` passes.
 
 ### Step 1: D1
@@ -450,17 +460,15 @@ arrive in a new step-5 PR.
 ## Open questions for the owner
 
 1. **F.** Approve the estimate, at a ceiling of $20 a month, or decline it.
-2. **The meeting-bot binding.** `[env.preview]` binds
-   `MEETING_BOT_CONTAINER` to a Durable Object in the Worker
-   `studioos-meeting-bot-preview`. That Worker is deployed only by
-   `meeting-bot-deploy.yml`, behind `MEETING_BOT_DEPLOY_ENABLED`, and that
-   workflow's last five runs on `main` failed. A Worker that binds a Durable
-   Object class in a script that does not exist is expected to be refused at
-   upload. That is not verified here. Choose one:
-   - (a) the meeting-bot preview host is deployed first, and it stays off
-     (`MEETING_BOT = "off"`);
-   - (b) the binding leaves `[env.preview]` in the step-0 PR, because
-     meeting-bot preview is out of #7147's scope.
+2. **The meeting-bot binding. Settled, 2026-11-18: dropped.** The owner chose
+   (b) on #7147 and amended D886 for staging (D7147 part 2). `[env.preview]` no
+   longer binds `MEETING_BOT_CONTAINER` to `studioos-meeting-bot-preview`. That
+   Worker is deployed only by `meeting-bot-deploy.yml`, behind
+   `MEETING_BOT_DEPLOY_ENABLED`, its recent runs on `main` failed, and it is
+   not known to exist; a binding to a script that does not exist was expected
+   to be refused at upload. `MEETING_BOT` is `"off"` in preview, and the guards
+   refuse a preview with no binding if it is switched on. The meeting-bot
+   preview host stays out of #7147's scope.
 3. **The D1 scope of the staging token.** Accept product-level D1 Edit if
    per-database scope is not offered, or require it.
 4. **The preview host vars.** `APP_URL` and `EXTRA_DEV_ORIGINS` in
