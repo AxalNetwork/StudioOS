@@ -99,6 +99,7 @@ represents a bug that reached production once:
 | `check-production-queues.mjs` | D5535: prove the trusted candidate’s production producers, consumers and dead-letter queues exist in the release account before mutation. |
 | `check-worker-startup.mjs` | D5532: locally profile a trusted production-shaped bundle and record its startup, health and artifact evidence. |
 | `verify-production-candidate.mjs` | D5501: require the exact main SHA and its six trusted Actions check results. |
+| `release-rollback-class.mjs` | D7151: report-only release step that records, before any write, whether the release could be rolled back automatically (`auto`, `auto-additive`, `manual`), the reasons and the rollback target, into the release evidence and job summary. Always exits 0. Rules in `lib/rollbackClass.mjs`. |
 | `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
 | `check-decision-appends.mjs` | D6466 (#6466): a change that appends a section to a decision file already on its base. A `D<n>.md` or `D<n>-p<k>.md` there fails when it gains a `##`/`###` heading or more than 10 lines; it names the `D<n>-p<k>.md` to write instead (D5615). Typo and link fixes pass; a file the change creates passes. On a pull request it reads the merge commit's first parent, which a shallow checkout still names; a base it cannot resolve exits 2, never a pass; a push says it skipped. |
 

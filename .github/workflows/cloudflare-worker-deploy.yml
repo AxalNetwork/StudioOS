@@ -199,6 +199,21 @@ jobs:
           cd cloudflare-worker
           node node_modules/wrangler/bin/wrangler.js deployments list --config ../wrangler.toml --env production --json > "$RUNNER_TEMP/release-evidence/previous-deployments.json"
 
+      # D7151 (#7151) — REPORT ONLY. Before any write, record whether this
+      # release could be rolled back automatically: `auto`, `auto-additive` or
+      # `manual`, with the reasons and the version a rollback would return to
+      # (the live one in previous-deployments.json). It reads the plan and the
+      # deployments the step above recorded, plus the live version's bindings;
+      # unknown is manual. continue-on-error and the script's own exit 0 keep
+      # it from changing what the release does; #7152 acts on the class.
+      - name: Record the release rollback class
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-rollback-class.mjs "$RUNNER_TEMP/release-evidence"
+
       - name: Confirm the candidate still owns the production release
         id: admitted
         env:
