@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Introductions Quarterly Ask · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.nwi-cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.nwi-cv.nwi-dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.nwi-cv *{box-sizing:border-box}
+.nwi-cv a{color:var(--vt);text-decoration:none}
+.nwi-cv button{font-family:var(--sg);cursor:pointer}
+.nwi-cv :focus-visible,.nwi-cv .nwi-fv{outline:2px solid var(--vi);outline-offset:2px}
+.nwi-cv h1,.nwi-cv h2,.nwi-cv h3,.nwi-cv p,.nwi-cv ol,.nwi-cv ul,.nwi-cv dl,.nwi-cv dd,.nwi-cv dt{margin:0;padding:0}
+.nwi-cv ol,.nwi-cv ul{list-style:none}
+.nwi-mo{font-family:var(--mo)}
+.nwi-mu{color:var(--mu)}
+.nwi-eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.nwi-sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.nwi-sd .nwi-lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.nwi-logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.nwi-sd .nwi-grp{padding:6px 20px 4px}
+.nwi-sd nav{display:flex;flex-direction:column;gap:2px}
+.nwi-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.nwi-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.nwi-sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.nwi-mn{min-width:0;display:flex;flex-direction:column}
+.nwi-tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.nwi-srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.nwi-bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.nwi-ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.nwi-av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.nwi-sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.nwi-sp .nwi-e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.nwi-sp .nwi-vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.nwi-hdr{display:flex;flex-direction:column;gap:6px}
+.nwi-hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.nwi-hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.nwi-hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.nwi-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nwi-ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.nwi-ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nwi-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.nwi-ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.nwi-kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nwi-k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.nwi-k.nwi-att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.nwi-kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.nwi-kv.nwi-un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.nwi-ks{font-size:12px;color:var(--mu);line-height:1.45}
+.nwi-g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.nwi-c3{grid-column:span 3}
+.nwi-c4{grid-column:span 4}
+.nwi-c5{grid-column:span 5}
+.nwi-c6{grid-column:span 6}
+.nwi-c7{grid-column:span 7}
+.nwi-c8{grid-column:span 8}
+.nwi-c9{grid-column:span 9}
+.nwi-c12{grid-column:span 12}
+.nwi-cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.nwi-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nwi-ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.nwi-ch .nwi-sm{font:500 12px var(--mo);color:var(--mu)}
+.nwi-sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.nwi-cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.nwi-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.nwi-btn.nwi-p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.nwi-btn.nwi-t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.nwi-btn.nwi-ask .nwi-em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.nwi-btn[aria-disabled=true]{opacity:.6;cursor:default}
+.nwi-lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.nwi-foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.nwi-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.nwi-pl.nwi-a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nwi-pl.nwi-g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.nwi-pl.nwi-v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nwi-pl.nwi-r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nwi-nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nwi-nt.nwi-r{background:var(--negBg);border-color:var(--negE)}
+.nwi-nt.nwi-a{background:var(--amBg);border-color:var(--amE)}
+.nwi-nt.nwi-g{background:var(--posBg);border-color:var(--posE)}
+.nwi-ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nwi-nt.nwi-r .nwi-ic{background:var(--neg)}
+.nwi-nt.nwi-a .nwi-ic{background:var(--amT)}
+.nwi-nt.nwi-g .nwi-ic{background:var(--pos)}
+.nwi-nt .nwi-bt{margin-left:auto;flex:none}
+.nwi-sk{display:block;border-radius:6px;background:var(--skel)}
+.nwi-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.nwi-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.nwi-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.nwi-tbl .nwi-n{text-align:right;font-family:var(--mo)}
+.nwi-tbl td.nwi-na{color:var(--mu);font-weight:500}
+.nwi-tbl td b{font-weight:700}
+.nwi-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.nwi-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nwi-inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.nwi-dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.nwi-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.nwi-pg .nwi-pb{display:flex;gap:5px;align-items:center}
+.nwi-pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.nwi-pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.nwi-st{display:grid;gap:14px 18px}
+.nwi-st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.nwi-st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nwi-dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.nwi-sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.nwi-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.nwi-dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.nwi-dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.nwi-df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.nwi-stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.nwi-stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.nwi-stp span:first-child{border-radius:999px 0 0 999px}
+.nwi-stp span:last-child{border-radius:0 999px 999px 0}
+.nwi-stp span+span{border-left:0}
+.nwi-stp span.nwi-on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.nwi-stp span.nwi-nx{border-style:dashed}
+.nwi-tl{display:flex;flex-direction:column}
+.nwi-tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.nwi-tl li:first-child{border-top:0}
+.nwi-tl .nwi-mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.nwi-tl .nwi-mk.nwi-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.nwi-tl .nwi-mk.nwi-cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.nwi-tl .nwi-mk.nwi-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.nwi-tl .nwi-mk.nwi-no{border-style:dashed}
+.nwi-tl .nwi-w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.nwi-pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.nwi-pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.nwi-pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.nwi-ph .nwi-hrow h1{font-size:22px}
+.nwi-ph .nwi-kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.nwi-ph .nwi-k{padding:12px 13px}
+.nwi-ph .nwi-kv{font-size:22px}
+.nwi-ph .nwi-btn{min-height:44px}
+.nwi-ph .nwi-lk{min-height:44px}
+.nwi-msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.nwi-lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.nwi-lst li:first-child{border-top:0}
+.nwi-lst b{font-size:13.5px}
+.nwi-lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.nwi-bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.nwi-bar i{display:block;height:100%;background:var(--vi)}
+.nwi-toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.nwi-toast a{color:#c4b5fd!important}
+.nwi-pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.nwi-pr:first-of-type{border-top:0}
+.nwi-pr b{font-size:13px}
+.nwi-pr small{display:block;font-size:12px;color:var(--mu)}
+.nwi-grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grp:first-of-type{border-top:0}
+.nwi-step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.nwi-ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.nwi-tbl tr.nwi-cur td{background:var(--lav)}
+.nwi-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.nwi-sec h3{font-size:13.5px;font-weight:800}
+.nwi-ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.nwi-ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.nwi-ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.nwi-k.nwi-bad{border-color:var(--negE)}
+.nwi-tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+.nwi-lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+/* ---- NWI addendum (#6256): additions to the approved Network workspace look ---- */
+.nwi-cv{text-align:left}
+.nwi-cv table{border-spacing:0}
+.nwi-st.nwi-tx dd{font:700 14px var(--sg);letter-spacing:0;line-height:1.3}
+.nwi-sh.nwi-ro{grid-template-columns:196px minmax(0,1fr) 360px}
+.nwi-sd .nwi-sep{height:1px;background:var(--hair);margin:8px 16px}
+.nwi-bk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-ow{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.nwi-s.nwi-ur{color:var(--neg)}
+.nwi-s.nwi-rf{color:var(--ink)}
+.nwi-s b{font:800 12px var(--mo)}
+.nwi-cold{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nwi-vd{text-decoration:line-through;color:var(--mu)}
+.nwi-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.nwi-rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.nwi-rh b{display:flex;align-items:center;gap:8px;font-size:14px}
+.nwi-rh .nwi-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.nwi-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.nwi-q{align-self:flex-end;max-width:88%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.nwi-an{padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.nwi-src{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.nwi-src span::before{content:"↳ ";color:var(--vt)}
+.nwi-draft{border:1.5px dashed var(--lavE);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.nwi-draft p.nwi-tx{font-size:12.5px;line-height:1.55;white-space:normal}
+.nwi-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 11.5px var(--mo);color:var(--mu)}
+.nwi-ent{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:600 12.5px var(--sg);color:var(--ink)}
+.nwi-ent[aria-disabled=true]{color:var(--mu);border-style:dashed}
+.nwi-rin{margin-top:auto;padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px}
+.nwi-rin span{flex:1;display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px}
+.nwi-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px;flex-wrap:wrap}
+.nwi-line b.nwi-mo{font-size:14px}
+.nwi-grh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grh:first-child{border-top:0;padding-top:0}
+.nwi-grh h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.nwi-mc{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.nwi-mc .nwi-mh{display:flex;gap:10px;align-items:center}
+.nwi-mc .nwi-mh>div{flex:1;min-width:0}
+.nwi-mc small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rs{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink)}
+.nwi-rs span::before{content:"· ";color:var(--mu)}
+.nwi-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.nwi-strip{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);flex-wrap:wrap}
+.nwi-strip .nwi-it{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font-size:12.5px}
+.nwi-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.nwi-f{display:flex;flex-direction:column;gap:5px}
+.nwi-f label,.nwi-f .nwi-lb{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-in{display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink)}
+.nwi-in.nwi-hint{color:var(--mu)}
+.nwi-ta{min-height:76px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.nwi-cnt{align-self:flex-end;font:500 11px var(--mo);color:var(--mu)}
+.nwi-panel{background:var(--card);border:1px solid var(--hair);border-radius:14px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.nwi-panel .nwi-dh{padding:16px 20px 12px}
+.nwi-panel .nwi-dc{padding:14px 20px}
+.nwi-panel .nwi-df{padding:12px 20px}
+.nwi-pick{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.nwi-pick.nwi-on{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi);background:var(--lav)}
+.nwi-pick small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px}
+.nwi-rv dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-bn{display:flex;align-items:center;gap:10px;padding:10px 30px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.nwi-bn.nwi-ro{background:#334155;color:#fff}
+.nwi-bn.nwi-sup{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.nwi-bn b{font-weight:800}
+.nwi-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px;align-self:flex-start}
+.nwi-cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.nwi-cmp dl{display:grid;grid-template-columns:80px minmax(0,1fr);gap:4px 10px}
+.nwi-cmp dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-src2{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.nwi-tile b{font:700 22px var(--mo)}
+.nwi-ph.nwi-fx{height:844px;overflow:hidden}
+.nwi-ph .nwi-pbd{flex:1;min-height:0}
+.nwi-stk{flex:none;display:flex;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.nwi-stk .nwi-btn{flex:1;min-height:44px;font-size:14px}
+.nwi-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.nwi-pc .nwi-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nwi-pc small{font-size:12px;color:var(--mu)}
+.nwi-tab{width:768px;display:flex;flex-direction:column;min-height:1024px;position:relative}
+.nwi-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.nwi-doc h2{font-size:17px;font-weight:800}
+.nwi-doc h3{font-size:13.5px;font-weight:800;margin-bottom:6px}
+.nwi-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.nwi-doc .nwi-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.nwi-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.nwi-crop{padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:16px}
+.nwi-sheetc{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:640px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.nwi-lst small{display:block}
+.nwi-lst li>div{min-width:0}
+.nwi-cv td,.nwi-cv th,.nwi-cv dd,.nwi-cv li,.nwi-cv p,.nwi-cv h1,.nwi-cv h2,.nwi-cv h3{color:inherit}
+.nwi-tbl td{color:var(--ink)}
+.nwi-tbl td.nwi-mo{white-space:nowrap}
+.nwi-crop,.nwi-doc{box-sizing:border-box}
+/* NIQ · Network Introductions quarterly ask (#7065). Built on nwi_extra.css (#6256); only new pieces here. */
+.niq-slot{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--ink)}
+.niq-slot.niq-used{border-color:var(--hair2)}
+.niq-slot.niq-ret{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.niq-slot.niq-chk{color:var(--amT);background:var(--amBg);border:1px dashed var(--amE)}
+.niq-slot.niq-nos{color:var(--mu);border-style:dashed}
+.niq-ann{border:1.5px dashed #a78bfa;border-radius:10px;padding:9px 12px;font:500 11.5px var(--sg);line-height:1.55;color:var(--mu);background:transparent}
+.niq-ann code{font:500 11px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px;color:var(--ink)}
+.niq-ann.niq-say{border:1px solid var(--hair);border-left:3px solid var(--vi);background:var(--raised);color:var(--ink);font-size:12px}
+.niq-ann.niq-say b{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);margin-right:6px}
+.niq-now,.niq-prop{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;line-height:1.7;vertical-align:1px}
+.niq-now{border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.niq-prop{border:1px dashed #a78bfa;color:var(--vt);background:var(--lav)}
+.nwi-cd.niq-bad{border-color:var(--negE)}
+.nwi-cv .nwi-rv dd{min-width:0;overflow-wrap:anywhere}
+.niq-ann .nwi-bk,.niq-ann .nwi-ow{white-space:normal}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "NIQ03", "options": ["NIQ01", "NIQ02", "NIQ02B", "NIQ03", "NIQ12", "NIQ04", "NIQ04B", "NIQ05", "NIQ06", "NIQ12B", "NIQ06B", "NIQ06C", "NIQ07", "NIQ07B", "NIQ08", "NIQ08B", "NIQ09", "NIQ10", "NIQ11A", "NIQ11B", "NIQ11C", "NIQ11D", "NIQ11E", "NIQ11F", "NIQI", "NIQH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'NIQ03';
+    /* NIQ12 boards draw on the dark tokens; everything else is light. Look copied from nwi.js (#6256). */
+    const dark = B.indexOf('NIQ12') === 0;
+    const CV = 'cv' + (dark ? ' dk' : '');
+    const J = (a) => a.join('');
+    const mo = (s) => `<span class="mo">${s}</span>`;
+
+    /* ---------- annotations (not product copy) ---------- */
+    const TB = (t) => `<span class="bk" title="Needs backend work">◇ ${t}</span>`;
+    const TO = (t) => `<span class="ow" title="Owner decision">⚑ ${t}</span>`;
+    const LBL = (t) => `<span class="lbl">${t}</span>`;
+
+    /* ---------- NW5 state words: each has a glyph and a word ---------- */
+    const NR = (t) => `<span class="s">— Not recorded${t ? ' · ' + t : ''}</span>`;
+    const UR = (t) => `<span class="s ur">? Could not be read${t ? ' · ' + t : ''}</span>`;
+    const NONE = `<span class="s">○ None</span>`;
+    const RF = (t) => `<span class="s rf">⊘ Refused${t ? ' · ' + t : ''}</span>`;
+    const COLD = `<span class="cold">▽ Going cold</span>`;
+    const LATE = (t) => `<span class="pl a">◷ ${t}</span>`;
+    const E = `<span class="em" aria-hidden="true">E</span>`;
+    const SR = (t) => `<span class="sr">${t}</span>`;
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+
+    /* ---------- shell: company/project switcher top-left, sidebar = held licences, Account menu holds Portfolio, Companies, Licences ---------- */
+    const NAVS = {
+      i: ['Home', 'Deals', 'Portfolio', 'Axal VC Fund', 'Network', 'Research', '|', 'Trust', 'Firm Settings'],
+      f: ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', '|', 'Trust', 'Company Settings'],
+      a: ['Home', 'Network', 'Research', '|', 'Admin console']
+    };
+    const SW = { i: '[Harbor Lane Capital]', f: '[Elm Studio]', a: '[Axal HQ]' };
+    const GRP = { i: 'Investor', f: 'Founder', a: 'HQ' };
+    const INI = { i: 'IC', f: 'JA', a: 'HQ' };
+    const side = (r) => `<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company or project: ${SW[r]}">${SW[r]} <span aria-hidden="true">▾</span></button><span class="eye grp">${GRP[r]}</span><nav aria-label="${GRP[r]}">${J(NAVS[r].map((t) => t === '|' ? '<div class="sep"></div>' : `<a href="#"${t === 'Network' ? ' aria-current="page"' : ''}>${t}</a>`))}</nav></aside>`;
+    const top = (r) => `<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">${bell}</button><button type="button" class="av" style="border:0" aria-label="Account menu: Portfolio, Companies, Licences">${INI[r]}</button></div></div>`;
+    const RAILC = (t) => `<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">${t || 'Ask about your network'}</span></aside>`;
+    const railOpen = (c, ph) => `<aside class="rail" aria-label="Eadwyn"><div class="rh"><b><span class="e" aria-hidden="true">E</span>Eadwyn</b><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">→</button></div><div class="rb">${c}</div><div class="rin"><span>${ph || 'Ask about your network…'}</span><button type="button" class="btn">Ask</button></div></aside>`;
+    const shell = (r, body, o) => {
+      o = o || {};
+      const h = o.h || 900;
+      return `<div class="${CV}" style="width:1440px;min-height:${h}px">${o.banner || ''}<div class="sh${o.rail ? ' ro' : ''}" style="min-height:${h}px">${side(r)}<div class="mn">${top(r)}<main class="bd">${body}</main></div>${o.rail ? railOpen(o.rail, o.railPh) : RAILC(o.railT)}</div>${o.overlay ? '<div class="dim" aria-hidden="true"></div>' + o.overlay : ''}</div>`;
+    };
+    const TABS = (cur) => `<nav class="ptabs" aria-label="Network">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<a href="#"${t === cur ? ' aria-current="page"' : ''}>${t}</a>`))}</nav>`;
+    const HEAD = (o) => `${o.crumb ? `<nav aria-label="Breadcrumb" class="foot">${o.crumb}</nav>` : ''}<header class="hdr"><span class="eye">${o.eye || 'Network · Relationship intelligence'}</span><div class="hrow"><div><h1>${o.h1 || 'Your network'}</h1><p>${o.sub || 'Which ties need a touch, which reminders are due, and which introductions are moving.'}</p></div><div class="acts">${o.acts !== undefined ? o.acts : `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn p">Request introduction</button>`}</div></div></header>${o.tab === false ? '' : TABS(o.tab || 'Overview')}`;
+
+
+    /* request-introduction panels */
+    const STP = (n) => `<div class="stp" role="list" aria-label="Steps">${J(['Who', 'Introducer', 'Review'].map((t, i) => `<span role="listitem"${i + 1 === n ? ' class="on" aria-current="step"' : ''}>${i + 1 < n ? '✓ ' : ''}${i + 1} ${t}</span>`))}</div>`;
+    const panel = (eye, h, body, foot, w) => `<div class="panel" role="dialog" aria-labelledby="p${h.length}" style="width:${w || 440}px"><div class="dh"><div><span class="eye">${eye}</span><h2 id="p${h.length}">${h}</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="dc">${body}</div><div class="df">${foot}</div></div>`;
+    /* phone helpers */
+    const phTop = (t, back) => `<div class="pt"><button type="button" class="pi" aria-label="${back ? 'Back' : 'Open menu'}">${back ? '‹' : '☰'}</button><b style="font-size:15px">${t}</b><div style="display:flex"><button type="button" class="pi" aria-label="Ask Eadwyn"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)">E</span></button><button type="button" class="pi" aria-label="Notifications">${bell}</button></div></div>`;
+    const phone = (t, body, stk, o) => `<div class="${CV} ph${stk ? ' fx' : ''}" style="width:390px;min-height:${(o && o.h) || 844}px">${phTop(t, o && o.back)}<main class="pbd" style="overflow:hidden">${body}</main>${stk ? `<div class="stk">${stk}</div>` : ''}</div>`;
+    const MSEL = (cur) => `<label class="eye" for="ms">Section</label><select id="ms" class="msel" aria-label="Network section">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<option${t === cur ? ' selected="selected"' : ''}>${t}</option>`))}</select>`;
+
+    /* crop wrapper for state grids */
+    const crop = (w, body) => `<div class="${CV} crop" style="width:${w}px">${body}</div>`;
+    const stcard = (tag, h, body, cls) => `<section class="cd${cls ? ' ' + cls : ''}"><span class="tag">${tag}</span><div class="ch"><h2>${h}</h2></div>${body}</section>`;
+
+
+    /* ---------- NIQ · quarterly investor ask (#7065): sample data, fictional, the same on every board ----------
+       Today Mon 16 Nov 2026. [Iris Chen] at [Harbor Lane Capital], Free tier: 3 asks a quarter.
+       Q4 2026 (key 2026Q4): 2 used before today -> 1 of 3 left (the last slot). The ask to [Elm Studio] at 14:02 UTC uses it -> 0 of 3.
+       Withdrawing the unanswered [Tidepool Labs] ask returns one Q4 slot once -> 1 of 3.
+       Asks recorded before founders could answer (legacy, paid): [Arcpoint Energy] 2026-10-19 (Q4), [Tidepool Labs] 2026-11-03 (Q4), one hidden target 2026-08-12 (Q3).
+       Intro credits (4) are a separate balance and never move here. */
+    const CAP = 3;
+    const QL = 'Q4 2026';
+    const QK = '2026Q4';
+    const LEFT = (n) => `<b class="mo">${n}</b> of <b class="mo">${CAP}</b> asks left this quarter (${QL})`;
+    const RID = 'a7c4e2d0';
+    const UID = 'a7c4e2d0-5b1f-4c9e-9d2a-31f0c6b8e417';
+    const AT = '2026-11-16 14:02 UTC';
+    const MSG = 'We lead pre-seed rounds in creative tools and would like to meet before [Elm Studio] raises. Happy to share how we work with design-led teams.';
+    const MLEN = MSG.length;
+    const CREDS = `Intro credits are separate: <b class="mo">4</b> available, none used by an ask`;
+    const FV = ' fv';
+
+    /* slot states: each has a glyph and a word */
+    const SLOT = (k, t) => {
+      const m = { used: ['●', 'Slot used', 'niq-used'], ret: ['↺', 'Slot returned', 'niq-ret'], chk: ['◌', 'Slot being checked', 'niq-chk'], none: ['○', 'No slot used', 'niq-nos'] }[k];
+      return `<span class="niq-slot ${m[2]}"><span aria-hidden="true">${m[0]}</span>${m[1]}${t ? ' · ' + t : ''}</span>`;
+    };
+    const STAT = {
+      pend: `<span class="pl">◷ Pending</span>`,
+      acc: `<span class="pl g">✓ Accepted</span>`,
+      dec: `<span class="pl">◌ Declined</span>`,
+      wd: `<span class="pl">⊘ Withdrawn</span>`,
+      chk: `<span class="pl a">◌ Being checked</span>`
+    };
+    const ANN = (t) => `<div class="niq-ann">${t}</div>`;
+    const SAY = (t) => `<div class="niq-ann niq-say"><b>Announced</b> “${t}”</div>`;
+    const NOW = (t) => `<span class="niq-now">${t || 'On main today'}</span>`;
+    const PROP = (t) => `<span class="niq-prop">Proposed · ${t}</span>`;
+
+    /* the asks, as GET /api/introductions returns them (D6260 names a target only where the viewer may see it) */
+    const ASKS_T = [
+      { n: '[Jules Avery]', v: '[Elm Studio]', m: MSG, at: '2026-11-16', q: QL, st: 'pend', slot: 'used', legacy: 0, nw: 1 },
+      { n: '[Grace Tan]', v: '[Tidepool Labs]', m: null, at: '2026-11-03', q: QL, st: 'pend', slot: 'used', legacy: 1 },
+      { n: '[Sofia Lind]', v: '[Arcpoint Energy]', m: 'We back climate hardware at seed and would like to meet before your round opens.', at: '2026-10-19', q: QL, st: 'pend', slot: 'used', legacy: 1 },
+      { n: null, v: null, m: 'Interested in your seed round; we invest in textile tooling.', at: '2026-08-12', q: 'Q3 2026', st: 'pend', slot: 'used', legacy: 1 }
+    ];
+    const tgt = (a) => a.n ? `<b>${a.n}</b><small>Founder of ${a.v}</small>` : `<b class="mu">Not available</b><small>You can no longer see this founder or venture, so no name is shown.</small>`;
+    const msgCell = (a) => a.m ? `“${a.m}”` : '<span class="s">— No message was sent with this ask</span>';
+
+    /* Your asks section: today on main (status Pending only) */
+    const ASKSEC = (o) => {
+      o = o || {};
+      const rows = (o.rows || ASKS_T.slice(1));
+      return `<section class="cd" aria-labelledby="ya"><div class="ch"><h2 id="ya">Your asks</h2><span class="sm">${LEFT(o.left === undefined ? 1 : o.left)}</span></div>
+      ${o.banner || ''}
+      <table class="tbl"><thead><tr><th scope="col">Target</th><th scope="col">Message</th><th scope="col">Quarter</th><th scope="col">Asked</th><th scope="col">Status</th>${o.next ? '<th scope="col">Next</th>' : ''}</tr></thead><tbody>
+      ${J(rows.map((a) => `<tr${a.nw && o.hl ? ' class="cur"' : ''}><td>${tgt(a)}</td><td style="max-width:360px">${msgCell(a)}</td><td class="mo">${a.q}</td><td class="mo">${a.at}</td><td>${STAT[a.st]}${o.slot ? `<div style="margin-top:4px">${SLOT(a.slot)}</div>` : ''}</td>${o.next ? `<td>${o.next(a)}</td>` : ''}</tr>`))}</tbody></table>
+      ${o.foot === undefined ? `<p class="foot">An ask’s status is written when you make it and nothing moves it yet. A reply is a conversation, not a row here.</p>` : o.foot}</section>`;
+    };
+
+    /* Introductions page around Your asks (NW3 groups collapsed to their summary lines) */
+    const GROUPS = `<section class="cd" aria-labelledby="ft"><div class="ch"><h2 id="ft">From your team</h2><span class="sm">1 received · 4 sent · no credit is used</span></div><p class="sub">Requests between teammates. Unchanged from NW3. <a href="#">Open →</a></p></section>
+      <section class="cd" aria-labelledby="cm"><div class="ch"><h2 id="cm">Curated matches</h2><span class="sm"><b class="mo">4</b> credits available</span></div><p class="sub">Accepting a match uses 1 credit. A different workflow from an ask (#7064). <a href="#">Open →</a></p></section>`;
+    const QUOTALINE = (n) => `<div class="line"><span>${LEFT(n)} · an ask names a founder or a startup on Axal</span><span class="acts"><span class="foot">Free tier · Q1 2027 starts 2027-01-01</span></span></div>`;
+
+    /* ---------- request sheet (NW3.1 continued) ---------- */
+    const STP4 = (n) => `<div class="stp" role="list" aria-label="Steps">${J(['Who', 'Introducer', 'Review', 'Sent'].map((t, i) => `<span role="listitem"${i + 1 === n ? ' class="on" aria-current="step"' : ''}>${i + 1 < n ? '✓ ' : ''}${i + 1} ${t}</span>`))}</div>`;
+    const ELMCARD = `<div class="pick on"><span class="av">ES</span><div><b>[Elm Studio]</b><small>Startup on Axal · founder [Jules Avery] · design tools, pre-seed</small></div><span class="pl v">✓ Chosen</span></div>`;
+    const Q1 = panel('Request introduction · step 1 of 3', 'Who do you want to meet?', `${STP(1)}<div class="seg" role="radiogroup" aria-label="Search for"><button type="button" role="radio" aria-checked="false">Person</button><button type="button" role="radio" aria-checked="true">Company</button><button type="button" role="radio" aria-checked="false">Fund</button></div><div class="f"><label for="q1">Company name</label><span id="q1" class="in">[Elm Studio]</span></div>${ELMCARD}<p class="foot">Results are founders and startups you can already see on Axal. One you cannot see is never listed, so a search never reveals it.</p>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Find who knows them</button>`);
+    const Q2 = panel('Request introduction · step 2 of 3', 'Who can introduce you?', `${STP(2)}<p class="sub">[Elm Studio] · founder [Jules Avery]</p>
+      <div class="nt"><span class="ic" aria-hidden="true">○</span><div><b>No teammate knows them.</b> Nobody on your teams who shares their book has [Jules Avery] or [Elm Studio] recorded. Checked ${mo('14:01')}.</div></div>
+      <div class="cd" style="border-color:var(--lavE);background:var(--lav);padding:13px 14px;gap:8px"><span class="eye">Fallback · a quarterly ask</span><b style="font-size:13.5px">Ask Axal to introduce you to [Jules Avery]</b><p class="sub">Offered because no warm path exists and [Elm Studio] is a startup on Axal. It uses <b>1 quarterly ask</b>, not an intro credit.</p><div class="line" style="background:var(--card)"><span>${LEFT(1)}</span><span class="pl a">! Last ask</span></div></div>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Review the ask</button>`);
+    const Q2T = panel('Request introduction · step 2 of 3 · another target', 'Who can introduce you?', `${STP(2)}<p class="sub">[Lena Sato] · founder, [Kelp Bio]</p>
+      <div class="pick on"><span class="av">TB</span><div><b>[Tom Becker]</b><small>Teammate at [Harbor Lane Capital] · advisor tie with Lena</small></div><span class="pl v">✓ Chosen</span></div>
+      <div class="line"><b>No credit and no ask is used for a team request</b></div>
+      <p class="sub">A teammate knows her, so no quarterly ask is offered. The team path stays first.</p>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Continue</button>`);
+
+    /* the confirm (review) panel: used in the sheet, tablet, phone and dark */
+    const REVIEW = (o) => {
+      o = o || {};
+      return `${o.nostep ? '' : STP(3)}<dl class="rv">
+      <dt>Venture</dt><dd><b>[Elm Studio]</b> · startup on Axal</dd>
+      <dt>Received by</dt><dd><b>[Jules Avery]</b>, founder <span class="foot">· shown because you can see this founder</span></dd>
+      <dt>Cost</dt><dd><b>1 quarterly ask</b> <span class="foot">· not an intro credit</span></dd>
+      <dt>Quarter</dt><dd class="mo">${QL} · ${QK}</dd>
+      <dt>Allowance</dt><dd><b class="mo">1</b> of <b class="mo">${CAP}</b> left now · <b class="mo">0</b> after this ask</dd></dl>
+      <div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>This is your last ask for ${QL}.</b> The next quarter starts ${mo('2027-01-01')}. Team requests stay free.</div></div>
+      <div class="f"><label for="qm${o.id || ''}">Message to [Jules Avery] (optional)</label><span id="qm${o.id || ''}" class="in ta">${MSG}</span><span class="cnt">${MLEN} / 2,000</span></div>
+      ${o.eadwyn === false ? '' : `<div class="acts"><button type="button" class="btn ask">${E}Draft the message</button><span class="foot">est. [400] tokens, quoted before drafting</span>${TB('ask draft · #6256')}</div>`}
+      <p class="sub"><b>An ask is not consent from the founder.</b> [Jules] will be told and can accept or decline. ${TB('#6261')}</p>`;
+    };
+    const SENDBTN = (s) => s === 'busy' ? `<button type="button" class="btn p" aria-disabled="true" aria-busy="true">Sending…</button>` : `<button type="button" class="btn p${s === 'fv' ? FV : ''}">Use 1 ask and send</button>`;
+    const CONFIRMSHEET = `<aside class="sheet-r" role="dialog" aria-modal="true" aria-labelledby="cs" style="width:560px">
+      <div class="dh"><div><span class="eye">Request introduction · step 3 of 3</span><h2 id="cs">Review the ask</h2></div><button type="button" class="ib" aria-label="Close and return to Introductions">✕</button></div>
+      <div class="dc">${REVIEW({ id: 's' })}</div>
+      <div class="df"><button type="button" class="btn t">Back</button>${SENDBTN('fv')}</div></aside>`;
+
+    /* ---------- the receipt ---------- */
+    const RCPT = (o) => {
+      o = o || {};
+      const st = o.st || 'pend';
+      return `<dl class="rv">
+      <dt>Receipt</dt><dd class="mo">${RID} <span class="foot">· ${UID}</span></dd>
+      <dt>Asked</dt><dd class="mo">${AT}</dd>
+      <dt>Venture</dt><dd>[Elm Studio]</dd>
+      <dt>Founder</dt><dd>[Jules Avery]</dd>
+      <dt>Cost</dt><dd>1 quarterly ask · ${QL}</dd>
+      <dt>Slot</dt><dd>${SLOT(o.slot || 'used', o.slotT || 'charged once, at ' + mo('14:02'))}</dd>
+      <dt>Status</dt><dd>${STAT[st]}${o.stT ? ' <span class="foot">' + o.stT + '</span>' : ''}</dd>
+      <dt>Message</dt><dd>“${MSG}”</dd></dl>`;
+    };
+
+    /* ---------- founder side ---------- */
+    const FDEC = `<section class="cd" aria-labelledby="fa"><div class="ch"><h2 id="fa">The ask</h2>${STAT.pend}</div>
+      <dl class="st tx" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><dt>From</dt><dd>[Iris Chen]<small>Investor · [Harbor Lane Capital]</small></dd></div><div><dt>For</dt><dd>[Elm Studio]<small>you are its founder</small></dd></div><div><dt>Asked</dt><dd class="mo">2026-11-16<small>14:02 UTC · through Axal</small></dd></div></dl>
+      <div class="nt"><span class="ic" aria-hidden="true">“</span><div><b>[Iris]’s message.</b> “${MSG}”</div></div></section>`;
+
+    const tableHdr = (cols) => `<thead><tr>${J(cols.map((c) => `<th scope="col">${c}</th>`))}</tr></thead>`;
+
+    let html = '';
+
+    /* ===== NW3-intro-ask.0 · Your asks as stored today ===== */
+    if (B === 'NIQ01') html = shell('i', `${HEAD({ tab: 'Introductions', h1: 'Introductions', sub: 'Requests between teammates, matches Axal curates for you, and the asks your tier allows. Three sources, never one count.' })}
+      ${QUOTALINE(1)}${GROUPS}
+      ${ASKSEC({ left: 1 })}
+      ${ANN(`${NOW()} <code>GET /api/introductions</code> returns <code>uid, quarter, message, status, created_at</code> and, by D6260, a target name only where you may see it (“Not available” otherwise). <code>status</code> is written as <code>pending</code> and nothing moves it. No Withdraw, no founder answer and no receipt page exist yet, so none is drawn here.`)}`, { h: 900, railT: 'Ask about introductions' });
+
+    /* ===== NW3-intro-ask.1 · Choose the target ===== */
+    else if (B === 'NIQ02') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">${Q1}${Q2}${Q2T}</div>${ANN('Who-knows comes first (<code>routes/relationships.ts</code>). The ask is offered only as the fallback: no warm path, and the target is a founder or startup you can see. The team path (right) never offers an ask and never spends anything.')}`);
+    else if (B === 'NIQ02B') html = crop(1400, `<div class="g3">
+      ${stcard('Not eligible · a fund', 'An ask cannot be used here', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>[Corran Ventures] is a fund.</b> An ask can name only a founder or a startup on Axal.</div></div><p class="sub">Nothing was sent and no ask was used. ${LEFT(1)}.</p><div class="acts"><button type="button" class="btn">Search someone else</button></div>`)}
+      ${stcard('Not eligible · not available to you', 'This founder or venture is not available to you', `<div class="nt"><span class="ic" aria-hidden="true">⊘</span><div>No ask was sent and none was used.</div></div><p class="sub">The same words appear whether the target is hidden from you or does not exist, so nothing about another member is disclosed.</p><p class="foot">${NOW('404 target_not_available')}</p><div class="acts"><button type="button" class="btn">Search someone else</button></div>`)}
+      ${stcard('Eligibility could not be read', 'We could not check this target', `<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>Whether you can reach [Elm Studio] could not be read.</b> No ask was sent and none was used.</div></div><p class="sub">Your message is kept. Use 1 ask stays off until the check succeeds.</p><p class="foot">${NOW('503 target_unreadable')}</p><div class="acts"><button type="button" class="btn" aria-disabled="true">Use 1 ask and send</button><button type="button" class="btn">Try again</button></div>`, 'niq-bad')}</div>
+      ${ANN('Today these refusals come back from <code>POST /api/introductions/request</code> itself, before any slot is reserved (D6260). Proposed: check eligibility at step 1 so the investor learns it before writing a message. ' + TB('eligibility read · #7065'))}`);
+
+    /* ===== NW3-intro-ask.2 · Confirm (last slot) ===== */
+    else if (B === 'NIQ03' || B === 'NIQ12') html = shell('i', `${HEAD({ tab: 'Introductions', h1: 'Introductions', sub: 'Requests between teammates, matches Axal curates for you, and the asks your tier allows. Three sources, never one count.' })}${QUOTALINE(1)}${GROUPS}${ASKSEC({ left: 1 })}`, { h: 1000, railT: 'Ask about introductions', overlay: CONFIRMSHEET });
+
+    /* ===== NW3-intro-ask.3 · Sending and recovery ===== */
+    else if (B === 'NIQ04') html = crop(1400, `<div class="g3">
+      ${stcard('1 · Sending', 'Use 1 ask and send', `<div class="acts">${SENDBTN('busy')}</div><p class="sub">The button locks on the first click. ${SLOT('chk', 'not counted as used or kept until the answer arrives')}</p>${SAY('Sending your ask to [Jules Avery].')}<p class="foot">${NOW('client lock: one request per target')}</p>`)}
+      ${stcard('2 · Clicked twice', 'Still one ask', `<p class="sub">A second click while sending does nothing: the request is already on its way, and only one is sent.</p><div class="acts">${SENDBTN('busy')}</div><p class="foot">${NOW('createIntroRequests ignores a target already sending or pending')}</p>`)}
+      ${stcard('3 · Second tab', 'Sent from another tab', `<div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>This ask was already sent from another tab.</b> Receipt ${mo(RID)} · ${mo(AT)}. Nothing was sent again and no second ask was used.</div></div><div class="acts"><a class="btn" href="#">Open the receipt</a></div><p class="foot">${TB('request key · #7065')} Today a second tab with a slot left would record and charge a second ask; the route takes no request key.</p>`)}
+      ${stcard('4 · Save failed', 'The ask was not sent', `<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>Not sent. No ask was used.</b> The server refused before reserving a slot.</div></div><p class="sub">Your message is kept (${MLEN} characters).</p>${SLOT('none')}<div class="acts"><button type="button" class="btn">Try again</button></div>${SAY('Not sent. No ask was used. Your message is kept.')}`, 'niq-bad')}
+      ${stcard('5 · Response lost', 'We could not confirm the ask', `<div class="nt a"><span class="ic" aria-hidden="true">?</span><div><b>The connection dropped before an answer.</b> The ask may or may not be recorded.</div></div><p class="sub">${SLOT('chk')} Your allowance is not shown as changed until your recorded asks are read again.</p><div class="acts"><button type="button" class="btn">Check what was recorded</button></div><p class="foot">Never a second send. Check reads <code>GET /api/introductions</code> and <code>/quota</code>.</p>`)}
+      ${stcard('6 · Retry finds the receipt', 'Your ask was recorded', `<div class="nt g"><span class="ic" aria-hidden="true">✓</span><div><b>Found: sent at ${mo('14:02')}.</b> Receipt ${mo(RID)}. Nothing was sent twice.</div></div><p class="sub">${SLOT('used', 'once')} ${LEFT(0)}.</p><div class="acts"><a class="btn" href="#">Open the receipt</a></div>${SAY('Your ask was recorded at 14:02. 0 of 3 asks left in Q4 2026.')}<p class="foot">${TB('match by request key · #7065')}</p>`)}</div>
+      ${ANN(`${TB('used, not recorded · #7065')} The route reserves the slot, then inserts the ask. If the insert fails, a slot is used with no ask. Proposed: one write, or a returned slot recorded as such. Until then this case reads “Slot being checked”, never “No ask was used”.`)}`);
+    else if (B === 'NIQ04B') html = crop(1400, `<div class="g3">
+      ${stcard('Quota used up · 402', 'No asks left this quarter', `<div class="line"><span>${LEFT(0)}</span></div><p class="sub">You have used all <b class="mo">3</b> introductions for ${QL}. Q1 2027 starts ${mo('2027-01-01')}.</p><div class="acts"><button type="button" class="btn" aria-disabled="true">Use 1 ask and send</button><a class="btn t" href="#">Compare tiers →</a></div><p class="foot">Your message is kept. The next tier allows more asks a quarter; upgrading is a separate, priced step. A team request stays free.</p>`)}
+      ${stcard('Quota could not be read', 'Asks this quarter', `<div class="line" style="border-color:var(--negE);background:var(--negBg)"><span>Asks left this quarter</span>${UR()}</div><p class="sub">Use 1 ask stays off until your allowance can be read. It is never drawn as 0 or as 3.</p><div class="acts"><button type="button" class="btn" aria-disabled="true">Use 1 ask and send</button><button type="button" class="btn">Try again</button></div>`, 'niq-bad')}
+      ${stcard('Slot words', 'Used, returned or being checked', `<ul class="lst"><li><div>${SLOT('used')}<small>The server recorded the ask and counted it.</small></div></li><li><div>${SLOT('ret')}<small>A confirmed withdrawal gave it back, once. ${TB('#6261')}</small></div></li><li><div>${SLOT('chk')}<small>No confirmed answer yet. Never drawn as used or returned.</small></div></li><li><div>${SLOT('none')}<small>Refused before a slot was reserved.</small></div></li></ul>`)}</div>`);
+
+    /* ===== NW3-intro-ask.4 · Receipt ===== */
+    else if (B === 'NIQ05') html = shell('i', `${HEAD({ tab: 'Introductions', crumb: '<a href="#">Network</a> › <a href="#">Introductions</a> › Your asks › ' + RID, eye: 'Ask · receipt ' + RID, h1: 'Your ask to [Jules Avery] at [Elm Studio]', sub: `Sent ${mo(AT)} · 1 quarterly ask · ${QL}`, acts: `<button type="button" class="btn ask">${E}Ask</button>` })}
+      <div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Ask sent.</b> Receipt ${mo(RID)}. ${LEFT(0)}. Focus moved to this heading; Back returns to Your asks.</div></div>
+      <div class="g"><div class="c7" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd" aria-labelledby="rc"><div class="ch"><h2 id="rc">Receipt</h2>${STAT.pend}</div>${RCPT()}</section>
+      <section class="cd" aria-labelledby="nx"><div class="ch"><h2 id="nx">What happens next</h2></div><ul class="tl">
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>Ask recorded</b><div class="foot">${NOW()} the stored state is Pending</div></div><span class="w">${AT}</span></li>
+      <li><span class="mk no" aria-hidden="true">○</span><div><b>[Jules Avery] is told</b><div class="foot">${PROP('notification to the founder')} ${TB('#6261')}</div></div><span class="w">not yet</span></li>
+      <li><span class="mk no" aria-hidden="true">○</span><div><b>[Jules] accepts or declines</b><div class="foot">You see the recorded answer and when. ${TB('#6261')}</div></div><span class="w">—</span></li>
+      <li><span class="mk no" aria-hidden="true">○</span><div><b>NDA step in Trust Center</b><div class="foot">Opens after acceptance. Acceptance does not sign it. ${TB('#6261')}</div></div><span class="w">—</span></li></ul>
+      <div class="cf"><span class="foot">While unanswered you can withdraw it and get this slot back once. ${TB('withdraw · #6261')}</span><button type="button" class="btn">Withdraw ask</button></div></section></div>
+      <div class="c5" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd" aria-labelledby="ws"><div class="ch"><h2 id="ws">One receipt, two readers</h2></div>
+      <table class="tbl">${tableHdr(['On the receipt', 'You (investor)', '[Jules] (founder)'])}<tbody>
+      <tr><td>Who asked, venture, message, date</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Status and the founder’s answer</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Your allowance, tier and slot</td><td>✓</td><td>⊘ never shown</td></tr>
+      <tr><td>Withdraw</td><td>✓ while unanswered</td><td>—</td></tr>
+      <tr><td>Accept · Decline</td><td>—</td><td>✓ while unanswered</td></tr>
+      <tr><td>Your other asks</td><td>✓</td><td>⊘ never shown</td></tr></tbody></table>
+      <p class="foot">Anyone else opening ${mo(RID)} gets “This ask is not available to you”, with no hint that it exists. ${TB('founder read · #6261')}</p></section>
+      <section class="cd"><div class="ch"><h2>Allowance</h2></div><div class="line"><span>${LEFT(0)}</span></div><p class="foot">${CREDS}.</p></section></div></div>`, { h: 1060, railT: 'Ask about this ask' });
+
+    /* ===== NW3-intro-ask.5 · Founder decision (implementation-dependent) ===== */
+    else if (B === 'NIQ06' || B === 'NIQ12B') html = shell('f', `${HEAD({ tab: 'Introductions', crumb: '<a href="#">Network</a> › <a href="#">Introductions</a> › Asked of you', eye: 'Ask · from an investor through Axal', h1: '[Iris Chen] asks to be introduced to you', sub: `Opened from your notification · ${mo('2026-11-16 14:03 UTC')}`, acts: `<span class="pl a" style="font-size:12.5px;padding:3px 11px">◷ Waiting · your decision</span><button type="button" class="btn ask">${E}Ask</button>` })}
+      <div class="g"><div class="c8" style="display:flex;flex-direction:column;gap:16px">${FDEC}
+      <section class="cd" aria-labelledby="yd"><div class="ch"><h2 id="yd">Your decision</h2></div>
+      <div class="f"><label for="fn">Note to [Iris] (optional)</label><span id="fn" class="in ta hint">Add a note [Iris] can read…</span><span class="cnt">0 / 1000</span></div>
+      <p class="sub"><b>Accepting opens the NDA step in Trust Center.</b> It does not sign the NDA and does not record an introduction as made. Declining is final and [Iris] sees “Declined”.</p>
+      <div class="cf"><span class="foot">Answering costs you nothing.</span><div class="acts"><button type="button" class="btn">Decline</button><button type="button" class="btn p">Accept</button></div></div></section></div>
+      <div class="c4" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd"><div class="ch"><h2>What [Iris] can see</h2></div><p class="sub">This ask, your answer and when, and your note. Not your other asks, your book or your Trust Center.</p></section>
+      <section class="cd"><div class="ch"><h2>About this ask</h2></div><p class="sub">An investor can ask Axal for an introduction to a founder when none of their teammates knows you. It is not consent from you.</p></section>
+      ${ANN(`${PROP('the owner-approved flow, A in #6261')} ${TB('#6261')} Needs the founder notification, a founder read of one ask, accept and decline, and decided_at / decided_by. Nothing on main shows a founder an ask today.`)}</div></div>`, { h: 960, railT: 'Ask about this ask' });
+    else if (B === 'NIQ06B') html = crop(1400, `<div class="g3">
+      ${stcard('Founder · after Accept', 'You accepted', `<div class="acts">${STAT.acc} <span class="foot">${mo('2026-11-17 10:20 UTC')}</span></div><div class="nt"><span class="ic" aria-hidden="true">→</span><div><b>Next: the NDA step.</b> Trust Center opens the mutual NDA for [Elm Studio], [Harbor Lane Capital] and Axal. Nothing is signed yet.</div></div><div class="acts"><button type="button" class="btn p">Open the NDA step</button></div>${SAY('Accepted. Next: the NDA step in Trust Center.')}`)}
+      ${stcard('Investor · recorded answer', 'Accepted by [Jules Avery]', `<div class="acts">${STAT.acc} <span class="foot">${mo('2026-11-17 10:20 UTC')}</span></div><p class="sub">[Jules]’s note: “Glad to talk. Sign the NDA and we’ll find a time.”</p><p class="sub">The NDA is <b>not signed</b>. No introduction is recorded as made.</p><div>${SLOT('used', 'kept: the ask was answered')}</div><div class="acts"><a class="btn" href="#">Open the NDA step</a></div>`)}
+      ${stcard('Investor · declined', 'Declined by [Sofia Lind]', `<div class="acts">${STAT.dec} <span class="foot">${mo('2026-11-18 09:05 UTC')}</span></div><p class="sub">No note was left. The 2026-10-19 ask, sent to her on 2026-11-16.</p><div>${SLOT('used', 'kept: the ask was answered')}</div><p class="foot">${TO('a declined ask keeps its slot · A')}</p>`)}</div>
+      ${ANN(`${TB('accept/decline, status accepted/declined · #6261')} ${TB('who issues the NDA envelope after acceptance · #6261')} Today <code>POST /api/trust/intro/request</code> is called by an investor and notifies the founder to sign.`)}`);
+    else if (B === 'NIQ06C') html = shell('f', `<nav aria-label="Breadcrumb" class="foot"><a href="#">Trust</a> › NDAs › [Elm Studio] × [Harbor Lane Capital]</nav>
+      <div class="nt" role="navigation" aria-label="Return"><span class="ic" aria-hidden="true">‹</span><div>You came here from the ask by [Iris Chen]. <a href="#">Back to the ask</a></div></div>
+      <header class="hdr"><span class="eye">Trust Center · mutual NDA</span><div class="hrow"><div><h1>Mutual NDA · [Elm Studio], [Harbor Lane Capital], Axal</h1><p>Three-party NDA from the Axal library. Each party signs on its own signing page.</p></div><div class="acts"><button type="button" class="btn p">Review and sign</button></div></div></header>
+      <div class="g"><section class="cd c8" aria-labelledby="sg"><div class="ch"><h2 id="sg">Signatures</h2><span class="pl a">◷ Awaiting signatures · 0 of 3</span></div><ul class="tl">
+      <li><span class="mk wa" aria-hidden="true">◷</span><div><b>[Jules Avery]</b> · founder, [Elm Studio]<div class="foot">you</div></div><span class="w">not signed</span></li>
+      <li><span class="mk wa" aria-hidden="true">◷</span><div><b>[Iris Chen]</b> · investor, [Harbor Lane Capital]</div><span class="w">not signed</span></li>
+      <li><span class="mk wa" aria-hidden="true">◷</span><div><b>Axal VC</b> · counter-signer</div><span class="w">not signed</span></li></ul></section>
+      <section class="cd c4"><div class="ch"><h2>Existing step</h2></div><p class="sub">This is the Trust Center NDA page as it is. Only the return line above is new.</p>${ANN(`${NOW('routes/trust.ts')} <code>/intro/request</code> mints the 3-way envelope; <code>/intro/status</code> reads it. ${TB('return-to-ask link · #7065')}`)}</section></div>`, { h: 760 }).replace('<a href="#" aria-current="page">Network</a>', '<a href="#">Network</a>').replace('<a href="#">Trust</a>', '<a href="#" aria-current="page">Trust</a>');
+
+    /* ===== NW3-intro-ask.6 · Withdrawal (Scope → Review → Result) ===== */
+    else if (B === 'NIQ07') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Withdraw · scope', 'Which ask?', `<div class="pick on"><span class="av">GT</span><div><b>[Grace Tan] · [Tidepool Labs]</b><small>Asked ${mo('2026-11-03')} · ${QL} · unanswered</small></div><span class="pl v">✓</span></div><p class="sub">Only an unanswered ask can be withdrawn. One that was accepted or declined stays as it is.</p>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Review</button>`, 420)}
+      ${panel('Withdraw · review', 'Withdraw this ask?', `<dl class="rv"><dt>Ask</dt><dd>[Grace Tan] · [Tidepool Labs]</dd><dt>Founder told</dt><dd>No · asked before founders could answer</dd><dt>Slot</dt><dd>1 ${QL} ask returns to you, <b>once</b></dd><dt>Allowance</dt><dd><b class="mo">0</b> of <b class="mo">3</b> now · <b class="mo">1</b> after a confirmed withdrawal</dd></dl><p class="sub">Withdrawn is final. [Grace] is not contacted.</p>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p${FV}">Withdraw ask</button>`, 440)}
+      ${panel('Withdraw · result', 'Ask withdrawn', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Withdrawn at ${mo('2026-11-16 14:30 UTC')}.</b> The server returned one ${QL} slot.</div></div><dl class="rv"><dt>Status</dt><dd>${STAT.wd}</dd><dt>Slot</dt><dd>${SLOT('ret', 'once')}</dd><dt>Allowance</dt><dd>${LEFT(1)}</dd></dl>${SAY('Ask withdrawn. 1 of 3 asks left in Q4 2026.')}`, `<span></span><button type="button" class="btn">Back to Your asks</button>`, 440)}</div>
+      ${ANN(`${TB('POST withdraw, one-time restore, status withdrawn · #6261')} Focus returns to the row in Your asks; its status reads Withdrawn.`)}`);
+    else if (B === 'NIQ07B') html = crop(1400, `<div class="g3">
+      ${stcard('Race · founder answered first', 'Not withdrawn', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>[Jules Avery] accepted at ${mo('10:20:12')}</b>, before your withdrawal arrived at ${mo('10:20:41')}.</div></div><dl class="rv"><dt>Status</dt><dd>${STAT.acc}</dd><dt>Slot</dt><dd>${SLOT('used', 'not returned')}</dd></dl><p class="sub">The recorded answer wins. Nothing was withdrawn and nothing was returned.</p><div class="acts"><a class="btn" href="#">Open the NDA step</a></div>`)}
+      ${stcard('Previous quarter · its own result', 'Q3 2026 ask withdrawn', `<div class="nt g"><span class="ic" aria-hidden="true">✓</span><div><b>Withdrawn.</b> The ask from ${mo('2026-08-12')} is closed.</div></div><dl class="rv"><dt>Slot</dt><dd>${SLOT('ret', 'to Q3 2026, which has ended')}</dd><dt>${QL}</dt><dd>${LEFT(1)} · unchanged</dd></dl><p class="sub">A returned Q3 slot does not add a Q4 ask.</p>`)}
+      ${stcard('Withdrawal not confirmed', 'Withdrawal being checked', `<p class="sub">[Grace Tan] · [Tidepool Labs]</p><div class="nt a"><span class="ic" aria-hidden="true">?</span><div><b>No answer from the server.</b> The ask may still be open.</div></div><dl class="rv"><dt>Status</dt><dd>${STAT.chk}</dd><dt>Slot</dt><dd>${SLOT('chk')}</dd><dt>Allowance</dt><dd>shown as before: ${LEFT(0)}</dd></dl><div class="acts"><button type="button" class="btn">Check again</button></div><p class="foot">A spinner never adds a slot back.</p>`)}</div>
+      ${ANN(`${TB('compare-and-set on status · #6261')} ${TB('per-quarter adjustment record · #7065')}`)}`);
+
+    /* ===== NW3-intro-ask.7 · Legacy recovery ===== */
+    else if (B === 'NIQ08') html = shell('i', `${HEAD({ tab: 'Introductions', h1: 'Introductions', sub: 'Requests between teammates, matches Axal curates for you, and the asks your tier allows. Three sources, never one count.' })}${QUOTALINE(0)}
+      ${ASKSEC({ left: 0, rows: ASKS_T, hl: 1, banner: `<div class="nt a" role="region" aria-label="Asks to resolve"><span class="ic" aria-hidden="true">!</span><div><b>3 asks were recorded before founders could answer them.</b> Each used a quarterly ask and nobody was told. Choose what happens to each one. Nothing is sent to a founder until you review and confirm it. ${TO('legacy policy · A, member decides')}</div></div>`, next: (a) => a.legacy ? (a.n ? `<button type="button" class="btn">Resolve</button>` : `<button type="button" class="btn">Resolve</button><small>can only be withdrawn or kept</small>`) : `<a class="btn t" href="#">Receipt</a>`, foot: `<p class="foot">The new ask to [Elm Studio] follows the founder-answer flow. ${TB('legacy resolution · #6261')}</p>` })}`, { h: 1020, railT: 'Ask about introductions', overlay: `<aside class="sheet-r" role="dialog" aria-modal="true" aria-labelledby="lg" style="width:560px"><div class="dh"><div><span class="eye">Resolve an earlier ask</span><h2 id="lg">[Sofia Lind] · [Arcpoint Energy]</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div>
+      <div class="dc"><dl class="rv"><dt>Asked</dt><dd class="mo">2026-10-19 · ${QL}</dd><dt>Founder told</dt><dd>No</dd><dt>Slot</dt><dd>${SLOT('used')}</dd></dl>
+      <div class="seg" role="radiogroup" aria-label="Choose what happens" style="flex-direction:column;align-items:stretch">
+      <button type="button" role="radio" aria-checked="true" style="text-align:left;min-height:44px">● Send it to [Sofia Lind] now · she will be told and can accept or decline</button>
+      <button type="button" role="radio" aria-checked="false" style="text-align:left;min-height:44px">○ Withdraw it · 1 ${QL} ask returns to you, once</button>
+      <button type="button" role="radio" aria-checked="false" style="text-align:left;min-height:44px">○ Keep it as a private record · nobody is told, the slot stays used</button></div>
+      <p class="sub">Choosing does nothing yet. The next step shows exactly what [Sofia] will read.</p></div>
+      <div class="df"><button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Review</button></div></aside>` });
+    else if (B === 'NIQ08B') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">
+      ${panel('Resolve · review', 'Send this ask to [Sofia Lind]?', `<p class="sub">[Sofia] will get a notification and open this ask. This is what she will read:</p><div class="pc"><span class="eye">From</span><b>[Iris Chen] · [Harbor Lane Capital]</b><span class="eye" style="margin-top:6px">Asked</span><span class="mo">2026-10-19 · sent to her 2026-11-16</span><span class="eye" style="margin-top:6px">Message</span><span>“We back climate hardware at seed and would like to meet before your round opens.”</span></div><div class="f"><label for="lm">Edit the message before it goes (optional)</label><span id="lm" class="in ta">We back climate hardware at seed and would like to meet before your round opens.</span><span class="cnt">82 / 2,000</span></div><p class="sub">No new ask is used: this one was paid on ${mo('2026-10-19')}.</p>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Notify [Sofia Lind]</button>`, 460)}
+      ${panel('Resolve · result', 'Sent to [Sofia Lind]', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>[Sofia] was told at ${mo('2026-11-16 14:20 UTC')}.</b> The ask is Pending her answer.</div></div><dl class="rv"><dt>Status</dt><dd>${STAT.pend}</dd><dt>Slot</dt><dd>${SLOT('used', 'no second charge')}</dd></dl>${SAY('Sent to Sofia Lind. No new ask was used.')}`, `<span></span><button type="button" class="btn">Back to Your asks</button>`, 420)}
+      ${panel('Resolve · target not available', 'This ask cannot be sent', `<div class="nt"><span class="ic" aria-hidden="true">⊘</span><div>You can no longer see this founder or venture, so the ask from ${mo('2026-08-12')} cannot be sent and no name is shown.</div></div><p class="sub">Withdraw it (its Q3 2026 slot is recorded as returned, ${QL} stays as it is) or keep it as a private record.</p>`, `<button type="button" class="btn">Keep</button><button type="button" class="btn p">Withdraw</button>`, 420)}</div>
+      ${ANN(`${TO('legacy policy · A: member decides per ask, nothing automatic')} ${TB('resolution endpoint, founder notification for an old ask · #6261')}`)}`);
+
+    /* ===== NW3-intro-ask.8 · Reads, refusals and support ===== */
+    else if (B === 'NIQ09') html = crop(1400, `<div class="g3">
+      ${stcard('Loading', 'Your asks', `<span class="sk" style="height:12px;width:60%"></span><span class="sk" style="height:34px"></span><span class="sk" style="height:34px"></span><p class="foot" role="status">Reading your asks and your allowance… Request introduction waits until both are read.</p>`)}
+      ${stcard('Verified empty', 'Your asks', `<p class="sub">${NONE} No ask is recorded. One appears here when you send one.</p><div class="line"><span>${LEFT(3)}</span></div>`)}
+      ${stcard('Optional fields missing', 'Your asks', `<table class="tbl"><tbody><tr><td>${tgt(ASKS_T[3])}</td></tr><tr><td><b>[Grace Tan]</b><small>${msgCell(ASKS_T[1])}</small></td></tr></tbody></table>`)}
+      ${stcard('Unavailable', 'Your asks', `<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>Your recorded asks could not be read.</b> Not shown as empty.</div></div><p class="sub">Request introduction is off: recorded asks must be readable before another is sent. Team requests still work.</p><div class="acts"><button type="button" class="btn">Try again</button></div>`, 'niq-bad')}
+      ${stcard('Refused · not an investor', 'Your asks', `<p class="sub">${RF()} Asks are for investor licences. Your licence can still request introductions from your team.</p><p class="foot">${NOW('403 investor_only')}</p>`)}
+      ${stcard('Refused · someone else’s ask', 'This ask is not available to you', `<p class="sub">${RF()} The link may be old, or the ask is not yours to read. Nothing about it is shown.</p><div class="acts"><a class="btn" href="#">Back to Introductions</a></div><p class="foot">${TB('per-ask read · #6261')}</p>`)}
+      ${stcard('HQ support session', 'Your asks · read-only', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Support session.</b> You can read this member’s asks. Send, withdraw, resolve and answer are off.</div></div><p class="foot">${TB('refuse writes in a support session · #7065')}</p>`)}
+      ${stcard('Eadwyn', 'Draft the message', `<div class="draft"><div class="cost"><span>Cost, quoted before drafting</span><b>[400] tokens</b></div><p class="tx">“We lead pre-seed rounds in creative tools…”</p><div class="acts"><button type="button" class="btn">Use in message</button><button type="button" class="btn">Edit</button><button type="button" class="btn t">Discard</button></div></div><p class="foot">Eadwyn drafts; it never sends, spends an ask or answers. ${TB('#6256')}</p>`)}
+      ${stcard('Saving kept your text', 'Message kept', `<p class="sub">After any recoverable error the message stays in the field, ${MLEN} characters, until you send or discard it.</p>`)}</div>`);
+
+    /* ===== Tablet 768 ===== */
+    else if (B === 'NIQ10') html = `<div class="${CV} tab">${phTop('Introductions').replace('class="pt"', 'class="pt" style="padding:0 12px"')}<main class="bd" style="padding:20px 24px;overflow:hidden">${HEAD({ tab: 'Introductions', h1: 'Introductions', sub: 'Team requests, curated matches and your asks.' })}${QUOTALINE(1)}${ASKSEC({ left: 1, rows: ASKS_T.slice(1, 3) })}</main><div class="dim" aria-hidden="true"></div><aside class="sheet-r" role="dialog" aria-modal="true" aria-labelledby="tc" style="width:600px"><div class="dh"><div><span class="eye">Request introduction · step 3 of 3</span><h2 id="tc">Review the ask</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="dc">${REVIEW({ id: 't' })}</div><div class="df"><button type="button" class="btn t">Back</button>${SENDBTN()}</div></aside></div>`;
+
+    /* ===== Phone 390 ===== */
+    else if (B === 'NIQ11A') html = phone('Request introduction', `${STP(2)}<h1 style="font-size:20px;font-weight:800">Who can introduce you?</h1><p class="sub">[Elm Studio] · founder [Jules Avery]</p><div class="nt"><span class="ic" aria-hidden="true">○</span><div><b>No teammate knows them.</b></div></div><div class="pc"><span class="eye">Fallback · a quarterly ask</span><b>Ask Axal to introduce you</b><small>Uses 1 quarterly ask, not an intro credit.</small><div class="line" style="margin-top:4px"><span>${LEFT(1)}</span></div><span class="pl a" style="align-self:flex-start">! Last ask</span></div>`, '<button type="button" class="btn p">Review the ask</button>', { back: 1 });
+    else if (B === 'NIQ11B') html = phone('Review the ask', `${STP(3)}<h1 style="font-size:20px;font-weight:800">Review the ask</h1>${REVIEW({ id: 'p', nostep: 1, eadwyn: false })}`, SENDBTN(), { back: 1 });
+    else if (B === 'NIQ11C') html = phone('Ask', `<span class="eye">Ask to [Elm Studio]</span><h1 style="font-size:20px;font-weight:800">We could not confirm the ask</h1><div class="nt a"><span class="ic" aria-hidden="true">?</span><div><b>The connection dropped before an answer.</b> Nothing will be sent again.</div></div><div class="pc"><span class="eye">Slot</span>${SLOT('chk')}<span class="eye" style="margin-top:6px">Allowance</span><span>shown as before: ${LEFT(1)}</span><span class="eye" style="margin-top:6px">Your message</span><span>kept · ${MLEN} characters</span></div>`, '<button type="button" class="btn p">Check what was recorded</button>', { back: 1 });
+    else if (B === 'NIQ11D') html = phone('Ask', `<span class="pl a" style="align-self:flex-start">◷ Waiting · your decision</span><h1 style="font-size:20px;font-weight:800">[Iris Chen] asks to be introduced to you</h1><div class="pc"><span class="eye">From</span><b>[Iris Chen] · [Harbor Lane Capital]</b><span class="eye" style="margin-top:6px">For</span><span>[Elm Studio]</span><span class="eye" style="margin-top:6px">Message</span><span>“${MSG}”</span></div><p class="sub"><b>Accepting opens the NDA step.</b> It does not sign it.</p>`, '<button type="button" class="btn">Decline</button><button type="button" class="btn p">Accept</button>', { back: 1 });
+    else if (B === 'NIQ11E') html = phone('Withdraw', `<h1 style="font-size:20px;font-weight:800">Withdraw this ask?</h1><div class="pc"><span class="eye">Ask</span><b>[Grace Tan] · [Tidepool Labs]</b><span class="eye" style="margin-top:6px">Founder told</span><span>No</span><span class="eye" style="margin-top:6px">Slot</span><span>1 ${QL} ask returns, once</span><span class="eye" style="margin-top:6px">Allowance</span><span><b class="mo">0</b> of <b class="mo">3</b> now · <b class="mo">1</b> after</span></div><p class="sub">Withdrawn is final. [Grace] is not contacted.</p>`, '<button type="button" class="btn">Back</button><button type="button" class="btn p">Withdraw ask</button>', { back: 1 });
+    else if (B === 'NIQ11F') html = phone('Your asks', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>3 asks were recorded before founders could answer.</b> Nothing is sent until you choose.</div></div><div class="line"><span>${LEFT(0)}</span></div>${J(ASKS_T.map((a) => `<div class="pc"><div class="r1"><b>${a.n ? a.n + ' · ' + a.v : 'Not available'}</b>${STAT[a.st]}</div><small>${a.q} · asked ${mo(a.at)}</small>${a.legacy ? '<button type="button" class="btn" style="align-self:flex-start">Resolve</button>' : '<a class="btn t" href="#" style="align-self:flex-start">Receipt</a>'}</div>`))}`, '', { back: 1 });
+
+    /* ===== Frame index ===== */
+    else if (B === 'NIQI') {
+      const R = [
+        ['NIQ01 · NW3-intro-ask.0', 'Investor', 'Network › Introductions', 'Request introduction', 'GET /introductions, /quota (live)'],
+        ['NIQ02 · .1 choose', 'Investor', 'Request introduction', 'Review the ask (fallback) or Continue (team)', 'who-knows (live); eligibility at step 1 ◇'],
+        ['NIQ02B · .1 not eligible', 'Investor', 'Step 1 or send', 'Search someone else / Try again', '404 target_not_available, 503 target_unreadable (live)'],
+        ['NIQ03 · .2 confirm', 'Investor', 'Review the ask', 'Use 1 ask and send', 'POST /request, /quota (live)'],
+        ['NIQ04 · .3 sending, recovery', 'Investor', 'Use 1 ask and send', 'Open the receipt / Try again / Check', 'request key, single read ◇'],
+        ['NIQ04B · .3 quota', 'Investor', 'Review the ask', 'Compare tiers / Try again', '402 quota_intros_exhausted (live)'],
+        ['NIQ05 · .4 receipt', 'Investor (founder: shared fields)', 'Sent result, Your asks row', 'Withdraw (◇) or wait', 'GET /introductions (live); per-ask read ◇'],
+        ['NIQ06 · .5 founder decision', 'Founder', 'Notification', 'Accept / Decline', '#6261 ◇'],
+        ['NIQ06B · .5 answers', 'Founder, investor', 'Accept / Decline', 'Open the NDA step', '#6261 ◇'],
+        ['NIQ06C · .5 NDA step', 'Founder', 'Open the NDA step', 'Review and sign / Back to the ask', '/api/trust/intro/* (live); return link ◇'],
+        ['NIQ07 · .6 withdraw', 'Investor', 'Receipt › Withdraw ask', 'Back to Your asks', 'withdraw + restore ◇ #6261'],
+        ['NIQ07B · .6 race, previous quarter', 'Investor', 'Withdraw ask', 'Open the NDA step / Check again', 'compare-and-set ◇'],
+        ['NIQ08 · .7 legacy', 'Investor', 'Your asks banner', 'Review', 'resolution ◇, ⚑ policy'],
+        ['NIQ08B · .7 legacy review', 'Investor', 'Resolve › Review', 'Notify / Withdraw / Keep', 'resolution ◇'],
+        ['NIQ09 · .8 states', 'Investor, founder, HQ', 'Any read', 'Try again', 'D5129 states'],
+        ['NIQ10 · tablet', 'Investor', 'Review the ask', 'Use 1 ask and send', 'as NIQ03'],
+        ['NIQ11A–F · phone', 'Investor, founder', 'as desktop', 'sticky primary', 'as desktop'],
+        ['NIQ12, NIQ12B · dark', 'Investor, founder', 'as NIQ03, NIQ06', 'as desktop', 'as desktop']
+      ];
+      html = `<div class="${CV} doc"><div><span class="eye">NW3-intro-ask · #7065 · frame index</span><h2 style="font-size:22px;margin-top:4px">Each frame: who acts, where it opens from, what comes next, and what it reads</h2></div>
+      <table class="tbl">${tableHdr(['Frame', 'Actor', 'Entry point', 'Next action', 'Data dependency'])}<tbody>${J(R.map((r) => `<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`))}</tbody></table>
+      <div class="cols"><div><h3>Keyboard order</h3><ul><li>Sheet: heading, target summary, message, Draft (Eadwyn), Back, Use 1 ask and send. Esc closes and returns focus to Request introduction.</li><li>Receipt: heading (focused after a send), Withdraw ask, Back to Your asks.</li><li>Founder: the ask, note, Decline, Accept. Accept moves focus to Open the NDA step.</li><li>Withdraw: Scope, Review, Result; focus returns to the ask’s row.</li></ul></div>
+      <div><h3>Announcements (<code>role="status"</code>)</h3><ul><li>“Sending your ask to [Jules Avery].”</li><li>“Ask sent. Receipt ${RID}. 0 of 3 asks left in ${QL}.”</li><li>“Not sent. No ask was used. Your message is kept.”</li><li>“We could not confirm the ask. Nothing will be sent again.”</li><li>“Ask withdrawn. 1 of 3 asks left in ${QL}.”</li><li>“Accepted. Next: the NDA step in Trust Center.”</li></ul><p class="foot" style="margin-top:6px">Visible focus is a 2px violet ring (shown on the primary in NIQ03 and NIQ07). Phone targets are 44px; the primary stays in a sticky footer.</p></div></div></div>`;
+    }
+
+    /* ===== Handoff ===== */
+    else if (B === 'NIQH') html = `<div class="${CV} doc"><div><span class="eye">NW3-intro-ask · #7065 · handoff</span><h2 style="font-size:22px;margin-top:4px">Quarterly investor ask and founder response: what exists, what is frontend, what needs the Worker</h2></div>
+      <div class="cols">
+      <div><h3>Checked on main (c59a9f2f66)</h3><ul>
+      <li><code>routes/introductions.ts</code>: <code>GET /quota</code> returns tier, quarter, used, cap, remaining (403 <code>investor_only</code>). <code>GET /</code> lists up to 200 asks with the target named only where visible (D6260). <code>POST /request</code> refuses 404 <code>target_not_available</code> and 503 <code>target_unreadable</code> before any slot, 402 <code>quota_intros_exhausted</code> at the cap, then bumps the counter and inserts a <code>pending</code> row. No request key, no withdraw, no status change.</li>
+      <li><code>middleware/requireInvestorTier.ts</code>: <code>investor_introductions</code> (uid, quarter, message, status, created_at); quarter key like <code>2026Q4</code>; the counter resets when the quarter changes. Caps: Free 3, Plus 10, Pro 25, Institutional 100.</li>
+      <li><code>lib/investorIntroRequest.js</code> and <code>InvestorIntroRequest.jsx</code> (#6551): quota line, unreadable disables sending, confirm with an optional message, a one-tab lock, “check your recorded asks before retrying”.</li>
+      <li><code>InvestorNetworkWorkspace.jsx</code> Asked view: target, status, quarter, date; “nothing moves it yet”.</li>
+      <li><code>routes/trust.ts</code>: <code>/intro/request</code> mints the 3-way NDA and notifies the founder; <code>/intro/status</code>.</li>
+      <li>#6261 decision A (2026-11-15): founder notified, accepts or declines, accepted opens the Trust Center NDA step.</li></ul>
+      <h3 style="margin-top:12px">Existing components reused</h3><ul><li>NW3.1 request sheet and stepper, NW3.3 decision layout, the Network shell, header, four links, Sheet, NW5 state words, the Eadwyn rail (#5130), Trust Center NDA page.</li></ul></div>
+      <div><h3>Backend required (◇)</h3><ul>
+      <li>#6261: founder notification, founder read of one ask, accept/decline with <code>decided_at</code>/<code>decided_by</code>, status <code>accepted</code>/<code>declined</code>/<code>withdrawn</code>.</li>
+      <li>#6261: withdraw an unanswered ask with a compare-and-set on status and a one-time slot restore; the race returns the recorded answer.</li>
+      <li>#7065: a request key on <code>POST /request</code> so a retry or a second tab returns the same receipt; one write for slot and row (today a failed insert leaves a slot used with no ask).</li>
+      <li>#7065: a per-quarter adjustment record so a returned Q3 slot never raises Q4.</li>
+      <li>#6261: legacy resolution for asks recorded before founders could answer: send now (after review), withdraw, or keep.</li>
+      <li>#6261: who issues the NDA envelope after acceptance; #7065: a return-to-ask link from Trust Center.</li>
+      <li>#7065: eligibility read at step 1; refusing writes in a support session. #6256: an Eadwyn draft for an ask message.</li></ul>
+      <h3 style="margin-top:12px">Owner picks drawn (⚑, option A)</h3><ul><li>Legacy asks: the member decides each one; nothing is sent automatically.</li><li>A declined ask keeps its slot; only an unanswered withdrawal returns one.</li></ul>
+      <h3 style="margin-top:12px">Frontend only</h3><ul><li>The ask as step 3 of the request sheet with venture, founder, cost, quarter and allowance; last-slot notice; the sending, second-click, failed-save and lost-response states over today’s routes; the slot words; the receipt page built from the list read; phone, tablet and dark.</li></ul>
+      <h3 style="margin-top:12px">Open</h3><ul><li>Whether a founder sees the investor’s message before accepting (drawn: yes).</li><li>A curated match is a different workflow (#7064); team requests are #7066.</li></ul></div></div></div>`;
+
+
+    if (!html) html = '<div>unknown board</div>';
+    html = html.replace(/class="([^"]*)"/g, (m, c) => 'class="' + c.split(/\s+/).filter(Boolean).map((x) => x.indexOf('niq-') === 0 ? x : 'nwi-' + x).join(' ') + '"');
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

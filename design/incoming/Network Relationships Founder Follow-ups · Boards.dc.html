@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Relationships Founder Follow-ups · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Relationships · #7059 · brief 4 of 6 (#7050) · extends #4799 NW1, NW2, NW2.1 and #6256</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Founder follow-ups — an overdue queue that opens the exact person and task, and a Person Sheet that never loses a draft</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Network › Overview and Relationships (/network, /network/relationships) for a founder. Each overdue row opens that person and that follow-up, even past page one of the book; View all opens a follow-up queue whose total matches the overview, oldest due first, with overdue, due today, due later, no due date and done told apart by glyph and word. The Person Sheet (NW2.1) is held by contact id, so completing the last open task under “Has open follow-up” keeps the sheet and its drafts. Every way out with unsaved edits asks one question: Save, Keep editing or Discard. Saves are busy-marked, retry-safe and keep text typed while they run. History past the first 200 items has a range and Load older. Boards continue the approved #4799 and #6256 look; section ids are NWR4.x (Relationships brief 4), keys carry NRU. Violet dashed ◇ tags mark backend work; the amber ⚑ tag marks the owner pick drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main c59a9f2f66 · [Lena Sato], [Kelp Bio] and every person, company and figure (142 people, 9 open follow-ups across 6 people, 3 overdue across 2) are fictional; 27 overdue, 246 notes and 205 open are review fixtures</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Relationships Founder Follow-ups Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NWR4.1', 'Overview · three overdue follow-ups, two people', 'NW1 with “Relationships needing attention” as overdue follow-ups only (B1), oldest due first. Two rows are [Ben Larsen]’s, each naming its own task (“1 of 2”). Open task links to the contact and the task; [Priya Nair] is #97, on page 2 of the book.', [F('NRU01', false, 1000)]],
+      ['NWR4.2', 'Follow-up queue', 'View all lands on Overdue · 3, the overview’s total. Six views with exact counts: Overdue, Due today, Due later, No due date, All open and Done in 30 days, each with its glyph. Each row says where the person sits in the book.', [F('NRU02', 'Overdue', 900), F('NRU02B', 'All open, grouped, and Done', 1300)]],
+      ['NWR4.3', 'Beyond 20 overdue · review fixture', '27 overdue across 14 people: the overview shows the oldest 3 and links to all 27; the queue pages 1–20 and 21–27 and reconciles to 27; people on page 3 of the book open by id (◇).', [C('NRU03', false, 1400, 520)]],
+      ['NWR4.4', 'Person Sheet opened from the overview', 'The book behind on page 2 with row 97 marked; the sheet names where it came from, the follow-up is Selected by word and violet edge, focus on its checkbox, and what is announced.', [F('NRU04', false, 1100)]],
+      ['NWR4.5', 'Last open task done under a filter, drafts kept', '“Has open follow-up” with Priya’s last task completed: the sheet stays (held by id), the list marks her row until the sheet closes, the note and follow-up drafts stay, with Undo.', [F('NRU05', false, 1100)]],
+      ['NWR4.6', 'One decision for pending edits', 'Escape, ✕, backdrop, navigation, Back, another person or Request introduction: Save, Keep editing or Discard, naming both drafts. Results for each choice, a partial save, and double Escape and repeat taps.', [F('NRU06', 'The decision', 1100), C('NRU06B', 'Triggers, results, double Escape', 1400, 760)]],
+      ['NWR4.7', 'Saving, retry and text added while saving', 'Saving with taps ignored, saved with newer text kept, failed with Save again under one key, offline, adding a follow-up, mark done failed, already done elsewhere, person no longer in the book.', [C('NRU07', false, 1400, 640)]],
+      ['NWR4.8', 'Older history beyond 200', 'Review fixture with 246 notes and 205 open follow-ups: ranges, Show 20 more, done read on their own, Load 46 older notes, the start-of-history end, and accurate labels. States: loading older, older unreadable, list end, total unreadable, None, Not recorded.', [F('NRU08', false, 1100), C('NRU08B', 'States', 1400, 560)]],
+      ['NWR4.9', 'Return restores position and focus', 'Back on Overview and in the queue after the task is done: filter, page and scroll kept, focus on the next row, and the announcement. Returning from Request introduction reopens the sheet.', [C('NRU09', false, 1400, 760)]],
+      ['NWR4.10', 'States on the overview and queue', 'Loading, Could not be read (never 0), None overdue, Stale, task not found, person not found, total unreadable, Refused.', [C('NRU10', false, 1400, 560)]],
+      ['NWR4.11', 'Tablet 768', 'The queue with the sheet as an overlay, drafts shown.', [C('NRU11', false, 768, 1024)]],
+      ['NWR4.12', 'Phone 390', 'Overview, the queue with a Show select, the sheet with the task selected, the note above the keyboard, the decision as a bottom sheet, and a failed save. 44 px targets, sticky primary.', [P('NRU12A', 'Overview'), P('NRU12B', 'Queue'), P('NRU12C', 'Sheet, task selected'), P('NRU12D', 'Note, keyboard open'), P('NRU12E', 'Decision'), P('NRU12F', 'Save failed')]],
+      ['NWR4.13', 'Dark', 'The overview, the decision over the sheet, and the phone sheet on the dark tokens.', [F('NRU13A', 'Overview · dark', 1000), F('NRU13B', 'Decision · dark', 1100), P('NRU13C', 'Phone sheet · dark')]],
+      ['NWR4.14', 'Prototype map', 'Each control, where it goes, where focus lands and what is announced; sheet keyboard order and phone keyboard behaviour.', [W('NRU14')]],
+      ['Handoff', 'Handoff', 'Checked on main, preserved, backend required (◇), owner pick (⚑), frontend only, accessibility and what is open.', [W('NRUH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

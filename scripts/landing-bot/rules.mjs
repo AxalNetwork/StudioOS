@@ -227,8 +227,12 @@ export function attempts(pr, kind, data = {}) {
 }
 
 /**
- * The repository's daily caps, since 00:00 UTC. Model runs are counted per provider call from run artifacts.
- * @param usage { now, modelCalls: [{ at }] | null, pushes: [{ at }] | null, requeues: [{ at }] | null }
+ * The repository's daily caps, since 00:00 UTC.
+ * LANDING_BOT_DAILY_MODEL_RUNS counts model RUNS (owner, 2026-11-17): one unit per run, however many rounds or
+ * account fallbacks (primary Claude, Claude 2, Claude 3, Codex) it used. The runner's per-run caps (turns, minutes,
+ * rounds in task.mjs's HARD) bound what one run can spend. `modelRuns` holds one entry per run; `modelCalls` is the
+ * old name for the same list.
+ * @param usage { now, modelRuns: [{ at }] | null, pushes: [{ at }] | null, requeues: [{ at }] | null }
  */
 export function budget(kind, env = {}, usage = {}) {
   const k = kindOf(kind);
@@ -245,7 +249,7 @@ export function budget(kind, env = {}, usage = {}) {
     const used = list.filter((e) => (time(e?.at) ?? now) >= since).length;
     if (used >= cap) reasons.push(`${variable}: ${used} of ${cap} used today`);
   };
-  check(k.model, usage.modelCalls, 'LANDING_BOT_DAILY_MODEL_RUNS');
+  check(k.model, usage.modelRuns ?? usage.modelCalls, 'LANDING_BOT_DAILY_MODEL_RUNS');
   check(k.push, usage.pushes, 'LANDING_BOT_DAILY_PUSHES');
   check(k.requeue, usage.requeues, 'LANDING_BOT_DAILY_REQUEUES');
   return { allowed: reasons.length === 0, reasons };

@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { applyStrategicAccess, canRequestStrategicAccess, referralCategories, strategicDecisionMessage } from '../src/pages/referrals/strategicAccess.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -42,6 +43,48 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnly(read('frontend/src/pages/ReferralsPage.jsx'));
 const SERVICE = read('cloudflare-worker/src/services/referralSubmissions.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/175_referral_submissions.sql');
+
+test('the server decision wins if an admin grants a pending strategic-access request', () => {
+  const startup = { key: 'startup', name: 'Startup referrals', locked: false, rewards: [3] };
+  const customer = { key: 'customer', name: 'Platform user referrals', locked: true };
+  const strategic = { key: 'strategic', name: 'Strategic introductions', locked: true, reward: 'Case by case' };
+  const pending = { strategic_access: 'requested', categories: [customer, strategic, startup], referral_code: 'sample' };
+  const result = applyStrategicAccess(pending, 'granted');
+  assert.equal(result.strategic_access, 'granted');
+  assert.equal(result.referral_code, pending.referral_code);
+  assert.deepEqual(result.categories, [customer, { ...strategic, locked: false }, startup]);
+  assert.equal(result.categories[0], customer);
+  assert.equal(result.categories[2], startup);
+  assert.equal(strategic.locked, true, 'the old overview is not mutated');
+  assert.match(strategicDecisionMessage(result.strategic_access), /can submit/);
+});
+
+test('only an unsent strategic request can be sent; pending and declined keep the category locked', () => {
+  assert.equal(canRequestStrategicAccess('none'), true);
+  assert.equal(canRequestStrategicAccess('none', true), false);
+  for (const state of ['requested', 'granted', 'declined', 'unknown', undefined]) {
+    assert.equal(canRequestStrategicAccess(state), false, String(state));
+  }
+  for (const state of ['requested', 'declined']) {
+    const result = applyStrategicAccess({ categories: [{ key: 'strategic', name: 'Strategic introductions', locked: false }] }, state);
+    assert.equal(result.strategic_access, state);
+    assert.equal(result.categories[0].locked, true);
+  }
+});
+
+test('an unknown access result makes no decision; malformed categories cannot grant or crash a referral', () => {
+  const previous = { strategic_access: 'none', categories: [] };
+  for (const state of [undefined, 'none', 'unexpected', 'constructor']) {
+    assert.equal(strategicDecisionMessage(state), null);
+    assert.equal(applyStrategicAccess(previous, state), previous);
+  }
+  for (const overview of [null, {}, { categories: null }, { categories: {} }, { categories: [null, 'strategic', { key: 'strategic' }] }]) {
+    assert.deepEqual(referralCategories(overview), []);
+    const result = applyStrategicAccess(overview, 'granted');
+    assert.equal(result.strategic_access, 'granted');
+    assert.deepEqual(result.categories, [], 'do not fabricate an eligible category from an incomplete overview');
+  }
+});
 
 /**
  * The page's tone map. Found by the exact literal `const STATUS_TONE = {` and
