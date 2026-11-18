@@ -6,6 +6,10 @@
  * only when the row carries `size_currency: 'EUR'` (the EUR_SOURCE rule on the
  * Worker); every other row reads "Not recorded" with the API's own reason.
  * EIF and EIFO are true, false, or null — null is unknown, never "no".
+ *
+ * D7166 (#7166): a size reads in its list's own currency (`size_currency`
+ * EUR or USD), and the size filter works in one currency at a time. A row is
+ * one fund vehicle: `vehicleLabel` names it from the manager and `fund_number`.
  */
 
 export const PAGE_SIZES = [25, 50, 100];
@@ -31,10 +35,25 @@ export const SIZE_BANDS = [
 
 export const STAGE_REASON = 'The fund directory records no stage for any fund yet.';
 
+/** D7166: no list records where a fund invests, so it reads Not recorded and is not a filter. */
+export const GEOGRAPHY_REASON = 'No list records where a fund invests. Manager HQ is where the manager is based, not where it invests.';
+
+/** D7166: the currencies the size filter works in, one at a time. */
+export const SIZE_CURRENCIES = [['EUR', 'Euros (EUR)'], ['USD', 'US dollars (USD)']];
+const MARK = { EUR: '€', USD: 'US$' };
+const CURRENCY_WORD = { EUR: 'euros', USD: 'US dollars' };
+
 export const EMPTY_QUERY = Object.freeze({
-  q: '', hq_country: '', focus: '', size_band: '', vintage: '', eif: false, eifo: false,
-  sort: 'name', limit: 25, offset: 0,
+  q: '', hq_country: '', focus: '', size_band: '', size_min: '', size_max: '', size_currency: 'EUR',
+  vintage: '', eif: false, eifo: false, sort: 'name', limit: 25, offset: 0,
 });
+
+/** D7166: a size field, in millions as typed, as the whole units the Worker reads; '' or a bad value is none. */
+export function millionsToUnits(v) {
+  const text = String(v ?? '').trim();
+  if (!/^\d+(\.\d+)?$/.test(text)) return undefined;
+  return Math.round(Number(text) * 1_000_000);
+}
 
 /** The query string the Worker reads; empty filters are dropped by the client module. */
 export function toParams(query) {
@@ -43,6 +62,9 @@ export function toParams(query) {
     hq_country: query.hq_country || undefined,
     focus: query.focus || undefined,
     size_band: query.size_band || undefined,
+    size_min: query.size_band ? undefined : millionsToUnits(query.size_min),
+    size_max: query.size_band ? undefined : millionsToUnits(query.size_max),
+    size_currency: query.size_currency && query.size_currency !== 'EUR' ? query.size_currency : undefined,
     vintage: query.vintage || undefined,
     eif: query.eif ? 1 : undefined,
     eifo: query.eifo ? 1 : undefined,
@@ -77,18 +99,52 @@ export function pageList(page, pages) {
   return out;
 }
 
-/** Euro cents → "€1,375M" / "€2.5M". Only ever called on a row the API marked EUR. */
-export function eurM(cents) {
+/** Cents → "€1,375M" / "US$2.5M", in the currency the API marked. */
+export function moneyM(cents, currency = 'EUR') {
   const m = Number(cents) / 100 / 1_000_000;
-  return `€${m.toLocaleString('en-US', { maximumFractionDigits: m < 10 ? 1 : 0 })}M`;
+  return `${MARK[currency] || ''}${m.toLocaleString('en-US', { maximumFractionDigits: m < 10 ? 1 : 0 })}M`;
 }
 
-/** The size to print, or null with the reason it is not recorded. */
+/** Euro cents → "€1,375M" / "€2.5M". Only ever called on a row the API marked EUR. */
+export function eurM(cents) {
+  return moneyM(cents, 'EUR');
+}
+
+/**
+ * The size to print with its currency code, or null with the reason it is not
+ * recorded. Only a currency the API marked (EUR or USD) is ever printed.
+ */
 export function sizeOf(item) {
-  if (item && item.size_currency === 'EUR' && item.fund_size_cents != null) {
-    return { text: eurM(item.fund_size_cents), reason: null };
+  const currency = item?.size_currency;
+  if (item && MARK[currency] && item.fund_size_cents != null) {
+    return { text: moneyM(item.fund_size_cents, currency), currency, reason: null };
   }
-  return { text: null, reason: item?.size_reason || 'Not recorded' };
+  return { text: null, currency: null, reason: item?.size_reason || 'Not recorded' };
+}
+
+/**
+ * D7166: a row is one fund vehicle. Its label is the manager and the fund
+ * number ("Dawn Capital V", "Dawn Capital Opp"); a name that already carries
+ * the number ("Afore IV") is not given it twice, and a row with no number is
+ * its manager's name. `manager` is the line under it.
+ */
+export function vehicleLabel(item) {
+  const name = String(item?.name || '').trim();
+  const number = String(item?.fund_number || '').trim();
+  if (!number) return { vehicle: name, manager: name };
+  return { vehicle: carriesWord(name, number) ? name : `${name} ${number}`, manager: name };
+}
+
+const isWordChar = (ch) => /[A-Za-z0-9]/.test(ch || '');
+
+/** Whether `name` holds `word` with no letter or digit either side (case-insensitive). */
+function carriesWord(name, word) {
+  const hay = name.toLowerCase();
+  const needle = word.toLowerCase();
+  for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + 1)) {
+    if (!isWordChar(hay[at - 1]) && !isWordChar(hay[at + needle.length])) return true;
+  }
+  return false;
 }
 
 /**
@@ -112,7 +168,20 @@ export function activeFilters(query, facets) {
   const out = [];
   if (query.hq_country) out.push({ key: 'hq_country', label: `HQ: ${label(facets?.hq_country, query.hq_country)}` });
   if (query.focus) out.push({ key: 'focus', label: `Focus: ${label(facets?.focus, query.focus)}` });
-  if (query.size_band) out.push({ key: 'size_band', label: `Size: ${(SIZE_BANDS.find(([v]) => v === query.size_band) || [])[1] || query.size_band}` });
+  const ccy = query.size_currency || 'EUR';
+  const mark = MARK[ccy] || '';
+  if (query.size_band) {
+    const band = (facets?.size_band || []).find((x) => x.value === query.size_band)?.label
+      || ((SIZE_BANDS.find(([v]) => v === query.size_band) || [])[1] || query.size_band).replace(/€/g, mark);
+    out.push({ key: 'size_band', label: `Size: ${band} (${ccy})` });
+  }
+  const lo = millionsToUnits(query.size_min);
+  const hi = millionsToUnits(query.size_max);
+  if (!query.size_band && (lo != null || hi != null)) {
+    const range = lo != null && hi != null ? `${mark}${query.size_min}M to ${mark}${query.size_max}M`
+      : lo != null ? `from ${mark}${query.size_min}M` : `up to ${mark}${query.size_max}M`;
+    out.push({ key: 'size', label: `Size: ${range} (${ccy})` });
+  }
   if (query.vintage) out.push({ key: 'vintage', label: `Vintage: ${query.vintage === 'none' ? 'not recorded' : query.vintage}` });
   if (query.eif) out.push({ key: 'eif', label: 'EIF' });
   if (query.eifo) out.push({ key: 'eifo', label: 'EIFO' });
@@ -123,8 +192,8 @@ export function activeFilters(query, facets) {
 export function coverageRows(coverage) {
   const f = coverage?.fields || {};
   return [
-    ['Size in euros', f.size_eur],
-    ['HQ', f.hq],
+    ['Size in a known currency', Number(f.size_eur || 0) + Number(f.size_usd || 0)],
+    ['Manager HQ', f.hq],
     ['Website', f.website],
     ['Stated focus', f.sector_focus],
     ['Vintage', f.fund_year],
@@ -157,6 +226,62 @@ export function directoryTabLabel(total) {
 }
 
 export { num as formatCount };
+
+/**
+ * D7166 (RFD-02): the count line, "11 fund vehicles match" beside "of 1,966
+ * in the directory, unfiltered", from the API's `total` and `coverage.total`.
+ */
+export function matchLine(data) {
+  const n = Number(data?.total || 0);
+  return {
+    match: `${num(n)} fund ${n === 1 ? 'vehicle matches' : 'vehicles match'}`,
+    of: `of ${num(data?.coverage?.total || 0)} in the directory, unfiltered`,
+  };
+}
+
+/** True when a size filter (a band, or a from/to figure) is in force. */
+export const sizeFiltered = (query) => !!query.size_band || millionsToUnits(query.size_min) != null || millionsToUnits(query.size_max) != null;
+
+/**
+ * D7166: what the size filter leaves out — every match with no size in the
+ * asked currency (`facets.size_not_comparable`). Null when no size filter is on.
+ */
+export function sizeExclusion(query, facets) {
+  if (!sizeFiltered(query) || !facets) return null;
+  const n = Number(facets.size_not_comparable || 0);
+  if (!n) return null;
+  const word = CURRENCY_WORD[query.size_currency || 'EUR'] || 'euros';
+  return `${num(n)} ${n === 1 ? 'fund has' : 'funds have'} no size in ${word}, so the size filter leaves ${n === 1 ? 'it' : 'them'} out.`;
+}
+
+/**
+ * D7166 (RFD-05): the zero-result hint, from the facet counts. Each facet's
+ * counts apply every other filter but not its own, so the sum of a facet
+ * whose values never overlap (size, vintage, EIF, EIFO) is how many funds
+ * dropping that one filter would show. HQ and focus can count a fund twice,
+ * so they give no hint. Null when no filter would show any.
+ */
+export function zeroHint(query, facets) {
+  if (!facets) return null;
+  const sum = (list) => (list || []).reduce((t, x) => t + Number(x.count || 0), 0);
+  const backed = (f) => (f ? Number(f.backed || 0) + Number(f.not_backed || 0) + Number(f.unknown || 0) : 0);
+  const options = [];
+  if (sizeFiltered(query)) options.push(['size', sum(facets.size_band) + Number(facets.size_not_comparable || 0)]);
+  if (query.vintage) options.push(['vintage', sum(facets.vintage)]);
+  if (query.eif) options.push(['eif', backed(facets.eif)]);
+  if (query.eifo) options.push(['eifo', backed(facets.eifo)]);
+  const best = options.filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])[0];
+  if (!best) return null;
+  const names = { size: 'the size filter', vintage: 'the vintage filter', eif: 'EIF', eifo: 'EIFO' };
+  return { key: best[0], count: best[1], text: `Removing ${names[best[0]]} would show ${num(best[1])} fund ${best[1] === 1 ? 'vehicle' : 'vehicles'}.` };
+}
+
+/** The patch that removes one active filter. */
+export function removeFilter(key) {
+  if (key === 'eif' || key === 'eifo') return { [key]: false };
+  if (key === 'size' || key === 'size_band') return { size_band: '', size_min: '', size_max: '' };
+  return { [key]: '' };
+}
 
 /** The three terms verdicts migration 406 allows (D597), as the page prints them. */
 export const VERDICT_LABELS = Object.freeze({
@@ -193,7 +318,7 @@ export function citationOf(item) {
  * list. Only values that differ from `EMPTY_QUERY` are written; other
  * parameters (`view`) are kept as they are.
  */
-const TEXT_KEYS = ['q', 'hq_country', 'focus', 'size_band', 'vintage', 'sort'];
+const TEXT_KEYS = ['q', 'hq_country', 'focus', 'size_band', 'size_min', 'size_max', 'size_currency', 'vintage', 'sort'];
 export function queryFromSearch(params) {
   const get = (k) => (typeof params?.get === 'function' ? params.get(k) : null);
   const out = { ...EMPTY_QUERY };
