@@ -108,6 +108,21 @@ test('?topic=licence adds a fourth intent, Licence, and presses it', () => {
   assert.equal(contact.initialIntent(null), 'lab');
 });
 
+test('#6986: ?topic= presses the pill it names, and an unknown topic keeps the default and three pills', () => {
+  const on = (path) => pills(render(React.createElement(ContactPage), path)).filter((p) => p.on).map((p) => p.label);
+  const shown = (path) => pills(render(React.createElement(ContactPage), path)).map((p) => p.label);
+  assert.deepEqual(on('/contact?topic=advise'), ['Advising']);
+  assert.deepEqual(on('/contact?topic=invest'), ['Investing / LP']);
+  assert.deepEqual(on('/contact?topic=lab'), ['Spin-Out Lab']);
+  assert.deepEqual(on('/contact?topic=licence'), ['Licence']);
+  for (const path of ['/contact?topic=advise', '/contact?topic=invest', '/contact?topic=lab']) {
+    assert.deepEqual(shown(path), ['Spin-Out Lab', 'Investing / LP', 'Advising'], `${path} shows Licence`);
+  }
+  assert.deepEqual(on('/contact?topic=nonsense'), ['Spin-Out Lab']);
+  assert.deepEqual(shown('/contact?topic=nonsense'), ['Spin-Out Lab', 'Investing / LP', 'Advising']);
+  assert.equal(contact.initialIntent('constructor'), 'lab', 'an inherited property name is not a topic');
+});
+
 test('every intent the page can send is one the Worker route accepts, under the same name', () => {
   assert.deepEqual(Object.keys(ROUTE_INTENTS), ['lab', 'invest', 'advise', 'licence']);
   for (const i of contact.intentsFor('licence')) {
