@@ -370,10 +370,20 @@ export function profileChart(rows, { complete = true, now = Date.now() } = {}) {
   if (!complete) return { partial: true, bars: [], total: null, sentence: 'Not every tester could be read, so the chart is not drawn.' };
   const since = now - 84 * 24 * 3_600_000;
   const recent = (Array.isArray(rows) ? rows : []).filter((t) => { const h = hoursSince(t.applied_at, now); return h !== null && now - h * 3_600_000 >= since; });
-  const bars = PROFILES.map((p) => ({ role: p.role, label: p.label, n: recent.filter((t) => t.member?.role === p.role).length }));
-  const other = recent.length - bars.reduce((a, b) => a + b.n, 0);
+  const counts = new Map();
+  for (const row of recent) {
+    const role = row.member?.role;
+    counts.set(role, (counts.get(role) ?? 0) + 1);
+  }
+  return profileChartFromCounts(Array.from(counts, ([role, n]) => ({ role, n })));
+}
+
+export function profileChartFromCounts(counts) {
+  const byRole = new Map(counts.map(({ role, n }) => [role, n]));
+  const bars = PROFILES.map((p) => ({ role: p.role, label: p.label, n: byRole.get(p.role) ?? 0 }));
+  const total = counts.reduce((sum, row) => sum + row.n, 0);
+  const other = total - bars.reduce((sum, row) => sum + row.n, 0);
   if (other) bars.push({ role: 'other', label: 'Other', n: other });
-  const total = recent.length;
   const sentence = total
     ? `Applications to test products in the last 12 weeks: ${bars.map((b) => `${b.label.toLowerCase()} ${b.n}`).join(', ')}.`
     : 'No application to test products in the last 12 weeks.';

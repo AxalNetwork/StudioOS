@@ -9,6 +9,7 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/admin_approvals_v2_4814_part8.test.mjs
  */
+import { expertPage, expertSummary, pitchSummary, testerPage, testerSummary } from './_approvalBoardPages_5876.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
@@ -65,13 +66,16 @@ async function mount(url, over = {}) {
       const items = LANE_ITEMS[q.get('lane')] || [];
       return json({ items, total: items.length, page: 1, page_size: 25, reviewers: REVIEWERS, tiles: { per_admin: [{ id: 7, count: 1 }, { id: 8, count: 4 }] }, assignments: { available: true } });
     }
-    if (path === '/api/admin/product-testers') return json({ rows: TESTERS, matching: TESTERS.length, totals: { applied: 2, active: 1, paused: 0, declined: 0, removed: 0 } });
+    if (path === '/api/admin/product-testers/summary') return json(testerSummary(TESTERS));
+    if (path === '/api/admin/product-testers') return json(testerPage(TESTERS, q));
     const t = /^\/api\/admin\/product-testers\/(\d+)$/.exec(path);
     if (t) { const row = TESTERS.find((r) => r.id === Number(t[1])); return row ? json({ tester: row, programs: [], events: [] }) : json({ code: 'not_found' }, 404); }
+    if (path === '/api/comarketing/admin/queue/summary') return json(pitchSummary(PITCHES));
     if (path === '/api/comarketing/admin/queue') { const items = PITCHES[q.get('status')] || []; return json({ items, total: items.length, attribution_30d: { visit: 0, signup: 0 } }); }
     const pm = /^\/api\/comarketing\/admin\/pitches\/([^/]+)$/.exec(path);
     if (pm) { const p = Object.values(PITCHES).flat().find((x) => x.uid === pm[1]); return json({ ...p, status: Object.keys(PITCHES).find((k) => PITCHES[k].includes(p)), decided: null }); }
-    if (path === '/api/wellbeing/admin/experts') return json({ items: EXPERTS, total: EXPERTS.length });
+    if (path === '/api/wellbeing/admin/experts/summary') return json(expertSummary(EXPERTS));
+    if (path === '/api/wellbeing/admin/experts') return json(expertPage(EXPERTS, q));
     const em = /^\/api\/wellbeing\/admin\/experts\/([^/]+)\/review$/.exec(path);
     if (em) return json({ expert: EXPERTS.find((e) => e.uid === em[1]), history: [] });
     return json({}, 404);

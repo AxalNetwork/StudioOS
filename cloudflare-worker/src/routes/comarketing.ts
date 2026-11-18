@@ -295,6 +295,38 @@ r.post('/me/pitches/:uid/withdraw', async (c) => {
 // D1039 (#2887): every admin route here is behind `requireAdmin`, so the HQ
 // compliance freeze and its refusals apply to the decisions (a read is never
 // frozen), as on every other admin surface.
+// D5876: counts and published attribution for the board without loading any pitch rows.
+r.get('/admin/queue/summary', async (c) => {
+  try {
+    await requireAdmin(c);
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    const [summary, attribution] = await Promise.all([
+      c.env.DB.prepare(`SELECT status, COUNT(*) AS n, MIN(datetime(reviewed_at)) AS oldest_reviewed_at
+        FROM comarketing_pitches GROUP BY status`).all<{ status: string; n: number; oldest_reviewed_at: string | null }>(),
+      c.env.DB.prepare(`SELECT a.event_kind, COUNT(*) AS n FROM comarketing_attributions a
+        JOIN comarketing_pitches p ON p.id = a.pitch_id
+        WHERE p.status = 'published' AND datetime(a.created_at) BETWEEN datetime(?) AND datetime('now')
+        GROUP BY a.event_kind`).bind(since).all<{ event_kind: string; n: number }>(),
+    ]);
+    if (!summary.success || !attribution.success || !Array.isArray(summary.results) || !Array.isArray(attribution.results)) {
+      throw new Error('Pitch summary was not returned');
+    }
+    const counts = { proposed: 0, approved: 0, published: 0, rejected: 0, withdrawn: 0 };
+    for (const { status, n } of summary.results) {
+      if (Object.hasOwn(counts, status)) counts[status as keyof typeof counts] = n;
+    }
+    const attribution30d = { visit: 0, signup: 0 };
+    for (const { event_kind, n } of attribution.results) {
+      if (event_kind === 'visit' || event_kind === 'signup') attribution30d[event_kind] = n;
+    }
+    return c.json({ counts, oldest_approved_at: summary.results.find((row) => row.status === 'approved')?.oldest_reviewed_at ?? null,
+      attribution_30d: attribution30d });
+  } catch (e) {
+    if (e instanceof Response || (e instanceof Error && AUTH_ERROR_STATUSES[e.message])) return mapError(c, e);
+    return refuse(c, 503, { code: 'queue_summary_unreadable', message: 'The co-marketing counts could not be read.' });
+  }
+});
+
 r.get('/admin/queue', async (c) => {
   try {
     await requireAdmin(c);
