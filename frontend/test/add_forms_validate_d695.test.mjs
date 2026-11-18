@@ -91,10 +91,10 @@ const COPY = {
     sub: 'Evidence that someone wants this, with its date.',
     foot: 'Waitlist sign-ups count toward the bar you set.',
     labels: ['Kind', 'Who', 'Amount', 'Date', 'Status'],
-    chips: { kind: ['Need-to-have mention', 'Waitlist sign-up', 'Pre-sale', 'Letter of intent'], status: ['Confirmed', 'To confirm'] },
+    chips: { kind: ['Need-to-have mention', 'Waitlist sign-up', 'Pre-sale', 'Letter of intent', 'Would pay'], status: ['Confirmed', 'To confirm'] },
     defaults: { kind: 'pre_sale', status: 'confirmed' },
     notes: ['To confirm: said, not yet in writing.'],
-    placeholders: ['Customer, lead or interviewee', '$1,200 · pre-sales and letters of intent only', '12 Oct'],
+    placeholders: ['Customer, lead or interviewee', '1,200 · amount in selected currency', '12 Oct'],
   },
   experiments: {
     eyebrow: 'Validate · Experiments and evidence', title: 'New hypothesis', cta: 'Create hypothesis',
@@ -163,10 +163,12 @@ async function assertWhen(m) {
     assert.ok(!signal.by('cycle-form-amount'), 'Waitlist sign-up hides Amount');
     await signal.input('signal_date', '2026-10-12');
     await signal.submit();
-    assert.deepEqual(signal.calls, [['signal', P, { kind: 'waitlist', who: null, amount_cents: null, currency: null, signal_date: '2026-10-12', status: 'confirmed' }]],
+    assert.deepEqual(signal.calls, [['signal', P, { kind: 'waitlist', who: null, amount_cents: null, currency: null, period: null, signal_date: '2026-10-12', status: 'confirmed' }]],
       'a hidden amount is not sent');
     await signal.choose('kind', 'loi');
     assert.ok(signal.by('cycle-form-amount'), 'Letter of intent shows Amount');
+    await signal.choose('kind', 'would_pay');
+    assert.ok(signal.by('cycle-form-amount'), 'Would pay shows Amount');
     await signal.choose('kind', 'need_to_have');
     assert.ok(!signal.by('cycle-form-amount'), 'a need-to-have mention takes no amount');
   } finally { await signal.unmount(); }
@@ -189,10 +191,10 @@ async function assertWhen(m) {
   } finally { await seg.unmount(); }
 }
 
-test('2: Amount shows only for pre-sales and letters of intent, and the second Score against chip reveals its date', async () => {
+test('2: Amount shows for pre-sales, letters of intent and Would pay, and the second Score against chip reveals its date', async () => {
   await mutationCheck(source, path, assertWhen, [
     ["when: (v) => AMOUNT_KINDS.includes(v.kind) }", '}'],
-    ['const amount = AMOUNT_KINDS.includes(v.kind) ? toCents(v.amount) : null;', 'const amount = toCents(v.amount);'],
+    ["AMOUNT_KINDS.includes(v.kind) && str(v.amount) ? signalAmount", "str(v.amount) ? signalAmount"],
     ["when: { name: 'score_against', value: SINCE } }", '}'],
     ["score_since: v.score_against === SINCE ? str(v.score_since) : null,", 'score_since: null,'],
   ]);
@@ -254,7 +256,7 @@ test('8: no chip, placeholder or note carries a bracket, and an empty read leave
     ["k: 'Feeds hypothesis', opts: [NONE_YET]", "k: 'Feeds hypothesis', opts: []"],
     ["empty: 'No pain themes recorded yet.'", "empty: 'No [pain themes] yet.'"],
     ["ph: 'Role at company type, size, where'", "ph: '[Role] at [company type], [size], [where]'"],
-    ["ph: '$1,200 · pre-sales and letters of intent only'", "ph: '€1,200 · pre-sales and letters of intent only'"],
+    ["ph: '1,200 · amount in selected currency'", "ph: '€1,200 · pre-sales and letters of intent only'"],
     ["...(owner == null ? {} : { owner_user_id: owner })", 'owner_user_id: owner'],
     ["hypothesis_id: idOrNull(v.hypothesis_id),", 'hypothesis_id: v.hypothesis_id,'],
   ]);
@@ -288,7 +290,7 @@ const BODIES = {
   'problem-discovery': { title: 'Month-end is manual', severity: 'severe', quotes: [], hypothesis_id: null },
   'ideal-customer-profile': { name: 'Finance leads', who_they_are: 'Controllers at 50-person firms', job_to_be_done: 'Close the month', urgency: 'medium', value_promised: 'Two days back', score_since: null },
   'market-intelligence': { name: 'Ledgerline', kind: 'adjacent', watch: { funding: true, launch: true, hiring: false }, why: 'Same buyer' },
-  'demand-signals': { kind: 'pre_sale', who: 'Harbour Works', amount_cents: 120000, currency: 'usd', signal_date: '2026-10-12', status: 'to_confirm' },
+  'demand-signals': { kind: 'pre_sale', who: 'Harbour Works', amount_cents: 120000, currency: 'usd', period: null, signal_date: '2026-10-12', status: 'to_confirm' },
   experiments: { claim: 'Controllers pay to skip month-end', success_bar: '5 of 8 say yes', disproof: 'Fewer than 3', pain_group_ids: [], direction: 'supports', deadline: '2026-10-31' },
 };
 
@@ -323,7 +325,7 @@ test('each Add sends the body its route on main takes, and Add competitor names 
   await mutationCheck(source, path, assertBodies, [
     [": str(v.directory_uid) ? { directory_uid: str(v.directory_uid) } : { name: str(v.company) };", ": { name: str(v.company) };"],
     ['watch: watchBody(v), why: str(v.why) };\n  },\n  search:', 'watch: v.watch, why: str(v.why) };\n  },\n  search:'],
-    ["currency: amount == null ? null : 'usd'", 'currency: null'],
+    ["currency: amount == null ? null : String(v.currency || 'usd').toLowerCase()", 'currency: null'],
     ['return at > 0 && id != null && s.slice(at + 1)', 'return id != null'],
     ["w.validate.hypothesis(projectId, hypothesis.toBody(v))", "w.validate.theme(projectId, hypothesis.toBody(v))"],
   ]);
@@ -342,7 +344,7 @@ const EDIT_CASES = {
   'market-intelligence': { row: { id: 'cand-7', edit: { kind: 'direct', watch: { funding: true, launch: false, hiring: true } } }, id: 'cand-7', change: [['kind', 'adjacent']],
     body: { kind: 'adjacent', watch: { funding: true, launch: false, hiring: true } } },
   'demand-signals': { row: { id: 'signal-4', edit: { kind: 'pre_sale', who: 'Harbour Works', amount_cents: 120000 } }, id: 'signal-4', change: [['kind', 'waitlist']],
-    body: { kind: 'waitlist', who: 'Harbour Works', amount_cents: null, currency: null } },
+    body: { kind: 'waitlist', who: 'Harbour Works', amount_cents: null, currency: null, period: null } },
   experiments: { row: { id: 9, edit: { claim: 'Controllers pay', deadline: '2026-10-31T00:00:00Z' } }, id: '9', change: [],
     body: { claim: 'Controllers pay', deadline: '2026-10-31' } },
 };
@@ -389,7 +391,7 @@ async function assertEdits(m) {
 test('6: each Validate Edit is titled Edit <noun>, saves with Save, and sends only the PATCH fields its source carried', async () => {
   await mutationCheck(source, path, assertEdits, [
     ['Object.entries(body).filter(([k]) => Object.hasOwn(v, from[k] ?? k))', 'Object.entries(body)'],
-    ["if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null });", ''],
+    ["if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null, period: null });", ''],
     ['return has(f) || (f.when', 'return true || (f.when'],
     ["idOf: recordId(/^signal-[1-9]\\d*$/),", "idOf: recordId(/^[a-z0-9-]+$/),"],
     ["key: 'edit-theme', title: 'Edit theme'", "key: 'edit-theme', title: 'Edit a theme'"],
@@ -585,7 +587,7 @@ const RECORD_EDITS = {
   'demand-signals': { id: 'signal-4', fields: [
     { key: 'kind', kind: 'CH', value: 'pre_sale' }, { key: 'who', kind: 'T', value: 'Harbour Works' }, { key: 'amount_cents', kind: 'T', value: '' },
     { key: 'signal_date', kind: 'T', value: '2026-10-12' }, { key: 'status', kind: 'CH', value: 'confirmed' },
-  ], change: [], method: 'signalUpdate', body: { kind: 'pre_sale', who: 'Harbour Works', amount_cents: null, currency: null, signal_date: '2026-10-12', status: 'confirmed' } },
+  ], change: [], method: 'signalUpdate', body: { kind: 'pre_sale', who: 'Harbour Works', amount_cents: null, currency: null, period: null, signal_date: '2026-10-12', status: 'confirmed' } },
   'ideal-customer-profile': { id: '12', fields: [
     { key: 'name', kind: 'T', value: 'Finance leads' }, { key: 'urgency', kind: 'CH', value: 'high' }, { key: 'score_since', kind: 'T', value: '2026-09-01' },
   ], change: [], method: 'segmentUpdate', body: { name: 'Finance leads', urgency: 'high', score_since: '2026-09-01' } },
@@ -620,7 +622,7 @@ test('6 (PR 2b): a Validate Edit opened from its record goes through its valuesO
   await assertFromRecord(m0, rm);
   await mutationCheck(source, path, (m) => assertFromRecord(m, rm), [
     ["    if (Array.isArray(e.watch)) v.watch = WATCH.map((o) => o.value).filter((k) => e.watch.includes(k));\n    else if", '    if'],
-    ["e.amount_cents == null || e.amount_cents === '' ? ''", "e.amount_cents == null ? ''"],
+    ["e.amount_cents == null || e.amount_cents === '' ? ''", "e.amount_cents == null || e.amount_cents === '' ? '0'"],
   ]);
   await mutationCheck(recordModelSource, recordModelPath, (rmm) => assertFromRecord(m0, rmm), [
     ['    if (edit.readsRecord) {', '    if (false) {'],
