@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Funds Directory and Discovery · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Funds · #7031 · Research Funds 1/5 · extends Research v2 (#3701)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Funds discovery — find a fund vehicle, check its source, save it, and come back to the exact list</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Funds (/research/funds) in the founder Research workspace: My funds (the shortlist, default) and Directory (?view=directory), the tab chosen by the link and said so. A first-time founder reaches search in one action (Browse fund directory). In Directory, search, filters, active chips, the filtered count beside the unfiltered total, and results come first; source coverage and “Where the money is” sit in a disclosure below. Rows name the fund vehicle, then its manager; reported size with its currency, vintage, manager HQ (where the manager is based), stated focus and a compact citation. Dawn Capital Opp (€75m) and Fund V (€582m) are separate vehicles. Save to shortlist is the one primary action; Add to project is separate. A signed-out founder opening a filtered link sees Funds named on the Sign In v2 card and returns to the same search, filters, sort and page; Back to results restores the row and focus. States follow the Platform States vocabulary (Unavailable on screen). Violet dashed ◇ tags mark backend or data work; amber ⚑ tags mark owner decisions (option A drawn). Board keys RFD map to the brief’s FND-D ids.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · fund rows, sizes, dates and publishers are the committed directory rows (migrations 378, 406, 413, 429), shown as committed; list and coverage counts are illustrative; [Lumen Robotics] and every person are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="8">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Funds Directory and Discovery Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RFD-00', 'Journey, routes, action names · FND-D00', 'First use to saved vehicle to restored list, the signed-out path, the action names the other four Funds briefs reuse, the shared results row and the annotation key.', [W('RFD00')]],
+      ['RFD-01', 'Empty My funds · FND-D01', 'First use: Browse fund directory is the main action, Add a fund by hand is secondary, no four zero counters. The tab a link selects is explicit, and a tab never shows 0 for a read that has not answered or failed.', [F('RFD01', false, 900), C('RFD01B', 'Tabs from a link, unread and failed counts', 1200, 330)]],
+      ['RFD-02', 'Desktop directory · FND-D02', 'Results first: search, five filters, sort, active chips, 11 matching of 1,966 unfiltered, what the size filter leaves out, the results and the pager; coverage below in a disclosure. The fund Sheet holds Save to shortlist, Add to project and the cited facts. Sizes: EUR, a second EUR vehicle, native USD and a missing amount.', [F('RFD02', false, 1370), F('RFD02B', 'Dawn Capital Opp selected · Sheet', 1260), C('RFD02C', 'Reported size, currency-scoped filter, data defect', 1300, 600), C('RFD02D', 'Disclosure open · two lists and coverage', 1240, 420)]],
+      ['RFD-03', 'Phone 390 · results and filters · FND-D03', 'Cards with no horizontal scroll, Filters and Sort in thumb reach, a full-height filter sheet with one currency at a time, the fund bottom sheet with Save to shortlist, secondary facts behind More, the saved state, and the first-use shortlist.', [P('RFD03A', 'Results'), P('RFD03B', 'Filters sheet'), P('RFD03C', 'Fund sheet · Save'), P('RFD03D', 'More details · saved'), P('RFD03E', 'My funds · first use')]],
+      ['RFD-04', 'Signed-out entry and restored results · FND-D04', 'A filtered link opened signed out: the Sign In v2 card says Funds is the destination; after sign-in the same search, filters, sort and page return, announced once. From a profile, Back to results restores the selected row and keyboard focus.', [F('RFD04', 'Sign-in · Funds as destination', 900), P('RFD04P', 'Phone sign-in sheet'), F('RFD04B', 'Restored after sign-in', 1440), C('RFD04C', 'Profile round trip', 1240, 430), W('RFD04D')]],
+      ['RFD-05', 'Empty, loading, unreadable and dark · FND-D05', 'Loading with no count, zero results with removable chips and a facet hint, a failed read with Retry, a size that is not recorded, shortlist unreadable, save failed, already saved, a list taken down and a role without Funds. Desktop and phone on the dark tokens.', [C('RFD05', false, 1400, 700), F('RFD05B', 'Desktop dark · saved', 1260), P('RFD05C', 'Phone dark · search and an Unavailable band')]],
+      ['RFD-06', 'Keyboard, focus and announcements · FND-D06', 'Focus order, accessible names, where focus returns when the Sheet closes, and the polite and alert announcements.', [W('RFD06')]],
+      ['RFD-07', 'Handoff · FND-D07', 'The route and data behind each board, what is preserved, what changes, frontend-only work, engineering and the open owner decision.', [W('RFD07')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

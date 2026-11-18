@@ -71,3 +71,34 @@ export function otherActivityLabel(item) {
   if (item.state === 'unreadable') return `${item.label}: could not be read`;
   return `${item.label}: reading`;
 }
+
+/**
+ * D6160 (#6160), canvas DCA18: the round calls entry, "Round calls · 3 open",
+ * from `GET /api/round-calls` (the investor's own list). It is drawn only when
+ * that read succeeds, counting the calls that read as Open (sent, not past the
+ * close date). A failed read is Unreadable for this entry alone. While calls
+ * are switched off (503 `round_calls_disabled`), for an investor not yet
+ * verified (403 `verified_investor_required`), and while the read is still
+ * out, the entry is absent: nothing appears, not a 0 and not Unreadable.
+ */
+export const ROUND_CALLS_ENTRY = Object.freeze({ key: 'round_calls', label: 'Round calls', href: '/round-calls' });
+const SILENT_CODES = new Set(['round_calls_disabled', 'verified_investor_required']);
+
+/** How one round-calls read lands: `off` for the silent refusals, else `unreadable`. */
+export function roundCallsReadOf(error) {
+  return SILENT_CODES.has(error?.code) ? { kind: 'off', data: null } : { kind: 'unreadable', data: null };
+}
+
+/** The entry for one read state, or `null` when nothing is drawn. */
+export function roundCallsItem(read) {
+  const { key, label, href } = ROUND_CALLS_ENTRY;
+  if (!read || read.kind === 'loading' || read.kind === 'off') return null;
+  const items = read.kind === 'ok' && Array.isArray(read.data?.items) ? read.data.items : null;
+  if (!items) return { key, label, href, state: 'unreadable', count: null };
+  return { key, label, href, state: 'count', count: items.filter((c) => c?.effective_state === 'open').length };
+}
+
+/** "Round calls: 3 open" for a screen reader; Unreadable is never a count. */
+export function roundCallsLabel(item) {
+  return item.state === 'count' ? `${item.label}: ${item.count} open` : `${item.label}: could not be read`;
+}

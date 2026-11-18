@@ -30,7 +30,9 @@ import { refuse } from '../util/refusal';
 import { userReadableDealIds } from './deals';
 import { PMF_MODEL_V1 } from '../services/scoring/pmf';
 import { SCOPE_ORDER, VENTURE_MODEL_V1 } from '../services/ventureScoring/model';
-import { liveModel, scoreVenture, storedScorecard, type StoredScope } from '../services/ventureScoring/store';
+import { liveModel, scoreChanges, scoreVenture, storedScorecard, CHANGE_REASONS, type StoredScope } from '../services/ventureScoring/store';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { noteFirm } from '../services/dealNotes';
 import { riskLayers, withRiskLayers } from '../services/ventureScoring/riskLayers';
 import { latestFairness } from '../services/ventureScoring/jobs';
 import {
@@ -208,16 +210,44 @@ r.get('/deal/:dealId', async (c) => {
     const nda = await hasNda(c.env, projectId, user.id);
     const stored: StoredScope[] = await storedScorecard(c.env, projectId, { inputs: nda });
     const reviews = await latestReviews(c.env, projectId, stored);
+    // #6173 (D6173): after the NDA, each scope's change since this investor's last visit for this firm.
+    const changes = nda ? await changesSinceVisit(c, user, dealId, projectId, stored) : null;
     await logScorecard(c.env, { projectId, userId: user.id, action: 'venture_score_read',
       details: { viewer: 'investor', scopes: stored.length, deal_id: dealId, masked: !nda }, role: 'investor' });
+    const view = investorView(stored, reviews, nda);
     return c.json({
       project_id: projectId, deal_id: dealId, locked: false, nda, model: VENTURE_MODEL_V1.version,
       masked_reason: nda ? null : 'Sign the NDA with this venture to see its inputs.',
       // D1260: after the NDA, Risk carries the ten layers' analyst reviews, never a note; before it, none.
-      scopes: withRiskLayers(investorView(stored, reviews, nda), nda ? await riskLayers(c.env, projectId, { notes: false }) : null),
+      scopes: withRiskLayers(changes ? view.map((s) => ({ ...s, change: changes.byScope[s.scope] ?? { state: 'not_recorded', reason: CHANGE_REASONS.noScore } })) : view,
+        nda ? await riskLayers(c.env, projectId, { notes: false }) : null),
+      ...(changes ? { change_since: changes.since } : {}),
     });
   } catch (e) { return fail(c, e); }
 });
+
+/**
+ * #6173: the visit to compare against. `?since=` is the watermark the deal page's What's new read
+ * returned (`since`), because that read advances `deal_seen` as the page opens; without it, this
+ * firm's `deal_seen.last_seen_at`. A `since` later than the stored watermark is not accepted: the
+ * comparison is never against a visit that has not happened. A read that fails makes every change
+ * unreadable, never "no change".
+ */
+async function changesSinceVisit(c: C, user: User, dealId: number, projectId: number, stored: StoredScope[]) {
+  const unreadable = (reason: string) => ({ since: null, byScope: Object.fromEntries(stored.map((s) => [s.scope, { state: 'unreadable' as const, reason }])) });
+  try {
+    const company = await noteFirm(c.env.DB, user.id, await activeCompanyFor(c, user), !!c.req.header('X-Company-Id'));
+    if (company === undefined) {
+      return { since: null, byScope: Object.fromEntries(stored.map((s) => [s.scope, { state: 'not_recorded' as const, reason: 'Choose the firm this deal is for to compare with your last visit.' }])) };
+    }
+    const seen = await c.env.DB.prepare('SELECT last_seen_at FROM deal_seen WHERE deal_id = ? AND user_id = ? AND company_id IS ?')
+      .bind(dealId, user.id, company).first<{ last_seen_at: string }>();
+    const asked = String(c.req.query('since') ?? '').trim();
+    const valid = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(asked) && Number.isFinite(Date.parse(asked));
+    const since = valid && seen && Date.parse(asked) <= Date.parse(seen.last_seen_at) ? asked : seen?.last_seen_at ?? null;
+    return { since, byScope: await scoreChanges(c.env, projectId, stored, since) };
+  } catch { return unreadable('The change since your last visit could not be read. Try again.'); }
+}
 
 // ── One venture ─────────────────────────────────────────────────────────────
 

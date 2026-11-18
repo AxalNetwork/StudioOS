@@ -133,7 +133,8 @@ test('Axal VC Fund preserves the live LP access implementation', () => {
 test('Fund preserves its institutional entitlement and honest locked state', () => {
   // D1160: an admin's /funds and /funds/performance forward to Fund admin; an investor's are unchanged.
   assert.match(app, /holds\('investor'\) \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>/);
-  assert.match(app, /path="\/funds\/performance"[^\n]+holds\('investor'\) \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>/);
+  // #6245 (owner: C): Performance takes the Worker's gate (the Investor licence), not the Institutional tier.
+  assert.match(app, /path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], holds\('investor'\) \? <FundPerformancePage fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : effectiveRole !== 'admin' \? <FundPerformancePage locked \/> : <FundOpsRedirect \/>\)\}/);
 });
 
 test('investor visual system includes source provenance, responsive layout, and dark mode', () => {

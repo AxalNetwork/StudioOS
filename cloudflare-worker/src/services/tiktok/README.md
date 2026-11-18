@@ -6,7 +6,7 @@ Part 2a of #2401. The sign-in, refresh and revoke are `integrations/tiktokOAuth.
 | File | What it holds |
 | --- | --- |
 | `client.ts` | The only file that calls TikTok's Display API: the account's counts (`/v2/user/info/`) and the public videos (`/v2/video/list/`). One host, no redirects, a 10-second deadline, errors as codes, field-by-field parsing. |
-| `grow.ts` | The one venture a connection serves (`tiktok_account_links`), the sync through `connector_fed_items`, the "From TikTok" module parts, delete, and the disconnect purge. |
+| `grow.ts` | The one venture a connection serves (`tiktok_account_links`), the sync through `connector_fed_items`, the "From TikTok" module parts, delete, the "Add TikTok as a channel" proposal (D5864: raised by a sync, accepted through the existing channel writer, dismissed for good), and the disconnect purge. |
 
 ## Rules for adding to it
 
@@ -15,3 +15,4 @@ Part 2a of #2401. The sign-in, refresh and revoke are `integrations/tiktokOAuth.
 - **Never 0, never a KPI.** A missing count is `null` with its reason. A scope the member did not grant says so. Nothing here writes `project_metrics` or `custom_kpi_values`.
 - **Counts only in logs.** No figure, title, token or open_id.
 - **A new feed is an entry in `integrations/tiktokFeeds.ts`.** The registry and the connector page follow it.
+- **The daily sync is `daily.ts` (D5867), and it calls `grow.ts`'s `syncTikTok`.** It never has its own landing. The cron in `index.ts` runs it hourly at :41. A connection already synced today is skipped. It reads only an active connection that a founder already linked to a venture, and only while that venture's company is switched on.

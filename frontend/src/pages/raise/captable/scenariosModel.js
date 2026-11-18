@@ -35,6 +35,18 @@ export const MODEL_LOCKED = 'This is your saved model. A scenario never writes i
 /** Who wrote a read-back: the engine's numbers, in words. Eadwyn's own reads of the model are on Overview. */
 export const READ_SOURCE = 'Read back from the engine’s numbers, every step shown. Eadwyn’s own read of your saved model is on Overview.';
 export const READ_ONLY = 'You can read these scenarios. Only the venture’s owner and co-founders change them.';
+/**
+ * D5074 part 6 (#5074): who may change scenarios, from the Today read's `capabilities` alone (the Worker's
+ * `capTableScenarioCapabilities.ts`): `edit` is the venture's own write gate, `plan` the caller's plan. Only a `true`
+ * allows: no map, an unknown key or any other value allows nothing. A write control is drawn when both are true;
+ * the plan's line when `plan` is not. The account's role, its tier and the grants read decide nothing here.
+ */
+export function scenarioStanding(capabilities) {
+  const caps = capabilities && typeof capabilities === 'object' ? capabilities : {};
+  const plan = caps.plan === true;
+  return { plan, writes: plan && caps.edit === true };
+}
+
 /** The Worker's own assumptions arrive with the Today read; these are said when it has not answered. */
 export const ASSUMPTIONS_FALLBACK = [
   '1× non-participating preferred, no participation, no seniority stack.',
@@ -736,4 +748,16 @@ export function runRequest(scenario, exits = null) {
   }
   const { notes: _n, exit_value: _e, ...rest } = i;
   return { kind: 'model', inputs: { ...rest, ...(exitList.length ? { exit_values: exitList } : {}) } };
+}
+
+/**
+ * D6085 (#6085): the line on a scenario's page naming the Use of funds plan
+ * scenarios that say this one pays for them. Null when none does, or when the
+ * read could not say (`used_by_plans: null`): the page then claims nothing.
+ */
+export function usedByLine(plans) {
+  if (!Array.isArray(plans) || !plans.length) return null;
+  const names = plans.map((p) => `${p.name}${p.is_base ? ' (base)' : ''}`);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `Use of funds: ${list} ${plans.length === 1 ? 'is' : 'are'} paid for by this scenario.`;
 }
