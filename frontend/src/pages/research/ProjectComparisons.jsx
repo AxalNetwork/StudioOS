@@ -58,10 +58,14 @@ function Value({ c, testid, onRetry }) {
   }
   if (c.state === 'not_recorded') return <span data-testid={testid} className="italic text-gray-500 dark:text-gray-400" title={c.reason}>{c.text}<span className="sr-only"> ({c.reason})</span></span>;
   if (c.state === 'unreadable') {
+    // D7167: a failed read says Unavailable; D7177: a value held in a form that cannot be read says Unreadable, with why.
+    const failedRead = /^Unavailable/.test(c.reason || '');
+    const word = failedRead ? 'Unavailable' : 'Unreadable';
+    const why = c.reason && c.reason !== word ? c.reason.replace(/^(Unreadable|Unavailable):\s*/, '') : null;
     return (
       <span data-testid={testid} className="flex flex-col items-start gap-0.5">
-        <span className="font-semibold text-red-700 dark:text-red-300">Unreadable</span>
-        {c.reason && c.reason !== 'Unreadable' ? <span className="text-[11px] text-axal-muted dark:text-gray-400">{c.reason.replace(/^Unreadable:\s*/, '')}</span> : null}
+        <span className="font-semibold text-red-700 dark:text-red-300">{failedRead ? <span aria-hidden="true">! </span> : null}{word}</span>
+        {why ? <span className="text-[11px] text-axal-muted dark:text-gray-400">{why}</span> : null}
         {onRetry ? <button type="button" className="text-[11.5px] font-bold text-violet-700 underline dark:text-violet-300" onClick={onRetry}>Retry</button> : null}
       </span>
     );

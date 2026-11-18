@@ -1,7 +1,7 @@
 // D6811 (#6811): mutations must affect only private imports and cleanup must preserve the shared fixture checkout.
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { closeSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, openSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -31,8 +31,13 @@ function readAction(root) {
 test('6811: private mutation is loaded by its child while an independent shared reader stays healthy', () => {
   const { source, copies } = fixture(), copy = isolatedMutationSource(source, copies); cleanups.push(copy.close);
   const original = join(source, 'cloudflare-worker/src/state.mjs'), mutated = join(copy.root, 'cloudflare-worker/src/state.mjs');
-  assert.notEqual(copy.root, source); assert.notEqual(statSync(original).ino, statSync(mutated).ino);
-  writeFileSync(mutated, "export const action = () => 'reconnect';\n");
+  assert.notEqual(copy.root, source);
+  const originalFd = openSync(original, 'r'), privateFd = openSync(mutated, 'r+');
+  try {
+    // Inspect and mutate the opened private inode, even if a pathname changes afterwards (D7255).
+    assert.notEqual(fstatSync(originalFd).ino, fstatSync(privateFd).ino);
+    writeFileSync(privateFd, "export const action = () => 'reconnect';\n");
+  } finally { closeSync(originalFd); closeSync(privateFd); }
   assert.equal(readAction(copy.root), 'reconnect'); assert.equal(readAction(source), 'manage');
   assert.equal(readFileSync(original, 'utf8'), "export const action = () => 'manage';\n");
   assert.equal(lstatSync(join(copy.root, 'node_modules')).isSymbolicLink(), true);

@@ -19,6 +19,12 @@
  * filled in, and a failed directory read is Unreadable, never Not recorded.
  * A row that left the directory is said to have left it, by the name kept.
  *
+ * D7167 (#7167): each fund cell carries the dated provenance object the fund
+ * read uses (`provenanceOf`: publisher, list, URL, reported on, imported on,
+ * reviewed on, verdict), and the fund table gains Manager, Label in the list,
+ * Investment stage and Source use. A fund whose list was withdrawn is refused
+ * with 410 `source_withdrawn`, never as `not_in_directory`.
+ *
  * AN ARCHIVED PROJECT IS READ-ONLY (409 `project_archived`), as in part 1.
  * Every write leaves an audit receipt. All SQL is bound; a list of uids is one
  * bound JSON array read through `json_each`.
@@ -38,7 +44,10 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { presentMetrics } from '../services/researchCompanyDirectory';
-import { presentFund, type DirectoryRow as FundRow } from '../services/researchFundDirectory';
+import { loadFundSources, presentFund, type DirectoryRow as FundRow, type FundSourceRow } from '../services/researchFundDirectory';
+import {
+  SOURCE_WITHDRAWN_MESSAGE, loadVehicleFacts, presentFact, rowProvenance, type FactRow, type ProposedField,
+} from '../services/researchFundProfile';
 import type { RouteMount } from '../util/routeRegistry';
 import { checkProjectOwner, defaultTitle as defaultProjectTitle, readField as readProjectField } from './research_projects';
 
@@ -71,12 +80,16 @@ export const ATTRIBUTES: Record<Kind, Array<{ key: string; label: string }>> = {
     { key: 'funding_total', label: 'Total funding' },
     { key: 'revenue', label: 'Revenue' },
   ],
+  // D7167: the canvas's order (FND-P06), then the two rows the earlier table held.
   fund: [
-    { key: 'hq', label: 'Headquarters' },
-    { key: 'focus', label: 'Stated focus' },
-    { key: 'fund_number', label: 'Fund' },
-    { key: 'size', label: 'Fund size' },
+    { key: 'manager', label: 'Manager' },
+    { key: 'size', label: 'Reported size' },
     { key: 'vintage', label: 'Vintage' },
+    { key: 'hq', label: 'Manager HQ' },
+    { key: 'focus', label: 'Stated focus' },
+    { key: 'fund_number', label: 'Label in the list' },
+    { key: 'stage', label: 'Investment stage' },
+    { key: 'source_use', label: 'Source use' },
     { key: 'notable_lps', label: 'Notable LPs' },
     { key: 'backing', label: 'EIF / EIFO' },
   ],
@@ -134,28 +147,49 @@ export function companyCells(r: Row): Record<string, Cell> {
   };
 }
 
-/** A served fund directory row as the comparison's cells (migration 378's columns). */
-export function fundCells(raw: FundRow): Record<string, Cell> {
+/**
+ * A served fund directory row as the comparison's cells (migration 378's
+ * columns). D7167: each recorded cell carries the row's `provenance`;
+ * `review` is its list's terms review and `facts` its proposed fields, where
+ * `null` means the facts could not be read (those cells are left out, which
+ * the page reads as Unavailable, never as Not recorded).
+ */
+export function fundCells(raw: FundRow, review?: FundSourceRow, facts: Map<ProposedField, FactRow> | null = new Map()): Record<string, Cell> {
   const r = presentFund(raw);
   const source = { name: r.source_name ?? null, url: r.source_url ?? null };
+  const reviews = new Map(review ? [[raw.source_name, review]] : []);
+  const provenance = rowProvenance(raw, reviews);
+  const dated = { provenance };
   const backing = r.eif == null && r.eifo == null ? null : { eif: r.eif, eifo: r.eifo };
-  return {
-    hq: cell(r.hq, source, r.as_of),
-    focus: cell(r.sector_focus, source, r.as_of),
-    fund_number: cell(r.fund_number, source, r.as_of),
+  const out: Record<string, Cell> = {
     size: r.fund_size_cents != null && r.size_currency
-      ? (numeric(r.fund_size_cents) ? cell(Number(r.fund_size_cents), source, r.as_of, { currency: r.size_currency }) : unreadable('Unreadable: the stored fund size could not be read as a number'))
+      ? (numeric(r.fund_size_cents) ? cell(Number(r.fund_size_cents), source, r.as_of, { currency: r.size_currency, ...dated }) : unreadable('Unreadable: the stored fund size could not be read as a number'))
       : { status: 'not_recorded', reason: (r as Row).size_reason || 'Not recorded' },
-    vintage: cell(r.fund_year, source, r.as_of, { date: r.fund_date ?? null }),
-    notable_lps: cell(r.notable_lps, source, r.as_of),
-    backing: cell(backing, source, r.as_of, {}, 'Not recorded: the list names no LPs for this fund'),
+    vintage: cell(r.fund_year, source, r.as_of, { date: r.fund_date ?? null, ...dated }),
+    hq: cell(r.hq, source, r.as_of, dated),
+    focus: cell(r.sector_focus, source, r.as_of, dated, 'Not recorded: the list states no focus for this vehicle'),
+    fund_number: cell(r.fund_number, source, r.as_of, dated, 'Not recorded: the list gives this vehicle no label'),
+    source_use: review
+      ? { status: 'recorded', value: review.verdict, reviewed_on: review.reviewed_on, imported_on: provenance.imported_on, source, as_of: review.reviewed_on, provenance }
+      : { status: 'not_recorded', reason: "Not recorded: this list's terms have not been reviewed" },
+    notable_lps: cell(r.notable_lps, source, r.as_of, dated),
+    backing: cell(backing, source, r.as_of, dated, 'Not recorded: the list names no LPs for this fund'),
   };
+  if (facts) {
+    for (const [key, field] of [['manager', 'manager_name'], ['stage', 'investment_stage']] as const) {
+      const v = presentFact(field, facts.get(field), reviews);
+      out[key] = v.status === 'recorded'
+        ? { status: 'recorded', value: v.value, source: { name: v.provenance.list_name, url: v.provenance.published_url }, as_of: v.provenance.reported_on, provenance: v.provenance }
+        : { status: 'not_recorded', reason: `Not recorded: ${v.reason.charAt(0).toLowerCase()}${v.reason.slice(1)}` };
+    }
+  }
+  return out;
 }
 
 /** A listed member's cells; a row whose cells cannot be built at all reads Unreadable in every row (D7177). */
-export function memberCells(kind: Kind, row: Row): Record<string, Cell> {
+export function memberCells(kind: Kind, row: Row, review?: FundSourceRow, facts: Map<ProposedField, FactRow> | null = new Map()): Record<string, Cell> {
   try {
-    return kind === 'company' ? companyCells(row) : fundCells(row as FundRow);
+    return kind === 'company' ? companyCells(row) : fundCells(row as FundRow, review, facts);
   } catch {
     return unreadableCells(kind);
   }
@@ -236,6 +270,9 @@ export function defaultComparisonTitle(names: string[]): string {
 async function ensureSubjects(env: Env, projectId: number, userId: number, kind: Kind, uids: string[]) {
   const listed = await directoryRows(env, kind, uids);
   const missing = uids.filter((u) => !listed.has(u));
+  // D7167: a fund still held but withheld for its list's terms is refused by name.
+  const withdrawn = kind === 'fund' && missing.length ? [...await withdrawnFunds(env, missing)] : [];
+  if (withdrawn.length) return { missing, withdrawn };
   if (missing.length) return { missing };
   let added = 0;
   for (const uid of uids) {
@@ -252,6 +289,10 @@ async function ensureSubjects(env: Env, projectId: number, userId: number, kind:
   const byUid = new Map((ids.results || []).map((r) => [r.directory_uid, r]));
   return { added, subjects: uids.map((u) => byUid.get(u)!) };
 }
+
+/** D7167: 410 `source_withdrawn`, naming the funds whose list was taken down. Nothing was written. */
+const withdrawnRefusal = (c: Context<{ Bindings: Env }>, withdrawn: string[]) =>
+  c.json({ detail: 'source_withdrawn', message: SOURCE_WITHDRAWN_MESSAGE, withdrawn }, 410);
 
 /** The project for a write: the caller's own, and not archived. */
 async function writableProject(c: Context<{ Bindings: Env }>, userId: number) {
@@ -299,12 +340,20 @@ comparisons.get('/:uid/comparisons', async (c) => {
     company: { state: 'ok', rows: new Map(), withdrawn: new Set() },
     fund: { state: 'ok', rows: new Map(), withdrawn: new Set() },
   };
+  // D7167: each fund cell's provenance needs its list's review and the proposed
+  // fields. Either failing leaves those parts out (Unavailable), not the column.
+  let reviews = new Map<string, FundSourceRow>();
+  let facts: Map<string, Map<ProposedField, FactRow>> | null = new Map();
   for (const kind of KINDS) {
     const uids = subjects.filter((s) => s.kind === kind).map((s) => s.directory_uid);
     if (!uids.length) continue;
     try {
       read[kind].rows = await directoryRows(c.env, kind, uids);
-      if (kind === 'fund') read[kind].withdrawn = await withdrawnFunds(c.env, uids.filter((u) => !read[kind].rows.has(u)));
+      if (kind === 'fund') {
+        read[kind].withdrawn = await withdrawnFunds(c.env, uids.filter((u) => !read[kind].rows.has(u)));
+        reviews = await loadFundSources(c.env).catch(() => new Map());
+        facts = await loadVehicleFacts(c.env, [...read[kind].rows.keys()]).catch(() => null);
+      }
     } catch {
       read[kind].state = 'unreadable';
     }
@@ -328,7 +377,10 @@ comparisons.get('/:uid/comparisons', async (c) => {
         const s = byId.get(m.subject_id)!;
         const view = subjectView(s);
         const row = read[s.kind].rows.get(s.directory_uid);
-        return { ...view, values: view.state === 'listed' && row ? memberCells(s.kind, row) : null };
+        const values = view.state === 'listed' && row
+          ? memberCells(s.kind, row, reviews.get(String(row.source_name)), facts ? (facts.get(s.directory_uid) ?? new Map()) : null)
+          : null;
+        return { ...view, values };
       }),
     })),
   });
@@ -353,6 +405,7 @@ comparisons.post('/:uid/subjects', async (c) => {
   } catch {
     return c.json({ detail: 'directory_unreadable' }, 503);
   }
+  if (result.withdrawn) return withdrawnRefusal(c, result.withdrawn);
   if (result.missing) return c.json({ detail: 'not_in_directory', missing: result.missing }, 404);
   if (result.added) {
     await touch(c.env, project.id);
@@ -542,6 +595,9 @@ async function readNames(c: Context<{ Bindings: Env }>, kind: Kind, uids: string
     return { response: c.json({ detail: 'directory_unreadable' }, 503) };
   }
   const missing = uids.filter((u) => !listed.has(u));
+  // D7167: a fund still held but withheld for its list's terms is refused by name (410), never as not_in_directory.
+  const withdrawn = kind === 'fund' && missing.length ? [...await withdrawnFunds(c.env, missing)] : [];
+  if (withdrawn.length) return { response: withdrawnRefusal(c, withdrawn) };
   if (missing.length) return { response: c.json({ detail: 'not_in_directory', missing }, 404) };
   return { names: new Map(uids.map((u) => [u, String(listed.get(u)!.name ?? '').trim() || u])) };
 }
@@ -669,6 +725,7 @@ comparisons.post('/:uid/comparisons/:comparisonUid/members', async (c) => {
   } catch {
     return c.json({ detail: 'directory_unreadable' }, 503);
   }
+  if (result.withdrawn) return withdrawnRefusal(c, result.withdrawn);
   if (result.missing) return c.json({ detail: 'not_in_directory', missing: result.missing }, 404);
   const subject = result.subjects![0];
   await c.env.DB.prepare(

@@ -5,7 +5,7 @@ import PublicFooter from '../components/PublicFooter';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { track } from '../lib/funnel';
 import { DOOR_LINKS } from '../lib/siteLinks';
-import { openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
+import { LAB_WEEKS, openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
 import { numberWordCap } from '../lib/numberWords';
 import { DIMENSIONS } from '../lib/scoringViewModel';
 import { SLIDE_META } from '../lib/pitchDeckViewModel';
@@ -88,13 +88,6 @@ const STEPS = [
   { n: '01', title: 'Join', desc: 'Create an account. Your membership is reviewed after you sign up.' }, // #6988 (X6): what MEMBERSHIP_STEPS says happens
   { n: '02', title: 'Get matched', desc: 'The record routes you to the founders, partners, or advisors your profile actually fits.' },
   { n: '03', title: 'Unlock the network', desc: 'Collaborate from one workspace. Capital reads the same record when the work is ready.' },
-];
-
-const LAB_WEEKS = [
-  { n: 'Week 1', title: 'Idea & Customer', desc: 'Problem definition, ICP, market sizing, ≥5 logged interviews' },
-  { n: 'Week 2', title: 'Solution & Roadmap', desc: 'MVP scope, 90-day OKRs, brand v1, pitch deck v1' },
-  { n: 'Week 3', title: 'Validate & Team', desc: 'Readiness score, advisor cadence, co-founder decision, revenue proof' },
-  { n: 'Week 4', title: 'Incorporate & Capital', desc: 'Entity, founder stock, 83(b), use of funds, investor intros' },
 ];
 
 // The canvas's card copy, corrected where the code says otherwise (D677's
@@ -340,7 +333,7 @@ function LabBand() {
             {LAB_WEEKS.map((w) => (
               <li key={w.n} className="ax-week">
                 <div className="ax-mono ax-week-n">{w.n}</div>
-                <div className="ax-week-t">{w.title}</div>
+                <div className="ax-week-t">{w.name}</div>
                 <div className="ax-week-d">{w.desc}</div>
               </li>
             ))}

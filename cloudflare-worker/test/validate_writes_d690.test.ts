@@ -81,6 +81,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec(MIG460);
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('228_research_company_directory.sql'));
+  db.exec(sqlOf('202611180051_7175_competitor_subject_and_verified_website.sql')); // D7175: subject_uid, website_verified_at
   db.exec(sqlOf('438_interview_sessions.sql'));
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');

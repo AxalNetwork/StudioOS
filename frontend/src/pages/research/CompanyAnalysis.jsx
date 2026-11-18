@@ -9,8 +9,10 @@ import { download, fetchExport } from '../../components/CompetitorAnalysis';
 import { useEscapeClose } from '../../components/useEscapeClose.js';
 import { PhoneSheet, SheetRow } from '../../ui/phone/PhoneSheet.jsx';
 import {
-  analysisTiles, featureGrid, inputsRow, landscapeRead, notesWithRead, signalColumns, sourceFetched,
+  analysisTiles, candidateSupport, classificationWord, failedReads, featureGrid, findingsOf, inputsRow, landscapeRead,
+  notesWithRead, reviseHref, signalColumns, sourceFetched,
 } from './companyAnalysisRead';
+import { EvidenceChip, SubjectBar, useSubjectRecord } from './AnalysisSubject.jsx';
 import {
   FIELD_WORD, GENERATED_SECTIONS, ORIGIN_WORD, PROPOSAL_FIELDS, changesText, competitorsAfter, contentCounts,
   defaultSelection, dirtyFields, draftFrom, exportFilename, exportProblem, mergeDraft, outputFrom, proposalText, reviewCounts,
@@ -51,6 +53,15 @@ import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
  * THE LANDSCAPE READ IS A RESTATEMENT, NOT A MODEL, as the canvas draws it:
  * it repeats the summary, the companies and the source kinds already on the
  * page, and Accept appends it to your notes.
+ *
+ * D7175 (#7175, canvas D7041, boards RS-13 B1–B5, C1–C3): the subject bar and
+ * the evidence status sit under the title; findings cite the sources they
+ * were read from, Interpretation is kept apart, the run's next steps are
+ * Suggested research questions, the subject is listed as excluded, and each
+ * Direct or Adjacent shows its reason and its sources, read or Unavailable.
+ * Insufficient evidence, No candidates and Sources unavailable each have
+ * their own shape. Preview Markdown, in the Export menu, shows the saved
+ * version's file before it is downloaded.
  */
 
 const STATUS_TONE = { complete: 'ok', running: 'info', error: 'danger', draft: 'neutral' };
@@ -69,6 +80,38 @@ const okBox = 'flex items-start gap-3 rounded-[10px] border border-emerald-200 b
   + 'dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-gray-100';
 
 const EMPTY_MANUAL = { name: '', url: '', summary: '', category: 'direct', crawl: true };
+const citeChip = 'inline-flex min-w-[22px] items-center justify-center rounded-md border border-violet-200 bg-violet-50 px-1 font-mono text-[10.5px] font-bold text-violet-800 hover:underline dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200';
+
+/** One source as a chip: its number and kind when read, Unavailable with its status when not (RS-13 B1, B2). */
+function SourceChip({ chip }) {
+  if (!chip.ok) return <StateChip kind="unavailable" label={chip.label} title={chip.url} />;
+  return (
+    <a href={chip.url} target="_blank" rel="noreferrer" aria-label={`Source ${chip.n}, ${chip.label}`}
+      className="inline-flex items-center gap-1 rounded-full border border-axal-hairline px-2 text-[11px] font-semibold leading-[1.6] text-axal-ink hover:border-violet-400 dark:border-gray-700 dark:text-gray-100">
+      <span className="font-mono text-violet-700 dark:text-violet-300">{chip.n}</span>{chip.label}
+    </a>
+  );
+}
+
+/** One finding: its tag, its words and the sources it cites, or "No source in this run". */
+function FindingRow({ f, urlOf }) {
+  return (
+    <li className="flex flex-col gap-1 border-t border-axal-hairline py-2.5 first:border-t-0 dark:border-gray-800 sm:flex-row sm:items-start sm:gap-3">
+      <span className="flex shrink-0 flex-wrap items-center gap-1.5 sm:w-44">
+        <span className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
+          {f.kind === 'interpretation' ? 'Interpretation' : f.noSource ? 'Run statement' : 'Source fact'}
+        </span>
+        {f.noSource ? <StateChip kind="partial" label="No source in this run" /> : null}
+      </span>
+      <span className="flex-1 text-[12.5px] leading-relaxed text-axal-ink dark:text-gray-100">{f.text}</span>
+      <span className="flex shrink-0 flex-wrap gap-1">
+        {f.cites.map((n) => (
+          <a key={n} href={urlOf(n)} target="_blank" rel="noreferrer" aria-label={`Source ${n}`} className={citeChip}>{n}</a>
+        ))}
+      </span>
+    </li>
+  );
+}
 const stamp = (v) => {
   if (!v) return null;
   const s = String(v);
@@ -240,6 +283,11 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   useRailOption(busy === 'refresh' ? 'analyse:sources' : null, 'Refresh sources');
   useRailOption(busy === 'add' && manual.crawl && manual.url.trim() ? 'extract:candidate' : null, 'Add');
   const [preview, setPreview] = useState('');
+  // D7175: the subject's directory record, read for the subject bar.
+  const { read: subjectRead, retry: retrySubject } = useSubjectRecord(analysis?.subject_uid || null);
+  // RS-13 B5: the saved version's Markdown, shown before it is downloaded.
+  const [mdPreview, setMdPreview] = useState(null); // { text, name, version }
+  const addNameRef = useRef(null);
 
   // Focus targets (RS-14 G): each control a sheet, dialog, retry or result returns focus to.
   const saveRef = useRef(null);
@@ -307,6 +355,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     runFor.current += 1; setBusy(''); setNotice(null); setPreview(''); setManual(EMPTY_MANUAL);
     setSaveError(null); setFailure(null); setResult(null); setRefreshed(null);
     setProposal(null); setSelection(null); setReviewError(''); setMenuOpen(false); setDecision(null); setSheetOpen(false);
+    setMdPreview(null);
   }, [id]);
   useEffect(() => () => { runFor.current += 1; }, []);
 
@@ -500,7 +549,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   };
 
   // Export (RS-14 C1): the saved version, checked before anything is downloaded.
-  const doExport = async (format, at = version, opener = exportOpener.current) => {
+  // `preview` (RS-13 B5, D7175): the checked Markdown is shown first, and Download writes it.
+  const doExport = async (format, at = version, opener = exportOpener.current, preview = false) => {
     const mine = ++runFor.current;
     setBusy('export');
     setFailure(null);
@@ -514,6 +564,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
         setFailure({
           kind: 'export',
           format,
+          preview,
           title: problem.kind === 'status'
             ? `${label} export failed. Nothing was downloaded.`
             : `The export did not return ${label}. Nothing was downloaded.`,
@@ -526,12 +577,16 @@ export default function CompanyAnalysis({ role = 'founder' }) {
       }
       const v = got.version || at;
       const name = exportFilename(id, v, format);
+      if (preview && format === 'md') {
+        setMdPreview({ text: got.text, name, version: v });
+        return;
+      }
       download(name, got.text, format === 'md' ? 'text/markdown' : 'application/json');
       setResult({ kind: 'export', title: `Downloaded version ${v}`, text: name });
       (opener || exportRef.current)?.focus?.();
     } catch (e) {
       if (runFor.current !== mine) return;
-      setFailure({ kind: 'export', format, title: `${format === 'md' ? 'Markdown' : 'JSON'} export failed. Nothing was downloaded.`, text: `${e?.message || 'The server did not answer.'} Your dossier is open and unchanged.` });
+      setFailure({ kind: 'export', format, preview, title: `${format === 'md' ? 'Markdown' : 'JSON'} export failed. Nothing was downloaded.`, text: `${e?.message || 'The server did not answer.'} Your dossier is open and unchanged.` });
       focusLater(failRef);
     } finally {
       if (runFor.current === mine) setBusy('');
@@ -544,6 +599,20 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     exportOpener.current = opener || exportRef.current;
     if (dirty) setDecision(format);
     else doExport(format, version, exportOpener.current);
+  };
+  // Preview shows the saved version, so unsaved changes need no decision first.
+  const previewMd = (opener) => {
+    setMenuOpen(false);
+    setSheetOpen(false);
+    exportOpener.current = opener || exportRef.current;
+    doExport('md', version, exportOpener.current, true);
+  };
+  const downloadPreview = () => {
+    if (!mdPreview) return;
+    download(mdPreview.name, mdPreview.text, 'text/markdown');
+    setResult({ kind: 'export', title: `Downloaded version ${mdPreview.version}`, text: mdPreview.name });
+    setMdPreview(null);
+    focusLater(exportOpener);
   };
   const closeDecision = () => { setDecision(null); focusLater(exportOpener); };
   const exportSaved = () => { const f = decision; setDecision(null); doExport(f, version, exportOpener.current); };
@@ -575,6 +644,18 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   const read = landscapeRead(analysis);
   const candidates = analysis?.candidates || [];
   const allSources = analysis?.sources || [];
+  // D7175: what each finding and each competitor rests on.
+  const fetchedList = allSources.filter(sourceFetched);
+  const urlOf = (n) => fetchedList[n - 1]?.url || undefined;
+  const findings = findingsOf(out, allSources);
+  const failed = failedReads(allSources);
+  const evidence = analysis?.evidence || null;
+  const insufficient = evidence?.status === 'insufficient';
+  const excluded = Array.isArray(out.excluded) ? out.excluded : [];
+  const focusAdd = () => addNameRef.current?.focus();
+  // D7175: with no source, no summary, gap or wedge is stated (RS-13 B3); the
+  // run's next steps are Suggested research questions, drawn apart below.
+  const generatedShown = GENERATED_SECTIONS.filter(([f]) => f !== 'next_actions' && !insufficient);
   const sourcesBy = useMemo(() => {
     const m = {};
     for (const s of analysis?.sources || []) {
@@ -598,6 +679,10 @@ export default function CompanyAnalysis({ role = 'founder' }) {
       <button type="button" role="menuitem" className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-semibold hover:bg-axal-ground focus:bg-axal-ground dark:hover:bg-gray-800 dark:focus:bg-gray-800"
         onClick={() => startExport('json')}>
         JSON<small className="font-mono text-[11px] font-medium text-axal-muted">{`saved version ${version} · ${dayTime(analysis?.updated_at) || 'date not recorded'}`}</small>
+      </button>
+      <button type="button" role="menuitem" className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-semibold hover:bg-axal-ground focus:bg-axal-ground dark:hover:bg-gray-800 dark:focus:bg-gray-800"
+        onClick={() => previewMd()}>
+        Preview Markdown<small className="font-mono text-[11px] font-medium text-axal-muted">{`the file for saved version ${version}, before it is downloaded`}</small>
       </button>
     </>
   );
@@ -851,6 +936,37 @@ export default function CompanyAnalysis({ role = 'founder' }) {
               )}
             </Card>
 
+            <SubjectBar uid={analysis.subject_uid || null} read={subjectRead} onRetry={retrySubject} evidence={evidence} running={running} />
+
+            {mdPreview && (
+              <Card data-testid="analysis-export-preview" role="dialog" aria-label="Export preview">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className={eyebrow}>{`Export preview · saved version ${mdPreview.version}`}</div>
+                    <p className="text-[12px] text-axal-muted">What the file will say, before it is downloaded · the same evidence words as the page</p>
+                  </div>
+                  <EvidenceChip evidence={evidence} />
+                </div>
+                <pre className="mt-2.5 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-axal-hairline bg-axal-ground p-3 font-mono text-[11.5px] leading-relaxed text-axal-ink dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100">{mdPreview.text}</pre>
+                <div className="mt-2.5 flex justify-end gap-2">
+                  <button type="button" className={ghostBtn} onClick={() => { setMdPreview(null); focusLater(exportOpener); }}>Cancel</button>
+                  <button type="button" className={primaryBtn} onClick={downloadPreview}>Download .md</button>
+                </div>
+              </Card>
+            )}
+
+            {!running && !errored && failed.length > 0 && evidence?.status !== 'unavailable' && (
+              <div data-testid="analysis-partial-bar" className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-[12px] text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-200">
+                <StateChip kind="partial" />
+                <span>{`${fetchedList.length} of ${allSources.length} sources fetched`}</span>
+                <StateChip kind="unavailable" label={`${failed.length} Unavailable`} />
+                <span className="min-w-0 truncate">{failed.map((f) => f.url).join(', ')}</span>
+                <button type="button" className={`${ghostBtn} min-h-[44px] sm:min-h-0`} disabled={acting || !!proposal} onClick={refresh}>
+                  {busy === 'refresh' ? 'Refreshing…' : `Retry the ${failed.length === 1 ? 'read' : `${failed.length} reads`}`}
+                </button>
+              </div>
+            )}
+
             {failure && (
               <FailAlert alertRef={failRef} title={failure.title} testId={`${failure.kind}-failed`}
                 actions={(
@@ -865,7 +981,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                     )}
                     {failure.kind === 'export' && (
                       <>
-                        <button type="button" className={ghostBtn} onClick={() => doExport(failure.format, version, exportOpener.current)} disabled={acting}>Retry export</button>
+                        <button type="button" className={ghostBtn} onClick={() => doExport(failure.format, version, exportOpener.current, !!failure.preview)} disabled={acting}>Retry export</button>
                         <button type="button" className={ghostBtn} onClick={() => { setFailure(null); focusLater(exportOpener); }}>Dismiss</button>
                       </>
                     )}
@@ -922,6 +1038,60 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                   </Card>
                 )}
 
+                {!running && !errored && (
+                  <>
+                    {insufficient && (
+                      <Card padding="lg" data-testid="analysis-insufficient" className="border-[1.5px] border-dashed border-amber-400 dark:border-amber-500/60">
+                        <EvidenceChip evidence={evidence} />
+                        <h2 className="mt-2 text-[15px] font-extrabold tracking-tight">
+                          {candidates.length ? 'This run read no sources' : 'This run found no companies and read no sources'}
+                        </h2>
+                        <p className="mt-1.5 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
+                          {candidates.length
+                            ? 'No company in this run has a site that was read. With no source, the run states no market gaps, no competitor classifications and no wedge. '
+                            : 'The search finished without an error and returned nothing for this market. With no source, the run states no market gaps, no competitor classifications and no wedge. '}
+                          Add a company you know with its website, or revise the market, customer or region and run again.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" className={`${primaryBtn} min-h-[44px] sm:min-h-0`} onClick={focusAdd}>Add a source</button>
+                          <Link to={reviseHref(analysis)} className={`${ghostBtn} inline-flex min-h-[44px] items-center sm:min-h-0`}>Revise the search</Link>
+                        </div>
+                        <div className="mt-3 border-t border-axal-hairline pt-2.5 text-[11.5px] text-axal-muted dark:border-gray-800">
+                          <div className={eyebrow}>What the run did</div>
+                          <ul className="mt-1 space-y-0.5">
+                            <li>{`Searched “${analysis.inputs?.market || ''}”${analysis.inputs?.region_focus ? `, ${analysis.inputs.region_focus}` : ''}, ${analysis.inputs?.depth === 'deep' ? 'Deep dive' : 'Quick scan'}`}</li>
+                            <li>{`Discovery returned ${candidates.length} ${candidates.length === 1 ? 'company' : 'companies'} · ${evidence.sources_tried} ${evidence.sources_tried === 1 ? 'read' : 'reads'} tried`}</li>
+                            <li>Saved as complete · Insufficient evidence</li>
+                          </ul>
+                        </div>
+                      </Card>
+                    )}
+
+                    {evidence?.status === 'no_candidates' && (
+                      <Card padding="lg" data-testid="analysis-no-candidates">
+                        <EvidenceChip evidence={evidence} />
+                        <p className="mt-2 text-[12.5px] text-axal-muted">The search ran and returned no companies. No read failed.</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Link to={reviseHref(analysis)} className={`${ghostBtn} inline-flex min-h-[44px] items-center sm:min-h-0`}>Revise the search</Link>
+                          <button type="button" className={`${ghostBtn} min-h-[44px] sm:min-h-0`} onClick={focusAdd}>Add a company</button>
+                        </div>
+                      </Card>
+                    )}
+
+                    {evidence?.status === 'unavailable' && (
+                      <Card padding="lg" data-testid="analysis-sources-unavailable">
+                        <StateChip kind="unavailable" label="Sources unavailable" />
+                        <p className="mt-2 text-[12.5px] text-axal-muted">
+                          {`${candidates.length} ${candidates.length === 1 ? 'company' : 'companies'} found; ${failed.length} of ${allSources.length} site reads failed. Classifications are drawn unconfirmed. This is not a search that found nothing.`}
+                        </p>
+                        <button type="button" className={`${ghostBtn} mt-3 min-h-[44px] sm:min-h-0`} disabled={acting} onClick={refresh}>
+                          {busy === 'refresh' ? 'Refreshing…' : 'Retry · Refresh sources'}
+                        </button>
+                      </Card>
+                    )}
+                  </>
+                )}
+
                 {/* The four kinds of content (RS-14 A2). */}
                 <div role="list" aria-label="What this dossier holds" data-testid="analysis-legend"
                   className="grid gap-2 rounded-xl border border-axal-hairline bg-white p-3 text-[12px] dark:border-gray-800 dark:bg-gray-900 sm:grid-cols-2 lg:grid-cols-4">
@@ -946,14 +1116,14 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                     </div>
                   </Card>
 
-                  {!running && !errored && (
+                  {!running && !errored && generatedShown.length > 0 && (
                     <Card data-testid="analysis-generated">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <h2 className="text-[15px] font-extrabold tracking-tight">Generated by the run</h2>
                         <span className="font-mono text-[11px] text-axal-muted">editable</span>
                       </div>
                       <div className="mt-3 space-y-3">
-                        {GENERATED_SECTIONS.map(([f, title]) => (
+                        {generatedShown.map(([f, title]) => (
                           <TextSection key={f} title={title}
                             tags={(
                               <>
@@ -963,7 +1133,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                             )}
                             value={draft[f]} rows={f === 'wedge' ? 2 : 3} dirty={changed.includes(f)} onChange={set(f)}
                             placeholder={f === 'market_summary' ? 'What this landscape looks like, in your words…' : f === 'wedge' ? undefined : 'One per line'}
-                            emptyReason={f === 'market_summary' ? 'the run returned no summary, and none is generated to fill the box' : f === 'wedge' ? 'the run returned none' : 'the run listed none'} />
+                            emptyReason={f === 'market_summary' ? 'the run returned no summary, and none is generated to fill the box' : f === 'wedge' ? 'the run returned none with a source' : 'the run listed none with a source'} />
                         ))}
                       </div>
                     </Card>
@@ -972,6 +1142,57 @@ export default function CompanyAnalysis({ role = 'founder' }) {
 
                 {!running && !errored && (
                   <>
+                    {!insufficient && (
+                      <Card data-testid="analysis-findings">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className={eyebrow}>Findings</span>
+                          <span className="text-[11px] text-axal-muted">
+                            {findings.facts.length
+                              ? `${findings.facts.filter((f) => !f.noSource).length} with a source · ${findings.facts.filter((f) => f.noSource).length} without`
+                              : 'Facts read from fetched pages · each cites its source'}
+                          </span>
+                        </div>
+                        {findings.facts.length ? (
+                          <ul className="mt-1.5">{findings.facts.map((f, i) => <FindingRow key={i} f={f} urlOf={urlOf} />)}</ul>
+                        ) : (
+                          <p className="mt-1.5 text-[11.5px] text-axal-muted"><Unrecorded /> <span className="ml-1">this run stored no findings with their sources</span></p>
+                        )}
+                        {findings.interpretation.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-1 dark:border-gray-800 dark:bg-gray-950">
+                            <div className={`${eyebrow} pt-2`}>Interpretation, kept apart from the facts</div>
+                            <ul>{findings.interpretation.map((f, i) => <FindingRow key={i} f={f} urlOf={urlOf} />)}</ul>
+                          </div>
+                        )}
+                      </Card>
+                    )}
+
+                    <div data-testid="analysis-questions" className="rounded-[14px] border-[1.5px] border-dashed border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-700 dark:bg-gray-900">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="text-[13px] font-extrabold tracking-tight">Suggested research questions</span>
+                        <span className="text-[11px] text-axal-muted">Questions, not findings · they never run on their own</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <KindTag kind="gen">Generated</KindTag>
+                        {edited.next_actions ? <KindTag kind="ed">{`Edited by you ${day(edited.next_actions) || ''}`.trim()}</KindTag> : null}
+                        {changed.includes('next_actions') ? <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300">· not saved</span> : null}
+                      </div>
+                      <textarea aria-label="Suggested research questions" className={`${inputClass} mt-2`} rows={3}
+                        value={draft.next_actions} placeholder="One per line"
+                        onChange={(e) => set('next_actions')(e.target.value)} />
+                      <p className="mt-1.5 text-[11.5px] text-axal-muted">
+                        {draft.next_actions.trim()
+                          ? 'From the run’s next steps, and any statement no source in the run supports. Add a source to answer one.'
+                          : <><Unrecorded /> <span className="ml-1">the run listed none</span></>}
+                      </p>
+                    </div>
+
+                    {excluded.length > 0 && (
+                      <p data-testid="analysis-excluded" className="text-[12px] text-axal-muted">
+                        <span className="font-semibold text-axal-ink dark:text-gray-100">Excluded from candidates</span>{' '}
+                        {excluded.map((x) => `${x.name}${x.domain ? ` · ${x.domain}` : ''}`).join(', ')} — the subject.
+                      </p>
+                    )}
+
                     <Card data-testid="analysis-competitors">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className={eyebrow}>Competitors</span>
@@ -981,8 +1202,48 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                         <p className="mt-1 text-[11px] text-axal-muted">Directory profiles: Unreadable. The company directory could not be read, so no competitor links to one.</p>
                       ) : null}
                       {candidates.length ? (
-                        <div className="mt-2.5 overflow-x-auto">
+                        <>
+                        {/* D7175 (RS-13 C1, C2): cards in place of the table below 1024px. */}
+                        <ul className="mt-2.5 space-y-2 lg:hidden" data-testid="analysis-competitor-cards">
+                          {candidates.map((c) => {
+                            const sup = candidateSupport(c, allSources);
+                            return (
+                              <li key={c.id} className="rounded-xl border border-axal-hairline p-3 dark:border-gray-800">
+                                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                  <Link to={`/research/companies/${encodeURIComponent(id)}/${encodeURIComponent(c.id)}`}
+                                    className="text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300">{c.name}</Link>
+                                  <span className="text-[11px] font-semibold text-axal-muted">{classificationWord(c, sup)}</span>
+                                </div>
+                                <div className="text-[11px] text-axal-muted">
+                                  {c.domain || 'Website: Not recorded'} · {ORIGIN_WORD[c.origin] || ORIGIN_WORD.known}
+                                  {c.relevance_score == null ? '' : ` · relevance ${c.relevance_score}`}
+                                </div>
+                                {c.summary ? <p className="mt-1.5 text-[12px] text-axal-ink dark:text-gray-100">{c.summary}</p> : null}
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {sup.chips.length ? sup.chips.map((x, i) => <SourceChip key={i} chip={x} />)
+                                    : <StateChip kind="not_applicable" label={sup.notAttempted ? 'Not attempted · no website' : 'No source read'} />}
+                                  {allSources.some((s) => s.candidate_id === c.id && s.origin === 'manual') ? <KindTag kind="man">attached</KindTag> : null}
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <select aria-label={`Classification for ${c.name}`}
+                                    className="min-h-[44px] rounded-md border border-axal-hairline bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+                                    value={c.category === 'adjacent' ? 'adjacent' : 'direct'} disabled={busy !== ''}
+                                    onChange={(e) => run('category', () => api.competitors.candidateUpdate(id, c.id, { category: e.target.value }))}>
+                                    <option value="direct">Direct</option>
+                                    <option value="adjacent">Adjacent</option>
+                                  </select>
+                                  <button type="button" className="min-h-[44px] px-2 text-[12px] font-semibold text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
+                                    disabled={busy !== ''} onClick={() => run('remove', () => api.competitors.removeCandidate(id, c.id))}>
+                                    {`Remove ${c.name}`}
+                                  </button>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                        <div className="mt-2.5 hidden overflow-x-auto lg:block">
                           <table className="w-full min-w-[760px] text-left text-[12px]">
+                            <caption className="sr-only">Classification and the evidence behind it · the subject is excluded</caption>
                             <thead>
                               <tr>{['Company', 'Category', 'Origin', 'Relevance', 'Sources', 'Summary', ''].map((h) => <th key={h || 'x'} className={th}>{h}</th>)}</tr>
                             </thead>
@@ -1018,20 +1279,28 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                                       <option value="direct">Direct</option>
                                       <option value="adjacent">Adjacent</option>
                                     </select>
+                                    {candidateSupport(c, allSources).unconfirmed
+                                      ? <div className="mt-1 text-[10.5px] font-semibold text-amber-800 dark:text-amber-300">unconfirmed · no source read</div>
+                                      : null}
                                   </td>
                                   <td className="py-2.5 pr-2"><Pill tone={ORIGIN_TONE[c.origin] || 'neutral'}>{ORIGIN_WORD[c.origin] || ORIGIN_WORD.known}</Pill></td>
                                   <td className="py-2.5 pr-2 font-mono">
                                     {c.relevance_score == null ? <Unrecorded /> : `${c.relevance_score} / 100`}
                                   </td>
                                   <td className="py-2.5 pr-2">
-                                    {(sourcesBy[c.id] || []).length
-                                      ? (
-                                        <span className="flex flex-wrap gap-1">
-                                          {[...new Set(sourcesBy[c.id].filter((s) => s.origin !== 'manual').map((s) => s.kind))].map((k) => <Pill key={k} tone="neutral">{k}</Pill>)}
-                                          {sourcesBy[c.id].some((s) => s.origin === 'manual') ? <KindTag kind="man">attached</KindTag> : null}
-                                        </span>
-                                      )
-                                      : <Unrecorded />}
+                                    {(() => {
+                                      // D7175: numbered when read, Unavailable with the status when not.
+                                      const sup = candidateSupport(c, allSources);
+                                      const attached = (sourcesBy[c.id] || []).some((s) => s.origin === 'manual');
+                                      return sup.chips.length || attached
+                                        ? (
+                                          <span className="flex flex-wrap gap-1">
+                                            {sup.chips.map((x, i) => <SourceChip key={i} chip={x} />)}
+                                            {attached ? <KindTag kind="man">attached</KindTag> : null}
+                                          </span>
+                                        )
+                                        : <StateChip kind="not_applicable" label={sup.notAttempted ? 'Not attempted · no website' : 'No source read'} />;
+                                    })()}
                                   </td>
                                   <td className="py-2.5 pr-2 text-axal-muted">{c.summary || <Unrecorded />}</td>
                                   <td className="py-2.5">
@@ -1046,6 +1315,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                             </tbody>
                           </table>
                         </div>
+                        </>
                       ) : (
                         <div className="mt-2.5 rounded-xl border-[1.5px] border-dashed border-axal-hairline p-4 dark:border-gray-700">
                           <p className="text-[13px] font-extrabold">No competitors yet</p>
@@ -1056,7 +1326,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                       <div className="mt-3 rounded-xl border border-dashed border-axal-hairline p-3 dark:border-gray-700" data-testid="analysis-add">
                         <div className={eyebrow}>Add competitor</div>
                         <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_2fr_auto]">
-                          <input aria-label="Name" className={inputClass} placeholder="Name *" value={manual.name} onChange={(e) => setManual({ ...manual, name: e.target.value })} />
+                          <input ref={addNameRef} aria-label="Name" className={inputClass} placeholder="Name *" value={manual.name} onChange={(e) => setManual({ ...manual, name: e.target.value })} />
                           <input aria-label="Website" className={inputClass} placeholder="https://" value={manual.url} onChange={(e) => setManual({ ...manual, url: e.target.value })} />
                           <input aria-label="Summary" className={inputClass} placeholder="Summary" value={manual.summary} onChange={(e) => setManual({ ...manual, summary: e.target.value })} />
                           <select aria-label="Category" className={inputClass} value={manual.category} onChange={(e) => setManual({ ...manual, category: e.target.value })}>
@@ -1228,6 +1498,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                   onClick={() => startExport('md', actionsRef.current)} />
                 <SheetRow title="Export JSON" description={`Saved version ${version}.${dirty ? ' Asks first.' : ''}`}
                   onClick={() => startExport('json', actionsRef.current)} />
+                <SheetRow title="Preview Markdown" description={`The file for saved version ${version}, before it is downloaded.`}
+                  onClick={() => previewMd(actionsRef.current)} />
                 <button type="button" className={`${ghostBtn} mt-3 min-h-[48px] w-full`} onClick={() => setSheetOpen(false)}>Close</button>
               </PhoneSheet>
             )}

@@ -9,9 +9,15 @@
  * directory does not hold reads Not recorded with the reason, a directory that
  * could not be read reads Unreadable, and a company or fund that left the
  * directory says so by the name the project kept. Nothing is scored or summed.
+ *
+ * D7167 (#7167): a fund cell that carries the Worker's `provenance` names its
+ * publisher and reported date, the same chip as the fund's Sheet and profile;
+ * a size is printed in the currency its list reported, never converted; and a
+ * read that failed reads "Unavailable" on screen.
  */
 import { money } from '../../lib/companyDirectoryView.js';
 import { eurM } from './fundDirectoryRead.js';
+import { amount, day, sourceChip } from './fundProfileRead.js';
 import { NOT_RECORDED } from './researchStates.js';
 
 /**
@@ -36,7 +42,7 @@ export const MEMBER_STATES = {
   listed: null,
   removed: 'No longer in the directory, so nothing is shown for it.',
   withdrawn: 'Its list was taken down for its terms, so nothing is shown for it.',
-  unreadable: 'Unreadable: the directory could not be read just now.',
+  unreadable: 'Unavailable: the directory could not be read just now.',
 };
 export const memberNote = (m) => (m && m.state in MEMBER_STATES ? MEMBER_STATES[m.state] : MEMBER_STATES.unreadable);
 
@@ -47,6 +53,8 @@ const BACKING = (v) => {
   return null;
 };
 
+const VERDICT_WORDS = { 'republish allowed': 'Republishing allowed', 'cite only': 'Cite only', 'not allowed': 'Not allowed' };
+
 /** One value as text, with what sits under it. `null` text means the value cannot be printed. */
 function valueText(key, c) {
   const v = c.value;
@@ -55,7 +63,8 @@ function valueText(key, c) {
     case 'last_round': return { text: money(v, c.currency), detail: [c.type, c.date].filter(Boolean).join(' · ') || null };
     case 'funding_total':
     case 'revenue': return { text: money(v, c.currency) };
-    case 'size': return { text: c.currency === 'EUR' ? eurM(v) : null };
+    case 'size': return { text: c.currency === 'EUR' ? eurM(v) : amount(v, c.currency), detail: c.currency || null };
+    case 'source_use': return { text: VERDICT_WORDS[v] || null, detail: [c.reviewed_on && `reviewed ${day(c.reviewed_on)}`, c.imported_on && `imported ${day(c.imported_on)}`].filter(Boolean).join(' · ') || null };
     case 'vintage': return { text: String(v), detail: c.date || null };
     case 'backing': return { text: BACKING(v) };
     default: return { text: typeof v === 'string' || typeof v === 'number' ? String(v) : null };
@@ -69,20 +78,24 @@ function valueText(key, c) {
  */
 export function cellView(key, cell, member) {
   if (!member || member.state !== 'listed' || !member.values) return { state: 'absent', text: null, reason: memberNote(member) };
-  if (!cell) return { state: 'unreadable', text: null, reason: 'Unreadable' };
-  // D7177: the Worker's per-cell Unreadable stays Unreadable, never Not recorded.
+  // D7167: a value the Worker left out (its read failed) reads Unavailable.
+  if (!cell) return { state: 'unreadable', text: null, reason: 'Unavailable' };
+  // D7177: the Worker's per-cell Unreadable (a value held in a form it cannot read) stays Unreadable, never Not recorded.
   if (cell.status === 'unreadable') return { state: 'unreadable', text: null, reason: cell.reason || 'Unreadable' };
   if (cell.status !== 'recorded') return { state: 'not_recorded', text: NOT_RECORDED, reason: cell.reason || NOT_RECORDED };
   const { text, detail = null } = valueText(key, cell);
   if (text == null) return { state: 'unreadable', text: null, reason: 'Unreadable: the value is held in a form this page cannot show' };
   const source = cell.source?.name || null;
+  // D7167: the fund's provenance chip (publisher · reported date), else the list and its as-of date.
+  const chip = key !== 'source_use' && cell.provenance ? sourceChip(cell.provenance) : null;
+  const url = cell.provenance?.published_url || cell.source?.url || '';
   return {
     state: 'recorded',
     text,
     detail,
-    source: [source || 'Source not recorded', cell.as_of ? `as of ${cell.as_of}` : 'date not recorded'].join(' · '),
+    source: chip || [source || 'Source not recorded', cell.as_of ? `as of ${cell.as_of}` : 'date not recorded'].join(' · '),
     // Only a web address is a link; anything else is printed, never opened.
-    sourceUrl: /^https?:\/\//i.test(String(cell.source?.url || '')) ? cell.source.url : null,
+    sourceUrl: /^https?:\/\//i.test(String(url)) ? String(url) : null,
   };
 }
 
@@ -137,6 +150,7 @@ export const COMPARISON_ERRORS = {
   project_archived: 'This project is archived, so it cannot change until you restore it.',
   comparison_full: 'A comparison holds at most 6 columns. Remove one first, or start another comparison.',
   not_in_directory: 'That is no longer in the directory, so it was not added.',
+  source_withdrawn: 'This fund’s source list was withdrawn, so nothing was added.',
   directory_unreadable: 'The directory could not be read just now, so nothing was added. Try again.',
   title_required: 'A comparison needs a title.',
   title_too_long: 'Keep the title under 160 characters.',
