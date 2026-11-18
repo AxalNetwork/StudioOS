@@ -60,7 +60,8 @@ const FROM_URL = [
   'pages/founder/FounderGrowCustomers.jsx',
   'pages/founder/FounderGrowFocus.jsx',
   'pages/founder/FounderGrowLaunch.jsx',
-  'pages/founder/FounderGrowPartnerships.jsx',
+  // FounderGrowPartnerships.jsx stood here; D6118 (#6118) made Partnerships Partner network's
+  // cycle page, which reads `?project_id=` through CycleRoute (below).
   'pages/founder/FounderGrowTalent.jsx',
   'pages/founder/FounderNetworkOrganizations.jsx',
   'pages/founder/FounderNetworkRelationships.jsx',

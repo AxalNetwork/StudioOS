@@ -20,7 +20,7 @@ until Session 1 assigns a number.
 | **Code Quality AI**: the per-PR autofix suggestions, the "AI findings" on recently merged code, and the "Potential fix for 1 code quality finding" pull requests (about 40 opened here so far, e.g. #941, #942) | Copilot-generated fixes and detections | **GitHub AI Credits**, usage-based. Clicking *Commit suggestion* does not consume them. Generating the fixes does. |
 | `codeql.yml` | This repository's own CodeQL workflow, with the `security-extended,security-and-quality` suites. It uploads to the Security tab when code scanning takes an upload (D718, D721: a public repository, or Code Security on), where Copilot Autofix can propose a fix per alert, and always summarises in the job summary (D672) | Actions minutes only; the classic Autofix uses no AI credits on a public repository |
 | `semgrep.yml`, `gitleaks.yml`, `ci.yml` (build, typecheck, drift, audits, OG, LFS), `migration-immutability.yml`, the contract workflows | Deterministic checks | Actions minutes only |
-| `claude-code.yml` | The `@claude` mention action | Anthropic **API** credits through `ANTHROPIC_API_KEY`, only when mentioned |
+| `claude-code.yml` | The `@claude` mention action | Anthropic **API** credits through its own federation rule (§4b, no stored key), only when mentioned |
 | Code Security AI (agentic autofix for code scanning, AI Scan for PRs) | Code Security products | Not in use: Code Security is off on this private repository (D672) |
 
 What this means:
@@ -33,7 +33,7 @@ What this means:
 
 **Each Max plan also comes with monthly API credit** (corrected 2026-10-17; this paragraph used to say a Max plan includes none). Anthropic's [API credits for Max and Team plans](https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers) gives each subscription **$200 a month on Max 20x** ($100 on Max 5x). The credit reaches the review only when the owner claims it into the right organization:
 
-- **How it is claimed.** The subscriber opens claude.ai → *Settings → Billing → API credits* and links a Console organization. They need the Owner, Admin or Billing role in that organization. Link the organization the review bills to: one plan feeds one organization, and only Anthropic support can change the link afterwards. If the plan is already linked to another organization, move the review there instead: build the federation rule of §4a in that organization, then point the four `ANTHROPIC_*_ID` variables at it. The fallback `ANTHROPIC_API_KEY` secret is shared with `claude-code.yml`, whose Claude Code runs the plan credit does not cover, so do not move that secret to the credit's organization.
+- **How it is claimed.** The subscriber opens claude.ai → *Settings → Billing → API credits* and links a Console organization. They need the Owner, Admin or Billing role in that organization. Link the organization the review bills to: one plan feeds one organization, and only Anthropic support can change the link afterwards. If the plan is already linked to another organization, move the review there instead: build the federation rule of §4a in that organization, then point the four `ANTHROPIC_*_ID` variables at it. `claude-code.yml` has its own federation rule (§4b) and no longer reads `ANTHROPIC_API_KEY`; its Claude Code runs are not covered by the plan credit, so leave its rule in the organization holding purchased credit.
 - **What it pays for.** It covers the Claude API, which is what this review calls (the Messages API through the pinned SDK). It does **not** cover Claude Code, so `claude-code.yml`, which runs Claude Code through `claude-code-action`, still needs purchased credit.
 - **How long it lasts.** It is spent before any purchased credit, expires at the end of each billing cycle, and does not roll over. An organization receives credit from one plan only, so the second subscription can feed a second organization but cannot add to the first.
 - **What the error means.** "Your credit balance is too low to access the Anthropic API" means the billed organization has no credit left. Either the plan's credit was never claimed, or it was linked to a different organization.
@@ -77,7 +77,7 @@ Set these under *Settings → Secrets and variables → Actions*.
 | Name | Kind | Default | Meaning |
 |---|---|---|---|
 | `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `ANTHROPIC_SERVICE_ACCOUNT_ID`, `ANTHROPIC_WORKSPACE_ID` | variables | unset | **Preferred credential: workload identity federation.** These are identifiers, not secrets. The job's GitHub OIDC token (audience `https://api.anthropic.com`) is exchanged for a short-lived Anthropic token, so no long-lived key is stored. With a rule set, federation is used even if the key secret also exists. A rule without the organization ID, or an ID of the wrong shape, is a configuration error. Setup: §4a. |
-| `ANTHROPIC_API_KEY` | secret | — | The fallback credential: a Console API key. Already exists for `claude-code.yml`; a dedicated key in its own workspace is better (§6). |
+| `ANTHROPIC_API_KEY` | secret | — | The fallback credential: a Console API key. `claude-code.yml` no longer reads it (§4b); a dedicated key in its own workspace is better (§6). |
 | `CLAUDE_REVIEW_ENABLED` | variable | off | `true` runs the review. |
 | `ANTHROPIC_MODEL` | variable | — (required) | Routine model ID. Suggested: `claude-sonnet-5-5`. |
 | `ANTHROPIC_MODEL_HIGH_RISK` | variable | unset | Model for diffs touching migrations, SQL, workflows, `wrangler*.toml`, Worker auth, billing or middleware, or adding secret-like lines. Suggested: `claude-opus-5-5`. |
@@ -161,9 +161,27 @@ A refused exchange reads `Token exchange failed with status 401 …`: the API an
 
 **What the rule allows.** Any workflow in this repository that runs on `pull_request` with `id-token: write` matches it. That includes one added on a branch of this repository, the same exposure a repository secret has. A fork's pull request never matches: GitHub gives it no OIDC token.
 
-**`claude-code.yml`.** The `@claude` workflow runs on comments, not pull requests, so this rule does not cover it. It keeps `ANTHROPIC_API_KEY` until it is migrated separately.
+**`claude-code.yml`.** The `@claude` workflow runs on comments, not pull requests, so this rule does not cover it. It has its own rule, §4b.
 
 It is **not** a required check. Making it one is a separate, explicit decision, taken after the shadow comparison.
+
+### 4b. Federation for `claude-code.yml` (D5530)
+
+The `@claude` workflow authenticates the same way, with no stored key (#5530, owner answer B). `anthropics/claude-code-action` takes the identifiers as inputs and does the exchange itself; the workflow needs `id-token: write`, which it has. It gets **its own rule**, because its runs carry a different subject from a pull request's.
+
+1. **Service account:** a new, dedicated one (for example `github-claude-code`), membership of a Claude Code workspace only, developer role. A separate workspace keeps its spend apart from the review's and lets a spend limit cap it.
+2. **Rule** (for example `studioos-claude-code`):
+   - **subject prefix `repo:AxalNetwork/StudioOS:ref:refs/heads/main`**. Comment, review and issue events run on the default branch, so their token's subject is that. A manual dispatch from another branch does not match and is refused, by design;
+   - **claim `workflow_ref`** equal to `AxalNetwork/StudioOS/.github/workflows/claude-code.yml@refs/heads/main`, copied character for character from a real token on the history tab. Without it the rule would also match every other `main` workflow holding `id-token: write`;
+   - audience `https://api.anthropic.com`;
+   - enabled in the Claude Code workspace only, scope `workspace:developer`, token lifetime 10 minutes. A run can last 20 minutes; the action keeps a fresh GitHub token on disk and Claude Code exchanges it again when its Anthropic token expires, so a short lifetime does not cut a run off.
+3. **Repository variables:** `CLAUDE_CODE_FEDERATION_RULE_ID` (`fdrl_…`), `CLAUDE_CODE_ORGANIZATION_ID` (a UUID), and optionally `CLAUDE_CODE_SERVICE_ACCOUNT_ID` (`svac_…`) and `CLAUDE_CODE_WORKSPACE_ID` (`wrkspc_…`). They are identifiers, not secrets. They are separate from the review's `ANTHROPIC_*_ID` variables, so neither workflow can be pointed at the other's rule by accident.
+
+Do not also give the action `anthropic_api_key` or `claude_code_oauth_token`: a static credential takes precedence and federation is not used (`scripts/lib/claudeCodeFederation.test.mjs` fails if one appears). With federation the action skips its inline-comment classification, which needs a key, and posts unconfirmed inline comments directly.
+
+The workflow's first step, `node scripts/check-claude-code-federation.mjs`, fails with a readable message when a required variable is missing or malformed, and prints which identifiers it found, never their values. A refused exchange is diagnosed as in §4a, on the Console's authentication history. Once the rule works, delete the `ANTHROPIC_API_KEY` secret if the review does not use it as its fallback, and revoke the key in the Console: deleting a secret leaves the key valid.
+
+**What the rule allows.** Only `claude-code.yml` on `main`, which only an owner, member or collaborator can start (#4571 SC-02). A branch cannot widen it: a pull request's token has a `pull_request` subject, and the `workflow_ref` claim names this file on `main`.
 
 ## 5. Cost
 
@@ -220,7 +238,7 @@ How it behaves:
 - **What it sends.** The same diff and excerpts, to whichever provider answers. This repository is public, so the diff is already public.
 - **Setup.** Add any of `ANTHROPIC_API_KEY_2`, `ANTHROPIC_API_KEY_3`, `OPENAI_API_KEY`, `GEMINI_API_KEY` and `KIMI_API_KEY` as repository secrets (*Settings → Secrets and variables → Actions → Secrets*). Set `OPENAI_MODEL` and its rates for the OpenAI step; optionally set `OPENAI_BASE_URL`. Set `GEMINI_MODEL` and its rates for Gemini, optionally `GEMINI_BASE_URL`. Optionally set `KIMI_MODEL` and `KIMI_BASE_URL` (§3). `CLAUDE_REVIEW_CREDIT_FALLBACK=off` turns the whole chain off.
 - **If every account is empty,** the summary lists them and says no review was made. Unbilled refusals record zero; timeouts retain their worst-case cost.
-- **This covers the advisory review only.** `claude-code.yml` (the `@claude` action) still uses `ANTHROPIC_API_KEY` alone.
+- **This covers the advisory review only.** `claude-code.yml` (the `@claude` action) uses its own federation rule (§4b) and no fallback chain.
 
 ## 7. Limitations
 

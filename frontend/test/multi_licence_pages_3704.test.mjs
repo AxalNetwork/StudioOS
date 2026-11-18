@@ -343,7 +343,7 @@ for (const [licence, title] of [['advisor', 'Advisor'], ['partner', 'Operating P
       assert.ok(!/How to apply/.test(lab.page.text()), 'the closing apply band is not drawn');
       assert.ok(!ids.includes('link-lp-workspace'), 'the Lab block does not repeat the LP section');
       assert.ok(!/Back the graduates\./.test(lab.page.text()));
-      assert.ok(/Download the programme brief/.test(lab.page.text()), 'the rest of the Lab overview is still drawn');
+      assert.ok(/Read the programme brief/.test(lab.page.text()), 'the rest of the Lab overview is still drawn');
       assert.ok(ids.includes('stub-investor'), 'the Investor block is drawn beside it');
     } finally { await lab.unmount(); }
   });

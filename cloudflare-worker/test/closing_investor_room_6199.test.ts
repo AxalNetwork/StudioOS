@@ -51,6 +51,7 @@ function freshDb() {
   db.exec(BASELINE);
   for (const f of ['312_fund_call_ledger.sql', '335_deal_transfers_and_closing_checklists.sql', '340_deal_transfer_company.sql',
     '410_safe_issuances.sql', '599_deal_currency.sql']) db.exec(MIG(f));
+    db.exec(MIG('202611161505_6195_commitment_route_preference.sql')); // D6195: commitments.route_preference
   db.exec('ALTER TABLE raise_prospects ADD COLUMN amount_cents INTEGER');
   db.exec(`
     INSERT INTO founders (id, name, email) VALUES (31, 'Fay Founder', 'fay@example.test');

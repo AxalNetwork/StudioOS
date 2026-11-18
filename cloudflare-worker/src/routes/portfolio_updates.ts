@@ -22,7 +22,7 @@ import { canAccessProject, getMemberProjectIds } from '../services/projectAccess
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
   ASK_AGAIN_DAYS, ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics, validMetricUnit,
-  draftLines, landReply, noMetrics, payloadFor, periodFacts,
+  audienceFact, draftLines, landReply, noMetrics, payloadFor, periodFacts, periodFollowers,
   type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
 
@@ -640,7 +640,9 @@ r.post('/share/draft-lines', async (c) => {
       ).bind(pid, start, end).first<{ n: number }>();
       contacts = Number(row?.n ?? 0);
     } catch { contacts = null; }
-    return c.json(await draftLines(c.env, user.id, periodFacts(metrics, roles, contacts, end, await shippedItems(c.env, pid, start, end))));
+    // D5867: the TikTok audience is a fact to draft from; the founder keeps or drops the line and sends.
+    const audience = audienceFact(await periodFollowers(c.env, pid, start, end));
+    return c.json(await draftLines(c.env, user.id, periodFacts(metrics, roles, contacts, end, await shippedItems(c.env, pid, start, end), audience)));
   } catch (e) { return mapError(c, e); }
 });
 

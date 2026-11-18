@@ -227,7 +227,38 @@ export const assignable = (uid) => throughSkill(() => teamAgentsApi.assignable(u
 /** `POST /api/teams/skills/:uid/assign { agent_uids }` → `{ added, refused }`. */
 export const assignSkill = (uid, agentUids) => throughSkill(() => teamAgentsApi.assignSkill(uid, agentUids));
 /** `GET /api/teams/:scope/:id/coverage` → `{ axes: [{ slug, label, people_level, agent_level }] }`. */
-export const coverage = (scope, id) => throughSkill(() => teamAgentsApi.coverage(scope, id));
+/**
+ * #5964 (D4538 part 2): an extension's lineage, `GET /api/teams/skills/:uid/base` → `{ lineage }` (null: a standalone
+ * skill). A 404 is the Worker's "There is no such skill" (another company, or a member on an unpublished draft).
+ */
+export async function skillBase(uid) {
+  try {
+    const r = await teamAgentsApi.skillBase(uid);
+    return { available: true, value: { lineage: r?.lineage ?? null } };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'team_agents_off') return unavailable();
+    if (status === 404) return { available: false, refused: true, code: 'not_found', reason: 'There is no such skill.' };
+    return { available: false, unreadable: true, reason: 'could not be read' };
+  }
+}
+/**
+ * #5964: `POST /api/teams/skills/:uid/extend` (`:uid` the Axal skill). A refusal keeps the Worker's code, so the dialog
+ * can tie it to its field (`extendRefusal` in `extensionCompareModel.js`); an answer with no code is unreadable.
+ */
+export async function extendSkill(uid, body) {
+  try {
+    return { available: true, value: await teamAgentsApi.extendSkill(uid, body) };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'team_agents_off') return unavailable();
+    if (code && [400, 403, 404, 409, 422].includes(status)) return { available: false, refused: true, code, reason: e?.message || null };
+    return { available: false, unreadable: true, reason: 'could not be read' };
+  }
+}
+export const coverage = (scope, id) =>throughSkill(() => teamAgentsApi.coverage(scope, id));
 /** D4121 (#4121): the agent's cost per run with `add` skills added and `remove` taken off; `{ available: false }` when pricing cannot be read. */
 export const costEstimate = (uid, change = {}) => throughSkill(() => teamAgentsApi.costEstimate(uid, change));
 /** D4121: the same for an agent not yet added (AG3, the Add-an-agent Skills step). */
