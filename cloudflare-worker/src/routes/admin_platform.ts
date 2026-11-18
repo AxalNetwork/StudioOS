@@ -257,7 +257,7 @@ r.post('/switches/:key', async (c) => {
   }
   const auditAction = thrown ? 'platform_switch_thrown' : 'platform_switch_released';
   let changed: boolean;
-  let recorded = true;
+  let recorded: boolean;
   let mirrored: boolean | null = null;
   try {
     // The change and its audit row in one batch: both or neither (D4703).

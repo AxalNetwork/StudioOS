@@ -170,7 +170,7 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
     try {
       const out = await capitalRelationshipsApi.acceptProposals(projectId, uids);
       failed = Array.isArray(out?.results) ? out.results.filter((r) => r.ok !== true).length : uids.length;
-    } catch { failed = uids.length; }
+    } catch { /* the whole request failed: every proposal stays counted as not accepted */ }
     setAll({ busy: false, failed, open: '' });
     reload();
   };
