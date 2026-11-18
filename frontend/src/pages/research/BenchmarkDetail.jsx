@@ -7,6 +7,9 @@ import { StatedLimit } from '../advisor/expertise/kit';
 import useRecordCrumb from '../admin/useRecordCrumb';
 import { benchmarkTiles, editorFields, editorPatch, readingDraft } from './benchmarkRead';
 import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
+import { researchBenchmarkFundsApi } from '../../lib/api/researchBenchmarkFunds';
+import { oursProvenance } from './oursFromFundRead.js';
+import OursFromFund from './OursFromFund.jsx';
 
 /**
  * `/research/benchmarking/:uid` — one benchmark (canvas f2eb2046, D314).
@@ -30,6 +33,11 @@ import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
  * says its named constituents go with it, because the Worker removes them
  * before the row. Only a delete the Worker confirmed leaves the page; a failed
  * one says so here and the benchmark stays drawn. A 404 is the D278 sentence.
+ *
+ * OURS MAY COME FROM A FUND (D6278). Under "Ours" the page says whether the
+ * figure was entered on this row or copied from a fund's recorded TVPI or DPI,
+ * and `OursFromFund` offers that copy. A typed figure is replaced only after
+ * the writer confirms; a hand edit of Ours drops the fund link at the Worker.
  */
 
 const eyebrow = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
@@ -269,6 +277,12 @@ export default function BenchmarkDetail({ role = 'investor' }) {
                   <div className="mt-1 font-mono text-[32px] font-bold tracking-tight text-axal-ink dark:text-gray-100">
                     {item.our_value || <Unrecorded />}
                   </div>
+                  {/* D6278: where Ours came from, and the fund figure that may fill it. */}
+                  {oursProvenance(item) && (
+                    <p data-testid="benchmark-ours-from" className="mt-1 text-[11.5px] text-axal-muted">{oursProvenance(item)}</p>
+                  )}
+                  <OursFromFund key={target} item={item} busy={busy}
+                    onUse={(choice) => run('fund', () => researchBenchmarkFundsApi.useFigure(target, choice), 'Ours now reads the fund’s recorded figure.')} />
                 </div>
                 <div className="border-t border-axal-hairline pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 dark:border-gray-800">
                   <div className="text-[11px] font-semibold text-axal-muted">Peer</div>

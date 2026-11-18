@@ -1,11 +1,10 @@
 import { holdsLicence } from '../services/accountLicences';
 /** D627: narrow LP reads and GP/admin writes; writes and actor audit commit together. D6246: the GP of record reads too. */
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { lpMembershipScope } from '../services/tenancyScope';
-import { claimLpRowsByEmail } from '../services/lpClaim';
-import { managedFundIds, requireFundGp } from '../services/fundGpAccess';
+import { requireFundGp } from '../services/fundGpAccess';
+import { readableFunds } from '../services/readableFunds';
 import { assertAdminAct, auditFundAct } from '../services/fundAdminAccess';
 import { readFundPerformance, validDate } from '../services/fundPerformance';
 import { readFundHistory, readFundPositions } from '../services/fundPositionsHistory';
@@ -26,34 +25,6 @@ r.onError((error, c) => {
   if (status) return refuse(c, status, { code: 'fund_access_refused', message: 'This account cannot access this fund.' });
   return refuse(c, 503, { code: 'fund_performance_unreadable', message: 'Fund performance is Unreadable. Please retry.', raw: error });
 });
-async function readableFunds(c: Context<{ Bindings: Env }>, user: any) {
-  const env = c.env;
-  if (user.role === 'admin') {
-    const all = await env.DB.prepare(`SELECT id, name, vintage_year, status FROM vc_funds ORDER BY id`).all<any>();
-    if (!all.success) throw new Error('Fund list read failed');
-    return all.results;
-  }
-  if (holdsLicence(user, 'investor')) await claimLpRowsByEmail(env, Number(user.id), user.email);
-  const scope = lpMembershipScope(user);
-  const lp = holdsLicence(user, 'investor')
-    ? await env.DB.prepare(`SELECT f.id, f.name, f.vintage_year, f.status FROM vc_funds f
-        WHERE EXISTS (SELECT 1 FROM limited_partners lp WHERE lp.fund_id = f.id
-          AND ${scope.sql}) ORDER BY f.id`)
-        .bind(...scope.binds).all<any>()
-    : { success: true, results: [] };
-  if (!lp.success) throw new Error('Fund list read failed');
-  // D6246: the GP of record also reads the fund they run, through the operating gate's own scope
-  // (institutional tier, verified active company), so this read and requireFundGp never disagree.
-  const managed = await managedFundIds(c, user);
-  const gp = managed.length
-    ? await env.DB.prepare(`SELECT id, name, vintage_year, status FROM vc_funds
-        WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id`).bind(JSON.stringify(managed)).all<any>()
-    : { success: true, results: [] };
-  if (!gp.success) throw new Error('Fund list read failed');
-  const byId = new Map<number, any>();
-  for (const fund of [...lp.results, ...gp.results]) if (!byId.has(Number(fund.id))) byId.set(Number(fund.id), fund);
-  return [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id));
-}
 r.get('/', async (c) => {
   const user = await requireAuth(c);
   const funds = await readableFunds(c, user);
