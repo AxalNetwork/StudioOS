@@ -350,6 +350,7 @@ catalogue version only in the fixture.
 | `fund_admin_answers_6397.test.ts` | D6397: gated audited prompt reads, recorded states/dates, scoped navigation, no models or financial writes. |
 `investor_consent_6392.test.ts` (#6392) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+| `network_intro_offers_6637.test.ts` | D6637: real migrated SQLite authorization, consent, failure and concurrency regressions. |
 | `network_tie_candidates_6636.test.ts` | D6636: real migrated SQLite authorization, consent, failure and concurrency regressions. |
 
 | `deal_activity_sources_6430.test.ts` | D6430: mounted real-SQLite data-room grant/folder/tier/NDA isolation, exact-firm deck grants, anonymous signature events, bounds and per-source failures. |
