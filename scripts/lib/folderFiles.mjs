@@ -19,6 +19,12 @@
  * or `INDEX_NONE` (the README describes the folder and its rule, no rows).
  * `perFileRows` finds the rows such a README must not carry. `folderListing`
  * is the one helper here that reads the disk: the files a block lists.
+ *
+ * #6470 — `scripts/` and `scripts/lib/` hold shell and Python files beside the
+ * modules, so a `.sh` or `.py` file is listed too, described by its leading `#`
+ * comment (after the shebang) or else a Python module docstring
+ * (`hashHeaderLine`). A data file (`.json`, `.txt`) takes no comment and is not
+ * listed: the script that reads or writes it describes it in its own header.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,8 +32,8 @@ import { join } from 'node:path';
 export const FILES_BEGIN = '<!-- files:begin -->';
 export const FILES_END = '<!-- files:end -->';
 
-/** The files a generated list names: source files, not READMEs or declarations. */
-export const LISTED_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|sql)$/;
+/** The files a generated list names: source files (#6470: shell and Python too), not READMEs or declarations. */
+export const LISTED_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|sql|sh|py)$/;
 export const listedFile = (name) => LISTED_EXT.test(name) && !/\.d\.ts$/.test(name);
 
 const MAX = 160;
@@ -81,6 +87,61 @@ export function headerLine(text) {
   return null;
 }
 
+/** A line of a `#` header that says nothing about the file: a rule (`# ----`), a shellcheck or coding pragma, the file's bare path. */
+const HASH_NOISE = /^(?:[-=#*_~]{3,}|shellcheck\b.*|-\*-.*-\*-|(?:vim?|pylint|noqa|type):.*|[\w./-]+\.(?:sh|py))$/;
+
+/**
+ * #6470: the first sentence of a shell or Python file's header, or null when it
+ * has none: the leading `#` comment block after the shebang (rules and pragmas
+ * skipped), else a Python module docstring.
+ */
+export function hashHeaderLine(text) {
+  const s = String(text ?? '').replace(/^#![^\n]*\n/, '');
+  const lead = /^(?:[^\S\n]*(?:#[^\n]*)?(?:\n|$))+/.exec(s)?.[0] ?? '';
+  const lines = lead.split('\n').map((l) => l.replace(/^\s*#\s?/, '').trim()).map((l) => (HASH_NOISE.test(l) ? '' : l));
+  const fromHash = firstLine(lines);
+  if (fromHash) return fromHash;
+  const doc = /^\s*[rRuU]?("\"\"|''')([\s\S]*?)\1/.exec(s.slice(lead.length));
+  return doc ? firstLine(doc[2].split('\n')) : null;
+}
+
+/**
+ * #6470: a file's whole header comment as text, comment markers stripped, or ''
+ * when it has none: for a shell or Python file the leading `#` block after the
+ * shebang and then a module docstring; for any other the consecutive leading
+ * comments (`/* … *\/`, `//`, SQL `--`), else its first JSDoc block. What a
+ * README row used to say about a file now lives here, so a test that once read
+ * the row reads this.
+ */
+export function headerComment(name, text) {
+  let s = String(text ?? '').replace(/^#![^\n]*\n/, '');
+  const parts = [];
+  if (/\.(sh|py)$/.test(name)) {
+    const hash = /^(?:[^\S\n]*(?:#[^\n]*)?(?:\n|$))*/.exec(s)[0];
+    parts.push(hash.split('\n').map((l) => l.replace(/^\s*#\s?/, '')).join('\n'));
+    const doc = /^\s*[rRuU]?("""|\'\'\')([\s\S]*?)\1/.exec(s.slice(hash.length));
+    if (doc) parts.push(doc[2]);
+    return tidy(parts);
+  }
+  for (;;) {
+    const rest = s.replace(/^\s+/, '');
+    const block = /^\/\*([\s\S]*?)\*\//.exec(rest);
+    const lines = /^(?:(?:\/\/|--)[^\n]*(?:\n|$)[^\S\n]*)+/.exec(rest);
+    if (block) parts.push(block[1].split('\n').map((l) => l.replace(/^\s*\*\s?/, '')).join('\n'));
+    else if (lines) parts.push(lines[0].split('\n').map((l) => l.replace(/^\s*(?:\/\/|--)\s?/, '')).join('\n'));
+    else break;
+    s = rest.slice((block ?? lines)[0].length);
+  }
+  if (!parts.length) {
+    const jsdoc = /\/\*\*([\s\S]*?)\*\//.exec(String(text ?? ''));
+    if (jsdoc) parts.push(jsdoc[1].split('\n').map((l) => l.replace(/^\s*\*\s?/, '')).join('\n'));
+  }
+  return tidy(parts);
+}
+
+/** Header parts as one text: trailing spaces dropped from each line, blank lines at either end trimmed. */
+const tidy = (parts) => parts.join('\n').split('\n').map((l) => l.trimEnd()).join('\n').trim();
+
 /** A Markdown file's first line when it is a heading (`## D6465 — title (#6465)`), its `#`s dropped; else null. */
 export function headingLine(text) {
   const first = String(text ?? '').split('\n').find((l) => l.trim() !== '');
@@ -90,8 +151,8 @@ export function headingLine(text) {
   return line.length > MAX ? `${line.slice(0, MAX - 1).trimEnd()}…` : line;
 }
 
-/** What a list row says about a file: a Markdown file's heading, any other file's header comment. */
-export const describe = (name, text) => (/\.md$/.test(name) ? headingLine(text) : headerLine(text));
+/** What a list row says about a file: a Markdown file's heading, a shell or Python file's `#` header, any other file's header comment. */
+export const describe = (name, text) => (/\.md$/.test(name) ? headingLine(text) : /\.(sh|py)$/.test(name) ? hashHeaderLine(text) : headerLine(text));
 
 const cell = (s) => String(s).replace(/\|/g, '\\|');
 
