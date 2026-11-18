@@ -251,8 +251,19 @@ export function DealMarket({ deal }) {
               <Block block={d.competitors} what="The competitors" retry={retry} testId="deal-market-competitors">
                 {(rows) => (rows.length
                   ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[520px] border-collapse text-left text-[12.5px]">
+                    <>
+                    {/* D4815 part 15 (#5908, DE15): a card per competitor on a phone, never a table scrolled sideways. */}
+                    <ul className="m-0 flex list-none flex-col gap-2 p-0 md:hidden" data-testid="deal-market-competitor-cards">{rows.map((r, i) => (
+                      <li key={`${r.name}-${i}`} className="rounded-axal-sm border border-axal-hairline px-3 py-2.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                        <p className="m-0 text-[13.5px] font-bold">{r.name || NOT_RECORDED}</p>
+                        <p className="m-0 mt-0.5">{r.why_it_matters || NOT_RECORDED}</p>
+                        <dl className="m-0 mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+                          <dt className="text-axal-muted dark:text-gray-400">Price</dt><dd className="m-0">{r.price_position || NOT_RECORDED}</dd>
+                          <dt className="text-axal-muted dark:text-gray-400">Depth</dt><dd className="m-0">{r.depth_position || NOT_RECORDED}</dd>
+                        </dl>
+                      </li>))}</ul>
+                    <div className="hidden md:block">
+                      <table className="w-full border-collapse text-left text-[12.5px]">
                         <thead><tr className="text-axal-muted dark:text-gray-400">{['Name', 'Why it matters', 'Price', 'Depth'].map((c) => <th key={c} scope="col" className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{c}</th>)}</tr></thead>
                         <tbody>{rows.map((r, i) => (
                           <tr key={`${r.name}-${i}`} className="align-top text-axal-ink dark:text-gray-100">
@@ -263,6 +274,7 @@ export function DealMarket({ deal }) {
                           </tr>))}</tbody>
                       </table>
                     </div>
+                    </>
                   )
                   : <p className={`m-0 ${SUB}`}>The founder tracks no competitors.</p>)}
               </Block>

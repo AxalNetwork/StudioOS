@@ -79,7 +79,6 @@ test('our own stored image URLs are left alone; every other image a slide names 
 // ─────────────────────────────────────────────────────────── the routes
 
 
-const root = new URL('../sql/', import.meta.url);
 const JWT_SECRET = 'synthetic-d1506-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 

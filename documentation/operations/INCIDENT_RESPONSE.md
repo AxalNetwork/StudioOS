@@ -159,8 +159,8 @@ finish technical mitigation.
 |------|-------|----------|-----------|----------------|
 | D1 database | R2 `studioos-backups/d1/<database>/backup-YYYY-MM-DD.sql` (flat `d1/backup-…` before 2026-09-15; `scripts/dr-drill.sh` reads both) | Daily 02:10 UTC (GH Actions) | 365 days, object-lock compliance mode | [`scripts/restore-d1.sh`](scripts/restore-d1.sh), into an empty EU database you create (`D1_RECOVERY.md` §3) |
 | KV (`TOKENS`) | R2 `studioos-backups/kv/TOKENS/YYYY-MM-DD.jsonl` | Daily 02:00 UTC (worker cron) | 365 days | manual `wrangler kv:bulk put` |
-| R2 contracts | R2 versioning on `studioos-files` | Continuous (versioning) | 7 years (previous versions) | dashboard restore |
-| R2 KYC | R2 versioning on `studioos-files` (`kyc/` prefix) | Continuous (versioning) | 7 years (previous versions) | dashboard restore |
+| R2 contracts | Approved record classes only: append-only snapshots under `studioos-backups/files-recovery/` | Daily 02:30 UTC, gated off until counsel/prefix approval and configuration | Seven years only where the class has a recorded legal retention basis | Synthetic drill: `python3 scripts/file-recovery-drill.py`; live restore awaits #6654 suppression-ledger integration |
+| R2 KYC | Only counsel-approved record prefixes from #6650; unclassified personal files are excluded | Same gated snapshot job; no live protection claimed before activation | Class-specific legal basis required before seven-year lock | Same verified snapshot path and suppression requirement; no dashboard version restore exists |
 | Worker source | Git (origin/main) | Per-commit | Indefinite | `git revert` + `wrangler deploy` |
 | R2 publications | `studioos-publications` | Recovery schedule not recorded | Not recorded; no locked-copy approval | No verified recovery path recorded; see [R2 inventory](R2_INVENTORY.json) and #6428 handoff |
 | R2 company logos | `studioos-company-logos` | Recovery schedule not recorded | Not recorded | Re-upload an available source asset; no archived restore path recorded; see [R2 inventory](R2_INVENTORY.json) |
@@ -177,16 +177,49 @@ finish technical mitigation.
    Object Lock.
 3. Add a **lifecycle rule**: transition to **Standard-IA** after **30
    days**, delete after **365 days**.
-4. Enable **versioning** on the contracts bucket (`studioos-files`) and
-   set a **7-year retention** on noncurrent versions.
-5. Add the same versioning + 7-year retention to the KYC sub-prefix
-   (currently sharing `studioos-files`; if it's split out later, repeat
-   the steps on the new bucket).
+4. **R2 has no object versioning or noncurrent-version restore.** Before
+   enabling file snapshots, obtain #6650's prefix registry and counsel's legal
+   retention basis for each record class (#6652, decision A). Registry schema:
+   `{"version":1,"classes":[{"prefix":"approved-record-prefix/","bucket":"studioos-files","class":"record","locked_copy":"yes","retention_basis":"approved-reference","retention_days":2557}]}`.
+   There are no default live prefixes. Keep personal files without a recorded
+   basis out of the locked archive. #6651 supplies write-once record keys;
+   this scheduled copy cannot recover a revision overwritten or deleted before
+   it was captured. RPO is at most the last verified successful snapshot, not
+   continuous versioning. Unobserved intermediate writes are not recoverable.
+5. After counsel approval, configure an **R2 bucket lock** covering
+   `files-recovery/` in `studioos-backups` for **2557 days**, at least seven
+   calendar years. This is a prefix lock, not S3 versioning or a claimed
+   compliance-mode setting. Inspect with `wrangler r2 bucket lock list
+   studioos-backups`; a 365-day D1/KV rule does not satisfy file retention.
+   The script checks the actual lock via Cloudflare's control-plane API and
+   refuses short, missing, indefinite or longer overlapping retention rules.
+   Provide separate private S3 credentials: a read-only source key for
+   `studioos-files` and an archive read/write destination key for
+   `studioos-backups`. GitHub secrets are `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID`,
+   `FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY`,
+   `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID` and
+   `FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY`.
+   Set `FILE_RECOVERY_REGISTRY` to the reviewed registry file path and enable
+   `FILE_RECOVERY_ENABLED=true` only after the operator checks and counsel
+   approval. The workflow stays disabled otherwise. No live configuration has
+   been changed by this implementation. Live restore must apply #6654's current
+   suppression ledger and remains blocked until its adapter exists. #6653 owns
+   the independent copy and missed-run alert.
 6. Add GitHub Actions secrets:
    - `CLOUDFLARE_API_TOKEN` (D1:edit + R2:read+write + Workers:edit)
    - `CLOUDFLARE_ACCOUNT_ID`
    - `PAGER_WEBHOOK_URL` (Slack/PagerDuty webhook; optional but
      strongly recommended for the DR drill to page on failure).
+
+**File recovery verification (#6428):** the synthetic-only drill writes and
+checks archive bytes, removes its synthetic source, restores one object and
+suppresses another. It does not read production files or establish live backup
+coverage. New snapshots use unique immutable keys, condition source GETs on
+listed ETags, verify each copied SHA-256 and publish a manifest only after all
+copies verify. A failed run cannot masquerade as a completed snapshot. The
+archive is private; object contents, keys and credentials stay out of logs.
+Operator evidence, approved prefixes and counsel retention decisions remain
+prerequisites; this task does not change D1/KV backup behavior.
 
 ---
 
@@ -241,3 +274,5 @@ non-involved engineer.
 ## Change Log
 
 - **2026-05-20** — Initial playbook (Task #5 IE).
+
+R2 retention reference: [Cloudflare bucket locks](https://developers.cloudflare.com/r2/buckets/bucket-locks/).

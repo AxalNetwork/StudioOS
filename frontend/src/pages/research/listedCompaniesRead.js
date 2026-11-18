@@ -300,11 +300,13 @@ export function filterMarkets(items = [], query = '', sort = 'supplied_count:des
  * Every market the search matches, paged from the Worker (`GET
  * /api/research/markets?q=&sort=&dir=`, 100 a read) until it has `total`.
  * Used only when the page's one read did not hold the whole directory.
+ * A captured directory request also preserves country, freshness, source and
+ * thesis-sector filters on every export page; paging starts at the first match.
  * A page that comes back empty before `total` stops the loop rather than
  * spinning; the file then holds what was read and the caller says how many.
  */
-export async function collectMarkets({ q, sort, fetchPage, pageSize = 100, maxPages = 100 }) {
-  const params = { q: String(q || '').trim() || undefined, ...marketSortParams(sort), limit: pageSize };
+export async function collectMarkets({ q, sort, request = null, fetchPage, pageSize = 100, maxPages = 100 }) {
+  const params = { ...(request || { q: String(q || '').trim() || undefined, ...marketSortParams(sort) }), limit: pageSize };
   const out = [];
   let total = Infinity;
   for (let i = 0; i < maxPages && out.length < total; i += 1) {

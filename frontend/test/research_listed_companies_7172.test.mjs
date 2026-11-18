@@ -398,8 +398,11 @@ const MARKETS = [
 ];
 
 test('the directory exports the filtered markets in the view\'s order, not the first 100 read', async () => {
-  const m = await mount('/research/markets?q=storage&sort=name%3Aasc', ({ path }) => (path.endsWith('/research/markets')
-    ? json({ items: MARKETS, total: MARKETS.length }) : null));
+  const m = await mount('/research/markets?q=storage&sort=name%3Aasc', ({ path, query }) => {
+    if (!path.endsWith('/research/markets')) return null;
+    const items = filterMarkets(MARKETS, query.get('q'), `${query.get('sort')}:${query.get('dir')}`);
+    return json({ items, total: items.length });
+  });
   try {
     assert.match(m.text('scoped-export'), /Export filtered markets · 3 rows/);
     assert.match(m.text('scoped-export'), /In the order shown: name, A to Z · “storage”/);
@@ -417,8 +420,9 @@ test('the directory exports the filtered markets in the view\'s order, not the f
 });
 
 test('when one read does not hold the directory, the count is the Worker\'s total and the file pages the Worker', async () => {
-  const m = await mount('/research/markets?q=storage', ({ path, query }) => {
+  const m = await mount('/research/markets?q=storage&country=DE&fresh=90&src=named', ({ path, query }) => {
     if (!path.endsWith('/research/markets')) return null;
+    if (query.get('country') !== 'DE' || query.get('fresh') !== '90' || query.get('src') !== 'named') return json({ items: [MARKETS[3]], total: 1 });
     if (query.get('limit') === '1') return json({ items: [MARKETS[0]], total: 3 });
     if (query.get('q') === 'storage') {
       const off = Number(query.get('offset') || 0);
@@ -428,11 +432,14 @@ test('when one read does not hold the directory, the count is the Worker\'s tota
   });
   try {
     assert.match(m.text('scoped-export'), /Export filtered markets · 3 rows/);
-    const counted = m.marketCalls().find((u) => u.searchParams.get('limit') === '1');
-    assert.deepEqual(Object.fromEntries(counted.searchParams), { q: 'storage', sort: 'supplied_count', dir: 'desc', limit: '1' });
+    const initial = m.marketCalls().find((u) => u.searchParams.get('limit') === '25');
+    assert.deepEqual(Object.fromEntries(initial.searchParams), { q: 'storage', sort: 'supplied_count', dir: 'desc', country: 'DE', fresh: '90', src: 'named', limit: '25' });
     await m.press(m.byTestId('scoped-export-button'));
     assert.equal(m.downloads.files[0].name, `markets-3-rows-${stamp()}.csv`);
     assert.equal((await m.downloads.text()).split('\r\n').length, 4);
+    assert.doesNotMatch(await m.downloads.text(), /Robotics/);
+    const exports = m.marketCalls().filter((u) => u.searchParams.get('limit') === '100');
+    assert.deepEqual(exports.map((u) => [u.searchParams.get('country'), u.searchParams.get('fresh'), u.searchParams.get('src')]), [['DE', '90', 'named'], ['DE', '90', 'named']]);
     assert.deepEqual(m.marketCalls().filter((u) => u.searchParams.get('limit') === '100' && u.searchParams.get('q')).map((u) => u.searchParams.get('offset')), [null, '2']);
   } finally { await m.unmount(); }
 });

@@ -1,25 +1,28 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Search } from 'lucide-react';
 import { Card, Pill } from '../../ui';
 import { Unreadable, Unrecorded } from '../../ui/Honesty';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { api } from '../../lib/api';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
-import { researchSectorsApi } from '../../lib/api/researchSectors.js';
+import MarketDirectoryPanel, { CoverageNote } from './MarketDirectory.jsx';
+import { DIRECTORY_TABS, MARKET_SORTS, readMarketQuery, writeMarketQuery, sectorSlug } from './marketDirectoryQuery.js';
 import { researchOverviewApi } from '../../lib/api/researchOverview.js';
+import { researchSectorsApi } from '../../lib/api/researchSectors.js';
 import { SaveNote } from '../advisor/expertise/kit';
 import { STALE_AT, ageBand, daysSince } from './marketReadingRead';
 import { comparableCount, dollarsToCents, freshReadingForm, rangeReadsForward } from './marketReadingRead';
-import { PublicPanel, ScopedExport } from './ListedCompaniesPanel.jsx';
-import {
-  LISTED_CSV_HEADER, MARKET_CSV_HEADER, changeListedQuery, clearListedFilters, collectMarkets, filterMarkets,
-  listedCsvCells, listedExport, listedRequest, marketCsvCells, marketExport, marketSortParams, readListedQuery, writeTab,
-} from './listedCompaniesRead.js';
-import { exportFileName, exportView } from '../../lib/csvExport';
 import { LatestSignals } from './RankedSignals.jsx';
 
+import { PublicPanel, ScopedExport } from './ListedCompaniesPanel.jsx';
+import { LISTED_CSV_HEADER, MARKET_CSV_HEADER, changeListedQuery, clearListedFilters, collectMarkets,
+  listedCsvCells, listedExport, listedRequest, marketCsvCells, marketExport, readListedQuery, writeTab } from './listedCompaniesRead.js';
+import { exportFileName, exportView } from '../../lib/csvExport';
+
 export { LatestSignals };
+export const MARKET_TABS = DIRECTORY_TABS;
+export { LISTED_PAGE } from './listedCompaniesRead.js';
+export { PublicPanel };
 
 /**
  * Research · Markets (`/research/markets`), to the Markets canvas
@@ -46,16 +49,6 @@ export { LatestSignals };
  * what EDGAR records. The Worker pages the list; this page asks for one page
  * at a time and prints the totals and the source lines the API sends.
  *
- * D7172 (#7172, the D7037 canvas) — TWO TABS IN THE URL, AND EXPORTS THAT SAY
- * WHAT THEY WRITE. Market directory and Listed companies (`?tab=listed`), with
- * government ownership as a Not recorded note beside them, not a tab. The
- * Listed companies tab is `ListedCompaniesPanel.jsx`, its search, Source, Sort
- * and page in the URL (`listedCompaniesRead.js`). The export is the active
- * tab's own: "Export this page · N rows" writes the listing rows on screen,
- * "Export filtered markets · N rows" every market the search matches in the
- * current sort. It used to write the first 100 markets read, unfiltered, on
- * either tab.
- *
  * D593 — EVERY TRACKED SECTOR IS A GROUP, and each opens its own page. The
  * sector list is `GET /api/research/sectors` (D547), not a list written here:
  * a sector no market maps to yet still has a group, saying so, with its
@@ -74,80 +67,16 @@ export { LatestSignals };
  * A save opens the new reading.
  */
 
-/** D7172 (D7037 RML-02): two tabs; government ownership is a coverage note beside them. */
-export const MARKET_TABS = [
-  { key: 'directory', label: 'Market directory' },
-  { key: 'listed', label: 'Listed companies' },
-];
-
-export const MARKET_SORTS = [
-  { value: 'supplied_count:desc', label: 'Company count, highest first' },
-  { value: 'supplied_count:asc', label: 'Company count, lowest first' },
-  { value: 'name:asc', label: 'Name, A to Z' },
-];
-
 /**
- * D3701 part 5 (RS-03): the search, the sort and the grouping live in the URL
- * (`?q=`, `?sort=`, `?group=0`), so a market opened and Back returns to the
- * same list, and a link carries the view. An unknown sort falls back to the
- * first; the search is capped like the other directories' searches.
+ * D7171 (#7171, canvas D7036): two tabs, Market directory and Listed
+ * companies, kept in the URL (`?tab=listed`). Government ownership is no
+ * longer a tab that always says Not recorded: the coverage note says why it is
+ * not available. The directory's view and its URL live in
+ * `marketDirectoryQuery.js`; the directory itself is `MarketDirectory.jsx`.
  */
-export function readMarketQuery(params) {
-  const q = String(params?.get?.('q') || '').slice(0, 120);
-  const raw = params?.get?.('sort');
-  const sort = MARKET_SORTS.some((s) => s.value === raw) ? raw : MARKET_SORTS[0].value;
-  const grouped = params?.get?.('group') !== '0';
-  return { q, sort, grouped };
-}
-
-/** The params for a view; defaults are left out so the plain URL stays plain. */
-export function writeMarketQuery(params, { q, sort, grouped }) {
-  const next = new URLSearchParams(params);
-  if (q) next.set('q', q); else next.delete('q');
-  if (sort && sort !== MARKET_SORTS[0].value) next.set('sort', sort); else next.delete('sort');
-  if (grouped === false) next.set('group', '0'); else next.delete('group');
-  return next;
-}
+export { DIRECTORY_TABS, MARKET_SORTS, readMarketQuery, writeMarketQuery, sectorSlug };
 
 const fmt = (n) => (n == null ? null : Number(n).toLocaleString('en-US'));
-
-/** The slug the sector page (#1139, D546) is keyed by: the tracked sector's own name, slugged. */
-export const sectorSlug = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-
-/** The group of markets no tracked sector claims, in the canvas's words (M1, D593). */
-export const UNMAPPED_LABEL = 'Not mapped yet';
-
-/**
- * Markets → groups by tracked sector, largest group first. A market with no
- * tracked sector is in its own group at the end, marked as such: no index
- * applies to it, and it is not folded into a sector it does not belong to.
- *
- * `tracked` is the sector list `GET /api/research/sectors` returns. A tracked
- * sector no market maps to joins as a group with no markets, after the groups
- * that have some (D593). Pass it only when `items` is every market: over a
- * search, or a page of the list, "no market is mapped" would be a guess.
- */
-export function groupMarkets(items, tracked = null) {
-  const groups = new Map();
-  const unmapped = [];
-  for (const m of items) {
-    if (!m.mi_sector) { unmapped.push(m); continue; }
-    if (!groups.has(m.mi_sector)) groups.set(m.mi_sector, []);
-    groups.get(m.mi_sector).push(m);
-  }
-  const sum = (ms) => ms.reduce((s, m) => s + (Number(m.supplied_count) || 0), 0);
-  const out = [...groups.entries()]
-    .map(([name, markets]) => ({ name, slug: sectorSlug(name), markets, companies: sum(markets), mapped: true }));
-  for (const s of tracked || []) {
-    if (!s?.name || groups.has(s.name)) continue;
-    groups.set(s.name, []);
-    out.push({ name: s.name, slug: s.slug || sectorSlug(s.name), markets: [], companies: 0, mapped: true });
-  }
-  out.sort((a, b) => Number(b.markets.length > 0) - Number(a.markets.length > 0)
-    || b.companies - a.companies || a.name.localeCompare(b.name));
-  if (unmapped.length) out.push({ name: UNMAPPED_LABEL, slug: null, markets: unmapped, companies: sum(unmapped), mapped: false });
-  return out;
-}
 
 /**
  * One section's read: `{ status: 'loading' | 'unreadable' | 'not_found' | 'ready', data }`.
@@ -181,170 +110,6 @@ function Caption({ children }) {
 function Bar({ value, max }) {
   const w = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
   return <span className="block h-1.5 rounded-full bg-violet-100 dark:bg-violet-950"><span className="block h-1.5 rounded-full bg-violet-500" style={{ width: `${w}%` }} /></span>;
-}
-
-/** A tracked sector's own page (D547), `/research/markets/sector/:slug`. */
-function OpenSector({ group }) {
-  return (
-    <Link to={`/research/markets/sector/${encodeURIComponent(group.slug)}`}
-      className="ml-auto text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300">
-      Open sector<span className="sr-only"> {group.name}</span> →
-    </Link>
-  );
-}
-
-export function PrivatePanel({ markets, sectors = null, exporter = null }) {
-  const [params, setParams] = useSearchParams();
-  const { q: query, sort, grouped } = readMarketQuery(params);
-  const setView = (patch) => setParams((prev) => writeMarketQuery(prev, { ...readMarketQuery(prev), ...patch }), { replace: true });
-  const setQuery = (q) => setView({ q });
-  const setSort = (v) => setView({ sort: v });
-  const setGrouped = (g) => setView({ grouped: g });
-  const visible = useMemo(() => filterMarkets(markets.data?.items || [], query, sort), [markets.data, query, sort]);
-  const max = Math.max(0, ...visible.map((m) => Number(m.supplied_count) || 0));
-  const total = markets.data?.total;
-  const held = (markets.data?.items || []).reduce((s, m) => s + (Number(m.supplied_count) || 0), 0);
-  const asOf = markets.data?.items?.[0]?.as_of;
-  // A sector with no group is only said to have no market over the WHOLE list:
-  // not while a search narrows it, and not if the read held fewer markets than
-  // it counted. Otherwise the groups are the sectors the markets name, as before.
-  const searching = query.trim() !== '';
-  const whole = !searching && (markets.data?.items || []).length >= (Number(total) || 0);
-  // A list route answering 404 has not said there are no sectors; it is unread too.
-  const sectorsUnread = sectors?.status === 'unreadable' || sectors?.status === 'not_found';
-  const tracked = whole && !sectorsUnread && sectors?.data ? (sectors.data.items || []) : null;
-
-  if (markets.status === 'loading' && !markets.data) return <Loading what="the markets" />;
-  if (markets.status === 'unreadable') {
-    return <Unreadable what="The markets" claim="This is not a sign there are none." onRetry={markets.reload} />;
-  }
-  if (!total) return <p data-testid="markets-empty" className="text-[12.5px] text-axal-muted">No markets are in the directory yet.</p>;
-
-  const row = (m) => (
-    <li key={m.slug} className="grid grid-cols-[1fr_120px_72px] items-center gap-3 py-1.5">
-      <Link to={`/research/markets/sector/${encodeURIComponent(m.slug)}`} className="truncate text-[13px] font-semibold text-axal-ink hover:text-axal-violet dark:text-gray-100">{m.name}</Link>
-      <Bar value={Number(m.supplied_count) || 0} max={max} />
-      <span className="text-right font-mono text-[12px] text-axal-muted">{fmt(m.supplied_count)}</span>
-    </li>
-  );
-
-  return (
-    <div data-testid="markets-private">
-      <div className="grid gap-3 sm:grid-cols-[1fr_260px_auto] sm:items-end">
-        <label className="block">
-          <span className="mb-1.5 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">Search markets</span>
-          <span className="relative block">
-            <Search size={14} className="pointer-events-none absolute left-3 top-3 text-axal-faint" />
-            <input aria-label="Search markets" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="FinTech, robotics, health…"
-              className="min-h-[40px] w-full rounded-lg border border-axal-hairline bg-white py-2 pl-9 pr-3 text-[13px] text-axal-ink focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" />
-          </span>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">Sort markets by</span>
-          <select aria-label="Sort markets by" value={sort} onChange={(e) => setSort(e.target.value)}
-            className="min-h-[40px] w-full rounded-lg border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100">
-            {MARKET_SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </label>
-        <label className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-axal-hairline px-3 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200">
-          <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="accent-violet-600" /> Group by tracked sector
-        </label>
-      </div>
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">
-            {fmt(total)} markets holding {fmt(held)} companies, as the taxonomy source counts them
-          </p>
-          <p className="text-[11px] text-axal-faint">
-            research_market_directory · Axal sector taxonomy{asOf ? ` · as of ${asOf}` : ''} · counts are not market size and are not independently verified
-          </p>
-        </div>
-        {/* D7172: the directory's own export, scoped to the search and the sort. */}
-        <ScopedExport exporter={exporter} />
-      </div>
-      {visible.length === 0 ? (
-        // D3701 RS-11 "Empty search": what happened, and the one way out.
-        <div className="mt-4 rounded-xl border border-axal-hairline px-4 py-3 dark:border-gray-800" data-testid="markets-no-match">
-          <p className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">No market matches “{query.trim()}”.</p>
-          <p className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-400">Check the spelling, or search another sector.</p>
-          <button type="button" data-testid="markets-clear-search" onClick={() => setQuery('')}
-            className="mt-2 min-h-[36px] rounded-lg border border-axal-hairline px-3 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
-            Clear search
-          </button>
-        </div>
-      ) : grouped ? (
-        <div className="mt-4 space-y-2">
-          {!searching && sectors?.status === 'loading' && !sectors.data ? <Loading what="the tracked sectors" /> : null}
-          {!searching && sectorsUnread ? (
-            <Unreadable what="The tracked sectors" claim="The groups below are only the sectors a market maps to; a sector missing from them is unread, not empty." onRetry={sectors.reload} />
-          ) : null}
-          {groupMarkets(visible, tracked).map((g, i) => (g.markets.length === 0 ? (
-            // Nothing to expand, so not a <details>: the row says why it is empty
-            // and still opens the sector, whose indexes do not wait on a market.
-            <div key={g.name} data-testid="sector-group-empty" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-axal-hairline px-4 py-3 dark:border-gray-800">
-              <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{g.name}</span>
-              <span className="text-[12px] text-axal-muted dark:text-gray-400">No market is mapped to this sector yet</span>
-              <OpenSector group={g} />
-            </div>
-          ) : (
-            <details key={g.name} open={i < 2} className="rounded-xl border border-axal-hairline px-4 py-2 dark:border-gray-800">
-              <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 py-1">
-                <span>
-                  <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{g.name}</span>
-                  <span className="ml-2 text-[12px] text-axal-muted">
-                    {g.markets.length} markets · {g.mapped ? `${fmt(g.companies)} companies` : 'no index applies'}
-                  </span>
-                </span>
-                {g.slug ? <OpenSector group={g} /> : null}
-              </summary>
-              <ul className="mt-1">{g.markets.map(row)}</ul>
-            </details>
-          )))}
-        </div>
-      ) : (
-        <ul className="mt-4">{visible.map(row)}</ul>
-      )}
-    </div>
-  );
-}
-
-/** D595's page size and the Public tab itself now live with the Listed companies tab (D7172). */
-export { LISTED_PAGE } from './listedCompaniesRead.js';
-export { PublicPanel };
-
-/**
- * D7172 (RML-06): the Market directory's export — every market the search
- * matches, in the current sort. When the page's one read holds the whole
- * directory (it reads 100; there are fewer today) these are the rows on screen.
- * When it does not, the label's count is the Worker's `total` for the search,
- * and the file pages `GET /api/research/markets?q=&sort=&dir=` for every match.
- */
-export function useDirectoryExport(markets, params) {
-  const { q, sort } = readMarketQuery(params);
-  const items = markets.data?.items || [];
-  const whole = markets.status === 'ready' && items.length >= (Number(markets.data?.total) || 0);
-  const partial = markets.status === 'ready' && !whole;
-  const [counted] = useRead(() => (partial
-    ? researchMarketsApi.list({ q: q.trim() || undefined, ...marketSortParams(sort), limit: 1 })
-    : Promise.resolve(null)), `${partial}|${q}|${sort}`);
-  const visible = whole ? filterMarkets(items, q, sort) : null;
-  const status = partial ? counted.status : markets.status;
-  const count = whole ? visible.length : (partial ? (counted.data?.total ?? null) : null);
-  const ctl = marketExport({ status, count, query: q, sort, sortLabel: MARKET_SORTS.find((x) => x.value === sort)?.label });
-  const rows = async () => (whole ? visible : collectMarkets({ q, sort, fetchPage: (p) => researchMarketsApi.list(p) }));
-  return { ctl, rows };
-}
-
-export function GovernmentPanel() {
-  return (
-    <div data-testid="markets-government" className="rounded-xl border border-dashed border-axal-hairline p-4 dark:border-gray-700">
-      <Unrecorded />
-      <h3 className="mt-2 text-[15px] font-bold text-axal-ink dark:text-gray-100">Government-owned companies</h3>
-      <p className="mt-1 text-[12.5px] text-axal-muted">
-        No source lists government-owned companies yet, so StudioOS cannot count or name them. The directory, the listed companies and SEC EDGAR do not record who owns a company.
-      </p>
-    </div>
-  );
 }
 
 export function WhereBased({ geos }) {
@@ -689,14 +454,27 @@ export function Readings({ readings, record = null }) {
   );
 }
 
+/** D7172: export the entire filtered directory using the same request as D7171's view. */
+export function useDirectoryExport(markets, params) {
+  const view = readMarketQuery(params);
+  const count = markets.status === 'ready' ? (markets.data?.total ?? null) : null;
+  const ctl = marketExport({ status: markets.status, count, query: view.q, sort: view.sort,
+    sortLabel: MARKET_SORTS.find((x) => x.value === view.sort)?.label });
+  const rows = async () => {
+    if ((markets.data?.items?.length || 0) >= count && !markets.request?.offset) return markets.data?.items || [];
+    return collectMarkets({ request: markets.request, fetchPage: (p) => researchMarketsApi.list(p) });
+  };
+  return { ctl, rows };
+}
+
 export default function MarketDirectoryZone({ role = 'founder', zoneActions = null }) {
   const navigate = useNavigate();
   // D7172: the tab and the Listed companies view are the URL's (history replace).
   const [params, setParams] = useSearchParams();
   const view = readListedQuery(params);
   const tab = view.tab;
-  const [markets, reloadMarkets] = useRead(() => researchMarketsApi.list({ limit: 100 }));
-  const [sectors, reloadSectors] = useRead(() => researchSectorsApi.list());
+  const [markets, setDirectoryRead] = useState({ status: 'loading', data: null, request: null });
+  const [sectors] = useRead(() => researchSectorsApi.list());
   const listedReq = listedRequest(view);
   const listedKey = JSON.stringify(listedReq);
   const [listed, reloadListed] = useRead(() => researchMarketsApi.listedCompanies(listedReq), listedKey);
@@ -705,7 +483,8 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
   const [exportBusy, setExportBusy] = useState(false);
   const [geos, reloadGeos] = useRead(() => researchMarketsApi.geographies({ sort: 'company_count', limit: 100 }));
   const [sigs, reloadSigs] = useRead(() => api.signals.list({ limit: 3, mode: role === 'advisor' ? 'advisor' : 'founder' }), role);
-  const [readings, reloadReadings] = useRead(() => api.research.marketReadings());
+  const showReadings = role !== 'investor';
+  const [readings, reloadReadings] = useRead(() => (showReadings ? api.research.marketReadings() : Promise.resolve({ items: [] })), role);
   const [overview, reloadOverview] = useRead(() => researchOverviewApi.get(1));
   const [form, setForm] = useState(null);
   const [opened, setOpened] = useState(0);
@@ -764,7 +543,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
 
   // The active tab's export: the same label and click in the zone's header row
   // and beside the count. A new view drops the last Downloaded or Error note.
-  const exportKey = tab === 'listed' ? `listed|${listedKey}` : `directory|${params.get('q') || ''}|${params.get('sort') || ''}`;
+  const exportKey = tab === 'listed' ? `listed|${listedKey}` : `directory|${JSON.stringify(markets.request)}|${markets.status}`;
   useEffect(() => { setExportNote(null); }, [exportKey]);
   const ctl = tab === 'listed' ? listedExport(listed, view) : directoryExport.ctl;
   const runExport = async () => {
@@ -829,8 +608,12 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
             Government ownership <Unrecorded /> no source records who owns a company
           </span>
         </div>
+        <div className="mt-3"><CoverageNote asOf={markets.data?.items?.[0]?.as_of} /></div>
         <div className="mt-4" role="tabpanel" id="markets-tabpanel" aria-labelledby={`markets-tab-${tab}`}>
-          {tab === 'directory' ? <PrivatePanel markets={{ ...markets, reload: reloadMarkets }} sectors={{ ...sectors, reload: reloadSectors }} exporter={exporter} /> : null}
+          {tab === 'directory' ? <>
+            <ScopedExport exporter={exporter} />
+            <MarketDirectoryPanel role={role} onRead={setDirectoryRead} />
+          </> : null}
           {tab === 'listed' ? <PublicPanel listed={{ ...listed, reload: reloadListed }} view={view} onChange={setListed} onClear={clearListed} exporter={exporter} /> : null}
         </div>
       </Card>
@@ -840,15 +623,17 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LatestSignals sigs={{ ...sigs, reload: reloadSigs }} sectors={sectors} />
-        <Readings
-          readings={{ ...readings, reload: reloadReadings }}
-          record={{
-            form, opened, busy, note, onSave: save,
-            onOpen: () => openForm(null),
-            onChange: setForm,
-            onCancel: () => { setForm(null); setNote(null); },
-          }}
-        />
+        {showReadings ? (
+          <Readings
+            readings={{ ...readings, reload: reloadReadings }}
+            record={{
+              form, opened, busy, note, onSave: save,
+              onOpen: () => openForm(null),
+              onChange: setForm,
+              onCancel: () => { setForm(null); setNote(null); },
+            }}
+          />
+        ) : null}
       </div>
       <p className="text-[11px] leading-relaxed text-axal-faint">
         Markets come from the Axal sector taxonomy; their company counts are the taxonomy source’s own and are not market size. Indexes are worldwide only. What no source holds reads “Not recorded”.

@@ -9,6 +9,7 @@ import { distributionPrimary } from '../distribution/distributionModel.js';
 import DurabilityChecklist from '../DurabilityChecklist';
 import DurableDueStrip from '../DurableDueStrip';
 import GrowFromMercury from '../GrowFromMercury';
+import GrowFromTiktok from '../GrowFromTiktok';
 import { DurableFromGoogle, RevenueFromGoogle } from '../GrowFromGoogle';
 import FromNotion from '../FromNotion';
 import { ImprovementPosthog, RevenuePosthog } from '../GrowPosthog';
@@ -28,6 +29,8 @@ const GrowOverview = lazyStep(() => import('../GrowOverview'));
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
 const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
+// D5866 (#5866): the founder's own TikTok, after From Mercury, anchored at #from-tiktok.
+const fromTiktok = (slug, data, ctx) => <GrowFromTiktok slug={slug} part={data?.parts?.from_tiktok} projectId={ctx.projectId} reload={ctx.reload} />;
 
 /**
  * Grow's read (#1488, D664) carries its own shapes, so it has an adapter
@@ -93,6 +96,7 @@ const grow = {
       {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
       <CalendarWeek projectId={ctx.projectId} />
       {fromMercury('distribution', data, ctx)}
+      {fromTiktok('distribution', data, ctx)}
       <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
     </>),
     // D1090 (#2955): a feedback database in Notion, as product feedback.
@@ -117,6 +121,8 @@ const grow = {
     // D1095 (#2960): then a metrics Sheet's figures, From Google.
     'revenue-and-traction': (data, ctx) => (<>
       {fromMercury('revenue-and-traction', data, ctx)}
+      {/* D5866: Audience on TikTok, beside revenue and never inside MRR, the ledger or a KPI. */}
+      {fromTiktok('revenue-and-traction', data, ctx)}
       <RevenueFromGoogle projectId={ctx.projectId} />
       {/* D1608 (#3731): PostHog's metrics and product retention, apart from revenue retention. */}
       <RevenuePosthog projectId={ctx.projectId} />

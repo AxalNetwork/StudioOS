@@ -6,7 +6,7 @@
  * and the crosswalk decide every row that comes back. Mounted behind the same
  * auth-error mapping `index.ts` uses, so a missing token answers 401.
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -19,6 +19,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 
 import researchMarkets, {
   indexSeries, NO_COMPANY_REASON, NO_COUNTRY_REASON, NO_SOURCE_REASON, SOURCES_CAP,
+  NO_KIND_REASON, ageDays, freshBand,
 } from '../src/routes/research_markets.ts';
 import { EUR_SOURCE } from '../src/services/researchFundDirectory.ts';
 import { periodKey } from '../src/services/market_intel/scoring.ts';
@@ -138,9 +139,11 @@ test('the market index: company counts from D1, supplied counts labelled apart, 
 
 test('the market index searches by a bound parameter, sorts and pages', async () => {
   const db = freshDb();
+  // D7171: `q` matches the tracked sector too, so Payments ("Fintech / DeFi") is found by "tech".
   const q = await get(db, '/markets?q=tech');
-  assert.deepEqual(q.body.items.map((i: any) => i.slug), ['autotech', 'fintech']);
-  assert.equal(q.body.total, 2);
+  assert.deepEqual(q.body.items.map((i: any) => [i.slug, i.matched_on]), [['autotech', 'name'], ['fintech', 'name'], ['payments', 'sector']]);
+  assert.equal(q.body.total, 3);
+  assert.deepEqual(q.body.matched_on, { name: 2, sector: 1 });
   const inj = await get(db, `/markets?q=${encodeURIComponent("' OR 1=1 --")}`);
   assert.equal(inj.status, 200);
   assert.equal(inj.body.total, 0, 'the search text reached the SQL as text');
@@ -663,6 +666,144 @@ test('D6284: paging still pages, and the derived fields ride on the page only', 
     for (const k of ['countries', 'source_count', 'newest_source_at']) assert.ok(['recorded', 'not_recorded'].includes(i[k].status), k);
   }
   assert.ok(!JSON.stringify(page.body).includes('market_size') && !JSON.stringify(page.body).includes('growth'), 'no invented size or growth');
+});
+
+// --- D7171 (#7171): filters, counts per option, q over the tracked sector, coverage summary ----
+
+// A fixed clock: fintech's newest source (s1's gdelt, 5 Oct) is 31 days old, fashion's (7 Oct) 29.
+const D7171_NOW = Date.UTC(2026, 10, 6, 0, 0, 0);
+const slugs = (r: any) => r.body.items.map((i: any) => i.slug);
+
+test('D7171: freshness bands are whole UTC days, Stale past 90; an undated source is no band', () => {
+  const now = D7171_NOW;
+  assert.equal(ageDays('2026-10-05 09:00:00', now), 31, 'a SQLite date with no zone is UTC');
+  assert.equal(ageDays('2026-10-07T00:00:00Z', now), 30);
+  assert.equal(ageDays('not a date', now), null);
+  const at = (value: string) => freshBand({ status: 'recorded', value }, now);
+  assert.equal(at('2026-10-07T00:00:00Z'), '30');
+  assert.equal(at('2026-10-06T00:00:00Z'), '90', 'day 31 is past the first band');
+  assert.equal(at('2026-08-08T00:00:00Z'), '90', 'day 90 is not yet Stale');
+  assert.equal(at('2026-08-07T00:00:00Z'), 'older', 'day 91 is Stale');
+  assert.equal(freshBand({ status: 'not_recorded', value: null, reason: 'x' }, now), 'none');
+});
+
+test('D7171: country, fresh and src filter the whole directory before paging, with counts per option', async () => {
+  mock.timers.enable({ apis: ['Date'], now: D7171_NOW });
+  try {
+    const db = freshDb();
+    seedIndex(db);
+    seedEvidence(db);
+
+    const all = await get(db, '/markets?limit=1');
+    assert.equal(all.body.total, 4);
+    assert.equal(all.body.directory_total, 4);
+    assert.equal(all.body.items.length, 1, 'the page is one row; the counts are the directory');
+    assert.deepEqual(all.body.facets.country, {
+      total: 4, options: [{ code: 'GB', count: 1 }, { code: 'JP', count: 1 }, { code: 'US', count: 1 }], not_recorded: 2,
+    });
+    assert.deepEqual(all.body.facets.fresh.options, [
+      { value: '30', count: 1 }, { value: '90', count: 2 }, { value: 'older', count: 0 }, { value: 'none', count: 1 },
+    ]);
+    assert.deepEqual(all.body.facets.src.options, [{ value: 'named', count: 3 }, { value: 'sector', count: 0 }, { value: 'none', count: 1 }]);
+
+    // A market whose countries are Not recorded never matches a country (payments has no company).
+    const gb = await get(db, '/markets?country=GB');
+    assert.deepEqual(slugs(gb), ['fintech']);
+    assert.equal(gb.body.total, 1);
+    assert.deepEqual(gb.body.filters.country, ['GB']);
+    assert.deepEqual(slugs(await get(db, '/markets?country=gb,jp')), ['autotech', 'fintech'], 'repeatable, comma or not, any of');
+    assert.deepEqual(slugs(await get(db, '/markets?country=GB&country=JP')), ['autotech', 'fintech']);
+
+    assert.deepEqual(slugs(await get(db, '/markets?fresh=30')), ['fashion']);
+    assert.deepEqual(slugs(await get(db, '/markets?fresh=90')), ['fintech', 'payments']);
+    assert.deepEqual(slugs(await get(db, '/markets?fresh=none')), ['autotech']);
+    assert.deepEqual(slugs(await get(db, '/markets?src=named')), ['fashion', 'fintech', 'payments']);
+    assert.deepEqual(slugs(await get(db, '/markets?src=none')), ['autotech']);
+
+    // Each facet counts over what the OTHER filters leave.
+    const both = await get(db, '/markets?country=GB&fresh=30');
+    assert.equal(both.body.total, 0);
+    assert.deepEqual(both.body.facets.fresh.options.find((o: any) => o.value === '90'), { value: '90', count: 1 }, 'GB leaves fintech, 31 days old');
+    assert.deepEqual(both.body.facets.country, { total: 1, options: [], not_recorded: 1 }, 'fresh=30 leaves fashion, with no country');
+
+    // The tracked-sector filter (the investor's thesis sectors).
+    assert.deepEqual(slugs(await get(db, `/markets?sector=${encodeURIComponent('Fintech / DeFi')}`)), ['fintech', 'payments']);
+  } finally { mock.timers.reset(); }
+});
+
+test('D7171: sector-level sources and evidence naming the market are counted apart; src=sector is sector-level only', async () => {
+  mock.timers.enable({ apis: ['Date'], now: D7171_NOW });
+  try {
+    const db = freshDb();
+    seedIndex(db);
+    const r = await get(db, '/markets');
+    const by = Object.fromEntries(r.body.items.map((i: any) => [i.slug, i]));
+    assert.deepEqual(by.fintech.sources_by_kind, {
+      market_intel: { count: 2, newest: { status: 'recorded', value: '2026-10-02T00:00:00Z' } },
+      signal_evidence: { count: 0, newest: { status: 'not_recorded', value: null, reason: NO_KIND_REASON } },
+    });
+    assert.deepEqual(slugs(await get(db, '/markets?src=sector')), ['fintech', 'payments']);
+    seedEvidence(db);
+    const fin = (await get(db, '/markets?q=FinTech')).body.items[0];
+    assert.deepEqual(fin.sources_by_kind.signal_evidence, { count: 2, newest: { status: 'recorded', value: '2026-10-05 09:00:00' } });
+    assert.equal(fin.sources_by_kind.market_intel.count + fin.sources_by_kind.signal_evidence.count, fin.source_count.value);
+    assert.deepEqual(slugs(await get(db, '/markets?src=sector')), [], 'evidence naming the market makes it named, not sector-level');
+  } finally { mock.timers.reset(); }
+});
+
+test('D7171: a filter that cannot be read is refused with a code, never dropped', async () => {
+  const db = freshDb();
+  for (const [path, code] of [
+    ['/markets?fresh=7', 'invalid_fresh'], ['/markets?src=all', 'invalid_src'],
+    ['/markets?country=Germany', 'invalid_country'], ['/markets?country=DE,1', 'invalid_country'],
+  ]) {
+    const r = await get(db, path);
+    assert.equal(r.status, 400, path);
+    assert.equal(r.body.error, code, path);
+    assert.match(r.body.message, /\./, path);
+  }
+});
+
+test('D7171: sort by newest source puts undated markets last either way', async () => {
+  mock.timers.enable({ apis: ['Date'], now: D7171_NOW });
+  try {
+    const db = freshDb();
+    seedIndex(db);
+    seedEvidence(db);
+    const desc = await get(db, '/markets?sort=newest_source');
+    assert.equal(desc.body.dir, 'desc');
+    assert.deepEqual(slugs(desc), ['fashion', 'fintech', 'payments', 'autotech']);
+    assert.deepEqual(slugs(await get(db, '/markets?sort=newest_source&dir=asc')), ['fintech', 'payments', 'fashion', 'autotech']);
+  } finally { mock.timers.reset(); }
+});
+
+test('D7171: the coverage summary counts the filtered markets, keeps both country reasons apart, and names no size', async () => {
+  mock.timers.enable({ apis: ['Date'], now: D7171_NOW });
+  try {
+    const db = freshDb();
+    seedIndex(db);
+    seedEvidence(db);
+    const r = await get(db, '/markets?limit=1');
+    assert.deepEqual(r.body.summary, {
+      markets: 4,
+      supplied_total: 1260,
+      fresh: { 30: 1, 90: 2, older: 0, none: 1 },
+      countries: { recorded: 2, no_company: 2, no_placeable_country: 0, distinct: 3 },
+      tracked: { mapped: 2, unmapped: 2 },
+      by_sector: [{
+        sector: 'Fintech / DeFi', markets: 2, sector_sources: 2,
+        newest_sector_source: { status: 'recorded', value: '2026-10-02T00:00:00Z' }, named_markets: 2,
+      }],
+      unmapped: { markets: 2, named_markets: 1 },
+      stale_days: 90,
+    });
+    assert.equal(r.body.read_at, new Date(D7171_NOW).toISOString());
+    db.prepare(`UPDATE research_company_directory SET country = 'Atlantis' WHERE uid = 'c3'`).run();
+    const filtered = await get(db, '/markets?fresh=none');
+    assert.equal(filtered.body.summary.markets, 1, 'over the filtered set');
+    assert.deepEqual(filtered.body.summary.countries, { recorded: 0, no_company: 0, no_placeable_country: 1, distinct: 0 });
+    assert.ok(!/market_size|growth/.test(JSON.stringify(r.body)), 'no invented size or growth');
+  } finally { mock.timers.reset(); }
 });
 
 // --- D7172 (#7172, the ◇ of D7037): tickers in both sources, for this search ----------

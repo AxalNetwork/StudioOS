@@ -1,3 +1,4 @@
+import GrowProposalDestinations from './GrowProposalDestinations';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { posthogApi } from '../../lib/api/posthog';
@@ -95,6 +96,7 @@ function PosthogPart({ section, projectId, module, api = posthogApi, onSync = nu
         )}
       </div>
       {(open || !phone) && body}
+      {section==='grow'&&module==='product_improvement'&&(open||!phone)?<GrowProposalDestinations projectId={projectId} source="posthog" revision={round} onChanged={again} canUndo={mine}/>:null}
       {tracking && <TrackMetric api={api} section={section} projectId={projectId} module={module} uid={d?.link?.uid} label={d?.label}
         onClose={() => setTracking(false)} onDone={() => { setTracking(false); again(); }} />}
       {untracking && (

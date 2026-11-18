@@ -77,7 +77,7 @@ async function call(w: W, who: number, method: string, path: string, body?: unkn
 const cfo = (over: Record<string, unknown> = {}) => ({ role_key: 'cfo', first_name: 'Carla', last_name: 'Cash', model_id: MODEL, monthly_cap_microusd: CAP, ...over });
 const CO = '/company/co-uid-1';
 
-const SRV = 'c'.repeat(32), THEIRS = 'd'.repeat(32), DOWN = 'e'.repeat(32);
+const SRV = 'c'.repeat(32), THEIRS = 'd'.repeat(32);
 /** A custom MCP connection as D852 stores it: approved read tools pinned, a drifted one, and a mail send tool (a write),
  * also left in `approved` (the overlap `customProvider` guards), so the write is refused by name, not by luck. */
 function server(w: W, owner: number, uid: string, o: { status?: string; approved?: Record<string, string>; drift?: string[] } = {}) {

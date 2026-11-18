@@ -18,6 +18,14 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 
+// #7247: the catalogue handler awaits `route.fetch()`. When a test ends while that request is still in flight,
+// the await throws "route.fetch: Test ended" and Playwright reports a passed journey as failed. Unrouting here
+// waits for handlers already running and drops the error of one the test's end cut off, as Playwright advises.
+test.afterEach(async ({ page }) => {
+  // A test that closed its own tab has no routes left to wait for.
+  if (!page.isClosed()) await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const PAID = {
   'founder:growth': { month: 5000, year: 48000 },
   'founder:studio': { month: 10000, year: 96000 },
@@ -41,17 +49,21 @@ function priced(body) {
  * The page's network: off-host requests aborted, the catalogue priced, and the session the test's to give.
  * `state.signedIn` flips when the email link is confirmed or Google returns.
  */
-async function wire(page, manifest, state) {
+async function wire(page, request, manifest, state) {
+  // Read the real catalogue before navigation. A request from a page the test
+  // has already left must not leave a Worker fetch waiting during teardown.
+  const response = await request.get('/api/public/plans-and-packs');
+  expect(response.ok(), 'the visual Worker serves the public catalogue').toBeTruthy();
+  const catalogue = priced(await response.json());
   await page.addInitScript((consentVersion) => {
     try {
       localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: consentVersion, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
     } catch { /* storage off: the journey fails loudly on its first check */ }
   }, CONSENT_VERSION);
   await page.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort('blockedbyclient'));
-  await page.route('**/api/public/plans-and-packs', async (route) => {
+  await page.route('**/api/public/plans-and-packs', (route) => {
     if (state.catalogueDown > 0) { state.catalogueDown -= 1; return route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"Unavailable"}' }); }
-    const res = await route.fetch();
-    return route.fulfill({ response: res, json: priced(await res.json()) });
+    return route.fulfill({ json: catalogue });
   });
   await page.route('**/api/auth/me', async (route) => {
     // The session probe after Google is a real round trip; the catalogue can answer first.
@@ -103,7 +115,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     test.use({ viewport: { width, height } });
 
     test('pricing exposes the active comparison and keeps audience choices visible', async ({ page, request }, testInfo) => {
-      await wire(page, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
+      await wire(page, request, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
       await page.goto('/pricing?for=founder');
       const comparison = page.getByRole('table', { name: width === 390 ? /plan features/ : 'Compare plans' });
       await expect(comparison.getByRole('rowheader', { name: 'Customer interviews' })).toBeVisible();
@@ -134,7 +146,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     });
 
     test('pricing control states, phone comparison and shared signup labels survive keyboard navigation', async ({ page, request }, testInfo) => {
-      await wire(page, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
+      await wire(page, request, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
       await page.goto('/pricing?for=founder');
       const billing = page.getByRole('group', { name: 'Billing', exact: true });
       await billing.getByRole('button', { name: 'Yearly', exact: true }).click();
@@ -192,7 +204,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     test('Back and choosing another plan before signing up carry the new plan only; the email link opens its checkout', async ({ page, request }) => {
       const manifest = await manifestOf(request);
       const state = { signedIn: false, catalogueDown: 0 };
-      await wire(page, manifest, state);
+      await wire(page, request, manifest, state);
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();
@@ -232,7 +244,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     test('the Google return lands on the Pricing return and opens that plan once the session is read', async ({ page, request }) => {
       const manifest = await manifestOf(request);
       const state = { signedIn: false, catalogueDown: 0 };
-      await wire(page, manifest, state);
+      await wire(page, request, manifest, state);
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();
@@ -256,7 +268,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     test('a catalogue that cannot be read on registration says so, and Try again reads it', async ({ page, request }) => {
       const manifest = await manifestOf(request);
       const state = { signedIn: false, catalogueDown: 0 };
-      await wire(page, manifest, state);
+      await wire(page, request, manifest, state);
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();
