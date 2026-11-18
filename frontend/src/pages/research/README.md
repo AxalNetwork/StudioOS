@@ -15,6 +15,8 @@ zones: one record each, reached from a zone's list.
 | `researchStates.js` | D3701 (Research v2): the words, tones and glyphs for a document's index state, whether Ask may cite it (read only from the Worker's `in_ask`), a Failed or Unsupported row's reason and next step, and Ask's seven response states. Unknown is Not recorded. |
 | `AskZone.jsx` | Ask over owned documents, with saved/discarded disposition, use notes and owned citation links (D549). |
 | `LibraryZone.jsx` | Owned and read-only client documents; kind/source-year editing and owned collections (D549). |
+| `RankedSignals.jsx` | D7173: Markets › Top-ranked signals, mounted by `MarketDirectoryZone.jsx`. Five card states (live, live empty, illustrative, loading, a failed read with Retry), confidence as the Worker's 0–100 plus %, and the evidence `Sheet` (bottom sheet on phone) opened by `?signal=`, focus back to View evidence on close. |
+| `rankedSignalsRead.js` | That card's readings: its state, confidence (Not recorded outside 0–100, Unavailable when evidence was not read), dates, evidence newest first, http(s)-only source links, and the exact-name sector match. |
 | `MarketSectorProfile.jsx` | The sector route's entry point; an unmapped market keeps its existing profile. |
 | `SectorProfile.jsx` | D547: tracked sectors inside `WorkspaceShell`, monthly live indexes with gaps, source mix, countries, funds, sub-markets and recorded build opportunities. Old market links redirect through the D533 crosswalk. |
 | `BenchmarkingZone.jsx` | Investor benchmarking. Each metric links to its page. |
