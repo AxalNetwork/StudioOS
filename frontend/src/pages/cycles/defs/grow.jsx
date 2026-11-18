@@ -82,7 +82,8 @@ const grow = {
       <UpdatesHistory updates={data?.parts?.updates} reason={data?.parts?.updates_reason} onShare={ctx.openAction}
         limit={5} more={{ text: 'Write the update in Reporting →', href: `/grow/reporting${ctx.projectId ? `?project_id=${ctx.projectId}` : ''}` }} />
       <DurabilityChecklist items={data?.parts?.checklist}
-        onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined} />
+        onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined}
+        onNotApplicable={ctx.projectId ? (key, na) => cyclesWrite.grow.checklistNotApplicable(ctx.projectId, key, na).then(ctx.reload) : undefined} />
       {fromMercury('durable-company-building', data, ctx)}
       {/* D1095 (#2960): Calendar events tagged #board or #filing, each an obligation proposal. */}
       <DurableFromGoogle projectId={ctx.projectId} />

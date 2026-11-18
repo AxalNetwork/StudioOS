@@ -460,9 +460,13 @@ export async function marketCard(x: Ctx): Promise<CardBody> {
 
 /** The checklist, each item done by the Lab's milestone or by hand. */
 export async function checklist(env: Env, projectId: number) {
-  const marks = await env.DB.prepare('SELECT item_key, done_at FROM durability_checklist WHERE project_id = ?')
-    .bind(projectId).all<{ item_key: string; done_at: string | null }>();
+  // D6789 (#6789): an item marked Not applicable carries who marked it and when; it is out of the score.
+  const marks = await env.DB.prepare(
+    `SELECT c.item_key, c.done_at, c.not_applicable_at, u.name AS not_applicable_by_name
+       FROM durability_checklist c LEFT JOIN users u ON u.id = c.not_applicable_by WHERE c.project_id = ?`,
+  ).bind(projectId).all<{ item_key: string; done_at: string | null; not_applicable_at: string | null; not_applicable_by_name: string | null }>();
   const mine = new Map((marks.results || []).map((m) => [m.item_key, m.done_at]));
+  const na = new Map((marks.results || []).filter((m) => m.not_applicable_at).map((m) => [m.item_key, { at: m.not_applicable_at, by: m.not_applicable_by_name ?? null }]));
   let lab = new Map<string, string | null>();
   try {
     // The Lab records milestones per founder account, not per venture, so
@@ -488,14 +492,19 @@ export async function checklist(env: Env, projectId: number) {
   // or once ticked by hand: it never lowers the score of a founder without one.
   let mercury = false;
   try { mercury = await founderHasMercury(env, projectId); } catch { /* no connections on this database */ }
-  return DURABILITY_ITEMS.filter((i) => !i.mercury || mercury || !!mine.get(i.key)).map((i) => {
+  return DURABILITY_ITEMS.filter((i) => !i.mercury || mercury || !!mine.get(i.key) || na.has(i.key)).map((i) => {
     const byLab = i.lab ? lab.has(i.lab) : false;
     const byHand = !!mine.get(i.key);
     const byMercury = i.mercury === 'runway' && runway != null && runway.months != null && runway.months >= MERCURY_RUNWAY_MONTHS;
+    // D6789: a Lab tick wins over a Not applicable mark (the Lab says the item applies); otherwise the mark
+    // takes the item out of the score, and it is neither done nor open.
+    const mark = byLab ? null : na.get(i.key) ?? null;
+    const isDone = !mark && (byLab || byHand || byMercury);
     // D6122 (GR-24): what ticks an item, so an open one can say so ("Ticks from the Spin-Out Lab", "Tick by hand").
-    return { key: i.key, label: i.label, ticks: i.lab ? 'lab' : i.mercury === 'runway' ? 'mercury' : 'hand', done: byLab || byHand || byMercury,
-      source: byLab ? 'Spin-Out Lab' : byHand ? 'manual' : byMercury ? `From Mercury, as of ${runway!.as_of}` : null,
-      done_at: byLab ? lab.get(i.lab!) ?? null : byHand ? mine.get(i.key) ?? null : byMercury ? runway!.as_of : null };
+    return { key: i.key, label: i.label, ticks: i.lab ? 'lab' : i.mercury === 'runway' ? 'mercury' : 'hand', done: isDone,
+      source: !isDone ? null : byLab ? 'Spin-Out Lab' : byHand ? 'manual' : `From Mercury, as of ${runway!.as_of}`,
+      done_at: !isDone ? null : byLab ? lab.get(i.lab!) ?? null : byHand ? mine.get(i.key) ?? null : runway!.as_of,
+      not_applicable: !!mark, not_applicable_at: mark?.at ?? null, not_applicable_by: mark?.by ?? null };
   });
 }
 
@@ -508,15 +517,17 @@ export async function durableCard(x: Ctx): Promise<CardBody> {
       WHERE e.project_id = ? AND e.due_date IS NOT NULL AND substr(e.due_date, 1, 10) BETWEEN ? AND ? ORDER BY e.due_date`,
   ).bind(x.projectId, iso(x.now), until).all<{ id: number; title: string; due_date: string; completion_status: string; owner_name: string | null; owner_user_name: string | null }>();
   const list = await checklist(x.env, x.projectId);
-  const done = list.filter((i) => i.done).length;
+  // D6789: the score counts done out of the items that apply.
+  const applies = list.filter((i) => !i.not_applicable);
+  const done = applies.filter((i) => i.done).length;
   const events = (ev.results || []).map(({ due_date, owner_name, owner_user_name, ...event }) => ({ ...event, owner: ownerShown(owner_user_name, owner_name), due_at: due_date }));
   const anyEvent = await x.env.DB.prepare('SELECT 1 FROM compliance_events WHERE project_id = ? LIMIT 1').bind(x.projectId).first();
-  const firstOpen = list.find((i) => !i.done);
+  const firstOpen = applies.find((i) => !i.done);
   const ownerless = events.find((e) => !e.owner);
   return {
     state: events.length || done ? 'ok' : 'empty', range: 'Next 90 days',
     series: { calendar: events.map((e) => ({ title: e.title, due: e.due_at.slice(0, 10), owner: e.owner })),
-      checklist: { done, total: list.length, pct: Math.round((done / list.length) * 100) } },
+      checklist: { done, total: applies.length, not_applicable: list.length - applies.length, pct: applies.length ? Math.round((done / applies.length) * 100) : null } },
     next: !anyEvent && !done ? { text: 'Add obligation', href: `${x.href('durable-company-building')}&add=1` }
       : ownerless ? { text: `Give ${ownerless.title} an owner.`, href: x.href('durable-company-building') }
       : firstOpen ? { text: `${firstOpen.label}.`, href: x.href('durable-company-building') } : null,
