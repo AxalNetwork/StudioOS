@@ -139,7 +139,7 @@ test('syndicate roster: creator/member/admin only; no member emails',async()=>{
       const r=await call(db,who,'GET','@/api/networkfx/syndicates/1');
       const allowed=[ADMIN,INV_INVITED,INV_COMMITTED].includes(who);
       assert.equal(r.status,allowed?200:403,r.text);
-      if(allowed) {assert.equal(r.body.members.length,1);assert.ok(r.body.members.every(m=>!('email' in m)));}
+      if(allowed) {assert.equal(r.body.members.length,who===INV_INVITED?1:0);assert.equal(r.body.member_count,1);assert.ok(r.body.members.every(m=>!('email' in m)));}
     }
   } finally {db.close();}
 });
