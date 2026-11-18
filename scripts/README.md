@@ -342,6 +342,7 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
 | `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
 | `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory and classification/provenance guard; `--write` renders the generated, gitignored Markdown inventory beside the policy JSON. |
+| `check-record-writes.mjs` | D6651: fails on a put or delete of a `record` R2 prefix outside `cloudflare-worker/src/services/recordStore.ts` (writes) and `cloudflare-worker/src/services/recordErasure.ts` (deletes); baseline `record-writes-baseline.json` started empty. |
 
 | `file-recovery.py` | D6428: approved-class-only, lock-verified R2 snapshots and suppression-required restore primitive; live activation waits for counsel/#6650/#6654. |
 | `file-recovery-drill.py` | D6428: synthetic-only archive/source-loss/restore/suppression drill, with no provider access. |

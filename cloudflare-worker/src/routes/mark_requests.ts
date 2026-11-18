@@ -44,6 +44,7 @@ import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { notify } from '../services/notify';
+import { putRecordOrThrow } from '../services/recordStore';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -201,7 +202,8 @@ r.post('/', async (c) => {
     if (file && ext) {
       fileKey = `${EVIDENCE_PREFIX}${proj.id}/${uid}.${ext}`;
       fileName = String(file.name || `evidence.${ext}`).replace(/[\r\n"\\/]/g, '').trim().slice(0, 200) || `evidence.${ext}`;
-      await c.env.FILES!.put(fileKey, await file.arrayBuffer(), {
+      // D6651: mark-request evidence is a record, written once.
+      await putRecordOrThrow(c.env.FILES!, fileKey, await file.arrayBuffer(), {
         httpMetadata: { contentType: String(file.type).toLowerCase() },
         customMetadata: { request_uid: uid, user_id: String(user.id) },
       });
@@ -214,8 +216,9 @@ r.post('/', async (c) => {
       ).bind(uid, proj.id, user.id, kind, reason, now, now, link, fileKey, fileName,
         fileKey ? file!.size : null, fileKey ? String(file!.type).toLowerCase() : null).run();
     } catch (e) {
-      // The row was not written: the stored file has nothing pointing at it.
-      if (fileKey) { try { await c.env.FILES?.delete(fileKey); } catch { console.warn('[mark_requests] orphan_evidence_not_deleted'); } }
+      // The row was not written: the stored file has nothing pointing at it. D6651: it stays unreferenced;
+      // a record key is never deleted from request code.
+      if (fileKey) console.warn('[mark_requests] evidence_left_unreferenced');
       // Two submits at once: the partial unique index keeps one; the other is the 409 above.
       if (/UNIQUE constraint failed/i.test(String((e as Error)?.message || ''))) {
         const again = await c.env.DB.prepare(OPEN_ONE)

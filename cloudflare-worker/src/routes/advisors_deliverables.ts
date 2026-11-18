@@ -19,6 +19,7 @@ import {
 } from '../services/advisorPractice';
 import { ALLOWED_DECLARED, MAX_UPLOAD_BYTES, sniffType } from './company_documents';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { putRecord } from '../services/recordStore';
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -180,7 +181,9 @@ async function storeVersionFile(c: Context<{ Bindings: Env }>, advisorId: number
   // answers 413 `storage_full` (thrown as a Response, like the checks above) and nothing is stored.
   const room = await assertStorageRoom(c.env, { userId: advisorId }, bytes.length, { id: advisorId });
   try {
-    await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { advisorId: String(advisorId) } });
+    // D6651: a deliverable original is a record, written once.
+    const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { advisorId: String(advisorId) } });
+    if (!stored.ok) throw new Error('record_exists');
   } catch {
     throw c.json({ detail: 'The file could not be stored. Try again.', code: 'storage_failed' }, 502);
   }
@@ -193,9 +196,12 @@ async function storeVersionFile(c: Context<{ Bindings: Env }>, advisorId: number
   return { key, name, type: sniffed, size: bytes.length, sha256 };
 }
 
-/** The row write failed after the bytes were stored: take them back out (best effort), then fail as the write did. */
-async function dropStored(c: Context<{ Bindings: Env }>, stored: StoredFile | null) {
-  if (stored) { try { await c.env.FILES?.delete(stored.key); } catch { /* orphaned bytes, never a row pointing nowhere */ } }
+/**
+ * The row write failed after the bytes were stored. D6651: a record key is never deleted from request
+ * code, so the bytes stay unreferenced (never a row pointing nowhere); the failure is only logged.
+ */
+async function dropStored(_c: Context<{ Bindings: Env }>, stored: StoredFile | null) {
+  if (stored) console.warn('[advisors_deliverables] stored file left unreferenced after a failed row write');
 }
 
 /**

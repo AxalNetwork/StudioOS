@@ -13,6 +13,7 @@ import useOfFundsEadwyn from './use_of_funds_eadwyn';
 import { uofCan, uofCapabilities, uofStanding, type UofCapabilities } from '../services/useOfFunds/capabilities';
 import { exportAudit, planCsv, planPdf, readBasePlan } from '../services/useOfFunds/exportPlan';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { putRecord } from '../services/recordStore';
 
 const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean;caps:UofCapabilities}}>();
 r.use('*',async(c,next)=>{
@@ -161,7 +162,9 @@ r.post('/snapshot',async c=>{
   let storage:Awaited<ReturnType<typeof assertStorageRoom>>;
   // A full allowance is answered as its own 413 (D1169), not as this router's 503.
   try { storage=await assertStorageRoom(c.env,{projectId:s.projectId},bytes.byteLength,s.user as any); } catch(e) { if (e instanceof Response) return e; throw e; }
-  await c.env.FILES.put(key,bytes,{httpMetadata:{contentType:'application/pdf'},customMetadata:{project_uid:venture.uid,uploaded_by:String(s.user.id)}});
+  // D6651: a filed snapshot is a record, written once under a fresh key.
+  const stored=await putRecord(c.env.FILES,key,bytes,{httpMetadata:{contentType:'application/pdf'},customMetadata:{project_uid:venture.uid,uploaded_by:String(s.user.id)}});
+  if (!stored.ok) return c.json({code:'snapshot_not_filed',detail:'The plan could not be added to the data room. Nothing was filed; try again in a moment.'},409);
   try {
     await c.env.DB.batch([
       c.env.DB.prepare(`INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
@@ -172,7 +175,7 @@ r.post('/snapshot',async c=>{
     ]);
   } catch (e) {
     console.error('[use-of-funds] snapshot not filed:',(e as Error).name);
-    await c.env.FILES.delete(key).catch(()=>{});
+    // D6651: the stored file stays unreferenced; a record key is never deleted from request code.
     return c.json({code:'snapshot_not_filed',detail:'The plan could not be added to the data room. Nothing was filed; try again in a moment.'},500);
   }
   await noteStorageLanded(c.env,storage);

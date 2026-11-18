@@ -22,6 +22,7 @@ import { calendarDay } from './growKpis';
 import { mintDownloadToken } from './signedDownload';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
 import { onCompanyTeam } from './obligationOwner';
+import { putRecordOrThrow } from './recordStore';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null; extra: Record<string, unknown> | null;
@@ -1176,7 +1177,8 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
     key = `${minutesPrefix(pid)}${newUid()}.${ext}`;
     // D1170 — Grow minutes count to the venture's owner (D1169 §1).
     storage = await assertStorageRoom(env, { projectId: pid }, file.size, user);
-    await env.FILES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+    // D6651: minutes are a record, written once under a fresh key.
+    await putRecordOrThrow(env.FILES, key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
   }
   const months = REPEAT_MONTHS[e.recurrence];
   const next = months ? addCalendarMonths(e.due_date, months) : e.due_date;
@@ -1197,7 +1199,7 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
       summary: months ? `Held on ${heldOn}; next due ${next}` : `Held on ${heldOn}; completed` })),
   ];
   try { await env.DB.batch(statements); } catch (error) {
-    if (key) { try { await env.FILES?.delete(key); } catch { /* the stored file is orphaned, never served */ } }
+    // D6651: the stored file stays unreferenced, never served; a record key is never deleted as a rollback.
     obligationClash(error, obligationKind(e), next);
   }
   if (storage) await noteStorageLanded(env, storage);

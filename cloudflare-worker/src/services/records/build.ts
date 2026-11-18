@@ -30,6 +30,7 @@ import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
 import {
   SYSTEM_ACTION_LABEL, SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, disconnectedReason, systemActionIntent, systemStateOf, type SystemState,
 } from '../systemsState';
+import { putRecordOrThrow } from '../recordStore';
 
 type Any = Record<string, any>;
 type Section = { rows: Row[]; empty?: string; action?: string };
@@ -454,7 +455,8 @@ async function uploadProof(ctx: RecordContext, id: string, f: Filing, body: Body
   const key = `${proofPrefix(ctx.projectId)}${crypto.randomUUID().replace(/-/g, '')}.${type.ext}`;
   // D1170 — a Build proof counts to the venture's owner (D1169 §1); a replaced proof is weighed whole.
   const storage = await assertStorageRoom(ctx.env, { projectId: ctx.projectId }, bytes.byteLength, ctx.user as any);
-  await files.put(key, bytes, { httpMetadata: { contentType: type.mime }, customMetadata: { project_id: String(ctx.projectId) } });
+  // D6651: a proof is a record, written once under a fresh key; a replacement points the row at the newest key.
+  await putRecordOrThrow(files, key, bytes, { httpMetadata: { contentType: type.mime }, customMetadata: { project_id: String(ctx.projectId) } });
   const write = f.source === 'step'
     ? ctx.env.DB.prepare('UPDATE formation_steps SET proof_file_key = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(key, bytes.byteLength, f.stepId, ctx.projectId)
     : ctx.env.DB.prepare('UPDATE entity_obligations SET proof_file_key = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND entity_id = (SELECT entity_id FROM projects WHERE id = ?)')
@@ -462,13 +464,11 @@ async function uploadProof(ctx: RecordContext, id: string, f: Filing, body: Body
   try {
     await ctx.env.DB.batch([write, logRow(ctx, 'company-creation', id, 'build_proof_uploaded', 'Proof uploaded')]);
   } catch (e) {
-    try { await files.delete(key); } catch { /* the object is unreferenced either way */ }
+    // D6651: the object stays unreferenced; a record key is never deleted as a rollback.
     throw e;
   }
   await noteStorageLanded(ctx.env, storage);
-  if (f.proofKey && f.proofKey.startsWith(proofPrefix(ctx.projectId))) {
-    try { await files.delete(f.proofKey); } catch (e) { console.warn('[build records] old proof not deleted:', (e as Error)?.message); }
-  }
+  // D6651: the replaced proof is a record and is kept; the row now points at the newest key.
   return { ok: true };
 }
 /** Open proof: one signed, single-use download, for a key under this venture's own prefix only. */

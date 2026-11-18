@@ -23,6 +23,13 @@ storage readers and guards must consume it rather than copy figures.
 
 `eventSyndication/` (D1490, #3904) lists an approved public event on outside channels: the eligibility rule, the channel registry (no adapter yet), the four triggers and the `event_syndication` job. See its README.
 
+`recordStore.ts` and `recordErasure.ts` (D6651, #6651) are the only code that
+writes or deletes an R2 object under a `record` prefix of the D6650 inventory. A
+record is written once (`putRecord` refuses an existing key), a replacement is a
+new key, and the only delete is `eraseRecordObjects` with a stated reason, the
+door #6654's suppression ledger completes. `scripts/check-record-writes.mjs`
+fails the build on any other put or delete of a record prefix.
+
 `storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls
 before its R2 write, and the 80/95/100% notices sent once the write lands. Its
 refusal is the one exception to "never a Response" here: it throws the 413

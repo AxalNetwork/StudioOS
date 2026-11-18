@@ -10,6 +10,8 @@ import {
   CREDENTIAL_FILE_MAX, CREDENTIAL_TYPES, ExpertReviewError, auditExpert, credentialFiles, credentialFilesFor, expertDecision,
   ownExpert, reviewDto, reviewTarget, saveCredentials,
 } from '../services/wellbeing/expertReview';
+import { eraseRecordObjects } from '../services/recordErasure';
+import { putRecordOrThrow } from '../services/recordStore';
 
 const reviews = new Hono<{ Bindings: Env }>();
 export async function expertReviewResult(c: Context<{ Bindings: Env }>, fn: () => Promise<Response>) {
@@ -110,18 +112,18 @@ reviews.put('/experts/me/credentials/files', async (c) => {
     if (!valid) return refuse(c, 415, { code: 'file_type_mismatch', message: 'The file bytes do not match the declared type.' });
     const uid = crypto.randomUUID(); const key = `wellbeing/credentials/${row.id}/${uid}.${CREDENTIAL_TYPES[type]}`;
     const name = (c.req.header('x-file-name') || `Credential.${CREDENTIAL_TYPES[type]}`).replace(/[\x00-\x1f\x7f/\\]/g, '_').slice(0, 200);
-    await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: type } });
-    try {
-      const saved = await c.env.DB.batch([
-        c.env.DB.prepare(`INSERT INTO expert_credential_files(uid, expert_id, file_key, file_name, file_type, file_size, uploaded_by)
-          SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM expert_credential_files WHERE expert_id = ?) < 10`)
-          .bind(uid, row.id, key, name, type, size, user.id, row.id),
-        c.env.DB.prepare(`UPDATE experts SET verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL,
-          decline_reason = NULL, decision_token = NULL, review_version = review_version + 1 WHERE id = ?
-          AND EXISTS (SELECT 1 FROM expert_credential_files WHERE uid = ?)`).bind(row.id, uid),
-      ]);
-      if (Number(saved[0].meta?.changes) !== 1) { await c.env.FILES.delete(key); return refuse(c, 409, { code: 'file_limit', message: 'Ten credential files are already recorded. Remove an old one first.' }); }
-    } catch (e) { try { await c.env.FILES.delete(key); } catch { /* inaccessible orphan; no DB reference */ } throw e; }
+    // D6651: credential evidence is a record, written once under a fresh key; when its row is not
+    // written it stays unreferenced (a record key is never deleted from request code).
+    await putRecordOrThrow(c.env.FILES, key, bytes, { httpMetadata: { contentType: type } });
+    const saved = await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO expert_credential_files(uid, expert_id, file_key, file_name, file_type, file_size, uploaded_by)
+        SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM expert_credential_files WHERE expert_id = ?) < 10`)
+        .bind(uid, row.id, key, name, type, size, user.id, row.id),
+      c.env.DB.prepare(`UPDATE experts SET verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL,
+        decline_reason = NULL, decision_token = NULL, review_version = review_version + 1 WHERE id = ?
+        AND EXISTS (SELECT 1 FROM expert_credential_files WHERE uid = ?)`).bind(row.id, uid),
+    ]);
+    if (Number(saved[0].meta?.changes) !== 1) return refuse(c, 409, { code: 'file_limit', message: 'Ten credential files are already recorded. Remove an old one first.' });
     return c.json({ files: await credentialFiles(c.env, row.id) }, 201);
   });
 });
@@ -150,7 +152,8 @@ reviews.delete('/experts/me/credentials/files/:fileUid', async (c) => {
     if (!file) return refuse(c, 404, { code: 'file_not_found', message: 'Credential file not found.' });
     // Keep the key available for retries if storage fails. R2 deletion is
     // idempotent, so a later D1 failure can also be retried with this row.
-    await c.env.FILES.delete(file.file_key);
+    // D6651: the expert removing their own file goes through the one record-erasure path.
+    await eraseRecordObjects(c.env.FILES, file.file_key, 'owner_removed');
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM expert_credential_files WHERE uid = ? AND expert_id = ?').bind(c.req.param('fileUid'), row.id),
       c.env.DB.prepare(`UPDATE experts SET verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL,

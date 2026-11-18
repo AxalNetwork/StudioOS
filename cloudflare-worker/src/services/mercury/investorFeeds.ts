@@ -42,6 +42,7 @@ import { recordReceipt } from '../fundCallLedger';
 import { LedgerRefusal, postLedgerEntry } from '../fundLedger';
 import { newUid } from './store';
 import { recompute as recomputeClosingLine } from '../closings';
+import { putRecord } from '../recordStore';
 
 /**
  * The report service receives only a deletion result or the existence of a
@@ -641,9 +642,11 @@ export async function acceptProposal(env: Env, user: User, p: ProposalRow, body:
   if (!pdf) return no(409, 'statement_unavailable', 'Mercury gave no PDF for that statement, so nothing was attached.');
   if (!env.FILES) return no(409, 'statement_unavailable', 'Statements cannot be stored in this environment, so nothing was attached.');
   const key = statementKeyOf(user, p);
-  await env.FILES.put(key, pdf.bytes, { httpMetadata: { contentType: 'application/pdf' } });
+  // D6651: an attached statement is a record, written once. The key is the proposal's own: when it is
+  // already stored (a concurrent accept, or an earlier attempt that stopped before marking), that copy of
+  // the same statement stands and is never replaced or deleted; the proposal's state decides the answer.
+  await putRecord(env.FILES, key, pdf.bytes, { httpMetadata: { contentType: 'application/pdf' } });
   if (!await markAccepted(env, user, p, key)) {
-    await env.FILES.delete(key);
     return no(409, 'already_decided', 'This proposal was already accepted or dismissed.');
   }
   return { ok: true, result_ref: key };

@@ -79,7 +79,11 @@ function bucket(db: DatabaseSync) {
   if (!BUCKETS.has(db)) BUCKETS.set(db, new Map());
   const store = BUCKETS.get(db)!;
   return { store, binding: {
-    async put(key: string, bytes: Uint8Array, opts?: any) { store.set(key, { bytes, type: opts?.httpMetadata?.contentType }); },
+    // Honours R2's write-once precondition (D6651): a put with `onlyIf.etagDoesNotMatch: '*'` stores nothing over an existing key.
+    async put(key: string, bytes: Uint8Array, opts?: any) {
+      if (opts?.onlyIf?.etagDoesNotMatch === '*' && store.has(key)) return null;
+      store.set(key, { bytes, type: opts?.httpMetadata?.contentType }); return { key };
+    },
     async get(key: string) { return store.get(key) ?? null; },
     async delete(key: string) { store.delete(key); },
   } };
@@ -820,9 +824,15 @@ test('test 9: Mark filed, the step checks and Upload proof, which stores a key w
   assert.deepEqual(after.body.main.find((x: any) => x.key === 'steps').rows.map((x: any) => [x.a, x.c]),
     [['Fill the election', 'Done'], ['Mail by certified post', 'Open'], ['Upload proof of mailing', 'Done']]);
   assert.equal(db.prepare('SELECT state FROM formation_steps WHERE id = 9').get()!.state, 'todo', 'the upload does not mark it filed');
-  // A second upload replaces the object.
-  assert.equal((await act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(PDF(), 'again.pdf'))).status, 200);
-  assert.equal(bucket(db).store.size, 1);
+  // D6651: a second upload is a replace — a new key, the row points at it, and the first proof keeps its bytes.
+  const firstBytes = bucket(db).store.get(key)!.bytes;
+  const again = new TextEncoder().encode('%PDF-1.4\n% a second made-up receipt\n');
+  assert.equal((await act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(again, 'again.pdf'))).status, 200);
+  const replaced = db.prepare('SELECT proof_file_key FROM formation_steps WHERE id = 9').get()!.proof_file_key as string;
+  assert.notEqual(replaced, key, 'a replace writes a new key');
+  assert.equal(bucket(db).store.size, 2, 'the replaced proof is kept, never deleted');
+  assert.deepEqual(bucket(db).store.get(key)!.bytes, firstBytes, 'the first proof is unchanged');
+  assert.deepEqual(bucket(db).store.get(replaced)!.bytes, again);
   assert.equal((await act(db, 'company-creation', 'step-9', 'mark-filed')).status, 200);
   assert.equal(db.prepare('SELECT state FROM formation_steps WHERE id = 9').get()!.state, 'done');
   assert.ok(!keysOf(await rec(db, 'company-creation', 'step-9')).includes('mark-filed'));
@@ -977,7 +987,7 @@ test('test 10: each closing write logs one row with its project, entity type and
   }
 });
 
-test('test 10: a closing write whose log fails is not written, and an upload leaves no object', async () => {
+test('test 10: a closing write whose log fails is not written, and an upload leaves no row pointing at its object', async () => {
   for (const w of CLOSING) {
     const db = recordsA(seeded());
     db.exec(`UPDATE users SET subscription_tier = 'growth' WHERE id = ${FOUNDER}`);
@@ -986,7 +996,8 @@ test('test 10: a closing write whose log fails is not written, and an upload lea
     const r = await w.run(db);
     assert.equal(r.status, 500, `${w.name}: ${JSON.stringify(r.body)}`);
     assert.equal(one(db, w.state), before, `${w.name}: the write did not land without its log`);
-    assert.equal(bucket(db).store.size, 0, `${w.name}: no stored object is left behind`);
+    // D6651: a record is never deleted as a rollback. An upload's object stays, unreferenced: the row above is unchanged.
+    for (const key of bucket(db).store.keys()) assert.ok(!one(db, w.state).includes(key), `${w.name}: no row points at the stored object`);
     db.close();
   }
 });

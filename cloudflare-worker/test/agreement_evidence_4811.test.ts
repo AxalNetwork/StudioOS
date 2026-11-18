@@ -68,7 +68,8 @@ test('attach: refused without each field, as a non-PDF, on an envelope or an uns
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
   assert.equal(ok.body.evidence.signatory, 'A. Founder, CEO');
   assert.equal(ok.body.evidence.file_sha256.length, 64);
-  assert.deepEqual(f.put, ['contracts/evidence/doc-bare.pdf']);
+  assert.equal(f.put.length, 1);
+  assert.match(f.put[0], /^contracts\/evidence\/doc-bare\/[0-9a-f-]{36}\.pdf$/, 'D6651: a fresh write-once key under the agreement');
   assert.deepEqual(await repairs(f), [], 'the contradiction clears');
   assert.equal((await call(f, 'GET', '/doc-bare/evidence')).body.evidence.signed_on, '2026-10-02');
   assert.equal((await call(f, 'POST', '/doc-bare/evidence', upload())).body.error, 'already_evidenced');

@@ -94,6 +94,8 @@ import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { ventureNdaStatus, type VentureNdaStatus } from '../services/dealAccess';
 import { investorRoomRequests, type InvestorRoomRequest } from '../services/dataRoomRequests';
 import { suffixAmount } from '../../../frontend/src/lib/money.js';
+import { putRecordOrThrow } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const research = new Hono<{ Bindings: Env }>();
 research.route('/collections', researchCollections);
@@ -461,7 +463,8 @@ research.post('/documents', async (c) => {
   const storage = await assertStorageRoom(c.env, { userId: user.id }, file.size, user);
 
   try {
-    await c.env.FILES.put(r2Key, await file.arrayBuffer(), {
+    // D6651: a research original is a record, written once.
+    await putRecordOrThrow(c.env.FILES, r2Key, await file.arrayBuffer(), {
       httpMetadata: { contentType: mime },
       customMetadata: { owner_user_id: String(user.id), doc_uid: uid, filename: file.name || 'document' },
     });
@@ -576,7 +579,8 @@ research.delete('/documents/:uid', async (c) => {
   // leaving the document's text answerable after the document was deleted.
   await deleteChunkedEntity(c.env, 'research_doc', row.id, row.chunk_count);
   if (c.env.FILES) {
-    try { await c.env.FILES.delete(row.r2_key); } catch (e) {
+    // D6651: the owner removing their document goes through the one record-erasure path.
+    try { await eraseRecordObjects(c.env.FILES, row.r2_key, 'owner_removed'); } catch (e) {
       console.warn('[research] R2 delete failed:', (e as Error).message);
     }
   }

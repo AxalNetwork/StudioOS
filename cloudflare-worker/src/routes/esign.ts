@@ -59,6 +59,7 @@ import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
 import { refuse } from '../util/refusal';
 import { librarySlugFor, sentAsBundledFile } from '../services/legalDocTypes';
+import { putRecordOrThrow } from '../services/recordStore';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -1579,7 +1580,8 @@ esign.post('/sign/:token', async (c) => {
     const pdfBytes = rendered.bytes;
     const fileUid = newFileUid();
     signedKey = `esign/signed/${rec.envelope_uuid}/${fileUid}.pdf`;
-    await c.env.FILES.put(signedKey, pdfBytes, {
+    // D6651: a signed copy is a record, written once under a fresh key.
+    await putRecordOrThrow(c.env.FILES, signedKey, pdfBytes, {
       httpMetadata: { contentType: 'application/pdf' },
       customMetadata: {
         envelope_uuid: rec.envelope_uuid,
