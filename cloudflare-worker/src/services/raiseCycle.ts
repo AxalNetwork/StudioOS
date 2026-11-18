@@ -80,6 +80,8 @@ const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.pr
  */
 const pitchHref = (ctx: Ctx) => `/raise/pitch?project_id=${ctx.projectId}`;
 const shareHref = (ctx: Ctx) => `/raise/pitch/share?project_id=${ctx.projectId}`;
+/** D6045: the same addresses for the Overview's stage and primary action (`raiseJourney.ts`). */
+export const raiseLinks = { module: href, add: addHref, pitch: pitchHref, share: shareHref } as const;
 /**
  * The full tools the module pages summarise; the pages link to them.
  * D1109 (#2989): the Data room has no tool beside its module any more: the
