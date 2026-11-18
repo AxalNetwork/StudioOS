@@ -1,1 +1,7 @@
-| Cap Table | founder | `/spinout-lab/captable` | `/spinout-lab/captable` | `captable.ts`, `legal_83b.ts`, `projects.ts`, `spinout_lab.ts` | OUT OF SCOPE | Lab tool ("Unlocked · Wk 4", Carta sync). Carta option pools and vesting (`/captable/equity-plan`) and audience-scoped share links with the named holders' consent (D364). |
+| Cap Table | founder | `/spinout-lab/captable` | `/spinout-lab/captable` | {backend} | OUT OF SCOPE | Lab tool ("Unlocked · Wk 4", Carta sync). Carta option pools and vesting (`/captable/equity-plan`) and audience-scoped share links with the named holders' consent (D364). |
+
+backend:
+- `captable.ts`
+- `legal_83b.ts`
+- `projects.ts`
+- `spinout_lab.ts`
