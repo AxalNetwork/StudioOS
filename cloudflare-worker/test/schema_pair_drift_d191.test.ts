@@ -21,6 +21,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { headerComment, indexMode } from '../../scripts/lib/folderFiles.mjs';
 
 import {
   sqlExpressions,
@@ -578,12 +579,13 @@ test('user_sessions.factor is declared once, beside the columns it is read with'
 test('the guard runs in test:guards and is documented', () => {
   assert.match(read('package.json'), /node --no-warnings scripts\/check-schema-pair-drift\.mjs/,
     'the guard is not in test:guards, so nothing runs it on a PR');
-  const readme = read('scripts/README.md');
-  const row = readme.split('\n').find((l) => l.includes('`check-schema-pair-drift.mjs`')) || '';
-  assert.ok(row, 'add the check-schema-pair-drift.mjs row to scripts/README.md');
-  assert.match(row, /`schema-pair-drift-baseline\.json`/, 'the README row no longer names its ledger');
-  assert.match(row, /ALTER/, 'the README row dropped the ALTER-awareness, which is what keeps it off partner_profiles');
-  assert.match(row, /stale entry/, 'the README row dropped the stale-entry refusal');
+  // #6470: scripts/README.md's list is generated from each script's header comment, so the row's text lives there.
+  assert.equal(indexMode(read('scripts/README.md')), 'generated');
+  const row = headerComment('check-schema-pair-drift.mjs', read('scripts/check-schema-pair-drift.mjs'));
+  assert.ok(row, 'check-schema-pair-drift.mjs has no header comment for scripts/README.md\'s generated list');
+  assert.match(row, /`schema-pair-drift-baseline\.json`/, 'the header no longer names its ledger');
+  assert.match(row, /ALTER/, 'the header dropped the ALTER-awareness, which is what keeps it off partner_profiles');
+  assert.match(row, /stale entry/, 'the header dropped the stale-entry refusal');
 });
 
 test('importing the guard does not run the scan', () => {

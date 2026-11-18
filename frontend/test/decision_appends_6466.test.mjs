@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { MAX_NET_LINES, findAppends, sectionHeadings } from '../../scripts/check-decision-appends.mjs';
+import { headerComment, indexMode } from '../../scripts/lib/folderFiles.mjs';
 
 const SCRIPT = resolve(process.cwd(), 'scripts/check-decision-appends.mjs');
 const DIR = 'documentation/architecture/decisions';
@@ -289,5 +290,7 @@ test('the branch that introduces the guard passes', () => {
 test('the guard runs in test:guards, beside check-decision-ids, and is documented', () => {
   const chain = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')).scripts['test:guards'].split(' && ');
   assert.ok(chain.includes('node scripts/check-decision-appends.mjs'), 'the guard is not in test:guards, so nothing runs it on a PR');
-  assert.match(readFileSync(resolve(process.cwd(), 'scripts/README.md'), 'utf8'), /^\| `check-decision-appends\.mjs` \| D6466/m);
+  // #6470: scripts/README.md's list is generated from each script's header comment, which opens with the decision.
+  assert.equal(indexMode(readFileSync(resolve(process.cwd(), 'scripts/README.md'), 'utf8')), 'generated');
+  assert.match(headerComment('check-decision-appends.mjs', readFileSync(resolve(process.cwd(), 'scripts/check-decision-appends.mjs'), 'utf8')), /^D6466/);
 });

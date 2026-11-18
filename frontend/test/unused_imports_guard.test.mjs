@@ -34,6 +34,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { headerComment, indexMode } from '../../scripts/lib/folderFiles.mjs';
 import {
   deadBindings, destructureBindings, destructurePatterns, destructuredNames,
   matchBracket, namedImports, prepareBody, topIndexOf, topParts,
@@ -460,17 +461,17 @@ test('the guard runs in test:guards and is documented', () => {
   const pkg = read('package.json');
   assert.match(pkg, /node scripts\/check-unused-imports\.mjs/,
     'the guard is not in test:guards, so nothing runs it on a PR');
-  const readme = read('scripts/README.md');
-  assert.match(readme, /`check-unused-imports\.mjs`/,
-    'add the check-unused-imports.mjs row to scripts/README.md');
-  const row = readme.split('\n').find((l) => l.includes('`check-unused-imports.mjs`')) || '';
+  // #6470: scripts/README.md's list is generated from each script's header comment, so the row's text lives there.
+  assert.equal(indexMode(read('scripts/README.md')), 'generated');
+  const row = headerComment('check-unused-imports.mjs', read('scripts/check-unused-imports.mjs'));
+  assert.ok(row, 'check-unused-imports.mjs has no header comment for scripts/README.md\'s generated list');
   // Both halves, and the one caveat a reader would otherwise be surprised by.
   // Matching merely /destructur/i was too loose: the row names the destructured
   // shape early on, so it passed even when the narrowing claim was removed.
-  assert.match(row, /import \{ a \} from/, 'the README row no longer names the import shape');
-  assert.match(row, /const \{ a \} = obj/, 'the README row no longer names the destructured shape');
-  assert.match(row, /`const` only/, 'the README row dropped the const-only narrowing');
-  assert.match(row, /rest element/, 'the README row dropped the rest-element caveat');
+  assert.match(row, /import \{ a \} from/, 'the header no longer names the import shape');
+  assert.match(row, /const \{ a \} = obj/, 'the header no longer names the destructured shape');
+  assert.match(row, /`const` only/, 'the header dropped the const-only narrowing');
+  assert.match(row, /rest element/, 'the header dropped the rest-element caveat');
 });
 
 test('importing the guard does not run the scan', () => {

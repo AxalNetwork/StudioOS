@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { headerComment, indexMode } from '../../scripts/lib/folderFiles.mjs';
 
 import {
   referencesOf,
@@ -76,11 +77,12 @@ test('the guard runs in test:guards and is documented', () => {
   const pkg = read('package.json');
   assert.match(pkg, /node scripts\/check-docs-assets-closure\.mjs/,
     'the guard is not in test:guards, so nothing runs it on a PR');
-  const readme = read('scripts/README.md');
-  const row = readme.split('\n').find((l) => l.includes('`check-docs-assets-closure.mjs`')) || '';
-  assert.ok(row, 'add the check-docs-assets-closure.mjs row to scripts/README.md');
-  assert.match(row, /never builds/, 'the README row dropped the never-builds constraint');
-  assert.match(row, /self-check/, 'the README row dropped the self-check, which is why the guard is trustworthy');
+  // #6470: scripts/README.md's list is generated from each script's header comment, so the row's text lives there.
+  assert.equal(indexMode(read('scripts/README.md')), 'generated');
+  const row = headerComment('check-docs-assets-closure.mjs', read('scripts/check-docs-assets-closure.mjs'));
+  assert.ok(row, 'check-docs-assets-closure.mjs has no header comment for scripts/README.md\'s generated list');
+  assert.match(row, /never builds/, 'the header dropped the never-builds constraint');
+  assert.match(row, /self-check/, 'the header dropped the self-check, which is why the guard is trustworthy');
 });
 
 test('it runs before the check that costs a bundle', () => {

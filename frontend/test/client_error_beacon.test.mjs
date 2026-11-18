@@ -22,6 +22,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { headerComment, indexMode } from '../../scripts/lib/folderFiles.mjs';
 
 // `window` must exist before the module is evaluated: log.js hangs
 // `__axalErrors` off it at import time for support to call in a console.
@@ -199,9 +200,10 @@ test('the guard that keeps this true is wired, and named where guards are listed
   const pkg = readFileSync(resolve(process.cwd(), 'package.json'), 'utf8');
   assert.match(pkg, /node scripts\/check-frontend-logging\.mjs/,
     'the guard is not in test:guards, so nothing runs it on a PR');
-  const readme = readFileSync(resolve(process.cwd(), 'scripts/README.md'), 'utf8');
-  assert.match(readme, /`check-frontend-logging\.mjs`/,
-    'add the check-frontend-logging.mjs row to scripts/README.md');
+  // #6470: scripts/README.md's list is generated from each script's header comment.
+  assert.equal(indexMode(readFileSync(resolve(process.cwd(), 'scripts/README.md'), 'utf8')), 'generated');
+  assert.match(headerComment('check-frontend-logging.mjs', readFileSync(resolve(process.cwd(), 'scripts/check-frontend-logging.mjs'), 'utf8')), /\S/,
+    'check-frontend-logging.mjs has no header comment for scripts/README.md\'s generated list');
   // The scope redaction is the security half; a revert would be silent.
   assert.match(LOG_SRC, /scope:\s*clip\(redact\(scope\)/,
     'toEntry stopped redacting the scope — the one beaconed field with no other sanitiser');
