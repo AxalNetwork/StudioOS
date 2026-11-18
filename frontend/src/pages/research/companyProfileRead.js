@@ -213,15 +213,3 @@ export function signalDate(g) {
   if (!blank(g?.created_at)) return { label: 'Recorded', date: String(g.created_at).slice(0, 10), note: 'observed date: not recorded' };
   return { label: 'Date', date: NOT_RECORDED, note: null };
 }
-
-/**
- * The analysis-setup subject from the profile link's query (D7041, D7046):
- * the directory uid with the name, website, sector label and country the
- * link carried. Null without a `subject`.
- */
-export function subjectFromQuery(params) {
-  const uid = params?.get?.('subject');
-  if (!uid) return null;
-  const get = (k) => (params.get(k) || '').slice(0, 200) || null;
-  return { uid: uid.slice(0, 120), name: get('market'), website: get('website'), sector: get('sector'), country: get('country') };
-}

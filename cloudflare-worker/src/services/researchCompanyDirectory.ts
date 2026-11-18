@@ -438,7 +438,9 @@ export async function getCompany(env: Env, uid: string) {
 
   const item: Row = {};
   for (const k of ['uid', 'name', 'website', 'country', 'founded_year', 'sector', 'source_name', 'source_url', 'source_license', 'as_of',
-    'competitor_status', 'diligence_status']) item[k] = row[k] ?? null;
+    'competitor_status', 'diligence_status', 'website_verified_at']) item[k] = row[k] ?? null;
+  // D7175: the recorded website's own state, in words the subject card prints.
+  item.website_status = !String(item.website ?? '').trim() ? 'not_recorded' : item.website_verified_at ? 'verified' : 'not_verified';
   return {
     item,
     tracked_sector: await trackedSector(env, row),

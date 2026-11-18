@@ -1,7 +1,6 @@
 /**
  * D7180 (#7180, D7046) — the Worker half of the Research › Companies profile
- * build, on the fully migrated schema (baseline plus every migration, this
- * issue's `competitor_analyses.subject_uid` included).
+ * build, on the fully migrated schema (baseline plus every migration).
  *
  * Pins:
  *   · each metric carries its own publisher, URL, confidence and observed
@@ -11,9 +10,8 @@
  *     is `updated_on`, kept apart;
  *   · `?part=` reads one evidence collection on its own, refuses a part it
  *     does not know, and reports a failed read as Unreadable on its own;
- *   · peers carry the rule the query ran;
- *   · a run started from a profile keeps its subject company (`subject_uid`),
- *     refuses a uid the directory does not hold, and reads the subject back.
+ *   · peers carry the rule the query ran. (The analysis subject is D7175's,
+ *     pinned by competitor_subject_evidence_7175.)
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/research_company_profile_7180.test.ts
@@ -27,7 +25,6 @@ import { SignJWT } from 'jose';
 import research from '../src/routes/research.ts';
 import competitors from '../src/routes/competitors.ts';
 import { citationFor, presentMetrics, PEER_LIMIT } from '../src/services/researchCompanyDirectory.ts';
-import { parseSubjectUid } from '../src/services/competitorSubject.ts';
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
@@ -152,38 +149,4 @@ test('peers carry the rule the query ran', async () => {
   const p = (await call(db, 'GET', '/api/research/company-directory/halden')).body.peers;
   assert.deepEqual(p.rows.map((x: any) => x.uid), ['bright', 'ampere'], 'same country first, then by name');
   assert.deepEqual(p.rule, { sector_label: 'energy storage', country: 'Norway', match: 'same_sector_label', order: ['same_country', 'name'], limit: PEER_LIMIT });
-});
-
-test('subject_uid: parsed strictly', () => {
-  assert.equal(parseSubjectUid(undefined), null);
-  assert.equal(parseSubjectUid('  '), null);
-  assert.equal(parseSubjectUid(' q42 '), 'q42');
-  assert.equal(parseSubjectUid(42), undefined);
-  assert.equal(parseSubjectUid('x'.repeat(121)), undefined);
-});
-
-test('a run from a profile keeps its subject company and reads it back', async () => {
-  const { db } = fixture();
-  const unknown = await call(db, 'POST', '/api/competitors/analyze', { market: 'energy storage', subject_uid: 'nope' });
-  assert.deepEqual([unknown.status, unknown.body.error], [400, 'subject_not_found']);
-  const bad = await call(db, 'POST', '/api/competitors/analyze', { market: 'energy storage', subject_uid: 7 });
-  assert.deepEqual([bad.status, bad.body.error], [400, 'subject_invalid']);
-  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM competitor_analyses').get() as any).n, 0, 'a refused subject writes no analysis');
-
-  await call(db, 'POST', '/api/competitors/analyze', { market: 'energy storage', geography: 'Norway', subject_uid: 'halden' });
-  const row = db.prepare('SELECT id, subject_uid FROM competitor_analyses').get() as any;
-  assert.equal(row.subject_uid, 'halden');
-  const full = await call(db, 'GET', `/api/competitors/${row.id}`);
-  assert.equal(full.status, 200);
-  assert.equal(full.body.subject_uid, 'halden');
-  assert.deepEqual(full.body.subject, { status: 'ok', uid: 'halden', name: 'Halden Grid', website: 'https://haldengrid.example', country: 'Norway', sector: 'energy storage' });
-
-  await call(db, 'POST', '/api/competitors/analyze', { market: 'energy storage' });
-  const plain = db.prepare('SELECT id, subject_uid FROM competitor_analyses WHERE subject_uid IS NULL').get() as any;
-  assert.ok(plain, 'a run outside a profile has no subject');
-  assert.equal((await call(db, 'GET', `/api/competitors/${plain.id}`)).body.subject, null);
-
-  db.exec(`DELETE FROM research_company_directory WHERE uid = 'halden'`);
-  assert.deepEqual((await call(db, 'GET', `/api/competitors/${row.id}`)).body.subject, { status: 'not_found', uid: 'halden' },
-    'a subject the directory no longer holds is Not found, not dropped');
 });

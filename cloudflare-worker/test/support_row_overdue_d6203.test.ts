@@ -147,20 +147,6 @@ async function call(db: any, user: number, path: string, init: any = {}) {
     env(db),
   );
 }
-const patch = (db: any, user: number, uid: string, body: unknown) =>
-  call(db, user, `/${uid}`, { method: 'PATCH', body: JSON.stringify(body) });
-const rowOf = (db: any, uid: string) =>
-  db.prepare('SELECT * FROM portfolio_support_entries WHERE uid = ?').get(uid) as any;
-const eventsOf = (db: any, uid: string) => db.prepare(
-  `SELECT e.* FROM portfolio_support_entry_events e
-     JOIN portfolio_support_entries s ON s.id = e.entry_id
-    WHERE s.uid = ? ORDER BY e.revision`,
-).all(uid) as any[];
-
-const post = (db: any, user: number, body: unknown) => call(db, user, '/', { method: 'POST', body: JSON.stringify(body) });
-const count = (db: any) => Number((db.prepare('SELECT COUNT(*) AS n FROM portfolio_support_entries').get() as any).n);
-const totals = async (db: any) => ((await (await call(db, MINE, '/')).json()) as any).totals;
-
 
 const PAST = '2000-01-31';
 const FUTURE = '2999-12-31';

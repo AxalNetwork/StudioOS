@@ -274,7 +274,8 @@ test('7176: apply takes only the ticked changes, with If-Match, as one new versi
     { name: 'Newco', domain: 'newco.example', category: 'direct' },
     { name: 'Skipco', domain: 'skipco.example', category: 'adjacent' },
   ];
-  model.synthesis = { market_summary: 'Two new integrators.', gaps: ['Cold sites'], wedge: 'Cold sites first.', next_actions: ['Interview five carriers'] };
+  // D7175: a wedge stands only when it cites a fetched source; one without moves to next_actions.
+  model.synthesis = { market_summary: 'Two new integrators.', gaps: ['Cold sites'], wedge: { text: 'Cold sites first.', sources: [1] }, next_actions: ['Interview five carriers'] };
   const p = await call(db, 'POST', `/${id}/rerun`, {});
   assert.equal(p.status, 200, JSON.stringify(p.body));
   const newco = p.body.candidates.add.find((c: any) => c.name === 'Newco');
@@ -329,12 +330,19 @@ test('7176: export is of a saved version and says which; an older version is rea
   assert.match(md.type, /^text\/markdown/);
   assert.equal(md.version, '2');
   assert.match(md.body, /## Conclusion\nLead with disputes\./);
+  // D7175 beside D7176: the same file carries the Evidence line and the numbered sources.
+  assert.match(md.body, /^Evidence: /m);
+  assert.match(md.body, /## Sources\n\[1\] /);
 
   const v1 = await call(db, 'GET', `/${id}/export?format=json&version=1`);
   assert.equal(v1.status, 200);
   assert.equal(v1.version, '1');
   assert.notEqual(v1.body.title, 'Freight, my take', 'version 1 came back with version 2’s title');
   assert.equal(v1.body.output.conclusion, undefined);
+  // D7175: a kept version carries its own evidence status and the analysis's subject (none here).
+  assert.ok(v1.body.evidence && typeof v1.body.evidence.status === 'string', 'a kept version lost its evidence');
+  assert.equal(v1.body.subject_uid, null);
+  assert.equal(v1.body.subject, null);
 
   const v2 = await call(db, 'GET', `/${id}/export?format=json&version=2`);
   assert.equal(v2.version, '2');

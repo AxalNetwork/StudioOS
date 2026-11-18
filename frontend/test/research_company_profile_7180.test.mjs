@@ -17,10 +17,10 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
-import { analysisHref, buildCompetitorsRedirect } from '../src/lib/companyDirectoryView.js';
+import { analysisHref } from '../src/lib/companyDirectoryView.js';
 import {
   EVIDENCE_COLLECTIONS, METRICS, cellText, metricEvidence, notRecordedFields, observedText, peerRuleText,
-  recordFields, replaceCollection, signalDate, subjectFromQuery,
+  recordFields, replaceCollection, signalDate,
 } from '../src/pages/research/companyProfileRead.js';
 import {
   EvidenceCollection, KeyMetrics, KindBadge, MetricEvidenceBody, NotRecordedGroup, SectorPeers,
@@ -38,26 +38,11 @@ const FUNDING = {
   observed_on: null, observed_basis: null, updated_on: '2026-11-02',
 };
 
-test('the CTA opens setup with the company as its subject, its sector label and its country', () => {
-  const href = analysisHref({ uid: 'q42', name: 'Halden Grid', website: 'https://haldengrid.example', sector: ' energy storage ', country: 'Norway' });
+test('the CTA opens setup with the company as its subject (D7175 carries the subject)', () => {
+  const href = analysisHref({ uid: 'q42', name: 'Halden Grid', website: 'https://haldengrid.example', sector: 'energy storage', country: 'Norway' });
   const q = new URL(href, 'https://x.example').searchParams;
   assert.equal(new URL(href, 'https://x.example').pathname, '/research/companies');
-  assert.deepEqual([q.get('tab'), q.get('subject'), q.get('market'), q.get('sector'), q.get('country'), q.get('website')],
-    ['analyses', 'q42', 'Halden Grid', 'energy storage', 'Norway', 'https://haldengrid.example']);
-  const bare = new URL(analysisHref({ uid: 'q1', name: 'Kestrel' }), 'https://x.example').searchParams;
-  assert.deepEqual([bare.has('sector'), bare.has('country'), bare.has('website')], [false, false, false], 'blank fields are left out');
-  assert.match(buildCompetitorsRedirect('?market=A&subject=q1&sector=s&country=c'), /subject=q1&sector=s&country=c/, '/build/competitors keeps the subject');
-  assert.deepEqual(subjectFromQuery(new URLSearchParams('market=Halden+Grid&subject=q42&sector=energy+storage&country=Norway')),
-    { uid: 'q42', name: 'Halden Grid', website: null, sector: 'energy storage', country: 'Norway' });
-  assert.equal(subjectFromQuery(new URLSearchParams('market=Halden')), null, 'no subject without a uid');
-});
-
-test('setup keeps the subject: it rides with the run and the startup list does not take it over', () => {
-  const ca = read('frontend/src/components/CompetitorAnalysis.jsx');
-  assert.match(ca, /if \(subject && payload\.mode === 'custom'\) payload\.subject_uid = subject\.uid;/);
-  assert.match(ca, /if \(ps\.length && !searchParams\.get\('subject'\)\) \{\s*setMode\('startup'\)/);
-  assert.match(ca, /market: \(linked\.sector \|\| market\)\.slice\(0, 200\),\s*geography: linked\.country \|\| prev\.geography,/);
-  assert.match(ca, /Kept with the analysis, so Direct and Adjacent are about this company\./);
+  assert.deepEqual([q.get('tab'), q.get('company'), q.get('name'), q.has('website')], ['analyses', 'q42', 'Halden Grid', false]);
   const profile = read('frontend/src/pages/research/CompanyProfile.jsx');
   assert.match(profile, /Set up competitor analysis →/);
   assert.doesNotMatch(profile, /Run competitor analysis/);

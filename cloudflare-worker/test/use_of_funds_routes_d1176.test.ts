@@ -34,7 +34,7 @@ function fixture(){
 // D5069: a write names the revision it read. These tests are about other things, so the
 // helper reads the scenario's stored revision for them; the stale-revision tests pass their own.
 function revisionFor(f:any,method:string,path:string,b:any){
-  if(!b||typeof b!=='object'||'expected_revision' in b) return b;
+  if (!b || typeof b !== 'object' || 'expected_revision' in b) return b;
   // D5375: a hire edit names the hire's own revision.
   const hr=/^\/hires\/([0-9]+)(?:\?|$)/.exec(path);
   if(hr&&method==='PATCH'){const h=f.db.prepare('SELECT revision FROM use_of_funds_hires WHERE id=?').get(Number(hr[1])) as any;return h?{...b,expected_revision:Number(h.revision)}:b;}

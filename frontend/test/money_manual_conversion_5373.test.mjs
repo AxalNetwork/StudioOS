@@ -160,7 +160,7 @@ const ALLOW = [
   } },
   { kind: 'usd', reason: "Admin, advisor-firm, partner, network and founder surfaces that name US dollars in the column or the copy (`price_usd`, `hourly_rate_usd`, \"in dollars\", `$` in the string).", files: {
     "frontend/src/lib/partnerSettlements.js": 1,
-    "frontend/src/pages/ServiceCatalogPage.jsx": 2,
+    "frontend/src/pages/ServiceCatalogPage.jsx": 1,
     "frontend/src/pages/admin/advisors/apOverviewModel.js": 1,
     "frontend/src/pages/admin/advisors/firmsModel.js": 1,
     "frontend/src/pages/admin/contracts/SettlementsDesk.jsx": 1,
