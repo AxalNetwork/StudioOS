@@ -160,7 +160,7 @@ export default function DealRoomPage() {
   const next = track && (track.state === 'ready' || track.state === 'none') ? track.next : null;
 
   return (
-    <div className="flex flex-col gap-4 pb-20 md:pb-0">
+    <div className="flex flex-col gap-4 pb-24 lg:pb-0">
       {/* DE04: Back to Deals, then the header with one h1. */}
       <button type="button" onClick={() => navigate(back.path)} className="inline-flex min-h-[44px] w-fit items-center gap-1 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink md:min-h-0 dark:text-gray-400 dark:hover:text-gray-200" data-testid="deal-crumb">
         <ArrowLeft size={14} /> {back.label}
