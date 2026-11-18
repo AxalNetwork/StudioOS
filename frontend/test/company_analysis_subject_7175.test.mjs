@@ -224,7 +224,8 @@ test('results: the subject bar, cited findings, interpretation apart, questions 
     assert.match(text, /Suggested research questionsQuestions, not findings · they never run on their own/);
     assert.match(text, /Excluded from candidates Halden Grid · halden-grid\.example — the subject\./);
     assert.match(text, /about · Unavailable · 503/);
-    assert.match(text, /Named by you/);
+    // D7176's origin words (companyAnalysisDraft.js ORIGIN_WORD), one vocabulary on the page.
+    assert.match(text, /Named in inputs/);
     assert.doesNotMatch(text, /Next steps the run listed/);
     // The partial bar's Retry re-reads the sources.
     assert.match(text, /2 of 3 sources fetched/);

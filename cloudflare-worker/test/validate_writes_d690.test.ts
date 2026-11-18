@@ -73,6 +73,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
+  db.exec(sqlOf('202611180053_7176_competitor_saved_versions.sql')); // D7176: competitor_sources.origin, saved versions
   applyAcceptRetryKeys(db); // D5352
   addColumnsFrom(db,sqlOf('605_member_file_sizes.sql'),'demand_signals');
   db.exec('ALTER TABLE mvp_features ADD COLUMN pain_group_id INTEGER REFERENCES pain_groups(id)');

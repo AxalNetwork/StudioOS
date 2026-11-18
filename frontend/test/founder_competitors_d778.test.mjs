@@ -33,6 +33,11 @@ const ONE_RERUN = analysis('a-one', 'Freight', {
   candidates: [{ id: 'a-one-c9', name: 'Rerun Rival', url: 'https://rerun.example', category: 'direct', origin: 'discovered', scores: {}, details: {} }],
 });
 const TWO = analysis('a-two', 'Payroll');
+// D7176: on the analysis page a rerun answers a proposal to review, not the analysis.
+const PROPOSAL = {
+  proposal_id: 'p-one', base_version: 1, output: {}, kept: {},
+  candidates: { add: [{ id: 'a-one-c9', name: 'Rerun Rival', category: 'direct', origin: 'discovered' }], remove: [] },
+};
 
 /** Stub the competitors client: reads answer at once; the five runs wait until the test answers them. */
 function stubApi() {
@@ -87,8 +92,10 @@ test('Re-run and Refresh sources on an analysis send their own option, keeping t
     const mounted = railPageHeaders()['X-Rail-Page'];
     assert.ok(mounted, 'the page mounts a rail');
     try {
-      await m.press('Re-run');
-      await act(async () => { net.pending.shift().ok(ONE_RERUN); }); await m.settle();
+      await m.press('Rerun discovery');
+      await act(async () => { net.pending.shift().ok(PROPOSAL); }); await m.settle();
+      assert.ok(m.text().includes('Review the rerun'), 'the proposal opens the review');
+      await m.press('Cancel · keep my draft');
       await m.press('Refresh sources');
       await act(async () => { net.pending.shift().ok(ONE); }); await m.settle();
       const [rerun, refresh] = ['rerun', 'refresh'].map((n) => net.calls.find((c) => c[0] === n));
@@ -106,15 +113,16 @@ test('a run answers only the analysis it was pressed on: opening another one dro
   const net = stubApi();
   const m = await analysisPage();
   try {
-    await m.press('Re-run');
-    assert.ok(m.text().includes('Running…'));
+    await m.press('Rerun discovery');
+    assert.ok(m.text().includes('Running discovery…'));
     await m.press('Open the other one');
     assert.ok(m.text().includes('Payroll Rival'), 'the opened analysis is drawn');
-    await act(async () => { net.pending.shift().ok(ONE_RERUN); }); await m.settle();
+    await act(async () => { net.pending.shift().ok(PROPOSAL); }); await m.settle();
     assert.ok(m.text().includes('Payroll Rival'), 'the opened analysis stays');
     assert.ok(!m.text().includes('Rerun Rival'), 'the dropped run is not drawn');
-    assert.ok(!m.text().includes('Running…'), 'and the page is pressable again');
-    await m.press('Re-run');
+    assert.ok(!m.text().includes('Review the rerun'), 'the dropped proposal opens no review');
+    assert.ok(!m.text().includes('Running discovery…'), 'and the page is pressable again');
+    await m.press('Rerun discovery');
     assert.equal(net.calls.filter((c) => c[0] === 'rerun').at(-1)[1], 'a-two');
   } finally { await m.unmount(); net.restore(); }
 });

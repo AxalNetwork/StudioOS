@@ -54,10 +54,20 @@ import { accentChipClass } from './shellConfig';
  * appears only for a reader who hovers to ask for it.
  */
 
+/**
+ * #6860: BELOW 640px EVERY CHIP AND TOOLBAR ACTION IS A 44px TARGET. Every workspace mounts this row, so the rule
+ * lives here: `max-sm:` only, so desktop keeps the canvas's `.fil` size exactly. `justify-center` keeps a short
+ * label centred in its 44px-wide box; the row already wraps (`flex-wrap`), so taller chips never clip.
+ */
+export const PHONE_TARGET = 'max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:justify-center';
+/** The same rule for the actions the toolbar mounts, set on its `ZoneActions` wrapper so only this row's actions grow. */
+export const PHONE_ACTION_TARGETS =
+  'max-sm:[&_a]:min-h-[44px] max-sm:[&_a]:min-w-[44px] max-sm:[&_button]:min-h-[44px] max-sm:[&_button]:min-w-[44px]';
+
 const CHIP =
   'inline-flex items-center whitespace-nowrap rounded-[7px] border px-2.5 py-[5px] ' +
   'text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 ' +
-  'focus-visible:outline-offset-2';
+  'focus-visible:outline-offset-2 ' + PHONE_TARGET;
 const CHIP_OFF =
   'border-gray-200 bg-white text-gray-700 hover:border-gray-300 ' +
   'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600';
@@ -69,9 +79,8 @@ const CHIP_TAP = 'min-h-[44px] md:min-h-0';
  * @param {Array} actions  passed straight to `ZoneActions`
  * @param {string} role    which licence's accent the selected chip wears
  * @param {string} [filterLabel]  names the chip row for assistive tech (`role="group"`)
- * @param {boolean} [tap]  44px chip targets below `md`, the size a thumb needs
- *   (D4826 part 2). Opt-in, so a zone moves to it with its own canvas rather
- *   than every zone's row growing at once.
+ * @param {boolean} [tap]  44px chip targets up to `md` (D4826 part 2), for a zone whose canvas draws them on tablets
+ *   too. Below 640px every chip is 44px already (#6860), so this only widens the range.
  */
 export default function ZoneToolbar({ filters = [], actions = [], role = 'founder', className = '', filterLabel, tap = false }) {
   const live = filters.filter(Boolean);
@@ -117,7 +126,7 @@ export default function ZoneToolbar({ filters = [], actions = [], role = 'founde
           ))}
         </div>
       )}
-      <ZoneActions items={actions} className="ml-auto" />
+      <ZoneActions items={actions} className={`ml-auto ${PHONE_ACTION_TARGETS}`} />
     </div>
   );
 }
