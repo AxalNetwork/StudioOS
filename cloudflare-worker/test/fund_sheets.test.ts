@@ -14,7 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import {
   parseSpreadsheetRef, usdCellToCents, centsToUsdCell, headerIndex, parseSheetValues,
-  fundsToSheetValues, applySheetRecords, listOwnerFunds, preflightSheetsOAuthSecrets,
+  fundsToSheetValues, planImport, readSyncFields, listOwnerFunds, preflightSheetsOAuthSecrets,
   googleSheetsOAuthAvailable, buildSheetsAuthUrl, googleSheetsRedirectUri,
   SHEETS_SCOPES, SHEET_HEADERS, SUGGESTED_SHEET_URL,
 } from '../src/services/fundSheets.ts';
@@ -127,43 +127,24 @@ test('header aliases still find Fund / State / Cheque min', () => {
   assert.equal(idx.status, 3);
 });
 
-test('push creates a row with no uid, updates an owned uid, and skips another owner', async () => {
-  const { db, env } = fresh();
-  db.exec(`INSERT INTO research_funds (uid, owner_user_id, name, status, created_at, updated_at)
-           VALUES ('mine', 1, 'Old Name', 'researching', '2026-01-01', '2026-01-01'),
-                  ('theirs', 2, 'Secret', 'passed', '2026-01-01', '2026-01-01')`);
-  const result = await applySheetRecords(env, { id: 1 }, [
-    { uid: 'mine', name: 'New Name', cheque_min_cents: 50000, cheque_max_cents: null,
-      stage_fit: 'right', path: 'warm', status: 'researching', pass_reason: null,
-      thesis: null, note: 'updated', source_url: null },
-    { uid: 'theirs', name: 'Stolen', cheque_min_cents: null, cheque_max_cents: null,
-      stage_fit: null, path: null, status: 'researching', pass_reason: null,
-      thesis: null, note: null, source_url: null },
-    { uid: null, name: 'Brand New', cheque_min_cents: null, cheque_max_cents: null,
-      stage_fit: null, path: null, status: null, pass_reason: null,
-      thesis: null, note: null, source_url: null },
-  ]);
-  assert.equal(result.updated, 1);
-  assert.equal(result.skipped, 1);
-  assert.equal(result.created, 1);
-  assert.equal(result.uid_writes.length, 1);
-
-  const mine = db.prepare('SELECT name, note, cheque_min_cents FROM research_funds WHERE uid = ?').get('mine') as any;
-  assert.equal(mine.name, 'New Name');
-  assert.equal(mine.note, 'updated');
-  assert.equal(mine.cheque_min_cents, 50000);
-
-  const theirs = db.prepare('SELECT name, owner_user_id FROM research_funds WHERE uid = ?').get('theirs') as any;
-  assert.equal(theirs.name, 'Secret');
-  assert.equal(theirs.owner_user_id, 2);
-
-  const created = db.prepare('SELECT name, owner_user_id FROM research_funds WHERE uid = ?')
-    .get(result.uid_writes[0].uid) as any;
-  assert.equal(created.name, 'Brand New');
-  assert.equal(created.owner_user_id, 1);
-
-  const count = (db.prepare('SELECT COUNT(*) AS n FROM research_funds').get() as any).n;
-  assert.equal(count, 3, 'push deleted a row — a pass is a state, not a delete');
+test('import plans a create for a row with no uid, an update for an owned uid, and never takes another owner’s', () => {
+  // D7170: the import is planned before anything is written; the run that
+  // applies it, its writeback and its run record are in fund_sheets_runs_7170.
+  const owned = new Map([['mine', {
+    uid: 'mine', name: 'Old Name', cheque_min_cents: null, cheque_max_cents: null, stage_fit: null,
+    path: null, status: 'researching', pass_reason: null, thesis: null, note: null, source_url: null,
+  }]]);
+  const plan = planImport([
+    [...SHEET_HEADERS],
+    ['mine', 'New Name', '500', '', 'right', 'warm', 'researching', '', '', 'updated', ''],
+    ['theirs', 'Stolen', '', '', '', '', 'researching', '', '', '', ''],
+    ['', 'Brand New', '', '', '', '', '', '', '', '', ''],
+  ], owned as any, readSyncFields({ note: true }));
+  assert.deepEqual(plan.rows.map((r) => r.action), ['update', 'resolve', 'create']);
+  assert.deepEqual(plan.rows[0].changes.map((c) => c.field),
+    ['name', 'cheque_min_cents', 'stage_fit', 'path', 'note']);
+  assert.equal(plan.rows[1].resolve?.kind, 'foreign_uid');
+  assert.equal(plan.rows[2].uid_cell, 'A4');
 });
 
 test('listOwnerFunds never returns another account', async () => {
