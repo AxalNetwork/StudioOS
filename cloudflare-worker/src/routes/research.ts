@@ -54,6 +54,7 @@ import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
 import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
+import { admitsCompanies, refuseCompanies } from '../services/researchCompaniesAccess';
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
@@ -4070,7 +4071,8 @@ const MARKET_SECTOR_ALIASES: Record<string, string[]> = {
 };
 
 research.get('/company-directory', async (c) => {
-  await requireAuth(c);
+  // D7178: a held Founder or Advisor licence, an active Lab, or an admin; anyone else is refused (403).
+  if (!admitsCompanies(await requireAuth(c))) return refuseCompanies(c);
   const sectorKey = String(c.req.query('sector') || '').trim().slice(0, 120).toLowerCase();
   const sectorLabel = sectorKey.replace(/-/g, ' ');
   const sectorTerms = sectorKey ? [...new Set(MARKET_SECTOR_ALIASES[sectorKey] || [sectorLabel])].filter(Boolean) : [];
@@ -4094,7 +4096,8 @@ research.get('/company-directory', async (c) => {
 // One company (D534): identity, each metric with its source and as-of date,
 // the migration-370 evidence keyed on company_id = id, and same-sector peers.
 research.get('/company-directory/:uid', async (c) => {
-  await requireAuth(c);
+  // D7178: the directory's rule, checked before the record is read, so a refusal never says whether it exists.
+  if (!admitsCompanies(await requireAuth(c))) return refuseCompanies(c);
   let company;
   try {
     company = await getCompany(c.env, c.req.param('uid'));

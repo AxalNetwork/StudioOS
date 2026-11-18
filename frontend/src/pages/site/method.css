@@ -299,6 +299,10 @@
 .ax-site .ax-i-card-t { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
 .ax-i-card-q { font-size: 14px; font-weight: 600; color: var(--ax-lilac); }
 .ax-i-card-d { margin: 0; font-size: 14.5px; line-height: 1.65; color: rgba(255,255,255,.75); }
+/* D7178 (RCL01): the one link on the Companies card. #C4B5FD on the dark veil is above 4.5:1; 44px tall on phones. */
+.ax-i-card-go { margin-top: auto; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 14px; font-weight: 700; color: #c4b5fd; text-decoration: none; }
+.ax-i-card-go:hover { text-decoration: underline; }
+.ax-i-card-go:focus-visible { outline: 2px solid #c4b5fd; outline-offset: 3px; border-radius: 6px; }
 .ax-i-note { margin: 20px 0 0; font-size: 13.5px; color: rgba(255,255,255,.6); }
 
 .ax-i-close { padding-top: 64px; padding-bottom: 80px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }

@@ -15,10 +15,14 @@
  * the router's own table, and this file names no model.
  */
 
-/** The three research cards, with only the sentences that are true. */
+/**
+ * The three research cards, with only the sentences that are true. D7178 (#7044, RCL01): the Companies card opens
+ * `/research/companies`; a signed-out visitor goes through sign-in and comes back to it (`lib/pendingNext.js`).
+ */
 export const RESEARCH_CARDS = [
   { t: 'Markets', q: 'How big is it, and is it moving?', d: 'A stale figure shows its age instead of passing as current.' },
-  { t: 'Companies', q: 'Who else is building this?', d: 'Competitor profiles, direct or adjacent, with the public sources behind them.' },
+  { t: 'Companies', q: 'Who else is building this?', d: 'Competitor profiles, direct or adjacent, with the public sources behind them.',
+    to: '/research/companies', go: 'Open Companies' },
   { t: 'Funds', q: 'Who writes this cheque?', d: 'Funds by thesis, stage, and cheque range, with the path in: warm, cold, or not yet assessed.' },
 ];
 

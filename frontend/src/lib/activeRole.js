@@ -50,3 +50,10 @@ export function resolveHeldLicences({ user, realUser, viewMode, isImpersonating 
   if (isAdmin) return viewMode ? [viewMode] : [];
   return own(user);
 }
+
+/**
+ * D7178 (#7044): the Research shell a page is drawn in, from the role browsed as and the licences held. The rule
+ * lives in `lib/researchAccess.js` beside the admissions it reads; it is re-exported here, beside the two resolvers
+ * it takes its inputs from, so the router reads it from the module it already reads them from.
+ */
+export { researchRoleFor } from './researchAccess.js';

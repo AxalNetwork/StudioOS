@@ -74,7 +74,8 @@ test('the sign-in page says where it leads for Grow, keeps Grow on its sign-up l
   assert.match(login, /\{context \? `Sign in to continue to \$\{context\.area\.name\}` : 'Sign in'\}/);
   assert.match(login, /\{context\.area\.what\} \{context\.area\.who\}/);
   assert.match(login, /applyHref=\{context\?\.registerHref \|\| '\/register'\}/);
-  assert.match(login, /return signInContextFor\(safeNextPath\(\)\);/, 'the page reads next some other way than its validated one');
+  // D7178: the second argument is the page's own query, read only for `ended=1` (a session that ended).
+  assert.match(login, /return signInContextFor\(safeNextPath\(\), window\.location\.search\);/, 'the page reads next some other way than its validated one');
 });
 
 test('sign-up says it continues to Grow and keeps it on the sign-in link', () => {

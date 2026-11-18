@@ -19,6 +19,13 @@ export const GROW_BOUNDARY = Object.freeze({
 
 export const GROW_BOUNDARY_ROLES = new Set(['investor', 'advisor', 'partner', 'exploring']);
 
+/**
+ * D7178 (#7044): Research › Companies has a route boundary of the same kind, and the screen after required setup
+ * that returns to a kept destination. They live in `pages/research/CompaniesAccess.jsx`; App.jsx is a frozen hub
+ * (D5615) and loads them through this module, the route-boundary module it already imports.
+ */
+export { CompaniesBoundary, DestinationReady } from '../research/CompaniesAccess.jsx';
+
 export default function GrowBoundary({ home = '/studio', impersonating = false }) {
   return (
     <main className="mx-auto max-w-xl px-4 pb-16 pt-10 sm:px-6" data-testid="grow-boundary">
