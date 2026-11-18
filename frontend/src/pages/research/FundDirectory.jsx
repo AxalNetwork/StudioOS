@@ -398,7 +398,7 @@ function AddOrOpen({ item, dossier, added, busy, onAdd, listState }) {
   }
   return (
     <button type="button" disabled={added || !!busy || !onAdd} onClick={() => onAdd && onAdd(item)} aria-busy={busy === item.uid || undefined}
-      className="inline-flex items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white hover:bg-violet-800 disabled:opacity-50 dark:bg-violet-600">
+      className="inline-flex items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white hover:bg-violet-800 disabled:opacity-50 dark:bg-violet-600 dark:hover:bg-violet-500">
       {added ? 'On your shortlist' : busy === item.uid ? ACTIONS.saving : ACTIONS.save}
     </button>
   );
