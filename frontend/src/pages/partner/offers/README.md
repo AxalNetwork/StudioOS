@@ -13,7 +13,8 @@ The Offers zones, each the body of one `/offers/*` address on the Partner shell,
 | `proofCards.js` | D4842: the pure rules a Proof card is drawn by. |
 | `AudienceFitZone.jsx` | `/offers/audience-fit` since D4842 (OF-04): who we fit and who we refer elsewhere, in business language. |
 | `fitRules.js` | D4842: the pure rules Audience fit reads from `partner_fit_rules`. |
-| `TestingZone.jsx` | `/offers/testing`: product testing runs and their recruitment. |
+| `TestingZone.jsx` | `/offers/testing` since D4843 part 2 (OF-06): one card per programme with its five-step lifecycle, places, dates and the one next action its state calls for. |
+| `testingLifecycle.js` | D4843 part 2: the pure rules Product testing reads: the fold of seven statuses into five steps, the next action, the applicant line and the list order. |
 | `useGuardedWrite.jsx` | #4688: one way to write a record and say whether the server accepted it. |
 
 **Adding to Offers.** A zone reads only mounted Worker routes and draws loading, empty, "Not recorded" with its

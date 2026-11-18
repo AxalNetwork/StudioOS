@@ -36,7 +36,6 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { FAILURES, GUARD_MODEL, OVER_CAPACITY, fakeAi } from './_fake_ai.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
 const scratch = mkdtempSync(join(tmpdir(), 'deck-fake-ai-d1511-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
