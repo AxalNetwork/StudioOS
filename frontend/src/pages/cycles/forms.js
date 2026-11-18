@@ -291,7 +291,7 @@ const PARTNER_STAGE = opts([['talking', 'Talking'], ['terms', 'Terms'], ['signed
 const TERMS_KIND = opts([['rev_share', 'Rev-share'], ['services_fee', 'Services fee'], ['referral_fee', 'Referral fee'], ['none', 'None yet']]);
 const termsFields = [
   { kind: 'CH', name: 'terms_kind', k: 'Terms', opts: TERMS_KIND, def: 3 },
-  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '20% or $4,000 / month', when: (v) => Boolean(v.terms_kind) && v.terms_kind !== 'none' },
+  { kind: 'T', name: 'amount', k: 'Amount', ph: '20% or $4,000 / month', when: (v) => Boolean(v.terms_kind) && v.terms_kind !== 'none' },
   { name: 'contact', k: 'Contact', parts: [
     { kind: 'T', name: 'contact_name', k: 'Name', ph: 'Name', max: 200 },
     { kind: 'T', name: 'contact_email', k: 'Email', ph: 'email', input: 'email', max: 200 },
@@ -647,7 +647,7 @@ const HOLDER_VESTING = opts([['none', 'None'], ['4y-1y', '4 years, 1-year cliff'
 const inGroup = (group) => ({ name: 'group', value: group });
 const vests = (v) => v.group === FOUNDERS && Boolean(v.vesting) && v.vesting !== 'none';
 const holderMoney = [
-  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '$500k' },
+  { kind: 'T', name: 'amount', k: 'Amount', ph: '$500k' },
   { kind: 'T', name: 'cap', k: 'Cap', ph: '$8M cap' },
 ];
 const NO_PROSPECT = { value: NONE, label: 'None' };
