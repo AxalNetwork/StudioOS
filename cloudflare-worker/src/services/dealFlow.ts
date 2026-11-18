@@ -91,17 +91,40 @@ export async function hasCommitment(env: Env, scope: Scope, dealId: number): Pro
   return !!row;
 }
 
-/** An owner is this investor, or an active investor seat linked to the same firm. */
-async function validOwner(env: Env, scope: Scope, ownerId: unknown): Promise<number> {
+/** A firm's active investor seats: who can own its deals. */
+const SEATS = "SELECT u.id, u.name FROM user_company_links l JOIN users u ON u.id = l.user_id WHERE l.company_id = ? AND u.role = 'investor' AND u.is_active = 1";
+
+/**
+ * An owner is this investor, or an active investor seat linked to the same firm.
+ * D6145 (#6145): a change (`clearable`) takes an explicit `null` as Unassigned,
+ * in a firm's flow only; an add with no owner, or `null`, is still the caller's.
+ */
+async function validOwner(env: Env, scope: Scope, ownerId: unknown, clearable = false): Promise<number | null> {
+  if (ownerId === null && clearable) {
+    if (scope.companyId == null) throw new FlowError('invalid_owner', 400, 'Only you can own a deal in your own flow.');
+    return null;
+  }
   if (ownerId == null) return scope.user.id;
   if (!Number.isSafeInteger(ownerId) || Number(ownerId) <= 0) throw new FlowError('invalid_owner', 400, 'Choose someone from your firm.');
   if (ownerId === scope.user.id) return scope.user.id;
   if (scope.companyId == null) throw new FlowError('invalid_owner', 400, 'Only you can own a deal in your own flow.');
-  const seat = await env.DB.prepare(
-    "SELECT 1 AS ok FROM user_company_links l JOIN users u ON u.id = l.user_id WHERE l.company_id = ? AND l.user_id = ? AND u.role = 'investor' AND u.is_active = 1",
-  ).bind(scope.companyId, ownerId).first();
+  const seat = await env.DB.prepare(SEATS + ' AND l.user_id = ?').bind(scope.companyId, ownerId).first();
   if (!seat) throw new FlowError('invalid_owner', 400, 'Choose someone from your firm.');
   return Number(ownerId);
+}
+
+/**
+ * D6145 (#6145): who a deal in this flow can be given to, the people
+ * `validOwner` accepts. A firm's: its active investor seats, the caller first.
+ * With no firm: the caller alone, and `can_unassign` false. Names only, never
+ * an email.
+ */
+export async function flowOwners(env: Env, scope: Scope) {
+  const you = { user_id: scope.user.id, name: scope.user.name ?? null, you: true };
+  if (scope.companyId == null) return { scope: 'you' as const, can_unassign: false, owners: [you] };
+  const rows = await env.DB.prepare(SEATS + ' ORDER BY u.name COLLATE NOCASE, u.id').bind(scope.companyId).all<{ id: number; name: string | null }>();
+  const others = (rows.results || []).filter((r) => Number(r.id) !== scope.user.id).map((r) => ({ user_id: Number(r.id), name: r.name ?? null, you: false }));
+  return { scope: 'firm' as const, can_unassign: true, owners: [you, ...others] };
 }
 
 const ROW_SELECT = `SELECT f.uid, f.deal_id, f.stage, f.owner_user_id, o.name AS owner_name, f.entered_via, f.entered_at,
@@ -216,7 +239,7 @@ export async function updateFlow(env: Env, scope: Scope, dealId: number, input: 
     if (stage === 'passed') throw new FlowError('use_pass', 400, 'Pass with its reason instead.');
     if (stage === 'closing' && !(await hasCommitment(env, scope, dealId))) throw new FlowError('closing_needs_commitment', 409, 'Closing follows a commitment. Commit on the deal page first.');
   }
-  const owner = input.owner_user_id !== undefined ? await validOwner(env, scope, input.owner_user_id) : undefined;
+  const owner = input.owner_user_id !== undefined ? await validOwner(env, scope, input.owner_user_id, true) : undefined;
   const note = input.note !== undefined ? textOrNull(input.note, NOTE_MAX, 'invalid_note') : undefined;
   const guard = moving ? GUARD : '';
   const gb = moving ? guardBinds(entry) : [];

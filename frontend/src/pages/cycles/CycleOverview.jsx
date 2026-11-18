@@ -1,3 +1,4 @@
+import { useSidebarListsSubpages } from '../../lib/sidebarSubpages.js';
 import { Lock } from 'lucide-react';
 import { openCheckout } from '../../components/checkout/checkoutEntry.js';
 import { Link, useNavigate } from 'react-router-dom';
@@ -94,6 +95,7 @@ export function GrowSubsections({ search, active }) {
 export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null, slots = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
+  const sidebarLists = useSidebarListsSubpages(`/${meta.key}`);
   const legacyTabs = cycleTabs(meta.key, cards, active, search);
   const tabs = meta.key === 'grow' ? growTabs(search, active) : legacyTabs;
   const current = tabs.find((t) => t.active) || tabs[0];
@@ -125,11 +127,13 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           {record && slots && <div ref={slots.actions} className="flex flex-wrap items-center justify-end gap-2" data-testid="record-header-actions" />}
         </div>
       </div>
-      <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`}</p>
+      <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? (sidebarLists ? `${meta.outcome}. The cycle’s data at a glance.` : `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`)}</p>
       {/* D5081 part 5 (#5081, RA-12): the one desktop navigation, from 1024px. Raise's tabs sit under its four
           stage headings (`cycleTabGroups`); headings, not routes. Below 1024px the select replaces it, and each
-          is `display: none` where the other shows, so only one is ever in the accessibility tree. */}
-      <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 lg:flex items-center" data-testid="cycle-tabs">
+          is `display: none` where the other shows, so only one is ever in the accessibility tree.
+          D6029 (#6029, BD23): where the sidebar lists this cycle's pages (Build), it is the one module switcher on
+          desktop, so no tabs are drawn there; tablet and phone keep the module select below. */}
+      <nav aria-label={`${meta.name} modules`} className={`mt-1 hidden flex-wrap gap-1.5 ${sidebarLists ? '' : 'lg:flex '}items-center`} data-testid="cycle-tabs" data-sidebar-lists={sidebarLists ? 'true' : undefined}>
         {groups.map((g) => {
           const links = g.tabs.map((t) => (
             <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !record ? 'page' : undefined}

@@ -4,7 +4,7 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { LinkPainDialog } from '../src/workspaces/founder/ValidateDialogs.jsx';
-import { partnershipViews, partnershipFilters, PartnershipsContent } from '../src/pages/founder/FounderGrowPartnerships.jsx';
+import { partnershipViews, partnershipFilters, CoMarketingSection } from '../src/pages/cycles/PartnershipsCoMarketing.jsx';
 import ZoneToolbar from '../src/workspaces/ZoneToolbar.jsx';
 import { renderedText } from './_renderedText.mjs';
 const render = (component, props) => renderToStaticMarkup(h(MemoryRouter, null, h(component, props)));
@@ -19,8 +19,10 @@ const pitches = ['approved', 'published', 'proposed', 'rejected', 'withdrawn', '
 for (const [view, expected] of Object.entries({ all: pitches.map((p) => p.title), signed: ['Partner 1', 'Partner 2'], 'in-motion': ['Partner 3'], dormant: ['Partner 4', 'Partner 5'] })) {
   test(`${view}: rendered rows and filter count agree with persisted statuses`, () => {
     const { rows, counts } = partnershipViews(pitches);
-    const html = render(PartnershipsContent, { project: { id: 1, name: 'Fixture' }, pitches, attributions: [], visible: rows[view], view, error: '' });
-    assert.deepEqual([...html.matchAll(/<tr[^>]*><td><strong>(.*?)<\/strong>/gs)].map((m) => renderedText(m[1])), expected);
+    // D6118: the pitches are Partnerships' co-marketing part now.
+    const html = render(CoMarketingSection, { projectId: 1, state: { status: 'ready', pitches, attributions: [] }, view });
+    assert.deepEqual([...html.matchAll(/<tr[^>]*><td[^>]*><b[^>]*>(.*?)<\/b>/gs)].map((m) => renderedText(m[1])), expected);
+    assert.deepEqual(rows[view].map((p) => p.title), expected);
     const toolbar = render(ZoneToolbar, { filters: partnershipFilters(view, () => {}, counts) });
     const chip = toolbar.match(new RegExp(`<button[^>]*data-testid="filter-partnerships-${view}"[^>]*>(.*?)<\\/button>`, 's'))[1];
     assert.match(renderedText(chip), new RegExp(`\\b${expected.length}\\b`));
