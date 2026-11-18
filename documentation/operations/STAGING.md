@@ -51,7 +51,7 @@ This compares what `[env.preview]` declares with production's
 
 | Kind | Binding | Production | `[env.preview]` declares | State |
 | --- | --- | --- | --- | --- |
-| Worker | — | `studioos` | `studioos-preview`, `workers_dev = true` | Created on first deploy. **It inherits the top-level custom domains. See step 0.** |
+| Worker | — | `studioos` | `studioos-preview`, `workers_dev = true` | Created on first deploy. Its route table is empty (`routes = []`), so it keeps no custom domain. See step 0. |
 | D1 | `DB` | `studioos-db` | `studioos-db-preview`, id `REPLACE_WITH_PREVIEW_D1_ID` | **Placeholder**, to create |
 | KV | `TOKENS` | production id | `REPLACE_WITH_PREVIEW_KV_TOKENS_ID` | **Placeholder**, to create |
 | KV | `RATE_LIMITS` | production id | `REPLACE_WITH_PREVIEW_KV_RATE_LIMITS_ID` | **Placeholder**, to create |
@@ -259,15 +259,14 @@ SCRATCH=$(mktemp -d)   # create commands run here, away from wrangler.toml, so n
 ### Step 0: gates (stop if any fails)
 
 1. **F is approved** on #7147, and the approved ceiling is recorded there.
-2. **The route inheritance is closed.** `[env.preview]` declares no `routes`,
-   so Wrangler resolves the top-level custom domains for it. On `cf2810ad`,
-   Wrangler warns: *"The env.preview environment inherits the top-level routes
-   configuration, which includes the custom domain(s): axal.vc, app.axal.vc.
-   Deploying this environment will reassign these custom domains away from
-   the top-level Worker."* A reviewed PR must merge first. It adds
-   `routes = []` to `[env.preview]` and teaches
-   `scripts/lib/previewIsolation.mjs` to read the routes Wrangler resolves.
-   Each must be empty (workers.dev only), with tests. Then this must print `[]`:
+2. **The route inheritance is closed.** Without a `routes` key, an environment
+   inherits the top-level routes, which are the `axal.vc` and `app.axal.vc`
+   custom domains. On `cf2810ad`, Wrangler warned: *"Deploying this environment
+   will reassign these custom domains away from the top-level Worker."* The
+   #7147 PR adds `routes = []` to `[env.preview]`, and
+   `cloudflare-worker/test/preview_isolation_4566.test.mjs` resolves the config
+   as `wrangler deploy` does and fails if preview carries any route. Confirm
+   that this still prints `[]`:
 
    ```bash
    (cd "$ROOT/cloudflare-worker" && node -e "const w=require('wrangler');process.stdout.write(JSON.stringify(w.unstable_readConfig({config:'../wrangler.toml',env:'preview'}).routes))" 2>/dev/null); echo

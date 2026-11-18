@@ -1083,17 +1083,18 @@ crons = [
 # Worker per PR with no bindings — documentation/architecture/DECISIONS.md
 # D36.
 #
-# #7147 (D7147): this environment is staging (owner decision B1). DO NOT
-# DEPLOY IT YET. It declares no `routes`, so Wrangler resolves the top-level
-# custom domains (axal.vc, app.axal.vc) for it, and `wrangler deploy --env
-# preview` would move both hosts to studioos-preview. A reviewed PR adds an
-# empty route table here, and teaches the isolation preflight to read the
-# resolved routes, before anything is deployed
-# (documentation/operations/STAGING.md, step 0).
+# #7147 (D7147): this environment is staging (owner decision B1). Its route
+# table is empty on purpose: an environment with no `routes` inherits the
+# top-level ones, and those are the axal.vc and app.axal.vc custom domains,
+# so `wrangler deploy --env preview` would have moved both hosts off
+# production. `routes = []` keeps staging on its workers.dev host only;
+# preview_isolation_4566 resolves the config the way Wrangler does and fails
+# if any route comes back.
 # ===========================================================================
 [env.preview]
 name = "studioos-preview"
 workers_dev = true
+routes = []
 
 [env.preview.vars]
 # D886: preview needs its own explicit enablement.
