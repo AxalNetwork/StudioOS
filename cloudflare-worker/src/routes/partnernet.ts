@@ -1,3 +1,5 @@
+import { networkTieCandidates } from '../services/networkTieCandidates';
+import { selectJwt } from '../auth';
 import { Hono } from 'hono';
 import { refuse } from '../util/refusal';
 import type { Env } from '../types';
@@ -451,6 +453,16 @@ async function companiesOf(env: Env, ids: number[]): Promise<Map<number, string>
   }
 }
 
+// D6636: browse only actual shared-resource participants, with no directory/email search.
+partnernet.get('/relationships/candidates',async c=>{
+ const user=await requireAuth(c);
+ if((await selectJwt(c))?.payload.impersonated_by)return refuse(c,403,{code:'support_session_refused',message:'A support session cannot choose a member’s ties.'});
+ const after=Number(c.req.query('after')||0);
+ if(!Number.isSafeInteger(after)||after<0)return refuse(c,400,{code:'invalid_cursor',message:'Choose a valid candidate page.'});
+ try{await ensureSchema(c.env);return c.json(await networkTieCandidates(c.env,user.id,{after}));}
+ catch{return refuse(c,503,{code:'candidates_unreadable',message:'People you share a deal or data room with could not be read. Try again.'});}
+});
+
 partnernet.get('/relationships', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
@@ -506,11 +518,16 @@ partnernet.post('/relationships', async (c) => {
   await ensureSchema(c.env);
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const otherId = parseInt(data?.partner_id);
+  const otherId = typeof data?.partner_id==='number' ? data.partner_id : typeof data?.partner_id==='string' && /^[1-9]\d*$/.test(data.partner_id) ? Number(data.partner_id) : NaN;
   const relType = String(data?.relationship_type || '');
-  if (!otherId || !REL_TYPES.has(relType)) return c.json({ error: `partner_id and valid relationship_type required (${[...REL_TYPES].join('|')})` }, 400);
+  if (!Number.isSafeInteger(otherId) || otherId<1 || !REL_TYPES.has(relType)) return c.json({ error: `partner_id and valid relationship_type required (${[...REL_TYPES].join('|')})` }, 400);
   if (otherId === user.id) return c.json({ error: 'Cannot create a relationship with yourself' }, 400);
 
+  if((await selectJwt(c))?.payload.impersonated_by)return refuse(c,403,{code:'support_session_refused',message:'A support session cannot request a member’s tie.'});
+  try{
+    if(!(await networkTieCandidates(c.env,user.id,{target:otherId,sharedOnly:true,limit:1})).people.length)
+      return refuse(c,403,{code:'not_shared',message:'Choose someone you already share a deal or data room with.'});
+  }catch{return refuse(c,503,{code:'candidates_unreadable',message:'Shared people could not be checked. Nothing was requested.'});}
   const other: any = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(otherId).first();
   if (!other) return c.json({ error: 'Other partner not found' }, 404);
 
