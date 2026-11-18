@@ -37,8 +37,21 @@
  *                   (what a commit holds) carries filled fails, so adding a file
  *                   never edits a README.
  *
+ *   6. NO HAND-WRITTEN ROWS (#6465) — a README may declare, in its own text,
+ *                   `<!-- index: generated -->` (its list is generated as in
+ *                   rule 5, and a Markdown file there is described by its first
+ *                   heading: `decisions/README.md`) or `<!-- index: none -->`
+ *                   (it describes the folder and its rule, with no per-file
+ *                   rows). Either way a table row naming one of the folder's
+ *                   files fails here, so adding a file never edits that README.
+ *                   The marker lives in the README, not in a list here, so
+ *                   marking another README edits only that README. An unmarked
+ *                   README is checked as before.
+ *
  *   4. ONE VERSION — every README.md merges with `union` (`.gitattributes`), so
- *                   two branches appending at the same spot never conflict.
+ *                   two branches appending at the same spot do not conflict in
+ *                   a local merge (GitHub's merge ignores union; rule 6 is the
+ *                   cure there).
  *                   When two branches rewrote the same line, union keeps both
  *                   versions; a README with a conflict marker, two rows for one
  *                   name in one table, or the same substantial line twice within
@@ -48,7 +61,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { unionArtifacts } from './lib/readmeUnion.mjs';
-import { blockHoldsList, findBlock, listedFile, renderList, withBlock } from './lib/folderFiles.mjs';
+import { blockHoldsList, findBlock, folderListing, indexMode, perFileRows, renderList, withBlock } from './lib/folderFiles.mjs';
 import { writeFileSync } from 'node:fs';
 
 const ROOT = resolve(process.cwd());
@@ -90,6 +103,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/routes',    'the production API surface'],
   ['cloudflare-worker/src/durable-objects', 'the Durable Object classes index.ts re-exports, one per binding in wrangler.toml (D5581 part 2 made it eight)'],
   ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
+  ['cloudflare-worker/src/services/useOfFunds', 'Use of funds scenarios, projections and cap-table links'],
   ['cloudflare-worker/src/services/fills', 'Fill with Eadwyn: the fill classes, FILL_FIELDS, the sources, provenance, the form run and what is kept'],
   ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
   ['cloudflare-worker/src/services/posthog', 'PostHog, read-only (D1385): the MCP reads, the tracked metrics and each section\'s sync (D1605–D1609), and Distribution\'s visits (D6107)'],
@@ -180,6 +194,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/raise/pitch',          'the Pitch deck studio (D894): its shell, its tabs and the model they read'],
   ['frontend/src/pages/raise/narrative',      'the Investor narrative tool (D906): its tabs inside the module page, and the model they read'],
   ['frontend/src/pages/raise/captable',       'the Cap table tool (D1015): its tabs inside the module page, and the model they read'],
+  ['frontend/src/pages/raise/useoffunds',     'the Use of funds tool (D1173): its tabs inside the module page, the dialogs, and the models they read'],
   ['frontend/src/pages/raise/caprel',         'the Capital relationships tool (D1188, D1192, D1193): its tabs inside the module page, the dialogs, and the models they read'],
   ['frontend/src/pages/raise/dataroom',       'the Data room tool (D1101, D1106): its tabs, Files with its lightboxes, Upload and the dialogs, and the models they read'],
   ['frontend/src/pages/raise/useoffunds',     'the Use of funds tool (D1173, D1177, D1178, D5081): Home and its tabs inside the module page, the dialogs, the shared plan read and the models they read'],
@@ -375,8 +390,31 @@ function indexed(file) {
   try { return execFileSync('git', ['show', `:${file}`], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
   catch { return null; }
 }
+// Every tracked README.md, for rule 4 below and for the #6465 markers.
+let readmes = [];
+try { readmes = execFileSync('git', ['ls-files', '-z', '*README.md'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean); } catch { readmes = []; }
+
+// ── 6. NO HAND-WRITTEN ROWS (#6465) ────────────────────────────────────────
+// The marker is read from each README itself; `MARKED` maps its folder to it.
+const MARKED = new Map();
+for (const file of readmes) {
+  if (!existsSync(join(ROOT, file))) continue;
+  const dir = file === 'README.md' ? '.' : file.slice(0, -'/README.md'.length);
+  const text = readFileSync(join(ROOT, file), 'utf8');
+  const gen = findBlock(text);
+  const mode = indexMode(gen && !gen.broken ? withBlock(text, '') : text);
+  if (!mode) continue;
+  if (mode === 'both') { errors.push(`${file} carries both \`<!-- index: generated -->\` and \`<!-- index: none -->\` — keep one (#6465)`); continue; }
+  MARKED.set(dir, mode);
+  if (mode === 'generated' && !gen) errors.push(`${file} says \`<!-- index: generated -->\` but holds no \`<!-- files:begin -->\` … \`<!-- files:end -->\` block to generate into (#6465)`);
+  const names = readdirSync(join(ROOT, dir), { withFileTypes: true }).filter((e) => e.isFile() && e.name !== 'README.md').map((e) => e.name);
+  for (const r of perFileRows(text, names)) {
+    errors.push(`${file}:${r.line} has a hand-written row for \`${r.name}\`, but the README says \`<!-- index: ${mode} -->\`: ${mode === 'generated' ? 'the list is generated from each file\'s header' : 'it takes no per-file rows'} — delete the row (#6465)`);
+  }
+}
+
 let listed = 0;
-for (const [dir] of DOCUMENTED) {
+for (const dir of new Set([...DOCUMENTED.keys(), ...[...MARKED].filter(([, m]) => m === 'generated').map(([d]) => d)])) {
   const abs = join(ROOT, dir);
   const readmePath = join(abs, 'README.md');
   if (!existsSync(readmePath)) continue;
@@ -385,12 +423,12 @@ for (const [dir] of DOCUMENTED) {
   if (!block) continue;
   if (block.broken) { errors.push(`${dir}/README.md has a broken file list: one \`<!-- files:begin -->\`, then one \`<!-- files:end -->\``); continue; }
   listed += 1;
-  const files = readdirSync(abs, { withFileTypes: true }).filter((e) => e.isFile() && listedFile(e.name))
-    .map((e) => ({ name: e.name, text: readFileSync(join(abs, e.name), 'utf8') }));
-  const list = renderList(files);
+  const list = renderList(folderListing(abs, MARKED.get(dir) ?? null));
   for (const row of list.split('\n').filter((l) => /\|\s*\|$/.test(l) && l.startsWith('| `'))) {
     const name = /^\| `([^`]+)`/.exec(row)[1];
-    errors.push(`${dir}/${name} has no header comment — its first line describes it in ${dir}/README.md's generated file list (#4104)`);
+    errors.push(/\.md$/.test(name)
+      ? `${dir}/${name} does not open with a heading — its first line describes it in ${dir}/README.md's generated list (#6465)`
+      : `${dir}/${name} has no header comment — its first line describes it in ${dir}/README.md's generated file list (#4104)`);
   }
   if (MODE === 'write') writeFileSync(readmePath, withBlock(src, list));
   else if (MODE === 'clean') writeFileSync(readmePath, withBlock(src, ''));
@@ -403,8 +441,6 @@ for (const [dir] of DOCUMENTED) {
 
 // Rule 4: every tracked README.md, not only the documented folders' — union
 // merges them all. Outside a git checkout there is nothing union could have done.
-let readmes = [];
-try { readmes = execFileSync('git', ['ls-files', '-z', '*README.md'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean); } catch { readmes = []; }
 for (const file of readmes) {
   if (!existsSync(join(ROOT, file))) continue;
   const text = readFileSync(join(ROOT, file), 'utf8');

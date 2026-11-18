@@ -32,6 +32,8 @@ export const NOTIFICATION_EVENTS = [
   { key: 'advisor_session_booked', label: 'Advisor session booked' },
   { key: 'dd_report_ready', label: 'Due-diligence report ready' },
   { key: 'vote_threshold_reached', label: 'Pipeline vote threshold reached' },
+  // D6218: a company you hold turns to Attention on a health recompute.
+  { key: 'portfolio_needs_attention', label: 'A company I hold needs attention' },
   { key: 'followed_entity_news', label: 'News from people & startups I follow' },
   { key: 'weekly_digest', label: 'Weekly digest' },
   { key: 'product_announcements', label: 'Product announcements' },

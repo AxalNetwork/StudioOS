@@ -58,7 +58,7 @@ export const ROUTE_WORDS: ReadonlySet<string> = new Set([
   'onboarding', 'partner', 'partner_onboarding', 'partner_portal', 'partners', 'payouts', 'perks', 'pipeline', 'pitch',
   'plans_and_pricing', 'platform', 'portfolio', 'practice', 'press', 'pricing', 'privacy', 'product_testing', 'products',
   'profile', 'programs', 'projects', 'raise', 'refer', 'referrals', 'register', 'relationships', 'remote', 'reports', 'research',
-  'resources', 'risk_disclosures', 'round_calls', 'scoring', 'search', 'security', 'services', 'settings', 'share', 'signals',
+  'resources', 'risk_disclosures', 'round_calls', 'scoring', 'search', 'security', 'services', 'settings', 'share', 'shared', 'signals',
   'signin', 'signup', 'skills', 'spinout', 'spinout_lab', 'startups', 'status', 'studio', 'studios', 'support', 'team', 'terms',
   'tickets', 'trust', 'u', 'updates', 'validate', 'values', 'verify', 'verify_email', 'welcome', 'well_known', 'wellbeing',
 ]);

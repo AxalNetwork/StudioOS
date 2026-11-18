@@ -375,6 +375,11 @@ export default function ProductsPage() {
         @keyframes mrdPop { 0% { transform: scale(.96); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
       `}</style>
 
+      {/* #7000: plans live on /pricing; this page sells packs and add-ons. */}
+      <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="products-compare-plans">
+        Looking for plans? <Link to="/pricing" className="font-semibold text-violet-700 dark:text-violet-300 hover:underline">Compare plans →</Link>
+      </p>
+
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           {!phone && (

@@ -146,7 +146,7 @@ test('Investor Home: the thesis band reads, links to Settings, and never guesses
   assert.deepEqual(thesisBandState({ status: 'error' }), { kind: 'unreadable' });
   assert.deepEqual(thesisBandState({ status: 'ready', profile: { thesis_text: '  ' } }), { kind: 'empty' });
   assert.deepEqual(thesisBandState({ status: 'ready', profile: null }), { kind: 'empty' });
-  assert.deepEqual(thesisBandState({ status: 'ready', profile: { thesis_text: 'Seed B2B infra' } }), { kind: 'set', text: 'Seed B2B infra' });
+  assert.deepEqual(thesisBandState({ status: 'ready', profile: { thesis_text: 'Seed B2B infra' } }), { kind: 'set', text: 'Seed B2B infra', groups: [] });
   const unreadable = routed(h(ThesisBandView, { state: { kind: 'unreadable' }, onRetry: () => {} }));
   assert.match(unreadable, /Your thesis could not be read ·/);
   assert.match(unreadable, />Try again</);

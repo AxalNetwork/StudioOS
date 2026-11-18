@@ -108,7 +108,9 @@ const listing = (uid, status, o = {}) => ({
 
 test('the tabs: Activity on the four pages only where part 1 fills it, and no page has a Terms tab', () => {
   const labels = Object.fromEntries(Object.entries(PAGES).map(([k, p]) => [k, p.tabs.map((t) => t.label)]));
-  for (const k of ['refer-and-earn', 'learning']) assert.equal(labels[k].at(-1), 'Activity', k);
+  assert.equal(labels['refer-and-earn'].at(-1), 'Activity');
+  // D5887 (#5887): Learning runs in the generic shell, where the same /activity address is History, before Settings.
+  assert.equal(PAGES.learning.tabs.find((t) => t.path === '/admin/programs/learning/activity').label, 'History');
   assert.equal(PAGES['mentor-cohorts'].tabs.find((t) => t.key === 'activity').label, 'History');
   // D5313 (#5313): Perks runs in the generic shell, where the same /activity address is History, before Settings.
   assert.equal(PAGES.perks.tabs.find((t) => t.path === '/admin/programs/perks/activity').label, 'History');
