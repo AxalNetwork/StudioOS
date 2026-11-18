@@ -236,7 +236,7 @@ test('the three action routes are literal routes with their guard and `lightbox`
     assert.doesNotMatch(line, /<Navigate/);
     assert.ok(at < app.indexOf(`<Route path="${slug}"`), `${path} is declared before ${slug}`);
   }
-  for (const [path, to, hash] of [['/build/tools', '/build/operating-systems', '#tools'], ['/raise/calls', '/raise/capital-relationships/calls', ''], ['/grow/updates', '/grow/reporting', '']]) {
+  for (const path of ['/build/tools', '/raise/calls', '/grow/updates']) {
     assert.equal(app.includes(`<Route path="${path}"`), false);
   }
   assert.match(app, /export function HistoryRedirect\(\{ to, hash \}\) \{\s*const location = useLocation\(\);\s*return <Navigate replace to=\{\{ pathname: to, search: location\.search, hash \}\} \/>;/);
@@ -293,10 +293,11 @@ test('history: Validate has none; other histories require module tabs and appear
   assert.deepEqual(cycleTabs('build', [{ slug: 'x', name: 'Tools' }]).filter((t) => t.name === 'Tools').length, 1, 'never twice');
 });
 
-test('Build\'s Tools is live now its section ships (#1597): second, on Operating systems\' #tools, keeping the venture', () => {
+test('Build\'s Tools is live now its section ships (#1597): after Plan and Progress (D6029), on Operating systems\' #tools, keeping the venture', () => {
   assert.equal(CYCLES.build.history.live, true);
   const tabs = cycleTabs('build', cards('build'), 'operating-systems', '?project_id=7');
-  assert.deepEqual([tabs[1].key, tabs[1].name, tabs[1].href, tabs[1].active], ['tools', 'Tools', '/build/operating-systems?project_id=7#tools', false]);
+  // D6029 (BD23): Plan and Progress lead, after Overview; Tools follows them, fourth.
+  assert.deepEqual([tabs[3].key, tabs[3].name, tabs[3].href, tabs[3].active], ['tools', 'Tools', '/build/operating-systems?project_id=7#tools', false]);
   assert.equal(tabs.filter((t) => t.name === 'Tools').length, 1);
   assert.equal(tabs.find((t) => t.key === 'operating-systems').active, true, 'the module tab keeps aria-current');
   assert.match(read('frontend/src/pages/cycles/ToolsHistory.jsx'), /<section id="tools"/, 'the hash lands on the section');

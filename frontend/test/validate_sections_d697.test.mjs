@@ -222,27 +222,30 @@ test('2: the table is titled Pain themes and offers ICP only, Need-to-have and M
 
 test('2: the five tiles read parts.stats, with FVW\'s notes for an unrecorded need or ICP', () => {
   const html = ssr(h(PainThemesSection, { parts: PAIN_PARTS, onExport: noop, onAssign: noop }));
-  for (const label of ['Themes', 'Interviews behind them', 'Ungrouped phrases', 'Need-to-have themes', 'Themes your ICP named']) assert.match(html, new RegExp(`>${label}<`));
-  assert.match(html, /1 more have mentions whose ICP fit was never recorded/);
+  // #6006 (V17): the six tiles, each naming what it counts and over which period.
+  for (const label of ['Themes', 'Interviews', 'Phrases in no theme', 'Need-to-have', 'ICP mention', 'Fit not recorded']) assert.match(html, new RegExp(`>${label}<`));
+  assert.match(html, /themes with a mention whose fit isn’t recorded/);
   const none = ssr(h(PainThemesSection, { parts: { ...PAIN_PARTS, stats: { ...PAIN_PARTS.stats, need_themes: null, icp_themes: null } }, onExport: noop, onAssign: noop }));
-  assert.match(none, /no severity recorded against any pain yet/);
+  assert.match(none, /no need-to-have ever recorded/);
   assert.match(none, /no ICP fit recorded on any interview yet/);
   assert.equal((none.match(/Not recorded/g) || []).length, 2);
 });
 
-test('2: each unthemed quote shows its interviewee and date; Assign attaches it to the theme through recordAction', async () => {
+test('2: each unthemed quote shows its interviewee and date; the selection bar assigns it through assign-many (#6006)', async () => {
   const html = ssr(h(PainThemesSection, { parts: PAIN_PARTS, onExport: noop, onAssign: noop }));
-  assert.match(html, /Unthemed quotes · 1/);
+  assert.match(html, /Unthemed quotes · 1 waiting/);
   assert.match(html, /“we lose a day a month” · Rowan Vale · 2026-10-02/);
   const m = await mounted('/validate/problem-discovery?project_id=7', handlerFor('problem-discovery'));
   try {
     const before = moduleReads(m.requests, 'problem-discovery');
+    // #6006 (V17): a quote is chosen by its box, and the selection bar assigns the set in one write.
+    await m.run(() => m.props(m.byTestid('validate-select-quote')).onChange({ target: { checked: true } }));
     const select = m.byTestid('validate-assign-theme');
     await m.run(() => m.props(select).onChange({ target: { value: '12' } }));
     await m.flush();
     const post = m.requests.find((r) => r.options.method === 'POST');
-    assert.ok(post.url.endsWith('/api/cycles/validate/modules/problem-discovery/records/12/actions/attach?project=7'), post.url);
-    assert.deepEqual(JSON.parse(post.options.body), { interview_id: 41, phrase: 'we lose a day a month' });
+    assert.ok(post.url.endsWith('/api/progress/pain-groups/7/assign-many'), post.url);
+    assert.deepEqual(JSON.parse(post.options.body), { phrases: ['we lose a day a month'], group_id: 12 });
     assert.ok(moduleReads(m.requests, 'problem-discovery') > before, 'the module is read again');
   } finally { await m.close(); }
 });
@@ -395,7 +398,7 @@ test('3: with New hypothesis registered (#1656 PR 2b) the section draws no inter
 // 4. Writers only
 // ---------------------------------------------------------------------------
 
-test('4: with can_write false, no write tool is drawn, whatever the read sends; the strips, the Ungrouped tile and More tools stay', () => {
+test('4: with can_write false, no write tool is drawn, whatever the read sends; the strips, the Phrases in no theme tile and More tools stay', () => {
   const reader = (parts) => ({ ...parts, can_write: false });
   const all = [
     ssr(h(InterviewsSection, { parts: reader(RESEARCH_PARTS), openDialog: noop, onLog: noop, onExport: noop })),
@@ -405,7 +408,7 @@ test('4: with can_write false, no write tool is drawn, whatever the read sends; 
   for (const tool of ['Log an interview', 'Export interviews', 'Export map', 'Open the Problem slide', 'Unthemed quotes', 'Assign to a theme', 'New theme', 'New hypothesis', 'Link to a pain', 'we lose a day']) {
     assert.doesNotMatch(all, new RegExp(tool), tool);
   }
-  assert.match(all, />Ungrouped phrases</);
+  assert.match(all, />Phrases in no theme</);
   assert.match(all, />Interviews logged</);
   assert.match(all, /More tools/);
   // Missing can_write is not a write gate either.

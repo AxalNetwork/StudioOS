@@ -114,11 +114,10 @@ test('the tabs: Activity on the four pages only where part 1 fills it, and no pa
   assert.equal(PAGES['mentor-cohorts'].tabs.find((t) => t.key === 'activity').label, 'History');
   // D5313 (#5313): Perks runs in the generic shell, where the same /activity address is History, before Settings.
   assert.equal(PAGES.perks.tabs.find((t) => t.path === '/admin/programs/perks/activity').label, 'History');
-  // Both shells retain their /activity bookmarks under the History label.
-  for (const k of ['investor-cohorts', 'referral-partners']) {
-    assert.equal(PAGES[k].tabs.find((t) => t.path === `/admin/programs/${k}/activity`).label, 'History');
+  // All three programs retain their activity bookmark as History in the shared shell.
+  for (const k of ['investor-cohorts', 'referral-partners', 'ai-native-venture']) {
+    assert.equal(PAGES[k].tabs.find(t => t.path === `/admin/programs/${k}/activity`).label, 'History');
   }
-  assert.deepEqual(labels['ai-native-venture'], []);
   assert.ok(Object.values(labels).every((l) => !l.includes('Terms')), 'part 1’s store holds no program’s terms');
   for (const [k, p] of [['mentor-cohorts', '/admin/programs/mentor-cohorts/activity'], ['refer-and-earn', '/admin/programs/refer-and-earn/activity'],
     ['perks', '/admin/programs/perks/activity'], ['learning', '/admin/programs/learning/activity']]) {

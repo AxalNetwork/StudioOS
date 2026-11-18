@@ -49,11 +49,21 @@
  * only. Table names are schema and appear in no output either. A parse error
  * reports a byte offset, never the text there.
  *
+ * STREAMED (D7142). The export is never one string: Node refuses a string
+ * past 536,870,888 characters and the export grows about 4 MiB a day. The
+ * command line decodes the file as a stream (planFile), plans each statement
+ * as it is read, spools each table's rows to a temporary directory, and
+ * writes each chunk when the next one opens. The chunk files, their order and
+ * manifest.tsv are what planRestore (the same planner, held in memory) gives.
+ *
  * Usage: node scripts/dr-drill-split.mjs <export.sql> <out-dir> [chunk-bytes]
  * Writes <out-dir>/NNN-<phase>.sql and <out-dir>/manifest.tsv, one line per
  * chunk: file, phase, statements, bytes, statements over D1's 100 KB limit.
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  appendFileSync, closeSync, createReadStream, mkdirSync, mkdtempSync, openSync, readSync, rmSync, writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -63,96 +73,228 @@ export const DEFAULT_CHUNK_BYTES = 1_000_000;
 export const D1_STATEMENT_LIMIT = 100_000;
 export const DEFER_FK = 'PRAGMA defer_foreign_keys=TRUE;';
 
-const WORD = /[A-Za-z0-9_$]/;
+// A word character: [A-Za-z0-9_$].
+const isWordCode = (k) => (k >= 97 && k <= 122) || (k >= 65 && k <= 90) || (k >= 48 && k <= 57) || k === 95 || k === 36;
+const NORMAL = 0;
+const QUOTE = 1;
+const LINE_COMMENT = 2;
+const BLOCK_COMMENT = 3;
 
 /**
- * Split SQL text into statements. Knows single-quoted strings ('' escapes),
- * "", `` and [] identifiers, -- and block comments (dropped), and trigger
- * bodies, whose BEGIN … END holds semicolons (CASE … END nests inside).
+ * D7142 — the statement splitter, fed in pieces. Knows single-quoted strings
+ * ('' escapes), "", `` and [] identifiers, -- and block comments (dropped),
+ * and trigger bodies, whose BEGIN … END holds semicolons (CASE … END nests
+ * inside). `push(text)` takes the next piece of the export, in any size; each
+ * statement is handed to `onStatement` as soon as its end is read, so the
+ * whole export is never one string. A piece may end anywhere: inside a quote,
+ * between the two characters of `--`, `/*`, `*\/` or a doubled quote, or in
+ * the middle of a word; the one character that needs the next piece to decide
+ * is held back until it arrives. `end()` finishes and returns
+ * { statements: count, error }, error null or { offset, reason }, offset in
+ * UTF-16 code units from the start (as a string index into the whole export
+ * would be), `errorByteOffset` the same position in UTF-8 bytes.
+ * `splitStatements(sql)` is this with one piece, so the string and the stream
+ * share every rule.
+ */
+export class StatementSplitter {
+  constructor(onStatement) {
+    this.onStatement = onStatement;
+    this.count = 0;
+    this.held = '';      // the tail of the last piece, held for one character of lookahead
+    this.base = 0;       // offset of held[0] in the export, in code units
+    this.baseBytes = 0;  // and in UTF-8 bytes
+    this.cur = '';
+    this.state = NORMAL;
+    this.close = '';
+    this.mark = null;    // where the open quote or comment began: { offset, piece, at, baseBytes }
+    this.reason = '';
+    this.inWord = false;
+    this.word = '';
+    this.collect = false;
+    this.first = [];     // the statement's first three words, upper-cased; a quoted identifier is '\u0000'
+    this.nwords = 0;
+    this.depth = 0;
+    this.sawBegin = false;
+    this.error = null;
+    this.errorByteOffset = null;
+    this.done = false;
+  }
+
+  isTrigger() {
+    const w = this.first;
+    return w[0] === 'CREATE' && (w[1] === 'TRIGGER' || ((w[1] === 'TEMP' || w[1] === 'TEMPORARY') && w[2] === 'TRIGGER'));
+  }
+
+  pushWord(u) {
+    if (this.nwords < 3) this.first.push(u);
+    this.nwords += 1;
+  }
+
+  flush() {
+    const s = this.cur.trim();
+    if (s) { this.count += 1; this.onStatement(s.endsWith(';') ? s : `${s};`); }
+    this.cur = ''; this.first = []; this.nwords = 0; this.word = ''; this.inWord = false; this.depth = 0; this.sawBegin = false;
+  }
+
+  push(text) {
+    if (this.done || this.error) return this;
+    this.run(this.held + text, false);
+    return this;
+  }
+
+  end() {
+    if (!this.done && !this.error) {
+      this.run(this.held, true);
+      this.done = true;
+      if (this.state === QUOTE || this.state === BLOCK_COMMENT) {
+        const m = this.mark;
+        this.error = { offset: m.offset, reason: this.reason };
+        this.errorByteOffset = m.baseBytes + Buffer.byteLength(m.piece.slice(0, m.at));
+      } else {
+        this.flush();
+      }
+    }
+    return { statements: this.count, error: this.error };
+  }
+
+  run(buf, final) {
+    const n = buf.length;
+    let i = 0;
+    let seg = 0;         // the first character of buf not yet copied into cur
+    let wstart = 0;      // where the current word began in buf
+    let stop = n;        // where processing stopped; buf.slice(stop) is held
+    const endWord = (at) => {
+      if (!this.inWord) return;
+      this.inWord = false;
+      if (!this.collect) { this.nwords += 1; return; }
+      const u = (this.word + buf.slice(wstart, at)).toUpperCase();
+      this.word = '';
+      this.pushWord(u);
+      if (this.isTrigger()) {
+        if (u === 'BEGIN') { this.depth += 1; this.sawBegin = true; }
+        else if (u === 'CASE') this.depth += 1;
+        else if (u === 'END' && this.depth > 0) this.depth -= 1;
+      }
+    };
+    const markHere = (at, reason) => {
+      this.mark = { offset: this.base + at, piece: buf, at, baseBytes: this.baseBytes };
+      this.reason = reason;
+    };
+
+    scan: while (i < n) {
+      switch (this.state) {
+        case QUOTE: {
+          const j = buf.indexOf(this.close, i);
+          if (j === -1) { i = n; break; }
+          if (this.close !== ']') {
+            if (j + 1 >= n && !final) { stop = j; break scan; }
+            if (buf[j + 1] === this.close) { i = j + 2; break; }
+          }
+          i = j + 1;
+          this.state = NORMAL;
+          break;
+        }
+        case LINE_COMMENT: {
+          const j = buf.indexOf('\n', i);
+          if (j === -1) { i = n; break; }
+          i = j; seg = j;
+          this.state = NORMAL;
+          break;
+        }
+        case BLOCK_COMMENT: {
+          const j = buf.indexOf('*/', i);
+          if (j === -1) {
+            if (!final && n - 1 >= i && buf[n - 1] === '*') { stop = n - 1; break scan; }
+            i = n; break;
+          }
+          i = j + 2; seg = i;
+          this.state = NORMAL;
+          break;
+        }
+        default: {
+          const k = buf.charCodeAt(i);
+          if (isWordCode(k)) {
+            if (!this.inWord) {
+              this.inWord = true;
+              wstart = i;
+              this.word = '';
+              this.collect = this.nwords < 3 || this.isTrigger();
+            }
+            i += 1;
+            while (i < n && isWordCode(buf.charCodeAt(i))) i += 1;
+            break;
+          }
+          if (k === 39 || k === 34 || k === 96 || k === 91) { // ' " ` [
+            endWord(i);
+            markHere(i, 'unterminated quote');
+            this.close = k === 91 ? ']' : buf[i];
+            this.state = QUOTE;
+            // A quoted identifier counts as a word for statement classification.
+            this.pushWord('\u0000');
+            i += 1;
+            break;
+          }
+          if (k === 45 || k === 47) { // - /
+            if (i + 1 >= n && !final) { stop = i; break scan; }
+            const next = buf[i + 1];
+            if (k === 45 && next === '-') {
+              endWord(i);
+              this.cur += `${buf.slice(seg, i)} `;
+              this.state = LINE_COMMENT;
+              i += 2;
+              break;
+            }
+            if (k === 47 && next === '*') {
+              endWord(i);
+              this.cur += `${buf.slice(seg, i)} `;
+              markHere(i, 'unterminated comment');
+              this.state = BLOCK_COMMENT;
+              i += 2;
+              break;
+            }
+            endWord(i);
+            i += 1;
+            break;
+          }
+          if (k === 59) { // ;
+            endWord(i);
+            i += 1;
+            if (this.isTrigger() && (!this.sawBegin || this.depth > 0)) break;
+            this.cur += buf.slice(seg, i);
+            seg = i;
+            this.flush();
+            break;
+          }
+          endWord(i);
+          i += 1;
+        }
+      }
+    }
+    // A piece cut between the two halves of a surrogate pair holds the first
+    // half back, so byte offsets count the pair as one character. It is never
+    // a word, quote or comment character, so reading it again changes nothing.
+    if (!final && stop === n && n > 0) {
+      const k = buf.charCodeAt(n - 1);
+      if (k >= 0xd800 && k <= 0xdbff) stop = n - 1;
+    }
+    if (this.inWord && this.collect) { this.word += buf.slice(wstart, stop); }
+    if (this.state === NORMAL || this.state === QUOTE) {
+      if (seg < stop) this.cur += buf.slice(seg, stop);
+    }
+    this.held = stop < n ? buf.slice(stop) : '';
+    this.base += stop;
+    this.baseBytes += Buffer.byteLength(stop < n ? buf.slice(0, stop) : buf);
+  }
+}
+
+/**
+ * Split SQL text into statements: the StatementSplitter fed the whole text.
  * Returns { statements, error } where error is null or { offset, reason }.
  */
 export function splitStatements(sql) {
   const statements = [];
-  let cur = '';
-  let words = [];
-  let word = '';
-  let depth = 0;
-  let sawBegin = false;
-  let i = 0;
-  const n = sql.length;
-
-  const isTrigger = () => {
-    const w = words.slice(0, 3);
-    return w[0] === 'CREATE' && (w[1] === 'TRIGGER' || ((w[1] === 'TEMP' || w[1] === 'TEMPORARY') && w[2] === 'TRIGGER'));
-  };
-  const endWord = () => {
-    if (!word) return;
-    const u = word.toUpperCase();
-    words.push(u);
-    if (isTrigger()) {
-      if (u === 'BEGIN') { depth += 1; sawBegin = true; }
-      else if (u === 'CASE') depth += 1;
-      else if (u === 'END' && depth > 0) depth -= 1;
-    }
-    word = '';
-  };
-  const flush = () => {
-    const s = cur.trim();
-    if (s) statements.push(s.endsWith(';') ? s : `${s};`);
-    cur = ''; words = []; word = ''; depth = 0; sawBegin = false;
-  };
-  const quoted = (close, reason) => {
-    const start = i;
-    cur += sql[i++];
-    for (;;) {
-      if (i >= n) return { offset: start, reason };
-      const c = sql[i];
-      cur += c; i += 1;
-      if (c === close) {
-        if (close !== ']' && sql[i] === close) { cur += sql[i]; i += 1; continue; }
-        return null;
-      }
-    }
-  };
-
-  while (i < n) {
-    const c = sql[i];
-    if (c === "'" || c === '"' || c === '`' || c === '[') {
-      endWord();
-      const err = quoted(c === '[' ? ']' : c, 'unterminated quote');
-      if (err) return { statements, error: err };
-      // A quoted identifier counts as a word for statement classification.
-      words.push('\u0000');
-      continue;
-    }
-    if (c === '-' && sql[i + 1] === '-') {
-      endWord();
-      while (i < n && sql[i] !== '\n') i += 1;
-      cur += ' ';
-      continue;
-    }
-    if (c === '/' && sql[i + 1] === '*') {
-      endWord();
-      const start = i;
-      const close = sql.indexOf('*/', i + 2);
-      if (close === -1) return { statements, error: { offset: start, reason: 'unterminated comment' } };
-      i = close + 2;
-      cur += ' ';
-      continue;
-    }
-    if (c === ';') {
-      endWord();
-      cur += c; i += 1;
-      if (isTrigger() && (!sawBegin || depth > 0)) continue;
-      flush();
-      continue;
-    }
-    if (WORD.test(c)) word += c; else endWord();
-    cur += c; i += 1;
-  }
-  endWord();
-  flush();
-  return { statements, error: null };
+  const { error } = new StatementSplitter((s) => statements.push(s)).push(sql).end();
+  return { statements, error };
 }
 
 // One identifier, optionally schema-qualified: "a", `a`, [a] or a bare word.
@@ -408,115 +550,243 @@ function parentsFirst(tables, deps) {
   return { order: order.concat(remaining), cyclic: remaining.length };
 }
 
-/**
- * Plan the restore: classify every statement, order the data parents-first
- * and pack each phase into chunks of at most chunkBytes (a single statement
- * bigger than that gets a chunk of its own). Returns { chunks, counts, error };
- * a chunk is { phase, statements, bytes, overLimit }.
- */
-export function planRestore(sql, { chunkBytes = DEFAULT_CHUNK_BYTES } = {}) {
-  const { statements, error } = splitStatements(sql);
-  const counts = {
-    statements: statements.length, schema: 0, data: 0, post: 0,
-    dropped_pragma: 0, dropped_txn: 0, dropped_internal: 0,
-    tables: 0, cyclic_tables: 0, cycle_edges_broken: 0, cycle_rows_updated: 0,
-    cycle_rows_unparsed: 0, split_tables: 0,
-    largest_statement_bytes: 0, over_limit: 0, chunks: 0,
-  };
-  if (error) return { chunks: [], counts, error };
+const newCounts = (statements = 0) => ({
+  statements, schema: 0, data: 0, post: 0,
+  dropped_pragma: 0, dropped_txn: 0, dropped_internal: 0,
+  tables: 0, cyclic_tables: 0, cycle_edges_broken: 0, cycle_rows_updated: 0,
+  cycle_rows_unparsed: 0, split_tables: 0,
+  largest_statement_bytes: 0, over_limit: 0, chunks: 0,
+});
 
+// Store keys for the two groups that are not a table's rows. A table name
+// read by unquote() never holds a NUL.
+const UPDATES = '\u0000updates';
+const SEQUENCE = '\u0000sqlite_sequence';
+
+/** The data rows, grouped by table, held in memory (planRestore on a string). */
+export function memoryStore() {
+  const rows = new Map();
+  return {
+    append(key, s) { if (!rows.has(key)) rows.set(key, []); rows.get(key).push(s); },
+    has: (key) => rows.has(key),
+    bytes: (key) => (rows.get(key) || []).reduce((a, s) => a + Buffer.byteLength(s) + 1, 0),
+    items: (key) => rows.get(key) || [],
+    rewrite(key, fn) { rows.set(key, rows.get(key).map(fn)); },
+    close() {},
+  };
+}
+
+/**
+ * D7142 — the data rows, grouped by table, spooled to files under `dir`, so a
+ * planned restore holds one table's write buffer per table and one chunk at
+ * a time, never the export. Each record is a 4-byte length and the
+ * statement's UTF-8 bytes.
+ */
+export function spoolStore(dir, { flushBytes = 1 << 16 } = {}) {
+  const groups = new Map();
+  let files = 0;
+  const flush = (g) => {
+    if (!g.parts.length) return;
+    appendFileSync(g.file, Buffer.concat(g.parts, g.pending));
+    g.parts = []; g.pending = 0;
+  };
+  const create = (key) => {
+    const g = { file: join(dir, `${String(files += 1).padStart(6, '0')}.spool`), parts: [], pending: 0, bytes: 0, count: 0 };
+    writeFileSync(g.file, '');
+    groups.set(key, g);
+    return g;
+  };
+  const write = (g, s) => {
+    const b = Buffer.from(s, 'utf8');
+    const len = Buffer.allocUnsafe(4);
+    len.writeUInt32LE(b.length, 0);
+    g.parts.push(len, b);
+    g.pending += 4 + b.length;
+    g.bytes += b.length + 1;
+    g.count += 1;
+    if (g.pending >= flushBytes) flush(g);
+  };
+  function* read(g) {
+    flush(g);
+    const fd = openSync(g.file, 'r');
+    try {
+      let buf = Buffer.allocUnsafe(1 << 20);
+      let have = 0;
+      let at = 0;
+      for (;;) {
+        if (have - at >= 4) {
+          const len = buf.readUInt32LE(at);
+          if (have - at >= 4 + len) {
+            yield buf.toString('utf8', at + 4, at + 4 + len);
+            at += 4 + len;
+            continue;
+          }
+          if (4 + len > buf.length) {
+            const bigger = Buffer.allocUnsafe(4 + len);
+            buf.copy(bigger, 0, at, have);
+            buf = bigger; have -= at; at = 0;
+          }
+        }
+        if (at > 0) { buf.copy(buf, 0, at, have); have -= at; at = 0; }
+        const got = readSync(fd, buf, have, buf.length - have, null);
+        if (got === 0) {
+          if (have !== 0) throw new Error('a spool file ends inside a record');
+          return;
+        }
+        have += got;
+      }
+    } finally {
+      closeSync(fd);
+    }
+  }
+  return {
+    append(key, s) { write(groups.get(key) || create(key), s); },
+    has: (key) => groups.has(key),
+    bytes: (key) => groups.get(key)?.bytes ?? 0,
+    items: (key) => (groups.has(key) ? read(groups.get(key)) : []),
+    rewrite(key, fn) {
+      const old = groups.get(key);
+      groups.delete(key);
+      const g = create(key);
+      for (const s of read(old)) write(g, fn(s));
+      flush(g);
+      rmSync(old.file, { force: true });
+    },
+    close() { rmSync(dir, { recursive: true, force: true }); },
+  };
+}
+
+/**
+ * The restore plan, fed one statement at a time. `add(s)` classifies a
+ * statement as planRestore always has; `finish({ chunkBytes, onChunk })`
+ * orders the data parents-first and packs each phase into chunks of at most
+ * chunkBytes (a single statement bigger than that gets a chunk of its own),
+ * calling onChunk(chunk) as each chunk opens. A chunk is
+ * { phase, header, statements, bytes, overLimit }; it is complete when the
+ * next one opens, or when finish returns. The rows wait in `store`.
+ */
+export function createRestorePlanner({ store = memoryStore() } = {}) {
+  const counts = newCounts();
   const schema = [];
   const post = [];
   const deps = new Map();
   const info = new Map();
   const tableOrder = [];
-  const rows = new Map();
-  const seq = [];
-  const addRow = (t, s) => {
-    if (!rows.has(t)) { rows.set(t, []); if (!tableOrder.includes(t)) tableOrder.push(t); }
-    rows.get(t).push(s);
-  };
+  const seen = new Set();
+  const order = (t) => { if (!seen.has(t)) { seen.add(t); tableOrder.push(t); } };
 
-  for (const s of statements) {
+  const add = (s) => {
+    counts.statements += 1;
     const bytes = Buffer.byteLength(s);
     if (bytes > counts.largest_statement_bytes) counts.largest_statement_bytes = bytes;
     if (bytes > D1_STATEMENT_LIMIT) counts.over_limit += 1;
     let m;
-    if (/^PRAGMA\b/i.test(s)) { counts.dropped_pragma += 1; continue; }
-    if (RE_TXN.test(s)) { counts.dropped_txn += 1; continue; }
+    if (/^PRAGMA\b/i.test(s)) { counts.dropped_pragma += 1; return; }
+    if (RE_TXN.test(s)) { counts.dropped_txn += 1; return; }
     if ((m = RE_CREATE_TABLE.exec(s))) {
       const t = unquote(m[1]);
       // SQLite creates its own sqlite_* tables and refuses a CREATE of one.
-      if (INTERNAL(t) || t.startsWith('sqlite_')) { counts.dropped_internal += 1; continue; }
+      if (INTERNAL(t) || t.startsWith('sqlite_')) { counts.dropped_internal += 1; return; }
       schema.push(s); counts.schema += 1;
-      if (!tableOrder.includes(t)) tableOrder.push(t);
+      order(t);
       const refs = new Set();
       for (const r of s.matchAll(RE_REFS)) refs.add(unquote(r[1]));
       deps.set(t, refs);
       const parsed = parseCreateTable(s);
       if (parsed) info.set(t, parsed);
-      continue;
+      return;
     }
     if ((m = RE_INSERT.exec(s) || RE_DELETE.exec(s))) {
       const t = unquote(m[1]);
-      if (INTERNAL(t)) { counts.dropped_internal += 1; continue; }
+      if (INTERNAL(t)) { counts.dropped_internal += 1; return; }
       counts.data += 1;
-      if (t === 'sqlite_sequence') seq.push(s); else addRow(t, s);
-      continue;
+      if (t === 'sqlite_sequence') store.append(SEQUENCE, s);
+      else { order(t); store.append(t, s); }
+      return;
     }
     // Indexes, views, triggers and anything unrecognised run after the data,
     // in the export's order.
     post.push(s); counts.post += 1;
-  }
-
-  const dataTables = tableOrder.filter((t) => rows.has(t));
-  counts.tables = dataTables.length;
-  // Break every cycle between tables at a nullable back-edge, then order the
-  // rest parents-first: cycle members, and the tables under them, included.
-  const { broken, edges } = breakCycles(dataTables, deps, info);
-  const updates = [];
-  for (const [child, parents] of broken) {
-    counts.cycle_edges_broken += parents.size;
-    const cols = [...new Set([...parents.values()].flat())];
-    rows.set(child, rows.get(child).map((stmt) => {
-      if (!RE_INSERT.test(stmt)) return stmt;
-      const r = deferRow(stmt, info.get(child), cols);
-      if (!r) { counts.cycle_rows_unparsed += 1; return stmt; }
-      if (r.update) { updates.push(r.update); counts.cycle_rows_updated += 1; }
-      return r.insert;
-    }));
-  }
-  const { order, cyclic } = parentsFirst(dataTables, edges);
-  counts.cyclic_tables = cyclic;
-
-  const chunks = [];
-  const pack = (phase, groups, header = null) => {
-    const headerBytes = header ? Buffer.byteLength(header) + 1 : 0;
-    let chunk = null;
-    const open = () => { chunk = { phase, header, statements: [], bytes: headerBytes, overLimit: 0 }; chunks.push(chunk); };
-    for (const group of groups) {
-      const groupBytes = group.reduce((a, s) => a + Buffer.byteLength(s) + 1, 0);
-      // A table that fits a fresh chunk never straddles two.
-      if (chunk && chunk.statements.length && chunk.bytes + groupBytes > chunkBytes && headerBytes + groupBytes <= chunkBytes) open();
-      let split = false;
-      for (let k = 0; k < group.length; k += 1) {
-        const b = Buffer.byteLength(group[k]) + 1;
-        if (!chunk || (chunk.statements.length && chunk.bytes + b > chunkBytes)) {
-          if (chunk && k > 0) split = true;
-          open();
-        }
-        chunk.statements.push(group[k]);
-        chunk.bytes += b;
-        if (b - 1 > D1_STATEMENT_LIMIT) chunk.overLimit += 1;
-      }
-      if (split) counts.split_tables += 1;
-    }
   };
-  pack('schema', schema.map((s) => [s]));
-  // The back-edge UPDATEs run after every INSERT, when both ends exist.
-  pack('data', [...order.map((t) => rows.get(t)), ...(updates.length ? [updates] : []), ...(seq.length ? [seq] : [])], DEFER_FK);
-  pack('post', post.map((s) => [s]));
-  counts.chunks = chunks.length;
+
+  const finish = ({ chunkBytes = DEFAULT_CHUNK_BYTES, onChunk = () => {} } = {}) => {
+    const dataTables = tableOrder.filter((t) => store.has(t));
+    counts.tables = dataTables.length;
+    // Break every cycle between tables at a nullable back-edge, then order the
+    // rest parents-first: cycle members, and the tables under them, included.
+    const { broken, edges } = breakCycles(dataTables, deps, info);
+    for (const [child, parents] of broken) {
+      counts.cycle_edges_broken += parents.size;
+      const cols = [...new Set([...parents.values()].flat())];
+      store.rewrite(child, (stmt) => {
+        if (!RE_INSERT.test(stmt)) return stmt;
+        const r = deferRow(stmt, info.get(child), cols);
+        if (!r) { counts.cycle_rows_unparsed += 1; return stmt; }
+        if (r.update) { store.append(UPDATES, r.update); counts.cycle_rows_updated += 1; }
+        return r.insert;
+      });
+    }
+    const { order: dataOrder, cyclic } = parentsFirst(dataTables, edges);
+    counts.cyclic_tables = cyclic;
+
+    const one = (s) => ({ bytes: Buffer.byteLength(s) + 1, items: [s] });
+    const stored = (key) => ({ bytes: store.bytes(key), items: store.items(key) });
+    const pack = (phase, groups, header = null) => {
+      const headerBytes = header ? Buffer.byteLength(header) + 1 : 0;
+      let chunk = null;
+      const open = () => {
+        chunk = { phase, header, statements: [], bytes: headerBytes, overLimit: 0 };
+        counts.chunks += 1;
+        onChunk(chunk);
+      };
+      for (const group of groups) {
+        // A table that fits a fresh chunk never straddles two.
+        if (chunk && chunk.statements.length && chunk.bytes + group.bytes > chunkBytes && headerBytes + group.bytes <= chunkBytes) open();
+        let split = false;
+        let k = 0;
+        for (const s of group.items) {
+          const b = Buffer.byteLength(s) + 1;
+          if (!chunk || (chunk.statements.length && chunk.bytes + b > chunkBytes)) {
+            if (chunk && k > 0) split = true;
+            open();
+          }
+          chunk.statements.push(s);
+          chunk.bytes += b;
+          if (b - 1 > D1_STATEMENT_LIMIT) chunk.overLimit += 1;
+          k += 1;
+        }
+        if (split) counts.split_tables += 1;
+      }
+    };
+    pack('schema', schema.map(one));
+    // The back-edge UPDATEs run after every INSERT, when both ends exist.
+    pack('data', [
+      ...dataOrder.map(stored),
+      ...(store.has(UPDATES) ? [stored(UPDATES)] : []),
+      ...(store.has(SEQUENCE) ? [stored(SEQUENCE)] : []),
+    ], DEFER_FK);
+    pack('post', post.map(one));
+    return counts;
+  };
+
+  return { add, finish, counts };
+}
+
+/**
+ * Plan the restore of an export held as one string: classify every
+ * statement, order the data parents-first and pack each phase into chunks of
+ * at most chunkBytes (a single statement bigger than that gets a chunk of its
+ * own). Returns { chunks, counts, error }; a chunk is
+ * { phase, header, statements, bytes, overLimit }. The command line streams
+ * the same plan (planFile).
+ */
+export function planRestore(sql, { chunkBytes = DEFAULT_CHUNK_BYTES } = {}) {
+  const { statements, error } = splitStatements(sql);
+  if (error) return { chunks: [], counts: newCounts(statements.length), error };
+  const planner = createRestorePlanner();
+  for (const s of statements) planner.add(s);
+  const chunks = [];
+  const counts = planner.finish({ chunkBytes, onChunk: (c) => chunks.push(c) });
   return { chunks, counts, error: null };
 }
 
@@ -524,7 +794,47 @@ export function chunkText(chunk) {
   return (chunk.header ? `${chunk.header}\n` : '') + chunk.statements.join('\n') + '\n';
 }
 
-function main(argv) {
+/**
+ * D7142 — split the export at `input` into chunk files in `outDir` without
+ * ever reading it into one string: the file is decoded as a stream, each
+ * statement planned as it is read, the rows spooled to a temporary directory,
+ * and each chunk written when the next one opens. The files, their order and
+ * manifest.tsv are planRestore's. Resolves to { counts, error, errorByteOffset }.
+ */
+export async function planFile(input, outDir, { chunkBytes = DEFAULT_CHUNK_BYTES, readBytes = 1 << 16, spoolDir = null } = {}) {
+  const tmp = spoolDir ?? mkdtempSync(join(tmpdir(), 'dr-drill-split-'));
+  const store = spoolStore(tmp);
+  try {
+    const planner = createRestorePlanner({ store });
+    const splitter = new StatementSplitter(planner.add);
+    const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
+    for await (const piece of createReadStream(input, { highWaterMark: readBytes })) {
+      splitter.push(decoder.decode(piece, { stream: true }));
+    }
+    splitter.push(decoder.decode());
+    const { error } = splitter.end();
+    if (error) return { counts: planner.counts, error, errorByteOffset: splitter.errorByteOffset };
+    if (planner.counts.schema === 0) return { counts: planner.counts, error: null, errorByteOffset: null };
+    mkdirSync(outDir, { recursive: true });
+    const manifest = [];
+    let open = null;
+    const write = () => {
+      if (!open) return;
+      const file = join(outDir, `${String(manifest.length + 1).padStart(3, '0')}-${open.phase}.sql`);
+      writeFileSync(file, chunkText(open));
+      manifest.push([file, open.phase, open.statements.length, open.bytes, open.overLimit].join('\t'));
+      open = null;
+    };
+    const counts = planner.finish({ chunkBytes, onChunk: (c) => { write(); open = c; } });
+    write();
+    writeFileSync(join(outDir, 'manifest.tsv'), manifest.join('\n') + '\n');
+    return { counts, error: null, errorByteOffset: null };
+  } finally {
+    store.close();
+  }
+}
+
+async function main(argv) {
   const [input, outDir, size] = argv;
   if (!input || !outDir) {
     console.error('usage: dr-drill-split.mjs <export.sql> <out-dir> [chunk-bytes]');
@@ -535,28 +845,19 @@ function main(argv) {
     console.error('dr-drill-split: chunk-bytes must be an integer of at least 1024');
     return 64;
   }
-  const sql = readFileSync(input, 'utf8');
-  const { chunks, counts, error } = planRestore(sql, { chunkBytes });
+  const { counts, error, errorByteOffset } = await planFile(input, outDir, { chunkBytes });
   if (error) {
-    console.error(`dr-drill-split: ${error.reason} at byte offset ${Buffer.byteLength(sql.slice(0, error.offset))}`);
+    console.error(`dr-drill-split: ${error.reason} at byte offset ${errorByteOffset}`);
     return 1;
   }
   if (counts.schema === 0) {
     console.error('dr-drill-split: the export holds no CREATE TABLE');
     return 1;
   }
-  mkdirSync(outDir, { recursive: true });
-  const manifest = [];
-  chunks.forEach((c, k) => {
-    const file = join(outDir, `${String(k + 1).padStart(3, '0')}-${c.phase}.sql`);
-    writeFileSync(file, chunkText(c));
-    manifest.push([file, c.phase, c.statements.length, c.bytes, c.overLimit].join('\t'));
-  });
-  writeFileSync(join(outDir, 'manifest.tsv'), manifest.join('\n') + '\n');
   console.log(Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(' '));
   return 0;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 }

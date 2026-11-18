@@ -301,6 +301,15 @@ e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_ac
 
 # D5531: documented public CodeQL archive SHA256, not an API key.
 00888164d8e120c38d808247dbea41bf2cb01184:documentation/architecture/decisions/D5531.md:generic-api-key:16
+# #7073: false positives. scripts/agent-gateway-keys.mjs lists the names of the
+# Actions secrets it reads (the second and third Claude account slots); no value
+# is in the file. Scoped to these two findings in the commit that added them.
+# The third entry is this comment's first wording, which quoted those names.
+# The slot table's property is now `envName`, so the merge queue's squashed
+# commit carries no such line; these entries cover the PR's own history only.
+5ca473a6086e9d4ecaa257b0010d64a1d8af2fb6:scripts/agent-gateway-keys.mjs:generic-api-key:31
+5ca473a6086e9d4ecaa257b0010d64a1d8af2fb6:scripts/agent-gateway-keys.mjs:generic-api-key:32
+001f03c99dbcf6014f12be5d932daa8a814fbe89:.gitleaksignore:generic-api-key:302
 # #6008: the interview-guide Worker test signed its session JWT with a synthetic fixture string (never a
 # credential). The fixture now uses 'test'.repeat(16). Scope this to the original finding.
 808d70152f4a4e77727fb5f6e93cb2cfacc065a2:cloudflare-worker/test/interview_guide_6008.test.ts:generic-api-key:13

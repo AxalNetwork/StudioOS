@@ -75,7 +75,8 @@ export const DOORS = {
     imgAlt: 'Two founders in violet cloaks look out over a valley city at sunset, beside a workshop of builders.',
     imgPos: '68% 38%',
     closePos: '50% 62%',
-    h1: 'Go from idea to funded — on one operating platform.',
+    // #6983 (X1): interim until #7007 (B3). The old headline promised funding, an outcome nothing guarantees.
+    h1: 'Test your idea with customers, build your company and prepare to raise, in one workspace.',
     who: 'For early-stage founders validating a first idea, and founders who already have a company and are preparing a raise.',
     primary: { t: 'Start free', to: '/register?lane=founder' },
     secondary: { t: 'See Spin-Out Lab', to: '/spinout-lab' },
@@ -222,7 +223,9 @@ export const DOORS = {
     closePos: '50% 62%',
     h1: 'Better deals, less noise. From first look to portfolio.',
     who: 'For angels, syndicates, emerging managers, funds, and LPs.',
-    primary: { t: 'Create an investor account', to: '/register?lane=lp' },
+    // #6983 (X1): the investor lane, not the LP form; LPs sign in from the line under the hero.
+    primary: { t: 'Create an investor account', to: '/register?lane=investor' },
+    lpSignIn: { lead: 'Already an LP in an Axal VC fund?', t: 'LP sign in', to: '/login?next=%2Flp-portal' },
     secondary: { t: 'Compare investor plans', to: '/pricing?for=investor' },
     problem: 'Most deal flow is cold inbound: decks without evidence, numbers without verification, and notes scattered across tools.',
     facts: [
@@ -285,7 +288,8 @@ export const DOORS = {
     plans: [
       { name: 'Free', desc: 'Browse the public deal index and watch the companies you follow.', tier: 'free', cta: 'Start free' },
       { name: 'Professional', desc: 'Work deals: full deal flow, warm introductions every quarter, deal rooms, and founder reference checks.', tier: 'professional', cta: 'Start trial', highlight: true, tag: 'Recommended' },
-      { name: 'Institutional', desc: 'Run a fund: more introductions, unlimited deal rooms, co-investing, LP reporting, and seats for your team.', tier: 'institutional', cta: 'Start with Institutional' },
+      // #6983 (X1): priced by agreement, as /pricing says (`sitePricing.js`, custom: true); never "Price not read".
+      { name: 'Institutional', desc: 'Run a fund: more introductions, unlimited deal rooms, co-investing, LP reporting, and seats for your team.', tier: 'institutional', custom: { note: 'Pricing agreed with Axal VC', cta: 'Contact Axal VC', to: '/contact?topic=invest' } },
     ],
     planNote: 'Every account can start a 14-day Professional trial with no card.',
     tokens: AI_TOKENS,
@@ -407,7 +411,7 @@ export const DOORS = {
     // The canvas leads with "Apply to advise"; the primary CTA is the lane
     // link (D676), so the canvas's two buttons trade places.
     primary: { t: 'Create an account', to: '/register?lane=advisor' },
-    secondary: { t: 'Apply to advise', to: '/contact' },
+    secondary: { t: 'Apply to advise', to: '/contact?topic=advise' },
     problem: 'Founders who need a specific gap closed rarely find the person who has closed it before.',
     facts: [
       'A public profile with expertise and availability',
@@ -462,7 +466,7 @@ export const DOORS = {
       d: 'There is no session cap, no listed hourly price, and no plan grid. Advisors are admitted by application.',
       items: ['Operators, domain experts, and seasoned founders', 'Office hours and one-off sessions', 'A visible record of engagements'],
       cta: 'Apply to advise',
-      to: '/contact',
+      to: '/contact?topic=advise',
     },
     faq: [
       { q: 'Who is this for?', a: 'Operators, domain experts, and seasoned founders who want to work with founders whose gap they have closed before.' },

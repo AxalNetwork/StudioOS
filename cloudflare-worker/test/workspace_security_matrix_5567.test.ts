@@ -97,7 +97,9 @@ test('3. forged callback: a changed signature or payload is refused', async () =
     const target = computeTarget(admission, 'executor.complete');
     const grant = await security.issue(target); assert.ok(grant.ok);
     const [payload, signature] = grant.value.token.split('.');
-    assert.equal(code(await security.redeem(`${payload}.${signature.slice(0, -2)}AA`, target)), 'grant_invalid');
+    // #7244: change the FIRST character; overwriting the last two with AA leaves a signature that already ends that
+    // way unchanged (its last base64url character carries spare bits), which redeemed the grant here.
+    assert.equal(code(await security.redeem(`${payload}.${signature[0] === 'A' ? 'B' : 'A'}${signature.slice(1)}`, target)), 'grant_invalid');
     const claims = decodeClaims(grant.value.token);
     const forged = Buffer.from(JSON.stringify({ ...claims, member_id: STRANGER })).toString('base64url');
     assert.equal(code(await security.redeem(`${forged}.${signature}`, target)), 'grant_invalid');

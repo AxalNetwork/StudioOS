@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Program Investor Cohort Access Presentation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Program · Investor cohort access presentation and PDF deck · sibling of the Spin-Out Lab pilot · PGI01 to PGI08 · #6969, #6965</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor cohort access as a shareable page and a five-slide PDF — an explanation of access, not an offer of it</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A presenter opens Programs, selects Investor cohort access and lands on its public, signed-out page at /programs/investor-cohorts: the name and one-sentence purpose first, “Assigned by an admin” in words, “Download PDF” above the fold, then the five kit sections in order. The signature visual is the four-step sequence main records: eligibility (a verified investor), assignment (one cohort, a scope, a last day), signature (the cohort NDA) and scoped access, with the three checks made on every read. Public availability needs HQ’s dated confirmation, which has not been given: the page and the deck say “Not running yet”, the confirmed state is held (⚑), and the close is informational, with no primary action. HQ runs the program and it is not offered to studios, so there is no studio enquiry. Kit copied verbatim from the pilot (#6966); the admin entry points and the index are on PGS07 and PGS08. Frontend only.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · the edition date, the as-of date and the HQ decision date are bracketed samples; generic cohort and role labels; no real investor, founder, company, quote or logo</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program Investor Cohort Access Presentation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PGI-01', 'Investor cohort access · public page · desktop 1440 · frontend only', '/programs/investor-cohorts signed out. Name and purpose first; “Assigned by an admin”; Download PDF and Print; the dark availability panel says “Not running yet” with no HQ decision published; then 1 Who it helps, 2 What they do (the four steps), 3 How participation works, 4 Access required, 5 an informational next step with no primary.', [F('PGI01', false, 5263)]],
+      ['PGI-02', 'Availability states · frontend only', 'HQ’s dated publication decision, carried in the map, three ways: not confirmed (today, the default), HQ confirmed (held ⚑ until HQ decides; still no application) and the decision field missing (Not recorded). The label “Assigned by an admin” never changes; nothing is read live.', [C('PGI02A', 'Not confirmed · default', 1440, 743), C('PGI02B', 'HQ confirmed · held ⚑', 1440, 743), C('PGI02C', 'Not recorded', 1440, 743)]],
+      ['PGI-03', 'Investor cohort access · phone 390 · frontend only', 'Stacked in reading order: name, purpose, audience, Download PDF full width, Print, the availability panel, the section nav, the four steps on a vertical rule, the three ways to learn more and the PDF.', [C('PGI03', false, 390, 8837)]],
+      ['PGI-04', 'The PDF deck · 5 slides at 1920 × 1080', 'axal-vc-investor-cohorts-v1.pdf. 1 Cover · 2 Who it helps · 3 What happens (eligibility, assignment, signature, scoped access) · 4 How participation works (what access covers, what founders control) · 5 Access and current conditions (availability as of the edition, public URL, edition).', [C('PGI04A', '1 · Cover', 1920, 1080), C('PGI04B', '2 · Who it helps', 1920, 1080), C('PGI04C', '3 · What happens', 1920, 1080), C('PGI04D', '4 · How participation works', 1920, 1080), C('PGI04E', '5 · Access and current conditions', 1920, 1080)]],
+      ['PGI-05', 'Grayscale print sheet', 'The five slides as a black-and-white printer gives them; export settings.', [C('PGI05', false, 1440, 1340)]],
+      ['PGI-06', 'Slide contact sheet', 'The deck in order with each slide’s text alternative, how the slides map to the page’s sections, and which lines depend on HQ’s decision.', [C('PGI06', false, 1440, 832)]],
+      ['PGI-07', 'Reading and focus order · frontend only', 'Numbered reading order of the hero at 1440 and 390, the focus ring on Download PDF, and the four steps’ text alternative.', [C('PGI07A', 'Desktop', 1440, 1037), C('PGI07B', 'Phone 390', 390, 1617)]],
+      ['PGI-08', 'Handoff', 'Registry key, canonical URL, PDF path, the availability field, editable source and edition; what main records; claims that depend on HQ’s decision; frontend only, accessibility and the open points (⚑).', [W('PGI08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

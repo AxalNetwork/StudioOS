@@ -62,7 +62,7 @@ import { resolve, join, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { unionArtifacts } from './lib/readmeUnion.mjs';
 import { blockHoldsList, findBlock, folderListing, indexMode, perFileRows, renderList, withBlock } from './lib/folderFiles.mjs';
-import { writeFileSync } from 'node:fs';
+import { regularTextFile } from './local-files.mjs';
 
 const ROOT = resolve(process.cwd());
 // #4104: `--write` fills the generated file lists in the working tree; `--clean` empties them.
@@ -194,6 +194,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
+  ['frontend/src/pages/relationships',         'relationship intelligence, introduction records and consent-based offers'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
   ['frontend/src/pages/raise/pitch',          'the Pitch deck studio (D894): its shell, its tabs and the model they read'],
   ['frontend/src/pages/raise/narrative',      'the Investor narrative tool (D906): its tabs inside the module page, and the model they read'],
@@ -204,6 +205,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/raise/useoffunds',     'the Use of funds tool (D1173, D1177, D1178, D5081): Home and its tabs inside the module page, the dialogs, the shared plan read and the models they read'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
+  ['frontend/src/pages/partner/offers',       'the partner Offers bucket’s zones and the pure rules they read (#4688, D4842, D4843)'],
   ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/portfolio',            'the Portfolio v2 frame, its shared parts and models, the company workspace and the Admin Investor preview (D4817)'],
@@ -421,26 +423,26 @@ let listed = 0;
 for (const dir of new Set([...DOCUMENTED.keys(), ...[...MARKED].filter(([, m]) => m === 'generated').map(([d]) => d)])) {
   const abs = join(ROOT, dir);
   const readmePath = join(abs, 'README.md');
-  if (!existsSync(readmePath)) continue;
-  const src = readFileSync(readmePath, 'utf8');
-  const block = findBlock(src);
-  if (!block) continue;
-  if (block.broken) { errors.push(`${dir}/README.md has a broken file list: one \`<!-- files:begin -->\`, then one \`<!-- files:end -->\``); continue; }
-  listed += 1;
-  const list = renderList(folderListing(abs, MARKED.get(dir) ?? null));
-  for (const row of list.split('\n').filter((l) => /\|\s*\|$/.test(l) && l.startsWith('| `'))) {
-    const name = /^\| `([^`]+)`/.exec(row)[1];
-    errors.push(/\.md$/.test(name)
-      ? `${dir}/${name} does not open with a heading — its first line describes it in ${dir}/README.md's generated list (#6465)`
-      : `${dir}/${name} has no header comment — its first line describes it in ${dir}/README.md's generated file list (#4104)`);
-  }
-  if (MODE === 'write') writeFileSync(readmePath, withBlock(src, list));
-  else if (MODE === 'clean') writeFileSync(readmePath, withBlock(src, ''));
-  // What a commit carries must hold no list: a committed list would make every new file a README edit.
-  const committed = findBlock(indexed(relative(ROOT, readmePath)) ?? (MODE === 'check' ? src : ''));
-  if (committed && !committed.broken && blockHoldsList(committed.content)) {
-    errors.push(`${dir}/README.md carries its generated file list in the index; it is generated, never committed — run \`node scripts/check-folder-docs.mjs --clean\` and stage the README again (#4104)`);
-  }
+  regularTextFile(readmePath, (src) => {
+    const block = findBlock(src);
+    if (!block) return;
+    if (block.broken) { errors.push(`${dir}/README.md has a broken file list: one \`<!-- files:begin -->\`, then one \`<!-- files:end -->\``); return; }
+    listed += 1;
+    const list = renderList(folderListing(abs, MARKED.get(dir) ?? null));
+    for (const row of list.split('\n').filter((l) => /\|\s*\|$/.test(l) && l.startsWith('| `'))) {
+      const name = /^\| `([^`]+)`/.exec(row)[1];
+      errors.push(/\.md$/.test(name)
+        ? `${dir}/${name} does not open with a heading — its first line describes it in ${dir}/README.md's generated list (#6465)`
+        : `${dir}/${name} has no header comment — its first line describes it in ${dir}/README.md's generated file list (#4104)`);
+    }
+
+    // What a commit carries must hold no list: a committed list would make every new file a README edit.
+    const committed = findBlock(indexed(relative(ROOT, readmePath)) ?? (MODE === 'check' ? src : ''));
+    if (committed && !committed.broken && blockHoldsList(committed.content)) {
+      errors.push(`${dir}/README.md carries its generated file list in the index; it is generated, never committed — run \`node scripts/check-folder-docs.mjs --clean\` and stage the README again (#4104)`);
+    }
+    return MODE === 'write' ? withBlock(src, list) : MODE === 'clean' ? withBlock(src, '') : null;
+  }, MODE !== 'check');
 }
 
 // Rule 4: every tracked README.md, not only the documented folders' — union

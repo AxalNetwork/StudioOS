@@ -1,3 +1,4 @@
+import NetworkIntroOffer from './relationships/NetworkIntroOffer';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -305,6 +306,8 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
   const [detail, setDetail] = useState(null);   // the proposition whose match reasoning is open
   const [terms, setTerms] = useState(null);     // the proposition whose terms are being written
   const [consentOpen, setConsentOpen] = useState(false);
+  const [offerOpen,setOfferOpen]=useState(false);
+  const [offerNotice,setOfferNotice]=useState(null);
 
   // The zone row's chip, over derived state. `all` is the artboard's default.
   const [filter, setFilter] = useState('all');
@@ -444,6 +447,7 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
   const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
 
   const handlers = {
+    offerIntroduction:{onClick:()=>setOfferOpen(true),title:'Offer an introduction between two of your accepted ties.'},
     consentLog: {
       onClick: () => setConsentOpen(true),
       disabled: props_.length === 0,
@@ -463,8 +467,10 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
 
   return (
     <div className="space-y-4">
+        {offerNotice&&<p role="status" className="text-sm text-gray-700 dark:text-gray-300">{offerNotice}</p>}
+      {offerOpen&&<NetworkIntroOffer onClose={()=>setOfferOpen(false)} onOffered={()=>{setOfferOpen(false);setOfferNotice('Introduction offered. Both people can accept or decline from Introductions.');}} />}
       {(zoneActions || zoneFilters) && (
-        <ZoneToolbar
+      <ZoneToolbar
           className="mb-3"
           role={role}
           filters={zoneFilters ? zoneFilters({ value: filter, onChange: choose }) : []}
@@ -549,6 +555,7 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
         <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className={selectCls}>
           <option value="all">All sources</option>
           <option value="matching">Matched for you</option>
+          <option value="offered">Offered by a tie</option>
           <option value="reciprocal">Matched with you</option>
           <option value="admin">Curated by Axal</option>
         </select>
@@ -602,9 +609,9 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
               cells: [
                 {
                   text: name,
-                  seam: p.source === 'reciprocal' ? 'Matched with you' : null,
-                  ours: p.source === 'reciprocal' ? null : 'Ours',
-                  sub: `${entityLabel(p.target)}${p.target?.country ? ` · ${p.target.country}` : ''} · ${p.score} match`,
+                  seam: p.source==='offered'?'Offered by a tie':p.source === 'reciprocal' ? 'Matched with you' : null,
+                  ours: ['reciprocal','offered'].includes(p.source) ? null : 'Ours',
+                  sub: `${entityLabel(p.target)}${p.target?.country ? ` · ${p.target.country}` : ''} · ${p.score==null?'Match not recorded':`${p.score} match`}`,
                 },
                 {
                   pill: state,
@@ -646,7 +653,7 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
                 { text: consentRecord(p, name), gate: gate ? 'Gated' : null },
                 {
                   text: p.terms?.outcome || standing(state, name),
-                  node: (
+                  node: p.source==='offered'?null:(
                     <button type="button" onClick={() => setDetail(p)}
                       className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400">
                       Why this match
@@ -915,7 +922,7 @@ function MatchDetail({ prop, onClose }) {
             {t.headline && <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t.headline}</p>}
           </div>
           <div className="flex-shrink-0 text-right">
-            <div className={`text-2xl font-bold ${scoreTone(prop.score)}`}>{prop.score}</div>
+            <div className={`text-2xl font-bold ${scoreTone(prop.score)}`}>{prop.score==null?'Not recorded':prop.score}</div>
             <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400">match</div>
           </div>
         </div>
