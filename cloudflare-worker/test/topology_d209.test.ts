@@ -329,7 +329,9 @@ test('each workflow deploys what the page says, on the trigger it says', () => {
   const branch = invocation('branch-provision.yml');
   assert.equal(branch.length, 1);
   assert.match(branch[0], /--config "wrangler\.branch\.\$\{BRANCH\}\.toml"/);
-  const preview = invocation('pr-preview.yml');
+  // D7146: the pull-request run builds; the trusted workflow_run deploys.
+  assert.equal(invocation('pr-preview.yml').length, 0);
+  const preview = invocation('pr-preview-deploy.yml');
   assert.equal(preview.length, 1);
   assert.match(preview[0], /--config wrangler\.pr-preview\.toml/);
   // Exactly two workflows deploy with a branch config (D253): provisioning,
@@ -356,7 +358,8 @@ test('each workflow deploys what the page says, on the trigger it says', () => {
     assert.equal(/push to main/.test(w.trigger), pushesMain, `${w.file}: "${w.trigger}" against on: ${on}`);
     assert.equal(/by hand/.test(w.trigger), on.includes('workflow_dispatch'), `${w.file}: "${w.trigger}" against on: ${on}`);
     assert.equal(/pull request/.test(w.trigger), on.includes('pull_request'), `${w.file}: "${w.trigger}" against on: ${on}`);
-    assert.ok(on.every((k) => ['push', 'workflow_dispatch', 'pull_request'].includes(k)), `${w.file} has a trigger the page does not name: ${on}`);
+    assert.equal(/after each preview build finishes, from main/.test(w.trigger), on.includes('workflow_run'), `${w.file}: "${w.trigger}" against on: ${on}`);
+    assert.ok(on.every((k) => ['push', 'workflow_dispatch', 'pull_request', 'workflow_run'].includes(k)), `${w.file} has a trigger the page does not name: ${on}`);
   }
   // "dispatched by HQ's Deploy step": the one dispatch names this workflow.
   assert.match(read('cloudflare-worker/src/routes/admin_deployments.ts'), /export const PROVISION_WORKFLOW = 'branch-provision\.yml';/);

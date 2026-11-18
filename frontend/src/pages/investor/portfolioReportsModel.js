@@ -269,6 +269,56 @@ export function seriesLine(s) {
 }
 
 /**
+ * D6224 (#6224): the reported figures as a CSV the investor takes away, built
+ * from the same `seriesOf` rows the tables draw — one row per figure per
+ * report received, oldest first, in the canvas's figure order. A gap is
+ * "Not recorded" with its reason, never 0 and never blank. Pure: no read.
+ */
+export const FIGURES_CSV_HEADER = Object.freeze(['Period', 'Figure', 'Value', 'Unit', 'Source', 'Corrected', 'Why not recorded']);
+const UNIT_WORDS = { usd: 'USD', pct: 'percent', months: 'months', multiple: 'multiple', count: 'count' };
+
+/**
+ * One CSV field (RFC 4180): quoted when it holds a quote, comma or line
+ * break, with quotes doubled. Text that a spreadsheet would run as a formula
+ * (a leading = + - @, tab or carriage return) is prefixed with a single
+ * quote. A finite number is written as itself, so a negative burn stays a number.
+ */
+export function csvCell(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** The CSV rows (header first) for the reports received; each a list of fields. */
+export function figuresCsvRows(reports) {
+  const rows = [[...FIGURES_CSV_HEADER]];
+  for (const key of FIGURE_KEYS) {
+    const s = seriesOf(reports, key);
+    for (const p of s.points) {
+      const unit = p.unit || s.unit;
+      rows.push([
+        p.label, s.label,
+        p.value == null ? 'Not recorded' : p.value,
+        unit ? UNIT_WORDS[unit] || unit : 'Not recorded',
+        p.source || 'Not recorded',
+        p.corrected ? 'Yes' : 'No',
+        p.value == null ? p.reason || 'Not recorded' : '',
+      ]);
+    }
+  }
+  return rows;
+}
+
+/** The whole file: CRLF line ends, as RFC 4180 has them. */
+export function figuresCsv(reports) {
+  return figuresCsvRows(reports).map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
+/** The file's name, dated by the day it was taken. */
+export const figuresCsvName = (now = new Date()) => `reported-figures-${todayOf(now)}.csv`;
+
+/**
  * Eadwyn's "What changed since the last report", from frozen figures only:
  * each figure the last two reports both carried, then each period that is
  * late or missing. It never fills in a figure.
