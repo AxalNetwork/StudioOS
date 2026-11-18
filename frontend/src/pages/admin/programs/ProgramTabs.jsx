@@ -158,3 +158,20 @@ export function InfluencerTabs({ queue }) {
     </Strip>
   );
 }
+
+/**
+ * D5895 (#5895): AI-native Venture in the generic shell (PG03a): the shell's six core sections, no module tab. The
+ * paths stay literal, as every strip here is, so the reachability walk reads each one as a door.
+ */
+export function AiNativeTabs() {
+  return (
+    <Strip label="AI-native Venture">
+      <Tab to="/admin/programs/ai-native-venture" end testId="programs-tab-overview">Overview</Tab>
+      <Tab to="/admin/programs/ai-native-venture/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/ai-native-venture/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/ai-native-venture/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/ai-native-venture/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/ai-native-venture/settings" testId="programs-tab-settings">Settings</Tab>
+    </Strip>
+  );
+}

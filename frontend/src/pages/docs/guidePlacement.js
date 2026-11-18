@@ -92,6 +92,7 @@ export const GUIDE_PLACEMENT = {
   "build/pitch-deck": {"area": "raising", "surface": "/raise/pitch", "appliesTo": ["founder"]},
   "build/deck-share-viewer": {"area": "raising", "surface": null, "appliesTo": ["founder"]},
   "build/financial-model": {"area": "building", "surface": "/raise/use-of-funds/runway/forecast", "appliesTo": ["founder"]},
+  "validate-grow/board-meeting-resolutions": {"area": "legal", "surface": null, "appliesTo": ["founder", "advisor"]},
   "validate-grow/trust-center": {"area": "data", "surface": "/trust/me", "appliesTo": null},
   "validate-grow/data-room": {"area": "data", "surface": "/raise/data-room", "appliesTo": null},
   "validate-grow/due-diligence": {"area": "data", "surface": "/research/diligence", "appliesTo": ["investor"]},

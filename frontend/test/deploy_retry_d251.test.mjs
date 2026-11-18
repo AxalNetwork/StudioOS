@@ -12,7 +12,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, chmodSync, readFileSync as rf } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, chmodSync, existsSync, readFileSync as rf } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -38,14 +38,25 @@ function stepScript(name) {
  * { code: exit status, out: what wrangler prints }. Returns the exit status
  * and how many times npx was called.
  */
-function runDeploy(outcomes) {
+function runDeploy(outcomes, recipient = '') {
   const dir = mkdtempSync(join(tmpdir(), 'd251-'));
   const plan = join(dir, 'plan.json');
   const calls = join(dir, 'calls');
+  const secretPath = join(dir, 'secret-path');
   writeFileSync(plan, JSON.stringify(outcomes));
   writeFileSync(calls, '');
   writeFileSync(join(dir, 'npx'), `#!/usr/bin/env node
 const fs = require('fs');
+const assert = require('node:assert/strict');
+const arg = process.argv.indexOf('--secrets-file');
+assert.ok(arg > 0);
+const path = process.argv[arg + 1];
+assert.equal(fs.statSync(path).mode & 0o777, 0o600);
+assert.deepEqual(JSON.parse(fs.readFileSync(path, 'utf8')), {
+  MAGIC_INSERT_CANARY_EMAIL: ${JSON.stringify(recipient.trim() || 'disabled')},
+});
+assert.equal(process.env.MAGIC_INSERT_CANARY_EMAIL, undefined);
+fs.writeFileSync(${JSON.stringify(secretPath)}, path);
 const plan = JSON.parse(fs.readFileSync(${JSON.stringify(plan)}, 'utf8'));
 const n = fs.readFileSync(${JSON.stringify(calls)}, 'utf8').length;
 fs.appendFileSync(${JSON.stringify(calls)}, 'x');
@@ -57,8 +68,13 @@ process.exit(o.code);
   chmodSync(join(dir, 'npx'), 0o755);
   chmodSync(join(dir, 'sleep'), 0o755);
   const r = spawnSync('bash', ['-e', '-c', stepScript('Deploy to Cloudflare Worker')], {
-    cwd: dir, env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, encoding: 'utf8',
+    cwd: dir,
+    env: { ...process.env, RUNNER_TEMP: dir, MAGIC_INSERT_CANARY_EMAIL: recipient, PATH: `${dir}:${process.env.PATH}` },
+    encoding: 'utf8',
   });
+  assert.ok(existsSync(secretPath), r.stderr);
+  assert.equal(existsSync(rf(secretPath, 'utf8')), false, 'release left its temporary secret file behind');
+  if (recipient.trim()) assert.ok(!(r.stdout + r.stderr).includes(recipient.trim()));
   return { status: r.status, calls: rf(calls, 'utf8').length, out: r.stdout };
 }
 
@@ -67,7 +83,7 @@ const OK = { code: 0, out: 'Deployed studioos triggers' };
 const CONFIG = { code: 1, out: '✘ [ERROR] Could not resolve "./missing" [code: 10021]' };
 
 test('a transient 10013 is retried, and a later success makes the step green', () => {
-  const r = runDeploy([E10013, E10013, OK]);
+  const r = runDeploy([E10013, E10013, OK], '  monitor+fixture@example.invalid  ');
   assert.equal(r.status, 0, 'two 10013s then a success still failed the step');
   assert.equal(r.calls, 3);
 });

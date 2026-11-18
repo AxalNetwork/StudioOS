@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { recordedRelevance } from '../pages/research/companyCandidateRead';
+import { exportProblem } from '../pages/research/companyAnalysisDraft';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { useRailOption, useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions/index.js';
@@ -63,13 +64,37 @@ export function download(filename, text, mime) {
   URL.revokeObjectURL(url);
 }
 
-export async function fetchMarkdown(url) {
+/**
+ * D7176: one export request, answered as what came back — the status, the
+ * content type, the version the Worker says it wrote (`X-Analysis-Version`)
+ * and the body. The caller decides whether that is a file.
+ */
+export async function fetchExport(url) {
   const token = localStorage.getItem('token');
   const res = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     credentials: 'include',
   });
-  return res.text();
+  const version = Number(res.headers.get('X-Analysis-Version')) || null;
+  return { status: res.status, type: res.headers.get('content-type') || '', version, text: await res.text() };
+}
+
+/**
+ * The Markdown export's text. D7176: it used to return `res.text()` whatever
+ * came back, so a 503 page was saved as a .md file. Now a status that is not
+ * 2xx, or a body that is not Markdown, throws, and nothing is downloaded.
+ */
+export async function fetchMarkdown(url) {
+  const got = await fetchExport(url);
+  const problem = exportProblem(got.status, got.type, 'md');
+  if (problem) {
+    const e = new Error(problem.kind === 'status'
+      ? `The Markdown export failed. Nothing was downloaded. The server answered ${problem.status}.`
+      : `The export did not return Markdown. Nothing was downloaded. The server answered ${problem.status} with ${problem.type}.`);
+    e.status = got.status;
+    throw e;
+  }
+  return got.text;
 }
 
 /**
@@ -327,6 +352,13 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     try {
       const full = await api.competitors.rerun(analysis.id, { inputs: analysis.inputs || inputs, keep_manual: true }, railPressHeaders(pressKey.rerun));
       if (runFor.current !== run) return;
+      // D7176: a rerun answers a proposal and replaces nothing. It is reviewed
+      // on the analysis's own page, which opens with it; this panel's draft is
+      // left as it is.
+      if (full?.proposal_id) {
+        navigate(`/research/companies/${encodeURIComponent(analysis.id)}`, { state: { rerunProposal: full } });
+        return;
+      }
       setAnalysis(full);
       setDirty(false);
     } catch (e) {
@@ -344,8 +376,11 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     try {
       const full = await api.competitors.refresh(analysis.id, railPressHeaders(pressKey.refresh));
       if (runFor.current !== run) return;
-      setAnalysis(full);
-      setDirty(false);
+      // D7176: a refresh changes sources only, so the panel takes the sources
+      // and the version and keeps any unsaved edit on screen.
+      setAnalysis((prev) => (dirty && prev
+        ? { ...prev, sources: full?.sources || prev.sources, version: full?.version ?? prev.version }
+        : full));
       setStatus('Sources refreshed.');
     } catch (e) {
       if (runFor.current === run) setError(e.message || 'Refresh failed.');
@@ -363,6 +398,8 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
         title: analysis.title,
         output: analysis.output,
         candidates: analysis.candidates,
+        // D7176: a save names the version it was made on; an older one answers 409.
+        base_version: analysis.version,
       });
       setAnalysis(full);
       setDirty(false);
@@ -625,6 +662,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           setManual={setManual}
           onAddManual={onAddManual}
           linkToDossier={linkToDossier}
+          onExportError={setError}
         />
       )}
 
@@ -632,10 +670,20 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           `{visibleSaved.length > 0 && …}` meant a failed read, a still-loading
           page and an empty store all rendered nothing, and nothing is the one
           thing that cannot be told apart from the others. */}
+      {/* D7176 (RS-14 A1, panel 1): loading is drawn, with no count, until the list is read. */}
+      {savedState === 'loading' && (
+        <div className={`${CARD} p-5 mt-6`} aria-busy="true" data-testid="saved-analyses-loading">
+          <div className="font-semibold text-gray-900 dark:text-gray-100">Saved analyses</div>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400" role="status">Loading your saved analyses.</p>
+          {['w-11/12', 'w-8/12', 'w-10/12'].map((w) => <div key={w} className={`mt-2 h-3 ${w} rounded bg-gray-200 dark:bg-gray-800`} />)}
+        </div>
+      )}
+
       {savedState === 'failed' && (
         <div className={`${CARD} p-5 mt-6`} role="alert">
           <div className="font-semibold text-gray-900 dark:text-gray-100">Your saved analyses could not be read.</div>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            This is not a claim that you have none.
             This is a problem with the request, not with your account — anything you have run is still stored.
             Running a new analysis below will also refresh this list.
           </p>
@@ -697,12 +745,38 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   );
 }
 
+/** D7176 (RS-14 A1): a saved row's run state, in the canvas's words. */
+const RUN_STATE = { complete: 'Complete', running: 'Running', error: 'Last run failed', draft: 'Draft' };
+const RUN_TONE = {
+  complete: 'text-emerald-700 dark:text-emerald-300',
+  running: 'text-violet-700 dark:text-violet-300',
+  error: 'text-red-700 dark:text-red-300',
+  draft: 'text-gray-600 dark:text-gray-400',
+};
+const savedDay = (v) => {
+  const t = Date.parse(`${String(v || '').replace(' ', 'T').replace(/Z?$/, 'Z')}`);
+  return Number.isFinite(t) ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+};
+
+/**
+ * One saved analysis: title, mode, run state, the edited flag and dates —
+ * everything the list read returns (D7176, RS-14 A1). It holds no competitor
+ * counts, so none are shown.
+ */
 function SavedRow({ a }) {
+  const created = savedDay(a.created_at);
+  const updated = savedDay(a.updated_at);
   return (
     <>
       <div className="min-w-0">
         <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{a.title || 'Untitled'}</div>
-        <div className="text-xs text-gray-400 dark:text-gray-500">{a.mode} · {new Date(a.updated_at + 'Z').toLocaleDateString()}{a.edited ? ' · edited' : ''}</div>
+        <div className="flex flex-wrap items-center gap-x-2 text-xs text-gray-500 dark:text-gray-400">
+          <span>{a.mode}</span>
+          <span className={`font-semibold ${RUN_TONE[a.status] || RUN_TONE.draft}`}>{RUN_STATE[a.status] || a.status || 'Draft'}</span>
+          {a.edited ? <span className="rounded border border-violet-200 px-1 font-semibold text-violet-700 dark:border-violet-800 dark:text-violet-300">Edited since run</span> : null}
+          {updated && <span>{`updated ${updated}`}</span>}
+          {created && <span>{`created ${created}`}</span>}
+        </div>
       </div>
       <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-violet-500" />
     </>
@@ -735,7 +809,7 @@ function AnalysisResults(props) {
     analysis, dirty, savingEdits, analyzing, onSave, onRerun, onRefresh,
     onRemoveCandidate, updateCandidate, updateOutput, setTitle,
     showManual, setShowManual, manual, setManual, onAddManual,
-    linkToDossier,
+    linkToDossier, onExportError,
   } = props;
   const out = analysis.output || {};
   const candidates = analysis.candidates || [];
@@ -750,8 +824,13 @@ function AnalysisResults(props) {
     download(`competitor-analysis-${analysis.id.slice(0, 8)}.json`, JSON.stringify(analysis, null, 2), 'application/json');
   }
   async function exportMd() {
-    const md = await fetchMarkdown(api.competitors.exportUrl(analysis.id, 'md'));
-    download(`competitor-analysis-${analysis.id.slice(0, 8)}.md`, md, 'text/markdown');
+    // D7176: a failed export downloads nothing and says why.
+    try {
+      const md = await fetchMarkdown(api.competitors.exportUrl(analysis.id, 'md'));
+      download(`competitor-analysis-${analysis.id.slice(0, 8)}.md`, md, 'text/markdown');
+    } catch (e) {
+      onExportError?.(e?.message || 'The Markdown export failed. Nothing was downloaded.');
+    }
   }
 
   return (

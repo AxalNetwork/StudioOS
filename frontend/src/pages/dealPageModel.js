@@ -1,7 +1,7 @@
 /**
- * D1148 (#2421) — the deal page's tabs, each at its own address, and what a
- * tab says while nothing reads its blocks yet. Pure, so the tests read it
- * without a browser.
+ * D1148 (#2421) — the deal page's tabs, each at its own address. Pure, so
+ * the tests read it without a browser. D6168 (#6168): the tabs' WAITS are
+ * gone; every tab draws its own read.
  *
  * WHERE THE TABS LIVE. `/deals/:dealId` is Overview, and `/deals/:dealId/<tab>`
  * is every other tab (the canvas's `/deals/[id]/<tab>`). A tab word the
@@ -137,8 +137,13 @@ export function tabHref(dealId, tab) {
 
 export const NOT_YET = 'Not read here yet';
 
-/** Why a tab draws no blocks today. Never a zero, never "none". */
-export const WAITS = {
-  scorecard: 'No per-deal score read exists yet. The scorecard is SCORING’s canvas (#2428), drawn here once its read lands. This is not a score of zero.',
-  evidence: 'No per-deal evidence read exists yet. The evidence block is the Raise evidence canvas (#2430), shown here as the founder shares each item.',
-};
+/**
+ * D6168 (#6168): one scope's drawer on the Scorecard tab, at its own address
+ * (`/deals/:id/scorecard?scope=team`). Team, Market and Traction link each of
+ * their scorecard rows here; Back from the drawer is the browser's own. A
+ * scope word that is not a key opens the tab with no drawer.
+ */
+export function scopeHref(dealId, scope) {
+  const base = tabHref(dealId, 'scorecard');
+  return /^[a-z][a-z_]{1,31}$/.test(String(scope ?? '')) ? `${base}?scope=${scope}` : base;
+}

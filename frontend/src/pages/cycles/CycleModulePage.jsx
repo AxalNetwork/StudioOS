@@ -67,8 +67,12 @@ export function Cell({ cell, first = false, linkState = undefined, plain = false
       : <span key={i} className="text-axal-ink/80 dark:text-gray-300">{l.text}</span>))}</span>;
   }
   const text = !plain && v.href ? <Link to={v.href} state={linkState} className="hover:underline">{v.text}</Link> : v.text;
-  if (v.tone) return <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL[v.tone]}`}>{text}</span>;
-  return <span className={first ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-ink/80 dark:text-gray-300'}>{text}</span>;
+  const value = v.tone ? <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL[v.tone]}`}>{text}</span>
+    : <span className={first ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-ink/80 dark:text-gray-300'}>{text}</span>;
+  if (!v.note) return value;
+  // #6006: the cell's note lines, small and muted under the value.
+  return <span className="inline-flex flex-col items-start gap-0.5">{value}
+    {v.note.map((line, i) => <span key={i} className="text-[11px] font-normal leading-snug text-axal-muted dark:text-gray-400" data-testid="cell-note">{line}</span>)}</span>;
 }
 
 /**

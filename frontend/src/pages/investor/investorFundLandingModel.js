@@ -37,9 +37,10 @@ export function fundZoneHref(path, fundId) {
   return `${path}?fund=${encodeURIComponent(String(fundId))}`;
 }
 
-/** What is true for a GP about distributions and new funds today (no GP page runs either). */
+/** What is true for a GP about distributions (no GP page runs one) and a fund not yet recorded. */
 export const DISTRIBUTIONS_TODAY = 'Distributed is what has been recorded on this fund. No GP page runs a distribution yet: Axal staff run one from the fund-administration console.';
-export const NO_FUND_TODAY = 'No fund record names you as its GP yet. No GP page creates one: Axal staff set a fund up in the fund-administration console. Once one names you as its GP, its commitments, LP records, capital movements and reporting periods appear here.';
+// #6235: the no-fund state now creates the fund (FundTermsForm.jsx), so this no longer sends the GP to Axal staff.
+export const NO_FUND_TODAY = 'No fund record names you as its GP yet. Once one does, its commitments, LP records, capital movements and reporting periods appear here.';
 
 /**
  * #6248: the landing's performance figures, from `GET /api/fund-performance/:id` (D627) — the same

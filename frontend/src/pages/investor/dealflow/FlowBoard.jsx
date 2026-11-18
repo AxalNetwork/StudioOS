@@ -105,10 +105,11 @@ export function PhoneBoard({ rows, cards, picked, onPick, onMove, busy, showPass
   const stage = stages.includes(chosen) ? chosen : stages[0];
   return (
     <div className="flex flex-col gap-2" data-testid="dealflow-phone-board">
-      <nav aria-label="Stage" className="flex gap-1 overflow-x-auto">
+      {/* D5902 (DE03b): the tabs scroll sideways inside their own strip, never the page; each is a 44px target. */}
+      <nav aria-label="Stage" className="flex max-w-full gap-1 overflow-x-auto" data-testid="dealflow-phone-stage-tabs">
         {stages.map((s) => (
           <button key={s} type="button" aria-pressed={stage === s} onClick={() => setStage(s)}
-            className={`whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-semibold ${stage === s ? 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
+            className={`min-h-[44px] flex-none whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-semibold ${stage === s ? 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`dealflow-phone-stage-${s}`}>{STAGE_WORD[s]} {rows.filter((r) => r.stage === s).length}</button>
         ))}
       </nav>

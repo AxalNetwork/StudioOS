@@ -1,3 +1,5 @@
+import NetworkIntroOffer from '../relationships/NetworkIntroOffer';
+import NetworkTieRequest from '../relationships/NetworkTieRequest';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, CircleAlert, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -165,6 +167,8 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const deepLink = resolveIntroTarget(params);
   const highlightedIntro = introTargetIsMine(deepLink, 'proposition') ? deepLink.uid : '';
   const requestedTab = params.get('tab') || '';
+  const [networkPicker, setNetworkPicker] = useState(null);
+  const [networkPickerNotice,setNetworkPickerNotice]=useState('');
   const [relationships, setRelationships] = useState(null);
   const [introductions, setIntroductions] = useState(null);
   const [asks, setAsks] = useState(null);
@@ -509,6 +513,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
   return (
     <main className="investor-network-workspace" data-testid="investor-network-workspace">
+      {networkPickerNotice && <p role="status">{networkPickerNotice}</p>}
+      {networkPicker === 'introduction' && <NetworkIntroOffer onClose={()=>setNetworkPicker(null)} onOffered={()=>{setNetworkPicker(null);setNetworkPickerNotice('Introduction offered. Each person chooses whether to accept.');}} />}
+      {networkPicker === 'tie' && <NetworkTieRequest onClose={()=>setNetworkPicker(null)} onSent={()=>{setNetworkPicker(null);setNetworkPickerNotice('Tie requested. It counts only after the other person accepts.');}} />}
       <div className="inw-layout">
         <section className="inw-main">
           {!embedded && <header className="inw-hero">
@@ -530,7 +537,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 : errors.relationships ? 'last-touch coverage unavailable'
                   : touchCoverage ? `${coldCount} going cold` : 'no touches logged yet';
               return `${ties} ties · ${touch}`;
-            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), companyLine(r), r.relationship_type] } })} />
+            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { addPerson: {onClick:()=>setNetworkPicker('tie'),title:'Ask someone you share a deal or data room with to accept a tie.'}, setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), companyLine(r), r.relationship_type] } })} />
             <p className="inw-footnote" data-testid="tile-coldest">
               Coldest {relationships === null ? '— loading' : coldest == null ? '— not recorded (no tie is past the cold window)' : `— ${coldest}d`}
             </p>
@@ -689,7 +696,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTargetName(a, askNamesUnreadable), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { handlers: {offerIntroduction: {onClick:()=>setNetworkPicker('introduction'),title:'Offer an introduction between two of your accepted ties.'}}, view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTargetName(a, askNamesUnreadable), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid="intro-credit-summary">
                 <span>Spendable intro credits · <strong>{creditView.label}</strong></span>
                 <button type="button" className="min-h-11 font-semibold underline" onClick={() => load(true)} disabled={refreshing} data-testid="intro-credit-retry">{refreshing ? 'Reading…' : 'Refresh credits'}</button>
@@ -711,7 +718,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 <div className="inw-proposition-list">{visiblePropositions.map((prop) => {
                   const target = prop.target || {}; const active = prop.status === 'pending'; const busy = busyUid === prop.uid;
                   return <article id={`network-intro-${safeKey(prop.uid)}`} className={`inw-proposition ${active ? 'featured' : ''} ${highlightedIntro === prop.uid ? 'highlighted' : ''}`} key={prop.uid} data-testid={`card-introduction-${prop.uid}`}>
-                    <div className="inw-prop-top"><span className="inw-prop-label">Proposal · {prop.source || 'network'}</span><span className="inw-score" data-testid={`text-intro-score-${prop.uid}`}>{Number.isFinite(Number(prop.score)) ? `${prop.score} match` : 'Match pending'}</span></div>
+                    <div className="inw-prop-top"><span className="inw-prop-label">Proposal · {prop.source || 'network'}</span><span className="inw-score" data-testid={`text-intro-score-${prop.uid}`}>{prop.source==='offered'?'Match not recorded':Number.isFinite(Number(prop.score)) ? `${prop.score} match` : 'Match pending'}</span></div>
                     <strong>{target.name || target.email || 'Proposed introduction'}</strong>
                     <p>{introductionContext(prop)}</p>
                     <p data-testid={`intro-counterpart-${prop.uid}`}>Other side: {counterpartAnswer(prop.counterpart_status)}</p>
