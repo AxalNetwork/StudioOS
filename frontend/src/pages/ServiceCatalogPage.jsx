@@ -594,7 +594,7 @@ function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
         <FillFormBar fill={fill} />
         <div>
           <FillLabel fill={fill} name="summary" label="What do you deliver?" value={form.summary}>
-            <label htmlFor="offering-summary" className="mb-1 block text-[11px] uppercase tracking-wide text-gray-500">Summary (what the founder gets)</label>
+            <label htmlFor="offering-summary" className="mb-1 block text-[11px] uppercase tracking-wide text-gray-500">What do you deliver?</label>
           </FillLabel>
           <textarea id="offering-summary" rows={3} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
         </div>
