@@ -87,10 +87,32 @@ def euro_cents_from_millions(value: str | None) -> int | None:
     return round(amount * 100_000_000) if amount is not None else None  # EUR millions -> cents
 
 
+_MILLIONS_RE = re.compile(r'\d\s*m\s*$', re.IGNORECASE)
+
+
 def euro_cents_exact(value: str | None) -> int | None:
-    """Column 67 ("€1,375,000,000.00") is already full euros, not millions."""
+    """Column 67 ("€1,375,000,000.00") is full euros, not millions.
+
+    D7166 (#7166): on the sheet's newer rows column 67 holds the shorthand
+    ("€ 121m") instead. Read as full euros that stored a millionth of the size
+    (Angular Ventures III: €121m as 12100 cents, 232 rows), so a value ending
+    in 'm' is millions, like column 5.
+    """
+    if value and _MILLIONS_RE.search(value.strip()):
+        return euro_cents_from_millions(value)
     amount = parse_amount(value)
     return round(amount * 100) if amount is not None else None  # EUR -> cents
+
+
+def vehicle_uid(manager: str, fund_number: str | None) -> str:
+    """D7166 (#7166): one row per vehicle, keyed by manager plus fund number.
+
+    'Dawn Capital' + 'V' is `dawncapital-v`; a row with no fund number keeps
+    the manager's own key (`dawncapital`). The same two inputs always give
+    the same uid, so a re-import never moves a vehicle.
+    """
+    number = normalized(fund_number or '')
+    return f'{normalized(manager)}-{number}' if number else normalized(manager)
 
 
 def parse_report_date(value: str | None) -> str | None:
@@ -123,8 +145,15 @@ def sql(value) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
-def parse_euro(today: date) -> tuple[dict[str, dict], dict[str, dict], int]:
-    """Returns (directory_by_uid, reports_by_(uid,period), raw_row_count)."""
+def parse_euro(today: date, moves: dict[str, str] | None = None) -> tuple[dict[str, dict], dict[str, dict], int]:
+    """Returns (directory_by_uid, reports_by_(uid,period), raw_row_count).
+
+    D7166 (#7166): keyed by vehicle (`vehicle_uid`), so a manager's Fund V and
+    its Opportunity fund are two rows, each with its own reports. `moves`, when
+    given, receives each manager key migration 378 used whose vehicle now has
+    another uid: the vehicle 378's row showed, which is the fund number on the
+    manager's first sheet row (378 never updated the number).
+    """
     with EURO.open(newline='', encoding='utf-8-sig') as f:
         rows = list(csv.reader(f))
     directory: dict[str, dict] = {}
@@ -133,9 +162,11 @@ def parse_euro(today: date) -> tuple[dict[str, dict], dict[str, dict], int]:
         name = (row[0] if row else '').strip()
         if not name:
             continue
-        uid = normalized(name)
         hq = FLAG_RE.sub('', row[3] if len(row) > 3 else '').strip() or None
         fund_number = (row[4] if len(row) > 4 else '').strip() or None
+        uid = vehicle_uid(name, fund_number)
+        if moves is not None and normalized(name) not in moves:
+            moves[normalized(name)] = uid
         qtr = row[7] if len(row) > 7 else ''
         year = row[8] if len(row) > 8 else ''
         period = period_for(qtr, year)
@@ -158,9 +189,18 @@ def parse_euro(today: date) -> tuple[dict[str, dict], dict[str, dict], int]:
             'eifo_flag': lp_flags(row[10] if len(row) > 10 else '')[1],
             'source_name': EURO_SOURCE, 'source_url': EURO_URL,
         })
-        # The row with the latest period wins the directory's "current" snapshot.
-        if period and (not item.get('quarter') or period > item['quarter']):
-            item.update({'fund_size_cents': size_cents, 'fund_date': report_date, 'quarter': period})
+        # The vehicle's row with the latest period wins its "current" snapshot,
+        # every field of it (D7166), not only the size and date.
+        if uid in directory and period and (not item.get('quarter') or period > item['quarter']):
+            item.update({
+                'fund_size_cents': size_cents, 'fund_date': report_date, 'quarter': period, 'hq': hq,
+                'website': (row[1] if len(row) > 1 else '').strip() or None,
+                'linkedin': (row[2] if len(row) > 2 else '').strip() or None,
+                'sector_focus': (row[9] if len(row) > 9 else '').strip() or None,
+                'notable_lps': (row[10] if len(row) > 10 else '').strip() or None,
+                'eif_flag': lp_flags(row[10] if len(row) > 10 else '')[0],
+                'eifo_flag': lp_flags(row[10] if len(row) > 10 else '')[1],
+            })
         directory[uid] = item
 
         if period and size_cents is not None:
@@ -184,6 +224,9 @@ def parse_euro(today: date) -> tuple[dict[str, dict], dict[str, dict], int]:
             if key not in reports:
                 reports[key] = {'fund_uid': uid, 'period': annual_period, 'report_date': report_date_annual,
                                  'fund_size_cents': annual_cents, 'source_url': EURO_URL}
+    if moves is not None:
+        for key in [k for k, v in moves.items() if k == v or k in directory]:
+            del moves[key]
     return directory, reports, len(rows) - 1
 
 
@@ -286,6 +329,11 @@ def parse_shai(directory: dict[str, dict], path: Path, defer_to: frozenset[str] 
     def cell(row: list[str], idx: int) -> str:
         return row[idx].strip() if idx < len(row) else ''
 
+    # A firm is known by its manager key, whichever vehicle row holds it
+    # (D7166 keys EuroTech by vehicle, so `dawncapital-v` is Dawn Capital).
+    managers: dict[str, dict] = {}
+    for item in directory.values():
+        managers.setdefault(normalized(item.get('name') or ''), item)
     added = 0
     for row in rows[header_at + 1:]:
         name = cell(row, i_name)
@@ -294,7 +342,7 @@ def parse_shai(directory: dict[str, dict], path: Path, defer_to: frozenset[str] 
             continue
         if _EMAIL_RE.search(name):
             continue
-        known = directory.get(normalized(name))
+        known = directory.get(normalized(name)) or managers.get(normalized(name))
         if known is not None and (defer_to is None or known.get('source_name') in defer_to):
             continue
         number = cell(row, i_num) or None
@@ -438,6 +486,93 @@ def write_shai_migration(directory: dict[str, dict], out: Path, number: str, as_
     return body.count('INSERT OR REPLACE')
 
 
+def _directory_insert(item: dict, as_of: str) -> str:
+    year_m = re.match(r'^(\d{4})', item.get('quarter') or '')
+    fund_year = int(year_m.group(1)) if year_m else None
+    return (
+        'INSERT OR REPLACE INTO research_fund_directory '
+        '(uid,name,website,linkedin,hq,fund_number,fund_size_cents,fund_date,quarter,fund_year,sector_focus,notable_lps,eif_flag,eifo_flag,source_name,source_url,as_of) '
+        'VALUES (%s);' % ','.join(map(sql, [
+            item['uid'], item['name'], item['website'], item['linkedin'], item['hq'], item['fund_number'],
+            item['fund_size_cents'], item['fund_date'], item['quarter'], fund_year,
+            item['sector_focus'], item['notable_lps'], item['eif_flag'], item['eifo_flag'],
+            item['source_name'], item['source_url'], as_of,
+        ]))
+    )
+
+
+MOVES_TABLE = 'research_fund_directory_uid_moves'
+# The columns that hold a directory uid, and the filter each needs. Each is
+# remapped through the moves table, so a saved fund, a raise prospect or a
+# project subject keeps the vehicle it named.
+UID_REFERENCES = (
+    ('research_funds', 'catalogue_uid', ''),
+    ('raise_prospects', 'research_fund_uid', ''),
+    ('research_project_subjects', 'directory_uid', "kind = 'fund' AND "),
+)
+
+
+def is_migration_stem(text: str) -> bool:
+    """A D4106 migration stem: UTC minute, issue number, slug."""
+    return re.fullmatch(r'\d{12}_\d+_[a-z0-9_]+', text) is not None
+
+
+def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
+    """D7166 (#7166): the EuroTech list again, one row per vehicle, sizes fixed.
+
+    Returns the migration text and its counts. Only EuroTech rows and their
+    reports are replaced; every other list is left as it is. Each manager key
+    migration 378 used whose vehicle now has another uid is recorded in
+    `research_fund_directory_uid_moves`, and the columns that hold a directory
+    uid are moved with it.
+    """
+    moves: dict[str, str] = {}
+    directory, reports, rows = parse_euro(today, moves)
+    as_of = today.isoformat()
+    src = sql(EURO_SOURCE)
+    lines = [
+        f'-- {stem} — the EuroTech fund list re-imported, one row per vehicle (D7166, #7166).',
+        '-- Generated by scripts/import-research-funds.py eurotech-migration from',
+        f'-- attached_assets/{EURO.name}, as of {as_of}.',
+        '--',
+        '-- 1. One row per vehicle. Migration 378 keyed the list by manager, so a',
+        "--    manager's funds were one row (Dawn Capital V merged into Opp) and its",
+        "--    reports drew different vehicles as one fund's size over time. Rows are",
+        '--    now keyed by manager plus fund number (`dawncapital-v`); a row with no',
+        "--    fund number keeps the manager's key.",
+        "-- 2. Sizes. The sheet writes newer rows' exact-euro column as '€ 121m';",
+        '--    378 read that as full euros, a millionth of the size. It is millions.',
+        "-- 3. Moves. Each 378 uid that no longer names a row maps to the vehicle 378's",
+        '--    row showed, and every saved reference to it is moved with it.',
+        '--',
+        "-- Only this list's rows and reports are replaced. Re-runnable: the same",
+        '-- deletes, uid-keyed upserts, and updates that find nothing left to move.',
+        f'CREATE TABLE IF NOT EXISTS {MOVES_TABLE} (old_uid TEXT PRIMARY KEY, new_uid TEXT NOT NULL, moved_on TEXT NOT NULL);',
+    ]
+    for old in sorted(moves):
+        lines.append(f'INSERT OR REPLACE INTO {MOVES_TABLE} (old_uid,new_uid,moved_on) VALUES ({sql(old)},{sql(moves[old])},{sql(as_of)});')
+    lines.append(f'DELETE FROM research_fund_directory_reports WHERE fund_uid IN (SELECT uid FROM research_fund_directory WHERE source_name = {src});')
+    lines.append(f'DELETE FROM research_fund_directory WHERE source_name = {src};')
+    for uid in sorted(directory):
+        lines.append(_directory_insert(directory[uid], as_of))
+    for (uid, period) in sorted(reports):
+        r = reports[(uid, period)]
+        lines.append(
+            'INSERT OR REPLACE INTO research_fund_directory_reports '
+            '(fund_uid,period,report_date,fund_size_cents,source_url) VALUES (%s);' % ','.join(map(sql, [
+                r['fund_uid'], r['period'], r['report_date'], r['fund_size_cents'], r['source_url'],
+            ]))
+        )
+    for table, column, extra in UID_REFERENCES:
+        lines.append(
+            f'UPDATE {table} SET {column} = (SELECT m.new_uid FROM {MOVES_TABLE} m WHERE m.old_uid = {table}.{column}) '
+            f'WHERE {extra}{column} IN (SELECT old_uid FROM {MOVES_TABLE} '
+            'WHERE old_uid NOT IN (SELECT uid FROM research_fund_directory));'
+        )
+    counts = {'rows_read': rows, 'vehicles': len(directory), 'reports': len(reports), 'moves': len(moves)}
+    return '\n'.join(lines) + '\n', counts
+
+
 def parse_deep(directory: dict[str, dict]) -> int:
     """Adds directory-only rows for Deep Tech entries not already matched by
     name to a EuroTech row. USD sizes are not written to fund_size_cents
@@ -541,11 +676,21 @@ def main_shai(argv: list[str]) -> None:
         print('shai_rows_written', written)
         print('migration', out.relative_to(ROOT))
         return
-    raise SystemExit('usage: import-research-funds.py [shai-clean RAW_CSV | shai-migration NUMBER]')
+    if argv[0] == 'eurotech-migration' and len(argv) == 2 and is_migration_stem(argv[1]):
+        text, counts = eurotech_vehicle_migration(date.today(), argv[1])
+        out = ROOT / 'cloudflare-worker/sql/migrations' / f'{argv[1]}.sql'
+        out.write_text(text)
+        for key, value in counts.items():
+            print(key, value)
+        print('migration', out.relative_to(ROOT))
+        return
+    raise SystemExit('usage: import-research-funds.py [shai-clean RAW_CSV | shai-migration NUMBER | eurotech-migration STEM]')
 
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         main_shai(sys.argv[1:])
     else:
-        main()
+        # Migration 378 is applied and never rewritten. D7166 re-imports the
+        # EuroTech list with `eurotech-migration STEM` instead.
+        raise SystemExit('migration 378 is applied; use eurotech-migration STEM (D7166)')

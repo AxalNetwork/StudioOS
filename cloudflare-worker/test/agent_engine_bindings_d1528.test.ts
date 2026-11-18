@@ -6,7 +6,7 @@
  *     names, and under `[env.preview]` with `-preview` names;
  *   · the `v5-agent-scope` migration tag (after D1502's `v4-deck-gen`) in all three migration tables;
  *   · `AGENT_ENGINE`, `AGENT_AUTONOMY` and `AGENT_RUNTIME` default to `off`,
- *     `manual` and `do`, and `AGENT_AI_GATEWAY` is set nowhere;
+ *     `manual` and `do`, and `AGENT_AI_GATEWAY` is `agents` in every table (D7073);
  *   · the cron lists are unchanged (the sweep has no cron line of its own);
  *   · a branch gets its own agent queue, DLQ and Workflow, and the branch
  *     check fails one that keeps HQ's Workflow or sends AGENT_QUEUE to the
@@ -52,11 +52,11 @@ for (const [label, prefix, sfx] of TABLES) {
     assert.equal(scopeMigration.kv.get('new_sqlite_classes'), '["AgentScope"]');
   });
 
-  test(`${label}: the engine's vars default to off, manual and do; no gateway is set`, () => {
+  test(`${label}: the engine's vars default to off, manual and do; the gateway is agents`, () => {
     const vars = inTable(prefix, 'vars')[0];
     assert.ok(vars);
     assert.deepEqual(['AGENT_ENGINE', 'AGENT_AUTONOMY', 'AGENT_RUNTIME'].map((k) => unq(vars.kv.get(k))), ['off', 'manual', 'do']);
-    assert.equal(vars.kv.has('AGENT_AI_GATEWAY'), false, 'the owner creates the gateway first');
+    assert.equal(unq(vars.kv.get('AGENT_AI_GATEWAY')), 'agents', 'D7073: the owner created the `agents` gateway');
     assert.equal(unq(vars.kv.get('AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD')), '100000000', 'D4423: $100 monthly gateway limit');
   });
 }

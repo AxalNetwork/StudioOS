@@ -35,6 +35,22 @@ export const EVIDENCE_LABEL = 'LOCAL SIMULATION · real orchestration and accoun
 export type AiMode = 'ok' | 'timeout' | 'rate_limited' | 'throw';
 export const STUB_ANSWER = 'A synthetic draft plan with three milestones.';
 
+/** The account model an engine run uses here (#7073 part 2). */
+export const ACCOUNT_MODEL = 'anthropic/claude-sonnet-5-5';
+
+/**
+ * The gateway's answers for the world in use: `fetch` to the AI Gateway host goes to `gatewayStub.handler`; any other
+ * URL is refused, so nothing in these tests reaches the network.
+ */
+const gatewayStub: { handler: ((init?: RequestInit) => Promise<Response>) | null } = { handler: null };
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(input instanceof Request ? input.url : input);
+  if (url.startsWith('https://gateway.ai.cloudflare.com/') && gatewayStub.handler) return gatewayStub.handler(init);
+  if (url.startsWith('https://gateway.ai.cloudflare.com/')) throw new Error('no gateway stub');
+  return realFetch(input as never, init);
+}) as typeof fetch;
+
 export function lifecycleWorld(o: { engine?: string; autonomy?: string; modes?: AiMode[] } = {}) {
   __resetForTest();
   const w = world({ engine: o.engine, autonomy: o.autonomy });
@@ -55,15 +71,34 @@ export function lifecycleWorld(o: { engine?: string; autonomy?: string; modes?: 
       },
     }),
   };
+  // D7073: an engine run needs the `agents` gateway, so the simulated deployment has one, as production must.
+  w.env.AGENT_AI_GATEWAY = 'agents';
+  // #7073 part 2: an engine run is answered by the model accounts on that gateway. The simulated deployment has the
+  // primary Claude account; its calls reach the stub below through `fetch`, never the network.
+  Object.assign(w.env, {
+    AGENT_AI_GATEWAY_TOKEN: 'test-gateway-run-token', CLOUDFLARE_ACCOUNT_ID: '0123456789abcdef0123456789abcdef',
+    AGENT_CLAUDE_ALIAS_1: 'claude-primary', AGENT_CLAUDE_MODEL: ACCOUNT_MODEL,
+  });
   const modes = [...(o.modes ?? ['ok'])];
   const ai = { calls: 0, models: [] as string[], modes };
+  // The account call: the same modes, as the gateway would answer them.
+  gatewayStub.handler = async (init) => {
+    ai.calls += 1;
+    ai.models.push(`anthropic/${JSON.parse(String(init?.body ?? '{}')).model}`);
+    const mode = modes.length > 1 ? modes.shift()! : modes[0];
+    if (mode === 'timeout') throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    if (mode === 'rate_limited') return Response.json({ type: 'error', error: { type: 'rate_limit_error', message: 'rate limited' } }, { status: 429 });
+    if (mode === 'throw') throw new Error('upstream exploded');
+    return Response.json({ content: [{ type: 'text', text: STUB_ANSWER }], usage: { input_tokens: 40, output_tokens: 10 } });
+  };
   w.env.AI = withGuard({
     run: async (model: string) => {
       ai.calls += 1;
       ai.models.push(model);
       const mode = modes.length > 1 ? modes.shift()! : modes[0];
       if (mode === 'timeout') throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
-      if (mode === 'rate_limited') throw Object.assign(new Error('429 Too Many Requests'), { status: 429 });
+      // Workers AI's own 429 (code 3040, out of capacity). D7073: that is `model_throttled`, not the gateway's limit.
+      if (mode === 'rate_limited') throw Object.assign(new Error('3040: Capacity temporarily exceeded, please try again.'), { status: 429 });
       if (mode === 'throw') throw new Error('upstream exploded');
       return { response: STUB_ANSWER, usage: { prompt_tokens: 40, completion_tokens: 10 } };
     },

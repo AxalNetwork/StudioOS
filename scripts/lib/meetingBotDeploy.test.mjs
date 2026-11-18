@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseSections, bindings } from '../check-wrangler-binding-parity.mjs';
-import { withMeetingBotBinding, withMeetingBotTopology } from './meetingBotBinding.mjs';
+import { withMeetingBotBinding, withMeetingBotTopology, botBindingProblem, BOT_HOSTS } from './meetingBotBinding.mjs';
 import { renderBranchConfig, checkRendered } from './branchConfig.mjs';
 const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
 const site=read('wrangler.toml'),bot=read('wrangler.meeting-bot.toml');
@@ -21,17 +21,23 @@ test('site deploys have no image dependency; the previous coupling is detected',
 });
 function remote(source){
   const sections=parseSections(source);
-  for(const [prefix,script] of [['','studioos-meeting-bot'],['env.production.','studioos-meeting-bot'],['env.preview.','studioos-meeting-bot-preview']]){
+  for(const {prefix,script,optional} of BOT_HOSTS){
     const row=sections.find(s=>s.name===prefix+'durable_objects.bindings'&&s.kv.get('name')==='"MEETING_BOT_CONTAINER"');
+    // D7147 part 2: staging (preview) may carry no bot binding while its bot is off.
+    if(optional&&!row){assert.equal(botBindingProblem(sections,prefix),null);continue;}
     assert.ok(row);assert.equal(row.kv.get('class_name'),'"MeetingBotContainer"');assert.equal(row.kv.get('script_name'),JSON.stringify(script));
+    assert.equal(botBindingProblem(sections,prefix),null);
   }
 }
-test('site bindings target the separate production and preview host, never a local class',()=>{
+test('site bindings target production\'s own host; preview binds none (bot off) or only the preview host, never a local class',()=>{
   const configured=withMeetingBotBinding(site);
   assert.equal(withMeetingBotBinding(configured),configured);
   // Provisioned (2026-10-28, after both bot hosts deployed): the site carries exactly the configured bindings.
   assert.equal(site,configured);
   remote(configured);assert.throws(()=>remote(configured.replace('script_name = "studioos-meeting-bot"','script_name = "studioos"')));remote(configured);
+  // D7147 part 2: staging has no bot binding, by owner decision, and its bot stays off.
+  assert.doesNotMatch(configured.split('[env.preview]')[1],/MEETING_BOT_CONTAINER/);
+  assert.equal(botBindingProblem(parseSections(configured),'env.preview.'),null);
   const sections=parseSections(bot),root=bindings(sections,''),preview=bindings(sections,'env.preview.');
   const onlyPreview=new Set(['CF_BOT_AUDIENCE','PREVIEW_CANARY_ENABLED','PREVIEW_CANARY_ORIGIN']);
   assert.deepEqual(new Set([...preview.get('vars')].filter(k=>!onlyPreview.has(k))),root.get('vars'));
@@ -39,6 +45,41 @@ test('site bindings target the separate production and preview host, never a loc
   preview.set('vars',root.get('vars'));assert.deepEqual(preview,root);
   assert.match(bot,/workers_dev = false/);assert.match(bot,/preview_urls = false/);
   assert.match(read('meeting-bot/worker/index.ts'),/status: 404/);
+});
+const PREVIEW_DO='[[env.preview.durable_objects.bindings]]\nname       = "PIPELINE_ROOM"';
+const BOT_OFF='# D886: preview needs its own explicit enablement.\nMEETING_BOT = "off"';
+const once=(text,from,to)=>{assert.equal(text.split(from).length,2,`anchor must occur once: ${from}`);return text.replace(from,to);};
+const previewBinding=script=>`[[env.preview.durable_objects.bindings]]\nname = "MEETING_BOT_CONTAINER"\nclass_name = "MeetingBotContainer"${script?`\nscript_name = "${script}"`:''}\n\n${PREVIEW_DO}`;
+const previewProblem=source=>botBindingProblem(parseSections(source),'env.preview.');
+test('D7147 part 2: preview binds nothing while its bot is off, or only the preview host',()=>{
+  // No binding, bot off: allowed (staging today), and provisioning never adds one back.
+  assert.equal(previewProblem(site),null);remote(site);assert.equal(withMeetingBotBinding(site),site);
+  // No binding, bot on: refused.
+  for(const on of ['canary','on']){
+    const bad=once(site,BOT_OFF,BOT_OFF.replace('"off"',`"${on}"`));
+    assert.equal(previewProblem(bad),'bot_on_without_binding');assert.throws(()=>remote(bad));
+    assert.throws(()=>withMeetingBotBinding(bad),/bot_on_without_binding/);
+  }
+  // No MEETING_BOT at all reads as unsafe, not off.
+  assert.equal(previewProblem(once(site,BOT_OFF,'')),'bot_on_without_binding');
+  // The separate preview host: allowed, and provisioning keeps it.
+  const own=once(site,PREVIEW_DO,previewBinding('studioos-meeting-bot-preview'));
+  assert.equal(previewProblem(own),null);remote(own);assert.equal(withMeetingBotBinding(own),own);
+  // Production's host: refused.
+  const prod=once(site,PREVIEW_DO,previewBinding('studioos-meeting-bot'));
+  assert.equal(previewProblem(prod),'wrong_bot_host');assert.throws(()=>remote(prod));
+  assert.throws(()=>withMeetingBotBinding(prod),/conflicting_bot_binding/);
+  // A local class: refused.
+  const local=once(site,PREVIEW_DO,previewBinding(null));
+  assert.equal(previewProblem(local),'local_bot_class');assert.throws(()=>remote(local));
+  assert.throws(()=>withMeetingBotBinding(local),/conflicting_bot_binding/);
+  // Another class on the preview host: refused.
+  const otherClass=once(site,PREVIEW_DO,previewBinding('studioos-meeting-bot-preview').replace('class_name = "MeetingBotContainer"','class_name = "MeetingBotRun"'));
+  assert.equal(previewProblem(otherClass),'wrong_bot_class');assert.throws(()=>remote(otherClass));
+  // Production must bind its own host: dropping it is refused.
+  const prodBinding='[[env.production.durable_objects.bindings]]\nname = "MEETING_BOT_CONTAINER"\nclass_name = "MeetingBotContainer"\nscript_name = "studioos-meeting-bot"\n';
+  const noProd=once(site,prodBinding,'');
+  assert.equal(botBindingProblem(parseSections(noProd),'env.production.'),'missing_bot_binding');assert.throws(()=>remote(noProd));
 });
 test('branches cannot accidentally call the HQ bot host with their own callbacks or key',()=>{
   const fixture=JSON.parse(read('infra/branches/_example.json'));

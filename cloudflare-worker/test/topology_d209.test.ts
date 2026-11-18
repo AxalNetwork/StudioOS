@@ -420,9 +420,17 @@ test('two task classes route through the gateway, each call naming its branch, a
   assert.deepEqual(optionFiles, ['services/aiRouter.ts'], 'a second place builds a gateway option');
   // The metadata travels as the binding's `gateway.metadata`, never as a raw
   // header a second code path could send without the router's rules.
+  // D7073-p2: the one exception. The agent account loop calls the gateway's provider-native endpoints, which have no
+  // binding option, so it labels its requests with the header itself, next to the key alias it names.
+  const ACCOUNT_LOOP = 'services/agents/agentAccounts.ts';
   for (const { file, code } of CODE) {
+    if (file === ACCOUNT_LOOP) continue;
     assert.doesNotMatch(code, /cf-aig-metadata/, `${file} sends the gateway metadata header by hand`);
   }
+  const loop = CODE.find((f) => f.file === ACCOUNT_LOOP)!.code;
+  assert.match(loop, /'cf-aig-metadata'/);
+  assert.match(loop, /'cf-aig-byok-alias': slot\.alias/, 'the account loop names its key alias on every request');
+  assert.match(loop, /'cf-aig-authorization': `Bearer \$\{token\}`/, 'the account loop uses the authenticated gateway');
   const router = CODE.find((f) => f.file === 'services/aiRouter.ts')!.code;
   const optionFor = fnBody(router, 'function gatewayOptionFor(');
   assert.match(optionFor, /if \(!GATEWAY_TASKS\.includes\(task\)\) return undefined;/);

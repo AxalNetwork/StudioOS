@@ -70,7 +70,10 @@ export async function mutuallyAccepted(env: Env, a: number, b: number): Promise<
   await ensureIntroNetworkSchema(env);
   const row = await env.DB.prepare(
     `SELECT p.uid FROM intro_propositions p JOIN intro_propositions q ON q.user_id = p.target_user_id AND q.target_user_id = p.user_id
-      WHERE p.user_id = ? AND p.target_user_id = ? AND p.status = 'accepted' AND q.status = 'accepted'`,
+      WHERE p.user_id = ? AND p.target_user_id = ? AND p.status = 'accepted' AND q.status = 'accepted'
+        AND ((p.source<>'offered' AND q.source<>'offered') OR (p.source='offered' AND q.source='offered'
+          AND CASE WHEN json_valid(p.breakdown_json) THEN json_extract(p.breakdown_json,'$.offer_uid') END
+            = CASE WHEN json_valid(q.breakdown_json) THEN json_extract(q.breakdown_json,'$.offer_uid') END))`,
   ).bind(Math.min(a, b), Math.max(a, b)).first<{ uid: string }>();
   return row?.uid ?? null;
 }
@@ -82,7 +85,10 @@ async function backfill(env: Env, userId: number): Promise<void> {
     `INSERT OR IGNORE INTO mail_address_shares (uid, user_low, user_high, source_kind, source_ref)
      SELECT lower(hex(randomblob(12))), MIN(p.user_id, p.target_user_id), MAX(p.user_id, p.target_user_id), 'introduction', p.uid
        FROM intro_propositions p JOIN intro_propositions q ON q.user_id = p.target_user_id AND q.target_user_id = p.user_id
-      WHERE p.status = 'accepted' AND q.status = 'accepted' AND p.user_id < p.target_user_id
+      WHERE p.status = 'accepted' AND q.status = 'accepted'
+        AND ((p.source<>'offered' AND q.source<>'offered') OR (p.source='offered' AND q.source='offered'
+          AND CASE WHEN json_valid(p.breakdown_json) THEN json_extract(p.breakdown_json,'$.offer_uid') END
+            = CASE WHEN json_valid(q.breakdown_json) THEN json_extract(q.breakdown_json,'$.offer_uid') END)) AND p.user_id < p.target_user_id
         AND (p.user_id = ? OR p.target_user_id = ?)`,
   ).bind(userId, userId).run();
 }
