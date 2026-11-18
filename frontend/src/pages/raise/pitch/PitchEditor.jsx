@@ -58,6 +58,7 @@ import { createAutosave, clockOf, idbStore, keyOf, restoreOffer } from './deckAu
 import { discardDraft as discardDraftAdapter, draft as draftAdapter, saveCard as saveCardAdapter, saveDoc as saveDocAdapter } from './deckV2Adapter';
 import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine } from './EditingParts';
 import usePreflight from './usePreflight';
+import { isQualitative, markLabel } from './versionReviewModel';
 import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from './PreflightPanel';
 import { gateOf, overlayOf, stepOf, workingDeck } from './preflightUiModel';
 import PreflightOverlay from './PreflightOverlay';
@@ -753,6 +754,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     // D1545 (#3788): Hide / Show and Move to section, each through its own in-page dialog, held until a version is saved.
     else if (id === 'hide' && cards[i]) setDialog({ kind: 'hide', index: i });
     else if (id === 'section' && cards[i]) setDialog({ kind: 'section', index: i });
+    // D6066 (#6060): the founders' "intentionally qualitative" mark; Review of the saved version reads it.
+    else if (id === 'qualitative' && cards[i]) edit({ type: 'setFlag', index: i, key: 'qualitative', value: isQualitative(cards[i]) ? undefined : true }, { label: markLabel(cards[i]) });
     // D1570 (#3817, pd33): the card's threads, on that card.
     else if (id === 'comments' && cards[i]) { choose(i); setSheet('comments'); }
   };

@@ -180,16 +180,16 @@ test('F0: My funds is the list as it was, with its zone toolbar and filters', ()
 
 // ── F0: Add to my funds, then the dossier ──────────────────────────────────
 
-test('F0: the drawer offers "Save to shortlist", and once the fund is on the list, "Open your dossier →"', () => {
+test('F0: the drawer offers "Save to shortlist" (D7167), and once the fund is on the list, "Open dossier →"', () => {
   const offer = drawerOf(withDrawer({ onAdd() {} }));
   const add = offer.match(/<button[^>]*>Save to shortlist<\/button>/)?.[0];
-  assert.ok(add, 'the drawer has no "Save to shortlist" button (D7166 renamed "Add to my funds")');
+  assert.ok(add, 'the drawer has no "Save to shortlist" button');
   assert.doesNotMatch(add, /\sdisabled=""/);
-  assert.doesNotMatch(offer, /Add to my list|Open your dossier/);
+  assert.doesNotMatch(offer, /Add to my funds|Open dossier/);
 
   const there = drawerOf(withDrawer({ onAdd() {}, isAdded: () => true, dossierOf: (x) => (x.uid === 'zeta' ? 'rf 7/x' : null) }));
-  assert.match(there, /<a[^>]*href="\/research\/funds\/rf%207%2Fx"[^>]*>Open your dossier →<\/a>/);
-  assert.doesNotMatch(there, /Save to shortlist|On your list/, 'the link takes the button’s place');
+  assert.match(there, /<a[^>]*href="\/research\/funds\/rf%207%2Fx"[^>]*>Open dossier →<\/a>/);
+  assert.doesNotMatch(there, /Save to shortlist|Saved to shortlist|On your shortlist/, 'the link takes the button’s place');
 
   const page = withDrawer({ isAdded: () => true });
   const rows = renderedText(page.slice(page.indexOf('<tbody'), page.indexOf('</tbody>')));
@@ -207,10 +207,10 @@ test('F0: an add says how it went in that fund’s drawer, and only there', () =
 
 test('F0: while the founder’s list is unread or unreadable, no add is offered that could duplicate a row', () => {
   const unread = drawerOf(withDrawer({ onAdd() {}, listState: 'unreadable' }));
-  assert.match(renderedText(unread), /Unreadable Your list could not be read, so this cannot tell whether the fund is on it\./);
+  assert.match(renderedText(unread), /Unavailable Your shortlist could not be read, so this cannot tell whether the fund is on it\./);
   assert.doesNotMatch(unread, />Save to shortlist</);
   const pending = drawerOf(withDrawer({ onAdd() {}, listState: 'loading' }));
-  assert.match(pending, /<button[^>]*disabled=""[^>]*>Checking your list…<\/button>/);
+  assert.match(pending, /<button[^>]*disabled=""[^>]*>Checking your shortlist…<\/button>/);
   assert.doesNotMatch(pending, />Save to shortlist</);
   // A dossier already known still opens.
   const known = drawerOf(withDrawer({ listState: 'unreadable', dossierOf: () => 'rf_1' }));
@@ -237,7 +237,7 @@ test('F0: the row the POST returns is kept, so the dossier opens before the list
   assert.match(ZONE, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\} busy=\{directoryBusy\}\s+dossierOf=\{dossierOf\} listState=\{listState\} notice=\{directoryNote\} onTotal=\{setDirectoryTotal\}/);
 });
 
-test('F0: the catalog profile says "Save to shortlist", and its way back is the Directory tab', () => {
+test('F0: the catalog profile says "Save to shortlist" (D7167), and its way back (D7166) is the Directory tab', () => {
   const fund = { loading: false, error: null, status: 200, data: { item: ZETA, reports: [], reports_status: 'ok', source_boundary: 'Reported snapshots only.' } };
   const out = html(h(catalog.FundCatalogView, { fund, list: { loading: false, error: null, existing: null }, onAdd() {} }));
   assert.match(out, /<button[^>]*>(<svg[\s\S]*?<\/svg>)? Save to shortlist<\/button>/);
@@ -264,7 +264,7 @@ test('F1: "Where the money is" is the overview’s own money section, drawn once
   assert.match(t, /research_fund_directory · 2,616 funds · as of 2026-10-04/);
 });
 
-test('F1: loading draws no figure; a failed read says Unreadable and draws no zero', () => {
+test('F1: loading draws no figure; a failed read says Unavailable (D7167) and draws no zero', () => {
   const loading = html(h(zone.MoneyBandView, { state: { phase: 'loading' } }));
   assert.match(loading, /data-state="loading"/);
   assert.match(loading, /aria-busy="true"/);
@@ -279,7 +279,7 @@ test('F1: loading draws no figure; a failed read says Unreadable and draws no ze
     const out = html(h(zone.MoneyBandView, { state, onRetry() {} }));
     const t = renderedText(out);
     assert.match(out, /data-state="unreadable"/, JSON.stringify(state));
-    assert.match(t, /Unreadable/);
+    assert.match(t, /Unavailable/);
     assert.match(t, /a failed read is not a directory with no funds/);
     assert.match(out, /<button[^>]*>Try again<\/button>/);
     assert.doesNotMatch(t, /\d/, `an unreadable band drew a figure: ${JSON.stringify(state)}`);
@@ -420,15 +420,15 @@ test('the zone heading gets the props ZoneHeading reads, so its line and its rou
   assert.doesNotMatch(heading, /\b(sub|right)=/);
 });
 
-test('a stat tile draws no figure while loading, and a failed read is Unreadable, never Not recorded', () => {
+test('a stat tile draws no figure while loading, and a failed read is Unavailable (D7167), never Not recorded', () => {
   const { FundStat } = zone;
   assert.equal(typeof FundStat, 'function', 'FundStat is not exported');
   const out = (props) => renderToStaticMarkup(React.createElement(FundStat, { label: 'Researched', note: 'funds on file', ...props }));
   const loading = out({ value: undefined, phase: 'loading' });
   assert.match(loading, /aria-label="Loading"/);
-  assert.doesNotMatch(loading, /Not recorded|Unreadable/);
+  assert.doesNotMatch(loading, /Not recorded|Unavailable/);
   const failed = out({ value: undefined, phase: 'unreadable' });
-  assert.match(failed, /Unreadable/);
+  assert.match(failed, /Unavailable/);
   assert.doesNotMatch(failed, /Not recorded/);
   assert.match(out({ value: null, phase: 'ok' }), /Not recorded/);
   assert.match(out({ value: 4, phase: 'ok' }), />4</);
