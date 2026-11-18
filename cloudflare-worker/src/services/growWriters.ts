@@ -905,13 +905,36 @@ export async function removeObligation(env: Env, pid: number, user: Pick<User, '
 }
 
 export async function setChecklistItem(env: Env, pid: number, user: User, key: string, done: boolean) {
+  // D6789: a tick by hand says the item applies, so it clears a Not applicable mark.
   await env.DB.prepare(
     `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, updated_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(project_id, item_key) DO UPDATE SET done_at = excluded.done_at, done_by = excluded.done_by, updated_at = excluded.updated_at`,
+     ON CONFLICT(project_id, item_key) DO UPDATE SET done_at = excluded.done_at, done_by = excluded.done_by, updated_at = excluded.updated_at,
+       not_applicable_at = CASE WHEN excluded.done_at IS NOT NULL THEN NULL ELSE durability_checklist.not_applicable_at END,
+       not_applicable_by = CASE WHEN excluded.done_at IS NOT NULL THEN NULL ELSE durability_checklist.not_applicable_by END`,
   ).bind(pid, key, done ? nowIso() : null, done ? user.id : null, nowIso()).run();
   await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key, action: done ? 'grow_checklist_done' : 'grow_checklist_undone',
     summary: done ? 'Checklist item ticked' : 'Checklist item unticked' });
   return { key, done };
+}
+
+/**
+ * D6789 (#6789): mark a durability checklist item Not applicable, or clear the mark. The mark records who and
+ * when, clears a tick by hand, and takes the item out of the score. The route refuses an item the Spin-Out Lab
+ * ticked: the Lab says it applies.
+ */
+export async function setChecklistNotApplicable(env: Env, pid: number, user: User, key: string, notApplicable: boolean) {
+  const at = nowIso();
+  await env.DB.prepare(
+    `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, not_applicable_at, not_applicable_by, updated_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)
+     ON CONFLICT(project_id, item_key) DO UPDATE SET not_applicable_at = excluded.not_applicable_at, not_applicable_by = excluded.not_applicable_by,
+       done_at = CASE WHEN excluded.not_applicable_at IS NOT NULL THEN NULL ELSE durability_checklist.done_at END,
+       done_by = CASE WHEN excluded.not_applicable_at IS NOT NULL THEN NULL ELSE durability_checklist.done_by END,
+       updated_at = excluded.updated_at`,
+  ).bind(pid, key, notApplicable ? at : null, notApplicable ? user.id : null, at).run();
+  await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key,
+    action: notApplicable ? 'grow_checklist_not_applicable' : 'grow_checklist_applies',
+    summary: notApplicable ? 'Checklist item marked not applicable' : 'Checklist item applies again' });
+  return { key, not_applicable: notApplicable };
 }
 
 // ── The records' actions (#1698) ────────────────────────────────────────────

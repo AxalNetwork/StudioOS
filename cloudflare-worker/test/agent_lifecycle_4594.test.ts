@@ -28,7 +28,7 @@ import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { removeMigratedDatabases } from './_storage_schema.ts';
 import { AGENT, MEMBER, MODULE, OPTION, PROJECT, SPONSOR, STRANGER, hex, loopDeps, type World } from './_agent_engine_fixture.ts';
-import { EVIDENCE_LABEL, STUB_ANSWER, batchOf, ledger, lifecycleStep, lifecycleWorld, modelCalls, until, type LifeWorld } from './_agent_lifecycle_fixture.ts';
+import { ACCOUNT_MODEL, EVIDENCE_LABEL, STUB_ANSWER, batchOf, ledger, lifecycleStep, lifecycleWorld, modelCalls, until, type LifeWorld } from './_agent_lifecycle_fixture.ts';
 import { agentRun } from '../src/services/agents/agentRun.ts';
 import { runTaskLoop } from '../src/agents/loop.ts';
 import { agentDlqConsumer, agentQueueConsumer, dispatchQueue, DLQ_FINAL_ATTEMPT } from '../src/agents/agentQueue.ts';
@@ -42,6 +42,7 @@ test.after(() => { __setEngineRouteDeps(null); removeMigratedDatabases(); });
 const P = { kind: 'project' as const, id: PROJECT };
 const T200 = hex(200, 'c');
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const ENGINE_MODEL = ACCOUNT_MODEL; // #7073 part 2: engine runs are answered by the primary Claude account
 const runRow = (w: World, uid: string) => w.db.prepare('SELECT * FROM agent_task_runs WHERE uid = ?').get(uid) as any;
 const taskRow = (w: World, id: number) => w.db.prepare('SELECT * FROM scope_tasks WHERE id = ?').get(id) as any;
 const ctx = { waitUntil() {}, passThroughOnException() {} } as any;
@@ -133,15 +134,18 @@ test(`A1. Workflow path: authorized start → admission → queue → Workflow �
     const l = await assertClean(w, 'A1');
     // Provenance: one model call on the agent's own model, one proposal tied to its usage row, one hold named by the run.
     assert.equal(modelCalls(w), 1);
-    assert.deepEqual([...new Set(w.ai.models.filter((m) => !m.includes('guard')))], [MODEL]);
+    assert.deepEqual([...new Set(w.ai.models.filter((m) => !m.includes('guard')))], [ENGINE_MODEL]);
     assert.equal(l.proposals.length, 1);
     const p = l.proposals[0];
     assert.deepEqual([p.run_key, p.agent_id, p.task_id, p.status], [`agent:${uid}`, AGENT, 200, 'accepted']);
     const usage = l.usage.find((u) => u.id === p.usage_log_id);
     assert.ok(usage, 'the proposal names its usage row');
-    assert.deepEqual([usage.model, usage.agent_id, usage.user_id, usage.rail_option], [MODEL, AGENT, SPONSOR, OPTION]);
+    assert.deepEqual([usage.model, usage.agent_id, usage.user_id, usage.rail_option], [ENGINE_MODEL, AGENT, SPONSOR, OPTION]);
     assert.equal(l.holds.length, 1);
-    assert.deepEqual([l.holds[0].idempotency_key, l.holds[0].execution_id, l.holds[0].status, l.holds[0].operation], [`agent:${uid}:run`, uid, 'settled', 'agent.ceo']);
+    // #7073 part 2: an engine run's hold is its account attempt's, keyed by the run and the slot, so a replayed step
+    // finds the same hold and a fallback account takes its own. It is a metered call's hold, which records no
+    // router hold context, so its operation column is empty; the usage row above names the agent.
+    assert.deepEqual([l.holds[0].idempotency_key, l.holds[0].execution_id, l.holds[0].status], [`exec:${uid}:agent.account.1`, uid, 'settled']);
     assert.ok(l.charged > 0, 'the run was charged');
     assert.equal(l.holds[0].actual, l.charged, 'settled at exactly what was charged');
     assert.ok(l.holds[0].actual <= l.holds[0].held, 'never more than was held');
@@ -247,7 +251,9 @@ test(`B1. a duplicated and a late-redelivered queue message start one Workflow a
 });
 
 for (const mode of ['timeout', 'rate_limited'] as const) {
-  test(`B2. the model ${mode === 'timeout' ? 'times out' : 'answers 429'}: the run is refused, its hold is released, nothing is proposed, and a fresh start then completes once [${EVIDENCE_LABEL}]`, async () => {
+  // #7073 part 2: a refused 429 bills nothing and its hold is released; a call that timed out may have been billed,
+  // so its hold settles at the attempt's quote and the usage row charges that (D7073-p2). Neither proposes anything.
+  test(`B2. the model ${mode === 'timeout' ? 'times out' : 'answers 429'}: the run is refused, ${mode === 'timeout' ? 'its hold settles at the quote because the call may have been billed' : 'its hold is released'}, nothing is proposed, and a fresh start then completes once [${EVIDENCE_LABEL}]`, async () => {
     const w = lifecycleWorld({ modes: [mode] }); // every model call fails, the router's fallback included
     try {
       w.agent(AGENT); w.task(200, AGENT);
@@ -255,8 +261,15 @@ for (const mode of ['timeout', 'rate_limited'] as const) {
       const out = await first.loop;
       assert.equal(out.go, false, `the run stopped: ${JSON.stringify(out)}`);
       let l = await assertClean(w, `B2 ${mode}`);
-      assert.deepEqual([l.proposals.length, l.charged], [0, 0], 'no proposal and no charge for a model that did not answer');
-      assert.ok(l.holds.every((h) => h.status === 'refunded'), `every hold released: ${JSON.stringify(l.holds)}`);
+      assert.equal(l.proposals.length, 0, 'no proposal for a model that did not answer');
+      if (mode === 'timeout') {
+        assert.ok(l.charged > 0, 'a timed-out call may have been billed, so it is counted');
+        assert.ok(l.holds.every((h) => h.status === 'settled'), `the hold settled at the quote: ${JSON.stringify(l.holds)}`);
+      } else {
+        assert.equal(l.charged, 0, 'no charge for a refused call');
+        assert.ok(l.holds.every((h) => h.status === 'refunded'), `every hold released: ${JSON.stringify(l.holds)}`);
+      }
+      const settledBefore = l.holds.filter((h) => h.status === 'settled').length;
       assert.notEqual(taskRow(w, 200).status, 'in_progress', 'the task is not left in progress');
       // Recovery: the provider answers again and the person starts it again; the second run completes and is charged once.
       w.ai.modes.splice(0, w.ai.modes.length, 'ok');
@@ -265,7 +278,7 @@ for (const mode of ['timeout', 'rate_limited'] as const) {
       await acceptWhenProposed(w, second.uid);
       assert.deepEqual(await second.loop, { go: true, decision: 'accepted' });
       l = await assertClean(w, `B2 ${mode} recovery`);
-      assert.equal(l.holds.filter((h) => h.status === 'settled').length, 1);
+      assert.equal(l.holds.filter((h) => h.status === 'settled').length, settledBefore + 1);
       assert.equal(l.proposals.length, 1);
     } finally { w.close(); }
   });

@@ -150,6 +150,117 @@ export function shareFailure(error) {
 }
 
 // ---------------------------------------------------------------------------
+// D6061 (#6061, PS-07): one investor at a time, and what that investor receives
+// ---------------------------------------------------------------------------
+
+export const ONE_LINK_EACH = 'One link per investor, so access, watermark and analytics are theirs alone.';
+export const FROZEN_NOTE = 'Frozen. Edits after this do not reach them until you send a new version.';
+export const FORWARDING_LINE = 'Off: the link opens only in the first browser that opens it.';
+export const DOWNLOAD_LINE = 'Save as PDF from the viewer.';
+export const NDA_LINE = 'They accept it on the link before any card shows.';
+export const TIME_LINE = 'Measures seconds per card for this link.';
+export const PREVIEW_NOTE = 'Built from the cards this link would send: the version or variant and what is included, as chosen.';
+
+/** The header button over the page: "Investor links (3)" once the read answers, the bare words until then. */
+export const linksButton = (n) => (Number.isInteger(n) && n >= 0 ? `Investor links (${n})` : 'Investor links');
+
+/** The person a link is for, without their fund: "Pat Partner" from "Pat Partner · Fund A". */
+export function recipientName(investorName) {
+  const s = String(investorName ?? '').trim();
+  return s ? s.split(' · ')[0].trim() || s : null;
+}
+
+/** The watermark the link will carry, as the one link writer words it (`watermarkFor`): the prospect and fund, or the name typed. */
+export function watermarkPreview(investorName) {
+  const s = String(investorName ?? '').trim();
+  return s ? `Prepared for ${s}`.slice(0, 160) : null;
+}
+
+/** The day a new link stops opening, from today: null for Never. */
+export function expiryDay(expires, now = Date.now()) {
+  if (expires == null) return null;
+  const days = Number(expires);
+  if (!Number.isFinite(days)) return null;
+  return dayLabel(new Date(Number(now) + days * 86_400_000).toISOString());
+}
+
+const ymd = (v) => (v ? String(v).slice(0, 10) : null);
+
+/** One investor link's state in words, with the day it stops or stopped: revoke and expiry, per investor. */
+export function linkStatusLine(row) {
+  switch (row?.status) {
+    case 'live': return row.expires_at ? `Live until ${ymd(row.expires_at)}` : 'Live · never expires';
+    case 'withdrawn': return row.withdrawn_at ? `Withdrawn ${ymd(row.withdrawn_at)}` : 'Withdrawn';
+    case 'expired': return row.expires_at ? `Expired ${ymd(row.expires_at)}` : 'Expired';
+    case 'used_up': return 'Used up: its view limit is reached';
+    default: return NOT_RECORDED;
+  }
+}
+
+/**
+ * The links the chosen investor already has on this version (`GET /api/decks/:id/investor-links`'s rows):
+ * a prospect's by its id; a typed name's by the same name typed before.
+ */
+export function linksForInvestor(rows, state) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (state?.investor && state.investor !== TYPED) {
+    return list.filter((r) => r?.investor?.prospect_id != null && String(r.investor.prospect_id) === String(state.investor));
+  }
+  const typed = String(state?.label ?? '').trim().toLowerCase();
+  if (!typed) return [];
+  return list.filter((r) => r?.investor?.prospect_id == null && String(r?.investor?.label ?? '').trim().toLowerCase() === typed);
+}
+
+/**
+ * "2 cards · appendix hidden · speaker notes hidden": the cards from the link-content read (the same
+ * selection the link serves), and the two switches that hide whole parts. Never a count before it is read.
+ */
+export function includedLine(content, include, failed = false) {
+  const inc = { ...DEFAULT_INCLUDE, ...(include || {}) };
+  const n = Array.isArray(content?.slides) ? content.slides.length : null;
+  const cards = failed ? 'Cards could not be read' : n == null ? 'Reading the cards…' : `${n} ${n === 1 ? 'card' : 'cards'}`;
+  return [cards, inc.sources ? 'appendix included' : 'appendix hidden', inc.notes ? 'speaker notes included' : 'speaker notes hidden'].join(' · ');
+}
+
+/**
+ * The right column: exactly what this investor receives, from the same inputs the link is made
+ * from — the form's state (the body `shareBody` writes) and the cards `POST …/preflight/link-cards`
+ * answers for that variant and "what is included" (what `effectiveSlidesFor` serves the link).
+ * Pure: the page draws the first card from `content` beside these words.
+ */
+export function recipientPreview({ state, deck, investorName = null, variantName = null, content = null, contentFailed = false, walkthrough = false, now = Date.now() }) {
+  const s = state || DEFAULT_SHARE;
+  const who = recipientName(investorName);
+  const version = content?.version ?? deck?.version ?? null;
+  const v = version == null ? 'This version' : `v${version}`;
+  const variant = variantOf(s.target);
+  const what = variant ? `The ${variantName ? `“${variantName}”` : 'tailored'} variant of ${v}` : v;
+  const saved = deck?.created_at ? ` as saved ${dayLabel(deck.created_at)}` : '';
+  const until = s.expires == null ? 'Never expires' : `Expires ${expiryDay(s.expires, now)}`;
+  const limit = viewLimitOf(s.viewLimit);
+  const can = ['View the cards'];
+  const cannot = [];
+  (s.allowDownload ? can : cannot).push('Save as PDF');
+  (s.allowForwarding ? can : cannot).push('Open the link in another browser');
+  if (walkthrough) can.push('Watch your walkthrough');
+  if (s.ndaRequired) cannot.push('See a card before accepting the NDA');
+  if (Number.isInteger(limit)) cannot.push(`Open it more than ${limit === 1 ? 'once' : `${limit} times`}`);
+  return {
+    title: who ? `What ${who} will receive` : 'What this investor will receive',
+    header: `${deck?.title || 'Pitch deck'} · ${v}`,
+    frozen: viewerNote({ version, as_of: deck?.created_at ?? null }),
+    gate: s.ndaRequired ? NDA_GATE_TITLE : null,
+    watermark: watermarkPreview(investorName),
+    cards: includedLine(content, s.include, contentFailed),
+    limits: [s.allowDownload ? 'Download on' : 'No download', until].join(' · '),
+    summary: [v, s.ndaRequired ? 'NDA first' : 'No NDA', s.allowDownload ? 'download on' : 'no download'].join(' · '),
+    sees: `${what}${saved} · not your draft`,
+    can, cannot,
+    timing: s.timePerSlide === false ? 'Visit counts only' : 'Seconds per card are measured',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The viewer (PD20, PD22)
 // ---------------------------------------------------------------------------
 

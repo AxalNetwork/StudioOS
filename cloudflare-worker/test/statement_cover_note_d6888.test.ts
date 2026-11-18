@@ -135,7 +135,8 @@ function fixture() {
   db.prepare(`INSERT INTO users (id, role, founder_id, name, email, is_active, investor_tier, investor_subscription_status)
     VALUES (?, 'admin', NULL, 'Ada', 'ada@axal.example', 1, 'free', 'active')`).run(ADMIN);
   // Venture Six is held at 30 Jun 2025 and marked twice: once on the date, once after it.
-  // Venture Seven's only cheque lands after the date: page 2 marks it Funded after.
+  // Venture Seven's only cheque lands after the date: the positions read cut at the date (D6887) leaves it out,
+  // so page 2 has no Funded after row and the note never names it.
   db.exec(`
     INSERT INTO projects (id, uid, name, founder_id) VALUES (6, 'p6', 'Venture Six', 60), (7, 'p7', 'Venture Seven', 70);
     INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, ownership_pct, position_date, created_by) VALUES
@@ -199,8 +200,9 @@ test('the route drafts from the statement\'s own reads for the date, and keeps n
     assert.match(p, /Page 1, summary: TVPI as of 30 Jun 2025: 1\.50×\./);
     assert.match(p, /Page 1, coverage: 1 of 1 position held at 30 Jun 2025 carry a usable recorded mark\./);
     assert.match(p, /Page 1, at cost: 0 positions are carried at cost/);
-    // Page 2: Venture Seven, first funded after the date.
-    assert.match(p, /Page 2, Funded after 30 Jun 2025: Venture Seven, \$500 invested\./);
+    // Page 2: the read cut at the date (D6887) leaves Venture Seven out, so no company is Funded after.
+    assert.match(p, /Page 2 marks no company as Funded after 30 Jun 2025\./);
+    assert.doesNotMatch(p, /Venture Seven|\$500/);
     // Nothing after the date reaches the model as a figure for it: not the September mark, not the summed book.
     assert.doesNotMatch(p, /\$1,200|\$1,100|2025-09-30|30 Sep 2025/);
   } finally { db.close(); }
