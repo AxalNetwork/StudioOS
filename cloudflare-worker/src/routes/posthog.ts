@@ -42,6 +42,7 @@
  * WHAT IS LOGGED. Counts and outcomes only: the venture and integration ids
  * in `activity_logs`, never a project name or anything PostHog sent.
  */
+import { rememberGrowProposal } from '../services/growProposalReceipts';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -421,12 +422,18 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     const link = await ownLink(c, user, p.id);
     const ctx = { integrationId: link.integration_id, projectId: p.id, userId: user.id };
     const id = idOf(c.req.param('id'), 'invalid_proposal');
+    // D6315: addFeedback's deterministic proposal uid can already exist after
+    // an interrupted earlier attempt. Reusing it never grants delete permission.
+    const existingFeedback=verb==='accept'&&c.req.param('section')==='grow'
+      ? await c.env.DB.prepare('SELECT id FROM product_feedback WHERE project_id=? AND uid=?').bind(p.id,`posthog-proposal-${id}`).first():null;
     const out = verb === 'accept' ? await acceptProposal(c.env, ctx, id, b) : await dismissProposal(c.env, ctx, id);
     if (out === 'not_found') throw new Refused(404, 'proposal_not_found');
     if (out === 'decided') throw new Refused(409, 'proposal_decided');
     if (out === 'not_ready') throw new Refused(409, 'not_ready');
     await log(c, user, `posthog_proposal_${verb === 'accept' ? 'accepted' : 'dismissed'}`, { project_id: p.id, integration_id: link.integration_id });
-    return c.json({ ok: true, ...(typeof out === 'object' ? { target_ref: out.target_ref } : {}) });
+    const destination=verb==='accept'&&c.req.param('section')==='grow'&&typeof out==='object'&&out.target_ref.startsWith('product_feedback:')
+      ? await rememberGrowProposal(c.env,p.id,user.id,'posthog',id,'feedback',out.target_ref.slice('product_feedback:'.length),!existingFeedback):undefined;
+    return c.json({ ok: true, ...(typeof out === 'object' ? { target_ref: out.target_ref } : {}), ...(destination?{destination}:{}) });
   });
   router.post('/:section/posthog/proposals/:id/accept', decide('accept'));
   router.post('/:section/posthog/proposals/:id/dismiss', decide('dismiss'));

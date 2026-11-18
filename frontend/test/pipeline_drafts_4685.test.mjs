@@ -25,7 +25,6 @@ import PartnerRetainersZone from '../src/pages/partner/pipeline/RetainersZone.js
 
 const h = React.createElement;
 const RAW = 'raw-server-detail-4685';
-const tick = () => new Promise((r) => setTimeout(r, 0));
 const deferred = () => { let resolve; let reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 
 /** Stub `api` methods for one test and put every one back afterwards. */

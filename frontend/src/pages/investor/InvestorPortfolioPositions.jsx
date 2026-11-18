@@ -39,7 +39,7 @@ import FromMercury from './FromMercury';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import { markRequestsApi } from '../../lib/api/markRequests';
-import { requestsByCompany, companyRequests } from '../portfolio/markRequestModel';
+import { requestsByCompany, companyRequests, headerChip } from '../portfolio/markRequestModel';
 import MarkRequestPanel, { RequestChip } from './MarkRequestPanel';
 import { HealthStatus, ObligationStatus, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
 import {
@@ -337,6 +337,13 @@ function MarkDrawer({ drawer, reference, asOf, onClose, onRetry, requests, onSen
       <div className="pf-sheet" data-testid="mark-drawer-body">
         <div className="pf-sheet-meta">
           {status}
+          {/* D6909 part 3 (PRM18): the request's state beside the mark's age; a glyph and a word, never colour alone. */}
+          {(() => {
+            const chip = requests?.state === 'ok' ? headerChip(requests.byCompany.get(row.uid)) : null;
+            return chip
+              ? <span className={`pf-chip ${chip.tone}`} data-testid="mark-drawer-request-chip" title={chip.note || undefined}><span aria-hidden="true">{chip.glyph}</span> {chip.label}</span>
+              : null;
+          })()}
           <span className="pf-muted">{[titleCase(row.stage), row.ownership, row.invested ? `invested ${row.invested}` : null].filter(Boolean).join(' · ') || NOT_RECORDED}</span>
         </div>
         <section><h3>Marks</h3>{body}</section>

@@ -93,6 +93,7 @@
  *
  * Every request value is bound. A typed figure is `source: 'manual'`.
  */
+import { growProposalReceipts, rememberGrowProposal, undoGrowProposal } from '../services/growProposalReceipts';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -112,7 +113,7 @@ import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
 import {
   CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
   REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
-  logGrowWrite, removeMarket, removeObligation, removePartner, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel,
+  logGrowWrite, removeMarket, removeObligation, removePartner, setApplicationStage, setChannelSpend, setChecklistItem, setChecklistNotApplicable, setPartnerRevenue, updateChannel,
   updateFeedback, updateMarket, updateObligation, feedbackThemes, renameFeedbackTheme, updatePartner, updateRole,
 } from '../services/growWriters';
 import { distributionOverview } from '../services/distribution/overview';
@@ -649,6 +650,23 @@ r.post('/campaigns/:uid/items', write((c, u, pid, b) => campaignItem(c.env, pid,
 r.delete('/campaigns/:uid/items/:kind/:itemUid', write((c, u, pid) => campaignItem(c.env, pid, u, param(c, 'uid'), param(c, 'kind'), param(c, 'itemUid'), true)));
 r.delete('/campaigns/:uid', write((c, u, pid) => archiveCampaign(c.env, pid, u, param(c, 'uid'))));
 
+// D6315: content-free destinations are private to the member who accepted them.
+r.get('/proposal-receipts',async c=>{
+ try{const user=await requireAuth(c);const pid=await project(c,user,c.req.query('project'),false);
+ return c.json(await growProposalReceipts(c.env,pid,user.id,c.req.query('source')||''));}catch(e){return fail(c,e);}
+});
+async function undoSourceProposal(c:C,user:User,pid:number,b:Record<string,unknown>,source:'mercury'|'google'|'posthog'|'beehiiv',id:number|null){
+ if(await isSupportSession(c))throw new Refused(403,'A support session cannot undo a member’s connector acceptance.');
+ if(source==='mercury')await founderOf(c,user,pid);
+ const receipt=await c.env.DB.prepare(`SELECT uid FROM grow_proposal_receipts WHERE uid=? AND project_id=? AND accepted_by=? AND source=? AND (? IS NULL OR source_id=?) AND state='accepted'`).bind(typeof b.receipt_uid==='string'?b.receipt_uid:'',pid,user.id,source,id,id).first<{uid:string}>();
+ if(!receipt)throw new Refused(404,'No undoable acceptance of yours is on this venture.');
+ return undoGrowProposal(c.env,pid,user.id,receipt.uid);
+}
+r.post('/mercury/partner-proposals/:id/undo',write((c,u,p,b)=>undoSourceProposal(c,u,p,b,'mercury',proposalId(c))));
+r.post('/google/proposals/:id/undo',write((c,u,p,b)=>undoSourceProposal(c,u,p,b,'google',proposalId(c))));
+r.post('/posthog/proposals/:id/undo',write((c,u,p,b)=>undoSourceProposal(c,u,p,b,'posthog',proposalId(c))));
+r.post('/beehiiv/channel-proposal/undo',write((c,u,p,b)=>undoSourceProposal(c,u,p,b,'beehiiv',null)));
+
 r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true));
 // D6865 (#6865): Mark told for several (GR-26), before `/feedback/:uid`.
 r.post('/feedback/told', write((c, u, pid, b) => markFeedbackToldMany(c.env, pid, u, b)));
@@ -722,6 +740,15 @@ r.delete('/obligations/:id', write((c, u, pid) => removeObligation(c.env, pid, u
 r.put('/checklist/:key', write(async (c, u, pid, b) => {
   const key = param(c, 'key');
   if (!DURABILITY_ITEMS.some((i) => i.key === key)) throw new Refused(404, 'Not a checklist item');
+  // D6789 (#6789): `{ not_applicable: true | false }` marks or clears Not applicable; `{ done }` ticks as before.
+  if (b.not_applicable !== undefined) {
+    if (typeof b.not_applicable !== 'boolean') throw new Refused(400, 'Say whether the item applies', 'not_applicable');
+    if (b.not_applicable) {
+      const item = (await checklist(c.env, pid)).find((i) => i.key === key);
+      if (item?.done && item.source === 'Spin-Out Lab') throw new Refused(409, 'The Spin-Out Lab ticked this item, so it applies', 'not_applicable');
+    }
+    return setChecklistNotApplicable(c.env, pid, u, key, b.not_applicable);
+  }
   return setChecklistItem(c.env, pid, u, key, b.done === true);
 }));
 
@@ -760,11 +787,14 @@ r.post('/mercury/sync', async (c) => {
 r.post('/mercury/partner-proposals/:id/accept', write(async (c, u, pid, b) => {
   await founderOf(c, u, pid);
   const id = proposalId(c);
+  if(b.growth_partner_uid!=null&&typeof b.growth_partner_uid!=='string')throw new Refused(400,'Choose a partner of this venture.');
   const create = async (name: string) => (await addPartner(c.env, pid, u, { name, type: 'other' })).uid;
   const out = await acceptPartnerProposal(c.env, pid, id, { growth_partner_uid: b.growth_partner_uid }, u.id, create);
   if (out !== 'ok') throw new Refused(...DECIDED[out]);
   await logGrowWrite(c.env, pid, u.id, { module: 'partner-network', entityId: id, action: 'grow_mercury_partner_accepted', summary: 'Mercury partner payment linked' });
-  return { ok: true, id, state: 'accepted' };
+  const target=await c.env.DB.prepare('SELECT g.uid FROM mercury_partner_proposals p JOIN growth_partners g ON g.id=p.growth_partner_id WHERE p.id=? AND p.project_id=?').bind(id,pid).first<{uid:string}>();
+  const destination=await rememberGrowProposal(c.env,pid,u.id,'mercury',id,'partner',target!.uid,!b.growth_partner_uid);
+  return { ok: true, id, state: 'accepted', destination };
 }));
 r.post('/mercury/partner-proposals/:id/dismiss', write(async (c, u, pid) => {
   await founderOf(c, u, pid);
@@ -913,11 +943,14 @@ r.post('/beehiiv/channel-proposal/accept', beehiiv(async (c, user) => {
   const b = await body(c);
   const pid = await project(c, user, b.project, true);
   const link = await servedLink(c, user, pid);
+  if(b.growth_channel_uid!=null&&typeof b.growth_channel_uid!=='string')throw new Refused(400,'Choose a channel of this venture.');
   const create = async () => (await addChannel(c.env, pid, user, { name: link.publication_name ?? 'Newsletter', utm_source: b.utm_source, kind: 'newsletter' })).uid;
   const out = await acceptChannelProposal(c.env, pid, user.id, { growth_channel_uid: b.growth_channel_uid }, create);
   if (out !== 'ok') throw new BeehiivRefused(...BEEHIIV_DECIDED[out]);
   await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_channel_accepted', summary: 'Beehiiv publication linked to a channel' });
-  return c.json({ ok: true, state: 'accepted' });
+  const target=await c.env.DB.prepare('SELECT p.id,g.uid FROM beehiiv_publication_links p JOIN growth_channels g ON g.id=p.growth_channel_id WHERE p.project_id=?').bind(pid).first<{id:number;uid:string}>();
+  const destination=await rememberGrowProposal(c.env,pid,user.id,'beehiiv',target!.id,'channel',target!.uid,!b.growth_channel_uid);
+  return c.json({ ok: true, state: 'accepted', destination });
 }));
 r.post('/beehiiv/channel-proposal/dismiss', beehiiv(async (c, user) => {
   const b = await body(c);
@@ -1129,7 +1162,8 @@ r.post('/google/proposals/:id/accept', async (c) => {
     const { id } = await addObligation(c.env, pid, user, { title: p.title, due_at: p.date, kind }, 'google_calendar');
     await decideProposal(c.env, integrationId, pid, p.id, user.id, { obligationId: id, eventId: p.event_id });
     await logGrowWrite(c.env, pid, user.id, { module: 'durable-company-building', entityId: p.id, action: 'grow_google_proposal_accepted', summary: 'Calendar obligation accepted' });
-    return c.json({ ok: true, id: p.id, state: 'accepted', obligation_id: id });
+    const destination=await rememberGrowProposal(c.env,pid,user.id,'google',p.id,'obligation',id,true);
+    return c.json({ ok: true, id: p.id, state: 'accepted', obligation_id: id, destination });
   } catch (e) { return googleFail(c, e); }
 });
 r.post('/google/proposals/:id/dismiss', async (c) => {

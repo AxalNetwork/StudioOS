@@ -80,7 +80,8 @@ import {
   parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
   SUGGESTED_SHEET_URL,
 } from '../services/fundSheets';
-import { refuse } from '../util/refusal';
+import { refuse, refusalBody } from '../util/refusal';
+import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldError } from '../services/researchFundReports';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
@@ -4442,45 +4443,47 @@ research.post('/funds/:uid/reports', async (c) => {
   ).bind(fundUid, user.id).first();
   if (!fund) return c.json({ detail: 'Not found' }, 404);
   const body = await c.req.json<any>().catch(() => ({}));
-  const period = String(body.period || '').trim();
-  if (!/^\d{4}-Q[1-4]$/.test(period)) return c.json({ detail: 'Period must use YYYY-Q1 through YYYY-Q4.' }, 400);
-  const sourceUrl = clampText(body.source_url, 500);
-  if (!sourceUrl) return c.json({ detail: 'A source URL is required for a quarterly report.' }, 400);
-  const uid = newUid();
-  const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO research_fund_reports
-       (uid, fund_uid, owner_user_id, period, report_date, fund_size_cents,
-        nav_cents, quarterly_return_bps, net_irr_bps, tvpi_bps, source_url,
-        report_url, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (fund_uid, owner_user_id, period) DO UPDATE SET
-       report_date = excluded.report_date,
-       fund_size_cents = excluded.fund_size_cents,
-       nav_cents = excluded.nav_cents,
-       quarterly_return_bps = excluded.quarterly_return_bps,
-       net_irr_bps = excluded.net_irr_bps,
-       tvpi_bps = excluded.tvpi_bps,
-       source_url = excluded.source_url,
-       report_url = excluded.report_url,
-       notes = excluded.notes,
-       updated_at = excluded.updated_at`
-  ).bind(
-    uid, fundUid, user.id, period, clampText(body.report_date, 30),
-    clampInt(body.fund_size_cents), clampInt(body.nav_cents),
-    clampInt(body.quarterly_return_bps), clampInt(body.net_irr_bps),
-    clampInt(body.tvpi_bps), sourceUrl, clampText(body.report_url, 500),
-    clampText(body.notes, 2000), now, now,
-  ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
-            quarterly_return_bps, net_irr_bps, tvpi_bps,
-            source_url, report_url, notes, created_at, updated_at
-       FROM research_fund_reports
-      WHERE fund_uid = ? AND owner_user_id = ? AND period = ?`
-  ).bind(fundUid, user.id, period).first();
-  return c.json(row, 201);
+  // D7169: create-only. A saved period answers `period_exists` with its row,
+  // so the page opens it instead of overwriting it.
+  const out = await createReport(c.env.DB as any, user.id, fundUid, body, newUid(), nowIso());
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'period_exists') {
+    return c.json(refusalBody({
+      code: 'period_exists',
+      message: `${out.report.period} already has a report. Open it to change it.`,
+      extra: { report_uid: out.report.uid, report: out.report },
+    }), 409);
+  }
+  return c.json(out.report, 201);
 });
+
+// D7169: partial update. A field absent from the body keeps its value, null
+// clears it; the row's `updated_at` travels as If-Match.
+research.patch('/funds/:uid/reports/:reportUid', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const body = await c.req.json<any>().catch(() => ({}));
+  const out = await patchReport(c.env.DB as any, user.id, fundUid, c.req.param('reportUid'), body, readIfMatch(c.req.header('If-Match')));
+  if (out.kind === 'not_found') return c.json({ detail: 'Not found' }, 404);
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'revision_required') {
+    return c.json(refusalBody({ code: 'revision_required', message: 'Send the report\'s updated_at as If-Match so a newer save is not overwritten.' }), 428);
+  }
+  if (out.kind === 'report_changed') {
+    return c.json(refusalBody({
+      code: 'report_changed',
+      message: `${out.report.period} changed after you opened it. Review both versions before saving.`,
+      extra: { report: out.report },
+    }), 409);
+  }
+  return c.json({ ...out.report, changed: out.changed });
+});
+
+const reportFieldRefusal = (c: any, errors: FieldError[]) => c.json(refusalBody({
+  code: 'invalid_report_field',
+  message: fieldErrorSentence(errors),
+  extra: { field: errors[0].field, errors },
+}), 400);
 
 research.delete('/funds/:uid/reports/:reportUid', async (c) => {
   const user = await requireAuth(c);

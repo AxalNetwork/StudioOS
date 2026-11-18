@@ -1,0 +1,20 @@
+/* #6235: Create a fund record (FV1b) and Edit terms. Tokens fall back to light values; .dark redefines them. */
+.ft-card{--ft-ink:#18181b;--ft-muted:#615c6e;--ft-line:#e7e7ed;--ft-paper:#fff;--ft-accent:#4f46e5;--ft-soft:#f5f5ff;--ft-bad:#9f3030;--ft-bad-bg:#fff5f5;margin-top:14px;padding:20px;background:var(--ft-paper);color:var(--ft-ink);border:1px solid var(--ft-line);border-radius:11px;max-width:880px;display:grid;gap:12px}
+.dark .ft-card{--ft-ink:#f3f2f7;--ft-muted:#a6a2b8;--ft-line:#2c2b3c;--ft-paper:#171622;--ft-accent:#818cf8;--ft-soft:#211f3d;--ft-bad:#f3a5a5;--ft-bad-bg:#2a1719}
+.ft-card h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em}
+.ft-kicker{font-family:var(--font-mono);font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ft-muted)}
+.ft-cap{margin:0;font-size:12px;line-height:1.5;color:var(--ft-muted)}
+.ft-cap a{color:var(--ft-accent);font-weight:700}
+.ft-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.ft-field{display:grid;gap:4px;min-width:0}
+.ft-field label{font-size:11px;font-weight:700}
+.ft-field label span{font-weight:500;color:var(--ft-muted)}
+.ft-field input,.ft-field select,.ft-field textarea{font:inherit;font-size:13px;min-height:40px;padding:8px 10px;border:1px solid var(--ft-line);border-radius:7px;background:var(--ft-paper);color:var(--ft-ink);width:100%;box-sizing:border-box}
+.ft-wide{grid-column:1/-1}
+.ft-note{background:var(--ft-soft);border:1px solid var(--ft-line);border-radius:8px;padding:10px 12px}
+.ft-note strong{font-size:11px}.ft-note p{margin:4px 0 0;font-size:12px;line-height:1.45}
+.ft-error{margin:0;padding:9px 11px;border-radius:7px;background:var(--ft-bad-bg);color:var(--ft-bad);font-size:12px}
+.ft-actions{display:flex;gap:10px;flex-wrap:wrap}
+.ft-actions button,.ft-card [role=alert] button{min-height:44px;padding:0 16px;border-radius:7px;border:1px solid var(--ft-line);background:var(--ft-paper);color:var(--ft-ink);font-weight:700;cursor:pointer}
+.ft-actions .ft-primary{background:var(--ft-accent);border-color:var(--ft-accent);color:#fff}
+@media(max-width:640px){.ft-card{padding:16px}.ft-grid{grid-template-columns:1fr}.ft-actions button{flex:1}}

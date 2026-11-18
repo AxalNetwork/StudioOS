@@ -17,4 +17,9 @@ export const helpCenterApi = {
   }),
   // Admin: per-guide yes/no counts and each "what was missing", no member identity.
   adminFeedback: () => request('/admin/help/feedback'),
+  // D6861: a search that found no guide. The Worker keeps the query with no
+  // member, withholds one that looks like an email address or an account number.
+  recordSearchMiss: (query) => request('/help/search-misses', { method: 'POST', body: JSON.stringify({ query }) }),
+  // Admin: the searches that found nothing over the last N days, most searched first.
+  adminSearchMisses: ({ days = 30 } = {}) => request(`/admin/help/search-misses?days=${encodeURIComponent(days)}`),
 };

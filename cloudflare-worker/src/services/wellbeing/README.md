@@ -21,3 +21,5 @@ reflection belongs to, and the rules a write's period must meet.
 suggest (never therapy, dietetics or spiritual guidance), the "Why this?"
 reasons, and the two reads the routes share: a member's preferences, and their
 topics only while consent covers them.
+Group sessions (D7120) live in `../../routes/wellbeing_group_sessions.ts`; the
+suggestion rule for them, `recommendSessions`, is in `recommend.ts`.
