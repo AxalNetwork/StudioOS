@@ -38,6 +38,7 @@ const ROUTES: Array<[string, string]> = [
   ['POST /:uid/activate', 'admin_licences_lifecycle'],
   ['POST /:uid/suspend', 'admin_licences_lifecycle'],
   ['POST /:uid/reinstate', 'admin_licences_lifecycle'],
+  ['POST /:uid/sync/retry', 'admin_licences_lifecycle'], // D4819 part 21 (#5928): Retry branch sync
   ['POST /:uid/renew', 'admin_licences_lifecycle'],
   ['POST /:uid/terminate', 'admin_licences_lifecycle'],
   ['GET /:uid/admins', 'admin_licences_admins'],
