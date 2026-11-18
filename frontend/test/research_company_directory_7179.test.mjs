@@ -364,7 +364,7 @@ test('mounted: Back to the same results focuses the company link that was opened
   try {
     const link = back.nodes().find((x) => back.props(x)?.['data-company-link'] === 'u1');
     assert.ok(link);
-    assert.equal(document.activeElement, link, 'focus is on the link that was opened');
+    assert.ok(document.activeElement === link, 'focus is on the link that was opened');
     assert.match(back.text(), /Back to your results: page 2, 1 selected/);
     assert.equal(back.props(back.nodes().find((x) => back.props(x)?.['data-testid'] === 'pick-company-u1')).checked, true, 'the selection is restored from this session');
     assert.equal(session.getItem('studioos.research.companies.return'), null, 'the return point is used once');
