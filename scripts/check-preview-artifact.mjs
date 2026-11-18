@@ -12,7 +12,7 @@
  * archive passes, writes its regular files and directories under `<dir>`. On
  * any refusal it writes nothing and exits 1, naming each problem.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { LIMITS, readPreviewArchive } from './lib/previewArtifact.mjs';
 
@@ -32,13 +32,30 @@ if (existsSync(out) && readdirSync(out).length) {
   console.error(`::error::${outArg} is not empty; the preview is unpacked only into an empty directory`);
   process.exit(1);
 }
-const size = statSync(zip).size;
-if (size > LIMITS.zipBytes) {
-  console.error(`::error::the artifact zip is ${size} bytes; the cap is ${LIMITS.zipBytes}`);
-  process.exit(1);
+// One open file: its size and its bytes come from the same descriptor, and at
+// most the cap plus one byte is ever read, so a file swapped or grown after the
+// size check can neither slip past the cap nor be read in its place.
+const fd = openSync(zip, 'r');
+let archive;
+try {
+  const size = fstatSync(fd).size;
+  if (size > LIMITS.zipBytes) {
+    console.error(`::error::the artifact zip is ${size} bytes; the cap is ${LIMITS.zipBytes}`);
+    process.exit(1);
+  }
+  const buf = Buffer.alloc(size + 1);
+  let read = 0;
+  for (let n; read < buf.length && (n = readSync(fd, buf, read, buf.length - read, read)) > 0;) read += n;
+  if (read > size) {
+    console.error('::error::the artifact zip grew while it was being read');
+    process.exit(1);
+  }
+  archive = buf.subarray(0, read);
+} finally {
+  closeSync(fd);
 }
 
-const { files, problems } = readPreviewArchive(readFileSync(zip));
+const { files, problems } = readPreviewArchive(archive);
 if (problems.length) {
   for (const p of problems.slice(0, 50)) console.error(`::error::preview artifact refused: ${p}`);
   if (problems.length > 50) console.error(`::error::... and ${problems.length - 50} more`);
