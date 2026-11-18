@@ -400,7 +400,7 @@ export function activityShown(events, filter) {
 export function activityEmpty(filter) {
   if (filter === 'mine') return 'None of your own activity on this deal is recorded.';
   if (filter === 'deal') return 'No deal activity you can read is recorded.';
-  if (filter === 'documents') return 'No document activity you can read is recorded. Documents show once you hold the venture’s NDA.';
+  if (filter === 'documents') return 'No document activity you can read is recorded. Catalogue documents require the venture’s NDA; data room files and deck versions require their own grants. NDA signatures show only to their parties and the venture’s founder or an admin.';
   if (filter === 'diligence') return 'No diligence activity you can read is recorded. A case shows to its own owner and reviewers.';
   return EMPTY.activity;
 }

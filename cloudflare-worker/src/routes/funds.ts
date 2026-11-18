@@ -12,6 +12,7 @@ import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireApprovedKyc, selectJwt } from '../auth';
+import { withFundReportDelivery } from '../services/fundReportNotices';
 import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod,deleteFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator, fundManageScope } from '../services/fundGpAccess';
@@ -887,7 +888,7 @@ funds.get('/:id/report-periods', async (c) => {
   await requireFundGp(c,fundId);
   const result=await c.env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? ORDER BY period_end DESC LIMIT 40').bind(fundId).all();
   if(!result.success)throw new Error('Reporting periods unreadable');
-  return c.json({ok:true,items:(result.results||[]).map(shapePeriod)});
+  return c.json({ok:true,items:await withFundReportDelivery(c.env,(result.results||[]).map(shapePeriod))});
  }catch(error){return fundReportError(c,error);}
 });
 

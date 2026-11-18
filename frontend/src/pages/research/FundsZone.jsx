@@ -264,6 +264,9 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
 
   // Switching tabs rewrites the URL in place, adding no history entry.
   const pick = (key) => setParams(fundsSearchFor(params, key), { replace: true });
+  // D7166 (RFD-01): the empty list's two ways forward. Browse opens the Directory with its search focused.
+  const browse = () => { pick('directory'); setTimeout(() => document.getElementById('fd-q')?.focus(), 0); };
+  const addByHand = () => document.getElementById('fz-add-name')?.focus();
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true }));
@@ -323,7 +326,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
       // D4613: the directory uid makes a repeat of this add idempotent on the Worker.
       const row = await api.research.fundCreate({ name: fund.name, source_url: fund.website || null, catalogue_uid: fund.uid });
       if (row?.uid) setCreated((rows) => ({ ...rows, [normalizeFundName(fund.name)]: row.uid }));
-      setDirectoryNote({ uid: fund.uid, ok: true, text: row?.existing ? `${fund.name} is already on My funds.` : `${fund.name} added to My funds.` });
+      setDirectoryNote({ uid: fund.uid, ok: true, text: row?.existing ? `${fund.name} is already on your shortlist.` : `${fund.name} saved to your shortlist.` });
       await load();
     } catch (e) {
       setDirectoryNote({ uid: fund.uid, ok: false, text: e?.detail || e?.message || 'That did not save.' });
@@ -364,7 +367,8 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
           action={data ? <Pill tone={data.warm_path_count ? 'ok' : 'neutral'}>{`${data.warm_path_count} with a route in`}</Pill> : null}
         />
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* D7166 (RFD-01): an empty list shows no counters, never a row of zeros. */}
+        <div className={listState === 'ok' && !items.length ? 'hidden' : 'grid grid-cols-2 gap-3 lg:grid-cols-4'}>
           <FundStat label="Researched" value={data?.researched_count} note="funds on file" phase={listState} />
           <FundStat label="Right stage" value={data?.right_stage_count} note="they write where you are" phase={listState} />
           <FundStat
@@ -393,6 +397,12 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
             <NothingYet
               title="No fund is on your list yet"
               body="Add the funds you are researching. What goes in is your own reading — their thesis in their words, whether they write at your stage, and whether you have a route in."
+              action={(
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={buttonClass} onClick={browse} data-testid="funds-browse-directory">Browse fund directory</button>
+                  <button type="button" className={ghostButtonClass} onClick={addByHand}>Add a fund by hand</button>
+                </div>
+              )}
             />
           )}
         >
@@ -559,7 +569,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
           <h3 className="text-sm font-extrabold tracking-tight">Add a fund</h3>
           <form className="mt-3 grid gap-3 md:grid-cols-3" onSubmit={add}>
             <Field label="Fund">
-              <input className={inputClass} value={form.name} maxLength={200} required
+              <input id="fz-add-name" className={inputClass} value={form.name} maxLength={200} required
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </Field>
             <Field label="Their thesis, in their words">
