@@ -158,7 +158,8 @@ test('a request id makes a repeat return the same comparison, and never a second
   const first = await call(f, 'POST', `/${uid}/comparisons`, { kind: 'company', uids: ['c-1', 'c-2'], request_id: RID });
   assert.deepEqual([first.status, first.body.repeat, first.body.rolled_back, first.body.project.uid, first.body.subjects_added], [201, false, false, uid, 2]);
   const repeat = await call(f, 'POST', `/${uid}/comparisons`, { kind: 'company', uids: ['c-1', 'c-2'], request_id: RID });
-  // Mutation checked: skip the request-id lookup → a second comparison is made.
+  // Mutation checked: skip both request-id lookups (before the batch and after it fails) → the repeat reads as
+  // rolled back; either one alone is covered by the other and by the unique index.
   assert.deepEqual([repeat.status, repeat.body.repeat, repeat.body.item.uid], [200, true, first.body.item.uid]);
   assert.equal(count(f, 'research_project_comparisons'), 1);
   // Without an id every save is its own comparison, as before.
