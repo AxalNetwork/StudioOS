@@ -1,4 +1,5 @@
 import { count, day, moneyCents, summary, title, top } from './format.js';
+import { ADVISOR_LICENCE_REQUIRED, LICENCE_SENTENCES } from '../../pages/advisor/expertise/licenceRefusal.js';
 
 /** A list's full-set total from its page facts (#4689), or null when the answer carries none. */
 const pageTotal = (page) => (Number.isInteger(page?.total) ? page.total : null);
@@ -32,6 +33,11 @@ const pageTotal = (page) => (Number.isInteger(page?.total) ? page.total : null);
  */
 export default function advisorExpertiseBoard(role, api) {
   return {
+    // D4828 (#4828, EX-14): each section's loading, failed and refused states are
+    // #5129's shared ones, and its rows are rows, not a sideways table, on a phone.
+    states: 'platform',
+    // #5363: the licence refusal reads as Refused with the zones' own sentence, no Try again.
+    refusals: { [ADVISOR_LICENCE_REQUIRED]: LICENCE_SENTENCES.expertise },
     sources: {
       profile: () => api.getMyAdvisor(),
       services: () => api.listMyAdvisorServices(),
