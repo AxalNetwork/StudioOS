@@ -65,6 +65,9 @@ export async function scopeHash(scope: ScopeKey, facts: readonly InputFacts[], r
   })));
 }
 
+/** The row's signature, as `keep` writes it. Exported for fixtures that store a version by hand (D6173's tests). */
+export async function scorecardRowSignature(env: Env, row: Omit<Row, 'id' | 'signature'>): Promise<string> { return signatureFor(env, row); }
+
 async function signatureFor(env: Env, row: Omit<Row, 'id' | 'signature'>): Promise<string> {
   const { project_id, scope, uid, value, band, confidence, coverage, inputs_json, inputs_hash, model_version, trigger, computed_by, computed_at, state } = row;
   return signHmac(env, 'venture-scorecard:' + JSON.stringify(canonical({
@@ -238,6 +241,54 @@ export async function storedScorecard(env: Env, projectId: number, opts: { input
       entry.inputs = Array.isArray(parsed?.result?.inputs) ? parsed.result!.inputs : [];
     }
     out.push(entry);
+  }
+  return out;
+}
+
+// ── #6173 (D6173): each scope's change since the investor's last visit ───────
+
+export type ScopeChange =
+  | { state: 'recorded'; delta: number; from: number; to: number; from_computed_at: string; since: string }
+  | { state: 'not_recorded'; reason: string }
+  | { state: 'unreadable'; reason: string };
+
+export const CHANGE_REASONS = Object.freeze({
+  firstVisit: 'This is your first visit to this deal for this firm, so there is nothing to compare with.',
+  noScore: 'This scope has no score now.',
+  oneVersion: 'Only one version of this score is stored, so there is nothing to compare with.',
+  noneBefore: 'No version of this score was stored before your last visit.',
+  noScoreThen: 'This scope had no score at your last visit.',
+  modelChanged: 'The scoring model changed since your last visit. Scores from two models are not compared.',
+  unreadable: 'The earlier version of this score could not be read.',
+});
+
+const AT_OR_BEFORE = `SELECT * FROM venture_scorecards WHERE project_id = ? AND scope = ?
+  AND julianday(computed_at) <= julianday(?) ORDER BY id DESC LIMIT 1`;
+const VERSIONS = 'SELECT COUNT(*) AS n FROM venture_scorecards WHERE project_id = ? AND scope = ?';
+
+/**
+ * A change is a difference between two stored, verified versions of one scope: the latest, and
+ * the latest stored at or before `since` (the investor's last visit). None is invented. With no
+ * earlier visit, one version, no version before the visit, no score then or now, or a different
+ * model, the change is Not recorded with its reason. An earlier row that does not verify is
+ * unreadable. Pure in what it decides; reads only `venture_scorecards`.
+ */
+export async function scoreChanges(env: Env, projectId: number, current: readonly StoredScope[], since: string | null): Promise<Record<string, ScopeChange>> {
+  const out: Record<string, ScopeChange> = {};
+  for (const now of current) {
+    if (!since) { out[now.scope] = { state: 'not_recorded', reason: CHANGE_REASONS.firstVisit }; continue; }
+    if (now.state !== 'scored' || now.value == null) { out[now.scope] = { state: 'not_recorded', reason: CHANGE_REASONS.noScore }; continue; }
+    const count = await env.DB.prepare(VERSIONS).bind(projectId, now.scope).first<{ n: number }>();
+    if (Number(count?.n ?? 0) < 2) { out[now.scope] = { state: 'not_recorded', reason: CHANGE_REASONS.oneVersion }; continue; }
+    const then = await env.DB.prepare(AT_OR_BEFORE).bind(projectId, now.scope, since).first<Row>();
+    if (!then) { out[now.scope] = { state: 'not_recorded', reason: CHANGE_REASONS.noneBefore }; continue; }
+    // PMF's rows are signed by its own store (D1144), as storedScorecard reads them.
+    if (now.scope !== 'pmf') {
+      try { await verify(env, then); } catch { out[now.scope] = { state: 'unreadable', reason: CHANGE_REASONS.unreadable }; continue; }
+    }
+    if (then.value == null) { out[now.scope] = { state: 'not_recorded', reason: CHANGE_REASONS.noScoreThen }; continue; }
+    if (String(then.model_version) !== String(now.model)) { out[now.scope] = { state: 'not_recorded', reason: CHANGE_REASONS.modelChanged }; continue; }
+    out[now.scope] = { state: 'recorded', delta: Number(now.value) - Number(then.value), from: Number(then.value), to: Number(now.value), from_computed_at: then.computed_at, since };
   }
   return out;
 }

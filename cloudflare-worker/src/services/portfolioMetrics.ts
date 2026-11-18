@@ -448,3 +448,50 @@ export function daysSince(lastDate: string | null | undefined, today: string): n
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
   return Math.max(0, Math.floor((b - a) / MS_PER_DAY));
 }
+
+/**
+ * #6204 (D6204) — when a period's report is due, and by how much a company is late.
+ *
+ * Owner answer of 2026-11-16: per book, default 30. A company's report for a period is due
+ * `due_days` after the period ends, where `due_days` is the reporting duty's own recorded term
+ * (`reporting_duties.due_days`, `after_end`, for the caller's book), else this firm-wide default.
+ * Nothing here is stored: the due day is worked out on read, as `reporting_periods` already does.
+ */
+export const REPORT_DUE_DEFAULT_DAYS = 30;
+
+/** `YYYY-MM-DD` plus `days` calendar days (UTC), or null for a date that does not parse. */
+export function addDays(date: string, days: number): string | null {
+  const t = toTime(date);
+  if (!Number.isFinite(t) || !Number.isInteger(days)) return null;
+  return new Date(t + days * MS_PER_DAY).toISOString().slice(0, 10);
+}
+
+export type ReportDue = {
+  due_date: string | null;
+  due_days: number | null;
+  due_basis: 'reporting_duty' | 'firm_default' | null;
+  due_reason: string | null;
+  days_overdue: number | null;
+  overdue: boolean;
+};
+
+/**
+ * One company's due date and lateness for a period ending `until`. `dutyDays` is the duty's own
+ * term (null: none recorded for this book, so the firm default applies; undefined: the duties could
+ * not be read, so no due date is claimed). A company that has reported is never overdue; one whose
+ * due day has not passed is Due, not overdue. Days overdue count from the day after the due day.
+ */
+export function reportDue(until: string | null, dutyDays: number | null | undefined, reported: boolean, today: string): ReportDue {
+  const none = (reason: string): ReportDue => ({ due_date: null, due_days: null, due_basis: null, due_reason: reason, days_overdue: null, overdue: false });
+  if (!until) return none('The period has no end date, so no due date can be worked out.');
+  if (dutyDays === undefined) return none('The reporting duties could not be read, so no due date is claimed.');
+  const days = dutyDays == null ? REPORT_DUE_DEFAULT_DAYS : dutyDays;
+  const due = addDays(until, days);
+  if (!due) return none('The period has no end date, so no due date can be worked out.');
+  const t = toTime(today), d = toTime(due);
+  const late = !reported && Number.isFinite(t) && t > d ? Math.floor((t - d) / MS_PER_DAY) : null;
+  return {
+    due_date: due, due_days: days, due_basis: dutyDays == null ? 'firm_default' : 'reporting_duty', due_reason: null,
+    days_overdue: late, overdue: late != null && late > 0,
+  };
+}

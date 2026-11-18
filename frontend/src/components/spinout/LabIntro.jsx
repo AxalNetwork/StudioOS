@@ -174,7 +174,7 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
               </Link>
             ) : null}
             <Link className={LAB_BTN_GHOST_ON_DARK} to={briefHref}>
-              Download the programme brief
+              Read the programme brief
             </Link>
           </div>
         </div>
@@ -211,8 +211,7 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
             </button>
           ) : null}
           <p className="mt-4 text-[11px] leading-relaxed text-white/50">
-            Read from the cohort record. The deadline is computed as seven days before the
-            start, 23:59 Delaware time — never typed.
+            Dates come from the cohort record.
           </p>
         </div>
       </div>
@@ -602,13 +601,8 @@ export function LabCommunity({ surface, directory, shipped }) {
 
         {/* Asks — stated, not drawn */}
         <div className={`p-4 ${LAB_CARD_SUNKEN}`}>
-          <span className={LAB_EYEBROW}>Founder-to-founder asks</span>
+          <span className={LAB_EYEBROW}>Getting an answer</span>
           <p className="mt-3 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
-            This does not exist yet. No store holds a question from one founder to another,
-            and the cohort read deliberately returns no founder identity — so there would be
-            nobody to address one to.
-          </p>
-          <p className="mt-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
             Office hours and matched advisors are the routes to an answer today, and both are
             in the arsenal above.
           </p>
@@ -620,7 +614,7 @@ export function LabCommunity({ surface, directory, shipped }) {
 
 /* ── Apply ────────────────────────────────────────────────────────────── */
 
-export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
+export function LabApplyBand({ cohort, applyHref, briefHref }) {
   const record = cohortOf(cohort);
   return (
     <section className="mt-16 pb-16">
@@ -631,9 +625,8 @@ export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
         <div className="max-w-[580px]">
           <div className={LAB_EYEBROW_ON_DARK}>How to apply</div>
           <h2 className="mt-2 text-[24px] font-black tracking-axal-heading">
-            {record?.open && record.name
-              ? `Apply to the ${record.name} cohort on the ${labTrack(track).name} track.`
-              : `Apply on the ${labTrack(track).name} track.`}
+            {/* #6990: no track in the heading until the application stores one (#6989). */}
+            {record?.open && record.name ? `Apply to the ${record.name} cohort.` : 'Apply to the Spin-Out Lab.'}
           </h2>
           <p className={`mt-2.5 text-[14px] leading-relaxed ${LAB_ON_DARK_MUTED}`}>
             {record?.deadlineLabel ? (
@@ -647,21 +640,13 @@ export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
             )}
             Selection is on evidence of thinking. No equity is taken for taking part.
           </p>
-          {/* The track is a reading aid, not a record. Saying so here is the
-              alternative to carrying a ?track= param the register page would
-              drop in silence. */}
-          <p className="mt-2 text-[11.5px] leading-relaxed text-white/45">
-            The track you picked above is not carried into the form — nothing stores one yet.
-            The application asks where the company is, and that answer is what an admission
-            decision reads.
-          </p>
         </div>
         <div className="flex flex-none flex-col gap-2.5">
           <Link className={LAB_BTN_ON_DARK} to={applyHref}>
             {applyLabelFor(cohort)} →
           </Link>
           <Link className={LAB_BTN_GHOST_ON_DARK} to={briefHref}>
-            Download the programme brief
+            Read the programme brief
           </Link>
         </div>
       </div>
@@ -719,7 +704,7 @@ export default function LabIntro({
         <LabJurisdictionCard value={jurisdiction} onChange={onJurisdiction} track={track} />
         <LabCommunity surface={surface} directory={directory} shipped={shipped} />
         {children}
-        {canApply ? <LabApplyBand cohort={cohort} applyHref={applyHref} briefHref={briefHref} track={track} /> : null}
+        {canApply ? <LabApplyBand cohort={cohort} applyHref={applyHref} briefHref={briefHref} /> : null}
       </div>
     </div>
   );

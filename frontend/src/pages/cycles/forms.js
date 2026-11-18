@@ -367,6 +367,12 @@ const OBLIGATION_KIND = opts([['governance', 'Governance'], ['compliance', 'Comp
 const REPEATS = opts([['once', 'Once'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly']]);
 const remindField = { kind: 'CK', name: 'remind', k: 'Remind', opts: [{ value: '14', label: '14 days before', checked: true }, { value: '1', label: 'The day before', checked: true }] };
 const remindDays = (v) => (Array.isArray(v.remind) ? v.remind.map(Number).filter(Number.isInteger) : []);
+// D6790 (#6790, GR-23): the owner is picked from the company team that Durable's form-options lists as `owners`.
+const ownerField = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [{ value: NONE, label: 'No one yet' }], def: 0, optionsFrom: 'owners' };
+/** D6790: the owner listbox's choices — No one yet, then the company team. */
+export function obligationOwnerOptions(read) {
+  return { owner_user_id: { opts: [{ value: NONE, label: 'No one yet' }, ...growChips(read?.owners)] } };
+}
 const obligation = {
   key: 'obligation', cta: 'Add obligation', button: 'Add obligation',
   title: 'Add obligation',
@@ -377,11 +383,12 @@ const obligation = {
     { kind: 'CH', name: 'kind', k: 'Kind', opts: OBLIGATION_KIND, def: 0, required: true },
     // The route refuses an obligation without a date (#1696).
     { kind: 'T', name: 'due_at', k: 'Due', input: 'date', ph: '12 Dec', required: true },
-    { kind: 'T', name: 'owner_name', k: 'Owner', ph: 'Name', max: 120 },
+    ownerField,
     { kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 2 },
     remindField,
   ],
-  toBody: (v) => ({ title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v) }),
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'durable-company-building').then(obligationOwnerOptions),
+  toBody: (v) => ({ title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_user_id: str(v.owner_user_id), repeats: v.repeats || null, remind_days: remindDays(v) }),
   submit: (w, projectId, v) => w.grow.obligation(projectId, obligation.toBody(v)),
 };
 
@@ -1118,7 +1125,9 @@ const editMarket = {
 
 const OBLIGATION_STATE = opts([['upcoming', 'Upcoming'], ['scheduled', 'Scheduled'], ['draft', 'Draft'], ['done', 'Done'], ['not_set_up', 'Not set up']]);
 // #4046: the title is carried too, now that the Edit draws it (and Ask fills it when blank).
-const OBLIGATION_CARRIED = ['title', 'status', 'owner_name', 'due_at'];
+const OBLIGATION_CARRIED = ['title', 'status', 'owner_user_id', 'due_at'];
+/** D6790: a name typed before owners were picked from the team stays until someone is picked; this chip sends nothing. */
+const KEEP_TYPED_OWNER = '__typed';
 // #6111: every reminder the record can hold, labelled as the Worker labels it (`growDaily.ts`).
 const REMIND_PRESETS = [30, 14, 7, 1, 0];
 const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
@@ -1132,7 +1141,9 @@ const editObligation = {
     obligation.fields[0],
     withChips(obligation.fields[1], [['tax', 'Tax'], ['other', 'Other']]),
     { kind: 'T', name: 'due_at', k: 'Due', input: 'date' },
-    obligation.fields[3],
+    // D6790: the row's own owner stays a choice when the team list does not carry it (a typed name, or someone who left).
+    { ...bare(ownerField), keep: (c) => (c.owner_user_id === KEEP_TYPED_OWNER ? { value: KEEP_TYPED_OWNER, label: `${asText(c.owner_name)} (typed, not on the team)` }
+      : asText(c.owner_user_id) ? { value: c.owner_user_id, label: asText(c.owner) || 'The picked owner' } : null) },
     bare(obligation.fields[4]),
     { ...remindField, opts: REMIND_PRESETS.map((n) => ({ value: String(n), label: reminderLabel(n), checked: false })) },
     // Overdue and Snoozed are states the record reads, so its Edit can open on them.
@@ -1143,12 +1154,23 @@ const editObligation = {
   valuesOf: (row) => {
     const e = growEdit(row) || {};
     const has = (k) => Object.hasOwn(e, k);
-    return { title: asText(e.title), status: asText(e.status), owner_name: asText(e.owner_name), due_at: dateText(e.due_at),
+    // D6790: the record's Owner fact names who is shown (the picked member, else the typed name), when the row does not.
+    const shown = asText(e.owner) || asText((row?.record?.facts ?? []).find((f) => f?.label === 'Owner')?.value);
+    const picked = e.owner_user_id != null && e.owner_user_id !== '';
+    const typed = asText(e.owner_name) || (picked ? '' : shown);
+    const ownerId = picked ? asText(e.owner_user_id) : typed ? KEEP_TYPED_OWNER : '';
+    // `owner` and `owner_name` label the kept chip (`keep`); they are not fields, so they are never sent.
+    return { title: asText(e.title), status: asText(e.status), owner_user_id: ownerId, owner: shown, owner_name: typed, due_at: dateText(e.due_at),
       ...(has('kind') ? { kind: asText(e.kind) } : {}), ...(has('repeats') ? { repeats: asText(e.repeats) } : {}),
       ...(has('remind_days') ? { remind: (Array.isArray(e.remind_days) ? e.remind_days : []).map(String) } : {}) };
   },
-  toBody: (v, was) => sentChanged(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
-    was, OBLIGATION_CARRIED, { remind_days: 'remind' }),
+  toBody: (v, was) => {
+    const body = sentChanged(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_user_id: str(v.owner_user_id), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
+      was, OBLIGATION_CARRIED, { remind_days: 'remind' });
+    if (v.owner_user_id === KEEP_TYPED_OWNER) delete body.owner_user_id;
+    return body;
+  },
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'durable-company-building').then(obligationOwnerOptions),
   submit: (w, projectId, id, v, was) => w.grow.obligationUpdate(projectId, id, editObligation.toBody(v, was)),
 };
 
