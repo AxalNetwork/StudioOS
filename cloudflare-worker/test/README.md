@@ -353,6 +353,7 @@ catalogue version only in the fixture.
 | `network_intro_offers_6637.test.ts` | D6637: real migrated SQLite authorization, consent, failure and concurrency regressions. |
 | `network_tie_candidates_6636.test.ts` | D6636: real migrated SQLite authorization, consent, failure and concurrency regressions. |
 
+| `file_recovery_6428.test.mjs` | D6428: runs synthetic-only Python recovery regressions through the standard Worker test suite. |
 | `deal_activity_sources_6430.test.ts` | D6430: mounted real-SQLite data-room grant/folder/tier/NDA isolation, exact-firm deck grants, anonymous signature events, bounds and per-source failures. |
 | `licence_agreement_revision_6562.test.ts` | D6562: recorded rendered-input snapshots, truthful comparisons, independent readiness, legacy uncertainty, frozen text and unready-send refusal over the full migrated schema. |
 | `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
