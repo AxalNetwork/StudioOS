@@ -382,3 +382,15 @@ test('wiring: the routes, the API module against the Worker routes, and the ledg
   assert.match(read('frontend/src/pages/admin/AdminLicences.jsx'), /licencePricingHqApi\.signals\(\)/);
   assert.equal(PRICING_PATHS.country('fr'), '/admin/licences/pricing/country/FR');
 });
+
+test('D5020 with the ledger menus: Needs attention counts a pricing signal, as the Attention cell does', async () => {
+  const { filterByMenus, attentionCell } = await import('../src/pages/admin/licenceLedgerModel.js');
+  const far = '2099-01-01';
+  const rows = [{ uid: 'lic-a', renewal_date: far }, { uid: 'lic-b', renewal_date: far }];
+  const reads = { 'lic-a': { ok: true, total: 0 }, 'lic-b': { ok: true, total: 0 } };
+  const pricing = { state: 'ok', byUid: { 'lic-a': { signals: { pricing_review_due: true } }, 'lic-b': { signals: { pricing_review_due: false } } } };
+  assert.equal(attentionCell(rows[0], reads['lic-a'], pricing).label, '1 item');
+  assert.deepEqual(filterByMenus(rows, reads, { attention: 'needs' }, pricing).map((l) => l.uid), ['lic-a']);
+  assert.deepEqual(filterByMenus(rows, reads, { attention: 'clear' }, pricing).map((l) => l.uid), ['lic-b']);
+  assert.deepEqual(filterByMenus(rows, reads, { attention: 'needs' }).map((l) => l.uid), [], 'without the pricing read, as before');
+});
