@@ -62,7 +62,7 @@ test('a row is one vehicle: the label comes from fund_number, the manager sits u
   assert.equal(read.vehicleLabel(AFORE).vehicle, 'Afore IV', 'a name that already carries its number is not given it twice');
   assert.equal(read.vehicleLabel({ name: 'Ivy Partners', fund_number: 'I' }).vehicle, 'Ivy Partners I', 'a number is a token, not a substring');
   assert.equal(read.vehicleLabel({ name: 'Solo', fund_number: null }).vehicle, 'Solo');
-  const { html, text } = view();
+  const { text } = view();
   assert.match(text, /Dawn Capital OppDawn Capital/);
   assert.match(text, /Dawn Capital VDawn Capital/);
 });
