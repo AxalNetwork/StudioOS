@@ -82,7 +82,6 @@ async function call(db: DatabaseSync, who: number, method: string, path: string,
   try { json = JSON.parse(text); } catch { /* not JSON */ }
   return { status: res.status, body: json, text };
 }
-const count = (db: DatabaseSync) => (db.prepare('SELECT COUNT(*) AS n FROM reference_checks').get() as any).n;
 
 
 test('internal deal fields are staff-only and zip is retired', async () => {

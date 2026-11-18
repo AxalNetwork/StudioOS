@@ -133,7 +133,6 @@ date cloudflare-worker/test/cycle_records_grow_d691.test.ts
 date cloudflare-worker/test/cycle_validate_d659.test.ts
 date cloudflare-worker/test/data_room_capabilities_5074.test.ts
 date cloudflare-worker/test/data_room_founder_reads_d374.test.ts
-date cloudflare-worker/test/data_room_grants_2461.test.ts
 date cloudflare-worker/test/data_room_part2_d1103.test.ts
 date cloudflare-worker/test/data_room_requests_d1104.test.ts
 date cloudflare-worker/test/dataroom_deck_sources_d1602.test.ts
@@ -323,7 +322,6 @@ date cloudflare-worker/test/relationships_d1356.test.ts
 date cloudflare-worker/test/relationships_intro_lifecycle_d4329.test.ts
 date cloudflare-worker/test/report_figures_d1059.test.ts
 date cloudflare-worker/test/reporting_duties_d1058.test.ts
-date cloudflare-worker/test/reporting_reader_d1061.test.ts
 date cloudflare-worker/test/research_overview_d536.test.ts
 date cloudflare-worker/test/revenue_ledger_d363.test.ts
 date cloudflare-worker/test/revshare_window_warnings.test.mjs
