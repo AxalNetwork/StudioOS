@@ -2741,6 +2741,13 @@ Four board sets from the owner's Claude Design canvas "Axal VC – platform desi
 
 None is built yet. Companies, founders, partners, countries' details and amounts are sample content; government fees read Not recorded and legal and tax wording waits on counsel. Open owner questions on #6681 and #6682 are drawn as option A and marked ⚑.
 
+## Landed 2026-11-16 — Sign in v2 (#6956)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the copy-paste prompt on #6956, as a page plus its boards:
+- **`Sign In v2 Page.dc.html`**, **`Sign In v2 · Boards.dc.html`**: SGN-00 to SGN-14, 40 frames (D6956). The component loads the production artwork from `frontend/public/auth/login-background.webp`. A clickable prototype is linked from #6956.
+
+Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
+
 
 ## Landed 2026-11-16 — Network: Organizations, Relationships and Introductions (#7051–#7066)
 
