@@ -132,7 +132,7 @@ test('M1: "no market is mapped" is said only over the whole list, and a failed s
 test('M1: the tracked sectors are the Worker\'s list, read by the mounted page, never written in it', () => {
   const src = codeOnly(read('frontend/src/pages/research/MarketDirectoryZone.jsx'));
   assert.match(src, /useRead\(\(\) => researchSectorsApi\.list\(\)\)/);
-  assert.match(src, /<PrivatePanel markets=\{\{ \.\.\.markets, reload: reloadMarkets \}\} sectors=\{\{ \.\.\.sectors, reload: reloadSectors \}\} \/>/);
+  assert.match(src, /<PrivatePanel markets=\{\{ \.\.\.markets, reload: reloadMarkets \}\} sectors=\{\{ \.\.\.sectors, reload: reloadSectors \}\} exporter=\{exporter\} \/>/);
   for (const name of ['AI Infrastructure', 'Agentic B2B', 'Quantum Infrastructure', 'Vertical SaaS', 'Climate Intelligence']) {
     assert.ok(!src.includes(name), `the page writes the sector "${name}" itself`);
   }
@@ -309,7 +309,7 @@ test('the partner row\'s Re-run stale opens the form on the stale reading; Attac
   // The page that renders the zone supplies it, through the workspace.
   assert.deepEqual(unsuppliedHandlers().filter((b) => b.zone === 'research/markets'), []);
   assert.match(codeOnly(read('frontend/src/workspaces/ResearchWorkspace.jsx')),
-    /zoneActions=\{\(rows, handlers\) => zoneActionsFor\(role, 'research\/markets', \{ handlers, view:/);
+    /zoneActions=\{\(scoped, handlers\) => zoneActionsFor\(role, 'research\/markets', \{ handlers, view:/);
 });
 
 test('copy that described the page without its form or its directory says what is there', () => {

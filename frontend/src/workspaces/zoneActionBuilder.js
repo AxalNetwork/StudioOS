@@ -144,6 +144,22 @@ export function makeZoneActions(TABLE, accent = null) {
         };
       }
       if (item.kind === 'export') {
+        // D7172 (#7172): a view that states its own scope. The page has worked
+        // out what the export writes ("Export this page · 14 rows", "Export
+        // filtered markets · 6 rows") and runs it itself, because the rows may
+        // be more than it has loaded; the header row carries the same label
+        // and the same click as the control the page draws beside its count.
+        if (view?.scoped) {
+          const s = view.scoped;
+          return {
+            label: s.label,
+            testid,
+            onClick: s.disabled ? undefined : s.onClick,
+            disabled: s.disabled === true,
+            busy: s.busy === true,
+            title: s.scope,
+          };
+        }
         const rows = view?.rows || [];
         if (!rows.length) {
           // THE STATE GOES IN THE LABEL, because a grey button whose only
