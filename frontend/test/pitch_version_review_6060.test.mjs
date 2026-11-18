@@ -215,7 +215,7 @@ async function mount({ list = versions, deck = SAVED } = {}) {
   localStorage.setItem('user', JSON.stringify({ id: 1, role: 'founder' }));
   const container = document.createElement('div'); document.body.appendChild(container);
   const rootEl = createRoot(container);
-  const settle = () => act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const settle = () => act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setImmediate(r)); });
   await act(async () => { rootEl.render(h(MemoryRouter, { initialEntries: ['/raise/pitch/review?project_id=7'] }, h(AuthProvider, null, h(PitchStudio, { tab: 'review' })))); });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -226,8 +226,8 @@ async function mount({ list = versions, deck = SAVED } = {}) {
     calls, all, pr, by: (id) => all(id)[0], ids: () => walk(container).map((n) => pr(n)['data-testid']).filter(Boolean),
     /** Until the preflight has measured every card (each card is drawn off screen in turn). */
     async measured() {
-      for (let i = 0; i < 200 && all('pitch-version-review-row').some((n) => pr(n)['data-status'] === 'running'); i += 1) {
-        await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+      for (let i = 0; i < 2000 && all('pitch-version-review-row').some((n) => pr(n)['data-status'] === 'running'); i += 1) {
+        await act(async () => { await new Promise((r) => setImmediate(r)); });
       }
     }, within: (node, id) => walk(node).filter((n) => pr(n)['data-testid'] === id), text: (n) => text(n).replace(/\s+/g, ' ').trim(),
     async unmount() {
