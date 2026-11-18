@@ -225,6 +225,8 @@ test('the LP workspace renders standalone, not only embedded', () => {
 /* -------------------------------- live studio metrics + the apply flow */
 
 const workspace = read('pages/SpinoutLabLpWorkspacePage.jsx');
+const participation = read('pages/investor/fund/FundParticipationSection.jsx');
+const application = read('pages/investor/fund/LpApplicationForm.jsx');
 const api = read('lib/api.js');
 
 test('each studio-proof tile falls back independently, not the whole page at once', () => {
@@ -248,8 +250,8 @@ test('the studio-proof caption counts live tiles rather than claiming all or non
 test('the LP application posts for real — no dead-end copy left', () => {
   assert.match(api, /submitLpApplication: \(body\) =>/);
   assert.match(api, /request\('\/spinout-lab\/lp-application', \{ method: 'POST'/);
-  assert.match(workspace, /<LpApplicationForm/);
-  assert.match(workspace, /spinoutLab\.submitLpApplication\(/);
+  assert.match(participation, /<LpApplicationForm/);
+  assert.match(application, /spinoutLab\.submitLpApplication\(/);
   // The old admission that the form was unwired must be gone with it.
   assert.doesNotMatch(workspace, /no LP-application\s*\n?\s*\/\/?\s*endpoint exists yet/);
   assert.doesNotMatch(workspace, /is not wired/);
@@ -259,11 +261,11 @@ test('the form stays hidden when the application status could not be read', () =
   // "Could not tell" is not "never applied" — showing a fresh form to someone
   // who already applied invites a duplicate submission.
   assert.match(workspace, /applicationLoaded/);
-  assert.match(workspace, /if \(!loaded\) \{/);
+  assert.match(application, /if \(!loaded\) \{/);
 });
 
 test('accreditation gates submission on the client too', () => {
-  assert.match(workspace, /disabled=\{busy \|\| !accredited\}/,
+  assert.match(application, /disabled=\{busy \|\| !accredited\}/,
     'the submit button is disabled until Rule 501 is certified');
 });
 
@@ -273,6 +275,6 @@ test('the access ladder reads the application, and the workspace feeds it one', 
 });
 
 test('D6138: the workspace keeps the application commitment slider and removes the allocation control and promise', () => {
-  assert.match(workspace, /type="range"[\s\S]*?aria-label="Target commitment"/);
+  assert.match(application, /type="range"[\s\S]*?aria-label="Target commitment"/);
   assert.doesNotMatch(workspace, /allocation (rights|preferences?|window)|allocationOpen|allocOpen/i);
 });
