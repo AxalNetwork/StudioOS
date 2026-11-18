@@ -285,3 +285,6 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
 }
 /* D6204: an obligation past its due date, by the Worker's date. */
 .pf-late-text{color:var(--pf-neg);font-weight:700;display:block}
+
+/* D6909 part 4: Eadwyn's drafts on a mark request (PRM20, PRM22). */
+.pf-draft{display:flex;flex-direction:column;gap:6px;border:1px solid var(--pf-lavE);background:var(--pf-lav);border-radius:9px;padding:10px 12px;margin:8px 0}

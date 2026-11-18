@@ -34,6 +34,7 @@ import {
   kindLabel, draftEvidenceWords, evidenceWords, requestCountWords,
 } from '../portfolio/markRequestModel';
 import { day } from '../portfolio/portfolioModel';
+import { ReasonDraft } from '../portfolio/MarkDrafts.jsx';
 
 function Steps({ at }) {
   return (
@@ -179,6 +180,8 @@ export function RequestSteps({ row, latest, initialStep = 0, initialDraft, initi
       <label htmlFor="pf-request-reason">Reason · required</label>
       <textarea id="pf-request-reason" rows={3} maxLength={REASON_MAX} value={reason} onChange={(e) => setReason(e.target.value)}
         placeholder="What is stale, wrong or missing, and what you know of it" data-testid="input-mark-request-reason" />
+      {/* D6909 part 4 (PRM20): Eadwyn drafts the reason; the investor accepts, edits or discards it, and still sends. */}
+      <ReasonDraft projectUid={row.uid} requestKind={kind} onUse={(r) => setReason(r)} />
       <fieldset className="pf-evidence" data-testid="mark-request-evidence">
         <legend>Evidence · optional</legend>
         {['none', 'link', 'file'].map((m) => (

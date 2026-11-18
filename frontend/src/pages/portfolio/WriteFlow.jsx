@@ -25,10 +25,11 @@ import './writeFlow.css';
  * shows the Worker's own sentence; a 400 that names a field returns to that
  * field. Closing a draft that holds anything asks first.
  */
-export default function WriteFlow({ kind, detail, today = '', save, reread, onSaved, onClose, closeAsked = false, onCloseAnswered, context = null, receiptNote = null }) {
+export default function WriteFlow({ kind, detail, today = '', save, reread, onSaved, onClose, closeAsked = false, onCloseAnswered, context = null, receiptNote = null, seed = null }) {
   const def = WRITES[kind];
   const initial = useMemo(() => draftOf(kind, today), [kind, today]);
-  const [values, setValues] = useState(initial);
+  // D6909 part 4: a seed (Eadwyn's accepted basis, source and day) starts Prepare filled; it is a draft like any other.
+  const [values, setValues] = useState(() => (seed ? { ...initial, ...seed } : initial));
   const [errors, setErrors] = useState({});
   const [step, setStep] = useState('prepare');
   const [base, setBase] = useState(() => baseOf(detail));
