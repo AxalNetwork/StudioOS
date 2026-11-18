@@ -261,7 +261,8 @@ test('/admin/licences/packages/compare outranks /admin/licences/:uid and is HQ o
   assert.match(src, /<Route path="\/admin\/licences\/packages\/compare" element=\{guard\(\['admin'\], hqOnly\(<PackageCompare \/>\)\)\} \/>/);
   const client = readFileSync(new URL('../src/lib/api/licencePackages.js', import.meta.url), 'utf8');
   assert.match(client, /\/admin\/licences\/\$\{enc\(licenceUid\)\}\/package-pricing/);
-  assert.doesNotMatch(client, /method:\s*'(POST|PUT|DELETE)'/);
+  // D5897's writes share this client; the pricing preview this board adds is a plain read.
+  assert.doesNotMatch(client.split('\n').find((l) => l.includes('package-pricing') && l.includes('request(')), /method:/);
   assert.equal(pricingQuery(), '');
   assert.equal(pricingQuery({ package: 'venture_building', version: 2 }), '?package=venture_building&version=2');
   assert.equal(pricingQuery({ version: 2 }), '', 'a version is never sent without its package (the Worker refuses it)');
