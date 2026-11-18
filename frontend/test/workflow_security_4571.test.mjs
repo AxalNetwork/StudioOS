@@ -11,14 +11,21 @@
  *   WF-2  every container image is pinned by digest, or is a recorded finding;
  *   WF-3  every workflow declares its token's permissions, at the top or on
  *         every job, and never `write-all`;
- *   WF-4  no `pull_request_target` and no `workflow_run`: a fork's pull request
- *         never runs with this repository's secrets or a write token;
+ *   WF-4  no `pull_request_target`, and no `workflow_run` except the reviewed
+ *         TRUSTED_WORKFLOW_RUN entries: a fork's pull request never runs with
+ *         this repository's secrets or a write token;
  *   WF-5  text an outsider writes (a PR title, body or branch name, an issue or
  *         comment body, a commit message) is never expanded inside a `run:`
  *         script or a github-script `script:`; it reaches a step through `env:`;
  *   WF-6  a workflow that an issue or comment can start, and that holds a write
  *         token, says who may start it (`author_association`), or is a recorded
- *         finding.
+ *         finding;
+ *   WF-7  (D7146, #7146) no workflow that runs pull-request code references a
+ *         Cloudflare credential: not a `pull_request` workflow (its file IS the
+ *         branch's code), and not a `pull_request_target` one that checks the
+ *         branch out. No named secret, no `secrets[...]`, no `toJSON(secrets)`,
+ *         no `secrets: inherit`. A preview is deployed by a TRUSTED_WORKFLOW_RUN
+ *         workflow from main instead.
  *
  * A recorded finding is an entry below naming its risk-register id in
  * documentation/audits/SECURITY_CONTROL_MATRIX_2026-11-06.md. Taking one out is
@@ -26,7 +33,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 
 const ROOT = new URL('../../', import.meta.url);
 const DIR = new URL('.github/workflows/', ROOT);
@@ -38,6 +45,21 @@ const read = (name) => readFileSync(new URL(name, DIR), 'utf8');
 export const MUTABLE_IMAGES = Object.freeze({});
 // SC-02 (claude-code.yml) was closed by gating each comment event on its author's association.
 export const UNGATED_COMMENT_TRIGGERS = Object.freeze({});
+/**
+ * `workflow_run` workflows that may exist, each with its decision. GitHub runs a
+ * `workflow_run` workflow from the default branch with a write-capable token, so
+ * each must take the run it reacts to as data: it never checks out the branch,
+ * never runs the artifact through an action, and refuses fork and non-pull_request
+ * runs. WF-4 holds those three rules for every entry.
+ */
+export const TRUSTED_WORKFLOW_RUN = Object.freeze({ 'pr-preview-deploy.yml': 'D7146' });
+
+/** A secret that is, or looks like, a Cloudflare credential. Account ids ride along: a PR run reads none. */
+const CLOUDFLARE_SECRET = /\bsecrets\.[A-Z0-9_]*(?:CLOUDFLARE|WRANGLER|CF_API|CF_ACCOUNT)[A-Z0-9_]*\b/;
+/** Ways to reach every secret without naming one. */
+const BULK_SECRETS = /\bsecrets\s*\[|toJSON\(\s*secrets\s*\)|^\s*secrets:\s*inherit\b/m;
+/** A checkout of the pull request's branch rather than the base. */
+const CHECKS_OUT_PR = /^\s*ref:\s*.*(?:pull_request\.head|github\.head_ref|refs\/pull\/|workflow_run\.head)/m;
 
 const indentOf = (l) => l.length - l.trimStart().length;
 const isComment = (l) => l.trimStart().startsWith('#');
@@ -104,7 +126,7 @@ function jobsOf(src) {
 const topPermissions = (src) => src.split('\n').some((l) => /^permissions:/.test(l));
 
 /** Event text an outsider controls. `github.head_ref` is the branch name, which a fork chooses. */
-const UNTRUSTED = /\$\{\{[^}]*\bgithub\.(head_ref|event\.(pull_request\.(title|body|head\.ref|head\.label)|issue\.(title|body)|comment\.body|review\.body|review_comment\.body|discussion\.(title|body)|head_commit\.(message|author\.(name|email))|commits|pages))/;
+const UNTRUSTED = /\$\{\{[^}]*\bgithub\.(head_ref|event\.(pull_request\.(title|body|head\.ref|head\.label)|issue\.(title|body)|comment\.body|review\.body|review_comment\.body|discussion\.(title|body)|head_commit\.(message|author\.(name|email))|commits|pages|workflow_run\.(head_branch|display_title|head_commit|pull_requests)))/;
 
 test('the guard reads every workflow, and each recorded finding is a row in the risk register', () => {
   assert.ok(FILES.length >= 30, `found ${FILES.length} workflows`);
@@ -158,10 +180,49 @@ test('WF-3: every workflow declares its token permissions (top level or every jo
   assert.deepEqual(bad, [], 'an undeclared token gets the repository default, which an owner can widen without touching this file');
 });
 
-test('WF-4: no pull_request_target and no workflow_run trigger', () => {
+test('WF-4: no pull_request_target, and workflow_run only in the reviewed trusted workflows', () => {
   // Mutation checked: `pull_request_target:` added to ci.yml's triggers.
-  const bad = FILES.filter((f) => /\b(pull_request_target|workflow_run)\b/.test(triggersOf(read(f))));
+  const bad = FILES.filter((f) => /\bpull_request_target\b/.test(triggersOf(read(f))) ||
+    (/\bworkflow_run\b/.test(triggersOf(read(f))) && !TRUSTED_WORKFLOW_RUN[f]));
   assert.deepEqual(bad, [], 'both run with this repository\'s secrets and a write token on a fork\'s pull request');
+  // Mutation checked: `ref: ${{ github.event.workflow_run.head_sha }}` added to pr-preview-deploy.yml's checkout.
+  for (const [f, decision] of Object.entries(TRUSTED_WORKFLOW_RUN)) {
+    assert.ok(FILES.includes(f), `${f} is listed but does not exist`);
+    assert.ok(existsSync(new URL(`documentation/architecture/decisions/${decision}.md`, ROOT)), `${f}: ${decision} records why it may exist`);
+    const src = codeLines(read(f)).join('\n');
+    assert.match(triggersOf(read(f)), /^\s*\n\s+workflow_run:\n\s+workflows: \[[^\]]+\]\n\s+types: \[completed\]\s*$/, `${f}: workflow_run on completion is its only trigger`);
+    assert.doesNotMatch(src, CHECKS_OUT_PR, `${f}: never check out the triggering branch`);
+    assert.doesNotMatch(src, /\bref:/, `${f}: its only checkout is main's own commit`);
+    assert.doesNotMatch(src, /actions\/download-artifact/, `${f}: an artifact is fetched as data and checked, never unpacked by an action`);
+    assert.match(src, /github\.event\.workflow_run\.event == 'pull_request'/, `${f}: refuses runs that are not pull_request runs`);
+    assert.match(src, /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/, `${f}: refuses fork runs`);
+    assert.match(src, /^permissions: \{\}$/m, `${f}: no token by default`);
+  }
+});
+
+test('WF-7: no workflow that runs pull-request code references a Cloudflare credential (D7146)', () => {
+  // Mutation checked: `CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}` added to pr-preview.yml's build job.
+  const bad = [];
+  for (const f of FILES) {
+    const on = triggersOf(read(f));
+    const src = codeLines(read(f)).join('\n');
+    const runsPrCode = /\bpull_request\b/.test(on.replace(/pull_request_target/g, '')) ||
+      (/\bpull_request_target\b/.test(on) && CHECKS_OUT_PR.test(src));
+    if (!runsPrCode) continue;
+    const named = src.match(new RegExp(CLOUDFLARE_SECRET.source, 'g')) || [];
+    for (const m of named) bad.push(`${f}: ${m}`);
+    if (BULK_SECRETS.test(src)) bad.push(`${f}: reaches every secret without naming one`);
+  }
+  assert.deepEqual(bad, [], 'a pull request\'s branch writes these workflows; a credential here is the branch\'s credential. Deploy from a TRUSTED_WORKFLOW_RUN workflow on main instead');
+  // The patterns catch what they must.
+  for (const s of ['${{ secrets.CLOUDFLARE_API_TOKEN }}', '${{ secrets.PR_PREVIEW_CLOUDFLARE_API_TOKEN }}', '${{ secrets.MEETING_BOT_CLOUDFLARE_API_TOKEN }}', '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}', '${{ secrets.WRANGLER_TOKEN }}', '${{ secrets.CF_API_TOKEN }}']) {
+    assert.match(s, CLOUDFLARE_SECRET, s);
+  }
+  assert.doesNotMatch('${{ secrets.GITHUB_TOKEN }}', CLOUDFLARE_SECRET);
+  for (const s of ['${{ secrets[matrix.name] }}', '${{ toJSON(secrets) }}', '    secrets: inherit']) assert.match(s, BULK_SECRETS, s);
+  for (const s of ['          ref: ${{ github.event.pull_request.head.sha }}', '          ref: refs/pull/1/head', '          ref: ${{ github.head_ref }}']) assert.match(s, CHECKS_OUT_PR, s);
+  // The pull-request half of the preview is a pull_request workflow, so this test reads it.
+  assert.ok(/\bpull_request\b/.test(triggersOf(read('pr-preview.yml'))));
 });
 
 test('WF-5: outsider-written event text is never expanded inside run: or a github-script script:', () => {
@@ -175,7 +236,7 @@ test('WF-5: outsider-written event text is never expanded inside run: or a githu
   }
   assert.deepEqual(bad, [], 'pass it through env: and quote the variable; an expression is pasted into the script before the shell parses it');
   // The pattern itself catches what it must (a guard that matches nothing guards nothing).
-  for (const s of ['${{ github.event.pull_request.title }}', '${{ github.head_ref }}', '${{ github.event.comment.body }}', '${{github.event.issue.body}}']) {
+  for (const s of ['${{ github.event.pull_request.title }}', '${{ github.head_ref }}', '${{ github.event.comment.body }}', '${{github.event.issue.body}}', '${{ github.event.workflow_run.head_branch }}', '${{ github.event.workflow_run.display_title }}']) {
     assert.match(s, UNTRUSTED, s);
   }
   assert.doesNotMatch('${{ github.event.pull_request.number }}', UNTRUSTED);

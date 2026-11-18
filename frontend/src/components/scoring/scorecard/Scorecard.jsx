@@ -11,22 +11,26 @@
  * flow's table and the deal's Overview (SC6, DL24a). The founder's page keeps
  * its waits: it is part 5's (#3281).
  *
+ * D6168 (#6168): `ScopeRows` draws a few scopes' rows on the deal's Team,
+ * Market and Traction tabs from the same read, and the panel's drawer has an
+ * address (`?scope=team`) when the page asks for it (`addressed`).
+ *
  * Nothing here computes a score. A scope with no value is "Not enough
  * recorded", "Not expected yet", "Not scored yet" or "Could not be read",
  * never a bar or a number of zero.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Unreadable } from '../../../ui';
 import { ventureScoresApi } from '../../../lib/api/ventureScores';
 import { reportError } from '../../../lib/log';
 import {
   COUNTED, FOUNDER_PAGE, GRADES, METHOD, MIX, NOT_ENOUGH, NOT_EXPECTED, NOT_REVIEWED, NOT_SCORED, NOT_YET, PMF_GROUPS, SCOPES, STATE_WORDS, UNREADABLE, WAITS, WEIGHTING_LINE,
   CHANGE_NOT_RECORDED, CONTEXT_VIEW, barText, bandWord, batches, coverageText, evidenceOf, panelOf, reviewText, scoreCellOf, stampText, stripBar, stripOf,
-  unreadScopes, valueOf,
+  scopeParam, unreadScopes, valueOf,
 } from './scorecardModel';
 import { ScopeScore } from '../../../pages/investor/dealflow/ScopeScore.jsx';
-import { tabHref } from '../../../pages/dealPageModel';
+import { scopeHref, tabHref } from '../../../pages/dealPageModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import WeightingControl from './Weighting';
 
@@ -440,6 +444,84 @@ export function useDealScorecard(dealId) {
   return [read, load];
 }
 
+/** D6168: the refusals as the panel words them, in a line instead of a centred card. */
+const REFUSED = new Set(['not_on_deal', 'no_access', 'not_found', 'locked']);
+
+/** D6168: one scope's row as the Scorecard tab draws it, with Open to its drawer there. */
+function ScopeLine({ s, masked, dealId, onRetry, testId }) {
+  const cell = <ScopeScore cell={scoreCellOf(s)} label={s.label} testId={`${testId}-score-${s.key}`} />;
+  const name = <span className="min-w-0 flex-1 basis-[150px] text-[13px] font-semibold text-axal-ink dark:text-gray-100">{s.label}</span>;
+  const ROW = 'flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 py-2 first:border-t-0 dark:border-gray-800';
+  if (s.state === 'unreadable') {
+    return (
+      <li className={ROW} data-testid={`${testId}-${s.key}`}>
+        {name}{cell}
+        <span className="text-[12.5px] text-red-700 dark:text-red-300" role="alert">{STATE_WORDS.scope_unreadable(s.label)}</span>
+        <button type="button" onClick={onRetry} className={BTN} data-testid={`${testId}-retry-${s.key}`}>Try again</button>
+      </li>
+    );
+  }
+  const value = valueOf(s, masked);
+  const coverage = coverageText(s.coverage);
+  return (
+    <li className={ROW} data-testid={`${testId}-${s.key}`}>
+      {name}{cell}
+      {value.kind === 'value' && <span className="font-mono text-[12.5px] text-axal-ink dark:text-gray-100" data-testid={`${testId}-value-${s.key}`}><span className="font-sans text-axal-muted dark:text-gray-400">Value </span>{value.text}</span>}
+      {value.kind === 'locked' && <span data-testid={`${testId}-value-${s.key}`}><ScopeScore cell={value.cell} label={`${s.label} value`} /></span>}
+      {coverage && <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`${testId}-coverage-${s.key}`}>{coverage}</span>}
+      {!masked && (
+        <Link to={scopeHref(dealId, s.key)} aria-label={`Open ${s.label} on the scorecard`} className={`${LINK} inline-flex min-h-[44px] items-center sm:min-h-0`} data-testid={`${testId}-open-${s.key}`}>Open</Link>
+      )}
+    </li>
+  );
+}
+
+/**
+ * D6168 (#6168): a few scopes' rows (`keys`, in the order given) for the deal's Team, Market and
+ * Traction tabs, read through `useDealScorecard` once per mount. Each row is the Scorecard tab's:
+ * the shared score (band and confidence, or the state's own word), the value only after the NDA,
+ * and coverage; Open goes to that scope's drawer on the Scorecard tab. Locked, not on the deal, no
+ * access and unreadable read as the tab words them. Nothing is a zero.
+ */
+export function ScopeRows({ dealId, keys, ndaHref = null, testId = 'scope-rows' }) {
+  const [read, retry] = useDealScorecard(dealId);
+  const panel = panelOf(read);
+  let body;
+  if (panel.state === 'loading') body = <p className={`m-0 ${SUB}`} aria-live="polite">{STATE_WORDS.reading}</p>;
+  else if (panel.state === 'unreadable') body = <div data-testid={`${testId}-unreadable`}><Unreadable what="The scorecard" claim="That is not a score of zero." onRetry={retry} /></div>;
+  else if (REFUSED.has(panel.state)) {
+    const words = panel.state === 'locked' ? { title: STATE_WORDS.locked.title, line: panel.reason } : STATE_WORDS[panel.state];
+    body = (
+      <div className="flex flex-col gap-1" data-testid={`${testId}-${panel.state.replace(/_/g, '-')}`}>
+        <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{words.title}</p>
+        <p className={`m-0 ${SUB}`}>{words.line}</p>
+      </div>
+    );
+  } else {
+    const masked = panel.state === 'masked';
+    const rows = keys.map((k) => panel.scopes.find((s) => s.key === k)).filter(Boolean);
+    body = (
+      <>
+        <ul className="m-0 flex list-none flex-col p-0">
+          {rows.map((s) => <ScopeLine key={s.key} s={s} masked={masked} dealId={dealId} onRetry={retry} testId={testId} />)}
+        </ul>
+        {masked && (
+          <p className={`m-0 ${SUB}`} data-testid={`${testId}-masked`}>
+            {STATE_WORDS.masked.line}{ndaHref && <> <Link to={ndaHref} className={LINK}>{STATE_WORDS.masked.act}</Link></>}
+          </p>
+        )}
+      </>
+    );
+  }
+  return (
+    <section className={CARD} data-testid={testId}>
+      <span className={EYE}>Venture scorecard</span>
+      <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">On the scorecard</h3>
+      {body}
+    </section>
+  );
+}
+
 function Header({ panel }) {
   const stamp = stampText(panel?.computed_at);
   return (
@@ -500,9 +582,21 @@ function Weighting() {
  * `weighting={false}` leaves the weighting out where the page already draws
  * it (Deal flow's toolbar, whose sort it must re-read on save).
  */
-export default function VentureScorecard({ audience = 'investor', dealId = null, ndaHref = null, weighting = true }) {
+export default function VentureScorecard({ audience = 'investor', dealId = null, ndaHref = null, weighting = true, addressed = false }) {
   const [read, retry] = useDealScorecard(audience === 'founder' ? null : dealId);
-  const [open, setOpen] = useState(null);
+  // D6168: on the deal page the drawer is `?scope=<key>`: opening it is a step in history, so Back closes it;
+  // its own close replaces the address. Elsewhere (Deal flow's peek) it stays the panel's own state.
+  const [params, setParams] = useSearchParams();
+  const [local, setLocal] = useState(null);
+  const open = addressed ? scopeParam(params.get('scope')) : local;
+  const setOpen = useCallback((key) => {
+    if (!addressed) { setLocal(key); return; }
+    setParams((was) => {
+      const next = new URLSearchParams(was);
+      if (key) next.set('scope', key); else next.delete('scope');
+      return next;
+    }, { replace: !key });
+  }, [addressed, setParams]);
   const [expanded, setExpanded] = useState(() => new Set());
   const toggle = useCallback((key) => setExpanded((was) => {
     const next = new Set(was);
@@ -537,7 +631,8 @@ export default function VentureScorecard({ audience = 'investor', dealId = null,
   else if (panel.state === 'locked') body = <Closed words={{ title: STATE_WORDS.locked.title, line: panel.reason }} testId="scorecard-locked" />;
   else {
     const masked = panel.state === 'masked';
-    const shown = panel.scopes.find((s) => s.key === open);
+    // A drawer opens on a scope that could be read, and never before the NDA: its inputs are not sent.
+    const shown = masked ? null : panel.scopes.find((s) => s.key === open && s.state !== 'unreadable');
     body = (
       <>
         {masked && (

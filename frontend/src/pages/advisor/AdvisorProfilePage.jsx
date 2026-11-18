@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
 import { initialsOf, profileSub, safeHref, sinceYear } from './practice/practiceTools';
 import { PriceCell } from './practice/SessionTypesPanel';
+import { servicePrice } from './expertise/expertiseModel';
 
 /**
  * Ops A5 public advisor profile (D571/D573). Publishes active session types
@@ -172,6 +173,28 @@ export function AdvisorProfileView({ state, onRetry, isOwner = false, onBook }) 
               </div>
             </dl>
           </Card>
+
+          {/* D4824 (#4824): the services the advisor chose to publish (D5315 part 3). Booked through a session type. */}
+          {Array.isArray(a.services) && a.services.length > 0 && (
+            <Card padding="md" data-testid="advisor-profile-services">
+              <SectionLabel>Services</SectionLabel>
+              <ul className="m-0 mt-2 list-none space-y-2.5 p-0">
+                {a.services.map((sv) => (
+                  <li key={sv.uid} className="border-t border-axal-hairline pt-2.5 first:border-t-0 first:pt-0 dark:border-gray-800">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                      <strong className="text-[12.5px]">{sv.title}</strong>
+                      <span className="text-[12.5px] font-semibold tabular-nums">
+                        {servicePrice(sv.price_cents, sv.currency) ?? <Unrecorded>No price set</Unrecorded>}
+                      </span>
+                    </div>
+                    {sv.duration_note && <p className="m-0 text-[11.5px] text-axal-faint">{sv.duration_note}</p>}
+                    {sv.scope && <p className="m-0 mt-1 text-[12px] leading-relaxed text-axal-muted">{sv.scope}</p>}
+                  </li>
+                ))}
+              </ul>
+              <p className="m-0 mt-2 text-[11px] text-axal-faint">A service is not booked on its own: book a session type.</p>
+            </Card>
+          )}
         </div>
 
         <Card padding="none" className="overflow-hidden" data-testid="advisor-profile-sessions">

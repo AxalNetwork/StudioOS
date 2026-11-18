@@ -285,7 +285,8 @@ test('11. headers are the shell\'s own, never the Worker CSP or no-referrer; HEA
   assert.match(head.headers.get('content-type')!, /text\/html/);
   // In fetch(): after the /assets/* block, before the first app.fetch a page load reaches.
   const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
-  const start = index.indexOf('export default {');
+  const start = index.indexOf('fetch: async (request: Request');
+  assert.ok(start >= 0, 'Worker fetch entrypoint exists');
   const at = (needle: string) => index.indexOf(needle, start);
   assert.ok(at('serveSocialCard(request, env)') > at("pathname.startsWith('/assets/')"), 'after the /assets/* block');
   assert.ok(at('serveSocialCard(request, env)') < at("if (!pathname.startsWith('/api/'))"), 'before Hono answers a page load');

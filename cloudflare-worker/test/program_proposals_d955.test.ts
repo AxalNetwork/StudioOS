@@ -407,3 +407,50 @@ test('D4808: HQ keeps a branch\'s rows for programs the nine do not include, and
   ];
   assert.deepEqual(keepRegistryRows(rows).map((r: any) => r.key), ['perks', 'synthetic-residency']);
 });
+
+const wellnessMigration = readFileSync(resolve(MIGRATIONS, '202611171541_7116_wellness_program.sql'), 'utf8');
+
+test('Wellness is a global proposed registry entry with a private-workspace link, a draft and no studio grant', async () => {
+  const db = fresh();
+  const grantCount = () => db.prepare('SELECT COUNT(*) AS n FROM program_grants').get()!.n;
+  const before = grantCount();
+  db.exec(wellnessMigration);
+  db.exec(wellnessMigration);
+  const catalogue = await call(db, LIS1, 'GET', '/?weeks=4');
+  assert.equal(catalogue.status, 200);
+  assert.deepEqual(catalogue.body.programs.rows.filter((p: any) => p.name === 'Wellness').map((p: any) => p.key), ['wellness']);
+  for (const user of [SUPER, LIS1, NAI]) {
+    const detail = await call(db, user, 'GET', '/wellness');
+    assert.equal(detail.status, 200);
+    const { program, playbook, draft } = detail.body;
+    assert.deepEqual([program.studio_only, program.group, program.status, program.member_access, program.modules],
+      [null, 'Access', 'proposed', 'not_open', ['wellbeing']]);
+    assert.equal(playbook.published, false);
+    if (user === SUPER) assert.equal(draft.sections.length, 5);
+    assert.equal(detail.body.grantable, false);
+  }
+  assert.equal(grantCount(), before);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM program_grant_defaults WHERE program_key = 'wellness'").get()!.n, 0);
+});
+
+test('Wellness retains studio and unrelated key owners and reuses a global program including its terms and edits', async () => {
+  const db = fresh();
+  const add = db.prepare('INSERT INTO programs (key, grp, name, status, position, licence_uid, modules) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  add.run('wellness', 'Access', 'Wellness', 'live', 21, 'lic-lis', '[]');
+  add.run('axal-wellness', 'Product', 'Another program', 'live', 22, null, '[]');
+  db.exec(wellnessMigration);
+  assert.equal((await call(db, NAI, 'GET', '/wellness')).status, 404);
+  assert.deepEqual((await call(db, LIS1, 'GET', '/wellness')).body.program.modules, []);
+  assert.deepEqual((await call(db, SUPER, 'GET', '/axal-wellness')).body.program.modules, []);
+  assert.deepEqual((await call(db, NAI, 'GET', '/axal-wellness-2')).body.program.modules, ['wellbeing']);
+
+  const other = fresh();
+  other.prepare("INSERT INTO programs (key, grp, name, status, position, member_access, modules) VALUES ('community-care', 'Access', 'Wellbeing', 'live', 21, 'invite', '[\"offers\"]')").run();
+  other.exec("INSERT INTO program_playbook_sections (program_key, version, section_key, position, title, body) VALUES ('community-care', 0, 'who', 1, 'Audience', 'Existing group')");
+  other.exec(wellnessMigration);
+  other.exec(wellnessMigration);
+  const detail = await call(other, SUPER, 'GET', '/community-care');
+  assert.equal((await call(other, SUPER, 'GET', '/wellness')).status, 404);
+  assert.deepEqual([detail.body.program.status, detail.body.program.member_access, detail.body.program.modules], ['live', 'invite', ['offers', 'wellbeing']]);
+  assert.deepEqual(detail.body.draft.sections.map((s: any) => s.body), ['Existing group']);
+});

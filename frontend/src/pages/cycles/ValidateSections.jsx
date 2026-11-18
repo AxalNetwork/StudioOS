@@ -249,49 +249,157 @@ function UnthemedQuote({ quote, themes, onAssign }) {
   );
 }
 
-export function PainThemesSection({ parts, projectId = null, onExport, onAssign, newThemeHref = null }) {
+/**
+ * #6006 (V17): the selection bar. With the bulk write, a quote is chosen by its box and the bar
+ * assigns every chosen one at once, to a theme or to a new theme named here. Without it (a caller
+ * that passes no `onAssignMany`), each quote keeps its own Assign select.
+ */
+export function SelectionBar({ selected, themes, onAssignMany, onClear }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [naming, setNaming] = useState(false);
+  const [title, setTitle] = useState('');
+  const count = selected.length;
+  const run = async (body) => {
+    setBusy(true); setError('');
+    try { await onAssignMany({ phrases: selected.map((q) => q.phrase), ...body }); onClear(); setNaming(false); setTitle(''); }
+    // Assign keeps the selection; the Worker's sentence is shown as it came.
+    catch (err) { setError(err?.message || 'Couldn’t assign. Nothing changed; your selection is kept.'); }
+    finally { setBusy(false); }
+  };
+  if (!count) return <p className={NOTE} data-testid="validate-selection-empty">Choose quotes to assign them together.</p>;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-axal-violet/40 bg-axal-violet/5 px-3 py-2.5 dark:border-violet-500/40 dark:bg-violet-500/10" data-testid="validate-selection-bar">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12px] font-extrabold text-axal-ink dark:text-gray-100" aria-live="polite">{count} selected{busy ? ' · Saving…' : ''}</span>
+        <label className="flex items-center gap-2 text-[11px] text-axal-muted dark:text-gray-400">
+          Assign to theme
+          <select className="min-h-[36px] rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+            value="" disabled={busy || !themes.length} data-testid="validate-assign-theme"
+            onChange={(e) => { if (e.target.value) run({ group_id: Number(e.target.value) }); }}>
+            <option value="">{themes.length ? 'Choose a theme' : 'No theme yet'}</option>
+            {themes.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
+        </label>
+        <button type="button" className={BUTTON} disabled={busy} onClick={() => setNaming((v) => !v)} aria-expanded={naming} data-testid="validate-new-theme-from-selected">New theme from selected</button>
+        <button type="button" className="text-[12px] font-semibold text-axal-muted hover:underline dark:text-gray-400" disabled={busy} onClick={onClear}>Clear</button>
+      </div>
+      {naming && (
+        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (title.trim()) run({ new_title: title.trim() }); }}>
+          <label className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-axal-muted dark:text-gray-400">
+            Theme name
+            <input className="min-h-[36px] min-w-0 flex-1 rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+              value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} data-testid="validate-new-theme-title" />
+          </label>
+          <button type="submit" className={BUTTON} disabled={busy || !title.trim()} data-testid="validate-new-theme-save">Create and assign</button>
+        </form>
+      )}
+      {error && <p role="alert" className={ERROR}>{error}</p>}
+    </div>
+  );
+}
+
+const quoteKey = (q) => `${q.interview_id}|${q.phrase}`;
+
+/** #6006 (V17): one unthemed quote with its box, for the selection bar. */
+function SelectableQuote({ quote, checked, onToggle }) {
+  return (
+    <li className="flex items-start gap-2 border-t border-axal-hairline py-2 first:border-t-0 dark:border-gray-800" data-testid="validate-unthemed-quote">
+      <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-axal-violet max-lg:h-5 max-lg:w-5" checked={checked} onChange={onToggle}
+        aria-label={`Select “${quote.phrase}”`} data-testid="validate-select-quote" />
+      <span className="text-[12.5px] text-axal-ink dark:text-gray-100">
+        “{quote.phrase}” · {quote.interviewee || 'Interviewee not recorded'} · {quote.date ? day(quote.date) : 'Date not recorded'}
+      </span>
+    </li>
+  );
+}
+
+export function PainThemesSection({ parts, projectId = null, onExport, onAssign, onAssignMany = null, newThemeHref = null }) {
   const stats = parts?.stats || {};
   const writer = parts?.can_write === true;
   const unthemed = Array.isArray(parts?.unthemed) ? parts.unthemed : null;
   const themes = Array.isArray(parts?.themes) ? parts.themes : [];
-  const fitUnknown = Number(stats.fit_unrecorded_themes) || 0;
+  const [chosen, setChosen] = useState(() => new Set());
+  const bulk = typeof onAssignMany === 'function';
+  const selected = (unthemed || []).filter((q) => chosen.has(quoteKey(q)));
+  const toggle = (q) => setChosen((prev) => { const next = new Set(prev); if (next.has(quoteKey(q))) next.delete(quoteKey(q)); else next.add(quoteKey(q)); return next; });
   return (
     <section className={SECTION} data-testid="validate-section-pain-themes">
+      {/* #6006 (V17): each tile names what it counts and over which period; Not recorded is never 0. */}
       <Strip testid="validate-pain-strip" items={[
-        { label: 'Themes', value: stats.themes, note: 'you name them; nothing else does' },
-        { label: 'Interviews behind them', value: stats.interviews, note: 'the denominator for every frequency below' },
-        { label: 'Ungrouped phrases', value: stats.ungrouped, note: 'logged, not yet themed' },
-        // Null, not 0, while no severity or no ICP fit was ever recorded.
-        {
-          label: 'Need-to-have themes', value: stats.need_themes,
-          note: nr(stats.need_themes) ? 'no severity recorded against any pain yet' : 'someone interviewed was recorded calling these a must',
-        },
-        {
-          label: 'Themes your ICP named', value: stats.icp_themes,
-          note: nr(stats.icp_themes) ? 'no ICP fit recorded on any interview yet'
-            : fitUnknown > 0 ? `${fitUnknown} more have mentions whose ICP fit was never recorded` : 'every mention behind these has a recorded fit',
-        },
+        { label: 'Themes', value: stats.themes, note: 'named groups · you name them; nothing else does' },
+        { label: 'Interviews', value: stats.interviews, note: 'held, all time' },
+        { label: 'Phrases in no theme', value: stats.ungrouped, note: 'distinct phrases, all time' },
+        { label: 'Need-to-have', value: stats.need_themes, note: nr(stats.need_themes) ? 'no need-to-have ever recorded' : 'themes with a need-to-have mention' },
+        { label: 'ICP mention', value: stats.icp_themes, note: nr(stats.icp_themes) ? 'no ICP fit recorded on any interview yet' : 'themes with a strong or partial fit mention' },
+        { label: 'Fit not recorded', value: stats.fit_unrecorded_themes, note: 'themes with a mention whose fit isn’t recorded' },
       ]} />
-      {writer && (
-        <div className="flex flex-wrap items-start gap-2">
-          <Link to={`/raise/pitch/edit${ventureSearch(projectId)}`} title={PROBLEM_SLIDE_NOTE} className={BUTTON} data-testid="validate-problem-slide">Open the Problem slide</Link>
-          <ExportButton label="Export map" run={onExport} testid="validate-export-map" />
-        </div>
-      )}
       {writer && unthemed && (
         <div className="flex flex-col gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="validate-unthemed">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-[12px] font-extrabold text-axal-ink dark:text-gray-100">Unthemed quotes · {parts.unthemed_total ?? unthemed.length}</span>
+            <span className="text-[12px] font-extrabold text-axal-ink dark:text-gray-100">Unthemed quotes · {parts.unthemed_total ?? unthemed.length} waiting</span>
             {newThemeHref && <Link to={newThemeHref} className={LINK} data-testid="validate-new-theme">New theme</Link>}
           </div>
+          <p className={NOTE}>Each phrase counted once per interview that said it · not the same as “Phrases in no theme” above.</p>
           {unthemed.length
-            ? <ul className="m-0 list-none p-0">{unthemed.map((quote, i) => <UnthemedQuote key={`${quote.interview_id}-${i}`} quote={quote} themes={themes} onAssign={onAssign} />)}</ul>
+            ? <ul className="m-0 list-none p-0">{unthemed.map((quote, i) => (bulk
+              ? <SelectableQuote key={`${quote.interview_id}-${i}`} quote={quote} checked={chosen.has(quoteKey(quote))} onToggle={() => toggle(quote)} />
+              : <UnthemedQuote key={`${quote.interview_id}-${i}`} quote={quote} themes={themes} onAssign={onAssign} />))}</ul>
             : <p className={NOTE}>Every logged phrase is in a theme.</p>}
+          {bulk && unthemed.length > 0 && <SelectionBar selected={selected} themes={themes} onAssignMany={onAssignMany} onClear={() => setChosen(new Set())} />}
           {Number(parts.unthemed_total) > unthemed.length && (
             <p className={NOTE}>The newest {unthemed.length} of {parts.unthemed_total} are shown; assign them and the next come up.</p>
           )}
         </div>
       )}
+      {writer && (
+        <div className="flex flex-wrap items-start gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800">
+          <ExportButton label="Export map (CSV)" run={onExport} testid="validate-export-map" />
+          <Link to={`/raise/pitch/edit${ventureSearch(projectId)}`} title={PROBLEM_SLIDE_NOTE} className={BUTTON} data-testid="validate-problem-slide">Open the Problem slide</Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * #6006 (V19): what the theme record adds beside the Worker's sections. Its sources (people and
+ * organisations beside the interview count), its links in each direction, Used on slide, and the two
+ * handoffs: Ideal customer profile for everyone, New hypothesis for a writer. Every link keeps the venture.
+ * Used on slide is Unavailable, with the Worker's reason: the deck never records which themes fed it.
+ */
+export function ThemeRecordParts({ parts, projectId, canWrite = false }) {
+  if (!parts || typeof parts !== 'object') return null;
+  const q = ventureSearch(projectId);
+  const sources = parts.sources && typeof parts.sources === 'object' ? parts.sources : null;
+  const slide = parts.used_on_slide && typeof parts.used_on_slide === 'object' ? parts.used_on_slide : null;
+  const count = (n, one, many) => (nr(n) ? `${many} not recorded` : plural(n, one, many));
+  return (
+    <section className={SECTION} data-testid="validate-theme-parts">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+        <div className={TILE} data-testid="validate-theme-sources">
+          <span className="block text-[11px] font-bold text-axal-muted dark:text-gray-400">Sources</span>
+          <span className="block text-[13px] font-semibold text-axal-ink dark:text-gray-100">{sources ? count(sources.interviews, 'interview', 'interviews') : <NotRecorded />}</span>
+          {sources && <span className="block text-[11px] text-axal-muted dark:text-gray-400">{count(sources.people, 'person', 'people')} · {count(sources.organisations, 'organisation', 'organisations')}</span>}
+        </div>
+        <div className={TILE} data-testid="validate-theme-links">
+          <span className="block text-[11px] font-bold text-axal-muted dark:text-gray-400">Hypotheses it feeds</span>
+          <span className="block text-[13px] font-semibold text-axal-ink dark:text-gray-100">
+            {nr(parts.supporting) || nr(parts.contradicting) ? <NotRecorded /> : `${parts.supporting} supporting · ${parts.contradicting} contradicting`}
+          </span>
+        </div>
+        <div className={TILE} data-testid="validate-theme-used-on-slide">
+          <span className="block text-[11px] font-bold text-axal-muted dark:text-gray-400">Used on slide</span>
+          {slide?.state === 'unavailable'
+            ? <span className="block text-[12px] text-axal-muted dark:text-gray-400"><b className="font-bold text-axal-ink dark:text-gray-100">Unavailable.</b> {slide.reason}</span>
+            : <NotRecorded />}
+          <Link to={`/raise/pitch/edit${q}`} className={LINK} data-testid="validate-theme-problem-slide">Open the Problem slide →</Link>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Link to={`/validate/ideal-customer-profile${q}`} className={LINK} data-testid="validate-theme-icp">See who has it →</Link>
+        {canWrite && <Link to={`/validate/experiments/new${q}`} className={LINK} data-testid="validate-theme-new-hypothesis">Write a hypothesis from this →</Link>}
+      </div>
     </section>
   );
 }
