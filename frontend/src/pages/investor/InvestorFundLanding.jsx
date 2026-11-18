@@ -12,6 +12,7 @@ import { titleCase as caseLabel } from '../../lib/absence';
 import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, PERFORMANCE_UNREADABLE, collectedLine, fundZoneHref, lpCommitmentText, performanceFigures } from './investorFundLandingModel';
 import { fundPerformanceApi } from '../../lib/api/fundPerformance.js';
 import FundOverviewPanel from './FundOverviewParts';
+import { CreateFundCard } from './FundTermsForm';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
@@ -161,9 +162,11 @@ function FundDetail({ fund }) {
   );
 }
 
-function EmptyFundDetail() {
+function EmptyFundDetail({ onCreated }) {
   return (
     <>
+      {/* #6235 (FV1b): the GP of record creates their own fund here. */}
+      <CreateFundCard onCreated={onCreated} />
       <section className="i6-summary i6-summary-empty">
         <div>
           <div className="i6-kicker">No fund record selected</div>
@@ -218,7 +221,7 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
     : error
       ? <div className="i6-error"><CircleAlert size={16} />{error}<button onClick={refresh} type="button">Retry</button></div>
       : items.length === 0
-        ? <EmptyFundDetail />
+        ? <EmptyFundDetail onCreated={(fund) => { setFundId(fund.id); refresh(); }} />
         : (
           <>
             <div className="i6-fund-switcher">

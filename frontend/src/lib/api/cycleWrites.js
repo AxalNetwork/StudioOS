@@ -106,6 +106,8 @@ export function makeCycleWrites(request) {
       market: (projectId, body) => request('/cycles/grow/markets', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       obligation: (projectId, body) => request('/cycles/grow/obligations', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       checklist: (projectId, key, done) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, done: done === true }) }),
+      // D6789 (#6789): mark a checklist item Not applicable (out of the score), or say it applies again.
+      checklistNotApplicable: (projectId, key, na) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, not_applicable: na === true }) }),
       // D1090 (#2955): Distribution's content calendar, typed by hand. A piece from Notion is edited in Notion.
       content: (projectId, body) => request('/cycles/grow/channels/content', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       contentUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
@@ -113,6 +115,9 @@ export function makeCycleWrites(request) {
       // Edits: a PATCH changes only the fields it is sent.
       // D6098 (#6098): rename one feedback theme, or merge it (`merge: true`); the roadmap items that answer it follow.
       feedbackTheme: (projectId, body) => request('/cycles/grow/feedback/themes', { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      // D6865 (#6865): one theme's weight and its Close the loop rows (a writer's read), and Mark told for several.
+      feedbackWeight: (projectId, theme) => request(`/cycles/grow/feedback/weight?project=${encodeURIComponent(projectId)}&theme=${encodeURIComponent(theme)}`),
+      feedbackTold: (projectId, uids, via) => request('/cycles/grow/feedback/told', { method: 'POST', body: JSON.stringify({ project: projectId, uids, via }) }),
       feedbackUpdate: (projectId, uid, body) => request(`/cycles/grow/feedback/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       channelUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       partnerUpdate: (projectId, uid, body) => request(`/cycles/grow/partners/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
