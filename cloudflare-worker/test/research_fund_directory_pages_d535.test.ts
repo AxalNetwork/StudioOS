@@ -104,7 +104,7 @@ test('coverage counts each field over the whole directory, whatever the filters'
     assert.equal(body.coverage.total, 8, `${path}: coverage is of the whole directory`);
     assert.equal(body.coverage.as_of, '2026-10-04');
     assert.deepEqual(body.coverage.fields, {
-      size_eur: 6, size_unknown_currency: 1, hq: 7, website: 1, linkedin: 0,
+      size_eur: 6, size_usd: 0, size_unknown_currency: 1, hq: 7, website: 1, linkedin: 0,
       sector_focus: 6, fund_year: 7, notable_lps: 4, fund_number: 0,
     });
   }
