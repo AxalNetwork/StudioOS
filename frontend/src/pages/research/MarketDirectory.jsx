@@ -711,7 +711,7 @@ function useKeyedRead(fn, key, enabled = true) {
  * reader is an investor, and one read of the Worker's page. `onData` hands the
  * page it shows to the zone: its rows are what Export writes, so the file is the view.
  */
-export default function MarketDirectoryPanel({ role = 'founder', onData = null }) {
+export default function MarketDirectoryPanel({ role = 'founder', onData = null, onRead = null }) {
   const [params, setParams] = useSearchParams();
   const view = useMemo(() => readMarketQuery(params), [params]);
   const onPatch = (patch) => setParams((prev) => writeMarketQuery(prev, patchMarketQuery(readMarketQuery(prev), patch)), { replace: false });
@@ -725,6 +725,8 @@ export default function MarketDirectoryPanel({ role = 'founder', onData = null }
   const data = markets.status === 'ready' ? markets.data : (markets.status === 'loading' ? markets.data : null);
 
   useEffect(() => { if (markets.status === 'ready') onData?.(markets.data); }, [markets.status, markets.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { onRead?.({ ...markets, request: listParams }); }, [markets.status, markets.data, listKey, onRead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // RMD-05B: back from a sector page, the open row's expand button takes focus.
   const focused = useRef('');
