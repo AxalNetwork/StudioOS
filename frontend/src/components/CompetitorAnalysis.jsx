@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Stat } from '../ui';
+import { StateChip } from '../ui/Honesty.jsx';
 
 import {
   ArrowLeft, Megaphone, Loader2, Sparkles, Plus, Trash2, RefreshCw, Download,
@@ -13,6 +14,8 @@ import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { useRailOption, useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions/index.js';
 import { railPressHeaders } from '../lib/railPage.js';
+import { EvidenceChip, NoSubject, SubjectBar, SubjectCard, useSubjectRecord } from '../pages/research/AnalysisSubject.jsx';
+import { isSubjectName, splitNames, subjectCard } from '../pages/research/companyAnalysisRead';
 
 // Competitor Analysis — in-house, Cloudflare-native competitive intelligence.
 // Discovery + controlled public-web crawl + Workers AI synthesis. Prefills from
@@ -42,6 +45,9 @@ const BTN_PRIMARY = 'inline-flex items-center justify-center gap-2 rounded-full 
 const BTN_GHOST = 'inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-sm px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors';
 const PILL_ON = 'px-4 py-1.5 rounded-full text-sm font-medium bg-violet-600 text-white';
 const PILL_OFF = 'px-4 py-1.5 rounded-full text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800';
+// D7175: a setup group's heading and its help line.
+const GROUP = 'text-sm font-bold text-gray-900 dark:text-gray-100';
+const HELP = 'text-xs text-gray-500 dark:text-gray-400';
 
 const REGIONS = ['Global', 'North America', 'Europe', 'UK', 'Asia', 'LATAM', 'Africa', 'MENA', 'Oceania'];
 
@@ -166,6 +172,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   // actually puts a row in this store rather than describing it.
   const formRef = useRef(null);
   const [projects, setProjects] = useState([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [projectId, setProjectId] = useState(embedded && project ? String(project.id) : '');
   const [mode, setMode] = useState(embedded ? 'startup' : 'custom'); // startup | custom
   const [inputs, setInputs] = useState(emptyInputs());
@@ -207,6 +214,16 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   const [manual, setManual] = useState({ name: '', url: '', category: 'direct', crawl: true, summary: '' });
   const [showManual, setShowManual] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // D7175 (RS-13 A1–A3): the subject company comes from the link (`company`
+  // is its directory uid, `name` what the link showed) and is read from the
+  // directory. It stays the subject until the reader changes company: no
+  // startup list, prefill or run replaces it.
+  const subjectUid = embedded ? null : (searchParams.get('company') || null);
+  const subjectLinkName = embedded ? '' : (searchParams.get('name') || '').slice(0, 200);
+  const { read: subjectRead, retry: retrySubject } = useSubjectRecord(subjectUid);
+  const subject = subjectUid ? subjectCard(subjectRead, subjectLinkName) : null;
+  // A refusal the run came back with, drawn in its own words (403, 400 market_required).
+  const [refusal, setRefusal] = useState(null);
 
   const applySaved = useCallback((list) => {
     if (list === READ_FAILED) { setSavedState('failed'); return; }
@@ -240,10 +257,9 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
         const ps = Array.isArray(projs) ? projs : projs?.projects || [];
         setProjects(ps);
         applySaved(list);
-        if (ps.length) {
-          setMode('startup');
-          setProjectId(String(ps[0].id));
-        }
+        // D7175 (RS-13 A2): the startups arriving choose nothing. The run is
+        // associated with a startup only when the reader picks one.
+        setProjectsLoaded(true);
         const loadId = searchParams.get('id');
         if (loadId) loadAnalysis(loadId);
       } catch { /* noop */ }
@@ -252,9 +268,11 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Prefill inputs from the selected startup.
+  // Prefill inputs from the startup the embedded page was handed. Elsewhere a
+  // chosen startup fills only the empty fields, and only when asked
+  // (D7175, RS-13 A2: "Fill empty fields").
   useEffect(() => {
-    if (mode !== 'startup' || !projectId) return;
+    if (!embedded || mode !== 'startup' || !projectId) return;
     let alive = true;
     (async () => {
       try {
@@ -275,22 +293,51 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, projectId]);
 
-  // Public directory handoff: a company profile can open this workspace with
-  // the sourced company name and website already in view. This remains a
-  // custom analysis until the user explicitly runs it; the query never writes
-  // a saved analysis by itself.
+  // Public directory handoff: an older link carries the company's name as the
+  // market, and Revise the search (D7175, RS-13 B3) carries the run's inputs.
+  // D7175: the website a link may carry is never written into Known
+  // competitors: the subject cannot be its own competitor. The query never
+  // writes a saved analysis by itself.
   useEffect(() => {
     if (embedded) return;
-    const market = searchParams.get('market');
-    const website = searchParams.get('website');
+    const g = (k) => (searchParams.get(k) || '').slice(0, 200);
+    const market = (searchParams.get('market') || '').slice(0, 200);
     if (!market) return;
-    setMode('custom');
     setInputs((prev) => ({
       ...prev,
-      market: market.slice(0, 200),
-      known_competitors: website ? `Official website: ${website}` : prev.known_competitors,
+      market,
+      target_customer: g('customer') || prev.target_customer,
+      geography: g('geography') || prev.geography,
+      region_focus: REGIONS.includes(g('region')) ? g('region') : prev.region_focus,
+      depth: g('depth') === 'deep' ? 'deep' : prev.depth,
+      known_competitors: g('known') || prev.known_competitors,
     }));
   }, [embedded, searchParams]);
+
+  // D7175: the market starts from the subject's sector label (or its name),
+  // once the record is read, and only into an empty field.
+  const subjectMarket = subject?.state === 'ok' ? (subject.sector || subject.name || '') : '';
+  useEffect(() => {
+    if (!subjectMarket) return;
+    setInputs((prev) => (prev.market.trim() ? prev : { ...prev, market: subjectMarket.slice(0, 200) }));
+  }, [subjectMarket]);
+
+  /** "Fill empty fields" from the chosen startup: never over what the reader typed. */
+  async function fillFromStartup() {
+    if (!projectId) return;
+    try {
+      const p = await api.getProject(projectId);
+      if (!p) return;
+      setInputs((prev) => ({
+        ...prev,
+        market: prev.market || p.sector || p.name || '',
+        problem: prev.problem || p.problem_statement || p.description || '',
+        target_customer: prev.target_customer || p.target_customer || '',
+        geography: prev.geography || p.geography || '',
+        known_competitors: prev.known_competitors || p.competitors || '',
+      }));
+    } catch { setError('Your startup could not be read, so no field was filled.'); }
+  }
 
   const setInput = (k, v) => setInputs((prev) => ({ ...prev, [k]: v }));
 
@@ -314,8 +361,9 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   }
 
   async function onAnalyze() {
-    if (!inputs.market.trim()) { setError('Enter a market / industry to analyze.'); return; }
+    if (!inputs.market.trim()) { setRefusal({ code: 'market_required', text: 'A market / industry is required to run the analysis.' }); return; }
     setError('');
+    setRefusal(null);
     setStatus('');
     setAnalyzing(true); setRunning('analyze');
     setAnalysis(null);
@@ -324,6 +372,8 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       const payload = { ...inputs };
       if (mode === 'startup' && projectId) { payload.project_id = projectId; payload.mode = 'startup'; }
       else payload.mode = 'custom';
+      // D7175: the subject rides by its uid; the Worker reads the record again.
+      if (subjectUid) payload.subject_uid = subjectUid;
       const full = await api.competitors.analyze(payload, railPressHeaders(pressKey.analyze));
       // A dropped run has still written its analysis: list it, don't open it.
       if (runFor.current !== run) { applySaved(await api.competitors.list().catch(() => READ_FAILED)); return; }
@@ -338,7 +388,11 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       // A successful run clears a failed read: the list just answered.
       applySaved(await api.competitors.list().catch(() => READ_FAILED));
     } catch (e) {
-      if (runFor.current === run) setError(e.message || 'Analysis failed. Try again or reduce depth.');
+      if (runFor.current !== run) return;
+      // D7175 (RS-13 B4): a refusal keeps the subject and every typed field.
+      if (e?.status === 403) setRefusal({ code: 'forbidden', text: 'You do not have access to that project. The run was not started; the subject and your fields are kept.' });
+      else if (e?.code === 'market_required' || (e?.status === 400 && /market/i.test(String(e?.message || '')))) setRefusal({ code: 'market_required', text: 'A market / industry is required to run the analysis.' });
+      else setError(e.message || 'Analysis failed. Try again or reduce depth.');
     } finally {
       if (runFor.current === run) { setAnalyzing(false); setRunning(null); }
     }
@@ -451,7 +505,11 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     setDirty(true);
   }
 
-  const canAnalyze = inputs.market.trim() && !analyzing;
+  // D7175: the subject cannot be its own competitor; the field refuses it.
+  const selfMatch = subject ? splitNames(inputs.known_competitors).filter((n) => isSubjectName({ ...subject, uid: subjectUid }, n)) : [];
+  // A subject that is still loading, unreadable or not in the directory is not one a run can start on.
+  const subjectBlocks = !!subject && subject.state !== 'ok';
+  const canAnalyze = inputs.market.trim() && !analyzing && !selfMatch.length && !subjectBlocks;
   // Embedded: scope the saved list to this startup only.
   const visibleSaved = embedded && project
     ? saved.filter((a) => Number(a.project_id) === Number(project.id))
@@ -543,86 +601,162 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
         </>
       )}
 
-      {/* Inputs form */}
+      {/* Inputs form. D7175 (RS-13 A2–A4): the subject, then three separate
+          groups (Market question, the optional startup, Known competitors),
+          then More context and the run bar, sticky on a phone. */}
       <div ref={formRef} className={`${CARD} p-5 mb-5`}>
-        {!embedded && (
+        {!embedded && subjectUid && (
           <div className="mb-4">
-            <div className={LABEL}>Mode</div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => projects.length && setMode('startup')}
-                disabled={!projects.length}
-                className={mode === 'startup' ? PILL_ON : PILL_OFF}
-              >
-                From my startup
-              </button>
-              <button type="button" onClick={() => setMode('custom')} className={mode === 'custom' ? PILL_ON : PILL_OFF}>
-                Custom market
-              </button>
-            </div>
-            {mode === 'startup' && projects.length > 0 && (
-              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={`${INPUT} mt-2 max-w-sm`}>
-                {projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-              </select>
-            )}
-            {!projects.length && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                No startup yet — using custom mode. <Link to="/build?new=1" className="text-violet-600 dark:text-violet-400 underline font-medium">Create one</Link> to pull your context.
-              </p>
-            )}
+            <SubjectCard read={subjectRead} linkName={subjectLinkName} onRetry={retrySubject} onChange={() => navigate('/research/companies')} />
           </div>
         )}
+        {!embedded && !subjectUid && chromeless && <div className="mb-4"><NoSubject /></div>}
 
-        <div className="mb-3">
-          <label className={LABEL}>Market / industry *</label>
-          <input value={inputs.market} onChange={(e) => setInput('market', e.target.value)} placeholder="e.g. AI sales enablement for SMBs" className={INPUT} />
-        </div>
-        <div className="grid sm:grid-cols-2 gap-3 mb-3">
-          <div>
-            <label className={LABEL}>Target customer</label>
-            <input value={inputs.target_customer} onChange={(e) => setInput('target_customer', e.target.value)} placeholder="e.g. 10-50 person B2B SaaS sales teams" className={INPUT} />
+        <fieldset className="mb-4">
+          <legend className={GROUP}>Market question</legend>
+          <p className={HELP}>What the run searches for. Required.</p>
+          <div className="mt-2 mb-3">
+            <label htmlFor="ca-market" className={LABEL}>Market / industry *</label>
+            <input id="ca-market" aria-label="Market or industry, required" aria-describedby="ca-market-help" aria-required="true"
+              value={inputs.market} onChange={(e) => { setInput('market', e.target.value); if (refusal?.code === 'market_required') setRefusal(null); }}
+              placeholder="e.g. AI sales enablement for SMBs" className={INPUT} />
+            <p id="ca-market-help" className={`${HELP} mt-1`}>
+              {subject?.state === 'ok'
+                ? `Prefilled from ${subject.name}${subject.sector ? `’s sector label (${subject.sector})` : ''}. Edit it freely; the subject does not change.`
+                : subjectUid ? 'Edit it freely; the subject does not change.' : 'Editable. A custom market has no subject company.'}
+            </p>
+            {refusal?.code === 'market_required' && (
+              <p role="alert" className="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">{refusal.text}</p>
+            )}
           </div>
-          <div>
-            <label className={LABEL}>Geography</label>
-            <input value={inputs.geography} onChange={(e) => setInput('geography', e.target.value)} placeholder="e.g. US + UK" className={INPUT} />
-          </div>
-        </div>
-        <div className="mb-3">
-          <label className={LABEL}>Known competitors (optional)</label>
-          <input value={inputs.known_competitors} onChange={(e) => setInput('known_competitors', e.target.value)} placeholder="comma-separated" className={INPUT} />
-        </div>
-        <div className="mb-3">
-          <label className={LABEL}>Problem (optional)</label>
-          <textarea value={inputs.problem} onChange={(e) => setInput('problem', e.target.value)} rows={2} placeholder="What pain are you solving?" className={INPUT} />
-        </div>
-        <div className="grid sm:grid-cols-2 gap-3 mb-3">
-          <div>
-            <label className={LABEL}>Region focus</label>
-            <select value={inputs.region_focus} onChange={(e) => setInput('region_focus', e.target.value)} className={INPUT}>
-              {REGIONS.map((r) => (<option key={r} value={r}>{r}</option>))}
-            </select>
-          </div>
-          <div>
-            <label className={LABEL}>Depth</label>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setInput('depth', 'quick')} className={inputs.depth === 'quick' ? PILL_ON : PILL_OFF}>Quick scan</button>
-              <button type="button" onClick={() => setInput('depth', 'deep')} className={inputs.depth === 'deep' ? PILL_ON : PILL_OFF}>Deep dive</button>
+          <div className="grid sm:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label htmlFor="ca-customer" className={LABEL}>Target customer</label>
+              <input id="ca-customer" value={inputs.target_customer} onChange={(e) => setInput('target_customer', e.target.value)} placeholder="e.g. 10-50 person B2B SaaS sales teams" className={INPUT} />
+            </div>
+            <div>
+              <label htmlFor="ca-geography" className={LABEL}>Geography</label>
+              <input id="ca-geography" value={inputs.geography} onChange={(e) => setInput('geography', e.target.value)} placeholder="e.g. US + UK" className={INPUT} />
             </div>
           </div>
-        </div>
-        <div className="mb-4">
-          <label className={LABEL}>Optional nudge</label>
-          <textarea value={inputs.nudge} onChange={(e) => setInput('nudge', e.target.value)} rows={2} placeholder="e.g. ignore enterprise incumbents, focus on bootstrapped SMB tools" className={INPUT} />
-        </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="ca-region" className={LABEL}>Region focus</label>
+              <select id="ca-region" value={inputs.region_focus} onChange={(e) => setInput('region_focus', e.target.value)} className={INPUT}>
+                {REGIONS.map((r) => (<option key={r} value={r}>{r}</option>))}
+              </select>
+            </div>
+            <div>
+              <span id="ca-depth" className={LABEL}>Depth</span>
+              <div role="radiogroup" aria-labelledby="ca-depth" className="flex items-center gap-2">
+                <button type="button" role="radio" aria-checked={inputs.depth === 'quick'} onClick={() => setInput('depth', 'quick')} className={`${inputs.depth === 'quick' ? PILL_ON : PILL_OFF} min-h-[44px] sm:min-h-0`}>Quick scan</button>
+                <button type="button" role="radio" aria-checked={inputs.depth === 'deep'} onClick={() => setInput('depth', 'deep')} className={`${inputs.depth === 'deep' ? PILL_ON : PILL_OFF} min-h-[44px] sm:min-h-0`}>Deep dive</button>
+              </div>
+              <p className={`${HELP} mt-1`}>Deep dive reads pricing, features, about and news pages and takes longer.</p>
+            </div>
+          </div>
+        </fieldset>
 
-        <button onClick={onAnalyze} disabled={!canAnalyze} className={`${BTN_PRIMARY} w-full`}>
-          {analyzing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {analyzing ? 'Analyzing competitors…' : 'Analyze competitors'}
-        </button>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
-          Deep dive crawls pricing / features / about / news pages and takes longer.
-        </p>
+        {!embedded && (
+          <fieldset className="mb-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <legend className={GROUP}>Associate with your startup (optional)</legend>
+            <p className={HELP}>Saves the run against a startup. It never changes the subject.</p>
+            <label htmlFor="ca-startup" className={`${LABEL} mt-2`}>Startup</label>
+            {!projectsLoaded ? (
+              <>
+                <select id="ca-startup" disabled className={`${INPUT} max-w-sm opacity-60`}><option>Loading your startups…</option></select>
+                <p role="status" className={`${HELP} mt-1`}>Your typed answers and the subject stay as they are while this loads.</p>
+              </>
+            ) : projects.length ? (
+              <>
+                <select id="ca-startup" value={mode === 'startup' ? projectId : ''} className={`${INPUT} max-w-sm`}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setRefusal(null);
+                    if (v) { setMode('startup'); setProjectId(v); } else { setMode('custom'); setProjectId(''); }
+                  }}>
+                  <option value="">None · not associated</option>
+                  {projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                </select>
+                <p className={`${HELP} mt-1`}>
+                  {mode === 'startup' && projectId
+                    ? `Chosen by you.${subject?.name ? ` The subject is still ${subject.name}.` : ''}`
+                    : `${projects.length === 1 ? '1 startup' : `${projects.length} startups`} available. Nothing is chosen for you.`}
+                </p>
+                {mode === 'startup' && projectId && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
+                    <span>{`Associated with ${projects.find((p) => String(p.id) === String(projectId))?.name || 'your startup'}. The fields you typed are kept. Its customer and region can fill the empty fields if you ask.`}</span>
+                    <button type="button" onClick={fillFromStartup} className={`${BTN_GHOST} min-h-[44px] sm:min-h-0`}>Fill empty fields</button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No startup yet. <Link to="/build?new=1" className="text-violet-600 dark:text-violet-400 underline font-medium">Create one</Link> to pull your context.
+              </p>
+            )}
+            {refusal?.code === 'forbidden' && (
+              <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                <StateChip kind="refused" />
+                <span>{refusal.text}</span>
+                <button type="button" className={`${BTN_GHOST} min-h-[44px] sm:min-h-0`}
+                  onClick={() => { setMode('custom'); setProjectId(''); setRefusal(null); }}>
+                  Run without a startup
+                </button>
+              </div>
+            )}
+          </fieldset>
+        )}
+
+        <fieldset className="mb-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <legend className={GROUP}>Known competitors (optional)</legend>
+          <p className={HELP}>Companies you already know compete. They are added as candidates and marked “Named by you”.</p>
+          <label htmlFor="ca-known" className={`${LABEL} mt-2`}>Known competitors</label>
+          <input id="ca-known" aria-describedby="ca-known-help" value={inputs.known_competitors} onChange={(e) => setInput('known_competitors', e.target.value)} placeholder="comma-separated" className={INPUT} />
+          {selfMatch.length ? (
+            <p id="ca-known-help" role="alert" className="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">
+              {`${selfMatch.join(', ')}: the subject cannot be its own competitor. Remove it to run.`}
+            </p>
+          ) : (
+            <p id="ca-known-help" className={`${HELP} mt-1`}>
+              {subject?.name
+                ? `Comma separates names. ${subject.name}${subject.host ? ` and ${subject.host}` : ''} are refused here: the subject cannot be its own competitor.`
+                : 'Comma separates names.'}
+            </p>
+          )}
+        </fieldset>
+
+        <details className="mb-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <summary className="cursor-pointer text-sm font-semibold text-gray-800 dark:text-gray-200">
+            More context <span className="font-normal text-gray-500 dark:text-gray-400">· Problem and an optional nudge for the search</span>
+          </summary>
+          <div className="mt-3 mb-3">
+            <label htmlFor="ca-problem" className={LABEL}>Problem (optional)</label>
+            <textarea id="ca-problem" value={inputs.problem} onChange={(e) => setInput('problem', e.target.value)} rows={2} placeholder="What pain are you solving?" className={INPUT} />
+          </div>
+          <div>
+            <label htmlFor="ca-nudge" className={LABEL}>Optional nudge</label>
+            <textarea id="ca-nudge" value={inputs.nudge} onChange={(e) => setInput('nudge', e.target.value)} rows={2} placeholder="e.g. ignore enterprise incumbents, focus on bootstrapped SMB tools" className={INPUT} />
+          </div>
+        </details>
+
+        {/* The run bar: sticky at the bottom of a phone screen (RS-13 C2 A), in place above. */}
+        <div className="sticky bottom-0 z-10 -mx-5 -mb-5 rounded-b-xl border-t border-gray-200 bg-white px-5 py-3 dark:border-gray-800 dark:bg-gray-900 sm:static sm:m-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:dark:bg-transparent">
+          {subjectBlocks && (
+            <p className={`${HELP} mb-2`}>
+              {subject.state === 'loading' ? 'Reading the subject’s record before the run can start.'
+                : subject.state === 'missing' ? 'This company is not in the directory. Change company, or run on a custom market.'
+                  : 'The subject’s record could not be read. Retry it above before you run.'}
+            </p>
+          )}
+          <button onClick={onAnalyze} disabled={!canAnalyze} className={`${BTN_PRIMARY} w-full min-h-[48px] sm:min-h-0`}>
+            {analyzing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {analyzing ? 'Running…' : 'Run competitor analysis'}
+          </button>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+            Uses AI tokens. Nothing runs until you press Run. If you leave, the run still saves to Saved analyses.
+          </p>
+        </div>
       </div>
 
       {error && (
@@ -637,9 +771,14 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       )}
 
       {analyzing && !analysis && (
-        <div className={`${CARD} p-8 text-center mb-5`}>
+        <div className={`${CARD} p-8 text-center mb-5`} data-testid="analysis-running">
+          {/* D7175 (RS-13 A5): the subject stays on screen while the one request runs. */}
+          {!embedded && (subjectUid || chromeless) && (
+            <div className="mb-4 text-left"><SubjectBar uid={subjectUid} read={subjectRead} onRetry={retrySubject} running /></div>
+          )}
           <Loader2 size={28} className="animate-spin text-violet-500 mx-auto mb-3" />
-          <p className="text-sm text-gray-600 dark:text-gray-400">Discovering candidates, crawling public sites, and synthesizing the landscape…</p>
+          <p role="status" className="text-sm text-gray-600 dark:text-gray-400">Discovering candidates, reading public sites and writing the summary…</p>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">No step-by-step progress is recorded; the run returns once, complete or failed. You can leave: the run still saves to Saved analyses.</p>
         </div>
       )}
 
@@ -725,6 +864,9 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       {savedState === 'ready' && visibleSaved.length > 0 && (
         <div className={`${CARD} p-5 mt-6`}>
           <div className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Saved analyses</div>
+          <div className="hidden items-center gap-3 border-b border-gray-100 pb-1.5 text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:border-gray-800 dark:text-gray-400 md:flex">
+            <span className="flex-1">Analysis</span><span className="w-48">Subject</span><span className="w-44">Evidence</span><span className="w-4" />
+          </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {visibleSaved.map((a) => (
               linkToDossier ? (
@@ -762,13 +904,18 @@ const savedDay = (v) => {
  * One saved analysis: title, mode, run state, the edited flag and dates —
  * everything the list read returns (D7176, RS-14 A1). It holds no competitor
  * counts, so none are shown.
+ *
+ * D7175 (RS-13 A2's saved list): each row also names its subject and its
+ * evidence status from the list payload. A custom run has no subject; a run
+ * that is not complete has no evidence status, and says what it is instead.
  */
 function SavedRow({ a }) {
+  const subject = a.subject_uid ? (a.subject_name || 'Subject not readable') : 'None · custom market';
   const created = savedDay(a.created_at);
   const updated = savedDay(a.updated_at);
   return (
     <>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{a.title || 'Untitled'}</div>
         <div className="flex flex-wrap items-center gap-x-2 text-xs text-gray-500 dark:text-gray-400">
           <span>{a.mode}</span>
@@ -777,10 +924,23 @@ function SavedRow({ a }) {
           {updated && <span>{`updated ${updated}`}</span>}
           {created && <span>{`created ${created}`}</span>}
         </div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300 md:hidden">
+          <span>{`Subject: ${subject}`}</span>
+          {a.evidence ? <EvidenceChip evidence={a.evidence} short /> : <SavedRunState status={a.status} />}
+        </div>
       </div>
+      <div className="hidden w-48 shrink-0 truncate text-xs text-gray-600 dark:text-gray-300 md:block">{subject}</div>
+      <div className="hidden w-44 shrink-0 md:block">{a.evidence ? <EvidenceChip evidence={a.evidence} short /> : <SavedRunState status={a.status} />}</div>
       <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-violet-500" />
     </>
   );
+}
+
+/** A saved run with no evidence status: still running, failed, or not recorded. */
+function SavedRunState({ status }) {
+  if (status === 'running') return <StateChip kind="provisional" label="Running" />;
+  if (status === 'error') return <StateChip kind="unavailable" label="Unavailable · run failed" />;
+  return <StateChip kind="not_recorded" />;
 }
 
 function Badge({ children, tone = 'gray' }) {
@@ -849,6 +1009,8 @@ function AnalysisResults(props) {
         <button onClick={onRefresh} disabled={analyzing} className={BTN_GHOST}><RefreshCw size={15} className={analyzing ? 'animate-spin' : ''} /> Refresh sources</button>
         <button onClick={exportJson} className={BTN_GHOST}><Download size={15} /> JSON</button>
         <button onClick={exportMd} className={BTN_GHOST}><Download size={15} /> Markdown</button>
+        {/* D7175: the run's evidence status, in the vocabulary the saved list uses. */}
+        <EvidenceChip evidence={analysis.evidence} />
       </div>
 
       {/* Market summary */}
@@ -964,7 +1126,8 @@ function AnalysisResults(props) {
       <Section title="Suggested wedge">
         <textarea value={out.wedge || ''} onChange={(e) => updateOutput({ wedge: e.target.value })} rows={2} className={INPUT} />
       </Section>
-      <Section title="Next steps the run listed">
+      {/* D7175: the run's next steps are questions, not findings. */}
+      <Section title="Suggested research questions">
         <EditableList items={out.next_actions || []} onChange={(next_actions) => updateOutput({ next_actions })} placeholder="Add an action…" />
       </Section>
       <Section title="Notes">
@@ -1030,7 +1193,7 @@ function CandidateCard({ c, sources, onRemove, onUpdate, dossierHref }) {
         <div className="mt-2 flex flex-wrap gap-1.5">
           {sources.map((s) => (
             <a key={s.id} href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title={s.url}>
-              <Search size={10} /> {s.kind}
+              <Search size={10} /> {s.kind}{Number(s.status) >= 200 && Number(s.status) < 400 ? '' : ' · Unavailable'}
             </a>
           ))}
         </div>

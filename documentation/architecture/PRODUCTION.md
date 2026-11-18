@@ -248,6 +248,20 @@ private registries, destination checks, canary receipts and rollback.
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
 - [ ] `CLOUDFLARE_ACCOUNT_ID`
 - [ ] `SLACK_DEPLOY_WEBHOOK_URL` – optional, failure notifications.
+- [ ] D6428 file recovery (disabled until counsel/#6650 approval):
+      `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID` and
+      `FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY` are a read-only S3 credential
+      for `studioos-files`; `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID` and
+      `FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY` are a separate archive
+      read/write credential for `studioos-backups`. The existing
+      `CLOUDFLARE_API_TOKEN` must also be able to read that bucket's lock rules
+      for the metadata-only retention preflight. Do not provision or enable
+      live copying from this checklist alone: the `FILE_RECOVERY_REGISTRY`
+      repository variable must name the approved record-class registry and
+      `FILE_RECOVERY_ENABLED` remains off until its retention basis and exact
+      prefix lock are verified. Live restore additionally awaits #6654's
+      suppression adapter. See `documentation/operations/INCIDENT_RESPONSE.md`
+      § Backups & Recovery. No values are recorded here.
 - [ ] `WORKGRAPH_INGEST_TOKEN` – optional, the same value as the Worker secret of that name (above); `pr-overlap.yml` posts each hourly snapshot with it (D5580 part 4).
 - [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
       independent receiver's observer secret. It is neither the Slack token nor

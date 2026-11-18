@@ -17,9 +17,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { runGrowDaily, remindOn } from '../src/services/growDaily.ts';
@@ -29,8 +29,6 @@ import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const ROOT = process.cwd();
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 
 const FOUNDER = 10, OWNER = 11;
 const A = 1;

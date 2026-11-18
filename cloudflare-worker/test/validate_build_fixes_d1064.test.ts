@@ -24,7 +24,6 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const ROOT = process.cwd();
 const FOUNDER = 10, ADMIN = 13;
 const P = 1, P_TRASHED = 3;
 

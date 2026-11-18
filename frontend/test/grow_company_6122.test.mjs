@@ -79,7 +79,7 @@ test('Grow names the strip above Company only, and hands it the query', () => {
   const out = html(above({ parts: { due_counts: COUNTS, due_on: '2026-11-14' } }, { projectId: 7, query: {}, onQuery() {}, search: '?project_id=7' }));
   assert.match(out, /data-testid="grow-company-due"/);
   const route = readFileSync(resolve('frontend/src/pages/cycles/CycleRoute.jsx'), 'utf8');
-  assert.match(route, /above\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\)/);
+  assert.match(route, /above\?\.\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\)/);
 });
 
 test('the rows: Repeats, Overdue and Snoozed as words, No owner named, Culture as a kind', () => {

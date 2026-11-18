@@ -204,3 +204,5 @@ It uses synthetic queue responses and has no production credentials.
 | `cloudflare-heartbeat-5671.yml` | D5671: disabled-by-default fixed-period fallback check; no PR secrets or per-event job. |
 | `agent-compute-image.yml` | D4557: read-only PR image validation; no publishing, credentials or deployment. |
 | `agent-compute-preview.yml` | D4557: owner-dispatched, independently protected, exact-main disabled preview host deployment; no broker enablement. |
+
+| `file-recovery.yml` | D6428: gated approved-class R2 archive, checksum verification and synthetic suppression-aware restore drill. Disabled until counsel/#6650/configuration approval; live restore awaits #6654. | Daily 02:30 UTC and manual dispatch, only with `FILE_RECOVERY_ENABLED=true` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, separate `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID`/`FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY` and `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID`/`FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY`; nonsecret `FILE_RECOVERY_REGISTRY` variable |
