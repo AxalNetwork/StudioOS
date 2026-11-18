@@ -90,8 +90,30 @@ jobs:
             cloudflare-worker/package-lock.json
             package-lock.json
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: github.event_name != 'merge_group'
         with:
           name: suite-plan
+      # D7108 part 2: in the queue no `plan` job runs. Each part writes the
+      # exact-once plan itself from this commit with equal weights (no timings
+      # file, no API, no artifact), so every part writes the same bytes. It
+      # fails this part, never drops one, when ci.yml's literal queue matrix and
+      # the plan's parts differ in number or this part is not in the plan.
+      - name: Exact-once plan from this commit (merge queue)
+        if: github.event_name == 'merge_group'
+        env:
+          PART: ${{ matrix.part }}
+          TOTAL: ${{ strategy.job-total }}
+        run: |
+          names=$(node scripts/test-drift-parts.mjs --plan --equal-weights)
+          node --input-type=module -e '
+            const names = JSON.parse(process.argv[1]);
+            const { PART, TOTAL } = process.env;
+            if (names.length !== Number(TOTAL) || !names.includes(PART)) {
+              console.error(`::error::The queue matrix (${TOTAL} parts, this one "${PART}") does not match the plan: ${names.join(", ")}.`);
+              process.exit(1);
+            }
+            console.log(`Equal-weight plan, ${names.length} parts; this part is ${PART}.`);
+          ' "$names"
       # Every part installs the worker's and the root dependencies. Only the
       # frontend-* parts and rest install frontend's: they import React deck
       # templates through the vite loader and run the root SPA build, which

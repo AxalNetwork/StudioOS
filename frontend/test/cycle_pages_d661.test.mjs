@@ -153,7 +153,7 @@ test('the module read query, the count, the pages, the cells and the links a rea
   assert.equal(safeHref('/validate/x'), '/validate/x');
   for (const bad of ['//evil.test', 'https://evil.test', 'javascript:alert(1)', 'validate', null]) assert.equal(safeHref(bad), null, String(bad));
   assert.deepEqual(cycleTabs('build', [{ slug: 'founding-team', name: 'Founding team' }], 'founding-team').map((t) => [t.name, t.href, t.active]),
-    [['Overview', '/build', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Tools history is its second tab (#1597)');
+    [['Overview', '/build', false], ['Plan', '/build/plan', false], ['Progress', '/build/plan/progress', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Plan and Progress lead (D6029), then its Tools history (#1597)');
 });
 
 test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module page keep `?project_id=`', () => {
@@ -420,7 +420,9 @@ test('EVERY MODULE RENDERS FROM THE SHARED READ: all 26 module pages, with their
       assert.ok(t.includes(`What ${name} shows.`) && t.includes(`${name} · at a glance`) && !t.includes(`Next: Next step for ${name}.`), name);
       assert.ok(t.includes(`${name} one`) && t.includes(`${name} two`), `${name} lists its records`);
       const currentLabel = cycle === 'grow' ? ({ 'product-improvement': 'Customers', distribution: 'Distribution', 'revenue-and-traction': 'Focus', 'team-expansion': 'Talent', 'partner-network': 'Partnerships', 'market-expansion': 'Markets', 'durable-company-building': 'Company' }[c.slug] || name) : name;
-      assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
+      // D6029 (BD23): Build's desktop module switcher is the sidebar, so its page marks the module in the picker.
+      if (cycle === 'build') assert.match(out, new RegExp(`<option value="${c.slug}" selected="">`), `${name} is the picked module`);
+      else assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
       n += 1;
     }
   }

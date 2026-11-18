@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Introductions Teammate Decision · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Introductions · #7066 under #7062 · NW3-intro-team, continuing NW3.2, NW3.4 and NW3.5</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · A teammate introduction decided, written, delivered and followed up from its own record</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Network → Introductions (/network/introductions) for a team request: [Jules Avery] asks his teammate [Ari Lane] to introduce him to [Morgan Vale]. A notification opens the participant-scoped record directly in the shared Sheet (IntroRecordSheet, #6776). Accept or Not now (with a note the requester reads) and Write introduction move from Asked of you into that Sheet, and every frame names the next actor. Ari sends from her own connected mailbox after Review and send; accepting and a saved draft leave Made unset. Delivery recovery follows D4604: a confirmed send whose record lags is fixed with Update the record, which sends no email, and an unknown delivery is verified before any new send. Mailbox details and recovery stay private to the introducer; the requester sees the lifecycle and who acts next. Outcome and each person’s own follow-up come after Made. A team introduction uses 0 introduction credits. It continues the approved Network canvas (#4799) and the investor addendum (#6256): four links, the shared Sheet, D5129 state words and the one Eadwyn rail (#5130). Violet dashed ◇ tags mark backend work; the dashed violet strip on each frame (role, entry, next, data) is annotation, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main c59a9f2f66 · [Jules Avery], [Ari Lane], [Morgan Vale], [Tidepool Labs], [Harbor Lane Capital] and every date and figure (0 credits, a [$0.0140] Eadwyn quote) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Introductions Teammate Decision Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW3-intro-team · entry', 'Entry from a notification', 'Ari’s bell lists “[Jules Avery] asks for an introduction”; the link /network/introductions?intro=…&kind=request opens the record Sheet directly. The record opens even when the log filter hides its row, survives sign-in (#7063), and a uid that is not yours reads as no longer on your desk, with nothing disclosed.', [F('NIT01', 'Notification panel · teammate', 1030), C('NIT01B', 'What the link does', 1400, 430)]],
+      ['NW3-intro-team / recipient', 'Teammate decision in the record (NW3.2)', 'Next: You. Accept or Not now, each with an optional note and the line “[Jules Avery] will read this note”. Accepting sends nothing and leaves Made unset. A withdrawal by Jules mid-decision returns 409; the Sheet re-reads and keeps the typed note.', [F('NIT02', 'Decision in the Sheet', 1070), C('NIT02B', 'Not now, accepted, changed by the other person', 1400, 570)]],
+      ['NW3-intro-team / compose', 'Write the introduction from the record', 'After Accept: Write introduction from Ari’s connected mailbox, or an Eadwyn draft after its quote ([$0.0140], nothing charged until confirmed). The composer in the Sheet shows sender, recipient, subject and editable body; Review and send asks once; Ari presses Send.', [F('NIT03', 'Accepted · write it', 1070), F('NIT03B', 'Composer in the Sheet', 1070), C('NIT03C', 'Quote, draft, manual, Review and send', 1400, 430)]],
+      ['NW3-intro-team / delivery recovery', 'Delivery recovery (NW3.4, NW3.5)', 'Introducer only. Confirmed send awaiting record update: Update the record, which sends no email, and no Resend. Sending, confirmed and complete, unknown delivery (It arrived / It did not arrive before any new send) and not sent with the draft kept. The requester sees the same words in every one of these.', [F('NIT04', 'Confirmed send · record pending', 1080), C('NIT04B', 'Sending, made, unknown, not sent', 1400, 440), C('NIT04C', 'The requester’s view of the same moments', 1400, 335)]],
+      ['NW3-intro-team / requester', 'Requester record', 'Next: Ari. Jules reads his note and the lifecycle, and may withdraw while pending (review, result, or 409 when Ari answered first). Declined shows Ari’s note.', [F('NIT05', 'Pending · withdraw available', 1070), C('NIT05B', 'Withdraw, ended, declined', 1400, 415)]],
+      ['NW3-intro-team / follow-up', 'Outcome and your own follow-up', 'After Made: an optional outcome either side records (Meeting held, by Jules), separate from delivery, and Jules’s private follow-up due today with Mark done, Snooze a week and Change. None, snoozed, done, outcome not recorded, an unreadable Follow-ups due read (never 0 or done) and a failed save that keeps the choice.', [F('NIT06', 'Made · follow-up due', 1070), C('NIT06B', 'Follow-up and outcome states', 1400, 620)]],
+      ['NW3-intro-team · states', 'Reads, refusals and failed writes', 'Loading, unavailable with Try again, support session refused, not a participant (404, nothing disclosed), verified empty Asked of you, missing optional fields, mailboxes unreadable vs none connected, send and decision failures that keep text, and offline with Stale.', [C('NIT07', false, 1400, 835)]],
+      ['NW3-intro-team · tablet', 'Tablet 768', 'The decision Sheet as a 560 px overlay; the primary stays in the Sheet footer.', [C('NIT08', false, 768, 1024)]],
+      ['NW3-intro-team · phone', 'Phone 390', 'From a notification to a sent, recovered and followed-up introduction, all in the full-height Sheet with a sticky 44 px footer: no sideways pan and no return to Asked of you.', [P('NIT09A', 'Notifications'), P('NIT09B', 'Decision'), P('NIT09C', 'Accepted · write'), P('NIT09D', 'Composer'), P('NIT09E', 'Review and send'), P('NIT09F', 'Record pending'), P('NIT09G', 'Unknown delivery'), P('NIT09H', 'Requester · pending'), P('NIT09I', 'Requester · follow-up due')]],
+      ['NW3-intro-team · dark', 'Dark', 'The decision Sheet and the phone record-pending state on the dark tokens; states keep their words and shapes.', [F('NIT10', 'Decision · dark', 1000), P('NIT10B', 'Record pending · dark')]],
+      ['NW3-intro-team · keyboard', 'Keyboard, focus and announcements', 'Keyboard order inside the Sheet, what is announced on each branch (Accept, Not now, withdraw, compose, send outcomes, Update the record, unknown delivery, follow-up, 409, unreadable) and where focus returns.', [W('NIT11')]],
+      ['Handoff', 'Handoff', 'Checked on main, preserved components, frontend-only work, the one backend item (◇ #7066) and what is open.', [W('NITH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

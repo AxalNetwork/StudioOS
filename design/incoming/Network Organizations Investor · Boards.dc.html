@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Organizations Investor · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Organizations · #7054 · extends NW4 and NW4.1 of #6256 (build owner #6257)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Investor Organizations — who counts as known, which company is which, and loading that does not wait on matches</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The investor Organizations directory (/network/organizations) and organization detail, drawn on the approved NW4 and NW4.1 boards of the Network v2 Investor canvas (#6256): the same shell, header “Organizations” with Ask beside the one primary, the four links, the Tie Sheet and the state words. These boards add the edge cases: two people with one display name count as two; two linked company profiles with one name stay two rows, told apart by who linked them; a name that is only text from a contact or an import keeps its source and is never matched. Each read loads and retries on its own; browsing never reads curated matches and never spends an ask. Violet dashed ◇ tags mark backend work. Keys carry the NOI prefix; section ids NW4.2 onward are new.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main c59a9f2f66 · [Harbor Lane Capital] and every person, company and figure (25 organizations, 5 with a co-investor contact, 4 known at [Northstar Capital], 2 of 3 asks) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Organizations Investor Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW4', 'Directory · identity edge cases', 'One row per company profile. [Northstar Capital]: 4 known, two of them named [Sam Ortiz], and [Hugo Brandt] with two ties counted once. Two [Harbor Seed] rows, each “1 of 2 named” and “Linked by” a person. [Arden Bio] and [Loomcraft] are text only, with their source. Co-investors reads “has a co-investor contact”; Portfolio, Passed and LPs stay off with reasons. The ask line says browsing spends nothing.', [F('NOI4', false, 1340), C('NOI4C', 'Co-investors · has a co-investor contact', 1400, 521)]],
+      ['NW4.1', 'Detail · namesakes and repeated ties', '[Northstar Capital]: two [Sam Ortiz] accounts open separately and are told apart by role and tie; no account number or email. Known counts distinct accounts. Introduction is Not applicable: no founder or project here.', [F('NOI4_1', false, 1000)]],
+      ['NW4.2', 'Detail · a same-name company and the ask', 'The second [Harbor Seed], linked by [Jules Avery], with a link to the other one. The existing confirm step for an eligible founder: message, “An ask is not consent”, Send ask. Then the ask states: eligible, confirm, sending then pending, quota loading, asks unavailable, none left.', [F('NOI4_1B', 'Confirm open', 900), C('NOI4A', 'Ask states', 1400, 640)]],
+      ['NW4.3', 'Text-only names', 'A company typed on a hand-added contact and one from a LinkedIn import: source, Not recorded profile, no inferred match, no ask.', [C('NOI4_1C', false, 1400, 258)]],
+      ['NW4.4', 'Prototype · open, open a person, return', 'Search “harbor”, open the second [Harbor Seed], open [Jules Avery] in the Tie Sheet, close: the directory returns with the same search, view and focused row, and says so.', [F('NOI4P1', '1 · Search and open', 900), F('NOI4P2', '2 · Person open', 900), F('NOI4P3', '3 · Back, same place', 900)]],
+      ['NW4.5', 'States', 'Loading waits for ties only; empty, read; a company with no recorded touch; directory Unavailable with its own Try again; company lookup Unavailable with its own Try again; Partial when imported contacts cannot be read.', [C('NOI5', false, 1400, 522)]],
+      ['NW4.6', 'Reads behind the page', 'Each read with what it feeds and what happens if it fails. Curated matches are not read here: opening or retrying makes 0 calls to propositions, which expire and generate on read.', [C('NOI4R', false, 1400, 320)]],
+      ['NW4.7', 'Phone 390', 'Search with the two [Harbor Seed] cards, the [Northstar Capital] detail with the two [Sam Ortiz] cards, and the directory Unavailable with Try again while asks are still reading. 44px targets.', [P('NOI8A', 'Directory · search'), P('NOI8B', 'Detail · namesakes'), P('NOI8C', 'Could not be read')]],
+      ['NW4.8', 'Tablet 768', 'The directory reflowed to three columns; source badges and “Linked by” stay.', [C('NOI9', false, 768, 1024)]],
+      ['NW4.9', 'Dark', 'The directory on the dark tokens; badges and states keep their words and shapes.', [F('NOI10', false, 1230)]],
+      ['Handoff', 'Handoff', 'What was checked on main, what is preserved, departures for review, backend required (◇ #7054), frontend only, accessibility and what is open.', [W('NOIH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

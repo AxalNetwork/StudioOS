@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { workflowFailureHints } from './workflowFailureHints.mjs';
 
@@ -50,6 +51,43 @@ test('supersession needs a trusted exact failed job, attempt, step and structure
   for (const variant of variants) assert.deepEqual(await withoutReads({ ...f, ...variant }), {});
 });
 
+test('bot supersession requires the exact candidate check and a skipped production promotion', async () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/meeting-bot-deploy.yml', import.meta.url), 'utf8');
+  const producerSteps = workflow.split('      - name: ');
+  const promotion = { name: 'Promote verified revision to production', conclusion: 'skipped' };
+  for (const [stage, step] of [
+    ['bot-initial', 'Verify the exact main candidate'],
+    ['bot-before-preview', 'Recheck the candidate before publishing the bot'],
+    ['bot-after-preview', 'Recheck the candidate after preview verification'],
+  ]) {
+    const producer = producerSteps.find(block => block.startsWith(step + '\n'));
+    assert.ok(producer?.split('\n').includes('          STUDIOOS_RELEASE_CHECK: ' + stage), step);
+    const f = fixture('meeting-bot-deploy', 'deploy', step, 'workflow_dispatch');
+    const [job] = f.jobs;
+    if (stage === 'bot-after-preview') job.steps.unshift(
+      { name: 'Deploy preview bot host only', conclusion: 'success' },
+      { name: 'Verify deployed preview callback before normal promotion', conclusion: 'success' },
+    );
+    job.steps.push(promotion);
+    const message = ['superseded', stage, 23, 2, head, baseSha].join(' ');
+    const api = () => notice('StudioOS release outcome v1', message);
+    assert.deepEqual(await workflowFailureHints({ ...f, api }), { superseded: true, supersededStage: stage });
+    for (const text of [message.replace(stage, 'initial'), message.replace(' 23 2 ', ' 23 1 '), message.replace(baseSha, head)]) {
+      assert.deepEqual(await workflowFailureHints({ ...f, api: () => notice('StudioOS release outcome v1', text) }), {});
+    }
+    const extraFailure = { name: 'Retain sanitized deployed preview result', conclusion: 'failure' };
+    for (const jobs of [
+      [{ ...job, name: 'other' }],
+      [{ ...job, steps: [...job.steps, extraFailure] }],
+      [{ ...job, steps: job.steps.slice(0, -1) }],
+      [{ ...job, steps: [...job.steps.slice(0, -1), { ...promotion, conclusion: 'success' }] }],
+      [job, { ...job, id: 86 }],
+    ]) assert.deepEqual(await withoutReads({ ...f, jobs }), {});
+    const otherWorkflow = fixture('cloudflare-worker-deploy', 'deploy', step);
+    assert.deepEqual(await withoutReads(otherWorkflow), {});
+  }
+});
+
 test('old or missing main auth evidence stays available for triage; a verified edge refusal reuses the owner issue', async () => {
   for (const [slug, name] of [['magic-link-probe', 'magic-link round trip'], ['magic-link-insert-probe', 'magic-link insert']]) {
     const f = fixture(slug, name, 'Report the outcome', 'schedule');
@@ -67,6 +105,7 @@ test('only a matching owner issue and curated preflight can receive the incident
   for (const [slug, job, step, event, number] of [
     ['claude-code', 'claude', 'Verify ANTHROPIC_API_KEY is configured', 'issue_comment', 5530],
     ['meeting-bot-deploy', 'deploy', 'Validate owner-approved preview configuration before deployment', 'push', 5675],
+    ['meeting-bot-deploy', 'deploy', 'Validate preview signing secret before image build', 'workflow_dispatch', 5675],
   ]) {
     const f = fixture(slug, job, step, event), ticket = issue(number, issueTitles[number]);
     assert.deepEqual(await workflowFailureHints({ ...f, api: path => {

@@ -137,7 +137,15 @@ export function pendingNextRedirected() {
  * else to a bare `/login`, as before; an area joins this list when its deep links (a course, a lesson, a webinar) are
  * shared and must survive sign-in.
  */
-export const RETURN_AFTER_LOGIN_PREFIXES = Object.freeze(['/learning', '/grow']);
+export const RETURN_AFTER_LOGIN_PREFIXES = Object.freeze(['/learning', '/grow', '/research/funds']);
+
+/**
+ * D7166 (#7166): a Funds directory link longer than the return cap (`sanitizeNextPath`, 200 characters) cannot be
+ * kept whole. It returns to the Directory without its filters, and `FUNDS_FILTERS_DROPPED` tells the page to say so
+ * (RFD-04, option A as drawn). Any other area falls back to `/login`, as before.
+ */
+export const FUNDS_FILTERS_DROPPED = 'filters_dropped';
+const FUNDS_PREFIX = '/research/funds';
 
 const underPrefix = (pathname, prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`);
 const pathOf = (p) => String(p || '').split(/[?#]/)[0];
@@ -152,7 +160,11 @@ export function loginRedirectFor(location) {
   const pathname = String(location?.pathname || '');
   const here = `${pathname}${location?.search || ''}${location?.hash || ''}`;
   const kept = RETURN_AFTER_LOGIN_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  const safe = kept ? sanitizeNextPath(here) : null;
+  let safe = kept ? sanitizeNextPath(here) : null;
+  if (!safe && kept && pathname === FUNDS_PREFIX && here.length > 200) {
+    const directory = new URLSearchParams(location?.search || '').get('view') === 'directory';
+    safe = sanitizeNextPath(`${FUNDS_PREFIX}?${directory ? 'view=directory&' : ''}${FUNDS_FILTERS_DROPPED}=1`);
+  }
   return safe ? `/login?next=${encodeURIComponent(safe)}` : '/login';
 }
 
@@ -174,6 +186,13 @@ const DESTINATION_AREAS = Object.freeze([
     who: (pathname) => (/^\/grow\/reporting(\/|$)/.test(pathname) && !/\/edit$/.test(pathname)
       ? 'You need a founder, advisor or operating partner account.'
       : 'You need a founder account.'),
+  },
+  {
+    // D7166 (#7166): RFD-04's "Sign in to continue to Funds". App.jsx guards /research/funds to founders and admins.
+    prefix: '/research/funds',
+    name: 'Funds',
+    what: 'Funds is the Research fund directory and your shortlist of funds.',
+    who: () => 'You need a founder account.',
   },
 ]);
 

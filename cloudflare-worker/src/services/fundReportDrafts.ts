@@ -14,6 +14,7 @@
  * prepared and issued only through its report.
  */
 import type { Env } from '../types';
+import { sendFundReportNotices } from './fundReportNotices';
 import { logAdminAction } from './adminAudit';
 import {
   administeredFunds, allocate, feeStatementFigures, fundFigures, isAdministered, isClosed, lastClosedMonth, lastClosedQuarter,
@@ -570,6 +571,9 @@ export async function issueDraft(env: Env, uid: string, actor: number, body: { f
     ).bind(JSON.stringify({ fund_id: row.fund_id, period: row.period_label, report_uid: uid, via: 'reporting_queue' }), String(actor), actor, uid, actor, at),
   ]);
   if (Number(results[0].meta?.changes ?? 0) !== 1) throw await whyNotIssued(env, uid, body.figures_sha256);
+  if (row.fund_id !== null && row.report_period_id !== null && Number(results[2].meta?.changes ?? 0) === 1) {
+    await sendFundReportNotices(env, row.fund_id, row.report_period_id);
+  }
   const members = await env.DB.prepare(
     "SELECT uid FROM fund_report_drafts WHERE fund_id = ? AND period_label = ? AND status = 'issued' AND issued_at = ? AND issued_by = ?",
   ).bind(row.fund_id, row.period_label, at, actor).all<{ uid: string }>();

@@ -168,7 +168,8 @@ test('Durable company-building: tagged events with Accept and Dismiss, each thro
 test('the wiring: both Grow modules mount their part, the dialog saves the feed’s shape, no browser pop-up', () => {
   const route = cycleRouteText();
   assert.ok(route.includes("import { DurableFromGoogle, RevenueFromGoogle } from '../GrowFromGoogle';"));
-  assert.match(route, /'revenue-and-traction': \(data, ctx\) => \(<>\s*\{fromMercury\('revenue-and-traction', data, ctx\)\}\s*<RevenueFromGoogle projectId=\{ctx\.projectId\} \/>/);
+  // D5866 (#5866): From TikTok may sit between From Mercury and From Google.
+  assert.match(route, /'revenue-and-traction': \(data, ctx\) => \(<>\s*\{fromMercury\('revenue-and-traction', data, ctx\)\}\s*(?:\{\/\*[^*]*\*\/\}\s*)?(?:\{fromTiktok\('revenue-and-traction', data, ctx\)\}\s*)?<RevenueFromGoogle projectId=\{ctx\.projectId\} \/>/);
   assert.match(route, /<DurableFromGoogle projectId=\{ctx\.projectId\} \/>\s*<\/>\),/);
   const dialog = read('frontend/src/pages/cycles/MapColumnsDialog.jsx');
   assert.ok(dialog.includes('const body = encode(mapping, header); await googleWorkspace.mapping(file.uid, body);'));

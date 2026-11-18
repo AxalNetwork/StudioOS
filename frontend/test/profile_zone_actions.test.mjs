@@ -247,6 +247,7 @@ const PROFILES = {
     // drafts and issues a period at `/funds/:fundId/reporting/new`.
     // EIGHTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
     // stores the log and the page draws it; the op scrolls to that card.
+    // D6637: the network picker is now supplied by its page.
     // NINETEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
     // hide over delete on #6274 (question 4 B); the Worker stamps `cleared_at`
     // and `Show cleared` reads it back.
@@ -255,7 +256,11 @@ const PROFILES = {
     // TWENTY-FIRST: `funds/calls`'s `Send reminders` (#6238, D6238) — it opens
     // the call's chase: one Eadwyn draft per line behind, each logged as sent
     // only when the GP confirms it.
-    handlers: 21,
+    //
+    // TWENTY-SECOND: `network/relationships`'s `Add person` (D6636) — the
+    // network picker is now supplied by its page.
+    // TWENTY-THIRD: `network/introductions`'s `Offer one` (D6637), supplied by its page.
+    handlers: 23,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,

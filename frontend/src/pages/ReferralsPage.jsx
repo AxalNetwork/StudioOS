@@ -19,6 +19,7 @@ import {
 import { api } from '../lib/api';
 import { readLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
 import LinkedInImportSheet, { NO_EMAIL_LINE } from './referrals/LinkedInImportSheet.jsx';
+import { applyStrategicAccess, canRequestStrategicAccess, referralCategories, strategicDecisionMessage } from './referrals/strategicAccess.js';
 import { useToast } from '../components/useToast';
 import ToastMessage from '../components/ToastMessage';
 import { Unreadable } from '../ui';
@@ -100,7 +101,7 @@ const FAQS = [
   { q: 'When are rewards actually paid?', a: 'Only after a qualifying outcome — acceptance and formation for a startup referral, onboarding for a platform user. What each pays now is on its category above. Strategic introductions are agreed case by case. Partner accounts are not paid perk credits. Never on submission alone.' },
   { q: 'Can I refer myself or my own company?', a: 'No. Self-referrals aren’t eligible under this program — apply directly instead.' },
   { q: 'Is every referral accepted?', a: 'No — most are not, and that’s intentional. Review is against a real quality bar, not a quota.' },
-  { q: 'Is this program open to everyone, or invite-only?', a: 'Startup, advisor, platform user, and service partner referrals are open. Strategic and capital introductions run on invite-only terms.' },
+  { q: 'Which referrals need access?', a: 'Startup and platform user referrals are open. Request strategic referral access before submitting a strategic or capital introduction. Approval opens that referral category. The formal Referral Partners roster is managed separately by HQ.' },
   { q: 'What if my referral needs more information?', a: 'It moves to "More info needed" in your pipeline with a note on what’s missing — you can update it from the detail view.' },
 ];
 
@@ -396,8 +397,9 @@ export default function ReferralsPage({ embedded = false }) {
   const [statusFilter, setStatusFilter] = useState('All');
   const [submitOpen, setSubmitOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [partnerOpen, setPartnerOpen] = useState(false);
-  const [partnerNote, setPartnerNote] = useState('');
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [accessNote, setAccessNote] = useState('');
+  const [sendingAccess, setSendingAccess] = useState(false);
   const [detail, setDetail] = useState(null);
   const [faqOpen, setFaqOpen] = useState(-1);
   const [copied, setCopied] = useState(false);
@@ -685,15 +687,30 @@ export default function ReferralsPage({ embedded = false }) {
   // D1353: a guided sheet, not a sign-in or a dead-end toast. LinkedIn gives no connections over its API; the export is the import.
   const importLinkedin = () => setLinkedinSheet(true);
 
-  const submitPartner = async () => {
+  const strategicAccess = overview?.strategic_access;
+  const categories = referralCategories(overview);
+  const mayRequestAccess = canRequestStrategicAccess(strategicAccess, sendingAccess);
+  const requestStrategicAccess = async () => {
+    if (!mayRequestAccess) return;
+    setSendingAccess(true);
     try {
-      await api.referralStrategicAccess({ note: partnerNote });
-      setOverview((o) => ({ ...o, strategic_access: 'requested' }));
-      setPartnerOpen(false);
-      setPartnerNote('');
-      showToast({ kind: 'success', msg: 'Partner program request submitted — we’ll follow up directly.' });
+      const result = await api.referralStrategicAccess({ note: accessNote.trim() });
+      const state = result?.strategic_access;
+      const message = strategicDecisionMessage(state);
+      if (!message) {
+        setAccessOpen(false);
+        await load();
+        showToast({ kind: 'warning', msg: 'The response did not confirm your access. Check the status shown before requesting again.' });
+        return;
+      }
+      setOverview((o) => applyStrategicAccess(o, state));
+      setAccessOpen(false);
+      setAccessNote('');
+      showToast({ kind: state === 'declined' ? 'warning' : 'success', msg: message });
     } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Could not submit request.' });
+      showToast({ kind: 'error', msg: e?.message || 'Could not request strategic referral access.' });
+    } finally {
+      setSendingAccess(false);
     }
   };
 
@@ -775,7 +792,7 @@ export default function ReferralsPage({ embedded = false }) {
                 <div className="text-[11.5px] text-[#8b8798]">Not every category carries equal weight or the same reward model</div>
               </div>
               <div className="rf-cat-grid">
-                {(overview?.categories || []).map((cat) => (
+                {categories.map((cat) => (
                   <div key={cat.key} className="rounded-[13px] border border-[#ececf1] bg-white p-4 dark:bg-gray-900">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[13.5px] font-extrabold tracking-tight">{cat.name}</div>
@@ -1039,7 +1056,7 @@ export default function ReferralsPage({ embedded = false }) {
                 Rewards vary by category and are never issued on submission alone — a qualified outcome (acceptance, close, or onboarding) is required. Some categories run on invite-only terms set case by case.
               </p>
               <div className="mt-4">
-                {memberRewardMatrix(overview?.categories).map((rw) => (
+                {memberRewardMatrix(categories).map((rw) => (
                   <div key={rw.cat} className="flex flex-wrap items-center gap-3 border-t border-[#f4f3f7] py-3 first:border-t-0">
                     <div className="min-w-[180px] flex-none text-[12.5px] font-bold">{rw.cat}</div>
                     <span className={CHIP[rw.modelTone]}>{rw.model}</span>
@@ -1051,19 +1068,22 @@ export default function ReferralsPage({ embedded = false }) {
 
             <div className="mt-8 flex flex-wrap items-center gap-6 rounded-[14px] border border-[#ececf1] bg-[#faf9fc] p-6 sm:p-7">
               <div className="min-w-0 flex-1">
-                <div className="rf-lbl mb-2">Referral partner program</div>
-                <p className="text-sm font-extrabold tracking-tight">Refer often, with more structure and better terms.</p>
+                <div className="rf-lbl mb-2">Strategic referral access</div>
+                <p className="text-sm font-extrabold tracking-tight">
+                  {strategicAccess === 'none' ? 'Request access to make strategic and capital introductions.'
+                    : strategicDecisionMessage(strategicAccess) || 'Your access status is unavailable.'}
+                </p>
                 <p className="mt-1.5 max-w-lg text-[12.5px] leading-relaxed text-[#4a4553]">
-                  For recurring referrers — invite-only. Custom reward terms, priority review, and a direct line for strategic and capital introductions.
+                  An admin reviews access to this referral category. HQ manages the formal Referral Partners roster separately.
                 </p>
               </div>
-              <button
+              {mayRequestAccess && <button
                 type="button"
                 className="rf-btn flex-none rounded-[10px] border border-[#d4c9f0] bg-white px-5 py-2.5 text-[13px] font-bold text-violet-700 dark:bg-gray-900 dark:text-violet-300"
-                onClick={() => setPartnerOpen(true)}
+                onClick={() => setAccessOpen(true)}
               >
-                Become a referral partner
-              </button>
+                Request strategic referral access
+              </button>}
             </div>
 
             <div ref={policyRef} id="policy" className="mt-8">
@@ -1088,7 +1108,7 @@ export default function ReferralsPage({ embedded = false }) {
 
       {submitOpen && (
         <SubmitDrawer
-          categories={(overview?.categories || []).filter((c) => !c.locked)}
+          categories={categories.filter((c) => !c.locked)}
           onClose={() => setSubmitOpen(false)}
           onDone={() => { setSubmitOpen(false); load(); }}
           notify={showToast}
@@ -1147,24 +1167,26 @@ export default function ReferralsPage({ embedded = false }) {
         </div>
       )}
 
-      {partnerOpen && (
-        <div className="rf-drawer-backdrop flex items-center justify-center p-6" onClick={() => setPartnerOpen(false)}>
-          <div className="rf-modal-panel max-w-[460px]" onClick={stop}>
-            <h3 className="text-base font-extrabold tracking-tight">Apply for the referral partner program</h3>
+      {accessOpen && (
+        <Sheet label="Strategic referral access" title="Request strategic referral access" onClose={() => setAccessOpen(false)} width={480}>
+          <div className="px-7 pb-6 pt-4">
             <p className="mt-2 text-[12.5px] leading-relaxed text-[#4a4553]">
-              Invite-only. We review recurring referrers individually and follow up directly with terms if there&apos;s a fit.
+              Describe the introductions you expect to make. If approved, you can submit them through Refer &amp; Earn.
             </p>
+            <label htmlFor="rf-strategic-note" className="mt-4 block text-xs font-semibold">Types of introductions (optional)</label>
             <input
-              value={partnerNote}
-              onChange={(e) => setPartnerNote(e.target.value)}
-              placeholder="What kinds of introductions do you expect to make?"
-              className="rf-input mt-4"
+              id="rf-strategic-note"
+              value={accessNote}
+              onChange={(e) => setAccessNote(e.target.value)}
+              disabled={sendingAccess}
+              maxLength={2000}
+              className="rf-input mt-1"
             />
-            <button type="button" className="rf-btn mt-3.5 w-full rounded-lg bg-violet-700 py-2.5 text-[13px] font-bold text-white" onClick={submitPartner}>
-              Request review
+            <button type="button" className="rf-btn mt-3.5 w-full rounded-lg bg-violet-700 py-2.5 text-[13px] font-bold text-white" disabled={sendingAccess} onClick={requestStrategicAccess}>
+              {sendingAccess ? 'Sending…' : 'Send access request'}
             </button>
           </div>
-        </div>
+        </Sheet>
       )}
     </div>
   );

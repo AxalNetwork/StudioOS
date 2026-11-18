@@ -52,6 +52,9 @@ regexes = [
   # in-memory capability fixture, whose fetch stub forbids external calls.
   # Anchors preserve detection for prefixed/suffixed values and other seeds.
   '''^synthetic-caprel-capabilities-5074-$''',
+  # D6473-p2: the review loop's numbered Claude accounts are named, never held, in code
+  # (`secret: 'ANTHROPIC_API_KEY_2'`). Anchored to the exact names, so a value is still caught.
+  '''^ANTHROPIC_API_KEY_[23]$''',
   # D4570-p6 (#4570): the Stripe key in the money authz suite is a fixture;
   # every Stripe call in that suite goes to an in-test fake. Pinned as the
   # literal, as D1135 is, rather than rewriting the PR branch's history.

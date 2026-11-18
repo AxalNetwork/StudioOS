@@ -52,6 +52,8 @@ jobs:
       - name: Select eligible PRs
         id: plan
         env:
+          # The landing App's login (`<slug>[bot]`): its keeper merges then count as no-model (owner, 2026-11-17).
+          LANDING_BOT_LOGIN: ${{ vars.LANDING_BOT_LOGIN }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/landing-bot/feeder.mjs plan
       - name: Reserve daily queue slots

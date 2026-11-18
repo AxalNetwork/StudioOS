@@ -1064,3 +1064,74 @@ test('#4733: the agent list carries reads_line from the role\'s effective works_
   assert.equal(added.body.agent.reads_line, `Works in ${labels.join(', ')}`);
   assert.ok(!/@example\.test/.test(list.text));
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// D7073 (#7073): the agent gateway fails closed, and a busy model is not the
+// gateway's limit. The real run(): only the model is a stub.
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('D7073: a malformed gateway refuses before any call or hold; a missing one refuses an engine run only', async () => {
+  // Mutations checked: the gateway check moved after run() → a hold is taken and the model is called;
+  // `input.engine === true` read as truthy-by-default → the sponsor's own run is refused.
+  const w = runWorld();
+  try {
+    const uid = await addCfo(w);
+    const agent = () => agentRow(w, uid);
+    const holds = () => (w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n;
+    const step = { module: 'use-of-funds', option: 'draft:raise/use-of-funds-runway', prompt: 'How long is our cash horizon?' };
+
+    w.env.AGENT_AI_GATEWAY = 'not a gateway!';
+    for (const engine of [false, true]) {
+      const r = await agentRun(w.env, { agent: agent(), ...step, runUid: `run-bad-gw-${engine ? 1 : 0}`, engine });
+      assert.deepEqual([r.ok, (r as any).status, (r as any).code], [false, 503, 'gateway_misconfigured']);
+    }
+    delete w.env.AGENT_AI_GATEWAY;
+    const engineRun = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-no-gw-0001', engine: true });
+    assert.deepEqual([engineRun.ok, (engineRun as any).status, (engineRun as any).code], [false, 503, 'gateway_required']);
+    assert.deepEqual(w.calls, [], 'nothing ran, not even the guard');
+    assert.equal(holds(), 0, 'nothing was held');
+    assert.equal(agent().status, 'active', 'no refusal pauses the agent');
+    assert.deepEqual(eventsOf(w, uid).filter((e) => e.kind === 'refused').map((e) => JSON.parse(e.detail_json).code),
+      ['gateway_misconfigured', 'gateway_misconfigured', 'gateway_required']);
+
+    // The sponsor's own run with no gateway is unchanged, and a refused run uid is still free to run.
+    const own = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-no-gw-0001' });
+    assert.equal(own.ok, true, JSON.stringify(own));
+    assert.equal(holds(), 1);
+
+    // With the gateway set, an engine run is answered by the model accounts (#7073 part 2). With none set up, it is
+    // refused before anything is held or called; it never falls back to the router's default route.
+    w.env.AGENT_AI_GATEWAY = 'agents';
+    const callsBefore = w.calls.length;
+    const gated = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-with-gw-01', engine: true });
+    assert.deepEqual([gated.ok, (gated as any).status, (gated as any).code], [false, 503, 'accounts_unconfigured']);
+    assert.equal(w.calls.length, callsBefore, 'no model call');
+    assert.equal(holds(), 1, 'no new hold');
+    // The sponsor's own run still goes through the gateway on the router.
+    const ownGated = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-with-gw-02' });
+    assert.equal(ownGated.ok, true, JSON.stringify(ownGated));
+  } finally { w.db.close(); }
+});
+
+test('D7073: a model out of capacity is model_throttled and pauses nothing; a 429 Workers AI does not explain is still gateway_limit', async () => {
+  // Mutation checked: `modelThrottled` removed → the first run answers `gateway_limit`, which the loop turns into the platform breaker.
+  const fail = (message: string) => () => { throw Object.assign(new Error(message), { status: 429 }); };
+  const step = { module: 'use-of-funds', option: 'draft:raise/use-of-funds-runway', prompt: 'How long is our cash horizon?' };
+  for (const [message, code] of [
+    ['3040: Capacity temporarily exceeded, please try again.', 'model_throttled'],
+    ['AiGatewayError: 2003: Rate limited', 'gateway_limit'],
+  ] as const) {
+    const w = runWorld(fail(message));
+    try {
+      const uid = await addCfo(w);
+      w.env.AGENT_AI_GATEWAY = 'agents';
+      // #7073 part 2: an engine run no longer reaches the router, so the sponsor's own run carries this check.
+      const r = await agentRun(w.env, { agent: agentRow(w, uid), ...step, runUid: 'run-throttle-01' });
+      assert.deepEqual([r.ok, (r as any).status, (r as any).code], [false, 503, code], message);
+      assert.equal(agentRow(w, uid).status, 'active');
+      assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_rail_proposals').get().n, 0);
+      const charged = (w.db.prepare('SELECT SUM(charged_microusd) AS c FROM ai_usage_logs WHERE agent_id = ? AND charged_microusd > 0').get(agentRow(w, uid).id) as any).c;
+      assert.equal(charged ?? 0, 0, 'a run no model answered charges nothing');
+    } finally { w.db.close(); }
+  }
+});

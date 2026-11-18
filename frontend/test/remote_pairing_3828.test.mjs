@@ -93,6 +93,8 @@ test('PR1: Phone remote makes a code and shows it grouped, with its QR and count
     assert.equal(m.text(m.by('remote-pair-code')), '482 913');
     assert.equal(m.pr(m.by('remote-pair-code'))['aria-label'], 'Code 4 8 2 9 1 3');
     assert.match(m.text(m.by('remote-pair-expires')), /^Expires in 9:4\d$/);
+    // QRCode.toDataURL encodes off the render; a busy runner can outlast `settle`, so wait for it (bounded).
+    for (let i = 0; i < 200 && !m.by('remote-pair-qr'); i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
     assert.ok(m.by('remote-pair-qr'), 'a QR code for /remote?code=…');
     await m.rerender(h(RemotePair, { deckId: 31, paired: true, onUnpaired: () => { unpaired += 1; } }));
     assert.ok(!m.by('remote-pair-panel'), 'the panel closes by itself once paired');

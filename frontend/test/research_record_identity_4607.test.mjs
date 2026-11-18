@@ -38,7 +38,8 @@ function stub() {
   const gets = [];
   const writes = [];
   api.competitors.get = (id) => { const d = deferred(); gets.push({ id, ...d }); return d.promise; };
-  api.competitors.save = async (id, body) => { writes.push({ op: 'save', id, body }); return analysisOf(id, { title: body.title ?? `Analysis ${id}` }); };
+  // D7176: the saved record carries what was saved, as the Worker's answer does.
+  api.competitors.save = async (id, body) => { writes.push({ op: 'save', id, body }); return analysisOf(id, { title: body.title ?? `Analysis ${id}`, ...(body.output ? { output: body.output } : {}) }); };
   api.competitors.candidateUpdate = async (aid, cid, body) => {
     writes.push({ op: 'candidateUpdate', aid, cid, body });
     return analysisOf(aid, { candidates: [{ id: cid, name: body.name ?? cid, origin: 'manual', category: 'direct' }] });
@@ -137,7 +138,10 @@ test('analysis: editing and saving the current record still works', async () => 
     await m.type('Market summary', 'New summary for A');
     await m.settle(() => m.ui.props(m.buttons('Save')[0]).onClick({ stopPropagation() {} }));
     assert.deepEqual(s.writes.map((w) => [w.op, w.id, w.body.output.market_summary]), [['save', 'A', 'New summary for A']]);
-    assert.match(m.text(), /Saved\./);
+    // D7176: the save line reads Saved once the answer is in (RS-14 A2 B).
+    const line = m.ui.nodes().find((n) => m.ui.props(n)?.['data-save-state']);
+    assert.equal(m.ui.props(line)['data-save-state'], 'ok');
+    assert.doesNotMatch(m.text(), /Unsaved changes/);
   } finally { await m.close(); s.restore(); }
 });
 

@@ -11,6 +11,7 @@ import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progr
 import { ExportButton, Sources } from './CycleModulePage.jsx';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 import { asksCountLabel } from './buildEadwyn.js';
+import { buildOutcome } from './buildNav.js';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -62,7 +63,8 @@ export function phoneRow(cols, row) {
   const targetLine = target?.separateLink === true ? `Target: ${cellView(target).text}${typeof comparison === 'string' ? ` · ${comparison}` : ''}` : null;
   return {
     title,
-    description: [second?.text, targetLine].filter(Boolean).join(' · ') || undefined,
+    // #6006: the title cell's first note (a theme's rank reason) follows the second cell on a phone.
+    description: [second?.text, cells[0]?.note?.[0], targetLine].filter(Boolean).join(' · ') || undefined,
     pill: toned ? { label: toned.text, tone: PILL_TONE[toned.tone] || 'neutral' } : undefined,
   };
 }
@@ -131,7 +133,7 @@ export default function PhoneModulePage({
   const bar = header === undefined ? (
     // D5081 part 4 (#5081): a tool that owns its page says its own line, as the desktop header does, never the
     // caption of the generic card it no longer draws.
-    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : owned ? owned.sub : card?.caption || undefined}
+    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : owned ? owned.sub : (meta.key === 'build' && buildOutcome(slug)) || card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor

@@ -103,6 +103,7 @@ import {
   adoptionOf, catalogueCoverage, filtersApplied, matchesSkill, parseSkillFilters, publishedEvaluation,
   type CampaignCoverageRow, type CoverageRow, type PublishedVersionRow, type SkillFilters, type SkillLinkRow, type VersionEvalRow,
 } from '../services/agents/skillCoverage';
+import { readSkillOverlap } from '../services/agents/skillOverlap';
 import { CATALOGUE } from '../services/ai/catalogue';
 import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
 import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
@@ -263,8 +264,7 @@ adminHqSkills.get('/', async (c) => {
       run_cost: null,
     };
   });
-  // D4536: the catalogue's coverage, in two more fixed reads whatever the page; D4536-p2: the published versions'
-  // evaluation, in three more. D5970: the same five reads with or without filters; `filters` says what was applied.
+  // D4536: catalogue coverage, including one bounded metadata read for overlap, and published version evaluation.
   const [coverage, published_evaluation] = await Promise.all([
     libraryCoverage(env, tax.category, page == null ? draftsUnevaluated : null, filters),
     libraryPublishedEvaluation(env, tax.category, filters),
@@ -386,11 +386,12 @@ async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, 
   ]);
   const all = read.results ?? [];
   const rows = filters ? all.filter((r) => matchesSkill(r, filters, category)) : all;
-  return catalogueCoverage(rows, {
+  const coverage = catalogueCoverage(rows, {
     category, roleKeys: ROLES.map((r) => r.key), librarySlugs: SKILL_LIBRARY_SLUGS,
     adoption: adoptionOf(links.results ?? [], rows),
     draftsWithoutCurrentEvaluation, filtered: filters != null,
   });
+  return { ...coverage, overlap: await readSkillOverlap(env, rows) };
 }
 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.

@@ -413,7 +413,7 @@ function CatalogueBody() {
               <CardFigure s={f} what="The testing programs" onRetry={retry} testId="programs-card-product-testing-figure">
                 {f.state === 'ready' ? <span className={FIGURE}>{testingLine(f.data)}</span> : null}
               </CardFigure>
-            ) : null, door: superAdmin ? <Link to="/admin?tab=product-testing" className={OPEN} aria-label="Open Product testing">Open</Link> : null, foot: superAdmin ? null : PRODUCT_TESTING_FOOT })
+            ) : null, door: superAdmin ? <Link to="/admin/platform/product-testing/programs" className={OPEN} aria-label="Open Product testing campaigns" data-testid="programs-open-testing-campaigns">Open</Link> : null, foot: superAdmin ? null : PRODUCT_TESTING_FOOT })
         );
       }
       default:
@@ -508,6 +508,7 @@ function CatalogueBody() {
           <h2 id="programs-catalogue-h" className={H2}>Catalogue</h2>
           <span className={SUB} data-testid="programs-catalogue-count">{plural(cards.length, 'program', 'programs')}</span>
           <StaleNote stale={stale} />
+          {superAdmin ? <Link to="/admin/licences/packages" className={LINK} data-testid="programs-licence-packages">View franchise package versions</Link> : null}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <ChoiceGroup label="Category" value={group ?? 'all'} onPick={(v) => setGroup(v === 'all' ? null : v)} groupTestId="programs-groups"
