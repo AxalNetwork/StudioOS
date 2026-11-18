@@ -99,6 +99,7 @@ represents a bug that reached production once:
 | `check-production-queues.mjs` | D5535: prove the trusted candidate’s production producers, consumers and dead-letter queues exist in the release account before mutation. |
 | `check-worker-startup.mjs` | D5532: locally profile a trusted production-shaped bundle and record its startup, health and artifact evidence. |
 | `verify-production-candidate.mjs` | D5501: require the exact main SHA and its six trusted Actions check results. |
+| `release-rollback-class.mjs` | D7151: report-only release step that records, before any write, whether the release could be rolled back automatically (`auto`, `auto-additive`, `manual`), the reasons and the rollback target, into the release evidence and job summary. Always exits 0. Rules in `lib/rollbackClass.mjs`. |
 | `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
 | `check-decision-appends.mjs` | D6466 (#6466): a change that appends a section to a decision file already on its base. A `D<n>.md` or `D<n>-p<k>.md` there fails when it gains a `##`/`###` heading or more than 10 lines; it names the `D<n>-p<k>.md` to write instead (D5615). Typo and link fixes pass; a file the change creates passes. On a pull request it reads the merge commit's first parent, which a shallow checkout still names; a base it cannot resolve exits 2, never a pass; a push says it skipped. |
 
@@ -189,7 +190,8 @@ unit tests over its pure helpers that *are* in the suite.
 
 | File | What it does |
 | --- | --- |
-| `pr-preview-worker.mjs` | The script behind `wrangler.pr-preview.toml` (repo root): a Worker per pull request with no bindings, serving the PR's `docs/` build on workers.dev. Two jobs, mirroring what `cloudflare-worker/src/index.ts` does on production — a missing hashed `/assets/*` file is a plain 404, never the SPA shell, and `/api/*` is a JSON 404 because a preview has no API. Deployed and deleted by `.github/workflows/pr-preview.yml`; guarded by `frontend/test/pr_preview.test.mjs`. |
+| `pr-preview-worker.mjs` | The script behind `wrangler.pr-preview.toml` (repo root): a Worker per pull request with no bindings, serving the PR's `docs/` build on workers.dev. Two jobs, mirroring what `cloudflare-worker/src/index.ts` does on production — a missing hashed `/assets/*` file is a plain 404, never the SPA shell, and `/api/*` is a JSON 404 because a preview has no API. Deployed and deleted by `.github/workflows/pr-preview-deploy.yml` from main (D7146) after `.github/workflows/pr-preview.yml` builds without credentials; guarded by `frontend/test/pr_preview.test.mjs`. |
+| `check-preview-artifact.mjs` | D7146 (#7146): checks a pull request's `pr-preview-docs` artifact zip as untrusted data and unpacks it into an empty `docs/` for the trusted preview deploy, all or nothing: static file types only, file-count and size caps, no symlink, path traversal or configuration file. Run by `.github/workflows/pr-preview-deploy.yml`; rules in `lib/previewArtifact.mjs`, tested by `lib/previewArtifact.test.mjs`. |
 
 ## Deploying a branch
 
