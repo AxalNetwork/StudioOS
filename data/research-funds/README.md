@@ -19,6 +19,10 @@ access a remote database. Its `--check` mode verifies the committed migration
 without writing. A later expansion uses a new dated manifest and a new migration;
 an applied migration is never regenerated in place.
 
+The CLI report lists its pinned baseline migrations and labels its comparison
+scope explicitly. Its count is reproducible against that baseline; intervening
+catalogue additions can reduce actual inserts through the runtime guards.
+
 Stage and cheque-range notes remain research evidence here because the public
 directory does not yet support those fields. They are not converted to fund
 size, fund vintage or LP backing. A website being accessible does not establish

@@ -138,6 +138,36 @@ test('runtime duplicate checks protect records that arrived after generation, wi
   db.close();
 });
 
+test('runtime and offline host matches agree for explicit ports and DNS dots while distinct subdomains remain distinct', () => {
+  const row = synthetic('Host Fixture Capital', 'https://fixture.example.test/');
+  const { sql } = generate([row]);
+  const variants = [
+    ['https://fixture.example.test:443/', false],
+    ['https://fixture.example.test:8080/about?view=all', false],
+    ['https://fixture.example.test./', false],
+    ['HTTP://WWW.FIXTURE.EXAMPLE.TEST.:8080/#about', false],
+    ['https://sub.fixture.example.test/', true],
+    ['https://fixture.example.test.unrelated.test/', true],
+    ['https://sub.www.fixture.example.test/', true],
+    ['https://fixture.example.testish/', true],
+  ];
+  for (const [website, shouldInsert] of variants) {
+    const db = fresh();
+    add(db, 'prior-manager', 'Different display name', website);
+    assert.equal(generate([row], [{ uid: 'prior-manager', name: 'Different display name', website }]).report.new_managers, shouldInsert ? 1 : 0, website);
+    db.exec(sql);
+    assert.equal(Boolean(db.prepare('SELECT uid FROM research_fund_directory WHERE uid=?').get('global-hostfixturecapital')), shouldInsert, website);
+    db.close();
+  }
+  const db = fresh();
+  add(db, 'prior-manager', 'Different display name', variants[0][0]);
+  const mutant = sql.replaceAll('[/?#:]*', '[/?#]*');
+  assert.notEqual(mutant, sql);
+  db.exec(mutant);
+  assert.throws(() => assert.equal(db.prepare('SELECT uid FROM research_fund_directory WHERE uid=?').get('global-hostfixturecapital'), undefined), assert.AssertionError);
+  db.close();
+});
+
 test('withheld third-party rows stay withheld while independent evidence is separately cited', () => {
   const db = fresh();
   const denied = 'Deep Tech Investors Mapping (public spreadsheet)';

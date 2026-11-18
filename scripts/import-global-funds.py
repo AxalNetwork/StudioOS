@@ -255,7 +255,14 @@ def duplicate_guard(row: dict) -> str:
         name_expr = f'replace({name_expr},{sql(char)},\'\')'
     names = sorted({runtime_name(n) for n in [row['name'], *row.get('aliases', [])]})
     domain = host(row['website'])
-    website_expr = "rtrim(replace(replace(replace(lower(coalesce(d.website,'')),'https://',''),'http://',''),'www.',''),'/')"
+    authority = "replace(replace(lower(trim(coalesce(d.website,''))),'https://',''),'http://','')"
+    website_expr = f"rtrim(CASE WHEN substr({authority},1,4)='www.' THEN substr({authority},5) ELSE {authority} END,'/')"
+    # urlsplit() treats a trailing DNS dot and explicit port as the same host.
+    # A dot is only equivalent at the host boundary, never before another label.
+    host_matches = ' OR '.join(
+        f"f.website_host={sql(form)} OR f.website_host GLOB {sql(form + '[/?#:]*')}"
+        for form in (domain, domain + '.')
+    )
     keys = sql(json.dumps(names, ensure_ascii=False))
     suffix = 'substr(f.name_key,length(n.base)+1)'
     # A Shai-style display name can include Fund II even when fund_number is
@@ -263,7 +270,7 @@ def duplicate_guard(row: dict) -> str:
     return ("NOT EXISTS (SELECT 1 FROM (SELECT d.source_name,lower(trim(d.name)) AS display_name,\n"
             f"  {name_expr} AS name_key,{website_expr} AS website_host FROM research_fund_directory d) f\n"
             "  WHERE NOT EXISTS (SELECT 1 FROM research_fund_sources s WHERE s.source_name=f.source_name AND s.verdict='not allowed')\n"
-            f"  AND (f.website_host={sql(domain)} OR f.website_host GLOB {sql(domain + '[/?#]*')}\n"
+            f"  AND ({host_matches}\n"
             f"    OR f.name_key IN ({','.join(sql(n) for n in names)})\n"
             f"    OR EXISTS (SELECT 1 FROM (SELECT value AS base FROM json_each({keys})\n"
             f"      UNION ALL SELECT value || 'fund' AS base FROM json_each({keys})) n\n"
@@ -341,6 +348,8 @@ def main() -> int:
     try:
         manifest_repo_path = args.manifest.resolve().relative_to(ROOT).as_posix()
         output, report = render(json.loads(args.manifest.read_text()), args.stem, baseline(), manifest_repo_path)
+        report['baseline_migrations'] = list(BASELINE)
+        report['comparison_scope'] = 'Pinned served catalogue only; apply-time guards may further reduce additions.'
         target = MIGRATIONS / (args.stem + '.sql')
         if args.check:
             if not target.exists() or target.read_text() != output:
