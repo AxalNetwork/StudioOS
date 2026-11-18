@@ -109,7 +109,7 @@ export const FILL_FIELDS = Object.freeze([
   { page: PUBLICATIONS, form: 'publication', field: 'summary_text', label: 'Summary', table: 'admin_publications', column: 'summary_text', class: 'composition', sources: ['eadwyn'] },
   // D1595 (#3868): the words only; no outcome, hours, detail, price, value, credit, cap, title, offer or partner name.
   { page: VALUE_ADD, form: 'support', field: 'summary', label: 'What happened', table: 'portfolio_support_entries', column: 'summary', class: 'composition', sources: ['eadwyn'] },
-  { page: CATALOG, form: 'offering', field: 'summary', label: 'Summary (what the founder gets)', table: 'service_offerings', column: 'summary', class: 'composition', sources: ['eadwyn'] },
+  { page: CATALOG, form: 'offering', field: 'summary', label: 'What do you deliver?', table: 'service_offerings', column: 'summary', class: 'composition', sources: ['eadwyn'] },
   { page: PERK_DEALS, form: 'perk', field: 'blurb', label: 'One line founders see on the card', table: 'perks', column: 'blurb', class: 'composition', sources: ['eadwyn'] },
   // #4046: a firm's private note on a deal, its words only. Its tag is the investor's own call, so it has no entry.
   { page: DEAL_ROOM, form: 'deal-note', field: 'body', label: 'Note', table: 'deal_notes', column: 'body', class: 'composition', sources: ['eadwyn'] },

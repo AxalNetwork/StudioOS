@@ -68,7 +68,8 @@ test('D1317: an offering’s detail opens as the shared right-side Sheet at 640p
   const detail = PAGE.slice(PAGE.indexOf('function OfferingDetailModal('), PAGE.indexOf('\n}\n', PAGE.indexOf('function OfferingDetailModal(')));
   assert.match(detail, /<Sheet label=\{offering\.title \|\| 'Offering'\} title=\{offering\.title\}[\s\S]*?width=\{640\} testId="service-offering-detail">/);
   assert.doesNotMatch(detail, /<Modal/);
-  assert.match(PAGE, /<Modal title=\{offering \? 'Edit offering' : 'New offering'\}/);
+  // #4843 part 3 (D4843-p3, OF-02b): the editor defines a service, a commercial offer.
+  assert.match(PAGE, /<Modal title=\{offering \? 'Edit service' : 'New service'\}/);
 });
 
 test('the worker still serializes the fields this page is built on', () => {

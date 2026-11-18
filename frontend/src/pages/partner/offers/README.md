@@ -8,6 +8,7 @@ The Offers zones, each the body of one `/offers/*` address on the Partner shell,
 | --- | --- |
 | `VisibilityZone.jsx` | `/offers/visibility` since D4843 (OF-05): "Where does our work come from?", one table of surfaces by engagements and won value, missing attribution as an action, and Views and Trend as Not measured with the reason one press away. |
 | `visibilityModel.js` | D4843: the pure rules Visibility reads: row order, the caption, the missing-source notice and the reasons. |
+| `catalogModel.js` | D4843 part 3 (OF-02): the pure rules the Catalog zone (`frontend/src/pages/ServiceCatalogPage.jsx`, `MineTab`) reads: the price with its basis, the requests line, and the listing switch's counts. |
 | `ProofZone.jsx` | `/offers/proof` since D4842 (OF-03): the result cards, outcome first, each with one consent label. |
 | `proofCards.js` | D4842: the pure rules a Proof card is drawn by. |
 | `AudienceFitZone.jsx` | `/offers/audience-fit` since D4842 (OF-04): who we fit and who we refer elsewhere, in business language. |
