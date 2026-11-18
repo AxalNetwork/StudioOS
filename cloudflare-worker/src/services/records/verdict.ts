@@ -3,7 +3,9 @@
  * the commitments it created, drawn as CO:368.
  *
  * Reads with `canReadDecision`, so partners never see a decision (D693
- * decision 7), and writes with `canWrite`. Every read and write of the three
+ * decision 7), and writes with `canWrite`. D6862 amends decision 7 for one
+ * case only: a named recipient reads the one decision shared with them through
+ * `routes/verdict_shares.ts`, never through this record. Every read and write of the three
  * decision tables goes through `services/verdict.ts` (decision 6); this file
  * names them only as its store keys.
  *
@@ -210,6 +212,8 @@ export function verdictSpec({ evidenceSource = evidenceFor }: { evidenceSource?:
       },
       {
         key: 'memo', title: 'Memo', side: true,
+        // D6862 (#6862): Share with… is drawn under this section by the page (`DecisionShares.jsx`),
+        // from `routes/verdict_shares.ts`; a Withheld decision says it cannot be shared.
         read: async () => ({ rows: [{ a: 'Decision memo', b: 'Export PDF', action: 'export-memo' }] }),
       },
     ],
@@ -303,6 +307,8 @@ export function verdictSpec({ evidenceSource = evidenceFor }: { evidenceSource?:
           options: evidence.map((e) => ({
             value: e.id, label: joined(e.label, strengthWord(e.strength)), meta: dMon(e.date), hypothesis_id: e.hypothesis_id ?? null,
             source: sourceKey({ kind: e.kind as EvidenceRow['kind'], ref_id: String(e.ref_id ?? e.id) }),
+            // D6862 (#6862, D6021 V17): the E-numbered table's Direction, Strength and kind columns.
+            direction: e.direction, strength: e.strength ?? null, kind: e.kind,
             ...(e.kind === 'experiment' ? { observed: e.observed === true } : {}),
           })),
           suggested_evidence: fresh ? fresh.ids : null,

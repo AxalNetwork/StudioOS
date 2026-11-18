@@ -162,6 +162,12 @@ finish technical mitigation.
 | R2 contracts | Approved record classes only: append-only snapshots under `studioos-backups/files-recovery/` | Daily 02:30 UTC, gated off until counsel/prefix approval and configuration | Seven years only where the class has a recorded legal retention basis | Synthetic drill: `python3 scripts/file-recovery-drill.py`; live restore awaits #6654 suppression-ledger integration |
 | R2 KYC | Only counsel-approved record prefixes from #6650; unclassified personal files are excluded | Same gated snapshot job; no live protection claimed before activation | Class-specific legal basis required before seven-year lock | Same verified snapshot path and suppression requirement; no dashboard version restore exists |
 | Worker source | Git (origin/main) | Per-commit | Indefinite | `git revert` + `wrangler deploy` |
+| R2 publications | `studioos-publications` | Recovery schedule not recorded | Not recorded; no locked-copy approval | No verified recovery path recorded; see [R2 inventory](R2_INVENTORY.json) and #6428 handoff |
+| R2 company logos | `studioos-company-logos` | Recovery schedule not recorded | Not recorded | Re-upload an available source asset; no archived restore path recorded; see [R2 inventory](R2_INVENTORY.json) |
+| R2 archive logs | `studioos-logs` | Tail-consumer writes; backup schedule not recorded | 2555 days in source configuration; live lifecycle unverified | No independent restore path recorded; see [R2 inventory](R2_INVENTORY.json) |
+| Preview file objects | `studioos-files-preview` | Not recorded | Not recorded | Synthetic preview data only; no production recovery claim; see [R2 inventory](R2_INVENTORY.json) |
+| Preview publication objects | `studioos-publications-preview` | Not recorded | Not recorded | Synthetic preview data only; see [R2 inventory](R2_INVENTORY.json) |
+| Preview logo objects | `studioos-company-logos-preview` | Not recorded | Not recorded | Re-upload synthetic source assets; see [R2 inventory](R2_INVENTORY.json) |
 
 **Operator one-time setup (NOT in code):**
 
