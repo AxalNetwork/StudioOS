@@ -1,6 +1,9 @@
 /** #6315: built SPA confirmation, destination link and undo at desktop/phone widths; synthetic Mercury responses, no bank access. */
 import {test,expect} from '@playwright/test';
 import {prepare} from './_editor.mjs';
+// #7247: the partner-network handler awaits `route.fetch()`; if the test ends while that request is in flight, the
+// await throws "route.fetch: Test ended" and fails the next spec. Unrouting waits for running handlers and drops it.
+test.afterEach(async ({page})=>{if(!page.isClosed())await page.unrouteAll({behavior:'ignoreErrors'});});
 for(const width of [1440,390])test(`Mercury acceptance names its destination and offers undo at ${width}px`,async({page,request},testInfo)=>{
  const m=await prepare(page,request),project=m.oneClick.projectId;let accepted=false,accepts=0,undos=0;
  const destination={uid:'receipt',source:'mercury',source_id:9,label:'Partner network',href:`/grow/partner-network/partner-a?project_id=${project}`,created_record:true,can_undo:true};
