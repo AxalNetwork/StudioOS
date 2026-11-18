@@ -4110,7 +4110,10 @@ research.get('/company-directory/:uid', async (c) => {
 // Public fund catalog (D535). Spreadsheet observations are reported fund-size
 // snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
 // Search, filters, sort and paging run on the server (services/researchFundDirectory.ts).
-const FUND_DIRECTORY_SOURCE = 'Public fund spreadsheets (EuroTech VC Funds; Deep Tech Investors Mapping)';
+// D7166 (#7166): the source names the lists served, from the answer itself, so a
+// list taken down for its terms (D597) is never named as a source.
+const fundDirectorySource = (sources: Array<{ name: string }>) =>
+  sources.length ? `Public fund lists (${sources.map((s) => s.name).join('; ')})` : 'Public fund lists';
 const FUND_DIRECTORY_BOUNDARY = 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.';
 
 research.get('/fund-directory', async (c) => {
@@ -4124,7 +4127,7 @@ research.get('/fund-directory', async (c) => {
   }
   try {
     const page = await listDirectory(c.env, query);
-    return c.json({ ...page, source: FUND_DIRECTORY_SOURCE, source_boundary: FUND_DIRECTORY_BOUNDARY });
+    return c.json({ ...page, source: fundDirectorySource(page.sources), source_boundary: FUND_DIRECTORY_BOUNDARY });
   } catch {
     // A failed read says so; it is never an empty directory.
     return c.json({ detail: 'Unreadable', reason: 'The fund directory could not be read' }, 503);

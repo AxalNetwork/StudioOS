@@ -256,3 +256,19 @@ jobs:
         env:
           SCAN_FACTS_FILE: .scan-state/facts.json
         run: node scripts/github-alerts.mjs scan
+
+  remediate:
+    name: Request alert reconciliation
+    needs: [visibility, scan]
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' && needs.visibility.outputs.upload == 'always'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch trusted remediation on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --silent --method POST repos/AxalNetwork/StudioOS/actions/workflows/scan-remediation.yml/dispatches -f ref=main

@@ -252,6 +252,8 @@ test('Programs: chips, search and a ⋯ menu per row, each step through its dial
   const v = await mount(h(ProductTestingConsole, { api, view: 'programs' }));
   try {
     assert.ok(v.by('testing-table'));
+    assert.equal(v.prop('testing-programs-catalogue', 'href'), '/admin/programs');
+    assert.match(v.text(), /Product testing campaigns/);
     assert.equal(v.textIn('testing-chip-all'), 'All 3');
     assert.equal(v.textIn('testing-count'), '1–3 of 3');
     assert.ok(!/@/.test(v.text()), 'no email address on Programs');
