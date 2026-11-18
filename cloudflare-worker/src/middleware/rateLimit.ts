@@ -41,6 +41,11 @@ export const PROJECT_INVITE_RESEND = /^\/api\/projects\/\d+\/invitations\/\d+\/r
 // the word, and `[^/]+` rather than `.+` so it cannot span a segment.
 export const COMPANY_INVITE_SEND = /^\/api\/company\/[^/]+\/invitations(\/[^/]+\/resend)?$/;
 
+// D6052 (#6052): Contacts' one invite path, `POST /api/contacts/invite`, which mails an invitation to a
+// typed address or to a raise prospect. It joins the company invitations' reasoning: an outbound-mail route
+// on the generic fail-open bucket is a relay.
+export const CONTACT_INVITE_SEND = /^\/api\/contacts\/invite\/?$/;
+
 // The e-sign routes that mail a signed PDF onward: POST
 // `/api/legal/esign/<id>/forward` (and the `/api/esign` remount index.ts warns
 // against). D410 opened forwarding to the envelope's sender as well as its
@@ -217,6 +222,16 @@ const BUCKETS: Bucket[] = [
     limit: 10,
     windowSec: 3600,
     test: (p, m) => m === 'POST' && COMPANY_INVITE_SEND.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  // D6052 (#6052): Contacts' invitations, a founder's own and a raise prospect's. 20 an hour per founder,
+  // fail-closed; a prospect also waits a day between sent invitations (services/prospectInvites.ts).
+  {
+    name: 'contact_invite_send',
+    limit: 20,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && CONTACT_INVITE_SEND.test(p),
     scope: 'user',
     failClosed: true,
   },

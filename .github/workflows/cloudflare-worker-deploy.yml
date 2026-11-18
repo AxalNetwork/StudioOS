@@ -39,6 +39,8 @@ jobs:
     if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 100
+    outputs:
+      decision: ${{ steps.candidate.outputs.decision }}
     permissions:
       contents: read
       actions: read
@@ -51,15 +53,17 @@ jobs:
         with:
           node-version: '22'
       - name: Wait for all six required checks
+        id: candidate
         env:
           STUDIOOS_RELEASE_CHECK: initial
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --wait
+        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --wait-for-decision
 
   deploy:
     name: build and deploy studioos Worker
     environment: production
     needs: admission
+    if: needs.admission.outputs.decision == 'verified'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -205,6 +209,21 @@ jobs:
           cd cloudflare-worker
           node node_modules/wrangler/bin/wrangler.js deployments list --config ../wrangler.toml --env production --json > "$RUNNER_TEMP/release-evidence/previous-deployments.json"
 
+      # D7151 (#7151) — REPORT ONLY. Before any write, record whether this
+      # release could be rolled back automatically: `auto`, `auto-additive` or
+      # `manual`, with the reasons and the version a rollback would return to
+      # (the live one in previous-deployments.json). It reads the plan and the
+      # deployments the step above recorded, plus the live version's bindings;
+      # unknown is manual. continue-on-error and the script's own exit 0 keep
+      # it from changing what the release does; #7152 acts on the class.
+      - name: Record the release rollback class
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-rollback-class.mjs "$RUNNER_TEMP/release-evidence"
+
       - name: Confirm the candidate still owns the production release
         id: admitted
         env:
@@ -243,10 +262,19 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           GITHUB_SHA: ${{ github.sha }}
+          MAGIC_INSERT_CANARY_EMAIL: ${{ secrets.MAGIC_PROBE_EMAIL }}
         run: |
           set -o pipefail
+          # Upload the HQ-only recipient with this release. Clearing its source
+          # disables future sends on the next release, including after rotation.
+          secret_dir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/insert-canary.XXXXXXXX")
+          trap 'rm -rf -- "$secret_dir"' EXIT
+          node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({
+            MAGIC_INSERT_CANARY_EMAIL: process.env.MAGIC_INSERT_CANARY_EMAIL?.trim() || "disabled"
+          }), { mode: 0o600 })' "$secret_dir/secrets.json"
+          unset MAGIC_INSERT_CANARY_EMAIL
           for attempt in 1 2 3; do
-            if npx --no-install wrangler deploy --config ../wrangler.toml --env production --var "WORKER_DEPLOY_VERSION:${GITHUB_SHA}" 2>&1 | tee deploy.log; then
+            if npx --no-install wrangler deploy --config ../wrangler.toml --env production --var "WORKER_DEPLOY_VERSION:${GITHUB_SHA}" --secrets-file "$secret_dir/secrets.json" 2>&1 | tee deploy.log; then
               exit 0
             fi
             if ! grep -qE '\[code: 10013\]' deploy.log; then
@@ -294,10 +322,12 @@ jobs:
           PUBLISH: ${{ steps.publish.outcome }}
         run: |
           mkdir -p "$RUNNER_TEMP/release-evidence"
-          # Wrangler can collect a local profiler trace when Cloudflare rejects startup.
-          if [ -d cloudflare-worker/.wrangler/tmp ]; then
-            find cloudflare-worker/.wrangler/tmp -type f -name worker.cpuprofile -exec cp {} "$RUNNER_TEMP/release-evidence/publish-startup.cpuprofile" \;
-          fi
+          # Wrangler writes rejection profiles beside the production wrangler.toml.
+          for profile in .wrangler/tmp/startup-profile-*/worker.cpuprofile; do
+            if [ -f "$profile" ]; then
+              cp "$profile" "$RUNNER_TEMP/release-evidence/publish-startup.cpuprofile"
+            fi
+          done
           {
             printf 'Candidate `%s`\n\n' "$GITHUB_SHA"
             printf '| Phase | Outcome |\n| --- | --- |\n'

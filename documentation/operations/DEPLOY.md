@@ -279,6 +279,17 @@ npx wrangler rollback <DEPLOYMENT_ID> --config ../wrangler.toml --env production
 > select. A migration that drops or renames a column does not, and needs a
 > two-deploy sequence instead.
 
+Each release records whether this rollback would be safe before it writes
+anything (D7151). The step "Record the release rollback class" puts a class in
+the job summary and in `rollback-class.json` in the release evidence, with the
+version a rollback would return to: **`auto`** (no D1 migration, no Durable
+Object migration, no binding removed), **`auto-additive`** (every pending
+statement only adds a table, view, non-unique index or nullable/defaulted
+column, or touches only a table the same release creates) or **`manual`**
+(anything else, each reason with its file and line; anything it cannot read is
+manual). It is report-only: today the operator still decides, and a `manual`
+release needs the compatibility check above before any rollback.
+
 ---
 
 ## 4. If a migration fails

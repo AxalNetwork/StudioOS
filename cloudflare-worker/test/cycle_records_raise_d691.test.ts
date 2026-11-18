@@ -18,8 +18,6 @@
  */
 import { test, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -28,14 +26,12 @@ import cycleRaise from '../src/routes/cycle_raise.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import { MODULES, TOOL_HREF, DATA_ROOM_ACCESS, fundFit, capIdOf, NEVER_EXPIRES } from '../src/services/raiseCycle.ts';
 import { saveScenario } from '../src/services/capTableWrites.ts';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { RAISE_RECORDS } from '../src/services/records/raise.ts';
 import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 
 const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
 const FOUNDER = 10, ADMIN = 30;
@@ -49,7 +45,6 @@ beforeEach(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
 afterEach(() => mock.timers.reset());
 
 /** The baseline, then every post-cutoff migration in order, as cycle_records_build_d690.test.ts builds one. */
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   loadSchema(db);

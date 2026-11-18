@@ -223,3 +223,19 @@ test('the fixture writer refuses without an isolated, fresh preflight, and write
     assert.match(readFileSync(out, 'utf8'), /LOCAL SQLite only/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// #7147 (D7147): an environment with no `routes` inherits the top-level ones,
+// which are the axal.vc and app.axal.vc custom domains, so deploying preview
+// would move both hosts off production. Resolve the config the way
+// `wrangler deploy` does and require preview to carry no route at all, while
+// production still carries the apex custom domains.
+test('#7147: preview resolves to no route, so deploying it cannot take axal.vc or app.axal.vc', async () => {
+  const { unstable_readConfig } = await import('wrangler');
+  const config = new URL('../../wrangler.toml', import.meta.url).pathname;
+  const read = (env) => unstable_readConfig({ config, env }, { hideWarnings: true });
+  const routes = (c) => (c.routes || []).map((r) => (typeof r === 'string' ? r : r.pattern));
+  assert.deepEqual(routes(read('preview')), [], 'preview resolves a route; it would take a production host');
+  const prod = routes(read('production'));
+  assert.ok(prod.includes('axal.vc') && prod.includes('app.axal.vc'), `production lost its custom domains: ${prod.join(', ')}`);
+  assert.match(REAL, /\[env\.preview\]\nname = "studioos-preview"\nworkers_dev = true\nroutes = \[\]\n/, 'the empty route table is gone from [env.preview]');
+});

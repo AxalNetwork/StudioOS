@@ -368,7 +368,7 @@ test('5965: every one of the seven parts needs its own conflict choice, includin
 });
 
 test('5965: an identical change by both sides is not a conflict', async () => {
-  const { w, hq, ext } = await scenario();
+  const { w, ext } = await scenario();
   await call(w, EDITOR, 'PATCH', paths(ext), { purpose: 'The new Axal purpose.' });
   await call(w, EDITOR, 'POST', `${paths(ext)}/publish`);
   const fields = (await call(w, EDITOR, 'GET', `${paths(ext)}/base`)).body.lineage.fields;

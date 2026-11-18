@@ -26,7 +26,7 @@ const handle=(write:boolean,fn:Handler,created=false)=>async(c:C)=>{
   }catch(error){
     if(error instanceof Response)return error;
     if(error instanceof ProspectsRefused)return c.json({detail:error.sentence,...(error.field?{field:error.field}:{})},error.status as any);
-    if(error instanceof Error&&error.message==='Unauthorized')return c.json({detail:'Sign in to continue.'},401);
+    if((error instanceof Error)&&error.message==='Unauthorized')return c.json({detail:'Sign in to continue.'},401);
     return c.json({detail:write?'Prospects could not be saved. Reload before trying again.':'Prospects could not be read. Try again.'},503);
   }
 };

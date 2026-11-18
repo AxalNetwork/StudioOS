@@ -146,6 +146,13 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "PATCH /api/research/funds/:uid/reports/:reportUid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_fund_reports_7169.test.ts",
+    "note": "Signed in (requireAuth). The report is read and written only WHERE uid, fund_uid and owner_user_id = the caller match; another owner, another fund or an unknown report gets the same 404."
+  },
   "POST /api/research/benchmarks/:uid/constituents": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

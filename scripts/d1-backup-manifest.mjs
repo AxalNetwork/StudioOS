@@ -13,6 +13,9 @@
  *           INSERT per row, as `wrangler d1 export` writes them), each
  *           table's REFERENCES parents, and the last migration the ledger
  *           (`schema_migrations`, `scripts/migrate-d1.mjs`) recorded.
+ *           The export is read once, as a stream, for the hash and the
+ *           counts (D7142): it is never one string, so it may outgrow
+ *           Node's 512 MiB string limit.
  *   verify  <sql> <manifest.json> --key K --migrations DIR [--max-age-hours H] [--now T]
  *           fails closed, exit 1 with one `reason=<code>` line, on:
  *             manifest_invalid   not a v1 manifest of this shape
@@ -34,7 +37,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { splitStatements } from './dr-drill-split.mjs';
+import { StatementSplitter, splitStatements } from './dr-drill-split.mjs';
 
 export const MANIFEST_VERSION = 1;
 export const DEFAULT_MAX_AGE_HOURS = 36;
@@ -55,7 +58,7 @@ const unquote = (s) => {
 };
 const internal = (t) => t.startsWith('_cf_');
 
-/** Streamed, so a 270 MB export is never hashed from one string. */
+/** Streamed, so a 270 MB export is never hashed from one string. verify uses it; build hashes in describeFile's pass. */
 export function sha256File(path) {
   return new Promise((resolveHash, reject) => {
     const h = createHash('sha256');
@@ -79,44 +82,78 @@ function literals(stmt) {
   return out;
 }
 
-/** The schema and counts of one export. Names and numbers only. */
-export function describe(sql) {
-  const { statements, error } = splitStatements(sql);
-  if (error) return { error };
+/**
+ * The schema and counts of one export, fed one statement at a time (D7142).
+ * `add(s)` reads a statement; `result()` is what describe() returns. Names
+ * and numbers only.
+ */
+export function createDescriber() {
+  let statements = 0;
   const rows = new Map();
   const refs = new Map();
   const migrations = [];
-  for (const s of statements) {
+  const add = (s) => {
+    statements += 1;
     const c = RE_CREATE_TABLE.exec(s);
     if (c) {
       const t = unquote(c[1]);
-      if (internal(t)) continue;
+      if (internal(t)) return;
       if (!rows.has(t)) rows.set(t, 0);
       const parents = new Set();
       for (const r of s.matchAll(RE_REFS)) { const p = unquote(r[1]); if (p !== t) parents.add(p); }
       refs.set(t, [...parents].sort());
-      continue;
+      return;
     }
     const i = RE_INSERT.exec(s);
     if (i) {
       const t = unquote(i[1]);
-      if (internal(t)) continue;
+      if (internal(t)) return;
       rows.set(t, (rows.get(t) ?? 0) + 1);
       if (t === LEDGER) { const f = literals(s).find((v) => MIGRATION_FILE.test(v)); if (f) migrations.push(f); }
     }
-  }
-  migrations.sort(migrationOrder);
-  const tables = [...rows.keys()].sort();
-  return {
-    statements: statements.length,
-    tables: tables.map((name) => ({ name, rows: rows.get(name), references: refs.get(name) ?? [] })),
-    migrations: { ledger: LEDGER, count: migrations.length, last: migrations.at(-1) ?? null },
   };
+  const result = () => {
+    const applied = [...migrations].sort(migrationOrder);
+    const tables = [...rows.keys()].sort();
+    return {
+      statements,
+      tables: tables.map((name) => ({ name, rows: rows.get(name), references: refs.get(name) ?? [] })),
+      migrations: { ledger: LEDGER, count: applied.length, last: applied.at(-1) ?? null },
+    };
+  };
+  return { add, result };
 }
 
-export async function buildManifest(sqlPath, { key, db, exportedAt, bookmark = null }) {
-  const sql = readFileSync(sqlPath, 'utf8');
-  const d = describe(sql);
+/** The schema and counts of one export held as a string. Names and numbers only. */
+export function describe(sql) {
+  const d = createDescriber();
+  const { error } = new StatementSplitter(d.add).push(sql).end();
+  if (error) return { error };
+  return d.result();
+}
+
+/**
+ * D7142 — describe the export at `path`, and hash it, in one streamed pass:
+ * the file is never one string, so an export past Node's 512 MiB string limit
+ * is read like any other. Resolves to { ...describe(), sha256 } or { error }.
+ */
+export async function describeFile(path, { readBytes = 1 << 16 } = {}) {
+  const d = createDescriber();
+  const splitter = new StatementSplitter(d.add);
+  const hash = createHash('sha256');
+  const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
+  for await (const piece of createReadStream(path, { highWaterMark: readBytes })) {
+    hash.update(piece);
+    splitter.push(decoder.decode(piece, { stream: true }));
+  }
+  splitter.push(decoder.decode());
+  const { error } = splitter.end();
+  if (error) return { error };
+  return { ...d.result(), sha256: hash.digest('hex') };
+}
+
+export async function buildManifest(sqlPath, { key, db, exportedAt, bookmark = null, readBytes } = {}) {
+  const d = await describeFile(sqlPath, { readBytes });
   if (d.error) throw new Error(`the export could not be read as SQL: ${d.error}`);
   return {
     version: MANIFEST_VERSION,
@@ -124,7 +161,7 @@ export async function buildManifest(sqlPath, { key, db, exportedAt, bookmark = n
     exported_at: exportedAt,
     time_travel_bookmark: bookmark || null,
     size_bytes: statSync(sqlPath).size,
-    sha256: await sha256File(sqlPath),
+    sha256: d.sha256,
     statements: d.statements,
     tables: d.tables,
     migrations: d.migrations,

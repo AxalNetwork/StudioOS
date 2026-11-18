@@ -83,6 +83,12 @@ export const PARTNERS_SETTINGS_PATH = '/admin/programs/referral-partners/setting
 export const INVESTOR_PATH = '/admin/programs/investor-cohorts';
 export const INVESTOR_ACTIVITY_PATH = '/admin/programs/investor-cohorts/activity';
 export const AI_NATIVE_PATH = '/admin/programs/ai-native-venture';
+// D5895 (#5895): AI-native Venture runs in the generic shell (PG03a), so it gains the shell's five other core sections.
+export const AI_NATIVE_HOW_PATH = '/admin/programs/ai-native-venture/how-it-runs';
+export const AI_NATIVE_AVAILABILITY_PATH = '/admin/programs/ai-native-venture/availability';
+export const AI_NATIVE_PARTICIPATION_PATH = '/admin/programs/ai-native-venture/participation';
+export const AI_NATIVE_ACTIVITY_PATH = '/admin/programs/ai-native-venture/activity';
+export const AI_NATIVE_SETTINGS_PATH = '/admin/programs/ai-native-venture/settings';
 
 /** The three old addresses. Each redirects where its function now lives (D894's rule). */
 export const HELD_PROGRAMS_PATH = '/admin/held/programs';
@@ -480,7 +486,16 @@ export const PAGES = Object.freeze({
     title: 'AI-native Venture', workspace: 'Programs',
     line: AI_NATIVE_PURPOSE,
     facts: ['Who: Founders', 'Join: By application'],
-    tabs: [],
+    // D5895 (#5895): the generic shell's six core sections in PG03's order and words. No module tab: the registry
+    // seeds no module for it and MODULE_PATHS has no entry.
+    tabs: [
+      { key: 'overview', label: 'Overview', path: AI_NATIVE_PATH },
+      { key: 'how', label: 'Playbook', path: AI_NATIVE_HOW_PATH },
+      { key: 'availability', label: 'Availability & grants', path: AI_NATIVE_AVAILABILITY_PATH },
+      { key: 'participation', label: 'Participation', path: AI_NATIVE_PARTICIPATION_PATH },
+      { key: 'activity', label: 'History', path: AI_NATIVE_ACTIVITY_PATH },
+      { key: 'settings', label: 'Settings', path: AI_NATIVE_SETTINGS_PATH },
+    ],
   },
 });
 
