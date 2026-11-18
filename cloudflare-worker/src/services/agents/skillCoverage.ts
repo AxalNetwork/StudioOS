@@ -146,7 +146,6 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
       pinned_behind_current: ctx.adoption.behind_current,
       published_without_links: ctx.adoption.published_without_links,
     },
-    overlap: { available: false, reason: 'Overlap suggestions are not computed yet.' } as Unavailable,
     executions: { available: false, reason: 'Waits on a reliable run status (#4667).' } as Unavailable,
   };
 }
