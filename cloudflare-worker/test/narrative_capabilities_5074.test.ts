@@ -33,7 +33,6 @@ const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [OTHER]: 'founder',
 const P = 1;
 // Invented words: no real venture, person or reason.
 const REASON = 'Quarterly portfolio review';
-const NOTE = 'Lead Traction with retention before revenue.';
 
 function fixture() {
   // The whole schema (baseline + every migration, built once), so the check's writes find every store they read.
@@ -71,9 +70,6 @@ async function call(db: DatabaseSync, who: number, method: string, path: string,
   } finally { [console.warn, console.error] = saved; }
 }
 const rec = (db: DatabaseSync, who: number, method: string, path: string, body?: unknown) => call(db, who, method, `/raise/modules/investor-narrative${path}`, body, '/api/cycles');
-const logs = (db: DatabaseSync) => db.prepare(
-  `SELECT action, details FROM activity_logs WHERE entity_type = 'raise.investor-narrative' ORDER BY id`,
-).all().map((r) => ({ ...(r as any) }));
 const count = (db: DatabaseSync, sql: string) => Number((db.prepare(sql).get() as any).n);
 
 /** Version 1, saved by the founder. */

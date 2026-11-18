@@ -104,7 +104,7 @@ test('no page is labelled as an AI advisor, and the three founder redirects stil
   assert.match(jobs, /user\?\.role === 'founder' \? <Navigate/, '/my/jobs no longer redirects only a founder');
   // #2338: /services and /needs are removed and forward everyone, but only a
   // founder still lands on the founder marketplace's tab.
-  for (const [path, tab] of [['/services', 'services'], ['/needs', 'needs']]) {
+  for (const path of ['/services', '/needs']) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.equal(Boolean(line), !isRetiredRedirect(path), path);
     assert.equal(line, undefined);

@@ -10,6 +10,7 @@ import { logDealRoomAction } from '../services/dealRoomAudit';
 import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { railFor, refuseRun } from '../util/railContext';
+import { holdsLicence } from '../services/accountLicences';
 
 const networkfx = new Hono<{ Bindings: Env }>();
 
@@ -182,8 +183,45 @@ networkfx.get('/referrals/compounding', async (c) => {
 // SYNDICATES
 // ============================================================
 
+const positiveId = (value: unknown) => (typeof value === 'number' || typeof value === 'string')
+  && /^[1-9]\d*$/.test(String(value)) && Number.isSafeInteger(Number(value))
+  ? Number(value) : null;
+
+async function invitedDealProject(env: Env, userId: number, dealId: number | null, projectId: number | null) {
+  return env.DB.prepare(
+    `SELECT d.project_id FROM deals d
+      JOIN projects p ON p.id = d.project_id
+      JOIN deal_invitations i ON i.deal_id = d.id
+      WHERE i.investor_user_id = ? AND i.status IN ('invited', 'interested')
+        AND p.deleted_at IS NULL AND (? IS NULL OR d.id = ?) AND (? IS NULL OR p.id = ?)
+      LIMIT 1`,
+  ).bind(userId, dealId, dealId, projectId, projectId).first<{ project_id: number }>();
+}
+
 networkfx.get('/syndicates', async (c) => {
   const user = await requireAuth(c);
+  // D6200: an invitation to this exact deal authorizes a count-only view.
+  const rawDeal = c.req.query('deal_id');
+  if (rawDeal != null) {
+    const dealId = positiveId(rawDeal);
+    if (dealId == null) return c.json({ error: 'bad_deal_id', detail: 'Choose a valid deal.' }, 400);
+    if (!holdsLicence(user, 'investor')) return c.json([]);
+    await ensureSchema(c.env);
+    const rows = await c.env.DB.prepare(
+      `SELECT s.id, s.name, u.name AS creator_name, s.status, s.target_cents, s.min_commitment_cents,
+              (SELECT COUNT(*) FROM syndicate_members m WHERE m.syndicate_id = s.id) AS members,
+              EXISTS (SELECT 1 FROM syndicate_members m WHERE m.syndicate_id = s.id AND m.user_id = ?) AS is_member,
+              s.created_by = ? AS is_lead
+         FROM syndicates s LEFT JOIN users u ON u.id = s.created_by
+        WHERE s.status = 'open' AND EXISTS (
+          SELECT 1 FROM deals d JOIN projects p ON p.id = d.project_id
+          JOIN deal_invitations i ON i.deal_id = d.id
+          WHERE d.id = ? AND d.project_id = s.deal_id AND p.deleted_at IS NULL
+            AND i.investor_user_id = ? AND i.status IN ('invited', 'interested')
+        ) ORDER BY s.id DESC LIMIT 100`,
+    ).bind(user.id, user.id, dealId, user.id).all();
+    return c.json(rows.results ?? []);
+  }
   await ensureSchema(c.env);
   const status = c.req.query('status');
   // D630 (#1388) — the syndicates linked to one company, for the deal room's
@@ -225,11 +263,10 @@ networkfx.get('/syndicates/:id', async (c) => {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.id = ${id}`;
   if (!rows.length) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
-  const memberRows = await sql`SELECT m.*, u.name FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at`;
-  const mayReadMembers = user.role === 'admin' || Number(rows[0].created_by) === user.id
-    || memberRows.some(member => Number(member.user_id) === user.id);
-  if (!mayReadMembers) { await sql.end(); return c.json({ error: 'Only the lead, members and admins can read this syndicate.' }, 403); }
-  const members = memberRows;
+  const lead = Number(rows[0].created_by) === Number(user.id);
+  const own = lead || user.role === 'admin' ? [] : await sql`SELECT 1 FROM syndicate_members WHERE syndicate_id = ${id} AND user_id = ${user.id}`;
+  if (!lead && user.role !== 'admin' && !own.length) { await sql.end(); return c.json({ error: 'Only the lead, members and admins can read this syndicate.' }, 403); }
+  const members = lead ? await sql`SELECT m.*, u.name FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at` : [];
   let project = null;
   if ((rows[0] as any).deal_id) {
     const p = await sql`SELECT id, name, sector, stage, status FROM projects WHERE id = ${(rows[0] as any).deal_id}`;
@@ -237,7 +274,7 @@ networkfx.get('/syndicates/:id', async (c) => {
   }
   const totals = await sql`SELECT COUNT(*) as n, COALESCE(SUM(commitment_cents), 0) as committed FROM syndicate_members WHERE syndicate_id = ${id}`;
   await sql.end();
-  return c.json({ ...rows[0], project, members, member_count: parseInt(totals[0]?.n) || 0, committed_cents: parseInt(totals[0]?.committed) || 0 });
+  return c.json({ ...rows[0], project, members, show_member_names: lead, member_count: parseInt(totals[0]?.n) || 0, committed_cents: parseInt(totals[0]?.committed) || 0 });
 });
 
 networkfx.post('/syndicates', async (c) => {
@@ -259,21 +296,41 @@ networkfx.post('/syndicates', async (c) => {
 networkfx.post('/syndicates/:id/join', async (c) => {
   const user = await requireApprovedKyc(c);
   await ensureSchema(c.env);
-  const id = parseInt(c.req.param('id'));
+  const id = positiveId(c.req.param('id'));
+  if (id == null) return c.json({ error: 'Choose a valid syndicate.' }, 400);
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const commitmentCents = parseInt(data?.commitment_cents);
-  if (!commitmentCents || commitmentCents <= 0) return c.json({ error: 'commitment_cents required' }, 400);
+  const commitmentCents = positiveId(data?.commitment_cents);
+  if (commitmentCents == null) return c.json({ error: 'Enter a positive amount in whole cents.' }, 400);
+  const dealId = data?.deal_id == null ? null : positiveId(data.deal_id);
+  if (data?.deal_id != null && dealId == null) return c.json({ error: 'Choose a valid deal.' }, 400);
 
-  const sRow: any = await c.env.DB.prepare(`SELECT * FROM syndicates WHERE id = ?`).bind(id).first();
-  if (!sRow) return c.json({ error: 'Syndicate not found' }, 404);
+  const sRow = await c.env.DB.prepare('SELECT status, deal_id, min_commitment_cents, created_by FROM syndicates WHERE id = ?').bind(id)
+    .first<{ status: string; deal_id: number | null; min_commitment_cents: number; created_by: number }>();
+  if (!sRow || (dealId != null && sRow.deal_id == null)
+    || (sRow.deal_id != null && (!holdsLicence(user, 'investor')
+      || !await invitedDealProject(c.env, user.id, dealId, sRow.deal_id)))) {
+    return c.json({ error: 'This syndicate is not available for this deal.' }, 404);
+  }
   if (sRow.status !== 'open') return c.json({ error: 'Syndicate is not open' }, 400);
   if (commitmentCents < sRow.min_commitment_cents) return c.json({ error: 'Commitment is below the syndicate minimum.' }, 400);
   if (sRow.created_by === user.id) return c.json({ error: 'Cannot join your own syndicate' }, 400);
 
   // Atomic insert via UNIQUE index — duplicate join returns 409
   try {
-    await c.env.DB.prepare(`INSERT INTO syndicate_members (syndicate_id, user_id, commitment_cents) VALUES (?, ?, ?)`).bind(id, user.id, commitmentCents).run();
+    const joined = await c.env.DB.prepare(
+      `INSERT INTO syndicate_members (syndicate_id, user_id, commitment_cents)
+       SELECT s.id, ?, ? FROM syndicates s WHERE s.id = ? AND s.status = 'open'
+         AND s.min_commitment_cents <= ? AND s.created_by <> ?
+         AND (s.deal_id IS NULL OR EXISTS (
+           SELECT 1 FROM deals d JOIN projects p ON p.id = d.project_id
+           JOIN deal_invitations i ON i.deal_id = d.id
+           WHERE d.project_id = s.deal_id AND p.deleted_at IS NULL
+             AND i.investor_user_id = ? AND i.status IN ('invited', 'interested')
+             AND (? IS NULL OR d.id = ?)
+         ))`,
+    ).bind(user.id, commitmentCents, id, commitmentCents, user.id, user.id, dealId, dealId).run();
+    if (!joined.meta.changes) return c.json({ error: 'The syndicate is no longer open to you. Nothing was recorded.' }, 409);
   } catch (e: any) {
     if (String(e?.message || '').toLowerCase().includes('unique')) return c.json({ error: 'Already joined this syndicate' }, 409);
     throw e;

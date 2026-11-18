@@ -11,6 +11,7 @@ import RoundCallSheet from './RoundCallSheet';
 import { useCallRead, CallReadState } from './roundCallParts';
 import { AnswerDialog, CloseDialog, ExtendDialog } from './CallDialogs';
 import CallRecipientDrawer, { toldLine } from './CallRecipientDrawer';
+import CallFollowThrough from './CallFollowThrough';
 import {
   ADMIN_REFUSED, FILTERS, FOOT_LINE, HIDDEN, NOT_RECORDED, OWNER_ONLY, PAGE_SIZE, SORTS, STATE_TONE, callLine,
   funnelOf, funnelSentence, furthestOf, isNamed, lastActivity, money, notTold, originLine, pageLabel, shortDay, stateNote,
@@ -304,6 +305,8 @@ export default function RaiseCallPage() {
           search={d ? `?project_id=${d.call.project_id}` : ''} />
         {read.error?.status === 403 ? <NoPermission admin={user?.role === 'admin'} message={read.error.message} />
           : <CallReadState read={read}>{d && <RaiseCallView state={{ data: d, q, filter, sort, page }} on={on} />}</CallReadState>}
+        {/* D6863: remind, export, a new call from a closed one and recording a commitment. */}
+        {d && d.call.state !== 'draft' ? <CallFollowThrough uid={uid} call={d.call} onOpenDraft={(c) => setSheet({ initialCall: c })} /> : null}
         {d && dialog?.kind === 'recipient' ? <CallRecipientDrawer recipient={dialog.recipient} questions={d.questions} projectId={d.call.project_id} onClose={close} /> : null}
         {d && dialog?.kind === 'extend' ? <ExtendDialog call={d.call} onClose={close} onDone={done} onReload={reload}
           extend={(date) => roundCallsApi.manage(uid, { action: 'extend', target_close: date })} /> : null}

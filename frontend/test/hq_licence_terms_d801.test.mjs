@@ -23,7 +23,6 @@ import {
   ESCALATION_KIND_LABELS, LICENCE_REQUEST_KINDS, LICENCE_PANEL_KINDS, escalationKindLabel, filterByKind, kindFilters,
   nonRenewalCheck, requestSummary, termAsItStands, termTarget,
 } from '../src/lib/escalationKinds.js';
-import { api } from '../src/lib/api.js';
 import { licenceLedgerApi } from '../src/lib/api/licenceLedger.js';
 import { TermsScheduleForm, saveError } from '../src/pages/admin/LicenceTermsSchedule.jsx';
 import { RequestsPanelView, loadLicenceRequests } from '../src/pages/admin/LicenceRequestsPanel.jsx';

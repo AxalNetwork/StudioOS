@@ -13,8 +13,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -29,8 +27,6 @@ import { ensureReferralSubmissionsSchema, rewardLine, REFERRAL_REWARD_RULES } fr
 import { splitStatements } from './_baseline.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '../..');
 const M566 = MIG('566_referral_reward_rules.sql');
 const SUPER = 30;
 const ROLES: Record<number, string> = { [SUPER]: 'admin', [ADMIN]: 'admin', [FOUNDER]: 'founder', [PARTNER]: 'partner' };

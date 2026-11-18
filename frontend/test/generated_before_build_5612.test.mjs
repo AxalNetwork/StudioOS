@@ -43,7 +43,9 @@ const isComment = (l) => l.trimStart().startsWith('#');
 export function needsGenerated(cmd) {
   if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?tsc(?:\s|$)/m.test(cmd)) return 'tsc';
   if (/(?:^|[\s;&|(])node\b[^\n]*\s--test(?:\s|=|$)/m.test(cmd)) return 'node --test';
-  if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?wrangler(?:@\S+)?\s+(?:deploy|dev|versions|publish)\b/m.test(cmd)) return 'wrangler';
+  // D7146: the preview config's script (scripts/pr-preview-worker.mjs) imports nothing, so a
+  // wrangler run on that config alone reads no generated module; the test below pins that.
+  if (/(?:^|[\s;&|(])(?:npx\s+(?:--yes\s+|--no-install\s+)?)?wrangler(?:@\S+)?\s+(?:deploy|dev|versions|publish)\b(?![^\n]*--config wrangler\.pr-preview\.toml(?:\s|$))/m.test(cmd)) return 'wrangler';
   if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?vite(?:\s|$)/m.test(cmd)) return 'vite';
   if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?playwright\s+test\b/m.test(cmd)) return 'playwright test';
   return null;
@@ -198,6 +200,10 @@ test('the guard flags a job with no generate step, and passes one with it', () =
   assert.deepEqual(ungenerated([['x.yml', wf(build)]]), []);
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: npx wrangler deploy --env production\n')]]).length, 1);
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: wrangler d1 export studioos-db --remote\n')]]), [], 'wrangler d1 reads no source');
+  // D7146: the preview config's script imports nothing, so deploying it needs no generated module.
+  assert.deepEqual(ungenerated([['x.yml', wf('      - run: npx --yes wrangler@4.125.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME"\n')]]), []);
+  assert.deepEqual(ungenerated([['x.yml', wf('      - run: npx --yes wrangler@4.125.0 deploy --config wrangler.toml --env production\n')]]).length, 1);
+  assert.doesNotMatch(readFileSync(new URL('scripts/pr-preview-worker.mjs', ROOT), 'utf8'), /^\s*import\b|\bimport\(/m, 'the preview script must stay import-free, or its deploy needs the generated modules');
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: npm run test:worker\n')]]), [], 'npm run test:* generates through its pre hook');
   const pw = '      - name: visual\n        run: npx --no-install playwright test -c playwright.visual.config.js\n';
   assert.deepEqual(ungenerated([['x.yml', wf(pw)]]), ['x.yml › worker › visual: runs playwright test before the generated modules are built'], 'playwright test starts vite');

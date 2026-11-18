@@ -1,9 +1,11 @@
 #:schema node_modules/wrangler/config-schema.json
 # ---------------------------------------------------------------------------
 # Pull-request preview Worker — one per PR, named `studioos-pr-<number>` by
-# .github/workflows/pr-preview.yml (`wrangler deploy --config
-# wrangler.pr-preview.toml --name studioos-pr-<n>`) and deleted when the PR
-# closes. This is NOT the production config: that is wrangler.toml, and the
+# .github/workflows/pr-preview-deploy.yml (`wrangler deploy --config
+# wrangler.pr-preview.toml --name studioos-pr-<n>`), main's trusted deploy of
+# the artifact pr-preview.yml builds without credentials (D7146), and deleted
+# when the PR closes. pr-preview.yml's browser tests serve the same config
+# locally with `wrangler dev`. This is NOT the production config: that is wrangler.toml, and the
 # apex guards (frontend/test/apex_route_coverage.test.mjs and
 # apex_truth_doc.test.mjs) read only that file.
 #

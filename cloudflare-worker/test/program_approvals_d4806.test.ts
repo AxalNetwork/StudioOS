@@ -189,7 +189,7 @@ const written = (db: DatabaseSync, key: string) => ({
 });
 const NONE = { program: 0, sections: 0, draftGrants: 0, history: 0, audit: 0 };
 
-for (const [label, outcome, status, extra] of [
+for (const [label, , status, extra] of [
   ['a decline', 'declined', 'declined', ", hq_note = 'Declined by another admin'"],
   ['a send-back', 'sent_back', 'sent_back', ", hq_note = 'Sent back by another admin'"],
   ['another approval', 'approved', 'approved', ", decision = 'catalogue'"],

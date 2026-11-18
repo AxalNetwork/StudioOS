@@ -36,6 +36,7 @@ const DOORS_SRC = read('frontend/src/lib/siteDoors.js');
 const { default: DoorPage, resolvePlans, chapterList, formatPrice } = await import('../src/pages/site/DoorPage.jsx');
 const { DOORS, DOOR_ORDER, AI_TOKENS } = await import('../src/lib/siteDoors.js');
 const { FOUNDER_TIERS, INVESTOR_TIERS } = await import('../src/data/pricing.js');
+const { PRICE_UNREAD } = await import('../src/lib/planPrices.js');
 const { PRODUCT_PAGES } = await import('../src/data/productPages.js');
 const { DOOR_LINKS } = await import('../src/lib/siteLinks.js');
 const { bucketsFor } = await import('../src/workspaces/shellConfig.js');
@@ -149,8 +150,11 @@ test('plan prices and features come from the catalogue, never typed', () => {
   // No price in the copy or the template: no "$5", no "$149", no "Custom".
   for (const [name, src] of [['siteDoors.js', DOORS_SRC], ['DoorPage.jsx', PAGE_SRC]]) {
     assert.doesNotMatch(code(src), /\$\d/, `${name} types a price`);
-    assert.doesNotMatch(code(src), /\bprice:\s*['"`]/, `${name} carries a price field`);
-    assert.doesNotMatch(code(src), /'Custom'/, `${name} carries the canvas's "Custom" price`);
+    // #6983 (X1): one exception, the word "Custom" for a plan marked `custom` (priced by agreement, as /pricing says).
+    // It is not a figure, and it is the only price field the page may write.
+    const typed = code(src).replace(/if \(p\.custom\) return \[\{ \.\.\.p, name: tier\.name \|\| p\.name, price: 'Custom',/, '');
+    assert.doesNotMatch(typed, /\bprice:\s*['"`]/, `${name} carries a price field`);
+    assert.doesNotMatch(typed, /'Custom'/, `${name} carries the canvas's "Custom" price outside a custom plan`);
   }
   assert.match(PAGE_SRC, /from '\.\.\/\.\.\/data\/pricing'/, 'the page reads the catalogue /pricing reads');
 
@@ -192,7 +196,7 @@ test('plan prices and features come from the catalogue, never typed', () => {
 test('the primary CTA is the lane link; every other CTA is a routed page', () => {
   const LANE = {
     founders: '/register?lane=founder',
-    investors: '/register?lane=lp',
+    investors: '/register?lane=investor', // #6983 (X1): was the LP form
     partners: '/register?lane=partner',
     advisors: '/register?lane=advisor',
   };
@@ -212,8 +216,41 @@ test('the primary CTA is the lane link; every other CTA is a routed page', () =>
       assert.ok(routeBlock(to.split('?')[0]), `${k}: ${to} is not a route`);
       assert.ok(html.includes(`href="${attr(to)}"`), `${k}: links ${to}`);
     }
+    // #6983 (X1): a plan priced by agreement asks for contact instead; every other plan is the lane link.
+    const custom = (door.plans || []).filter((p) => p.custom).map((p) => attr(p.custom.to));
     for (const m of html.matchAll(/class="ax-door-plan[ "][\s\S]*?href="([^"]+)"/g)) {
+      if (custom.includes(m[1])) continue;
       assert.equal(m[1], attr(LANE[k]), `${k}: a plan's CTA is the lane link`);
+    }
+  }
+});
+
+test('#6983 (X1): the investor page opens the investor lane, and only the LP sign-in names the LP form', () => {
+  const html = PAGES.investors;
+  const lp = [...html.matchAll(/href="([^"]*lane=lp[^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(lp, [], 'no link on /for-investors opens the LP registration form');
+  assert.match(html, /Already an LP in an Axal VC fund\? <a href="\/login\?next=%2Flp-portal"[^>]*>LP sign in<\/a>/);
+  // Institutional is priced by agreement: "Custom", the note, and Contact Axal VC on the invest topic.
+  const card = html.slice(html.indexOf('data-tier="institutional"'));
+  const one = card.slice(0, card.indexOf('</a>') + 4); // the card, up to its button
+  assert.match(one, /ax-door-plan-amt">Custom</);
+  assert.match(one, /ax-door-plan-per">Pricing agreed with Axal VC</);
+  assert.match(one, /href="\/contact\?topic=invest"[^>]*>Contact Axal VC</);
+  assert.doesNotMatch(one, /Price not read/);
+  // With the plans read failed, a custom plan still never prints "Price not read".
+  const unread = resolvePlans(DOORS.investors, { investor: INVESTOR_TIERS, reading: false });
+  const inst = unread.find((p) => p.tier === 'institutional');
+  assert.equal(inst.price, 'Custom');
+  assert.notEqual(inst.price, PRICE_UNREAD);
+  // The advisor page's contact links carry the advise topic (#6986 presses it).
+  assert.equal(DOORS.advisors.secondary.to, '/contact?topic=advise');
+  assert.equal(DOORS.advisors.aside.to, '/contact?topic=advise');
+});
+
+test('#6983 (X1): the sign-up copy promises no pitch review, no deal matching and no "idea to funded"', () => {
+  for (const [name, src] of [['registerCopy.js', read('frontend/src/lib/registerCopy.js')], ['siteDoors.js', DOORS_SRC]]) {
+    for (const re of [/Submit your pitch/, /Get matched with deals/, /idea to funded/i]) {
+      assert.doesNotMatch(src, re, `${name} still says ${re}`);
     }
   }
 });
