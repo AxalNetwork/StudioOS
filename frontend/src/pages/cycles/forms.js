@@ -1791,6 +1791,10 @@ const editSignal = {
   // An amount is sent when its box was shown, and cleared when the kind takes none.
   toBody: (v) => {
     const body = onlyShown(v, signalBody(v), { amount_cents: 'amount' });
+    if (!Object.hasOwn(v, 'amount')) {
+      if (Object.hasOwn(v, 'currency')) body.currency = str(v.currency)?.toLowerCase() ?? null;
+      if (Object.hasOwn(v, 'period')) body.period = str(v.period);
+    }
     if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null, period: null });
     if (Object.hasOwn(v, 'amount') && !str(v.amount)) Object.assign(body, { amount_cents: null, currency: null, period: null });
     return body;
