@@ -90,7 +90,9 @@ test('a failed snapshot read is a 500 refusal with our sentence, never an empty 
   assert.equal('items' in r.body, false, 'no list rides on a refusal');
   assert.equal('snapshots' in r.body, false);
   assert.doesNotMatch(JSON.stringify(r.body), /disk I\/O|corrupt/, 'SQLite\'s text never reaches the body');
-  assert.ok(errors.some((a) => a.join(' ').includes(SQLITE_TEXT)), 'it is logged instead');
+  // D7256 amends D278: the refusal is logged by its code, and the store's own text is not copied into the log.
+  assert.ok(errors.some((a) => a.join(' ').includes('"code":"metrics_read_failed"')), 'the refusal is logged by its code');
+  assert.ok(!errors.some((a) => a.join(' ').includes(SQLITE_TEXT)), 'the store\'s text stays out of the log');
 });
 
 test('an empty store is still 200 with an empty list — the two answers differ', async () => {

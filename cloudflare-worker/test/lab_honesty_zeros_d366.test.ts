@@ -99,7 +99,9 @@ for (const table of ['cap_table_option_pools', 'cap_table_vesting']) {
     assert.equal('pools' in r.body, false, 'no list rides on a refusal');
     assert.equal('grants' in r.body, false);
     assert.doesNotMatch(JSON.stringify(r.body), /disk I\/O|corrupt/, 'SQLite\'s text never reaches the body');
-    assert.ok(logged.some((a) => a.join(' ').includes(SQLITE_TEXT)), 'it is logged instead');
+    // D7256 amends D278: the refusal is logged by its code, and the store's own text is not copied into the log.
+    assert.ok(logged.some((a) => a.join(' ').includes('"code":"equity_plan_read_failed"')), 'the refusal is logged by its code');
+    assert.ok(!logged.some((a) => a.join(' ').includes(SQLITE_TEXT)), 'the store\'s text stays out of the log');
   });
 }
 
