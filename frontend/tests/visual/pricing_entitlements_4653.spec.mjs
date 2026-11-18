@@ -2,6 +2,13 @@
 import { test, expect } from '@playwright/test';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 
+// #7247: a handler here awaits `route.fetch()`; if the test ends while that request is in flight, the await throws
+// "route.fetch: Test ended" and fails a passing test. Unrouting waits for running handlers and drops that error.
+test.afterEach(async ({ page }) => {
+  // A test that closed its own tab has no routes left to wait for.
+  if (!page.isClosed()) await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 for (const width of [1440, 390]) {
   test(`Investor capacity and licence unit follow the catalogue at ${width}px`, async ({ page, request }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });

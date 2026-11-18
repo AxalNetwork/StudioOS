@@ -57,7 +57,6 @@ const GRID = codeOnly(read('frontend/src/pages/advisor/practice/sessionGrid.js')
 // #4715: the advisor router is advisors.ts plus the route modules it mounts.
 const WORKER = advisorRoutesSource();
 const API = read('frontend/src/lib/api.js');
-const FILTERS = read('frontend/src/workspaces/advisorZoneFilters.js');
 const ACTIONS = read('frontend/src/workspaces/advisorZoneActions.js');
 const CANVAS = read('design/canvases/integrated/Advisor Detail · Practice.dc.html');
 

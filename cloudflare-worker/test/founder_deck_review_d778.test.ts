@@ -15,8 +15,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -27,8 +25,6 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-d778-deck-review-0123456789';
 const FOUNDER = 1; const PID = 7;
 const DECK_TEXT = '# Problem\nFreight teams reconcile invoices by hand.\n\n# Solution\nAn agent that reconciles them.';

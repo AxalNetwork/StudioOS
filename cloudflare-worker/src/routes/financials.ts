@@ -613,9 +613,7 @@ financials.get('/:projectId/export.xlsx', async (c) => {
     ).bind(projectId).first<{ assumptions_json: string }>();
   } catch (e) { console.error('[financials] export select:', (e as Error).message); }
   if (!fm) return c.json({ detail: 'No financial model saved yet' }, 404);
-  const a = normalizeAssumptions(
-    fm ? safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}) : null,
-  );
+  const a = normalizeAssumptions(safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}));
   const computed = projectFinancials(a);
   const sens = sensitivity(a);
 

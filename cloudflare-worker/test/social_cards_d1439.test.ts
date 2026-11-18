@@ -27,7 +27,6 @@ import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../..');
-const SQL = resolve(here, '../sql');
 
 /** The shell as `prerender-og.mjs` leaves it for `/`: the home card in the managed block. */
 const SHELL = `<!doctype html>

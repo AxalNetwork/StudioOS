@@ -106,11 +106,11 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
 });
 
 test('Accounts, Approvals, Programs, Community and Insights are guard([\'admin\']) without hqOnly, each old held address forwarding', () => {
-  for (const [path, page, old, redirect] of [
-    ['/admin/insights', 'AdminInsights', '/admin/held/insights', 'HeldInsightsRedirect'],
-    ['/admin/community', 'AdminCommunity', '/admin/held/community', 'HeldCommunityRedirect'],
-    ['/admin/approvals', 'AdminApprovals', '/admin/held/approvals', 'HeldApprovalsRedirect'],
-    ['/admin/programs', 'AdminProgramsCatalogue', '/admin/held/programs', 'HeldProgramsRedirect'],
+  for (const [path, page, old] of [
+    ['/admin/insights', 'AdminInsights', '/admin/held/insights'],
+    ['/admin/community', 'AdminCommunity', '/admin/held/community'],
+    ['/admin/approvals', 'AdminApprovals', '/admin/held/approvals'],
+    ['/admin/programs', 'AdminProgramsCatalogue', '/admin/held/programs'],
   ]) {
     const line = routeLine(path);
     assert.ok(line, `${path} is not registered`);

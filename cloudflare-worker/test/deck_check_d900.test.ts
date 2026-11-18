@@ -23,8 +23,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -37,8 +35,6 @@ import { ClaimNoteError, noteText, setClaimNote } from '../src/services/raiseCla
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-d900-deck-check-0123456789-abcdef';
 
 const OWNER = 1, COFOUNDER = 2, ADMIN = 4, OTHER = 5;

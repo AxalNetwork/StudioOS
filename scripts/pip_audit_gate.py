@@ -50,6 +50,8 @@ def audit(run=subprocess.run, sleep=time.sleep, report=print):
         delay = DELAYS_SECONDS[attempt - 1]
         report(f"Attempt {attempt}/{ATTEMPTS}: {reason}; retrying in {delay}s.")
         sleep(delay)
+    # Reached only if ATTEMPTS is 0: fail closed instead of returning None, which exits as success.
+    return 1
 
 
 def main():

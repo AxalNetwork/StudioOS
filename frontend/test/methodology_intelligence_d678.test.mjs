@@ -108,7 +108,11 @@ test('methodology: every string the page draws from lib/siteMethod.js is the can
     else if (Array.isArray(v)) v.forEach(walk);
     else if (v && typeof v === 'object') Object.entries(v).forEach(([key, x]) => { if (!['img', 'tone', 'icon'].includes(key)) walk(x); });
   };
-  for (const k of ['METHOD_STAGES', 'METHOD_DIMENSIONS', 'METHOD_LOOP', 'METHOD_LINKS', 'METHOD_DISCIPLINES', 'METHOD_FIGURES', 'LAB_WEEKS', 'METHOD_RECORD', 'METHOD_USERS', 'METHOD_ROLES']) {
+  // D6991: the Lab section's week names and lines are no longer the canvas's.
+  // Owner answer F1 on #6976 (2026-11-16, https://github.com/AxalNetwork/StudioOS/issues/6976#issuecomment-6924817291)
+  // replaced them with the Lab's own list (`LAB_WEEKS` in lib/spinoutLab.js), so
+  // siteMethod.js keeps only the canvas's week colours and this check skips them.
+  for (const k of ['METHOD_STAGES', 'METHOD_DIMENSIONS', 'METHOD_LOOP', 'METHOD_LINKS', 'METHOD_DISCIPLINES', 'METHOD_FIGURES', 'METHOD_RECORD', 'METHOD_USERS', 'METHOD_ROLES']) {
     walk(method[k]);
   }
   assert.ok(strings.length > 120, `the page's copy is read (${strings.length} strings)`);
