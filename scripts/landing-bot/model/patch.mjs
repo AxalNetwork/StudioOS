@@ -16,15 +16,19 @@ export function hasConflictMarkers(text) {
  * Problems with a set of changes `[{ path, before, after }]` against the allowed list.
  * An empty list means the patch may be emitted.
  */
-export function checkChanges(changes, allowed) {
+export function checkChanges(changes, allowed, { resolving = false } = {}) {
   const allow = new Set(allowed);
   const problems = [];
   if (!changes.length) problems.push('the patch changes nothing');
   for (const c of changes) {
     if (!safeRelativePath(c.path) || !allow.has(c.path)) problems.push(`touches a file outside the allowed list: ${c.path}`);
     if (c.after === null || c.after === undefined) problems.push(`deletes a file: ${c.path}`);
-    else if (hasConflictMarkers(c.after) && !hasConflictMarkers(c.before ?? '')) problems.push(`adds conflict markers: ${c.path}`);
+    else if (hasConflictMarkers(c.after) && (resolving || !hasConflictMarkers(c.before ?? ''))) {
+      problems.push(resolving ? `leaves conflict markers: ${c.path}` : `adds conflict markers: ${c.path}`);
+    }
   }
+  // #6475: a resolution resolves every conflicted file, so each allowed file must be in the patch.
+  if (resolving) for (const p of allow) if (!changes.some((c) => c.path === p)) problems.push(`leaves ${p} unresolved`);
   return problems;
 }
 
@@ -53,7 +57,7 @@ export function patchFor({ baseSha, changes }) {
  * contents must hash to the manifest, and `readBefore(path)` (the checkout's
  * current text, or null) must hash to the manifest's before value.
  */
-export function checkPatch(patch, manifest, allowed, readBefore) {
+export function checkPatch(patch, manifest, allowed, readBefore, { resolving = false } = {}) {
   const problems = [];
   if (patch?.version !== 1 || !Array.isArray(patch.files) || !patch.files.length) return ['the patch is malformed or empty'];
   if (manifest?.version !== 1 || !Array.isArray(manifest.files)) return ['the manifest is malformed'];
@@ -73,6 +77,6 @@ export function checkPatch(patch, manifest, allowed, readBefore) {
     changes.push({ path: f.path, before, after: f.content });
   }
   for (const p of byPath.keys()) if (!seen.has(p)) problems.push(`the patch leaves out ${p}, which the manifest names`);
-  problems.push(...checkChanges(changes, allowed).filter((x) => x !== 'the patch changes nothing'));
+  problems.push(...checkChanges(changes, allowed, { resolving }).filter((x) => x !== 'the patch changes nothing'));
   return problems;
 }

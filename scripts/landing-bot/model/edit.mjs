@@ -2,6 +2,7 @@
 // #6473: the `edit` job's entry point: one round of the model on the checkout, writing a patch and manifest or nothing.
 /**
  *   node edit.mjs --task task.json --work <checkout> --out <dir> --round <n> --base <sha> [--feedback verify.json]
+ *                 [--stage stage.json]   (merge mode, #6475: the report stage.mjs wrote)
  *
  * Runs in the `repair` environment with the model credentials and no GitHub
  * write token. It runs no repository code: the checkout is read as data and
@@ -12,7 +13,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseTask } from './task.mjs';
+import { parseTask, stageProblems } from './task.mjs';
 import { createWorkspace } from './workspace.mjs';
 import { providerOrder, runRound } from './loop.mjs';
 import { checkChanges, manifestFor, patchFor } from './patch.mjs';
@@ -31,7 +32,7 @@ export function args(argv) {
 }
 
 /** The whole round; returns the result object it wrote. Exposed for tests with stub providers. */
-export async function editMain({ task: taskPath, work, out, round, base, feedback }, { env = process.env, providers } = {}) {
+export async function editMain({ task: taskPath, work, out, round, base, feedback, stage }, { env = process.env, providers } = {}) {
   mkdirSync(out, { recursive: true });
   const write = (name, v) => writeFileSync(join(out, name), `${JSON.stringify(v, null, 2)}\n`);
   const finish = (result) => { write('result.json', result); return result; };
@@ -41,6 +42,16 @@ export async function editMain({ task: taskPath, work, out, round, base, feedbac
   const { task, errors } = parseTask(readFileSync(taskPath, 'utf8'));
   if (!task) return finish({ outcome: 'no_patch', reason: 'the task is invalid', errors });
   if (n > task.max_rounds) return finish({ outcome: 'no_patch', reason: `round ${n} is past the cap of ${task.max_rounds}` });
+
+  // #6475: merge mode. The tree the model reads is main merged into the head, conflicts left in.
+  const resolving = !!task.merge_sha;
+  if (resolving) {
+    // The merge was staged by stage.mjs in the step before, in its own process; this module starts none.
+    let report = null;
+    try { report = stage ? JSON.parse(readFileSync(stage, 'utf8')) : null; } catch { /* null: refused below */ }
+    const problems = stageProblems(task, report);
+    if (problems.length) return finish({ outcome: 'no_patch', reason: problems[0], problems, round: n });
+  }
 
   let failure = null;
   if (feedback) {
@@ -57,7 +68,7 @@ export async function editMain({ task: taskPath, work, out, round, base, feedbac
   if (result.outcome !== 'patched') return finish({ ...result, round: n });
 
   const changes = workspace.changes();
-  const problems = checkChanges(changes, task.allowed_files);
+  const problems = checkChanges(changes, task.allowed_files, { resolving });
   if (problems.length) return finish({ ...result, round: n, outcome: 'no_patch', reason: 'the edits failed a check', problems });
   write('patch.json', patchFor({ baseSha: base, changes }));
   write('manifest.json', manifestFor({ baseSha: base, round: n, result, changes }));

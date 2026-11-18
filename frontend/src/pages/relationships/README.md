@@ -1,6 +1,6 @@
 # frontend/src/pages/relationships — relationship intelligence
 
-Who on the member's teams knows an investor, a founder or a company, the ask for an introduction, the introducer's inbox, the log and follow-ups (D1357, #3572, LinkedIn part 8). Built to the owner's canvas: `design/incoming/Who Knows Them Page.dc.html` and `design/incoming/Who knows them · Boards.dc.html` (RI1–RI8). Every read and write is `relationshipsApi` (`lib/api/relationships.js`, D1356 and D4329).
+Who on the member's teams knows an investor, a founder or a company, the ask for an introduction, the introducer's inbox, the log and follow-ups (D1357, #3572, LinkedIn part 8). Built to the owner's canvas: `design/incoming/Who Knows Them Page.dc.html` and `design/incoming/Who knows them · Boards.dc.html` (RI1–RI8). Every read and write is `relationshipsApi` (`../../lib/api/relationships.js`, D1356 and D4329).
 
 | File | What it is |
 |---|---|
@@ -9,6 +9,10 @@ Who on the member's teams knows an investor, a founder or a company, the ask for
 | `WhoKnowsStrip.jsx` | RI2, RI3: "Who knows them" on a record, with Rank by fit, and the ask Sheet (reason required, context optional, "Ask Eadwyn to draft from this record"). On Capital relationships' investor sheet and Deal flow's peek drawer. |
 | `IntroductionsDesk.jsx` | RI4–RI6: a summary card (D4464), Asked of you (Accept, Not now, Write the intro or Ask Eadwyn to draft it, through the Email composer), follow-ups (Mark done, Snooze, Ask Eadwyn to draft one), and the log with team and status filters. Reads `?intro=<uid>` (the Worker's introLink, D4329) and highlights that row. On Network › Introductions. |
 | `DraftFlow.jsx` | D4330 (part 8b): the shared quote-then-run behind every "Ask Eadwyn to draft…" button (`useDraftFlow`) and the panel that shows the quote and its confirmation (`DraftFlow`). No fetch of its own — `run` is the one call its caller already owns. |
+
+| `NetworkTieRequest.jsx` | D6636: names-only consent picker using the existing Sheet. |
+| `IntroRecordSheet.jsx` | D5310 part 3: one introduction request in the shared detail Sheet, with actions allowed to its reader. |
+| `introRecordModel.js` | D5310 part 3: recorded states and actions for the introduction request detail. |
 
 ## The rules for adding here
 

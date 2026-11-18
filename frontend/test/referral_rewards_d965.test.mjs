@@ -112,7 +112,8 @@ test('the member matrix promises credits only from a rule that is on, and nothin
   assert.ok(unread.slice(0, 2).every((r) => r.model === 'Not read' && !/credits? (on|once)/.test(r.note)));
   const page = read('frontend/src/pages/ReferralsPage.jsx');
   assert.ok(!/REWARD_MATRIX|Milestone-based|'Platform credit'/.test(page), 'the hard-coded matrix is gone');
-  assert.match(page, /memberRewardMatrix\(overview\?\.categories\)/);
+  assert.match(page, /const categories = referralCategories\(overview\);/);
+  assert.match(page, /memberRewardMatrix\(categories\)/);
 });
 
 test('mounted: the tile counts exactly and shows the credits paid to a Super Admin; an Admin reads Not read here yet', async () => {

@@ -138,6 +138,21 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/landing-bot-conflict.yml",
+      "channel": "#axalvc-actions-landing-bot-conflict"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-ejection.yml",
+      "channel": "#axalvc-actions-landing-bot-ejection"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-keeper.yml",
+      "channel": "#axalvc-actions-landing-bot-keeper"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/landing-bot-model-round.yml",
       "channel": "#axalvc-actions-landing-bot-model-round"
     },
@@ -260,6 +275,11 @@
       "id": 416139951,
       "path": ".github/workflows/runner-benchmark.yml",
       "channel": "#axalvc-actions-runner-benchmark"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/scan-remediation.yml",
+      "channel": "#axalvc-actions-scan-remediation"
     },
     {
       "id": 412401690,

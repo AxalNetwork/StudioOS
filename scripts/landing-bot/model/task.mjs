@@ -8,7 +8,14 @@
  *     "allowed_files": ["frontend/src/lib/x.js", ...],   // the only files a patch may touch
  *     "verify": [["npm", "ci", "--ignore-scripts"], ["node", "--test", "frontend/test/x.test.mjs"]],
  *     "data": { "ci-log.txt": "...", "pr-title.txt": "..." },  // untrusted text, shown to the model as data
- *     "max_turns": 20, "max_minutes": 15, "max_rounds": 3 }
+ *     "max_turns": 20, "max_minutes": 15, "max_rounds": 3,
+ *     "merge_sha": "<40 hex>", "head_sha": "<40 hex>" }               // optional: merge mode (#6475)
+ *
+ * MERGE MODE (#6475). With `merge_sha`, each round checks out the branch,
+ * merges that commit into it with main's merge rules (`stage.mjs`), and edits
+ * and verifies the conflicted tree. `allowed_files` must then be exactly the
+ * conflicted files, and a patch may leave no conflict marker. `head_sha`,
+ * when given, must be the commit the branch resolves to, or nothing runs.
  *
  * The caps are clamped to HARD, which only an edit of this file (a T2 change
  * the owner lands) can raise. A caller asking for more gets HARD, not more.
@@ -98,6 +105,12 @@ export function parseTask(input) {
     if (bytes > HARD.dataBytes) errors.push(`data is larger than ${HARD.dataBytes} bytes`);
   }
 
+  const SHA = /^[0-9a-f]{40}$/;
+  for (const k of ['merge_sha', 'head_sha']) {
+    if (raw[k] !== undefined && raw[k] !== null && !SHA.test(String(raw[k]))) errors.push(`${k} is not a full commit SHA`);
+  }
+  if (raw.head_sha && !raw.merge_sha) errors.push('head_sha is read only in merge mode, with merge_sha');
+
   if (errors.length) return { task: null, errors };
   return {
     task: Object.freeze({
@@ -109,6 +122,8 @@ export function parseTask(input) {
       max_turns: intIn(raw.max_turns, HARD.turns, HARD.turns),
       max_minutes: intIn(raw.max_minutes, HARD.minutes, HARD.minutes),
       max_rounds: intIn(raw.max_rounds, HARD.rounds, HARD.rounds),
+      merge_sha: raw.merge_sha || null,
+      head_sha: raw.head_sha || null,
     }),
     errors: [],
   };
@@ -118,4 +133,26 @@ export function parseTask(input) {
 export function safeRef(ref) {
   return typeof ref === 'string' && ref.length <= 200 && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(ref) &&
     !ref.includes('..') && !ref.endsWith('/') && !ref.endsWith('.lock') && !ref.includes('//');
+}
+
+/** True when `a` and `b` name the same set of paths (#6475: the conflicted files must be the allowed files). */
+export const sameFiles = (a, b) => {
+  const x = [...new Set(a || [])].sort();
+  const y = [...new Set(b || [])].sort();
+  return x.length === y.length && x.every((p, i) => p === y[i]);
+};
+
+/**
+ * #6475: the merge-mode stage report a round's job must hold before it edits or verifies. `stage.mjs` writes it in
+ * its own step and process, so the keyed job's own modules start no process. Problems, or [] when the report is
+ * the merge the task names.
+ */
+export function stageProblems(task, report) {
+  if (!task?.merge_sha) return [];
+  if (!report || report.ok !== true) return [`merge mode: ${report?.reason ?? 'the merge was not staged'}`];
+  const problems = [];
+  if (report.main !== task.merge_sha) problems.push('merge mode: the staged merge is of another main commit');
+  if (task.head_sha && report.head !== task.head_sha) problems.push('merge mode: the staged merge is of another head');
+  if (!sameFiles(report.conflicted, task.allowed_files)) problems.push('merge mode: the conflicted files are not the allowed files');
+  return problems;
 }

@@ -21,7 +21,7 @@ export function prepare(argv, env = process.env) {
   if (!task) return { ok: false, errors };
   mkdirSync(value, { recursive: true });
   writeFileSync(join(value, 'task.json'), `${JSON.stringify(task, null, 2)}\n`);
-  return { ok: true, rounds: task.max_rounds };
+  return { ok: true, rounds: task.max_rounds, merge: task.merge_sha ? 'true' : 'false' };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -29,5 +29,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (!r.ok) {
     for (const e of r.errors) console.error(`::error::landing-bot model: ${e}`);
     process.exitCode = 1;
-  } else if (r.rounds && process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `rounds=${r.rounds}\n`);
+  } else if (r.rounds && process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `rounds=${r.rounds}\nmerge=${r.merge}\n`);
 }

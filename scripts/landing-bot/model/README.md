@@ -25,10 +25,12 @@ manifest as untrusted and re-check it with `patch.mjs`'s `checkPatch` before the
 
 ## Providers
 
-Claude, then Codex, then Gemini, or the order in `LANDING_BOT_PROVIDERS`.
+The review loop's accounts in its order (`documentation/operations/CLAUDE_REVIEW.md` §6a): primary Claude, Claude 2,
+Claude 3, then Codex, then Gemini; or the order in `LANDING_BOT_PROVIDERS` (names `claude`, `claude-2`, `claude-3`,
+`codex`, `gemini`). The manifest's `provider` names the account that made the patch.
 
 **When the runner moves to the next provider.** Only when the provider could not work:
-- authentication, permission, billing or quota;
+- authentication, permission, billing or quota (an Anthropic "credit balance" refusal or spend limit included);
 - rate limit, overload or 5xx;
 - federation failure;
 - no credential configured.
@@ -39,6 +41,8 @@ the next provider is never asked to try again.
 | Provider | Credential (in the `repair` environment) | Model variable | Default model |
 | --- | --- | --- | --- |
 | Claude | The four `ANTHROPIC_*_ID` variables (federation, preferred), else `ANTHROPIC_API_KEY` | `LANDING_BOT_CLAUDE_MODEL` | `claude-opus-5-5` |
+| Claude 2 | `ANTHROPIC_API_KEY_2` | `LANDING_BOT_CLAUDE_MODEL` | `claude-opus-5-5` |
+| Claude 3 | `ANTHROPIC_API_KEY_3` | `LANDING_BOT_CLAUDE_MODEL` | `claude-opus-5-5` |
 | Codex | `OPENAI_API_KEY` | `LANDING_BOT_OPENAI_MODEL` | `gpt-5.3-codex` |
 | Gemini | `GEMINI_API_KEY` | `LANDING_BOT_GEMINI_MODEL`, else `GEMINI_MODEL` | none: unset means skipped |
 
@@ -68,6 +72,21 @@ Every allowed file must also clear `pathGuard` in `../rules.mjs`, so no task can
 
 **Daily spend** (`LANDING_BOT_DAILY_MODEL_RUNS`) is the caller's check, through `budget()`, before it calls the
 runner.
+
+## Merge mode (#6475)
+
+A task with `merge_sha` (and `head_sha`) asks the runner to edit a merge that has not happened yet:
+
+- the round checks out the branch with its history (`filter: blob:none`);
+- a step before `edit` and before `verify` runs `stage.mjs` in its own process: it merges `merge_sha` with the
+  branch keeper's git settings and main's merge rules only, leaves the conflict markers in the tree, and writes a
+  report;
+- `edit.mjs` and `verify.mjs` refuse unless the report is that merge and its conflicted files are exactly the
+  task's allowed files (`stageProblems` in `task.mjs`);
+- a patch must resolve every allowed file and may leave no conflict marker (`checkChanges(..., { resolving: true })`).
+
+The staging step holds no model credential: the keys are set only on the `Edit` step. The modules the keyed step
+loads still start no process; staging never runs inside them.
 
 ## The rule for adding to it
 
