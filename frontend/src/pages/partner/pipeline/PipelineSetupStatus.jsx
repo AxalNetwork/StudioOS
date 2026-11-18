@@ -5,7 +5,7 @@ import useKeyedRead from '../../../hooks/useKeyedRead';
 import { useActiveCompany } from '../../../contexts/ActiveCompanyContext';
 import { setupSteps } from './commandCentre';
 
-/** The caller's catalogue and the firm's fit rules are independent setup reads. */
+/** The command centre's firm-coverage rules reconcile the setup reads with lead scoring. */
 export default function PipelineSetupStatus({ leads }) {
   const { company } = useActiveCompany();
   const scope = company?.id ?? 'none';
@@ -21,11 +21,12 @@ export default function PipelineSetupStatus({ leads }) {
   return (
     <div className="mb-3 space-y-2" data-testid="pipeline-setup-status">
       {rows.map(({ key, read, empty, to, label }) => {
+        if (key === 'services' && serviceCoverage === true) return null;
         if (read.status === 'loading') return null;
         const data = read.data;
         const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : null;
         const failed = read.status === 'unreadable' || items === null;
-        if (!failed && (key === 'services' ? serviceCoverage === true : items.some(item => item.is_active === 1 || item.is_active === true))) return null;
+        if (!failed && key === 'rules' && items.some(item => item.is_active === 1 || item.is_active === true)) return null;
         const message = key === 'services' && serviceCoverage == null
           ? 'Firm services are not confirmed from your own catalogue.' : empty;
         return (

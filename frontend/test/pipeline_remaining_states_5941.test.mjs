@@ -99,3 +99,20 @@ test('a colleague with an empty catalogue sees no missing-services warning when 
     api.listPartnerFitRules = originalRules;
   }
 });
+
+test('proven firm coverage takes precedence over a failed personal catalogue read', async () => {
+  const originalServices = api.listServiceOfferings;
+  const originalRules = api.listPartnerFitRules;
+  api.listServiceOfferings = async () => { throw new Error('catalogue unavailable'); };
+  api.listPartnerFitRules = async () => ({ items: [] });
+  let view;
+  try {
+    view = await mountContracts(h(PipelineSetupStatus, { leads: { scoring: 'fit_rules' } }));
+    assert.doesNotMatch(view.text(), /Your services could not be read|No active services/);
+    assert.match(view.text(), /No active fit rules configured/);
+  } finally {
+    await view?.unmount();
+    api.listServiceOfferings = originalServices;
+    api.listPartnerFitRules = originalRules;
+  }
+});
