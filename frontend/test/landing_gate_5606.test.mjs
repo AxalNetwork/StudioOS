@@ -51,11 +51,11 @@ test('fast runs the guards before installing dependencies on a single full-histo
   assert.ok(job('gate').includes("&& 'test:drift (draft fast tier)' || 'test:drift (full suite)'"));
 });
 
-// D7108 (#7108): in the merge queue, fast skips duplicated acquisition/scan/build/type work that the
+// D7108 (#7108): in the merge queue, fast skips exactly the six steps that the
 // required `scan`, `worker (typecheck)` and `frontend (build)` jobs repeat on
 // the same candidate. Every other required step keeps a plain `!cancelled()`,
 // so the trusted-base migration and drift checkers still run in the queue.
-const QUEUE_SKIPPED = ['scanner_pins', 'scanner_cache', 'install_scanner', 'scan', 'worker_install', 'worker_typecheck', 'frontend_install', 'frontend_build'];
+const QUEUE_SKIPPED = ['install_scanner', 'scan', 'worker_install', 'worker_typecheck', 'frontend_install', 'frontend_build'];
 const EVERY_EVENT = ['checkout', 'node', 'range', 'trusted', 'migrations', 'generated', 'drift', 'verdict'];
 function fastStepIfs(block) {
   const out = {};
@@ -76,7 +76,7 @@ function assertQueueSkips(block) {
   }
 }
 
-test('D7108: fast skips duplicated acquisition and validation steps in the merge queue', () => {
+test('D7108: fast skips only its six duplicated steps in the merge queue', () => {
   assertQueueSkips(fast);
   const swap = (id, from, to) => fast.replace(`id: ${id}\n        if: ${from}`, `id: ${id}\n        if: ${to}`);
   const plain = '${{ !cancelled() }}';

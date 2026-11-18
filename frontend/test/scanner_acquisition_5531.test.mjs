@@ -21,7 +21,7 @@ async function fixture(t, name, binaryVersion) {
   const source = join(root, 'release.tar.gz');
   await execute('tar', ['-czf', source, '-C', content, target]);
   const tool = { name, version, url: `https://github.com/example/scanner/releases/download/v${version}/release.tar.gz`, sha256: await digest(source) };
-  const options = { tool, cacheDir: join(root, 'cache'), workDir: join(root, 'jobs'), sleep: async () => {} };
+  const options = { tool, platform: 'linux', arch: 'x64', cacheDir: join(root, 'cache'), workDir: join(root, 'jobs'), sleep: async () => {} };
   const download = (_url, destination) => copyFile(source, destination);
   const install = overrides => installScanner({ ...options, download, ...overrides });
   const scan = async installed => {

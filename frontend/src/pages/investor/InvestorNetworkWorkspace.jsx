@@ -1,3 +1,4 @@
+import NetworkTieRequest from '../relationships/NetworkTieRequest';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, CircleAlert, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -165,6 +166,8 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const deepLink = resolveIntroTarget(params);
   const highlightedIntro = introTargetIsMine(deepLink, 'proposition') ? deepLink.uid : '';
   const requestedTab = params.get('tab') || '';
+  const [networkPickerOpen,setNetworkPickerOpen]=useState(false);
+  const [networkPickerNotice,setNetworkPickerNotice]=useState('');
   const [relationships, setRelationships] = useState(null);
   const [introductions, setIntroductions] = useState(null);
   const [asks, setAsks] = useState(null);
@@ -509,6 +512,8 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
   return (
     <main className="investor-network-workspace" data-testid="investor-network-workspace">
+      {networkPickerNotice && <p role="status">{networkPickerNotice}</p>}
+      {networkPickerOpen && <NetworkTieRequest onClose={()=>setNetworkPickerOpen(false)} onSent={()=>{setNetworkPickerOpen(false);setNetworkPickerNotice('Tie requested. It counts only after the other person accepts.');}} />}
       <div className="inw-layout">
         <section className="inw-main">
           {!embedded && <header className="inw-hero">
@@ -530,7 +535,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 : errors.relationships ? 'last-touch coverage unavailable'
                   : touchCoverage ? `${coldCount} going cold` : 'no touches logged yet';
               return `${ties} ties · ${touch}`;
-            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), companyLine(r), r.relationship_type] } })} />
+            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { addPerson: {onClick:()=>setNetworkPickerOpen(true),title:'Ask someone you share a deal or data room with to accept a tie.'}, setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), companyLine(r), r.relationship_type] } })} />
             <p className="inw-footnote" data-testid="tile-coldest">
               Coldest {relationships === null ? '— loading' : coldest == null ? '— not recorded (no tie is past the cold window)' : `— ${coldest}d`}
             </p>
