@@ -3,6 +3,7 @@
  *
  * Responsibilities:
  *   • load raw signals + companies (D1 first, seed fallback — see NOTE below),
+ *     a failed read surfacing as SignalsUnreadableError (D7173),
  *   • apply the founder-facing filters,
  *   • rank via ./ranking.ts,
  *   • run a best-effort background refresh via the source adapters.
@@ -13,10 +14,10 @@
  *
  * NOTE on the DB fallback: the `signals` tables ship as a migration
  * (sql/migrations/136_signals.sql) that may not be applied in every environment yet. So the
- * engine attempts a DB read and, if the tables are missing or empty, transparently
- * falls back to the in-code seed corpus (services/signals/seed.ts). This keeps
- * the UI fully functional day one while supporting DB-backed data later — no
- * code change needed when the table fills.
+ * engine attempts a DB read and, if the tables are missing or no ingestion has
+ * ever written a signal, falls back to the in-code seed corpus
+ * (services/signals/seed.ts), labelled `illustrative`. Any other read failure
+ * is an error (D7173): it is never served, or cached, as the example set.
  *
  * Caching: ranked result sets are cached in KV (env.RATE_LIMITS) for a short TTL
  * so repeated dashboard loads are cheap; a refresh busts the cache.
@@ -67,78 +68,135 @@ async function loadCompaniesFromDb(env: Env): Promise<NormalizedCompany[]> {
       source_key: r.source_key || undefined,
       updated_at: r.updated_at || undefined,
     }));
-  } catch {
-    return [];
+  } catch (e) {
+    // The roster feeds the rank: only a missing table falls back (D7173).
+    if (isMissingTable(e)) return [];
+    throw new SignalsUnreadableError(e);
   }
 }
 
-async function loadSignalsFromDb(env: Env): Promise<Signal[]> {
-  try {
-    const rows = (await env.DB.prepare(
-      `SELECT * FROM signals WHERE status = 'active'`,
-    ).all<any>()).results || [];
-    if (!rows.length) return [];
-
-    const ids = rows.map((r) => r.id);
-    const ph = ids.map(() => '?').join(',');
-    const evRows = (await env.DB.prepare(
-      `SELECT * FROM signal_evidence WHERE signal_id IN (${ph})`,
-    ).bind(...ids).all<any>()).results || [];
-    const mapRows = (await env.DB.prepare(
-      `SELECT signal_id, symbol FROM signal_company_map WHERE signal_id IN (${ph})`,
-    ).bind(...ids).all<any>()).results || [];
-
-    const evBySignal = new Map<string, any[]>();
-    for (const e of evRows) {
-      const list = evBySignal.get(e.signal_id) || [];
-      list.push(e);
-      evBySignal.set(e.signal_id, list);
-    }
-    const coBySignal = new Map<string, string[]>();
-    for (const m of mapRows) {
-      const list = coBySignal.get(m.signal_id) || [];
-      list.push(m.symbol);
-      coBySignal.set(m.signal_id, list);
-    }
-
-    return rows.map((r): Signal => ({
-      id: r.id,
-      type: r.type,
-      title: r.title,
-      thesis: r.thesis,
-      why_now: r.why_now || '',
-      region: r.region,
-      country: r.country,
-      sector: r.sector,
-      industry: r.industry || undefined,
-      niche: r.niche,
-      market_cap_band: r.market_cap_band,
-      target_customers: safeJson(r.target_customers, []),
-      maturity_stage: r.maturity_stage || undefined,
-      related_companies: coBySignal.get(r.id) || [],
-      evidence_items: (evBySignal.get(r.id) || []).map((e) => ({
-        id: e.id,
-        kind: e.kind,
-        title: e.title,
-        detail: e.detail || undefined,
-        source_key: e.source_key,
-        url: e.url || undefined,
-        weight: e.weight ?? undefined,
-        observed_at: e.observed_at,
-      })),
-      founder_opportunity: r.founder_opportunity || '',
-      advisor_note: r.advisor_note || '',
-      build: safeJson(r.build_opportunity, { headline: '', wedge: '', icp: '' }),
-      market: safeJson(r.market_context, {} as Signal['market']),
-      confidence_score: r.confidence_score ?? 0,
-      freshness_score: r.freshness_score ?? 0,
-      source_attribution: dedupe((evBySignal.get(r.id) || []).map((e) => e.source_key)),
-      tags: safeJson(r.tags, []),
-      updated_at: r.updated_at,
-    }));
-  } catch {
-    return [];
+/**
+ * D7173 — a failed read is an error, never the example set.
+ *
+ * Only a missing table is "nothing was ever stored" (an environment the
+ * signals migration has not reached); every other D1 error is a failed read
+ * and surfaces as `SignalsUnreadableError`, which the route answers with
+ * 503 `signals_unreadable` and which is never cached.
+ */
+export class SignalsUnreadableError extends Error {
+  readonly raw: unknown;
+  constructor(raw?: unknown) {
+    super('signals_unreadable');
+    this.name = 'SignalsUnreadableError';
+    this.raw = raw;
   }
+}
+
+export function isMissingTable(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e ?? '');
+  return /no such table/i.test(m);
+}
+
+type DbSignals =
+  | { state: 'missing' }
+  | { state: 'never_ingested' }
+  | { state: 'read'; signals: Signal[] };
+
+async function allRows(stmt: D1PreparedStatement): Promise<any[]> {
+  return (await stmt.all<any>()).results || [];
+}
+
+async function loadSignalsFromDb(env: Env): Promise<DbSignals> {
+  let rows: any[];
+  try {
+    rows = await allRows(env.DB.prepare(`SELECT * FROM signals WHERE status = 'active'`));
+  } catch (e) {
+    if (isMissingTable(e)) return { state: 'missing' };
+    throw new SignalsUnreadableError(e);
+  }
+
+  if (!rows.length) {
+    // No active signal. Whether that is "live and empty" or "never ingested"
+    // turns on whether an ingest run ever wrote a signal row, of any status.
+    try {
+      const any = await allRows(env.DB.prepare(`SELECT 1 AS one FROM signals LIMIT 1`));
+      return any.length ? { state: 'read', signals: [] } : { state: 'never_ingested' };
+    } catch (e) {
+      if (isMissingTable(e)) return { state: 'missing' };
+      throw new SignalsUnreadableError(e);
+    }
+  }
+
+  const ids = rows.map((r) => r.id);
+  const ph = ids.map(() => '?').join(',');
+
+  // The company map feeds the rank, so a failure here is a failed read.
+  let mapRows: any[];
+  try {
+    mapRows = await allRows(env.DB.prepare(`SELECT signal_id, symbol FROM signal_company_map WHERE signal_id IN (${ph})`).bind(...ids));
+  } catch (e) {
+    throw new SignalsUnreadableError(e);
+  }
+
+  // Evidence that cannot be read marks each signal `evidence_state:
+  // 'unavailable'` (confidence null) rather than an empty list that scores 0.
+  let evRows: any[] | null;
+  try {
+    evRows = await allRows(env.DB.prepare(`SELECT * FROM signal_evidence WHERE signal_id IN (${ph})`).bind(...ids));
+  } catch {
+    evRows = null;
+  }
+
+  const evBySignal = new Map<string, any[]>();
+  for (const e of evRows || []) {
+    const list = evBySignal.get(e.signal_id) || [];
+    list.push(e);
+    evBySignal.set(e.signal_id, list);
+  }
+  const coBySignal = new Map<string, string[]>();
+  for (const m of mapRows) {
+    const list = coBySignal.get(m.signal_id) || [];
+    list.push(m.symbol);
+    coBySignal.set(m.signal_id, list);
+  }
+
+  const signals = rows.map((r): Signal => ({
+    id: r.id,
+    type: r.type,
+    title: r.title,
+    thesis: r.thesis,
+    why_now: r.why_now || '',
+    region: r.region,
+    country: r.country,
+    sector: r.sector,
+    industry: r.industry || undefined,
+    niche: r.niche,
+    market_cap_band: r.market_cap_band,
+    target_customers: safeJson(r.target_customers, []),
+    maturity_stage: r.maturity_stage || undefined,
+    related_companies: coBySignal.get(r.id) || [],
+    evidence_items: (evBySignal.get(r.id) || []).map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      title: e.title,
+      detail: e.detail || undefined,
+      source_key: e.source_key,
+      url: e.url || undefined,
+      weight: e.weight ?? undefined,
+      observed_at: e.observed_at,
+    })),
+    evidence_state: evRows ? 'recorded' : 'unavailable',
+    founder_opportunity: r.founder_opportunity || '',
+    advisor_note: r.advisor_note || '',
+    build: safeJson(r.build_opportunity, { headline: '', wedge: '', icp: '' }),
+    market: safeJson(r.market_context, {} as Signal['market']),
+    confidence_score: evRows ? (r.confidence_score ?? 0) : null,
+    freshness_score: r.freshness_score ?? 0,
+    source_attribution: dedupe((evBySignal.get(r.id) || []).map((e) => e.source_key)),
+    tags: safeJson(r.tags, []),
+    updated_at: r.updated_at,
+  }));
+  return { state: 'read', signals };
 }
 
 function safeJson<T>(s: any, def: T): T {
@@ -164,17 +222,21 @@ export async function loadCompanies(env: Env): Promise<Record<string, Normalized
  * Load raw (unranked) signals — DB first, seed fallback — WITH provenance.
  *
  * `data_state` is the honesty flag the whole surface hangs off: 'live' means
- * every evidence line was fetched from a public source by an ingestion run;
- * 'illustrative' means no ingestion has ever populated D1 and the caller is
- * seeing the curated example corpus. The UI is required to say so — serving
- * examples as if they were live observations is the exact failure this flag
- * exists to prevent.
+ * the signals were read from D1, written there by an ingestion run, and may
+ * be an empty list; 'illustrative' means the tables are missing or no
+ * ingestion has ever written a signal, and the caller is seeing the curated
+ * example corpus. The UI is required to say so — serving examples as if they
+ * were live observations is the exact failure this flag exists to prevent.
+ *
+ * D7173: a failed read throws `SignalsUnreadableError`. It is never turned
+ * into the example set, and an ingested store with no active signal is
+ * `live` with none, not examples.
  */
 export async function loadSignalsWithState(
   env: Env,
 ): Promise<{ signals: Signal[]; data_state: 'live' | 'illustrative' }> {
   const fromDb = await loadSignalsFromDb(env);
-  if (fromDb.length) return { signals: fromDb, data_state: 'live' };
+  if (fromDb.state === 'read') return { signals: fromDb.signals, data_state: 'live' };
   return { signals: getSeedSignals(), data_state: 'illustrative' };
 }
 
@@ -259,9 +321,14 @@ export async function getRankedSignals(
   const sliced = ranked.slice(0, limit);
 
   const payload = { signals: sliced, total: ranked.length, mode, data_state };
-  try {
-    await env.RATE_LIMITS.put(key, JSON.stringify(payload), { expirationTtl: CACHE_TTL });
-  } catch { /* ignore cache write */ }
+  // A partial read (evidence that could not be read) is not cached either,
+  // so the next request reads again instead of serving it for 15 minutes.
+  const partial = ranked.some((s) => s.evidence_state === 'unavailable');
+  if (!partial) {
+    try {
+      await env.RATE_LIMITS.put(key, JSON.stringify(payload), { expirationTtl: CACHE_TTL });
+    } catch { /* ignore cache write */ }
+  }
   return { ...payload, cached: false };
 }
 

@@ -12,6 +12,11 @@
       "channel": "#axalvc-actions-agent-compute-preview"
     },
     {
+      "id": null,
+      "path": ".github/workflows/agent-gateway-keys.yml",
+      "channel": "#axalvc-actions-agent-gateway-keys"
+    },
+    {
       "id": 417193959,
       "path": ".github/workflows/agent-stage-a.yml",
       "channel": "#axalvc-actions-agent-stage-a"
@@ -110,6 +115,11 @@
       "id": 280437837,
       "path": ".github/workflows/dr-drill.yml",
       "channel": "#axalvc-actions-dr-drill"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/file-recovery.yml",
+      "channel": "#axalvc-actions-file-recovery"
     },
     {
       "id": 385718276,
@@ -230,6 +240,11 @@
       "id": 349437953,
       "path": ".github/workflows/pr-preview.yml",
       "channel": "#axalvc-actions-pr-preview"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/pr-preview-deploy.yml",
+      "channel": "#axalvc-actions-pr-preview-deploy"
     },
     {
       "id": 404322234,

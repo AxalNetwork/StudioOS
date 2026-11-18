@@ -204,7 +204,6 @@ test('the export browser may load the page\'s origin, the web fonts and inline d
 
 // ─────────────────────────────────────────────────────────── the routes
 
-const root = new URL('../sql/', import.meta.url);
 const JWT_SECRET = 'synthetic-d1506-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 

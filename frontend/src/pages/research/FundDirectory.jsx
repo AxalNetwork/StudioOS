@@ -11,6 +11,9 @@ import {
 } from './fundDirectoryRead';
 import { FUNDS_FILTERS_DROPPED } from '../../lib/pendingNext.js';
 import { canAddToResearch } from './researchComparisons.js';
+import { ACTIONS, UNAVAILABLE, WITHDRAWN, day, reportedSize, rereadBeforeAction } from './fundProfileRead.js';
+import { ProposedFields, SourceChip, SourceDatesCard, StateChip } from './FundProvenance.jsx';
+import ResearchActions from './ResearchActions.jsx';
 
 const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
 
@@ -48,6 +51,14 @@ const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
  * list is published. A list taken down for its terms is never served; the
  * footer names it and says why (`removed_sources`).
  *
+ * D7167 (#7167, FND-P01, FND-P07): the detail Sheet starts with the vehicle,
+ * its manager, vintage and dated, native-currency reported size, cites one
+ * provenance object with its three dates, and offers the three action names.
+ * It shows only what its own read answered: while loading, no facts and no
+ * action; on a failed read, Unavailable with Retry; on a 410, or a 410 met
+ * when Save, Add or Compare re-reads the fund, the facts are cleared and the
+ * actions removed.
+ *
  * RESULTS FIRST, ONE ROW PER VEHICLE (D7166, #7166, boards RFD-00 to RFD-05).
  * Search, filters, sort, the active chips and the count come first: "N fund
  * vehicles match" beside the unfiltered total, announced politely. Coverage,
@@ -69,11 +80,11 @@ const CHIP = 'inline-flex items-center rounded-full border border-violet-200 bg-
 
 const safeHref = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim() : null);
 
-/** The canvas's red "Unreadable" badge. */
+/** The red read-failed badge. D7167: the Platform States word is "Unavailable" (D5129). */
 export function UnreadableBadge() {
   return (
     <span className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-      Unreadable
+      {UNAVAILABLE}
     </span>
   );
 }
@@ -106,76 +117,58 @@ function Backing({ item, long = false }) {
 }
 
 /**
- * One fund's facts, as the drawer and the profile page both show them. Each
- * absent field reads "Not recorded" with its reason; nothing is inferred.
+ * One vehicle's facts, as the Sheet shows them (FND-P01): the dated reported
+ * size in its own currency with its source chip first, then vintage, manager
+ * HQ (where the manager is based, not where it invests), stated focus and the
+ * proposed fields, each absent one "Not recorded" with its reason. The
+ * reported-size history is the profile's (FND-P02), drawn per vehicle there;
+ * the old per-manager report list mixed vehicles and is not shown here.
  */
-export function FundDetails({ item, reports = null, reportsState = 'ok' }) {
-  const size = sizeOf(item);
+export function FundDetails({ item }) {
+  const size = reportedSize(item);
   const website = safeHref(item.website);
   const linkedin = safeHref(item.linkedin);
+  const reported = day(item.provenance?.reported_on || item.fund_date);
   return (
     <div className="space-y-4">
-      <dl className="grid grid-cols-[minmax(96px,auto)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 text-[12.5px]">
+      <dl className="grid grid-cols-[minmax(110px,auto)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 text-[12.5px]">
         <dt className={DT}>Reported size</dt>
         <dd className="m-0">
           {size.text
-            ? <><span className="font-mono text-[15px] font-semibold text-axal-ink dark:text-gray-100">{size.text}</span>
-              <span className="ml-1.5 font-mono text-[11px] text-axal-faint">{size.currency}</span>
-              {recorded(item.fund_date) ? <span className="block text-[11.5px] text-axal-faint">as reported on {item.fund_date}</span> : null}</>
-            : <NotRecorded reason={size.reason === 'Not recorded' ? 'The source lists no size for this fund.' : size.reason} />}
+            ? <><span className="font-mono text-[15px] font-semibold text-axal-ink dark:text-gray-100">{size.text} <span className="text-[11px] text-axal-muted">{size.currency}</span></span>
+              <span className="block text-[11.5px] text-axal-faint">{reported ? `Reported ${reported}` : 'Reported date not recorded'}{recorded(item.quarter) ? ` · ${item.quarter}` : ''}</span>
+              {item.provenance ? <span className="mt-1 block"><SourceChip provenance={item.provenance} /></span> : null}</>
+            : <NotRecorded reason={size.reason === 'Not recorded' ? 'The list records no size for this vehicle.' : size.reason} />}
         </dd>
-        <dt className={DT}>Stage</dt>
-        <dd className="m-0"><NotRecorded reason={STAGE_REASON} /></dd>
         <dt className={DT}>Vintage</dt>
-        <dd className="m-0">{item.fund_year != null ? <span className="font-mono">{item.fund_year}</span> : <NotRecorded reason="The source lists no vintage for this fund." />}</dd>
+        <dd className="m-0">{item.fund_year != null ? <span className="font-mono">{item.fund_year}</span> : <NotRecorded reason="The list records no vintage for this vehicle." />}</dd>
         <dt className={DT}>Manager HQ</dt>
-        <dd className="m-0">{recorded(item.hq)
-          ? <>{item.hq}<span className="block text-[11.5px] text-axal-faint">Where the manager is based, not where it invests.</span></>
-          : <NotRecorded reason="The source lists no HQ for this fund." />}</dd>
-        <dt className={DT}>Investment geography</dt>
-        <dd className="m-0"><NotRecorded reason={GEOGRAPHY_REASON} /></dd>
+        <dd className="m-0">{recorded(item.hq) ? <>{item.hq}<span className="block text-[11.5px] text-axal-faint">Where the manager is based, not where it invests</span></> : <NotRecorded reason="The list records no HQ for this manager." />}</dd>
         <dt className={DT}>Stated focus</dt>
-        <dd className="m-0">{recorded(item.sector_focus) ? item.sector_focus : <NotRecorded reason="The source states no focus for this fund." />}</dd>
+        <dd className="m-0">{recorded(item.sector_focus) ? item.sector_focus : <NotRecorded reason="The list states no focus for this vehicle." />}</dd>
+      </dl>
+      {item.proposed
+        ? <ProposedFields proposed={item.proposed} />
+        : <dl className="grid grid-cols-[minmax(110px,auto)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 text-[12.5px]">
+          <dt className={DT}>Investment stage</dt><dd className="m-0"><NotRecorded reason={STAGE_REASON} /></dd>
+          {/* D7166: no list records where a fund invests. */}
+          <dt className={DT}>Investment geography</dt><dd className="m-0"><NotRecorded reason={GEOGRAPHY_REASON} /></dd>
+        </dl>}
+      <dl className="grid grid-cols-[minmax(110px,auto)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 text-[12.5px]">
         <dt className={DT}>Notable LPs</dt>
-        <dd className="m-0">{recorded(item.notable_lps) ? item.notable_lps : <NotRecorded reason="With no LPs listed, EIF and EIFO backing is unknown, not absent." />}</dd>
+        <dd className="m-0">{recorded(item.notable_lps) ? item.notable_lps : <NotRecorded reason="The list names no LPs for this vehicle." />}</dd>
         <dt className={DT}>EIF / EIFO</dt>
         <dd className="m-0"><Backing item={item} long /></dd>
         <dt className={DT}>Vehicle</dt>
         <dd className="m-0">{recorded(item.fund_number) ? `${vehicleLabel(item).vehicle} · managed by ${item.name}` : <NotRecorded reason="The source names no fund number, so this row is the manager's." />}</dd>
+        <dt className={DT}>Label in the list</dt>
+        <dd className="m-0">{recorded(item.fund_number) ? item.fund_number : <NotRecorded />}</dd>
         <dt className={DT}>Website</dt>
         <dd className="m-0">{website ? <a href={website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-axal-violet dark:text-violet-300">{website.replace(/^https?:\/\//i, '')} <ExternalLink size={12} /></a> : <NotRecorded />}</dd>
         <dt className={DT}>LinkedIn</dt>
         <dd className="m-0">{linkedin ? <a href={linkedin} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-axal-violet dark:text-violet-300">LinkedIn page <ExternalLink size={12} /></a> : <NotRecorded />}</dd>
       </dl>
-
-      <div className="border-t border-axal-hairline pt-3 dark:border-gray-800">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Reported size over time</div>
-        {reportsState === 'loading' && <p className="mt-2 text-[12px] text-axal-muted">Loading reported periods…</p>}
-        {reportsState === 'unreadable' && (
-          <p className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-axal-muted">
-            <UnreadableBadge /> The reports could not be read. This is not a fund with no reports.
-          </p>
-        )}
-        {reportsState === 'ok' && Array.isArray(reports) && !reports.length && (
-          <p className="mt-2 text-[12px] text-axal-muted"><Unrecorded>No reported period is recorded for this fund.</Unrecorded></p>
-        )}
-        {reportsState === 'ok' && Array.isArray(reports) && reports.length > 0 && (
-          <ul className="mt-2 space-y-1">
-            {reports.map((p) => {
-              const s = sizeOf(p);
-              return (
-                <li key={p.period} className="flex justify-between gap-3 text-[12.5px]">
-                  <span className="font-mono text-axal-muted">{p.period}</span>
-                  {s.text ? <span className="font-mono text-axal-ink dark:text-gray-100">{s.text}</span> : <Unrecorded reason="No size in a known currency">Not recorded</Unrecorded>}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <p className="mt-2 text-[11px] text-axal-faint"><span className="font-mono">research_fund_directory_reports</span> · one row per reported period</p>
-      </div>
-
-      <SourceCard item={item} />
+      {item.provenance ? <SourceDatesCard provenance={item.provenance} reason={item.source?.reason} /> : <SourceCard item={item} />}
     </div>
   );
 }
@@ -404,62 +397,93 @@ function Pager({ data, onQuery }) {
 }
 
 /**
- * D593 — "Add to my funds" puts a directory fund on the founder's own list,
- * and the founder's row is the way into its dossier: once there is one, the
- * button's place holds "Open your dossier →" to `/research/funds/:uid`, as
- * the catalog profile already did. `dossier` is that row's uid, or null.
+ * D593 — the shortlist action. D7167 names it "Save to shortlist" (FND-P04);
+ * once the founder's own row exists, its place holds "Open dossier →" to
+ * `/research/funds/:uid`. `dossier` is that row's uid, or null.
  *
- * `listState` is the founder's own list read, as the catalog profile reads
- * it: while it has not answered, or after it failed, nothing here can tell
- * whether the fund is already on it, so no add is offered that could
- * duplicate a row.
+ * `listState` is the founder's own list read: while it has not answered, or
+ * after it failed, nothing here can tell whether the fund is already on it,
+ * so no save is offered that could duplicate a row.
  */
 function AddOrOpen({ item, dossier, added, busy, onAdd, listState }) {
   if (dossier) {
     return (
       <Link to={`/research/funds/${encodeURIComponent(dossier)}`} data-testid="fund-directory-open-dossier"
         className="inline-flex items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500">
-        Open your dossier →
+        {ACTIONS.open}
       </Link>
     );
   }
   if (listState === 'unreadable') {
     return (
       <span className="flex basis-full flex-wrap items-center gap-2 text-[12px] text-axal-muted dark:text-gray-400">
-        <UnreadableBadge /> Your list could not be read, so this cannot tell whether the fund is on it.
+        <UnreadableBadge /> Your shortlist could not be read, so this cannot tell whether the fund is on it.
       </span>
     );
   }
   if (listState === 'loading') {
-    return <button type="button" className={GHOST} disabled>Checking your list…</button>;
+    return <button type="button" className={GHOST} disabled>Checking your shortlist…</button>;
   }
   return (
-    <button type="button" className={GHOST} disabled={added || !!busy || !onAdd} onClick={() => onAdd && onAdd(item)}>
-      {added ? 'Saved to shortlist' : busy === item.uid ? 'Saving…' : 'Save to shortlist'}
+    <button type="button" disabled={added || !!busy || !onAdd} onClick={() => onAdd && onAdd(item)} aria-busy={busy === item.uid || undefined}
+      className="inline-flex items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white hover:bg-violet-800 disabled:opacity-50 dark:bg-violet-600 dark:hover:bg-violet-500">
+      {added ? 'Saved to shortlist' : busy === item.uid ? ACTIONS.saving : ACTIONS.save}
     </button>
   );
 }
 
-function Drawer({ item, drawer, onClose, onAdd, busy, isAdded, dossierOf, notice, listState, backTo }) {
+/** FND-P07 B: the source list was withdrawn; the facts are gone and no action is offered. */
+export function WithdrawnPanel({ removed, during = false, reason = null }) {
+  const href = safeHref(removed?.url);
+  return (
+    <div role="alert" data-testid="fd-drawer-withdrawn" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-[12.5px] dark:border-amber-800 dark:bg-amber-950/30">
+      <StateChip kind="rf" />
+      <p className="font-extrabold text-axal-ink dark:text-gray-100">{during ? WITHDRAWN.title : WITHDRAWN.read}</p>
+      {during ? <p className="text-axal-muted dark:text-gray-300">{WITHDRAWN.body}</p> : <p className="text-axal-muted dark:text-gray-300">None of the fund’s own fields are shown.</p>}
+      {(removed?.reason || reason) ? <p className="text-axal-muted dark:text-gray-300">{removed?.reason || reason}</p> : null}
+      <p className="text-[11.5px] text-axal-faint">
+        {removed?.title || removed?.name || 'The list'}{removed?.publisher ? ` · ${removed.publisher}` : ''} · Not allowed{removed?.reviewed_on ? ` · reviewed ${day(removed.reviewed_on)}` : ''}
+      </p>
+      {href ? <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet dark:text-violet-300">View the list <ExternalLink size={12} /></a> : null}
+    </div>
+  );
+}
+
+function Drawer({ item, drawer, onClose, onAdd, busy, isAdded, dossierOf, notice, listState, onRetry = () => {}, research = null, backTo = null }) {
+  const fresh = drawer.data?.item || null;
   const added = isAdded(item);
   const v = vehicleLabel(item);
   const dossier = dossierOf(item);
   const note = notice && notice.uid === item.uid ? notice : null;
-  const reportsState = drawer.loading ? 'loading' : (drawer.error || drawer.data?.reports_status === 'unreadable') ? 'unreadable' : 'ok';
+  const withdrawn = drawer.status === 410;
+  const failed = !drawer.loading && !withdrawn && !!drawer.error;
+  const sub = fresh ? [fresh.proposed?.manager_name?.status === 'recorded' ? `Managed by ${fresh.proposed.manager_name.value}` : v.manager !== v.vehicle ? `Managed by ${v.manager}` : null, fresh.fund_year != null ? `vintage ${fresh.fund_year}` : null].filter(Boolean).join(' · ') : null;
+  const footer = fresh && !withdrawn && !failed ? (
+    <div className="flex flex-wrap items-center gap-2">
+      <AddOrOpen item={item} dossier={dossier} added={added} busy={busy} onAdd={onAdd} listState={listState} />
+      {research ? research(fresh) : null}
+      <Link to={`/research/funds/catalog/${encodeURIComponent(item.uid)}`} state={{ back: backTo, selected: item.uid }} className={GHOST}>{ACTIONS.profile}</Link>
+    </div>
+  ) : null;
   return (
-    <Sheet label={v.vehicle} eyebrow={v.manager !== v.vehicle ? v.manager : 'Fund details'} title={v.vehicle} onClose={onClose} width={480} phone="sheet" testId="fd-drawer-sheet">
+    <Sheet label={`${v.vehicle} details`} eyebrow="Fund vehicle" title={v.vehicle} sub={sub || undefined} onClose={onClose} width={480} phone="sheet" testId="fd-drawer-sheet" footer={footer}>
       <div id="fd-drawer" className="px-5 pb-5 pt-1">
-        <div className="mt-3 flex flex-wrap gap-2">
-          <AddOrOpen item={item} dossier={dossier} added={added} busy={busy} onAdd={onAdd} listState={listState} />
-          <Link to={`/research/funds/catalog/${encodeURIComponent(item.uid)}`} state={{ back: backTo, selected: item.uid }} className={GHOST}>Open full profile</Link>
-        </div>
-        {/* The add's outcome, beside the control that made it. Always in the
+        {/* The save's outcome, beside the control that made it. Always in the
             tree, so a screen reader hears the sentence when it arrives. */}
         <p role="status" className={note ? `mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}` : 'sr-only'}>
           {note ? note.text : ''}
         </p>
-        <div className="mt-4">
-          <FundDetails item={item} reports={drawer.data?.reports || null} reportsState={reportsState} />
+        <div className="mt-3">
+          {drawer.loading && <p className="text-[12.5px] text-axal-muted" aria-busy="true">Loading this fund… No action is offered until the read answers.</p>}
+          {withdrawn && <WithdrawnPanel removed={drawer.removed} reason={drawer.reason} during={!!drawer.during} />}
+          {failed && (
+            <div role="alert" data-testid="fd-drawer-unavailable" className="space-y-2">
+              <StateChip kind="un" />
+              <p className="text-[12.5px] text-axal-muted">This fund could not be read. Nothing is shown in its place, because an old copy would pass for the directory’s answer.</p>
+              <button type="button" className={GHOST} onClick={onRetry}>Retry</button>
+            </div>
+          )}
+          {fresh && !withdrawn && !failed && <FundDetails item={fresh} />}
         </div>
       </div>
     </Sheet>
@@ -479,7 +503,9 @@ export function FundDirectoryView({
   query, onQuery, search, onSearch, result, facets, selected, onSelect, onClose, drawer = { loading: false, error: null, data: null },
   onAdd = null, busy = null, isAdded = () => false, dossierOf = () => null, listState = 'ok', notice = null, band = null,
   filtersOpen = false, onToggleFilters = () => {},
-  onRetry = () => {}, onClear = () => {}, onResearch = null, opened = null, backTo = '/research/funds?view=directory',
+  onRetry = () => {}, onClear = () => {}, onResearch = null,
+  onRetryDrawer = () => {}, sheetResearch = null, backHref = null,
+  opened = null, backTo = backHref || '/research/funds?view=directory',
 }) {
   const { loading, error, data } = result;
   const active = activeFilters(query, facets);
@@ -669,7 +695,8 @@ export function FundDirectoryView({
           a bottom sheet on a phone, as it was. */}
       {data && selected && (
         <Drawer item={selected} drawer={drawer} onClose={onClose} backTo={backTo}
-          onAdd={onAdd} busy={busy} isAdded={isAdded} dossierOf={dossierOf} notice={notice} listState={listState} />
+          onAdd={onAdd} busy={busy} isAdded={isAdded} dossierOf={dossierOf} notice={notice} listState={listState}
+          onRetry={onRetryDrawer} research={sheetResearch} />
       )}
     </section>
   );
@@ -766,19 +793,41 @@ export default function FundDirectory({
       const data = await researchFundsApi.get(item.uid);
       if (mine === pickSeq.current) setDrawer({ loading: false, error: null, data });
     } catch (e) {
-      if (mine === pickSeq.current) setDrawer({ loading: false, error: e?.message || 'Unreadable', data: null });
+      if (mine === pickSeq.current) {
+        setDrawer({ loading: false, error: e?.message || UNAVAILABLE, status: e?.status ?? null, data: null,
+          ...(e?.status === 410 ? { removed: e?.data?.removed || null, reason: e?.data?.reason || null } : {}) });
+      }
     }
   };
+
+  // D7167 (FND-P07 B): Save, Add and Compare re-read the fund first. A 410
+  // clears the Sheet's facts and removes its actions; nothing is saved.
+  const [checkNote, setCheckNote] = useState(null);
+  const reread = async (uid) => {
+    const r = await rereadBeforeAction(researchFundsApi.get, uid);
+    if (r.withdrawn) {
+      setDrawer({ loading: false, error: WITHDRAWN.read, status: 410, data: null, removed: r.removed, reason: r.reason, during: true });
+      return false;
+    }
+    if (!r.ok) { setCheckNote({ uid, ok: false, text: r.message }); return false; }
+    setCheckNote(null);
+    return true;
+  };
+  const save = onAdd ? async (item) => { if (await reread(item.uid)) onAdd(item); } : null;
 
   return (
     <>
       <FundDirectoryView
         query={query} onQuery={change} search={search} onSearch={setSearch}
         result={result} facets={facets} selected={selected} onSelect={pick}
-        onClose={() => { pickSeq.current += 1; setSelected(null); }} drawer={drawer}
-        onAdd={onAdd} busy={busy}
+        onClose={() => { pickSeq.current += 1; setSelected(null); setCheckNote(null); }} drawer={drawer}
+        onAdd={save} busy={busy}
+        onRetryDrawer={() => selected && pick(selected)}
+        sheetResearch={canAddToResearch(role) ? (x) => (
+          <ResearchActions kind="fund" item={{ uid: x.uid, name: x.name }} addLabel={ACTIONS.add} compareLabel={ACTIONS.compare} beforeOpen={() => reread(x.uid)} />
+        ) : null}
         isAdded={(x) => researchedNames.has(normalize(x.name))}
-        dossierOf={dossierOf || (() => null)} listState={listState} notice={notice} band={band}
+        dossierOf={dossierOf || (() => null)} listState={listState} notice={checkNote || notice} band={band}
         filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((o) => !o)}
         onRetry={load} onClear={clear}
         onResearch={canAddToResearch(role) ? (x, el) => { researchOpener.current = el; setResearching({ uid: x.uid, name: x.name }); } : null}

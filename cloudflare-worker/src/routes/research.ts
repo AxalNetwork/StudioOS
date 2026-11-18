@@ -52,9 +52,11 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkDetail, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
 import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
-import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
+import { DirectoryQueryError, citeSource, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
+import { SOURCE_WITHDRAWN_MESSAGE, withdrawnSourceOf } from '../services/researchFundProfile';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
 import { PORTFOLIO_NOTE_INSTRUCTION, portfolioNoteMaterial } from '../services/portfolioNotes';
@@ -76,11 +78,14 @@ import { deliverableReadsSince, readStateFor, readTrackingFor } from './_partner
 import {
   googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
   makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
-  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink, upsertSheetLink,
-  parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
-  SUGGESTED_SHEET_URL,
+  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink,
+  parseSpreadsheetRef, fundsAppBase, SUGGESTED_SHEET_URL,
+  SheetSyncError, readSyncFields, readResolutions, readIdempotencyKey,
+  listWorkbookTabs, saveSheetDestination, checkLinkedTab, latestRuns, openImportRun,
+  previewExport, previewImport, exportFundsToSheet, importFundsFromSheet, reconcileImportRun,
 } from '../services/fundSheets';
-import { refuse } from '../util/refusal';
+import { refuse, refusalBody } from '../util/refusal';
+import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldError } from '../services/researchFundReports';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
@@ -4143,7 +4148,8 @@ research.get('/fund-directory/:uid', async (c) => {
   if (!fund) return c.json({ detail: 'Not found' }, 404);
   // D597: a fund of a list taken down for its terms says so, and why — never its fields.
   if (fund.removed) {
-    return c.json({ detail: 'Removed', reason: `This fund's list was taken down. ${fund.removed.reason}`, removed: fund.removed }, 410);
+    // D7167: `error` names the refusal, so a page that re-reads before Save, Add or Compare can tell it from a 404.
+    return c.json({ error: 'source_withdrawn', detail: 'Removed', reason: `This fund's list was taken down. ${fund.removed.reason}`, removed: fund.removed }, 410);
   }
   return c.json({ ...fund, source_boundary: FUND_DIRECTORY_BOUNDARY });
 });
@@ -4183,6 +4189,14 @@ research.post('/funds', async (c) => {
   if (catalogueUid !== null && !CATALOGUE_UID_RE.test(catalogueUid)) {
     return c.json({ detail: 'catalogue_uid_invalid' }, 400);
   }
+  // D7167: a directory fund whose list was withdrawn is refused by name. A
+  // failed check does not block the save: the fund's facts are gated on read.
+  if (catalogueUid !== null) {
+    const gone = await withdrawnSourceOf(c.env, catalogueUid).catch(() => null);
+    if (gone) {
+      return c.json({ error: 'source_withdrawn', detail: 'source_withdrawn', message: SOURCE_WITHDRAWN_MESSAGE, removed: citeSource(gone.source_name, gone.published_url, gone) }, 410);
+    }
+  }
   const uid = newUid();
   const now = nowIso();
   // D4613: INSERT OR IGNORE against the partial unique index on (owner,
@@ -4218,9 +4232,25 @@ research.post('/funds', async (c) => {
 // Dedicated Sheets OAuth (not calendar's token table, not calendar's scopes).
 // SUPER ADMIN ONLY — a founder's shortlist stays on Axal; they do not get a
 // Google copy of it. Sheet routes are registered BEFORE `/funds/:uid` so
-// "sheet" is never captured as a uid. Push never deletes. Pull overwrites
-// the sheet's data rows.
+// "sheet" is never captured as a uid. `pull` is Export (Axal → the tab) and
+// `push` is Import (the tab → Axal); import never deletes. D7170: each has a
+// preview that writes nothing, a run record with an idempotency key, and an
+// import whose identifiers are not confirmed is reconciled before another.
 // ---------------------------------------------------------------------------
+
+/**
+ * One answer for every sheet failure: a precondition refusal keeps its own
+ * status and code; anything Google or the Worker threw is a 502 with our
+ * sentence, and the provider text travels only on `upstream`.
+ */
+function sheetRefusal(c: any, e: unknown, fallback: { code: string; message: string }) {
+  if (e instanceof SheetSyncError) {
+    return refuse(c, e.status, { code: e.code, message: e.sentence, extra: e.extra });
+  }
+  return refuse(c, 502, { ...fallback, raw: e, audience: 'owner' });
+}
+
+const SHEETS_UNCONFIGURED = { code: 'sheets_unconfigured', message: 'Google Sheets is not configured on this server yet.' };
 
 research.get('/funds/sheet/status', async (c) => {
   const user = await requireSuperAdmin(c);
@@ -4228,6 +4258,11 @@ research.get('/funds/sheet/status', async (c) => {
   const missing = preflightSheetsOAuthSecrets(c.env);
   const tok = configured ? await loadSheetsToken(c.env, user.id) : null;
   const link = await loadSheetLink(c.env, user.id);
+  // The tab is checked by gid on every status read, so a deleted tab blocks
+  // both directions on the card before anyone opens a review.
+  const tab = configured && tok && link ? await checkLinkedTab(c.env, user.id, link) : null;
+  const runs = await latestRuns(c.env, user.id);
+  const open = await openImportRun(c.env, user.id);
   return c.json({
     configured,
     missing: configured ? [] : missing,
@@ -4235,10 +4270,15 @@ research.get('/funds/sheet/status', async (c) => {
     google_email: tok?.google_email || null,
     spreadsheet_id: link?.spreadsheet_id || null,
     sheet_gid: link ? Number(link.sheet_gid) : null,
-    sheet_title: link?.sheet_title || null,
+    sheet_title: tab?.title || link?.sheet_title || null,
+    workbook_title: tab?.workbook_title || null,
+    tab_state: tab?.state || null,
+    tab_checked_at: tab?.checked_at || null,
     last_pulled_at: link?.last_pulled_at || null,
     last_pushed_at: link?.last_pushed_at || null,
     last_error: link?.last_error || null,
+    last_runs: runs,
+    open_run: open,
     suggested_url: SUGGESTED_SHEET_URL,
   });
 });
@@ -4318,52 +4358,111 @@ research.post('/funds/sheet/disconnect', async (c) => {
   return c.json({ ok: true });
 });
 
+research.get('/funds/sheet/tabs', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const raw = String(c.req.query('url') || '').trim();
+  let spreadsheetId: string | undefined;
+  if (raw) {
+    const parsed = parseSpreadsheetRef(raw);
+    if ('error' in parsed) return refuse(c, 400, { code: 'spreadsheet_url_invalid', message: parsed.error });
+    spreadsheetId = parsed.spreadsheet_id;
+  }
+  try {
+    return c.json(await listWorkbookTabs(c.env, user, spreadsheetId));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the workbook. Check that the connected Google account can open it and try again.' });
+  }
+});
+
 research.patch('/funds/sheet/link', async (c) => {
   const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
   const body = await c.req.json<any>().catch(() => ({}));
   const raw = String(body.url || body.spreadsheet_url || body.spreadsheet_id || '').trim();
   const parsed = parseSpreadsheetRef(raw);
-  if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
-  const existing = await loadSheetLink(c.env, user.id);
-  const gid = parsed.sheet_gid != null
-    ? parsed.sheet_gid
-    : (body.sheet_gid != null && Number.isFinite(Number(body.sheet_gid))
-      ? Math.trunc(Number(body.sheet_gid))
-      : (existing ? Number(existing.sheet_gid) : 0));
-  const link = await upsertSheetLink(c.env, user, parsed.spreadsheet_id, gid);
-  return c.json({
-    spreadsheet_id: link.spreadsheet_id,
-    sheet_gid: Number(link.sheet_gid),
-  });
+  if ('error' in parsed) return refuse(c, 400, { code: 'spreadsheet_url_invalid', message: parsed.error });
+  // The tab is an explicit choice. A gid in the pasted URL is not one, and
+  // neither is being the first tab: no gid and no new tab is `tab_required`.
+  const gid = body.sheet_gid != null && body.sheet_gid !== '' && Number.isFinite(Number(body.sheet_gid))
+    ? Math.trunc(Number(body.sheet_gid))
+    : null;
+  const createTab = typeof body.create_tab === 'string' && body.create_tab.trim() ? body.create_tab.trim() : null;
+  try {
+    const link = await saveSheetDestination(c.env, user, { spreadsheetId: parsed.spreadsheet_id, sheetGid: gid, createTab });
+    return c.json({
+      spreadsheet_id: link.spreadsheet_id,
+      sheet_gid: Number(link.sheet_gid),
+      sheet_title: link.sheet_title,
+    });
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the workbook. Check that the connected Google account can open it and try again.' });
+  }
 });
 
+research.post('/funds/sheet/export/preview', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json(await previewExport(c.env, user, readSyncFields(body.fields)));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the tab. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+research.post('/funds/sheet/import/preview', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json(await previewImport(c.env, user, readSyncFields(body.fields), readResolutions(body.resolutions)));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the tab. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+// Export Axal funds to Sheets. Answers the run; a run Google refused before
+// any write is `failed` in the body, not a 502, because it was recorded.
 research.post('/funds/sheet/pull', async (c) => {
   const user = await requireSuperAdmin(c);
-  if (!googleSheetsOAuthAvailable(c.env)) {
-    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
-  }
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
   try {
-    return c.json(await pullFundsToSheet(c.env, user));
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
-    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
-    return refuse(c, 502, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.', raw: msg, audience: 'owner' });
+    const key = readIdempotencyKey(body.idempotency_key);
+    return c.json(await exportFundsToSheet(c.env, user, { fields: readSyncFields(body.fields), idempotencyKey: key }));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.' });
   }
 });
 
+// Import from Sheets. Never deletes. A run whose identifiers did not reach
+// the sheet answers 200 with status `uncertain`, not a 502 a retry would
+// repeat; the next import is refused with `reconcile_required` until then.
 research.post('/funds/sheet/push', async (c) => {
   const user = await requireSuperAdmin(c);
-  if (!googleSheetsOAuthAvailable(c.env)) {
-    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
-  }
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
   try {
-    return c.json(await pushFundsFromSheet(c.env, user));
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
-    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
-    return refuse(c, 502, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.', raw: msg, audience: 'owner' });
+    const key = readIdempotencyKey(body.idempotency_key);
+    return c.json(await importFundsFromSheet(c.env, user, {
+      fields: readSyncFields(body.fields),
+      resolutions: readResolutions(body.resolutions),
+      idempotencyKey: key,
+    }));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+research.post('/funds/sheet/runs/:runUid/reconcile', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json({ run: await reconcileImportRun(c.env, user, c.req.param('runUid'), { write: body.write === true }) });
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.' });
   }
 });
 
@@ -4442,45 +4541,47 @@ research.post('/funds/:uid/reports', async (c) => {
   ).bind(fundUid, user.id).first();
   if (!fund) return c.json({ detail: 'Not found' }, 404);
   const body = await c.req.json<any>().catch(() => ({}));
-  const period = String(body.period || '').trim();
-  if (!/^\d{4}-Q[1-4]$/.test(period)) return c.json({ detail: 'Period must use YYYY-Q1 through YYYY-Q4.' }, 400);
-  const sourceUrl = clampText(body.source_url, 500);
-  if (!sourceUrl) return c.json({ detail: 'A source URL is required for a quarterly report.' }, 400);
-  const uid = newUid();
-  const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO research_fund_reports
-       (uid, fund_uid, owner_user_id, period, report_date, fund_size_cents,
-        nav_cents, quarterly_return_bps, net_irr_bps, tvpi_bps, source_url,
-        report_url, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (fund_uid, owner_user_id, period) DO UPDATE SET
-       report_date = excluded.report_date,
-       fund_size_cents = excluded.fund_size_cents,
-       nav_cents = excluded.nav_cents,
-       quarterly_return_bps = excluded.quarterly_return_bps,
-       net_irr_bps = excluded.net_irr_bps,
-       tvpi_bps = excluded.tvpi_bps,
-       source_url = excluded.source_url,
-       report_url = excluded.report_url,
-       notes = excluded.notes,
-       updated_at = excluded.updated_at`
-  ).bind(
-    uid, fundUid, user.id, period, clampText(body.report_date, 30),
-    clampInt(body.fund_size_cents), clampInt(body.nav_cents),
-    clampInt(body.quarterly_return_bps), clampInt(body.net_irr_bps),
-    clampInt(body.tvpi_bps), sourceUrl, clampText(body.report_url, 500),
-    clampText(body.notes, 2000), now, now,
-  ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
-            quarterly_return_bps, net_irr_bps, tvpi_bps,
-            source_url, report_url, notes, created_at, updated_at
-       FROM research_fund_reports
-      WHERE fund_uid = ? AND owner_user_id = ? AND period = ?`
-  ).bind(fundUid, user.id, period).first();
-  return c.json(row, 201);
+  // D7169: create-only. A saved period answers `period_exists` with its row,
+  // so the page opens it instead of overwriting it.
+  const out = await createReport(c.env.DB as any, user.id, fundUid, body, newUid(), nowIso());
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'period_exists') {
+    return c.json(refusalBody({
+      code: 'period_exists',
+      message: `${out.report.period} already has a report. Open it to change it.`,
+      extra: { report_uid: out.report.uid, report: out.report },
+    }), 409);
+  }
+  return c.json(out.report, 201);
 });
+
+// D7169: partial update. A field absent from the body keeps its value, null
+// clears it; the row's `updated_at` travels as If-Match.
+research.patch('/funds/:uid/reports/:reportUid', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const body = await c.req.json<any>().catch(() => ({}));
+  const out = await patchReport(c.env.DB as any, user.id, fundUid, c.req.param('reportUid'), body, readIfMatch(c.req.header('If-Match')));
+  if (out.kind === 'not_found') return c.json({ detail: 'Not found' }, 404);
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'revision_required') {
+    return c.json(refusalBody({ code: 'revision_required', message: 'Send the report\'s updated_at as If-Match so a newer save is not overwritten.' }), 428);
+  }
+  if (out.kind === 'report_changed') {
+    return c.json(refusalBody({
+      code: 'report_changed',
+      message: `${out.report.period} changed after you opened it. Review both versions before saving.`,
+      extra: { report: out.report },
+    }), 409);
+  }
+  return c.json({ ...out.report, changed: out.changed });
+});
+
+const reportFieldRefusal = (c: any, errors: FieldError[]) => c.json(refusalBody({
+  code: 'invalid_report_field',
+  message: fieldErrorSentence(errors),
+  extra: { field: errors[0].field, errors },
+}), 400);
 
 research.delete('/funds/:uid/reports/:reportUid', async (c) => {
   const user = await requireAuth(c);
@@ -4572,29 +4673,6 @@ async function writeBriefIntoNote(env: Env, userId: number, fundUid: string, bri
 // ---------------------------------------------------------------------------
 // Benchmarks (migration 217)
 // ---------------------------------------------------------------------------
-
-interface BenchRow {
-  id: number; uid: string; owner_user_id: number; metric: string;
-  our_value: string | null; peer_value: string | null; peer_source: string | null;
-  peer_sample_size: number | null; peer_as_of: string | null; reading: string | null;
-  created_at: string; updated_at: string;
-}
-
-const benchDto = (r: BenchRow) => ({
-  uid: r.uid,
-  metric: r.metric,
-  our_value: r.our_value,
-  peer_value: r.peer_value,
-  peer_source: r.peer_source,
-  peer_sample_size: r.peer_sample_size,
-  peer_as_of: r.peer_as_of,
-  reading: r.reading,
-  // Derived, not stored: a row is only a COMPARISON when the peer figure has
-  // its base. Without it the row is a metric being tracked, which is a
-  // different and lesser claim, and the zone renders the two differently.
-  is_comparison: Boolean(r.peer_value && r.peer_source && r.peer_sample_size),
-  created_at: r.created_at,
-});
 
 research.get('/benchmarks', async (c) => {
   const user = await requireAuth(c);
@@ -4688,58 +4766,11 @@ research.delete('/benchmarks/:uid', async (c) => {
 // A THIN BASE IS THIS ROW'S OWN n, not the list's minimum: the detail page's
 // banner reads the comparison in front of it.
 
-const BENCH_THIN_AT = 10;
-const BENCHMARK_NOT_FOUND = 'This benchmark is not on your list.';
-const PEER_BASE_REQUIRED = 'A peer figure needs its source and its sample size. A benchmark presented '
-  + 'without its base is arithmetic wearing a metric’s clothes.';
-
-interface ConstituentRow {
-  id: number; uid: string; benchmark_id: number; owner_user_id: number;
-  name: string; value: string | null; as_of: string | null; position: number; created_at: string;
-}
-
-const constituentDto = (r: ConstituentRow) => ({
-  uid: r.uid, name: r.name, value: r.value, as_of: r.as_of, created_at: r.created_at,
-});
-
-/** The caller's benchmark by uid, or null. */
-async function ownedBenchmark(env: Env, userId: number, uid: string): Promise<BenchRow | null> {
-  const row = await env.DB.prepare(
-    `SELECT * FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, userId).first<BenchRow>();
-  return row || null;
-}
-
-/** The detail read: the row, its constituents, and what the page says about them. */
-async function benchmarkDetail(env: Env, userId: number, row: BenchRow) {
-  const cons = await env.DB.prepare(
-    `SELECT * FROM research_benchmark_constituents
-      WHERE benchmark_id = ? AND owner_user_id = ?
-      ORDER BY position ASC, id ASC`
-  ).bind(row.id, userId).all<ConstituentRow>();
-  const constituents = (cons.results || []).map(constituentDto);
-  const item = { ...benchDto(row), updated_at: row.updated_at };
-  const n = item.is_comparison ? Number(row.peer_sample_size) : null;
-  return {
-    item,
-    constituents,
-    // Only a comparison has a sample to be thin, or a count to disagree with.
-    thin: n !== null && n < BENCH_THIN_AT,
-    sample_note: n !== null && n < BENCH_THIN_AT
-      ? `The smallest peer set behind this comparison is ${n}. A median over a set that size moves with one member and should not be presented as a market rate.`
-      : null,
-    count_mismatch: n !== null && constituents.length > 0 && constituents.length !== n,
-    mismatch_note: n !== null && constituents.length > 0 && constituents.length !== n
-      ? `${constituents.length} ${constituents.length === 1 ? 'constituent is' : 'constituents are'} named against a stored sample of ${n}.`
-      : null,
-  };
-}
-
 research.get('/benchmarks/:uid', async (c) => {
   const user = await requireAuth(c);
   const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
   if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
-  return c.json(await benchmarkDetail(c.env, user.id, row));
+  return c.json(await benchmarkDetail(c, user, row));
 });
 
 research.patch('/benchmarks/:uid', async (c) => {
@@ -4776,17 +4807,24 @@ research.patch('/benchmarks/:uid', async (c) => {
       }, 409);
     }
   }
+  // D6278: a figure typed by hand is no longer the fund's recorded one, so an
+  // edit that changes "Ours" drops the link to where it was copied from.
+  const handEdited = has('our_value') && next.our_value !== row.our_value;
   await c.env.DB.prepare(
     `UPDATE research_benchmarks
         SET metric = ?, our_value = ?, peer_value = ?, peer_source = ?, peer_sample_size = ?,
-            peer_as_of = ?, reading = ?, updated_at = ?
+            peer_as_of = ?, reading = ?, updated_at = ?,
+            fund_id = CASE WHEN ? THEN NULL ELSE fund_id END,
+            our_value_metric = CASE WHEN ? THEN NULL ELSE our_value_metric END,
+            our_value_as_of = CASE WHEN ? THEN NULL ELSE our_value_as_of END
       WHERE id = ? AND owner_user_id = ?`
   ).bind(
     next.metric, next.our_value, next.peer_value, next.peer_source, next.peer_sample_size,
-    next.peer_as_of, next.reading, nowIso(), row.id, user.id,
+    next.peer_as_of, next.reading, nowIso(), handEdited ? 1 : 0, handEdited ? 1 : 0, handEdited ? 1 : 0,
+    row.id, user.id,
   ).run();
   const fresh = await ownedBenchmark(c.env, user.id, row.uid);
-  return c.json(await benchmarkDetail(c.env, user.id, fresh as BenchRow));
+  return c.json(await benchmarkDetail(c, user, fresh as BenchRow));
 });
 
 research.post('/benchmarks/:uid/constituents', async (c) => {
@@ -4813,7 +4851,7 @@ research.post('/benchmarks/:uid/constituents', async (c) => {
     newUid(), row.id, user.id, name, clampText(b.value, 100), clampText(b.as_of, 40),
     last?.p == null ? 0 : Number(last.p) + 1, nowIso(),
   ).run();
-  return c.json(await benchmarkDetail(c.env, user.id, row), 201);
+  return c.json(await benchmarkDetail(c, user, row), 201);
 });
 
 research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
@@ -4826,7 +4864,7 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
   if (!res.meta?.changes) {
     return c.json({ error: 'constituent_not_found', message: 'That constituent is not on this benchmark.' }, 404);
   }
-  return c.json(await benchmarkDetail(c.env, user.id, row));
+  return c.json(await benchmarkDetail(c, user, row));
 });
 
 // ---------------------------------------------------------------------------

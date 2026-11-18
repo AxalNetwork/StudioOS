@@ -16,8 +16,9 @@
  * gap in the series, never a 0. A recorded 0 stays 0.
  *
  * NO TOTAL SCORE. Coverage is the read's coarse band per skill axis (covered,
- * partial, gap), never a number. The scorecard rows on each tab are slots for
- * SCORING's canvas (#2428), which draws them once its per-deal read lands.
+ * partial, gap), never a number. D6168 (#6168): each tab draws its scopes'
+ * rows from the venture scorecard's read (`SCORECARD_ROWS`, `ScopeRows`), and
+ * points to the Evidence tab for what the founder shared (`EVIDENCE_LINK`).
  */
 
 import { NOT_RECORDED } from '../../lib/absence';
@@ -283,23 +284,30 @@ export function chartSummary(title, points) {
   return { text: `${title}: ${fmt(first)} in ${dateText(first.month)}, ${fmt(last)} in ${dateText(last.month)}.${gapText}`, gaps };
 }
 
-// ---------------------------------------------------------------- DL24 slots
+// ---------------------------------------------------------------- DL24: the scorecard rows and the evidence
 
-/** The slots from sibling canvases on these tabs (DL24): each says where it comes from and why it is empty. */
-export const SLOTS = {
-  teamRow: { eye: 'SC row · Venture scorecard canvas', title: 'Team · on the scorecard', line: 'The Team row shows here once the per-deal score read lands (SCORING, #3280). This is not a score of zero.' },
-  marketRows: { eye: 'SC rows · Venture scorecard canvas', title: 'Scorecard rows', line: 'Market, Product-market fit, Geographic and Political and regulatory show here once the per-deal score read lands (SCORING, #3280). This is not a score of zero.' },
-  tractionRows: { eye: 'SC rows · Venture scorecard canvas', title: 'Scorecard rows', line: 'Traction and Financial show here once the per-deal score read lands (SCORING, #3280). This is not a score of zero.' },
-  evidence: { eye: 'VR10 · Raise evidence canvas', title: 'Evidence the founder shared', line: 'The founder’s shared evidence shows here once the investor evidence read lands (PIPE-RAISE, #3291).' },
-};
+/**
+ * D6168 (#6168): the scorecard scopes each tab draws as rows, in SCORING's
+ * order (v1 canvas DL4, DL5, DL6). Each row is the Scorecard tab's own, read
+ * from `GET /api/venture-scores/deal/:dealId`.
+ */
+export const SCORECARD_ROWS = Object.freeze({
+  team: Object.freeze(['team']),
+  market: Object.freeze(['market', 'pmf', 'geographic', 'political']),
+  traction: Object.freeze(['traction', 'financial']),
+});
 
-/** A slot fed by the read: its own reason when the read says one, Unreadable when the read failed. */
-export function slotOf(slot, block) {
-  if (block === undefined) return { ...slot, state: 'waiting' };
-  const b = blockOf(block);
-  if (b.state === 'unreadable') return { ...slot, state: 'unreadable', line: `${slot.title} could not be read. That is not the same as none. Try again.` };
-  return { ...slot, state: 'waiting', line: b.reason ? `${b.reason}. ${slot.line}` : slot.line };
-}
+/**
+ * D6168: the founder's shared evidence is one link away, on the Evidence tab.
+ * No count is drawn here: the evidence read (`GET /api/deals/:id/evidence`)
+ * logs each read as an open of the evidence (`open_evidence`), and visiting
+ * Market or Traction is not one.
+ */
+export const EVIDENCE_LINK = Object.freeze({
+  title: 'Evidence the founder shared',
+  line: 'What the founder shared with you, with each item’s source and date, is on the Evidence tab.',
+  act: 'Open the Evidence tab',
+});
 
 /** Words for the team values band, advisors and geography the read holds no figure for. */
 export const ADVISORS_LINE = 'No advisor count is read for this deal yet.';

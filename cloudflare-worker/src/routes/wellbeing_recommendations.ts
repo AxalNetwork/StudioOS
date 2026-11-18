@@ -19,9 +19,8 @@
  * effect on the next read: nothing derived from topics is stored.
  *
  * Who is suggested. Experts the directory lists: active, verified, not a
- * sample, not hidden, a complete profile (`GET /experts`'s own filter). Group
- * sessions are #7120's; until then a suggestion is 1:1 only and the answer
- * says that group sessions are not offered yet.
+ * sample, not hidden, a complete profile (`GET /experts`'s own filter), and
+ * (D7120) upcoming group sessions run by such an expert.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -35,8 +34,9 @@ import { isTimezone } from '../services/wellbeing/reflectionPeriods';
 import {
   type Candidate, type Format, type Preferences, type SupportType, type TopicSource,
   FORMATS, NOT_USED, SUPPORT_TYPES, SUPPORT_TYPE_KEYS, TOPIC_SOURCES,
-  consentedTopics, loadPreferences, recommend,
+  consentedTopics, loadPreferences, recommend, recommendSessions,
 } from '../services/wellbeing/recommend';
+import { memberSession, upcomingSessions } from './wellbeing_group_sessions';
 
 const preferences = new Hono<{ Bindings: Env }>();
 const recommendations = new Hono<{ Bindings: Env }>();
@@ -241,7 +241,8 @@ recommendations.get('/', async (c) => {
   const base = {
     suggestions: prefs.suggestions,
     topic_consent: prefs.topic_consent,
-    group_sessions: { offered: false, reason: 'Group sessions are not bookable yet.' },
+    // D7120 — group sessions are offered: free, seat-limited, never naming attendees.
+    group_sessions: { offered: true },
     not_used: NOT_USED,
   };
   if (!prefs.suggestions) return c.json({ ...base, state: 'off', items: [] });
@@ -252,7 +253,21 @@ recommendations.get('/', async (c) => {
     ).bind(user.id).all<{ target_kind: string; target_uid: string }>();
     const dismissed = new Set((dismissedRows.results || []).map((r) => `${r.target_kind}:${r.target_uid}`));
     const out = recommend(await eligibleCandidates(c.env), prefs, topics, dismissed);
-    return c.json({ ...base, ...out, dismissed_count: dismissed.size });
+    if (out.state === 'off' || out.state === 'choose_interests') return c.json({ ...base, ...out, dismissed_count: dismissed.size });
+    // D7120 — upcoming group sessions that fit, after the experts; full ones
+    // stay, marked unavailable.
+    const groups = recommendSessions((await upcomingSessions(c.env)).map((g) => memberSession(g)), prefs, topics, dismissed);
+    const items = [...out.items, ...groups.items].sort((a: any, b: any) => Number(b.available) - Number(a.available));
+    return c.json({
+      ...base, ...out, items, state: items.length ? 'ok' : 'no_match',
+      excluded: {
+        ...out.excluded,
+        dismissed: out.excluded.dismissed + groups.excluded.dismissed,
+        language: out.excluded.language + groups.excluded.language,
+        format: out.excluded.format + groups.excluded.format,
+      },
+      dismissed_count: dismissed.size,
+    });
   } catch (e) {
     return refuse(c, 503, { code: 'recommendations_unreadable', message: 'Suggestions could not be read. This is not a claim that none match.', raw: e });
   }

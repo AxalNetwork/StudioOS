@@ -14,7 +14,8 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
-import { TAB_DEFS, WAITS, dealGroupsFor, dealTabsFor, tabHref, tabOf } from '../src/pages/dealPageModel.js';
+import * as dealPageModel from '../src/pages/dealPageModel.js';
+import { TAB_DEFS, dealGroupsFor, dealTabsFor, scopeHref, tabHref, tabOf } from '../src/pages/dealPageModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -88,12 +89,12 @@ test('the address names the tab; a word the role does not draw, or no word, is O
   assert.equal(tabHref('4x', 'notes'), '/deals//notes', 'a bad id never reaches the address');
 });
 
-test('every tab with no read says why, and none says zero or none', () => {
-  for (const t of ['scorecard', 'evidence']) assert.ok(WAITS[t], t);
-  for (const t of ['team', 'market', 'traction']) assert.equal(WAITS[t], undefined, `D1154: ${t} reads D1151's section and no longer waits`);
-  assert.equal(WAITS.notes, undefined, 'D1152: Notes reads its store and no longer waits');
-  for (const t of ['terms', 'diligence']) assert.equal(WAITS[t], undefined, `D1153: ${t} is a working tab and no longer waits`);
-  for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w.replace('not a score of zero', '')), w);
+test('D6168: no tab waits any more; a scope’s drawer has its own address on the Scorecard tab', () => {
+  assert.equal('WAITS' in dealPageModel, false, 'Scorecard and Evidence draw their reads (D1257, D1268); no tab draws a wait card');
+  assert.equal(scopeHref(4, 'team'), '/deals/4/scorecard?scope=team');
+  assert.equal(scopeHref('4', 'legal_ip'), '/deals/4/scorecard?scope=legal_ip');
+  assert.equal(scopeHref(4, 'x&y=1'), '/deals/4/scorecard', 'a word that is not a scope key never reaches the address');
+  assert.equal(scopeHref('4x', 'team'), '/deals//scorecard?scope=team', 'a bad id never reaches the address');
 });
 
 /* ------------------------------------------------------------------ *

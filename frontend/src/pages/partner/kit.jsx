@@ -32,6 +32,8 @@
  * the shared four-state handling stays shared.
  */
 
+import { useId, useState } from 'react';
+
 export {
   // The four states, in one place, with error beating empty. See its own
   // docblock — the ordering is the whole point.
@@ -135,6 +137,41 @@ export function NotComputable({ children, why }) {
         {children || 'Not recorded'}
       </span>
       {why && <span className="text-[11px] leading-relaxed text-axal-faint">{why}</span>}
+    </span>
+  );
+}
+
+/**
+ * #4843 (D4843, Offers v2 spec "Not measured / Not recorded"): a figure the product does not
+ * measure, as grey words and an ⓘ that discloses the reason on request. Never a zero, and never
+ * a paragraph on the page: the reason is one keyboard-reachable press away. `label` defaults to
+ * "Not measured"; "Not recorded" is for a value nobody entered.
+ */
+export function NotMeasured({ label = 'Not measured', why, testId }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <span className="relative inline-flex items-center gap-0.5 whitespace-nowrap" data-testid={testId}>
+      <span className="text-[12px] text-axal-muted dark:text-gray-400">{label}</span>
+      {why ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          aria-label={`Why this is ${label.toLowerCase()}`}
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[12px] text-axal-muted hover:text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-gray-400 dark:hover:text-gray-100 max-sm:h-11 max-sm:w-11"
+          data-testid={testId ? `${testId}-why` : undefined}
+        >
+          <span aria-hidden="true">ⓘ</span>
+        </button>
+      ) : null}
+      {why && open ? (
+        <span id={id} role="note" className="absolute left-0 top-full z-10 mt-1 w-64 whitespace-normal rounded-lg border border-axal-hairline bg-white p-2 text-[12px] leading-snug text-axal-ink shadow-md dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+          data-testid={testId ? `${testId}-reason` : undefined}>
+          {why}
+        </span>
+      ) : null}
     </span>
   );
 }

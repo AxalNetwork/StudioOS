@@ -279,6 +279,9 @@ export async function decideRailAs(env: Env, who: { ownerId: number; deciderId: 
   // D4488: Distribution acceptance requires fresh venture access and the creative transaction.
   if (routed?.rail_option === 'draft:distribution' && status !== 'discarded') return null;
   if (routed && routed.rail_option.startsWith('dataroom:') && status !== 'discarded') return null;
+  // D6897 part 3: a Share outside Axal draft is kept only by its own route, behind the founders' Evidence gate
+  // (`routes/raise_share_drafts.ts`); here it can only be discarded.
+  if (routed && routed.rail_option.startsWith('share:') && status !== 'discarded') return null;
   if (status === 'edited' && (!edited || typeof edited !== 'object' || JSON.stringify(edited).length > MAX_PAYLOAD_CHARS)) return null;
   // D777 part 3: keeping a value re-checks the never-fill registry. The stored
   // field may have been listed since it was proposed, and an edit may name one.

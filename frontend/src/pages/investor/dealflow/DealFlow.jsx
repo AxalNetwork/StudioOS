@@ -435,7 +435,7 @@ export default function DealFlow({ view, scope }) {
         {nothing || (view === 'board'
           ? (phone ? <PhoneBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />)
-          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
+          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowTable rows={shown} columns={settings.columns} sort={settings.sort} onSort={(sort) => setSettings({ sort })} filters={settings.filters}
               onMin={(key, min) => setSettings({ filters: { ...settings.filters, min: { ...settings.filters.min, [key]: min } } })}
               picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} words={words} onWords={setWords} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />))}
@@ -457,10 +457,11 @@ export default function DealFlow({ view, scope }) {
         </div>
       )}
       {picked.length > 0 && (
+        // D5902 (DE03d): on a phone the bar's Compare and Clear are 44px targets.
         <div className="flex items-center gap-3" data-testid="dealflow-compare-bar">
           <span className="text-[13px]">{picked.length} selected</span>
-          {picked.length >= 2 ? <Link to={compareHref(picked)} className="font-semibold underline" data-testid="dealflow-compare">Compare</Link> : <span className="text-[13px] text-axal-muted">Pick at least two to compare.</span>}
-          <button type="button" className="text-[13px] underline" onClick={() => setPicked([])}>Clear</button>
+          {picked.length >= 2 ? <Link to={compareHref(picked)} className="inline-flex items-center font-semibold underline max-sm:min-h-[44px]" data-testid="dealflow-compare">Compare</Link> : <span className="text-[13px] text-axal-muted">Pick at least two to compare.</span>}
+          <button type="button" className="text-[13px] underline max-sm:min-h-[44px]" onClick={() => setPicked([])}>Clear</button>
         </div>
       )}
       <OtherDealActivity surviving={flowUnreadable} />

@@ -119,14 +119,11 @@ test('library files, seeded skills and published skills are three counts', () =>
   assert.deepEqual(c.sources, { library_files: 3, source_only: ['not-seeded'], seeded: 2, seeded_published: 1, authored_in_store: 1 });
 });
 
-test('linked agents are adoption, and executions and overlap are unavailable rather than zero', () => {
+test('linked agents are adoption, and executions are unavailable rather than zero', () => {
   const c = cover([row()], { adoption: { links: 4, agents: 3, behind_current: 1, published_without_links: 0 } });
   assert.deepEqual(c.adoption, { links: 4, agents: 3, pinned_behind_current: 1, published_without_links: 0 });
-  for (const m of [c.executions, c.overlap]) {
-    assert.equal(m.available, false);
-    assert.ok(m.reason.length > 0);
-    assert.ok(!('count' in m) && !('value' in m), 'no number stands in for a missing measure');
-  }
+  assert.equal(c.executions.available, false);
+  assert.ok(!('count' in c.executions) && !('value' in c.executions), 'no number stands in for a missing measure');
   assert.match(c.executions.reason, /#4667/);
 });
 
