@@ -76,4 +76,4 @@ through `runSchemaBootstrap`. A failed schema check returns
 `investor_schema_not_ready` with HTTP 503 for those requests and is retried on the
 next request. Anonymous reads that bypassed role bootstrap still bypass it.
 
-The guard baseline drops from 317 to 316 statements, in 42 files instead of 43.
+The guard baseline drops from 310 to 309 statements, in 41 files instead of 42.
