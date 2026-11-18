@@ -26,12 +26,17 @@ export function worldBankStatus(): 'unspecified' { return 'unspecified'; }
 export async function ingestWorldBank(env: Env, opts: { from?: number; to?: number } = {}) {
   const now=new Date().toISOString();
   const from=opts.from ?? new Date().getUTCFullYear()-5, to=opts.to ?? new Date().getUTCFullYear();
-  const vintage=now.slice(0,10);
+  const vintage=now;
   const run=await env.DB.prepare(
     "INSERT INTO research_market_ingestion_runs(source_id,vintage,started_at,status) VALUES('world-bank',?,?, 'running') RETURNING id"
   ).bind(vintage,now).first<{id:number}>();
   let seen=0, inserted=0;
   try {
+    const countriesResponse=await fetch('https://api.worldbank.org/v2/country?format=json&per_page=400',{headers:{Accept:'application/json'}});
+    if(!countriesResponse.ok) throw new Error('World Bank country metadata HTTP '+countriesResponse.status);
+    const countriesPayload=await countriesResponse.json() as any;
+    const countryCodes=new Set((Array.isArray(countriesPayload?.[1])?countriesPayload[1]:[])
+      .filter((x:any)=>x?.region?.id && x.region.id!=='NA').map((x:any)=>normalizeIso3(x?.id)).filter(Boolean));
     for (const [indicator, meta] of Object.entries(WORLD_BANK_METRICS)) {
       const url='https://api.worldbank.org/v2/country/all/indicator/'+encodeURIComponent(indicator)
         +'?format=json&per_page=20000&date='+from+':'+to;
@@ -42,7 +47,7 @@ export async function ingestWorldBank(env: Env, opts: { from?: number; to?: numb
       for (const row of rows) {
         const iso3=normalizeIso3(row?.countryiso3code);
         const value=normalizeValue(row?.value);
-        if(!iso3 || value===null || !/^\d{4}$/.test(String(row?.date ?? ''))) continue;
+        if(!iso3 || !countryCodes.has(iso3) || value===null || !/^\d{4}$/.test(String(row?.date ?? ''))) continue;
         seen++;
         const key=indicator+':'+iso3+':'+row.date;
         const prior=await env.DB.prepare(
