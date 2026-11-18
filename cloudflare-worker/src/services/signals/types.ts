@@ -228,10 +228,16 @@ export interface Signal {
   market?: MarketContext;
 
   // Scores are 0..100 for display. Computed by the ranking engine; any values
-  // present on seed rows are treated as hints and recomputed.
-  confidence_score: number;
+  // present on seed rows are treated as hints and recomputed. Confidence is
+  // null when the evidence could not be read (D7173): it cannot be computed
+  // without the evidence, and 0 would claim the signal has none.
+  confidence_score: number | null;
   freshness_score: number;
   rank_score?: number; // final blended ranking score (engine-computed)
+
+  /** 'unavailable' when the signal's evidence could not be read (D7173);
+   *  its `evidence_items` is then empty for that reason, not because none exist. */
+  evidence_state?: 'recorded' | 'unavailable';
 
   source_attribution: string[]; // distinct source keys backing the signal
   tags?: string[];

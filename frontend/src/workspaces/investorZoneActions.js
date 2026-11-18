@@ -238,9 +238,8 @@ export const INVESTOR_ZONE_ACTIONS = {
     // called `introductionsRequest`. The AI Matching Engine was removed, the
     // button with it, and nothing else asks for an intro.
     { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    // D497 (#1023): question 8 on #1023 asks whether this reuses the
-    // `intro_propositions` flow between two of your accepted ties.
-    { label: 'Offer one', unbuilt: 'offering an introduction between two of your accepted ties is not built, and whether it reuses the existing introduction-proposal flow is the owner’s decision, asked on #1023', hover: 'Offering an introduction is not decided yet.' },
+    // D6637 / D6263 Q8: offer between two accepted ties through existing propositions.
+    { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },
   ],
   // D6258: the list is derived from the relationship book, and since D572

@@ -9,6 +9,9 @@
  *
  * D6897 part 2 (RA-30 A/B): Output is Link or PDF. A PDF has no expiry and no view limit; the Worker records the copy
  * and returns the snapshot, and the browser draws the A4 page and saves it. It is listed under PDF copies.
+ *
+ * D6897 part 3 (RA-30): "Use Eadwyn's draft" under the covering line (`ShareDrafts.jsx`). A kept draft fills the
+ * field, where it stays the founder's to change; nothing is added by itself.
  */
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -20,6 +23,7 @@ import { BTN_P, BTN_S, LINK, MUTED } from './EvidenceParts';
 import { NOTHING_SENT, COVERING_LINE_MAX, SNAPSHOT_IS_DATED, SNAPSHOT_SHOWS, OUTPUTS, PDF_DOWNLOADED, snapshotErrors, snapshotBody } from './shareOutsideModel';
 import { COPY_LINE } from './sharePdfModel';
 import { downloadReadinessPdf } from '../../../lib/raiseSharePdf';
+import { LineDraft } from './ShareDrafts';
 
 const FIELD = 'min-h-[44px] w-full rounded-lg border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:min-h-[36px]';
 const LABEL = 'flex flex-col gap-1 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100';
@@ -123,6 +127,7 @@ export function ShareReadinessSheet({ projectId, onClose }) {
           <span className="text-[12px] font-normal text-axal-muted dark:text-gray-400">One sentence above the snapshot, at most {COVERING_LINE_MAX} characters.</span>
           {errors.covering_line ? <span className={ERR} role="alert">{errors.covering_line}</span> : null}
         </label>
+        <LineDraft projectId={projectId} onUse={(line) => setForm((f) => ({ ...f, covering_line: line || '' }))} />
         {form.output === 'pdf' ? <p className={MUTED} data-testid="share-readiness-copy-line">{COPY_LINE}</p> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className={LABEL}>Expires after (days)
             <input type="number" min={1} max={90} className={FIELD} value={form.expires_in_days} onChange={set('expires_in_days')} aria-invalid={!!errors.expires_in_days} />

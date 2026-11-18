@@ -13,6 +13,9 @@
  * D6897 part 2 (RA-27, RA-28 C, RA-29): Output is Link or PDF. A PDF copy has no expiry and no view limit; the Worker
  * records it and returns the pack, the browser draws the A4 page. Shared links lists PDF copies apart, with no state.
  *
+ * D6897 part 3 (RA-27 A): with a reader after an NDA, Eadwyn can propose the selection for one reader
+ * (`ShareDrafts.jsx`); accepting only ticks rows here, and the founder still makes the pack.
+ *
  * No browser pop-up anywhere; every write opens an in-page sheet or dialog first.
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -32,6 +35,7 @@ import {
 import { COPY_LINE, copyShares } from './sharePdfModel';
 import { OutputChoice } from './ShareReadiness';
 import { downloadPackPdf } from '../../../lib/raiseSharePdf';
+import { PackProposal } from './ShareDrafts';
 
 const FIELD = 'min-h-[44px] w-full rounded-lg border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:min-h-[36px]';
 const LABEL = 'flex flex-col gap-1 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100';
@@ -200,6 +204,8 @@ export function ShareOutsideSheet({ projectId, onClose, onMade }) {
         </div>}
         <section className="flex flex-col gap-2">
           <h3 className={H2}>The reader sees</h3>
+          {after && preview?.items?.state === 'recorded' && preview.items.rows.length
+            ? <PackProposal projectId={projectId} rows={preview.items.rows} onTick={(uids) => setPicked(new Set(uids))} /> : null}
           <ReaderRows preview={preview} reader={form.reader} picked={picked} onToggle={toggle} />
           {errors.items ? <p className={ERR}>{errors.items}</p> : null}
           {after && preview?.claims?.state === 'recorded' && preview.claims.rows.length

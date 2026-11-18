@@ -82,7 +82,7 @@ export const folderInScope = (folderId: number | null | undefined, folders: Fold
  * grant's own project. Fails closed: a scope that cannot be read is an empty
  * set, which opens nothing, never the whole room.
  */
-export async function grantFolderScope(env: Env, grantId: number): Promise<FolderScope> {
+export async function grantFolderScope(env: Env, grantId: number, throwOnError = false): Promise<FolderScope> {
   try {
     const grant = await env.DB.prepare(
       'SELECT project_id, folders_scoped FROM data_room_grants WHERE id = ?',
@@ -103,6 +103,7 @@ export async function grantFolderScope(env: Env, grantId: number): Promise<Folde
     ).bind(grant.project_id, grantId, grant.project_id).all<{ id: number }>();
     return new Set((rows.results || []).map((r) => Number(r.id)));
   } catch (e) {
+    if (throwOnError) throw e;
     console.error('[data_room] folder scope unreadable', (e as Error)?.message);
     return new Set();
   }
@@ -113,7 +114,7 @@ export async function grantFolderScope(env: Env, grantId: number): Promise<Folde
  * a read that cannot be done (a store not yet migrated) is "not committed", so
  * a committed-only file stays hidden.
  */
-export async function investorCommitted(env: Env, projectId: number, userId: number): Promise<boolean> {
+export async function investorCommitted(env: Env, projectId: number, userId: number, throwOnError = false): Promise<boolean> {
   try {
     const row = await env.DB.prepare(
       `SELECT 1 AS yes FROM raise_prospects rp JOIN users u ON u.id = ?
@@ -123,7 +124,8 @@ export async function investorCommitted(env: Env, projectId: number, userId: num
         LIMIT 1`,
     ).bind(userId, projectId).first<{ yes: number }>();
     return !!row;
-  } catch {
+  } catch (e) {
+    if (throwOnError) throw e;
     return false;
   }
 }

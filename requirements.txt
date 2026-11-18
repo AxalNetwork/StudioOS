@@ -8,7 +8,7 @@ aiosignal==1.4.0
     # via aiohttp
 alembic==1.20.1
     # via repl-nix-workspace
-annotated-doc==0.0.5
+annotated-doc==0.0.6
     # via fastapi
 annotated-types==0.8.0
     # via pydantic
@@ -39,7 +39,7 @@ cryptography==50.0.2
     #   http-ece
     #   py-vapid
     #   pywebpush
-fastapi==0.162.2
+fastapi==0.162.4
     # via repl-nix-workspace
 frozenlist==1.8.0
     # via
@@ -47,9 +47,9 @@ frozenlist==1.8.0
     #   aiosignal
 google-api-core==2.44.0
     # via google-api-python-client
-google-api-python-client==2.201.0
+google-api-python-client==2.202.0
     # via repl-nix-workspace
-google-auth==2.62.1
+google-auth==2.62.2
     # via
     #   google-api-core
     #   google-api-python-client

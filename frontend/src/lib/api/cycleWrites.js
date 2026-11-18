@@ -106,6 +106,8 @@ export function makeCycleWrites(request) {
       market: (projectId, body) => request('/cycles/grow/markets', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       obligation: (projectId, body) => request('/cycles/grow/obligations', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       checklist: (projectId, key, done) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, done: done === true }) }),
+      // D6789 (#6789): mark a checklist item Not applicable (out of the score), or say it applies again.
+      checklistNotApplicable: (projectId, key, na) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, not_applicable: na === true }) }),
       // D1090 (#2955): Distribution's content calendar, typed by hand. A piece from Notion is edited in Notion.
       content: (projectId, body) => request('/cycles/grow/channels/content', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       contentUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
@@ -127,6 +129,12 @@ export function makeCycleWrites(request) {
       acceptMercuryPartner: (projectId, id, body = {}) => request(`/cycles/grow/mercury/partner-proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       dismissMercuryPartner: (projectId, id) => request(`/cycles/grow/mercury/partner-proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
       deleteMercuryFact: (projectId, id) => request(`/cycles/grow/mercury/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
+      // D5866 (#5866): the founder's own TikTok (D5863 sync and delete, D5864 the channel proposal). `kind` is
+      // `account` (an audience snapshot) or `video` (a video's figures), as the Worker's delete reads it.
+      syncTiktok: (projectId) => request('/cycles/grow/tiktok/sync', { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      deleteTiktokFact: (projectId, id, kind) => request(`/cycles/grow/tiktok/facts/${seg(id)}?${new URLSearchParams({ project: String(projectId), kind: kind === 'account' ? 'account' : 'video' })}`, { method: 'DELETE' }),
+      acceptTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      dismissTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
     },
     // D696 (#1658): a record's own action, as `cyclesApi.recordAction` sends it; a
     // FormData body (Upload proof) goes as it is.
