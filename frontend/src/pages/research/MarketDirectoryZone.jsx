@@ -11,6 +11,9 @@ import { researchOverviewApi } from '../../lib/api/researchOverview.js';
 import { SaveNote } from '../advisor/expertise/kit';
 import { STALE_AT, ageBand, daysSince } from './marketReadingRead';
 import { comparableCount, dollarsToCents, freshReadingForm, rangeReadsForward } from './marketReadingRead';
+import { LatestSignals } from './RankedSignals.jsx';
+
+export { LatestSignals };
 
 /**
  * Research · Markets (`/research/markets`), to the Markets canvas
@@ -515,46 +518,7 @@ export function TopMovers({ overview }) {
   return <Card data-testid="markets-movers"><h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Top movers this month</h2><div className="mt-2">{body}</div></Card>;
 }
 
-export function LatestSignals({ sigs }) {
-  let body;
-  if (sigs.status === 'loading' && !sigs.data) body = <Loading what="the signals" />;
-  else if (sigs.status === 'unreadable') body = <Unreadable what="The signals" claim="This is not a sign there are none." onRetry={sigs.reload} />;
-  else if (!(sigs.data?.signals || []).length) body = <p className="text-[12.5px] text-axal-muted">No signals are recorded yet.</p>;
-  else {
-    const list = sigs.data.signals.slice(0, 3);
-    body = (
-      <>
-        {sigs.data.data_state === 'illustrative' ? (
-          <p className="mb-2 text-[11.5px] font-semibold text-amber-800 dark:text-amber-300">Illustrative: no live signal is stored, so these are the seed examples.</p>
-        ) : null}
-        <ul className="space-y-2">
-          {list.map((s) => (
-            <li key={s.id} className="rounded-lg border border-axal-hairline p-3 dark:border-gray-800">
-              <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{s.title}</p>
-              <p className="mt-0.5 text-[11.5px] text-axal-muted">
-                {[s.sector, s.region].filter(Boolean).join(' · ')}
-                {s.confidence_score != null ? ` · confidence ${Math.round(Number(s.confidence_score) * 100)}%` : ''}
-                {s.updated_at ? ` · updated ${String(s.updated_at).slice(0, 10)}` : ''}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </>
-    );
-  }
-  const total = sigs.data?.total;
-  const shown = Math.min(3, (sigs.data?.signals || []).length);
-  return (
-    <Card data-testid="markets-signals">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Top-ranked signals</h2>
-        {total && shown ? <span className="text-[12px] text-axal-muted">{fmt(shown)} of {fmt(total)}</span> : null}
-      </div>
-      <p className="mt-1 text-[11px] text-axal-faint">Ordered by the signals engine’s rank, not by date.</p>
-      <div className="mt-2">{body}</div>
-    </Card>
-  );
-}
+// Top-ranked signals moved to `RankedSignals.jsx` (D7173); re-exported above.
 
 // ---- Your market readings, and recording one ---------------------------------
 
@@ -867,7 +831,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
         <TopMovers overview={{ ...overview, reload: reloadOverview }} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <LatestSignals sigs={{ ...sigs, reload: reloadSigs }} />
+        <LatestSignals sigs={{ ...sigs, reload: reloadSigs }} sectors={sectors} />
         <Readings
           readings={{ ...readings, reload: reloadReadings }}
           record={{

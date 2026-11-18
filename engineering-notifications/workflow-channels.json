@@ -237,6 +237,11 @@
       "channel": "#axalvc-actions-pr-preview"
     },
     {
+      "id": null,
+      "path": ".github/workflows/pr-preview-deploy.yml",
+      "channel": "#axalvc-actions-pr-preview-deploy"
+    },
+    {
       "id": 404322234,
       "path": ".github/workflows/prompt-eval-gate.yml",
       "channel": "#axalvc-actions-prompt-eval-gate"

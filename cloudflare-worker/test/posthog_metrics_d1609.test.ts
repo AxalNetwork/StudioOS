@@ -215,9 +215,16 @@ test('proposals: proposed once, Dismiss keeps it decided, Accept runs its kind\'
   const q = { ...p, source_key: 'svy-1:resp-2' };
   await proposeOnce(env, ctx, q);
   const id2 = (db.prepare("SELECT id FROM posthog_proposals WHERE source_key = 'svy-1:resp-2'").get() as any).id;
-  registerAcceptor({ kind: 'survey_feedback', async accept() { return { target_ref: 'product_feedback:9' }; } });
+  registerAcceptor({ kind: 'survey_feedback', async accept() {
+    // D6315 records a receipt only for a destination that was actually created.
+    db.prepare("INSERT INTO product_feedback (uid, project_id, body, source, created_by, updated_by) VALUES ('9', ?, 'Synthetic accepted feedback', 'customer', ?, ?)").run(P, FOUNDER, FOUNDER);
+    return { target_ref: 'product_feedback:9' };
+  } });
   const ok = await call(app, env, FOUNDER, 'POST', `/api/cycles/grow/posthog/proposals/${id2}/accept`, { project: P });
-  assert.deepEqual(ok.body, { ok: true, target_ref: 'product_feedback:9' });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.ok, true);
+  assert.equal(ok.body.target_ref, 'product_feedback:9');
+  assert.equal(ok.body.destination.href, `/grow/product-improvement/9?project_id=${P}`);
   assert.deepEqual({ ...(db.prepare('SELECT status, target_ref, decided_by FROM posthog_proposals WHERE id = ?').get(id2) as any) }, { status: 'accepted', target_ref: 'product_feedback:9', decided_by: FOUNDER });
   const logged = db.prepare("SELECT details FROM activity_logs WHERE action LIKE 'posthog_proposal_%'").all() as any[];
   for (const l of logged) assert.doesNotMatch(l.details, /calendar|pay/, 'only ids are logged');

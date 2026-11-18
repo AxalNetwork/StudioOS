@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React, { act, useState } from 'react';
+import { act, useState } from 'react';
 import { h, mountForm, propsOf, textOf } from './_form_d695.mjs';
 import { LightboxPhoneProvider } from '../src/ui/Lightbox.jsx';
 import OpportunitySheet, {
@@ -146,10 +146,10 @@ test('#5934 PP08: Activity reads Not recorded with no recorded event, and invent
 // Mutation checked: a failed read drawn as "not in your pipeline" (fails); Try again not re-reading (fails).
 test('#5934 PP08: a failed read is Unreadable inside the sheet, with Try again', async () => {
   let fail = true;
-  const boom = () => { if (fail) throw new Error('down'); return null; };
+  const boom = (value) => { if (fail) throw new Error('down'); return value; };
   const src = sources({
-    leads: () => boom() || { items: [LEAD], passed: [] }, proposals: () => boom() || { items: [PROPOSAL] },
-    negotiations: () => boom() || { items: [] }, retainers: () => boom() || { items: [] },
+    leads: () => boom({ items: [LEAD], passed: [] }), proposals: () => boom({ items: [PROPOSAL] }),
+    negotiations: () => boom({ items: [] }), retainers: () => boom({ items: [] }),
   });
   const s = await mountForm(h(OpportunitySheet, { opportunity: { needId: 7 }, onClose() {}, sources: src }), { modal: true });
   try {

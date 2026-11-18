@@ -27,7 +27,9 @@ the generic route wrapper once a canvas has graduated.
   frozen figures of the reports received, the Reports timeline with Read, Ask
   and Waive, Terms read only, the reader (640 wide) and the holding notes. Its
   address rules live in `../cycles/reportingModel.js`; the reporting words and
-  sums in `portfolioReportsModel.js`, pure.
+  sums in `portfolioReportsModel.js`, pure. D6224 (#6224): Figures offers
+  "Download figures (CSV)", built in the browser from the same rows, with no
+  read of its own.
 - `PortfolioReports.jsx` (D1061, #2931) is RPT9 at the top of Portfolio ›
   Reports (`InvestorPortfolioUpdates.jsx`): four tiles and one row per company
   the investor signed into, from `GET /api/reporting/portfolio`, with filters

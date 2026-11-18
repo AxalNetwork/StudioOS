@@ -45,6 +45,8 @@ function setup() {
   }
   db.exec(read('cloudflare-worker/sql/migrations/202611171643_7118_wellbeing_reflections.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/202611171711_7119_wellbeing_preferences.sql'));
+  // D7120 — recommendations also read upcoming group sessions.
+  db.exec(read('cloudflare-worker/sql/migrations/202611171724_7120_wellbeing_group_sessions.sql'));
   const u = db.prepare('INSERT INTO users (id, role, email, name, subscription_tier) VALUES (?, ?, ?, ?, ?)');
   u.run(MIA, 'founder', 'mia@example.test', 'Mia', 'growth');
   u.run(OTTO, 'founder', 'otto@example.test', 'Otto', 'growth');
@@ -131,7 +133,7 @@ test('a chosen interest returns matching experts, each with Why this?, and never
   assert.ok(why.used.some((x: any) => x.kind === 'language'));
   assert.ok(why.not_used.includes('Anything you wrote in a reflection'));
   assert.deepEqual(r.body.items[0].support_types.map((t: any) => t.key), ['nutrition']);
-  assert.equal(r.body.group_sessions.offered, false);
+  assert.equal(r.body.group_sessions.offered, true, 'D7120 offers group sessions');
 });
 
 test('registered dietetics and general nutrition are distinct choices', async () => {
@@ -218,7 +220,7 @@ test('no results, a group-only format, a price ceiling and suggestions off each 
   const group = await recs(e, MIA);
   assert.equal(group.body.state, 'no_match');
   assert.equal(group.body.excluded.format, 2);
-  assert.match(group.body.group_sessions.reason, /not bookable yet/);
+  assert.equal(group.body.group_sessions.offered, true);
   await prefs(e, MIA, { formats: ['one_to_one'], price_max_cents: 10000, base_revision: 2 });
   const cheap = await recs(e, MIA);
   assert.deepEqual(uids(cheap), ['nutr-fr']);
