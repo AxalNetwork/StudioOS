@@ -137,7 +137,7 @@ test('the profile: vehicle first, dated native size with its chip, the three dat
   assert.match(text, /Opp€75m EURreported 25 Sep 2023This vehicle/);
   assert.match(text, /4 older reports name no vehicle, so they are not shown here\./);
   assert.match(html, /<a[^>]*href="\/research\/funds\?view=directory&amp;q=dawn"[^>]*>[\s\S]*?Back to results<\/a>/);
-  assert.match(html, /<button[^>]*>Save to shortlist<\/button>/);
+  assert.match(html, /<button[^>]*>(<svg[\s\S]*?<\/svg>)? Save to shortlist<\/button>/);
   assert.doesNotMatch(text, /Unreadable|Add to my funds/);
   // Saved: Open dossier → in the button's place.
   const saved = page({ fund: ready, list: { loading: false, error: null, existing: { uid: 'rf_1' } } });

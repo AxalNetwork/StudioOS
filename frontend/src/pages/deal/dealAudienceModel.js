@@ -33,7 +33,7 @@ export const WHO_SEES = Object.freeze([
   {
     key: 'score', label: 'Score and evidence',
     cells: [FULL, FULL, FULL, FULL, FULL, FULL, FULL],
-    source: 'No per-deal score or evidence read yet: Scorecard and Evidence say so (D1253, D1261).',
+    source: '`GET /api/venture-scores/deal/:dealId` by the visibility rule, values after the NDA (D1256, D1257); `GET /api/deals/:id/evidence` for the shared evidence, each read logged as an open (D1265, D6167).',
     departs: {},
   },
   {

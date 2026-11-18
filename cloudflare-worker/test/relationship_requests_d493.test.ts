@@ -1,3 +1,4 @@
+import { migratedTemplate, removeMigratedDatabases } from './_storage_schema.ts';
 /**
  * D493 (U8) — a relationship about someone else is a request they accept or
  * decline (migration 368, routes/partnernet.ts).
@@ -61,7 +62,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
         async first() { const q = sqliteCall(sql, b); return db.prepare(q.sql).get(...q.values) ?? null; },
-        async all() { const q = sqliteCall(sql, b); return { results: db.prepare(q.sql).all(...q.values) }; },
+        async all() { const q = sqliteCall(sql, b); return { success:true, results: db.prepare(q.sql).all(...q.values) }; },
         async run() {
           const q = sqliteCall(sql, b);
           const r = db.prepare(q.sql).run(...q.values);
@@ -80,6 +81,12 @@ function freshDb({ legacy = false }: { legacy?: boolean } = {}) {
   for (const t of ['users', 'partner_relationships', 'notifications_inbox', 'user_settings']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
+  // D6636: preserve the pre-368 relationship upgrade fixture while adding real current shared-resource tables.
+  const template=migratedTemplate();
+  try{for(const name of ['account_licences','licences','projects','deals','deal_invitations','commitments','investor_dealroom_members','data_room_grants','project_members']){
+    const row=template.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(name) as any;
+    db.exec(row.sql);
+  }}finally{template.close();}
   const u = db.prepare('INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(ADMIN, 'admin@example.test', 'Ada Admin', 'admin');
   u.run(IDA, 'ida@example.test', 'Ida Investor', 'investor');
@@ -87,6 +94,8 @@ function freshDb({ legacy = false }: { legacy?: boolean } = {}) {
   u.run(OLI, 'oli@example.test', 'Oli Outsider', 'investor');
   u.run(LEO, 'leo@example.test', 'Leo Lender', 'investor');
   u.run(NED, 'ned@example.test', 'Ned Neighbour', 'partner');
+  db.exec("INSERT INTO projects(id,uid,name) VALUES(900,'shared-6636','Synthetic shared venture'); INSERT INTO deals(id,project_id) VALUES(900,900)");
+  for(const id of [ADMIN,IDA,PAM,OLI,LEO,NED])db.prepare("INSERT INTO deal_invitations(deal_id,investor_user_id,status) VALUES(900,?,'invited')").run(id);
   if (legacy) {
     // Pre-368 rows: written straight in, as the old POST did.
     const r = db.prepare(`INSERT INTO partner_relationships (partner_a_id, partner_b_id, relationship_type, strength_score, metadata)
@@ -299,3 +308,5 @@ test('pre-368 relationships stay accepted and each subject is told once', async 
   await pam(db, `/relationships/${id}/respond`, { method: 'POST', body: { decision: 'accept' } });
   assert.deepEqual(await noticeLegacyRelationships(env(db)), { rows: 0, notices: 0 });
 });
+
+test.after(removeMigratedDatabases);

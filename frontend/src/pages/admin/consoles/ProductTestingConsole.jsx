@@ -276,7 +276,13 @@ function Programs({ items, ask }) {
     setF((s) => ({ ...s, owner: x.startsWith('firm:') ? 'partner' : x, firm: x.startsWith('firm:') ? x.slice(5) : '', page: 1 }));
   };
   return (
-    <section className="flex flex-col gap-3" data-testid="testing-all">
+    <section className="flex flex-col gap-3" data-testid="testing-all" aria-labelledby="testing-campaigns-title">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="testing-campaigns-title" className={H2}>Product testing campaigns</h2>
+        <Link to="/admin/programs" className="text-[12.5px] font-semibold text-axal-violet-deep underline dark:text-violet-300" data-testid="testing-programs-catalogue">
+          Programs catalogue
+        </Link>
+      </div>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Programs by status">
         {chips.map((c) => (
           <button key={c.status || 'all'} type="button" aria-pressed={f.status === c.status} onClick={() => set('status')(c.status)}

@@ -32,8 +32,9 @@ import {
   MIN_EVIDENCE_KINDS,
 } from '../src/services/signals/ingest';
 import { getSeedSignals, SEED_ANCHOR } from '../src/services/signals/seed';
-import { getRankedSignals } from '../src/services/signals/engine';
+import { getRankedSignals, SignalsUnreadableError } from '../src/services/signals/engine';
 import { SOURCE_REGISTRY } from '../src/services/signals/sources';
+import { rankedSignalsResponse } from '../src/routes/signals';
 import { EVIDENCE_KINDS } from '../src/services/signals/types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -192,18 +193,144 @@ test('seed timestamps are anchored — Date.now() must not appear in seed.ts', (
   }
 });
 
-// Minimal env stub: no D1 tables (every prepare throws), inert KV.
-function stubEnv(): any {
+// ---------------------------------------------------------------- read states (D7173)
+//
+// The single fallback test that stood here used an env where every `prepare`
+// threw, and so locked in the example set for ANY error. D7173 splits it: a
+// missing table (or a store no ingest ever wrote) is illustrative; any other
+// D1 error is 503 `signals_unreadable` and writes nothing to KV; an ingested
+// store with no active signal is live and empty; evidence that cannot be read
+// is `evidence_state: 'unavailable'` with confidence null.
+
+type Answer = any[] | Error;
+/** A D1 stub that answers by the first matching SQL fragment; unmatched SQL answers []. */
+function fakeEnv(answers: Array<[RegExp, Answer]>, puts: string[] = []): any {
+  const answer = (sql: string) => {
+    const hit = answers.find(([re]) => re.test(sql));
+    const a = hit ? hit[1] : [];
+    if (a instanceof Error) throw a;
+    return { results: a };
+  };
+  const stmt = (sql: string) => ({
+    bind: () => stmt(sql),
+    all: async () => answer(sql),
+  });
   return {
-    DB: { prepare: () => { throw new Error('no table'); }, exec: () => { throw new Error('no table'); } },
-    RATE_LIMITS: { get: async () => null, put: async () => {} },
+    DB: { prepare: (sql: string) => stmt(sql) },
+    RATE_LIMITS: { get: async () => null, put: async (k: string) => { puts.push(k); } },
   };
 }
+const missing = () => new Error('D1_ERROR: no such table: signals: SQLITE_ERROR');
+const broken = () => new Error('D1_ERROR: Network connection lost.');
 
-test('engine: with no ingested rows the response is LABELED illustrative', async () => {
-  const res = await getRankedSignals(stubEnv(), { mode: 'founder' } as any);
+const LIVE_ROW = {
+  id: 'sig-live-1', type: 'workflow_digitization', title: 'Live signal', thesis: 't', why_now: 'because',
+  region: 'Europe', country: 'Germany', sector: 'Energy storage', niche: 'n', market_cap_band: 'small',
+  target_customers: '[]', confidence_score: 70, freshness_score: 50, tags: '[]', status: 'active',
+  updated_at: '2026-11-10T00:00:00Z',
+};
+const EVIDENCE = [
+  { id: 'e1', signal_id: 'sig-live-1', kind: 'filing', title: 'A filing', source_key: 'sec_edgar', url: 'https://example.com/f', observed_at: '2026-11-01T00:00:00Z' },
+  { id: 'e2', signal_id: 'sig-live-1', kind: 'news', title: 'A story', source_key: 'news_rss', url: null, observed_at: '2026-11-05T00:00:00Z' },
+];
+
+test('engine: missing tables → LABELED illustrative, the example corpus still renders', async () => {
+  const res = await getRankedSignals(fakeEnv([[/./, missing()]]), { mode: 'founder' } as any);
   assert.equal(res.data_state, 'illustrative');
-  assert.ok(res.signals.length > 0, 'the labeled example corpus still renders');
+  assert.ok(res.signals.length > 0);
+});
+
+test('engine: tables present but no ingest ever wrote a signal → illustrative', async () => {
+  const res = await getRankedSignals(fakeEnv([[/FROM signals/, []]]), { mode: 'founder' } as any);
+  assert.equal(res.data_state, 'illustrative');
+  assert.ok(res.signals.length > 0);
+});
+
+test('engine: any other D1 error is unreadable — never examples, nothing cached', async () => {
+  const puts: string[] = [];
+  await assert.rejects(
+    getRankedSignals(fakeEnv([[/WHERE status = 'active'/, broken()]], puts), { mode: 'founder' } as any),
+    (e: any) => e instanceof SignalsUnreadableError,
+  );
+  assert.deepEqual(puts, [], 'a failed read must not be written to KV');
+  // The probe that tells live-empty from never-ingested failing is a failed read too.
+  await assert.rejects(
+    getRankedSignals(fakeEnv([[/WHERE status = 'active'/, []], [/LIMIT 1/, broken()]], puts), { mode: 'founder' } as any),
+    (e: any) => e instanceof SignalsUnreadableError,
+  );
+  // So is the company roster the rank reads.
+  await assert.rejects(
+    getRankedSignals(fakeEnv([[/FROM signal_companies/, broken()], [/WHERE status = 'active'/, [LIVE_ROW]]], puts), { mode: 'founder' } as any),
+    (e: any) => e instanceof SignalsUnreadableError,
+  );
+  assert.deepEqual(puts, []);
+});
+
+test('engine: ingested store with no active signal → live with none, not examples', async () => {
+  const res = await getRankedSignals(
+    fakeEnv([[/WHERE status = 'active'/, []], [/LIMIT 1/, [{ one: 1 }]]]),
+    { mode: 'founder' } as any,
+  );
+  assert.equal(res.data_state, 'live');
+  assert.deepEqual(res.signals, []);
+  assert.equal(res.total, 0);
+});
+
+test('engine: a live store fully filtered out → live with none', async () => {
+  const res = await getRankedSignals(
+    fakeEnv([[/WHERE status = 'active'/, [LIVE_ROW]], [/FROM signal_evidence/, EVIDENCE]]),
+    { mode: 'founder', sector: 'Nothing like it' } as any,
+  );
+  assert.equal(res.data_state, 'live');
+  assert.equal(res.total, 0);
+  assert.deepEqual(res.signals, []);
+});
+
+test('engine: live rows carry evidence, a 0–100 confidence and evidence_state recorded', async () => {
+  const puts: string[] = [];
+  const res = await getRankedSignals(
+    fakeEnv([[/WHERE status = 'active'/, [LIVE_ROW]], [/FROM signal_evidence/, EVIDENCE]], puts),
+    { mode: 'founder' } as any,
+  );
+  assert.equal(res.data_state, 'live');
+  const s = res.signals[0];
+  assert.equal(s.evidence_state, 'recorded');
+  assert.equal(s.evidence_items.length, 2);
+  assert.equal(s.evidence_items[1].url, undefined, 'a null URL stays absent, never a dead link');
+  assert.ok(Number.isInteger(s.confidence_score) && s.confidence_score! > 1 && s.confidence_score! <= 100, `confidence ${s.confidence_score} is on the 0–100 scale`);
+  assert.equal(puts.length, 1, 'a whole read is cached');
+});
+
+test('engine: evidence read failing → evidence_state unavailable, confidence null, not cached', async () => {
+  const puts: string[] = [];
+  const res = await getRankedSignals(
+    fakeEnv([[/WHERE status = 'active'/, [LIVE_ROW]], [/FROM signal_evidence/, broken()]], puts),
+    { mode: 'advisor' } as any,
+  );
+  assert.equal(res.data_state, 'live');
+  const s = res.signals[0];
+  assert.equal(s.evidence_state, 'unavailable');
+  assert.equal(s.confidence_score, null, 'unknown, never 0');
+  assert.deepEqual(s.evidence_items, []);
+  assert.deepEqual(puts, [], 'a partial read is not cached');
+});
+
+test('route: GET /api/signals answers 503 signals_unreadable on a failed read, 200 otherwise', async () => {
+  const ctx = (env: any) => ({ env, json: (body: any, status = 200) => ({ body, status }) });
+  const errLog = console.error;
+  console.error = () => {};
+  try {
+    const failed: any = await rankedSignalsResponse(ctx(fakeEnv([[/WHERE status = 'active'/, broken()]])), { mode: 'founder' } as any);
+    assert.equal(failed.status, 503);
+    assert.equal(failed.body.error, 'signals_unreadable');
+    assert.ok(!('signals' in failed.body), 'no example set rides along with the refusal');
+    assert.doesNotMatch(failed.body.message, /Network connection lost/, 'the raw D1 text is logged, never sent');
+  } finally {
+    console.error = errLog;
+  }
+  const ok: any = await rankedSignalsResponse(ctx(fakeEnv([[/./, missing()]])), { mode: 'founder' } as any);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.data_state, 'illustrative');
 });
 
 // 'engine: kpis report last_refreshed_at null before any ingestion' stood

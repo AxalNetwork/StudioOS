@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Plus } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { Card } from '../../ui';
 import { api } from '../../lib/api';
@@ -9,7 +9,7 @@ import { NotRecorded, SourceCard, UnreadableBadge } from './FundDirectory';
 import { ProposedFields, SourceChip, SourceDatesCard, StateChip, VehicleHistory } from './FundProvenance.jsx';
 import ResearchActions from './ResearchActions.jsx';
 import { canAddToResearch } from './researchComparisons.js';
-import { ACTIONS, UNAVAILABLE, backTo, day, managedLine, reportedSize, rereadBeforeAction, shortlistMatch } from './fundProfileRead.js';
+import { ACTIONS, UNAVAILABLE, day, managedLine, reportedSize, rereadBeforeAction, shortlistMatch } from './fundProfileRead.js';
 
 /**
  * `/research/funds/catalog/:id` — one fund from the public directory (D535,
@@ -41,7 +41,9 @@ import { ACTIONS, UNAVAILABLE, backTo, day, managedLine, reportedSize, rereadBef
  * matched on `catalogue_uid`, never the name, so one manager's other vehicle
  * never reads as saved. Save, Add and Compare re-read the fund first, and a
  * 410 then clears the page. Back to results returns to the directory address
- * the Sheet was opened from. A failed read reads "Unavailable".
+ * the Sheet was opened from (D7166: and names the row, so the directory can
+ * focus it); a direct visit links to the Fund directory. A failed read reads
+ * "Unavailable".
  */
 
 /** The page's state after a failed read. A 410 keeps the removed list and why (D597). */
@@ -68,7 +70,7 @@ function SaveAction({ list, onAdd, adding }) {
   return (
     <button type="button" onClick={onAdd || undefined} disabled={!onAdd || adding} aria-busy={adding || undefined} data-testid="fund-catalog-add"
       className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-violet-600">
-      {adding ? ACTIONS.saving : ACTIONS.save}
+      <Plus size={14} aria-hidden="true" /> {adding ? ACTIONS.saving : ACTIONS.save}
     </button>
   );
 }
@@ -79,10 +81,20 @@ function SaveAction({ list, onAdd, adding }) {
  * shortlist read, { loading, error, existing }; `back` is where Back to
  * results goes.
  */
-export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, adding = false, notice = null, onRetry = () => {}, research = null, back: backHref = '/research/funds?view=directory' }) {
-  const back = (
-    <Link to={backHref} data-testid="fund-catalog-back" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">
+export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, adding = false, notice = null, onRetry = () => {}, research = null, backTo = null, back: backHref = null }) {
+  // The directory is the Funds page's second tab (D593); `/research/funds`
+  // alone opens My funds.
+  // D7166 (RFD-04C): opened from a directory row, Back to results returns to
+  // that same query and names the row, so the directory can focus it again.
+  // D7167: `back` is the same address as a bare string (fundProfileRead.backTo).
+  const path = backTo?.path ?? backHref;
+  const back = typeof path === 'string' && /^\/research\/funds(\?|$)/.test(path) ? (
+    <Link to={path} state={{ selected: backTo?.selected }} data-testid="fund-catalog-back" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">
       <ArrowLeft size={13} aria-hidden="true" /> Back to results
+    </Link>
+  ) : (
+    <Link to="/research/funds?view=directory" data-testid="fund-catalog-back" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">
+      <ArrowLeft size={13} aria-hidden="true" /> Fund directory
     </Link>
   );
   if (fund.loading) {
@@ -198,6 +210,8 @@ export function FundCatalogView({ fund, list = { loading: false, error: null, ex
 export default function FundCatalogProfile({ role = 'founder' }) {
   const { id } = useParams();
   const location = useLocation();
+  // D7166: where Back to results returns — the directory query this profile was opened from.
+  const backTo = typeof location.state?.back === 'string' ? { path: location.state.back, selected: location.state.selected || id } : null;
   const [fund, setFund] = useState({ loading: true, error: null, status: null, data: null });
   const [list, setList] = useState({ loading: true, error: null, existing: null });
   const [notice, setNotice] = useState(null);
@@ -271,7 +285,7 @@ export default function FundCatalogProfile({ role = 'founder' }) {
       title={fund.data?.item?.name || 'Fund profile'}
       activeSlug="funds"
     >
-      <FundCatalogView fund={fund} list={list} onAdd={add} adding={adding} notice={notice} onRetry={load} back={backTo(location.state)}
+      <FundCatalogView fund={fund} list={list} onAdd={add} adding={adding} notice={notice} onRetry={load} backTo={backTo}
         research={canAddToResearch(role) ? (item) => (
           <ResearchActions kind="fund" item={{ uid: item.uid || id, name: item.name }} addLabel={ACTIONS.add} compareLabel={ACTIONS.compare} beforeOpen={reread} />
         ) : null} />

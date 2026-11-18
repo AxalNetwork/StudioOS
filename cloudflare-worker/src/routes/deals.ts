@@ -1,3 +1,4 @@
+import { dealActivitySources } from '../services/dealActivitySources';
 import { notifyInvitationAnswer } from '../services/dealInvitationAnswer';
 import { investorPreviewRefusal } from '../util/investorPreview';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
@@ -10,7 +11,7 @@ import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
 import { STARTUP_NOT_PUBLIC_STATUSES } from '../services/startupProfileVisibility';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
+import { selectJwt, requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
 import { dealHiddenFrom, editorialKeys, hiddenDealIds, hiddenJson, preparationManagesDeal, PREPARATION_MANAGED_TERMS, withoutHidden, type ReaderMode } from '../services/dealPreparation';
 import { assertAdminAct } from '../services/fundAdminAccess';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
@@ -1274,6 +1275,7 @@ export const ACTIVITY_KINDS = ['deal', 'documents', 'diligence'] as const;
  * caller's own rows, for the page's Mine filter.
  */
 deals.get('/:id/activity', async (c) => {
+  if ((await selectJwt(c))?.payload.impersonated_by) return c.json({error:'support_session_refused'},403);
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
@@ -1334,6 +1336,7 @@ deals.get('/:id/activity', async (c) => {
       events.push({ type: 'unreadable', kind: 'diligence', label: 'Diligence activity could not be read', at: null, mine: false });
     }
   }
+  if (deal.project_id) events.push(...await dealActivitySources(c, deal, user));
   await sql.end();
   events.sort((a, b) => (normTs(b.at) || 0) - (normTs(a.at) || 0));
   return c.json(events);

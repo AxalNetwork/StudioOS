@@ -19,6 +19,7 @@ import {
   holdingRouteOf, identityOf, keyFactsOf, nextActionsOf,
 } from '../portfolio/companyModel';
 import CompanyPreview from '../portfolio/CompanyPreview';
+import { CompanyNotes, noteSentence, useCompanyNotes } from '../portfolio/CompanyNotes';
 import { isInvestorPreview } from '../portfolio/previewModel';
 import { useViewMode } from '../../contexts/ViewModeContext';
 import '../portfolio/company.css';
@@ -35,7 +36,8 @@ import '../portfolio/company.css';
  * company's name, its sector and stage, your holding and its route, its
  * health, six key facts, and five tabs, each its own address:
  *   - Overview (`/portfolio/companies/:uid`): why it reads as it does, next
- *     actions, and the figures it reported (the old Figures);
+ *     actions, the figures it reported (the old Figures) and, from D6222
+ *     (#6222), the investor's own private notes on the company;
  *   - Financials (`…/financials`): investment history, return, valuation
  *     marks and distributions (`GET /api/positions/:uid`), then Ownership &
  *     rights — the old Terms and the read-only cap table. The old `…/terms`
@@ -135,8 +137,22 @@ function KeyFacts({ facts, retry }) {
   );
 }
 
-/** Overview (canvas PF-06 A, addendum PFA01): why it reads as it does, next actions, and the figures it reported. */
+/**
+ * Overview (canvas PF-06 A, addendum PFA01): why it reads as it does, next
+ * actions, the figures it reported, and (D6222, #6222) the investor's own
+ * notes, where What changed's "Save as my note" lands. A What changed save
+ * that fails hands its text to the Notes box with the reason, so it is kept.
+ */
 function Overview({ uid, reads, retry, company }) {
+  const notes = useCompanyNotes(uid);
+  const [draft, setDraft] = useState(null);
+  const saveChanges = async (body) => {
+    try { await notes.create(body); } catch (e) {
+      const { body: text, ...source } = body;
+      setDraft({ text, source: source.source ? source : null, error: noteSentence(e) });
+      throw e;
+    }
+  };
   const why = evidenceOf(reads, uid);
   const actions = nextActionsOf(reads, uid);
   const state = why.health.state;
@@ -184,8 +200,9 @@ function Overview({ uid, reads, retry, company }) {
           <h2 className="pf-h2" id="pf-co-reported">Company-reported performance</h2>
           <span className="pf-sm">Separate from your investment and its marks</span>
         </div>
-        <FiguresTab uid={uid} periods={company?.periods || []} />
+        <FiguresTab uid={uid} periods={company?.periods || []} onSaveNote={notes.status === 'ready' && notes.canWrite ? saveChanges : null} />
       </section>
+      <CompanyNotes notes={notes} draft={draft} />
       <section className="pf-card" aria-labelledby="pf-co-recent">
         <div className="pf-card-head">
           <h2 className="pf-h2" id="pf-co-recent">Recent activity</h2>

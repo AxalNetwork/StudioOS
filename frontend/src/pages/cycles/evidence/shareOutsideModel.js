@@ -55,14 +55,18 @@ export function composerErrors(form, today = new Date().toISOString().slice(0, 1
     if (form.nda_confirmed !== true) errors.nda_confirmed = 'Confirm that an NDA is signed outside Axal.';
     if (!DAY.test(String(form.nda_signed_on ?? '')) || form.nda_signed_on > today) errors.nda_signed_on = 'Enter the day the NDA was signed. It cannot be in the future.';
   }
-  if (!intIn(Number(form?.expires_in_days), LINK_LIMITS.expires_in_days)) errors.expires_in_days = 'A link lasts from 1 to 90 days.';
-  if (!intIn(Number(form?.view_limit), LINK_LIMITS.view_limit)) errors.view_limit = 'Allow from 1 to 100 views.';
+  if (form?.output !== 'pdf') {
+    if (!intIn(Number(form?.expires_in_days), LINK_LIMITS.expires_in_days)) errors.expires_in_days = 'A link lasts from 1 to 90 days.';
+    if (!intIn(Number(form?.view_limit), LINK_LIMITS.view_limit)) errors.view_limit = 'Allow from 1 to 100 views.';
+  }
   if (Array.isArray(form?.items) && form.items.length === 0) errors.items = 'Tick at least one item.';
   return errors;
 }
 /** The body the Worker takes: only the fields it accepts. */
 export function composerBody(form) {
-  const body = { label: String(form.label).trim(), reader: form.reader, expires_in_days: Number(form.expires_in_days), view_limit: Number(form.view_limit) };
+  const body = { label: String(form.label).trim(), reader: form.reader };
+  // D6897 part 2: a PDF copy has no expiry and no view limit; the Worker refuses them.
+  if (form.output !== 'pdf') { body.expires_in_days = Number(form.expires_in_days); body.view_limit = Number(form.view_limit); }
   if (form.reader === 'after_nda') { body.nda_confirmed = form.nda_confirmed === true; body.nda_signed_on = form.nda_signed_on; }
   if (Array.isArray(form.items)) body.items = form.items;
   return body;
@@ -109,8 +113,10 @@ export function snapshotErrors(form) {
   const label = String(form?.label ?? '').trim();
   if (!label) e.label = 'Name who this is for.';
   else if (label.length > LINK_LIMITS.label) e.label = `At most ${LINK_LIMITS.label} characters.`;
-  if (!intIn(form?.expires_in_days, LINK_LIMITS.expires_in_days)) e.expires_in_days = 'Between 1 and 90 days.';
-  if (!intIn(form?.view_limit, LINK_LIMITS.view_limit)) e.view_limit = 'Between 1 and 100 views.';
+  if (form?.output !== 'pdf') {
+    if (!intIn(form?.expires_in_days, LINK_LIMITS.expires_in_days)) e.expires_in_days = 'Between 1 and 90 days.';
+    if (!intIn(form?.view_limit, LINK_LIMITS.view_limit)) e.view_limit = 'Between 1 and 100 views.';
+  }
   const line = String(form?.covering_line ?? '');
   if (/[\r\n]/.test(line.trim())) e.covering_line = 'One sentence, on one line.';
   else if (line.trim().replace(/\s+/g, ' ').length > COVERING_LINE_MAX) e.covering_line = `At most ${COVERING_LINE_MAX} characters.`;
@@ -118,5 +124,16 @@ export function snapshotErrors(form) {
 }
 export function snapshotBody(form) {
   const line = String(form?.covering_line ?? '').trim().replace(/\s+/g, ' ');
-  return { label: String(form.label).trim(), expires_in_days: form.expires_in_days, view_limit: form.view_limit, ...(line ? { covering_line: line } : {}) };
+  const limits = form?.output === 'pdf' ? {} : { expires_in_days: form.expires_in_days, view_limit: form.view_limit };
+  return { label: String(form.label).trim(), ...limits, ...(line ? { covering_line: line } : {}) };
 }
+
+// ---------------------------------------------------------------------------
+// D6897 part 2 (#6897, canvas D6054 RA-28 C, RA-30 B): Link or PDF
+// ---------------------------------------------------------------------------
+/** The sheet's Output choice. A link can be stopped and counted; a PDF is a copy that cannot. */
+export const OUTPUTS = Object.freeze([
+  { key: 'link', word: 'Link', line: 'Dated, with an expiry and a view limit. You can revoke it.' },
+  { key: 'pdf', word: 'PDF', line: 'An A4 page you download and send yourself. A copy cannot be stopped or counted.' },
+]);
+export const PDF_DOWNLOADED = 'Downloaded. Nothing was sent: send the file yourself.';

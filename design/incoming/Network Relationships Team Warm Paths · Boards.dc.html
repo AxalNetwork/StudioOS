@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Relationships Team Warm Paths · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network › Relationships · #7060 · brief 5 of 6 (#7050) · extends #4799 NW2.1 and #6256</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Team warm paths — who on my team knows this person, and asking them for an introduction</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The team warm path inside the Person Sheet (NW2.1, #4799) and its existing Ask a teammate sheet (RI3). A person is looked up by the LinkedIn profile or email you recorded, never by name, and teammates never see that identifier. Name only (Not recorded), no shared path (None) and a failed lookup (Unavailable) are three states with three different recoveries; none is drawn as 0. Request introduction goes straight to the teammate who knows them: one teammate opens the Ask sheet, several open Who should you ask? first. Target, recipient and reason stay on screen before the explicit Send; the result reads Asked, never Made, which needs a confirmed send from the teammate’s mailbox. Sheets stack so an unsaved note survives. The sharing summary shows Off, one team, several teams and unreadable, with the fields a team can discover. Keys carry the NRT prefix. Violet dashed ◇ tags mark backend work; there is no ⚑ owner pick.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main c59a9f2f66 · [Lena Sato], [Kelp Bio], [Quill Analytics], both [Morgan Vale]s and every person, company and figure (142 people, 3 teammates, 20 a day) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Relationships Team Warm Paths Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['W1', 'Person Sheet · one eligible teammate', '[Ari Lane] is looked up by the email Lena recorded; [Dev Varma] shared and knows her. The footer primary is Request introduction from [Dev]. The book line now says what is shared and with which team.', [F('NRT01', false, 1100)]],
+      ['W2', 'Five lookup states', 'Name only (Not recorded, company lookup, ◇ edit identifier), valid identifier with no shared path (None, company lookup), lookup unavailable (Try again), one eligible teammate, several eligible teammates, plus loading.', [C('NRT02', false, 1400, 1020)]],
+      ['W3', 'Identity · two contacts named [Morgan Vale]', 'One at [Harbor Seed] by LinkedIn profile (3 teammates), one at [Elm Studio] by email (None). A teammate’s same-name contact with another profile never appears.', [C('NRT03', false, 1400, 654)]],
+      ['W4', 'Request flow', 'Who should you ask? → Ask [Dev] for an introduction (target, recipient, cost, reason, context, Eadwyn quote) → Request sent (Asked, not Made). Then the Ask sheet stacked over the Person Sheet with its unsaved note kept.', [C('NRT04', 'Pick · Ask · Sent', 1440, 707), F('NRT04B', 'Ask sheet over a dirty Person Sheet', 1000)]],
+      ['W5', 'After the send', 'Lena’s sheet marks Dev as Asked; the Introductions ledger row; what Dev receives. Asked, Accepted and Made are three steps.', [C('NRT05', false, 1400, 608)]],
+      ['W6', 'Dirty sheet', 'Closing the Ask sheet returns to the note; leaving for Introductions asks first; the existing close guard is kept.', [C('NRT06', false, 1400, 322)]],
+      ['W7', 'Sharing summary', 'Off, on for a named team, on for several teams, unreadable; what a team can discover and what is never shared; the same row seen by Lena and by Dev.', [C('NRT07', false, 1400, 651)]],
+      ['W8', 'Errors and refusals', 'Send failed, teammate no longer shared, 20 a day, support session, Eadwyn quote, reason missing, and the investor credit flows kept out (#6636, #6637).', [C('NRT08', false, 1400, 596)]],
+      ['W9', 'Tablet 768', 'Relationships with the Person Sheet as an overlay, several teammates.', [C('NRT09', false, 768, 1024)]],
+      ['W10', 'Phone 390', 'Sheet with one teammate, Who should you ask?, the Ask sheet with the keyboard open, Request sent, name only.', [P('NRT10A', 'One teammate'), P('NRT10B', 'Who should you ask?'), P('NRT10C', 'Ask · keyboard open'), P('NRT10D', 'Request sent'), P('NRT10E', 'Name only')]],
+      ['W11', 'Dark', 'The stacked Ask sheet on desktop and the Person Sheet on phone.', [F('NRT11', 'Desktop', 1000), P('NRT11B', 'Phone')]],
+      ['W12', 'Prototype and accessibility', 'Frame links, keyboard and focus, screen-reader announcements, phone keyboard, error recovery.', [W('NRT12')]],
+      ['Handoff', 'Handoff', 'Checked on main, preserved, frontend only, backend required (◇), open questions.', [W('NRTH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

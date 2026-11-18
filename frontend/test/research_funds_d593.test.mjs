@@ -189,11 +189,11 @@ test('F0: the drawer offers "Save to shortlist" (D7167), and once the fund is on
 
   const there = drawerOf(withDrawer({ onAdd() {}, isAdded: () => true, dossierOf: (x) => (x.uid === 'zeta' ? 'rf 7/x' : null) }));
   assert.match(there, /<a[^>]*href="\/research\/funds\/rf%207%2Fx"[^>]*>Open dossier →<\/a>/);
-  assert.doesNotMatch(there, /Save to shortlist|On your shortlist/, 'the link takes the button’s place');
+  assert.doesNotMatch(there, /Save to shortlist|Saved to shortlist|On your shortlist/, 'the link takes the button’s place');
 
   const page = withDrawer({ isAdded: () => true });
   const rows = renderedText(page.slice(page.indexOf('<tbody'), page.indexOf('</tbody>')));
-  assert.match(rows, /^Zeta Deep TechIn My funds/, 'the row says where the fund now is');
+  assert.match(rows, /^Zeta Deep TechSaved to shortlist/, 'the row says where the fund now is');
 });
 
 test('F0: an add says how it went in that fund’s drawer, and only there', () => {
@@ -232,16 +232,16 @@ test('F0: the row the POST returns is kept, so the dossier opens before the list
   assert.match(add, /if \(row\?\.uid\) setCreated\(\(rows\) => \(\{ \.\.\.rows, \[normalizeFundName\(fund\.name\)\]: row\.uid \}\)\);/);
   assert.match(add, /if \(!fund \|\| listState !== 'ok' \|\|/);
   // D4613: an add an earlier request already made says so.
-  assert.match(add, /text: row\?\.existing \? `\$\{fund\.name\} is already on My funds\.` : `\$\{fund\.name\} added to My funds\.`/);
+  assert.match(add, /text: row\?\.existing \? `\$\{fund\.name\} is already on your shortlist\.` : `\$\{fund\.name\} saved to your shortlist\.`/);
   assert.match(ZONE, /const dossiers = useMemo\(\(\) => dossierMap\(items, created\), \[items, created\]\);/);
   assert.match(ZONE, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\} busy=\{directoryBusy\}\s+dossierOf=\{dossierOf\} listState=\{listState\} notice=\{directoryNote\} onTotal=\{setDirectoryTotal\}/);
 });
 
-test('F0: the catalog profile says "Save to shortlist" (D7167), and Back to results is the Directory tab by default', () => {
+test('F0: the catalog profile says "Save to shortlist" (D7167), and its way back (D7166) is the Directory tab', () => {
   const fund = { loading: false, error: null, status: 200, data: { item: ZETA, reports: [], reports_status: 'ok', source_boundary: 'Reported snapshots only.' } };
   const out = html(h(catalog.FundCatalogView, { fund, list: { loading: false, error: null, existing: null }, onAdd() {} }));
-  assert.match(out, /<button[^>]*>Save to shortlist<\/button>/);
-  assert.match(out, /<a[^>]*href="\/research\/funds\?view=directory"[^>]*>[\s\S]*?Back to results<\/a>/);
+  assert.match(out, /<button[^>]*>(<svg[\s\S]*?<\/svg>)? Save to shortlist<\/button>/);
+  assert.match(out, /<a[^>]*href="\/research\/funds\?view=directory"[^>]*>[\s\S]*?Fund directory<\/a>/);
   // The company page's "See all N in Funds" counts directory funds, so it lands on the directory too.
   const company = read('frontend/src/pages/research/CompanyProfile.jsx');
   // D4612: and it keeps the list's own filter, so the total it names is the total it opens.
@@ -293,7 +293,7 @@ test('F1: a money section with nothing recorded says Not recorded with its reaso
   assert.doesNotMatch(t, /\d/);
 });
 
-test('F1: the band sits above the directory’s search and list, read through the existing overview method', () => {
+test('F1: the band sits below the directory’s results, in the disclosure, read through the existing overview method', () => {
   const out = html(h(directory.FundDirectoryView, {
     query: directoryRead.EMPTY_QUERY, onQuery() {}, search: '', onSearch() {}, facets: null, selected: null,
     onSelect() {}, onClose() {}, result: { loading: false, error: null, data: DATA },
@@ -303,7 +303,10 @@ test('F1: the band sits above the directory’s search and list, read through th
   const band = out.indexOf('data-testid="band-probe"');
   const search = out.indexOf('id="fd-q"');
   const list = out.indexOf('data-testid="fund-directory-results"');
-  assert.ok(cover > 0 && band > cover && search > band && list > search, 'the band is not between the coverage card and the search');
+  // D7166 (RFD-02): results first; coverage and the band move into the disclosure below them.
+  const disclosure = out.indexOf('data-testid="fund-directory-disclosure"');
+  assert.ok(search > 0 && list > search && disclosure > list && cover > disclosure && band > cover,
+    'search, then results, then the disclosure with coverage and the band');
   assert.match(ZONE, /import \{ researchOverviewApi \} from '\.\.\/\.\.\/lib\/api\/researchOverview\.js';/);
   assert.match(ZONE, /import \{ Money \} from '\.\/ResearchOverviewPanel';/);
   assert.match(ZONE, /export function MoneyBand\(\{ load = researchOverviewApi\.get \}\)/);
