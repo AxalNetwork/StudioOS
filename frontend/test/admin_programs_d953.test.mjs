@@ -150,7 +150,8 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     'refer-and-earn': ['Overview', 'How it runs', 'Queue', 'Settings', 'Activity'],
     // D5313 (#5313): Perks runs in the generic shell (PG03a): its six core sections and the Perk queue module.
     perks: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Perk queue', 'History', 'Settings'],
-    learning: ['Overview', 'How it runs', 'People', 'Activity'],
+    // D5887 (#5887): Learning runs in the generic shell (PG03a): its six core sections and the Learners module.
+    learning: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Learners', 'History', 'Settings'],
     // D963 (#2796): Referral partners' Queue and Activity, Investor cohort access's Overview and Activity.
     // D5888 (#5888): Referral partners runs in the generic shell (PG03a): its six core sections and the Referral queue module.
     'referral-partners': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Referral queue', 'History', 'Settings'],
@@ -567,9 +568,9 @@ test('Referral partners links D923\'s tabs, with Commissions for a Super Admin o
   } finally { await hq.close(); }
   const investor = await mounted('/admin/programs/investor-cohorts', ProgramPage, worker());
   try {
-    assert.match(investor.textOf('programs-investor-banner'), /^Not running yet\./);
+    assert.match(investor.textOf('programs-investor-banner'), /current assignment and a signed cohort NDA/);
     assert.ok(investor.has('programs-tabs'), 'Overview and Activity');
-    assert.equal(investor.textOf('programs-header-status'), '○Not built yet');
+    assert.match(investor.textOf('programs-header-status'), /Reading…$/, 'the registry detail has not answered');
   } finally { await investor.close(); }
   const ai = await mounted('/admin/programs/ai-native-venture', ProgramPage, worker());
   try {

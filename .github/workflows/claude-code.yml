@@ -1,22 +1,29 @@
 name: Claude Code
 
-# Runs Anthropic's official Claude Code action against the repo using an
-# API key (NOT subscription auth — the Anthropic org has subscription
-# access to Claude Code disabled, so the only working path is the
-# `ANTHROPIC_API_KEY` environment variable documented at
-# https://docs.anthropic.com/en/docs/claude-code/github-actions).
+# Runs Anthropic's official Claude Code action against the repo. It bills
+# Claude API credits, never a subscription (the Anthropic org has
+# subscription access to Claude Code disabled).
+#
+# Authentication is workload identity federation (#5530, D5530): the action
+# exchanges this job's GitHub OIDC token for a short-lived Anthropic token,
+# so no API key is stored. `id-token: write` below is what lets it ask for
+# that token. It has its own federation rule, separate from claude-review.yml's
+# pull-request rule; documentation/operations/CLAUDE_REVIEW.md §4b sets it up.
 #
 # Trigger paths:
 #   - Issue comment mentioning `@claude`
 #   - PR review / review-comment mentioning `@claude`
 #   - Manual `workflow_dispatch`
 #
-# Required repository secret (Settings → Secrets and variables → Actions):
-#   ANTHROPIC_API_KEY   — billed via Anthropic API, not the Claude.ai sub.
+# Required repository variables (Settings → Secrets and variables → Actions →
+# Variables). They are identifiers, not secrets:
+#   CLAUDE_CODE_FEDERATION_RULE_ID   fdrl_…
+#   CLAUDE_CODE_ORGANIZATION_ID      the organization UUID
+#   CLAUDE_CODE_SERVICE_ACCOUNT_ID   svac_… (optional)
+#   CLAUDE_CODE_WORKSPACE_ID         wrkspc_… (optional when the rule names one)
 #
-# The workflow short-circuits with a human-readable error if the secret
-# is missing, so a misconfigured fork or freshly-cloned repo gets a
-# clear failure instead of an opaque auth crash inside the action.
+# The workflow short-circuits with a human-readable error if they are missing
+# or malformed, instead of an opaque auth failure inside the action.
 
 on:
   issue_comment:
@@ -71,21 +78,24 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Hard-fail with a readable message if the secret isn't set.
-      # Without this, the action below crashes with a generic 401.
-      - name: Verify ANTHROPIC_API_KEY is configured
+      # Hard-fail with a readable message if the federation variables are
+      # missing or malformed. Without this, the action fails with a generic 401.
+      - name: Verify Claude Code federation is configured
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: bash scripts/check-anthropic-key.sh
+          CLAUDE_CODE_FEDERATION_RULE_ID: ${{ vars.CLAUDE_CODE_FEDERATION_RULE_ID }}
+          CLAUDE_CODE_ORGANIZATION_ID: ${{ vars.CLAUDE_CODE_ORGANIZATION_ID }}
+          CLAUDE_CODE_SERVICE_ACCOUNT_ID: ${{ vars.CLAUDE_CODE_SERVICE_ACCOUNT_ID }}
+          CLAUDE_CODE_WORKSPACE_ID: ${{ vars.CLAUDE_CODE_WORKSPACE_ID }}
+        run: node scripts/check-claude-code-federation.mjs
 
       - name: Run Claude Code
         uses: anthropics/claude-code-action@ec7c223ff45a0763d3d5e530c74403d14f8ddd10 # v1
         with:
-          # API-key auth path. The action reads the env var below.
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Workload identity federation: the action exchanges the job's OIDC
+          # token (audience https://api.anthropic.com) per run. No stored key.
+          anthropic_federation_rule_id: ${{ vars.CLAUDE_CODE_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.CLAUDE_CODE_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.CLAUDE_CODE_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ vars.CLAUDE_CODE_WORKSPACE_ID }}
           # Optional one-shot prompt for manual dispatch runs.
           prompt: ${{ inputs.prompt }}
-        env:
-          # Some action versions read the key from the env directly
-          # rather than the `with:` input — set both for compatibility.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

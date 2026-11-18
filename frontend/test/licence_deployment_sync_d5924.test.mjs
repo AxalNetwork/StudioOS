@@ -82,7 +82,10 @@ test('L15: HQ revision against the branch revision, the failed attempt’s time 
   assert.match(text, /6 min ago · 9 Nov 2026, 11:54 UTC · code unreachable/);
   assert.match(text, /Retry sync/);
   assert.match(html, /<button type="button" disabled="" data-testid="licence-sync-retry" aria-describedby="licence-sync-retry-reason"/,
-    'Retry sync is drawn, and disabled: no route re-sends a copy on demand');
+    'without a handler Retry sync is drawn, and disabled');
+  // D4819 part 21 (#5928): the page passes the route's handler, and the button sends.
+  const live = strip({ sync: PENDING, onRetry: () => {} });
+  assert.match(live, /<button type="button" data-testid="licence-sync-retry" aria-describedby="licence-sync-retry-reason"/, 'with a handler it is live');
   assert.match(text, new RegExp(`${RETRY_SYNC_REASON.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} The next try is not before 9 Nov 2026, 12:54 UTC\\.`));
   assert.match(html, /data-testid="licence-sync-reread"/, 'Read again re-reads the licence');
 });
@@ -153,12 +156,15 @@ test('the branch line keeps “last accepted a copy” and never says “respond
   assert.ok(renderedText(strip({ sync: SYNCED })).includes(BRANCH_LINE_NOTE));
 });
 
-test('the retry window is the Worker’s own, and no route retries a sync on demand yet', () => {
+test('the retry window is the Worker’s own, and the on-demand retry route exists (D4819 part 21)', () => {
   const push = read('cloudflare-worker/src/services/licencePush.ts');
   assert.equal(Number(/LICENCE_PUSH_RETRY_WINDOW_MINUTES = (\d+);/.exec(push)?.[1]), SYNC_RETRY_WINDOW_MINUTES);
-  // Retry sync is disabled because nothing serves it. When a route lands, wire the button and this fails.
+  // D5924 drew Retry sync disabled until a route served it; #5928 added `POST /:uid/sync/retry`, and the page wires it.
   const routes = ['admin_deployments.ts', 'admin_licences.ts', 'admin_licences_lifecycle.ts'].map((f) => read(`cloudflare-worker/src/routes/${f}`)).join('\n');
-  assert.doesNotMatch(routes, /r\.post\('\/(licences\/)?:uid\/(sync|push)/);
+  assert.match(routes, /r\.post\('\/:uid\/sync\/retry'/);
+  const detailSrc = read('frontend/src/pages/admin/licences/LicenceDetail.jsx');
+  assert.match(detailSrc, /const retrySync = \(\) => act\('syncRetry', adminLicenceSyncApi\.retry, d\.uid\);/);
+  assert.match(detailSrc, /<LicenceSyncStrip [\s\S]*?onRetry=\{retrySync\}/);
 });
 
 const FAILED = {
@@ -216,6 +222,8 @@ async function mount(handle) {
   return {
     calls, has: (id) => Boolean(byId(id)), text: () => text(container),
     async click(id) { await act(async () => { await props(byId(id)).onClick({ preventDefault() {} }); }); await flush(); },
+    // D4819 part 21: a press that opens the consequence sheet resolves only when the sheet is answered.
+    async press(id) { await act(async () => { props(byId(id)).onClick({ preventDefault() {} }); }); await flush(); },
     async clickText(label) {
       const n = walk(container).find((x) => x.tagName === 'BUTTON' && text(x).includes(label));
       assert.ok(n, `a ${label} button`);
@@ -234,7 +242,11 @@ test('mounted: Reconcile on a failed deployment asks the Worker, dispatches noth
   try {
     assert.ok(v.has('deploy-provisioning'));
     assert.ok(v.has('deploy-retry-form'), 'Retry stays beside it');
-    await v.click('deploy-reconcile');
+    await v.press('deploy-reconcile');
+    assert.ok(v.has('licence-consequence-sheet'), 'Reconcile asks in the consequence sheet first (D4819 part 21)');
+    assert.deepEqual(v.calls.filter(([m]) => m === 'POST'), [], 'nothing is sent before the sheet is confirmed');
+    assert.match(v.text(), /Reconcile never starts a run/);
+    await v.press('licence-consequence-confirm');
     assert.deepEqual(v.calls.filter(([m]) => m === 'POST'), [['POST', '/admin/licences/lic_fr/deploy/reconcile']], 'Reconcile is the read-only check; no retry is sent');
     assert.match(v.text(), /Reconciled\. Attempt 1 is recorded as failed \(run_failed\), and nothing was sent\. Retry starts attempt 2\./);
   } finally { await v.close(); }

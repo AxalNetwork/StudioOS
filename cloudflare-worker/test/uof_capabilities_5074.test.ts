@@ -154,3 +154,40 @@ test('the writes refuse from the map, in the route source',()=>{
   assert.match(src,/capabilities:\{\.\.\.c\.get\('caps'\),\.\.\.plan\.viewer\.capabilities\}/);
   assert.ok(!/support&&c\.req\.method!=='GET'/.test(src),'no write refusal of its own beside the map');
 });
+
+// D5074 part 6: Runway's other reads carry the same map, and the forecast (its own store, `routes/financials.ts`)
+// answers with `edit` from its own save gate and a support session's read-only rule.
+const SUPPORT_AS_FOUNDER=uofCapabilities({admin:false,founderAccount:true,support:true});
+test('part 6: the scenarios, compare and forecast reads carry the caller\'s map; a support session saves no forecast',async()=>{
+  const f=fixture();
+  await call(f,'GET','/plan',undefined,FOUNDER); // the founder initializes the Base
+  for(const [label,who,extra,map] of [['founder',FOUNDER,{},FOUNDER_MAP],['admin',ADMIN,{},ADMIN_MAP],['support as founder',FOUNDER,{impersonated_by:ADMIN},SUPPORT_AS_FOUNDER]] as const){
+    const s=await call(f,'GET','/scenarios',undefined,who,extra);
+    assert.equal(s.status,200,`${label}: ${JSON.stringify(s.body)}`);
+    assert.deepEqual(s.body.capabilities,map,`${label}: scenarios`);
+    const id=s.body.items[0].id;
+    const cmp=await call(f,'GET',`/compare?ids=${id}`,undefined,who,extra);
+    assert.equal(cmp.status,200,`${label}: ${JSON.stringify(cmp.body)}`);
+    assert.deepEqual(cmp.body.capabilities,map,`${label}: compare`);
+    const fc=await call(f,'GET','/api/financials/1',undefined,who,extra);
+    assert.equal(fc.status,200,`${label}: ${JSON.stringify(fc.body)}`);
+    assert.deepEqual(fc.body.capabilities,{edit:map.edit},`${label}: forecast`);
+  }
+  for(const path of ['/api/financials/1','/api/financials/1/recompute']){
+    const w=await call(f,path.endsWith('recompute')?'POST':'PUT',path,{assumptions:{}},FOUNDER,{impersonated_by:ADMIN});
+    assert.equal(w.status,403,`${path}: ${JSON.stringify(w.body)}`);
+    assert.equal(w.body.code,'support_read_only');
+  }
+  assert.equal(rows(f,'SELECT project_id FROM financial_models').length,0,'a support session wrote no forecast');
+  const own=await call(f,'PUT','/api/financials/1',{assumptions:{}},FOUNDER);
+  assert.notEqual(own.status,403,`the founder's own save is not refused for who they are: ${JSON.stringify(own.body)}`);
+});
+
+test('part 6: the forecast\'s map and its save ask the same rule, in the route source',()=>{
+  const src=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/routes/financials.ts'),'utf8');
+  assert.match(src,/return \{ edit: canEditFinancials\(project, user\) && !\(await isSupportSession\(c as any\)\) \};/);
+  assert.match(src,/if \(!canEditFinancials\(project, user\)\) throw new Error\('Forbidden'\);/);
+  assert.equal((src.match(/ensureCanEdit\(project, user\);\n  if \(await isSupportSession\(c as any\)\) return c\.json\(SUPPORT_READ_ONLY, 403\);/g)||[]).length,2,'the save and the recompute');
+  const uof=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/routes/cycle_use_of_funds.ts'),'utf8');
+  assert.equal((uof.match(/capabilities:c\.get\('caps'\)\}\);/g)||[]).length,2,'the scenarios and compare reads');
+});
