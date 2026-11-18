@@ -225,3 +225,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
 | `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
+| `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |

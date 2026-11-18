@@ -208,7 +208,7 @@ test('the guard flags a job with no generate step, and passes one with it', () =
 // #6461: the two focused jobs no longer repeat the folder, decision and dark-mode guards or the
 // root SPA build. They are ci.yml's on every pull request: test:drift's `rest` part (what
 // scripts/test-drift-parts.mjs leaves unsharded) runs test:guards, which holds check-folder-docs and
-// check-decision-ids, and check-dark-mode; every `suite` part runs `npm run build` first.
+// check-decision-ids, and check-dark-mode; every `suite` part but worker-* runs `npm run build` first (D7108).
 // Mutation checked: a guard dropped from test:guards (fails); check-dark-mode dropped from
 // test:drift (fails); the suite's build step dropped (fails); a guard step back in a job (fails).
 test('focused contract jobs retain generation and contracts; the required sharded CI owns the suite, the guards and the build', async () => {
@@ -225,7 +225,15 @@ test('focused contract jobs retain generation and contracts; the required sharde
     assert.match(pkg['test:guards'], /node scripts\/check-decision-ids\.mjs/);
     const suite = jobsOf(ciSource).find(j => j.job === 'suite');
     assert.ok(suite, 'ci.yml has the suite job');
-    assert.ok(suite.steps.some(st => /^npm\s+run\s+build\b/.test(String(st.run || '').trim())), 'every suite part builds the SPA');
+    // D7108: the worker-* parts read no docs/ and skip the build; frontend-*
+    // and rest, which hold every test that opens docs/, always build.
+    const builds = suite.steps.filter(st => /^npm\s+run\s+build\b/.test(String(st.run || '').trim()));
+    assert.equal(builds.length, 1, 'the suite has one root SPA build step');
+    const suiteText = ciSource.slice(ciSource.indexOf('\n  suite:\n'), ciSource.indexOf('\n  test-deps:\n'));
+    const buildStep = suiteText.split(/^ {6}- /m).find(b => /^ {8}run: npm run build$/m.test(b));
+    assert.ok(buildStep, 'the build step is in the suite job');
+    assert.deepEqual([...buildStep.matchAll(/^ {8}if: (.+)$/gm)].map(m => m[1]),
+      ["${{ !startsWith(matrix.part, 'worker') }}"], 'the build skips only the worker-* parts, so frontend-* and rest always build');
     assert.match(ciSource, /^    name: .*\|\| 'test:drift \(full suite\)'/m);
     assert.match(ciSource, /node scripts\/test-drift-parts\.mjs/);
   };
@@ -234,6 +242,11 @@ test('focused contract jobs retain generation and contracts; the required sharde
   assert.throws(() => ciCovers(ci, { ...scripts, 'test:guards': scripts['test:guards'].replace('node scripts/check-folder-docs.mjs && ', '') }));
   assert.throws(() => ciCovers(ci, { ...scripts, 'test:drift': scripts['test:drift'].replace(' && node scripts/check-dark-mode.mjs', '') }));
   assert.throws(() => ciCovers(ci.replace('name: Build the SPA\n        run: npm run build', 'name: Build the SPA\n        run: true'), scripts));
+  // D7108 mutations: a condition that leaves rest unbuilt, and no build step at all.
+  const buildIf = "name: Build the SPA\n        run: npm run build\n        if: ${{ !startsWith(matrix.part, 'worker') }}\n";
+  assert.ok(ci.includes(buildIf), 'the suite build step carries the D7108 condition');
+  assert.throws(() => ciCovers(ci.replace(buildIf, "name: Build the SPA\n        run: npm run build\n        if: ${{ startsWith(matrix.part, 'frontend') }}\n"), scripts));
+  assert.throws(() => ciCovers(ci.replace(`      - ${buildIf}`, ''), scripts));
   for (const [workflow, contracts] of [
     ['form-lightbox-contracts.yml', ['add_lightbox_d695.test.mjs', 'lightbox_d685.test.mjs']],
     ['record-page-contracts.yml', ['record_page_d696.test.mjs', 'persona_pdf_d696.test.mjs']],
