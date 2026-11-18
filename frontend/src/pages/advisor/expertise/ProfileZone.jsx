@@ -8,6 +8,9 @@ import {
 } from './kit';
 import { PROFILE_LIMITS } from '../../../lib/advisorLimits';
 import { SAVED, notSavedKept, overLimitKeys, overLimitLine } from './feedback';
+import { MATCH_FIELDS, filled } from './profileFields.js';
+
+export { MATCH_FIELDS, filled };
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -45,29 +48,9 @@ export const PROFILE_LIMIT_LABELS = {
 const splitList = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const joinList = (v) => (Array.isArray(v) ? v.join(', ') : '');
 
-/**
- * The fields a match surface reads — the meter's list, and the `Match-critical`
- * chip's (D392). One list, so the chip cannot select fields the meter does not
- * count or miss one it does.
- */
-export const MATCH_FIELDS = [
-  ['Positioning statement', 'headline'],
-  ['Sectors', 'sectors'],
-  ['Stages', 'stages'],
-  ['Languages', 'languages'],
-  ['Geography', 'country'],
-  ['Availability window', 'availability_note'],
-  ['Headshot', 'headshot_url'],
-];
+// D7516: the list and `filled` live in `profileFields.js`, so Overview can read them without this page's imports.
 const MATCH_KEYS = MATCH_FIELDS.map(([, key]) => key);
 const ALL_KEYS = ['display_name', 'headline', 'bio', 'expertise', 'sectors', 'stages', 'languages', 'country', 'timezone', 'availability_note', 'headshot_url', 'linkedin_url'];
-
-/** Is this field answered in the SAVED record? An empty list is not an answer here. */
-export function filled(profile, key) {
-  const v = profile?.[key];
-  if (Array.isArray(v)) return v.length > 0;
-  return v !== null && v !== undefined && String(v).trim() !== '';
-}
 
 /**
  * Which form fields a chip shows. `gaps` reads the saved record, not the draft,

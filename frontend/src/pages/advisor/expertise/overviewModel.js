@@ -20,7 +20,7 @@
  * with its `StateChip`. A step that would come from a failed read is not
  * offered, and the card says which reads it could not use.
  */
-import { MATCH_FIELDS, filled } from './ProfileZone.jsx';
+import { MATCH_FIELDS, filled } from './profileFields.js';
 import { ADVISOR_LICENCE_REQUIRED } from './licenceRefusal.js';
 import { SESSIONS_PATH, stageKey } from './expertiseModel.js';
 

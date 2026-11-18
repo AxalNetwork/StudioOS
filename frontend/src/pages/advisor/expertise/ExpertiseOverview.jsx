@@ -13,7 +13,7 @@
  */
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { DataState, StateChip } from '../../../ui';
+import { DataState, StateChip } from '../../../ui/Honesty';
 import { useViewMode } from '../../../contexts/ViewModeContext';
 import { LICENCE_SENTENCES } from './licenceRefusal';
 import {
