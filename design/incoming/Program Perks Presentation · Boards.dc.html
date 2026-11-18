@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Program Perks Presentation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Program · Perks presentation and PDF deck · sibling of the Spin-Out Lab pilot · PGP01 to PGP08 · #6972, #6965</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Perks as a shareable page and a six-slide PDF — how a founder finds, checks and claims an offer, with no offer named</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A presenter opens Programs, selects Perks and lands on its public, signed-out page at /programs/perks: the name and one-sentence purpose first, “Open to all members” in words, “Download PDF” above the fold, then the five kit sections in order. The signature visual is one generic offer in four labelled parts, provider, eligibility, redemption conditions and next step, drawn as a bracketed sample with the claim button’s own reasons as the qualification cue. The journey is find, check, claim, redeem; the partner’s side (submit, review, deliver, never told who claimed) is shown separately. The page and the deck name no partner, offer, discount or count, so they stay true when an offer ends; the one action is “Sign in to Perks” with a return to /perks. Kit copied verbatim from the pilot (#6966); the admin entry points and the index are on PGS07 and PGS08. Frontend only.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · the edition date and the as-of date are bracketed samples; every offer is a bracketed sample; no real partner, offer, founder, quote or logo</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program Perks Presentation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PGP-01', 'Perks · public page · desktop 1440 · frontend only', '/programs/perks signed out. Name and purpose first; “Open to all members”; Download PDF and Print; the dark availability panel (browse, claim, offers, status) with Sign in to Perks; then 1 Who it helps, 2 What they do (find, check, claim, redeem), 3 How participation works (the offer anatomy, pricing, the provider’s role), 4 Access required, 5 Next step.', [F('PGP01', false, 5427)]],
+      ['PGP-02', 'Availability states · frontend only', 'The map’s dated status, two ways: running (today, the default) and the status field missing (Not recorded). The third frame is the existing /perks empty state a founder meets after sign-in when nothing is listed: the presentation never counts offers, so it stays true either way.', [C('PGP02A', 'Running · default', 1440, 673), C('PGP02B', 'Not recorded', 1440, 659), C('PGP02C', 'After sign-in · nothing listed (existing page)', 1440, 358)]],
+      ['PGP-03', 'Perks · phone 390 · frontend only', 'Stacked in reading order: name, purpose, audience, Download PDF full width, Print, the availability panel with Sign in to Perks, the section nav, the four steps on a vertical rule, the offer anatomy then its key, the three next steps and the PDF.', [C('PGP03', false, 390, 9795)]],
+      ['PGP-04', 'The PDF deck · 6 slides at 1920 × 1080', 'axal-vc-perks-v1.pdf. 1 Cover · 2 Who it helps · 3 Every offer (the anatomy) · 4 What happens (find, check, claim, redeem) · 5 How participation works (pricing and the partner) · 6 Access and current conditions (status as of the edition, public URL, edition).', [C('PGP04A', '1 · Cover', 1920, 1080), C('PGP04B', '2 · Who it helps', 1920, 1080), C('PGP04C', '3 · Every offer', 1920, 1080), C('PGP04D', '4 · What happens', 1920, 1080), C('PGP04E', '5 · How participation works', 1920, 1080), C('PGP04F', '6 · Access and current conditions', 1920, 1080)]],
+      ['PGP-05', 'Grayscale print sheet', 'The six slides as a black-and-white printer gives them; export settings.', [C('PGP05', false, 1440, 1459)]],
+      ['PGP-06', 'Slide contact sheet', 'The deck in order with each slide’s text alternative, how the slides map to the page’s sections, and which lines depend on live availability.', [C('PGP06', false, 1440, 1020)]],
+      ['PGP-07', 'Reading and focus order · frontend only', 'Numbered reading order of the hero at 1440 and 390, the focus ring on Download PDF, and the offer anatomy’s text alternative.', [C('PGP07A', 'Desktop', 1440, 1030), C('PGP07B', 'Phone 390', 390, 1782)]],
+      ['PGP-08', 'Handoff', 'Registry key, canonical URL, PDF path, the status field, the sign-in link, editable source and edition; what main records; claims that depend on live availability; frontend only, accessibility and the open points (⚑).', [W('PGP08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

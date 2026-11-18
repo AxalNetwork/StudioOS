@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Program Learning Presentation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Program · Learning presentation and PDF deck · PGL01 to PGL08 · #6973, #6965</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Learning as a shareable page and a five-slide PDF: the parent program, one illustrative course, access decided per program</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A presenter opens Programs, selects Learning and lands on its public, signed-out page at /programs/learning: the name and one-sentence purpose first, “Open or by invitation · per program” in words, “Download PDF” above the fold as an ink link to a committed file, and a dark panel that offers only Sign in to Learning, where a member sees what is open to them before any Join. The five sections follow the kit’s fixed order. The signature visual is one illustrative course outline (lesson, exercise, exam, each with what completes it), labelled as an illustration so no draft title reads as a published course or credential, and a tree that shows Learning as the parent with learning programs inside it, each open, by invitation or still a draft. The same story is a 16:9 deck of five slides with a grayscale print variant. Built with the program presentation kit from the Spin-Out Lab canvas (#6966) verbatim, plus one availability word; the admin entry points and the index are referenced there (PGS07, PGS08), not redrawn. No courses, certificates, fees, places or results are claimed. Frontend only, except an optional registry correction held for the owner.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · the course, module, lesson titles, program names, pass mark and edition date are bracketed fictional samples; no real course, learner or result</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program Learning Presentation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PGL-01', 'Learning · public page · desktop 1440 · frontend only', '/programs/learning signed out. Name and purpose first; Open or by invitation · per program; Download PDF and Print; the dark panel (Sign in to Learning, no Join); then 1 Who it helps (learners, organisers, studios), 2 What they do (the course outline and the formats), 3 How participation works (Learning as the parent), 4 Access required, 5 Next step with three doors and the PDF apart.', [F('PGL01', false, 5294)]],
+      ['PGL-02', 'Availability state · frontend only', 'No live read: the label comes from the registry’s join method. As drawn, “Open or by invitation · per program”, and the signed-in Learning area shows what is open. Held: if the registry’s “Not open to members yet” stands, the label and panel say so instead.', [C('PGL02A', 'Open or by invitation · per program · as drawn', 1440, 624), C('PGL02B', 'Not open to members yet · if the registry stands · held', 1440, 656)]],
+      ['PGL-03', 'Learning · phone 390 · frontend only', 'Stacked in reading order: name, purpose, audience, Download PDF full width, Print, the panel, the section nav, the three audiences, the course steps one under another, the program tree on a rule, the three doors and the PDF.', [C('PGL03', false, 390, 9186)]],
+      ['PGL-04', 'The PDF deck · 5 slides at 1920 × 1080', 'axal-vc-learning-v1.pdf. 1 Cover · 2 Who it helps · 3 Each program sets its own access · 4 One course: a lesson, an exercise, an exam · 5 Access and next step (conditions, two addresses, public URL, edition). No course is presented as published.', [C('PGL04A', '1 · Cover', 1920, 1080), C('PGL04B', '2 · Who it helps', 1920, 1080), C('PGL04C', '3 · The parent program', 1920, 1080), C('PGL04D', '4 · One course', 1920, 1080), C('PGL04E', '5 · Access and next step', 1920, 1080)]],
+      ['PGL-05', 'Grayscale print sheet', 'The five slides as a black-and-white printer gives them: steps and programs keep numbers, glyphs, words and outline styles, so nothing depends on hue; export settings.', [C('PGL05', false, 1440, 1340)]],
+      ['PGL-06', 'Slide contact sheet', 'The deck in order with each slide’s text alternative, and how the slides map to the page’s sections.', [C('PGL06', false, 1440, 866)]],
+      ['PGL-07', 'Share preview and entry points · frontend only', 'The link preview and head metadata for /programs/learning, its card on the public index, and how the admin row, Manage program and View presentation reach it (PGS07–PGS08 patterns, not redrawn).', [C('PGL07', false, 1440, 842)]],
+      ['PGL-08', 'Handoff', 'Registry key, canonical URL, PDF path, editable source and edition; what main shows; claims that depend on live availability; ◇ backend (registry row, optional PDF check), frontend only, accessibility and the owner’s open points.', [W('PGL08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

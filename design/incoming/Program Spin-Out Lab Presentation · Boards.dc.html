@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Program Spin-Out Lab Presentation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Program · Spin-Out Lab presentation and PDF deck · pilot of the program presentation kit · PGS00 to PGS10 · #6966, #6965</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Spin-Out Lab as a shareable page and a five-slide PDF — and the kit every program presentation reuses</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A presenter opens Programs, selects Spin-Out Lab and lands on its public, signed-out page at /spinout-lab/brief: the name and one-sentence purpose first, availability in words, “Download PDF” above the fold as an ink link to a committed file, distinct from Apply, Sign in and the studio enquiry, then five sections in a fixed order (who it helps, what they do, how participation works, access required, next step). The same story is a 16:9 deck of five slides with a grayscale print variant. This pilot defines the program presentation kit (#6965) that the nine sibling canvases copy, and draws the shared entry points once: the /admin/programs row and phone list, Manage program, View presentation on the program detail, and the public Programs index with an open, an invitation-only and a proposed example. Public site brand kit; wording from #6990, week names from owner decision F1, no Demo Day (J1), no typed dates, places, fees, results or quotes. Frontend only, one optional ◇.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · the cohort values, studio grants, activity figures and the edition date are bracketed fictional samples; two index cards are labelled examples; no real founder, company, investor, quote or logo</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program Spin-Out Lab Presentation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PGS-00', 'Program presentation kit · #6965', 'The reusable system the nine siblings copy verbatim: availability labels in words, the four actions that never look alike (Download PDF, Print, participation, sign in and enquiry), the page frame and fixed section order, the signature journey, the 16:9 slide master with its grayscale variant, and how to use the kit.', [W('PGS00')]],
+      ['PGS-01', 'Spin-Out Lab · public page · desktop 1440 · frontend only', '/spinout-lab/brief signed out (and /programs/spinout-lab). Name and purpose first; By application; Download PDF and Print this page; the dark availability panel with the homepage’s cohort card and the one primary, Apply; then 1 Who it helps, 2 What they do (the four-week journey), 3 How participation works, 4 Access required, 5 Next step with the PDF apart.', [F('PGS01', false, 4980)]],
+      ['PGS-02', 'Availability states · frontend only', 'The program-specific state from GET /api/spinout-lab/brief, five ways: open, closed (no apply; the page and PDF still work), unavailable (never “closed”), blank fields (Not recorded) and loading. The label “By application” never changes.', [C('PGS02A', 'Open', 1440, 659), C('PGS02B', 'Closed', 1440, 624), C('PGS02C', 'Unavailable', 1440, 624), C('PGS02D', 'Blank fields', 1440, 627), C('PGS02E', 'Loading', 1440, 624)]],
+      ['PGS-03', 'Spin-Out Lab · phone 390 · frontend only', 'Stacked in reading order: name, purpose, audience, Download PDF full width, Print, the availability panel with Apply, the section nav two per row, the journey stacked on a vertical rule, the three next steps and the PDF.', [C('PGS03', false, 390, 8685)]],
+      ['PGS-04', 'The PDF deck · 5 slides at 1920 × 1080', 'axal-vc-spinout-lab-v1.pdf. 1 Cover (availability, name, purpose, audience, edition) · 2 Who it helps · 3 What happens (the four weeks, horizontal) · 4 How participation works · 5 Access and next step (conditions, addresses, public URL, edition). Evergreen: no dates or places.', [C('PGS04A', '1 · Cover', 1920, 1080), C('PGS04B', '2 · Who it helps', 1920, 1080), C('PGS04C', '3 · What happens', 1920, 1080), C('PGS04D', '4 · How participation works', 1920, 1080), C('PGS04E', '5 · Access and next step', 1920, 1080)]],
+      ['PGS-05', 'Grayscale print sheet', 'The five slides as a black-and-white printer gives them: violet to ink, the closing panel as an outline, artwork in grey; export settings.', [C('PGS05', false, 1440, 1340)]],
+      ['PGS-06', 'Slide contact sheet', 'The deck in order with each slide’s text alternative, and how the slides map to the page’s sections.', [C('PGS06', false, 1440, 763)]],
+      ['PGS-07', 'Admin entry points · /admin/programs · frontend only', 'The program name on a desktop row and a phone row opens its presentation; Open becomes Manage program, same destination. On the program detail, View presentation sits first in the header’s actions, desktop and phone.', [C('PGS07A', 'Rows · desktop', 1440, 612), C('PGS07B', 'Phone 390', 390, 527), C('PGS07C', 'Detail · desktop', 1440, 564), C('PGS07D', 'Detail · phone', 390, 462)]],
+      ['PGS-08', 'Public Programs index · frontend only', 'New /programs, signed out: Spin-Out Lab (by application, with its live line) and two labelled examples, an invitation-only program and a proposed one. The way in from Programs & Events, the phone index, and the unknown-key page.', [F('PGS08A', 'Desktop 1440', 1423), C('PGS08B', 'Phone 390', 390, 1516), C('PGS08C', 'From /events', 1440, 816), F('PGS08D', 'Unknown key', 1244)]],
+      ['PGS-09', 'Reading and focus order · frontend only', 'Numbered reading order of the hero at 1440 and 390, the focus ring on Download PDF, the element each action is, and the journey’s text alternative.', [C('PGS09A', 'Desktop', 1440, 930), C('PGS09B', 'Phone 390', 390, 1584)]],
+      ['PGS-10', 'Handoff', 'Registry key, canonical URL, PDF path, editable source and edition; what exists on main and what changes; claims that depend on the live read; ◇ backend (optional), frontend only, accessibility and the owner’s open points.', [W('PGS10')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wellness Member Home · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Wellness · member home · #7117 (delivery #7116, #7118, #7119, #7120)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Wellness — a quiet private place to check in, reflect by day, week and month, and choose support</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Wellness (/wellbeing) for an eligible founder or Administrator in their own personal workspace. The page opens with “Take a moment to check in”, then Today, This week and This month, each with its date and its own state, then Recommendations and My bookings. The header heart opens Today directly with a link to the full home; on a phone the heart and the Account sheet reach it in one tap. The content area uses the wellness palette (warm off-white, ink, restrained sage) and a small static dawn motif inside the unchanged Axal VC shell with violet actions. Clinical, nutrition, mindfulness and spiritual support are separate opt-in choices; with all of them off it is a plain private journal. No streaks, no “missed”, no scores of anyone’s health, no diagnosis or prescribing, and Eadwyn never reads check-ins. Violet dashed ◇ tags mark backend work by issue; amber ⚑ tags mark owner decisions. Every provider and session is a [Sample].</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Tue 17 Nov 2026 · checked against main f62f025552 · [Maya Ruiz], [Northwind Labs], [Dr. Mara Lind], [Jonas Weber], [Ana Sousa], the [Grounding circle] (8 seats, 3 open) and every date and price are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Wellness Member Home Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['WLM-00', 'Journey, routes and entry points', 'The order of the page, the routes (one destination at /wellbeing, a direct route to each period), the three entry points and the annotation key.', [W('WLM00')]],
+      ['WLM-01', 'Home · desktop 1440', '“Take a moment to check in” with the dawn motif; Today, This week and This month with dates and independent states; Recommendations with four sample variants; My bookings, practice preferences and the general resource library. One primary action: Begin today’s reflection.', [F('WLM01', false, 1320), C('WLM01B', 'Independent states later the same day', 1200, 300)]],
+      ['WLM-02', 'Header heart and phone entries', 'The heart opens a dialog straight on Today with a link to the full home; loading, saved and couldn’t-load with Retry. On a phone: the heart in the phone header and the Wellness row in the Account sheet.', [F('WLM02', 'Heart open on Today', 900), C('WLM02B', 'Popover states', 1220, 470), P('WLM02P', 'Account sheet row'), P('WLM09F', 'Phone heart')]],
+      ['WLM-03', 'Daily, Weekly and Monthly reflections', 'Each period saves on its own. Brief private history with Edit reflection; days without an entry are left out, never counted. The weekly view adds a four-week table in words; the monthly view cites only what was recorded.', [F('WLM03', 'Today', 760), F('WLM03W', 'This week', 940), F('WLM03M', 'This month', 780)]],
+      ['WLM-04', 'Practice preferences', 'Clinical support, Nutrition, Mindfulness and grounding, Spiritual guidance: four separate opt-in switches, plus a separate consent for using ticked topics. All off still works as a quiet secular journal.', [C('WLM04', 'Some on · all off', 1240, 820), C('WLM04B', 'Today with all off vs practices on', 1240, 470)]],
+      ['WLM-05', 'Recommendations', 'Choose interests, Why this?, Dismiss with undo and Browse all. Therapist, dietitian, 1:1 session and group session as [Sample] variants with credentials, scope, format, language, time zone, price and availability. Resources, providers and sessions are labelled apart.', [F('WLM05', false, 1260), C('WLM05B', 'Choose interests', 760, 640), C('WLM05C', 'Why this? and Dismiss', 1200, 560)]],
+      ['WLM-06', 'Provider detail', 'Credentials and verification, practice region, scope and what the provider does not do, services and prices, next openings, and what the provider learns if you book.', [F('WLM06', false, 800)]],
+      ['WLM-07', '1:1 and group booking decisions', 'The shipped 1:1 Confirm step and the planned group reservation, each stating exactly what the provider (and the group) learns when you reserve. Outcomes: reserved, last seat taken, time no longer open.', [C('WLM07', false, 1340, 560), C('WLM07B', 'Outcomes', 1340, 300)]],
+      ['WLM-08', 'States', 'Suggestions off, no matching provider, no seats, a cancelled session, a failed read with “Couldn’t load your check-in” and Retry, and a failed save that keeps the words.', [C('WLM08', false, 1340, 760)]],
+      ['WLM-09', 'Phone 390', 'Home with stacked periods, Today from the heart with 44 px controls and a sticky Save, Recommendations with Why this?, reserving a seat, and My bookings after reserving.', [P('WLM09A', false), P('WLM09B', false), P('WLM09C', false), P('WLM09D', false), P('WLM09E', false)]],
+      ['WLM-10', 'Dark mode', 'The home and the phone home on the dark wellness tokens.', [F('WLM10', false, 1320), P('WLM10P', false)]],
+      ['WLM-11', 'Admin programme detail', 'Admin → Programs → Wellness (#7116) describes the programme and shows no member data; its only route into Wellness is a link to the administrator’s own workspace.', [C('WLM11', false, 1340, 560)]],
+      ['WLM-12', 'Motion', 'Static by default. An optional slow-breathing animation runs only when started, with a spoken text equivalent, and never moves under reduced motion.', [C('WLM12', false, 1200, 380)]],
+      ['WLM-H', 'Handoff', 'Checked on main, backend by issue, owner questions including the live provider roster, contrast table, keyboard and screen-reader order, and the 1440/390 handoff.', [W('WLMH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

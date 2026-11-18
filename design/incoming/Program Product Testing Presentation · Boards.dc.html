@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Program Product Testing Presentation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Program · Product testing presentation and PDF deck · sibling of the Spin-Out Lab pilot · PGT01 to PGT08 · #6974, #6965</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Product testing as a shareable page and a five-slide PDF — two paths, one approved campaign, two separate decisions</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A presenter opens Programs, selects Product testing and lands on its public, signed-out page at /programs/product-testing: the name and one-sentence purpose first, “By application · two steps” in words, “Download PDF” above the fold, then the five kit sections in order. The signature visual is what main records: a tester path (join the pool, HQ approves) and a partner path (propose a campaign, HQ reviews) meeting at one campaign HQ opens, then apply, selection by the campaign owner, and testing; every step names who decides. Approval as a tester is drawn apart from being picked for a campaign. The page reads nothing live: open campaigns are listed in Studio for active testers, and no place, reward or open campaign is promised. Product testing stays at HQ and is not granted to studios, so there is no studio enquiry (⚑). Kit copied verbatim from the pilot (#6966); the admin entry points and the index are on PGS07 and PGS08.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · the edition date, the count and its time are bracketed samples; no real campaign, partner, product, tester, quote or logo</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program Product Testing Presentation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PGT-01', 'Product testing · public page · desktop 1440 · frontend only', '/programs/product-testing signed out. Name and purpose first; “By application · two steps”; Download PDF and Print; the dark availability panel says where open campaigns are listed (Studio) and carries the one primary, Sign in to become a tester; then 1 Who it helps, 2 What they do (the two paths), 3 How participation works (two decisions), 4 Access required, 5 Next step.', [F('PGT01', false, 5569)]],
+      ['PGT-02', 'Availability states', 'A is the default and frontend only: a fixed panel, no count. B to D need a signed-out count of open campaigns that main does not have (◇) and HQ’s decision to publish it (⚑): a timestamped count, a measured 0 with the pool still open to join, and Unavailable, never drawn as 0.', [C('PGT02A', 'Default · fixed', 1440, 659), C('PGT02B', 'Count · held ◇ ⚑', 1440, 660), C('PGT02C', 'None open now · held', 1440, 665), C('PGT02D', 'Unavailable · held', 1440, 660)]],
+      ['PGT-03', 'Product testing · phone 390 · frontend only', 'Stacked in reading order: name, purpose, audience, Download PDF full width, Print, the availability panel, the section nav, the tester path then the partner path, the meeting campaign, steps 1 to 3, the decisions and the three ways forward.', [C('PGT03', false, 390, 10138)]],
+      ['PGT-04', 'The PDF deck · 5 slides at 1920 × 1080', 'axal-vc-product-testing-v1.pdf. 1 Cover · 2 Who it helps · 3 What happens (two paths meet at one approved campaign) · 4 How participation works (two decisions, kept apart) · 5 Access and current conditions (public URL, edition).', [C('PGT04A', '1 · Cover', 1920, 1080), C('PGT04B', '2 · Who it helps', 1920, 1080), C('PGT04C', '3 · What happens', 1920, 1080), C('PGT04D', '4 · How participation works', 1920, 1080), C('PGT04E', '5 · Access and current conditions', 1920, 1080)]],
+      ['PGT-05', 'Grayscale print sheet', 'The five slides as a black-and-white printer gives them; export settings.', [C('PGT05', false, 1440, 1340)]],
+      ['PGT-06', 'Slide contact sheet', 'The deck in order with each slide’s text alternative, and how the slides map to the page’s sections. Nothing in the deck depends on live availability.', [C('PGT06', false, 1440, 901)]],
+      ['PGT-07', 'Reading and focus order · frontend only', 'Numbered reading order of the hero at 1440 and 390, the focus ring on Download PDF, and the diagram’s text alternative.', [C('PGT07A', 'Desktop', 1440, 1075), C('PGT07B', 'Phone 390', 390, 1717)]],
+      ['PGT-08', 'Handoff', 'Registry key, canonical URL, PDF path, editable source and edition; what main records; ◇ backend (an optional public count; no feedback record); frontend only; accessibility; open points (⚑).', [W('PGT08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
