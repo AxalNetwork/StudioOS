@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Lock as LockIcon, Search, Settings as SettingsIcon, X } from 'lucide-react';
 import { openPaywall } from '../components/PaywallModal';
@@ -11,6 +11,7 @@ import { settingsActive, settingsEntry, useScopeInView } from '../lib/settingsSc
 import { useActiveProject } from '../lib/activeProject.js';
 import useLicenceNeeds from '../hooks/useLicenceNeeds';
 import { needsCount } from '../lib/licencePage';
+import { SidebarSubpagesContext, subpageRootsKey, visibleSubpageRoots } from '../lib/sidebarSubpages';
 
 /**
  * SidebarNav — the left navigation, lifted out of App.jsx unchanged.
@@ -214,13 +215,8 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
               // three rows at once. Every row that declares `match` already
               // lists its own subtree there when it wants it, so no other row
               // loses coverage.
-              // D6029 (#6029, BD23): a row may carry `children`, its own pages, drawn under it while one of
-              // them (or the row) is open. A child's page lights the row too. Build is the one such row.
-              const kids = Array.isArray(item.children) ? item.children : null;
-              // The row's own page among them (Overview, `to`) matches only exactly, so `/build/team` (Grow's) never opens Build's.
-              const onKid = kids ? kids.some((k) => { const p = k.to?.split('#')[0]; return p && p !== to && (navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`)); }) : false;
               const manualActive = Array.isArray(match)
-                ? navLocation.pathname === to || onKid
+                ? navLocation.pathname === to
                   || match.some((p) => navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`))
                 : null;
               // Task #6 / #7 — items the user can't afford render as a
@@ -259,11 +255,15 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                   </button>
                 );
               }
-              const subnav = kids && !collapsed && !q && (navLocation.pathname === to || onKid)
-                ? <SidebarChildren key={`${to}-children`} label={label} root={to} items={kids} onNavigate={onNavigate} /> : null;
-              return [
+              // D6029 (#6029, BD23): a row with `children` lists its own pages under it while it is the current row
+              // and the sidebar is expanded, so the sidebar is that area's one page switcher on desktop.
+              const rowIsCurrent = derivedRow !== null ? to === derivedRow : (manualActive ?? navLocation.pathname === to);
+              const kids = !collapsed && !q && rowIsCurrent && Array.isArray(item.children) && item.children.length
+                ? <SubpageList items={item.children} pathname={navLocation.pathname} onNavigate={onNavigate} parent={label} />
+                : null;
+              return (
+                <React.Fragment key={to}>
                 <NavLink
-                  key={to}
                   to={to}
                   state={to === '/account' || to === '/trust/me' ? { sectionSidebarShell: role } : undefined}
                   end={manualActive === null}
@@ -311,9 +311,10 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                       )}
                     </>
                   )}
-                </NavLink>,
-                subnav,
-              ];
+                </NavLink>
+                {kids}
+                </React.Fragment>
+              );
             })}
           </div>
         );
@@ -323,6 +324,46 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
       {settingsScope ? <SettingsScopeBlock scope={settingsScope} collapsed={collapsed} onNavigate={onNavigate} activeUid={activeCompany?.uid || null} /> : null}
     </div>
     </div>
+  );
+}
+
+/** D6029: a sub-page lights on its exact path when `end`, else on its subtree too. */
+/**
+ * D6029 (#6029): tells the pages below which rows the desktop sidebar lists
+ * the sub-pages of now (none while it is closed or an icon rail), so Build's
+ * header drops its desktop module tabs only then. It lives here, not in
+ * App.jsx, because App.jsx's imports are frozen (D5615).
+ */
+export function SidebarSubpagesProvider({ groups, open, collapsed, children }) {
+  const key = subpageRootsKey(groups);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the groups are rebuilt on every render; `key` is their identity.
+  const roots = useMemo(() => visibleSubpageRoots(groups, { open, collapsed }), [open, collapsed, key]);
+  return <SidebarSubpagesContext.Provider value={roots}>{children}</SidebarSubpagesContext.Provider>;
+}
+
+export function subpageActive(child, pathname) {
+  if (!child?.to) return false;
+  return pathname === child.to || (!child.end && pathname.startsWith(`${child.to}/`));
+}
+
+/** D6029 (#6029, BD23) — a row's own pages, indented under it: links, and a heading where one is drawn ("Modules"). */
+export function SubpageList({ items, pathname, onNavigate, parent }) {
+  return (
+    <ul className="m-0 list-none border-l border-gray-200 py-1 pl-0 ml-8 dark:border-gray-700" aria-label={`${parent} pages`} data-testid="sidebar-subpages">
+      {items.map((c) => (c.heading
+        ? <li key={`h-${c.heading}`} className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{c.heading}</li>
+        : (
+          <li key={c.to}>
+            <Link to={c.to} onClick={onNavigate} aria-current={subpageActive(c, pathname) ? 'page' : undefined}
+              className={`block truncate px-3 py-1.5 text-[13px] transition-colors ${subpageActive(c, pathname)
+                ? 'font-semibold text-violet-700 dark:text-violet-300'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`}
+              data-testid={`sidebar-subpage-${c.to}`}>
+              {c.label}
+            </Link>
+          </li>
+        )))}
+    </ul>
   );
 }
 
@@ -394,30 +435,4 @@ function abbreviateLabel(label) {
     return !/^(and|the|of|a|to|for|on|in|my)$/i.test(w);
   });
   return parts.map((w) => w[0].toUpperCase()).join('').slice(0, 3) || label[0].toUpperCase();
-}
-
-/**
- * D6029 (#6029, Build v2 BD23 / BU23): a row's own pages, under it while one is open. A child with
- * `heading` is a label, not a link ("Modules"). A child's address may carry a hash (Tools,
- * `/build/operating-systems#tools`, until #5078); it is lit by its path, and the first child whose path
- * holds the address wins: the hash first, then the page, then the longest path that holds a record, so
- * Operating systems and Tools are never lit together and Overview (`/build`) is lit only on itself.
- */
-export function SidebarChildren({ label, root = null, items, onNavigate }) {
-  const { pathname, hash } = useLocation();
-  const links = items.filter((k) => !k.heading);
-  // The address with its hash first (Tools), then the page itself, then the longest page that holds it (a record).
-  const prefix = links.filter((k) => k.to !== root && !k.to.includes('#') && pathname.startsWith(`${k.to}/`)).sort((a, b) => b.to.length - a.to.length)[0];
-  const current = links.find((k) => hash && k.to === `${pathname}${hash}`) || links.find((k) => k.to === pathname) || prefix;
-  return (
-    <nav aria-label={label} className="mb-1 flex flex-col border-l border-gray-200 py-0.5 pl-2 ml-7 dark:border-gray-700" data-testid={`sidebar-children-${label.toLowerCase()}`}>
-      {items.map((k) => k.heading
-        ? <span key={`h-${k.heading}`} className="mt-2 px-3 pb-0.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-gray-400 dark:text-gray-500">{k.heading}</span>
-        : <Link key={k.to} to={k.to} onClick={onNavigate} aria-current={k === current ? 'page' : undefined}
-            className={`flex min-h-[32px] items-center rounded-md px-3 text-[13px] transition-colors ${k === current
-              ? 'font-bold text-violet-700 bg-violet-50 dark:text-violet-300 dark:bg-violet-900/30'
-              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'}`}
-            data-testid={`sidebar-child-${k.key}`}>{k.label}</Link>)}
-    </nav>
-  );
 }

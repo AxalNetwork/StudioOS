@@ -1,4 +1,4 @@
-/** D653: founder round calls (`/api/round-calls`): availability, D1222's readiness, the context, the list and their writes. */
+/** D653: round calls (`/api/round-calls`): availability, D1222's readiness, the context, the founder's and the investor's lists (D6160), one call and their writes. */
 import { request } from '../api.js';
 const params = input => new URLSearchParams(Object.entries(input || {}).filter(([,value]) => value != null && value !== '')).toString();
 export const roundCallsApi = {
@@ -7,6 +7,8 @@ export const roundCallsApi = {
   readiness: projectId => request('/round-calls/readiness?' + params({project_id:projectId})),
   context: projectId => request('/round-calls/context?' + params({project_id:projectId})),
   list: projectId => request('/round-calls?' + params({project_id:projectId})),
+  // D6160 (#6160): the calls sent to the signed-in investor, with the company and their own response only.
+  investorList: () => request('/round-calls'),
   page: uid => request(`/round-calls/${encodeURIComponent(uid)}`),
   create: body => request('/round-calls', {method:'POST',body:JSON.stringify(body)}),
   save: (uid,body) => request(`/round-calls/${encodeURIComponent(uid)}`, {method:'PUT',body:JSON.stringify(body)}),

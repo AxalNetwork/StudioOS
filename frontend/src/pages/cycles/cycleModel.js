@@ -23,7 +23,7 @@
 
 /** The four cycles, in the sidebar's order. `question` and `outcome` are the canvas's words. */
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
-import { BUILD_DESTINATIONS } from './buildNav.js';
+import { BUILD_DESTINATIONS, BUILD_OUTCOMES } from './buildNav.js';
 
 export const CYCLES = {
   validate: { key: 'validate', name: 'Validate', question: 'Is this worth building?', outcome: 'Research → Insights → Evidence', action: 'Record a session' },
@@ -42,6 +42,18 @@ export const CYCLES = {
     // D1056 (#2427): Grow's history is the Reporting desk, its own page, in place of Updates.
     history: { key: 'reporting', name: 'Reporting', path: '/grow/reporting', hash: '', live: true } },
 };
+
+/**
+ * D6029 (#6029, BD23): each Build module's subtitle, the founder outcome it serves (BD23's "After" column),
+ * in place of a line describing its records.
+ */
+export const BUILD_MODULE_OUTCOMES = BUILD_OUTCOMES;
+
+/** A module page's subtitle: Build's outcome line (BD23); elsewhere its caption and how to move between modules. */
+export function moduleSubtitle(cycle, slug, caption) {
+  if (cycle === 'build' && BUILD_MODULE_OUTCOMES[slug]) return BUILD_MODULE_OUTCOMES[slug];
+  return [caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ');
+}
 
 export const CARD_STATES = ['ok', 'empty', 'too_little', 'not_recorded', 'unreadable'];
 
@@ -386,4 +398,14 @@ export function isPlainClick(e) {
 export function linkEvidenceAction(row, first, open) {
   if (row?.keys?.evidence !== 'none' || typeof open !== 'function') return null;
   return { text: 'Link evidence', label: `Link evidence to ${first && !first.nr ? first.text : 'this feature'}`, onClick: open };
+}
+
+/**
+ * D6790 (#6790, GR-23): an obligation with no owner offers "Pick owner" in
+ * place of Edit. It opens the same Edit (the same PATCH), focused on the
+ * owner listbox of the company team. Any other row: null.
+ */
+export function pickOwnerAction(row, first, open) {
+  if (row?.keys?.owner !== 'none' || typeof open !== 'function') return null;
+  return { text: 'Pick owner', label: `Pick an owner for ${first && !first.nr ? first.text : 'this obligation'}`, onClick: open };
 }
