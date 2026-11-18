@@ -119,10 +119,12 @@ const CARDS = popularGuides({ guides: [
   { anchor: 'data/room', views: 870 }, { anchor: 'capital/cap-table', views: 640 },
 ] }, SECTIONS);
 
-test('Popular this week: loading, unreadable, an empty week, and four ranked cards', () => {
+test('Popular: loading, unreadable, an empty week, and four ranked cards', () => {
+  // D6861 (HC1): "Popular", views over the last 7 days, two by two beside Your tickets.
   const loading = html(h(PopularGuidesView, { read: { status: 'loading', cards: [] } }));
-  assert.match(loading, /Popular this week/);
-  assert.match(loading, /By views, last 7 days/);
+  assert.match(loading, />Popular</);
+  assert.match(loading, /views, last 7 days/);
+  assert.match(loading, /A view is one member reading a guide on one day\. Only guides you can open are listed\./);
   assert.match(loading, /aria-busy="true"/);
   assert.doesNotMatch(loading, /views ·|help-popular-none/);
   const failed = html(h(PopularGuidesView, { read: { status: 'error', cards: [] }, onRetry: () => {} }));
@@ -135,7 +137,8 @@ test('Popular this week: loading, unreadable, an empty week, and four ranked car
   assert.equal(count(out, 'data-testid="help-popular-card"'), 4);
   for (const r of ['01', '02', '03', '04']) assert.ok(out.includes(`>${r}<`), `rank ${r}`);
   assert.match(out, /href="\/help\/capital\/calls"/);
-  assert.match(out, /1,240 views · Capital/);
+  assert.match(out, />Capital<\/div>/);
+  assert.match(out, /1,240 views, last 7 days/);
   assert.equal(count(out, 'bg-violet-50'), 1, 'only the first rank is violet, as the canvas draws it');
 });
 
@@ -194,13 +197,18 @@ const ANSWERS = adminFeedbackView({
 test('the admin answers: loading, unreadable, none, and the rows with what was missing', () => {
   assert.match(html(h(GuideAnswersAdminView, { read: { status: 'loading', view: null } })), /aria-busy="true"/);
   const failed = html(h(GuideAnswersAdminView, { read: { status: 'error', view: null }, onRetry: () => {} }));
-  assert.match(failed, /The answers could not be read\./);
+  assert.match(failed, /The guide answers could not be read\./);
+  assert.match(failed, /Never drawn as 0 Yes · 0 No\./);
   assert.doesNotMatch(failed, /help-answers-none|help-answers-row/);
   const none = html(h(GuideAnswersAdminView, { read: { status: 'ok', view: adminFeedbackView({ guides: [], missing: [] }, SECTIONS) } }));
   assert.match(none, /No member has answered yet\./);
   const some = html(h(GuideAnswersAdminView, { read: { status: 'ok', view: ANSWERS }, all: false }));
   assert.equal(count(some, 'data-testid="help-answers-row"'), ADMIN_ROWS);
-  assert.match(some, /data-testid="help-answers-all"[^>]*>Show all</);
+  assert.match(some, /data-testid="help-answers-all"[^>]*>Show all 7 guides and 1 note</);
+  assert.match(some, /Admins only/);
+  assert.match(some, /Guide answers and content review/);
+  assert.match(some, /No names/);
+  assert.match(some, /Verification pending/);
   assert.match(some, /title="This guide is no longer in the Help Center\."/);
   assert.match(some, /The fee table/);
   assert.match(some, /Capital calls · 2026-10-06/);
@@ -216,12 +224,14 @@ const layout = codeOnly(read('frontend/src/pages/docs/DocsLayout.jsx'));
 const signals = codeOnly(read('frontend/src/pages/docs/HelpSignals.jsx'));
 
 test('the layout mounts each part where the canvas draws it, and the admin card for an admin only', () => {
-  assert.match(layout, /\{!trimmedQuery && user && <PopularGuides sections=\{visibleSections\} \/>\}/,
+  // One guard around the signed-in browsing block, not one per card (CodeQL: useless conditional).
+  assert.match(layout, /\{!trimmedQuery && user && \(\s*<div[^>]*>\s*<section[^>]*>\s*<PopularGuides sections=\{visibleSections\} \/>/,
     'popular guides appear for signed-in readers browsing the catalogue');
   assert.match(layout, /\{role === 'admin' && <GuideAnswersAdmin sections=\{visibleSections\} \/>\}/);
-  assert.match(layout, /<GuideFeedback anchor=\{`\$\{section\.id\}\/\$\{sub\.id\}`\} \/>/);
+  assert.match(layout, /<GuideFeedback anchor=\{`\$\{section\.id\}\/\$\{sub\.id\}`\} next=\{/);
   const article = layout.slice(layout.indexOf('function HelpArticle('), layout.indexOf('function HelpHome('));
-  assert.ok(article.indexOf('<GuideFeedback') < article.indexOf('id="related"'), 'the answer comes before Related, as on the canvas');
+  // D6861 (HC5): Help Center v2 draws Related guides, then "Did this answer it?".
+  assert.ok(article.indexOf('id="related"') < article.indexOf('<GuideFeedback'), 'Related comes before the answer, as on the v2 canvas');
 });
 
 test('each part reads its own store, through the module file, and a failure is never an empty answer', () => {
