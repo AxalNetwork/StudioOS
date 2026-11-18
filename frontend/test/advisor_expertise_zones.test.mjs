@@ -172,9 +172,11 @@ test('an unpriced service is never rendered as free', () => {
   // "no price set" into "$0.00", which is a different claim entirely.
   assert.match(kit, /if \(cents == null\) return null;/);
 
-  const services = codeOnly(read('frontend/src/pages/advisor/expertise/ServicesZone.jsx'));
-  assert.match(services, /money\(row\.price_cents, row\.currency\) \?\? <Unrecorded \/>/,
-    'an absent price falls back to Not recorded, not to a zero');
+  // D4824: the card (ServiceCard.jsx) writes the price with its code, and an absent one says so.
+  const services = codeOnly(read('frontend/src/pages/advisor/expertise/ServiceCard.jsx'));
+  assert.match(services, /servicePrice\(row\.price_cents, row\.currency\);/);
+  assert.match(services, /\{price \?\? <span [^>]*>— No price set<\/span>\}/,
+    'an absent price reads No price set, not a zero');
   // Shared with the partner tree, which carries the same risk on different
   // column names (`amount_cents`, `floor_cents`, `hours_used`).
   assertAbsentIsNotZero('frontend/src/pages/advisor/expertise', ['price_cents']);

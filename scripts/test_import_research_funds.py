@@ -13,6 +13,7 @@ tests, so this stays runnable either way.
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 import unittest
 from datetime import date
@@ -422,3 +423,43 @@ class ShaiDefersOnlyToServedListsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class VehicleImportTests(unittest.TestCase):
+    """D7166 (#7166): one row per vehicle, the shorthand size fixed, and the
+    committed migration exactly what the importer writes."""
+
+    STEM = '202611180052_7166_research_fund_directory_vehicles'
+
+    def test_a_vehicle_uid_is_the_manager_and_the_fund_number(self):
+        self.assertEqual(mod.vehicle_uid('Dawn Capital', 'V'), 'dawncapital-v')
+        self.assertEqual(mod.vehicle_uid('Dawn Capital', 'Opp'), 'dawncapital-opp')
+        self.assertEqual(mod.vehicle_uid('Dawn Capital', None), 'dawncapital')
+        self.assertEqual(mod.vehicle_uid('Dawn Capital', ' '), 'dawncapital')
+
+    def test_the_exact_column_in_shorthand_is_millions(self):
+        self.assertEqual(mod.euro_cents_exact('€ 121m'), 12_100_000_000)
+        self.assertEqual(mod.euro_cents_exact('€121,000,000.00'), 12_100_000_000)
+
+    def test_two_vehicles_of_one_manager_are_two_rows_with_their_own_reports(self):
+        moves: dict = {}
+        directory, reports, _ = mod.parse_euro(date(2026, 11, 18), moves)
+        self.assertEqual(directory['dawncapital-v']['fund_size_cents'], 58_200_000_000)
+        self.assertEqual(directory['dawncapital-opp']['fund_size_cents'], 7_500_000_000)
+        self.assertEqual(directory['angularventures-iii']['fund_size_cents'], 12_100_000_000)
+        self.assertEqual(sorted(p for (u, p) in reports if u == 'dawncapital-v'), ['2023-Q3', '2023-Q4'])
+        self.assertEqual(moves['dawncapital'], 'dawncapital-opp', "the vehicle 378's row showed")
+        self.assertFalse(set(moves) & set(directory), 'a move starts from a live uid')
+
+    def test_the_committed_migration_is_what_the_importer_writes(self):
+        path = mod.ROOT / 'cloudflare-worker/sql/migrations' / f'{self.STEM}.sql'
+        committed = path.read_text()
+        as_of = re.search(r'as of (\d{4}-\d{2}-\d{2})\.', committed).group(1)
+        text, counts = mod.eurotech_vehicle_migration(date.fromisoformat(as_of), self.STEM)
+        self.assertEqual(text, committed)
+        self.assertEqual(counts['vehicles'], 1364)
+
+    def test_a_stem_is_minute_issue_slug(self):
+        self.assertTrue(mod.is_migration_stem(self.STEM))
+        for bad in ('378', '202611180052_research', '202611180052_7166_x; DROP', ''):
+            self.assertFalse(mod.is_migration_stem(bad), bad)

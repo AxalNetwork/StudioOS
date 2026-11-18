@@ -17,6 +17,8 @@ import {
 } from './flowModel';
 import { MAX_COMPARE } from './dealFlowModel';
 import { AssignToMe } from './OwnerControls';
+// D5902 (#5902, DX3 board DE03a): on a phone the table's rows are the deal card itself.
+import { DealCard } from './DealCard';
 
 const MUTED = 'text-[12px] text-axal-muted dark:text-gray-400';
 const STICKY = 'sticky z-10 bg-white dark:bg-gray-900';
@@ -153,19 +155,30 @@ export function FlowTable({ rows, columns, sort, onSort, filters, onMin, picked,
 /**
  * DLS18a: the table as cards on a phone, with the card scopes.
  *
+ * D5902 (#5902, Deals v2 DX3, board DE03a): a row on the member's deals is the
+ * Deals v2 card (`DealCard`) — venture, my stage, round, the score strip, the
+ * chosen scopes, fit, days, owner, Open, Move to… and Compare — so nothing the
+ * desktop table offers is missing on the phone. A round not on their deals
+ * keeps the short row with Add to my deal flow, as the table's Stage cell does.
+ *
  * D4634 (#4634): the same rows, in the same pages, as the desktop table: one page of `PAGE_SIZE` at a time with
  * the count and the next and previous controls, so the 26th match and every one after it are reachable. A round
  * not on the member's deals offers Add to my deal flow, as the table's Stage cell does.
  */
-export function PhoneCards({ rows, cards, picked, onPick, onAdd = null, page = 1, onPage = null, onPeek = null }) {
+export function PhoneCards({ rows, cards, picked, onPick, onAdd = null, page = 1, onPage = null, onPeek = null, onMove = null, busy = false }) {
   const pages = pagesFor(rows.length);
   const at = Math.min(Math.max(1, page), pages);
   return (
     <div className="flex flex-col gap-2">
       <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="dealflow-phone-cards">
-        {pageOf(rows, at).map((r) => (
+        {pageOf(rows, at).map((r) => (r.inFlow && onMove ? (
+          <li key={r.id} data-testid={`dealflow-phone-row-${r.id}`}>
+            <DealCard row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} draggable={false} onPeek={onPeek} />
+          </li>
+        ) : (
           <li key={r.id} className="flex flex-col gap-1 rounded-xl border border-axal-hairline bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-gray-900" data-testid={`dealflow-phone-row-${r.id}`}>
-            <div className="flex items-start justify-between gap-2"><VentureCell row={r} onPeek={onPeek} /><input type="checkbox" aria-label={`Compare ${r.name}`} checked={picked.includes(r.id)} disabled={!picked.includes(r.id) && picked.length >= MAX_COMPARE} onChange={() => onPick(r.id)} /></div>
+            <div className="flex items-start justify-between gap-2"><VentureCell row={r} onPeek={onPeek} />
+              <label className="flex min-h-[44px] min-w-[44px] items-center justify-center"><input type="checkbox" aria-label={`Compare ${r.name}`} checked={picked.includes(r.id)} disabled={!picked.includes(r.id) && picked.length >= MAX_COMPARE} onChange={() => onPick(r.id)} /></label></div>
             <span className={MUTED}>{r.inFlow ? stageWord(r.stage) : 'Not on your deals'} · {r.round}</span>
             {!r.inFlow && onAdd && (
               <button type="button" className="min-h-[44px] w-fit text-[13px] font-semibold text-violet-700 underline hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100"
@@ -174,7 +187,7 @@ export function PhoneCards({ rows, cards, picked, onPick, onAdd = null, page = 1
             <div className="flex flex-wrap gap-x-3">{cards.map((k) => <span key={k} className="flex gap-1"><span className={MUTED}>{SCOPE_SHORT[k]}</span><ScopeCell scores={r.scores} scope={k} /></span>)}</div>
             <div className="flex justify-between"><AskCell row={r} /><DaysCell row={r} /></div>
           </li>
-        ))}
+        )))}
       </ul>
       <nav aria-label="Pages" className="flex items-center justify-between gap-2 text-[13px]" data-testid="dealflow-phone-pages">
         <button type="button" disabled={at <= 1 || !onPage} onClick={() => onPage(at - 1)} aria-label="Previous page" className="min-h-[44px] min-w-[44px] px-2 disabled:opacity-40" data-testid="dealflow-phone-prev-page">‹ Previous</button>

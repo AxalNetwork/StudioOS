@@ -28,7 +28,6 @@ const ROOT = process.cwd();
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const LANDING_SRC = read('frontend/src/pages/LandingPage.jsx');
-const APP = read('frontend/src/App.jsx');
 // #4105: a route can live in a module under frontend/src/routes/; the shell's links are checked against both.
 const ROUTES = readRoutesSource();
 

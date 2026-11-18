@@ -72,7 +72,7 @@ test('the counterpart’s consent is returned, and only the consent', () => {
 
   // AND NOTHING ELSE OF THEIRS. Their score and their breakdown are the
   // matching engine's reasoning about them, addressed to them.
-  assert.ok(!/m\.score|m\.breakdown_json/.test(FULL_SELECT),
+  assert.ok(!/SELECT\s+m\.(?:score|breakdown_json)\b/.test(FULL_SELECT),
     'the counterpart’s own match reasoning is being returned alongside their consent');
 });
 

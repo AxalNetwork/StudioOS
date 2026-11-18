@@ -6,13 +6,15 @@ import {makeD1} from './_d1_sqlite.mjs';
 import {tableFromBaseline,stripForeignKeys} from './_baseline.mjs';
 import funds from '../src/routes/funds.ts';
 import {FundReportRefusal,reportId} from '../src/services/fundReports.ts';
+import {sendFundReportNotices} from '../src/services/fundReportNotices.ts';
 const baseline=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
-const tables=['users','vc_funds','limited_partners','portfolio_positions','legal_documents','fund_report_periods','activity_logs','user_company_links','capital_calls','fund_distributions','projects'];
+const tables=['users','vc_funds','limited_partners','portfolio_positions','legal_documents','fund_report_periods','activity_logs','user_company_links','capital_calls','fund_distributions','projects','notifications_inbox'];
 const schema=tables.map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join('\n')+`CREATE UNIQUE INDEX periods_unique ON fund_report_periods(fund_id,period);CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);` // D1137: migration 597's archive flag
  +['312_fund_call_ledger.sql','417_fund_position_valuations.sql','418_fund_ledger.sql','472_entity_bank_accounts.sql','473_fund_management_fees.sql','474_mercury_entity_connections.sql','476_fund_report_drafts.sql','483_mercury_not_ours.sql'].map(m=>readFileSync(new URL('../sql/migrations/'+m,import.meta.url),'utf8')).join('\n'); // D6249: an issued period's read looks up its pack
 const secret='d631-local-fixture-signing-secret';
 async function fixture(){
- const {DB,db}=makeD1(schema);
+ const migration=readFileSync(new URL('../sql/migrations/202611151259_6255_fund_report_notice_delivery.sql',import.meta.url),'utf8');
+ const {DB,db}=makeD1(schema+migration);
  const insert=db.prepare("INSERT INTO users(id,name,email,role,investor_tier,investor_subscription_status) VALUES(?,?,?,?,?,'active')");
  for(const [id,name,role,tier]of [[1,'Admin','admin','free'],[2,'GP','investor','institutional'],[3,'LP','investor','free'],[4,'Other','investor','institutional'],[5,'Founder','founder','free'],[6,'Legacy','investor','free']])insert.run(id,name,`${name}@example.test`,role,tier);
  db.exec(`INSERT INTO vc_funds(id,name,gp_user_id,gp_name,gp_entity,fund_size_cents,fund_admin,status) VALUES
@@ -166,4 +168,46 @@ test('draft deletion requires the matching GP and revision, refuses linked packs
  const issued = await f.request('/10/report-periods', 2, 'POST', {...draft, issue:true});
  assert.equal(issued.status, 201);
  assert.equal((await f.request(`/10/report-periods/${issued.body.period.id}`, 2, 'DELETE', { revision: issued.body.period.revision })).status, 409);
+});
+
+
+test('D6255: only a committed issue sends scoped, deduplicated in-app notices', async () => {
+ const f=await fixture();
+ f.db.exec("INSERT INTO limited_partners(fund_id,user_id) VALUES (10,3),(10,6)");
+ f.db.exec("INSERT INTO limited_partners(fund_id,user_id,status) VALUES (10,4,'withdrawn')");
+ const saved=await f.request('/10/report-periods',2,'POST',draft);
+ const id=saved.body.period.id;
+ await sendFundReportNotices(f.env,10,id);
+ assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM notifications_inbox').get().n,0);
+ const posted=await f.request('/10/report-periods',2,'POST',{...draft,issue:true});
+ assert.equal(posted.status,200);
+ assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM notifications_inbox').get().n,2,'the issue path publishes before a retry');
+ await Promise.all([sendFundReportNotices(f.env,10,id),sendFundReportNotices(f.env,10,id)]);
+ const notices=f.db.prepare('SELECT user_id,type,channel,link FROM notifications_inbox ORDER BY user_id').all().map(row=>({...row}));
+ assert.deepEqual(notices,[3,6].map(user_id=>({user_id,type:'fund_report_issued',channel:'in_app',link:`/funds/10/reporting/${id}`})));
+ const detail=(await f.request(`/10/report-periods/${id}`)).body.period;
+ assert.deepEqual([detail.delivery_status,detail.delivered_count,detail.undelivered_count],['partial',2,1]);
+ assert.ok(detail.lps_notified_at);
+ const list=(await f.request('/10/report-periods')).body.items;
+ assert.equal(list[0].lps_notified_at,detail.lps_notified_at);
+ assert.equal((await f.request(`/10/report-periods/${id}`,3)).body.period.delivery_status,undefined);
+ f.db.exec('DELETE FROM notifications_inbox');
+ await sendFundReportNotices(f.env,10,id);
+ assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM notifications_inbox').get().n,0,'dismissal must not reset the delivery receipt');
+});
+
+test('D6255: a failed inbox write rolls back fan-out and records the failure after issue', async () => {
+ const f=await fixture();
+ f.db.exec("INSERT INTO limited_partners(fund_id,user_id) VALUES (10,6)");
+ f.db.exec("CREATE TRIGGER fail_notice BEFORE INSERT ON notifications_inbox WHEN NEW.user_id=6 BEGIN SELECT RAISE(ABORT,'test refusal'); END");
+ const posted=await f.request('/10/report-periods',2,'POST',{...draft,issue:true});
+ assert.equal(posted.status,201);
+ assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM notifications_inbox').get().n,0);
+ const id=posted.body.period.id;
+ const detail=(await f.request(`/10/report-periods/${id}`)).body.period;
+ assert.deepEqual([detail.status,detail.delivery_status,detail.lps_notified_at],['issued','failed',null]);
+ assert.equal((await f.request('/10/report-periods')).body.items[0].delivery_status,'failed');
+ f.db.exec('DROP TABLE fund_report_notice_delivery');
+ const unreadable=await f.request(`/10/report-periods/${id}`);
+ assert.deepEqual([unreadable.status,unreadable.body.period.delivery_status],[200,'unreadable']);
 });

@@ -223,7 +223,8 @@ test('mounted RPT10 Figures: five small multiples from the frozen figures, a das
     await v.click('company-figure-toggle-customers');
     assert.match(v.text('company-figure-table-customers'), /Q2 2026 Not recorded · Moving billing systems/);
     assert.match(v.text('company-what-changed'), /MRR \$31,200 → \$44,100.*Headcount 11 → 17.*The Sep 2026 report has not arrived/);
-    assert.match(v.text('company-what-changed-note'), /nothing here is saved or sent/);
+    // D6222 (#6222): the placeholder is gone; What changed is saved as the investor's own note (portfolio_company_notes_d6222).
+    assert.ok(!v.has('company-what-changed-note'));
     assert.ok(!v.asked.some((a) => a.path.startsWith('/reporting/reports/')), 'Figures never opens a report, so no open is recorded');
     assert.match(v.text('company-holding'), /Seed · Your holding: Seed · \$250,000 invested · since 12 Mar 2026 · Direct/);
   } finally { await v.close(); }

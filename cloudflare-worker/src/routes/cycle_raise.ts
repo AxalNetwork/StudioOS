@@ -5,6 +5,9 @@
  *   GET /overview?project=:pid
  *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7], focus, meter, index }
  *       (D692: the phone's parts, in the shape all four cycles share; services/cycleFocus.ts)
+ *       D6045 (#6045): + `stage`, `primary_action { key, label, href, rule }` (null for staff), the Pitch
+ *       card's `pitch_state` and `investor_activity` (services/raiseJourney.ts); a source that could not
+ *       be read makes the fields it feeds `{ state: 'unreadable', reason }`, never a guessed stage.
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module: { slug, name, records_title }, card: Card,
  *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? }, parts? }
@@ -202,6 +205,7 @@ import {
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
+import { journeyUnreadable, raiseJourney } from '../services/raiseJourney';
 import { prospectBrief } from '../services/prospectBrief';
 import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
 import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
@@ -363,19 +367,28 @@ cycleRaise.get('/overview', async (c) => {
   const ctx = ctxOf(c, s.projectId);
   // D1610 W5: the Cap table card says which plan records it.
   const withPlan = (cs: Card[]) => cs.map((card) => (card.slug === 'cap-table' ? { ...card, plan: capTablePlan(s.user) } : card));
-  if (capitalStaff(s.user)) {
-    const [figs, cs, steps, tools] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
+  // D6045: the stage, the primary action, the Pitch card's state and investor activity, from recorded state.
+  // Staff read counts only (no investor names) and are offered no action.
+  const staff = capitalStaff(s.user);
+  const journeyRead = raiseJourney(ctx, { currentDeck: () => currentDeck(c.env, s.projectId) }, { names: !staff, act: !staff })
+    .catch((e) => { console.warn('[cycle_raise] journey unreadable:', (e as Error)?.message); return journeyUnreadable(!staff); });
+  const withPitch = (cs: Card[], j: Awaited<typeof journeyRead>) =>
+    cs.map((card) => (card.slug === 'pitch-deck' ? { ...card, pitch_state: j.pitch_state } : card));
+  if (staff) {
+    const [figs, cs, steps, tools, j] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
       m.slug === 'capital-relationships' ? capitalSummaryCard(c.env, s.projectId)
-        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx)]);
-    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: withPlan(cs), next_steps: steps, connectors: tools });
+        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx), journeyRead]);
+    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: withPitch(withPlan(cs), j), next_steps: steps, connectors: tools,
+      stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity });
   }
   // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
   // The other six cards are built as `cards()` builds them.
   const owner = isRoomOwner(s);
   const cardsRead = owner ? cards(ctx)
     : Promise.all(MODULES.map((m) => (m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))));
-  const [figs, cs, steps, tools] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx)]);
-  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: withPlan(cs), next_steps: steps, connectors: tools, ...(await raisePhone(ctx, figs, cs)) });
+  const [figs, cs, steps, tools, j] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx), journeyRead]);
+  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: withPitch(withPlan(cs), j), next_steps: steps, connectors: tools, ...(await raisePhone(ctx, figs, cs)),
+    stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity });
 });
 
 cycleRaise.get('/modules/:slug', async (c) => {
@@ -1705,7 +1718,7 @@ cycleRaise.delete('/google/facts/:id', async (c) => {
 });
 
 // D1263: the evidence paths use scope(), then active-company and founder-only decision gates.
-async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
+export async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
   c.header('Cache-Control', 'no-store');
   const s = await scope(c);
   if (s instanceof Response) return s;
@@ -1716,7 +1729,7 @@ async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceConte
   if (write && !ctx.founder) throw new RaiseEvidenceError('forbidden', 403);
   return ctx;
 }
-function evidenceFailure(c: any, error: unknown) {
+export function evidenceFailure(c: any, error: unknown) {
   if (error instanceof RaiseEvidenceError) return c.json({ error: error.code, message: error.sentence }, error.status);
   return c.json({ error: 'evidence_unreadable', message: 'Evidence could not be read or saved. Try again.' }, 503);
 }
