@@ -7,7 +7,10 @@ test.afterEach(async ({page})=>{if(!page.isClosed())await page.unrouteAll({behav
 for(const width of [1440,390])test(`Mercury acceptance names its destination and offers undo at ${width}px`,async({page,request},testInfo)=>{
  const m=await prepare(page,request),project=m.oneClick.projectId;let accepted=false,accepts=0,undos=0;
  const destination={uid:'receipt',source:'mercury',source_id:9,label:'Partner network',href:`/grow/partner-network/partner-a?project_id=${project}`,created_record:true,can_undo:true};
- await page.route('**/api/cycles/grow/modules/partner-network?*',async route=>{const response=await route.fetch(),data=await response.json();
+ // #7473: a refetch the page no longer waits for can see its response disposed ("Response has been disposed");
+ // that request is not under test, so it falls through rather than failing the spec.
+ await page.route('**/api/cycles/grow/modules/partner-network?*',async route=>{let response,data;
+  try{response=await route.fetch();data=await response.json();}catch{await route.fallback().catch(()=>{});return;}
   data.parts={...data.parts,from_mercury:{state:'ok',can_decide:true,proposals:[{id:9,state:accepted?'accepted':'pending',partner_company:'Fixture partner',growth_partner_uid:accepted?'partner-a':null,growth_partner_name:accepted?'Fixture partner':null}]}};
   await route.fulfill({response,json:data});
  });
