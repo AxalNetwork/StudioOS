@@ -49,7 +49,7 @@ test('Liquidity has no route left: /raise/liquidity and /liquidity are gone', ()
   assert.doesNotMatch(app, /<Route path="\/liquidity"/);
 });
 
-test('Grow Partner network opens the founder feed, and partners keep their Offers address', () => {
+test('Grow Partnerships opens the founder feed, and partners keep their Offers address', () => {
   const founder = { role: 'founder', subscription_tier: 'studio' };
   assert.deepEqual(moduleToolLinks('grow', 'partner-network', founder, '?project_id=41'),
     [{ label: 'Open co-marketing', href: '/grow/partner-network/co-marketing?project_id=41' }]);
@@ -58,7 +58,7 @@ test('Grow Partner network opens the founder feed, and partners keep their Offer
   assert.equal(partner.label, 'Co-Marketing Review');
   const html = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/grow/partner-network/co-marketing?project_id=41'] },
     h(FounderCoMarketingPage, { user: founder })));
-  assert.match(html, /href="\/grow\/partner-network\?project_id=41"/);
+  assert.match(html, /href="\/grow\/partnerships\?project_id=41"/);
   assert.doesNotMatch(html, /Co-Marketing Review|Propose a pitch/);
 });
 
