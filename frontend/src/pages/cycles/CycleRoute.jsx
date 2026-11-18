@@ -958,13 +958,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     );
   } else {
     const read = module?.records;
-    const rankable = cycle === 'grow' && slug === 'partner-network' && projectId && !narrativeAdmin && Array.isArray(read?.rows) && read.rows.length > 0;
+    const isPartnerNetwork = cycle === 'grow' && slug === 'partner-network';
+    const rankable = isPartnerNetwork && projectId && !narrativeAdmin && Array.isArray(read?.rows) && read.rows.length > 0;
     const ranked = rankable && partnerRank ? applyRank(read.rows, (row) => row.id, partnerRank) : null;
     const recs = ranked ? { ...read, rows: ranked.list } : read;
     // D703 step 6: below 1024px the module is a pushed page with the same props.
     const ModulePage = phone ? PhoneModulePage : CycleModulePage;
     // D6031 (#6031, BD8): a module's own line above its table and its own phone rows, from its cycle's def.
     const above = moduleStatus === 'ready' && projectId && !narrativeAdmin ? fnOf(def.aboveRecords, slug) : null;
+    const aboveRecords = above?.(module, { projectId, reload: () => setReload((n) => n + 1), query, onQuery: setQuery, search: q });
     const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
     // D5077 (#5077, BD7, BD8, BD18 A): on a cycle with a Sources region, the connector parts draw there,
     // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
@@ -1033,9 +1035,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} home={uofOwnsHome ? uofHome : null} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} home={capRelOwnsHome ? capRelHome : null} works={capRelWorks} action={action} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
-        aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
-          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
-          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1), query, onQuery: setQuery, search: q }) : null}
+        aboveRecords={rankable ? <>
+          {aboveRecords}
+          <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
+            ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
+        </> : aboveRecords}
+        {...(phone && isPartnerNetwork ? { showAboveRecordsWhenEmpty: true } : {})}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}
