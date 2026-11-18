@@ -28,16 +28,17 @@
  */
 
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { privateDirectory, regularTextFile, writePrivateFile } from './local-files.mjs';
 import {
   applyMutation, changedTests, parseSpec, runnerFor, runPassed, sha256, summaryLine,
   tapCounts, testArgv, testCommandLine, verdict,
 } from './lib/mutationCheck.mjs';
 
 const ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
-const JOURNAL_DIR = join(tmpdir(), 'studioos-mutation-check', sha256(ROOT).slice(0, 16));
+// Git metadata is private to this checkout, unlike a predictable directory in the shared OS temp root.
+const JOURNAL_DIR = resolve(ROOT, execFileSync('git', ['rev-parse', '--git-path', 'studioos-mutation-check'], { encoding: 'utf8' }).trim());
 const JOURNAL = join(JOURNAL_DIR, 'journal.json');
 
 function flag(args, name, fallback = null) {
@@ -76,7 +77,9 @@ function list(args) {
 
 // ---------------------------------------------------------------- restore
 function readJournal() {
-  try { return JSON.parse(readFileSync(JOURNAL, 'utf8')); } catch { return null; }
+  privateDirectory(JOURNAL_DIR);
+  try { const text = regularTextFile(JOURNAL); return text === null ? null : JSON.parse(text); }
+  catch (error) { throw new Error('Cannot safely read the mutation recovery journal', { cause: error }); }
 }
 function restoreFromJournal() {
   const j = readJournal();
@@ -171,13 +174,14 @@ async function run(args) {
   }
 
   // Backups outside the repository, so a killed run can be undone.
-  mkdirSync(JOURNAL_DIR, { recursive: true });
+  privateDirectory(JOURNAL_DIR);
+  const backupDir = mkdtempSync(join(JOURNAL_DIR, 'run-'));
   const files = [...originals].map(([path, buf], i) => {
-    const backup = join(JOURNAL_DIR, `${i}.orig`);
-    writeFileSync(backup, buf);
+    const backup = join(backupDir, `${i}.orig`);
+    writePrivateFile(backup, buf, true);
     return { path, backup, sha: sha256(buf) };
   });
-  writeFileSync(JOURNAL, JSON.stringify({ root: ROOT, startedAt: new Date().toISOString(), files }, null, 2));
+  writePrivateFile(JOURNAL, JSON.stringify({ root: ROOT, startedAt: new Date().toISOString(), files }, null, 2), true);
   restored = false;
 
   const onSignal = (sig) => { killRun(child); restoreAll(); console.error(`mutation-check: stopped by ${sig}; files restored`); process.exit(130); };
