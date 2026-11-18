@@ -442,9 +442,10 @@ test('Queue: empty says who sends terms; for a Super Admin a waiting row opens A
 });
 
 test('Investor cohort access: the banner until Live, the NDA template’s state, four tiles, the table, and End access as a dialog', async () => {
-  const view = await mounted('/admin/programs/investor-cohorts', worker());
+  const view = await mounted('/admin/programs/investor-cohorts', worker({ details: { 'investor-cohorts': detail('investor-cohorts', 'partly_built') } }));
   try {
-    assert.ok(view.has('programs-investor-banner'));
+    assert.match(view.textOf('programs-header-status'), /Partly built/);
+    assert.match(view.textOf('programs-investor-banner'), /verified investor.*current assignment.*signed cohort NDA/);
     assert.equal(view.textOf('programs-investor-nda-template'), NDA_TEMPLATE_LINE.missing);
     assert.equal(view.textOf('programs-tile-investors-value'), '1');
     assert.equal(view.textOf('programs-tile-hidden-value'), '0', 'a real 0 the Worker counted');
@@ -464,6 +465,10 @@ test('Investor cohort access: the banner until Live, the NDA template’s state,
     assert.equal(live.textOf('programs-header-status'), '✓Live', 'the registry’s status');
     assert.match(live.textOf('programs-tile-hidden'), /Could not be read/);
   } finally { await live.close(); }
+  const unavailable = await mounted('/admin/programs/investor-cohorts', worker({ details: { 'investor-cohorts': response({ error: 'down' }, 503) } }));
+  try {
+    assert.match(unavailable.textOf('programs-header-status'), /Unavailable$/);
+  } finally { await unavailable.close(); }
 });
 
 test('Give access: verified investors only, an open pair marked and not picked, one body, and part 6’s refusal in place', async () => {

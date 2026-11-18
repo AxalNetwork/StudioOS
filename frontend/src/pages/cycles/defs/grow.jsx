@@ -14,6 +14,7 @@ import FromNotion from '../FromNotion';
 import { ImprovementPosthog, RevenuePosthog } from '../GrowPosthog';
 import UpdateAskReplies from '../UpdateAskReplies';
 import FeedbackThemes from '../FeedbackThemes';
+import FeedbackLoop from '../FeedbackLoop';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import PartnershipsCoMarketing from '../PartnershipsCoMarketing';
@@ -95,7 +96,10 @@ const grow = {
     </>),
     // D1090 (#2955): a feedback database in Notion, as product feedback.
     // D6098 (#6098): Rename or merge a theme; `parts.themes` reaches writers only.
+    // D6865 (#6865): the counts strip, a theme's weight and Close the loop (GR-21, GR-23, GR-26).
     'product-improvement': (data, ctx) => (<>
+      <FeedbackLoop counts={data?.parts?.counts} themes={data?.parts?.themes} projectId={ctx.projectId}
+        api={cyclesWrite.grow} reload={ctx.reload} />
       <FeedbackThemes themes={data?.parts?.themes}
         onRename={ctx.projectId ? (body) => cyclesWrite.grow.feedbackTheme(ctx.projectId, body).then((out) => { ctx.reload(); return out; }) : undefined} />
       <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />

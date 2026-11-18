@@ -7,6 +7,7 @@ const catalog = { repository, workflows: [
   { id: 11, path: '.github/workflows/ci.yml' },
   { id: 12, path: '.github/workflows/cloudflare-worker-deploy.yml' },
   { id: 13, path: 'dynamic/github-code-quality/codeql' },
+  { id: 15, path: '.github/workflows/meeting-bot-deploy.yml' },
 ] };
 const run = { id: 101, workflow_id: 11, run_attempt: 1, repository: repo, head_repository: repo,
   created_at: '2026-11-14T12:00:00Z', event: 'push', head_branch: 'main', head_sha: 'a'.repeat(40), status: 'completed', conclusion: 'failure' };
@@ -125,6 +126,9 @@ test('only verified release supersession and trusted main CI incidents suppress 
   mock.issues[0].user.login = 'outsider';
   assert.equal((await writer.report({ ...input({id: 105}), inheritedIssueNumber: 1 })).action, 'created');
   assert.equal((await writer.report({ ...input({id: 106, workflow_id: 12, conclusion: 'timed_out'}), superseded:true })).action, 'created');
+  assert.deepEqual(await writer.report({ ...input({ workflow_id: 15 }), superseded: true }), { action: 'ignored', reason: 'non_actionable' });
+  assert.equal((await writer.report(input({ workflow_id: 15 }))).action, 'created');
+  assert.equal((await writer.report({ ...input({ workflow_id: 13 }), superseded: true })).action, 'created');
 });
 test('an acknowledged create with a lost HTTP response is discovered before retrying', async () => {
   const mock = service(), writer = mock.reporter();

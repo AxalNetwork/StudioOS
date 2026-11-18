@@ -58,7 +58,7 @@ test('the reminders and the touch log are wired to their stores', () => {
   assert.match(API, /partnerReminderSet: \(id, data\) =>/, 'api.js lost the reminder write');
   assert.match(API, /partnerInteractionAdd: \(id, data\) =>/, 'api.js lost the touch write');
   // The op is the page's, and (#6259) it opens the Reminders view.
-  assert.match(PAGE, /handlers: \{ setReminders: setRemindersOp \}/, 'the Set reminders op is not the page’s');
+  assert.match(PAGE, /handlers: \{[^\n]*\bsetReminders: setRemindersOp\b/, 'the Set reminders op is not the page’s');
   // A reminder is a date: the page refuses an empty one before the route is asked.
   assert.match(PAGE, /if \(!reminderDate\)/, 'the page stopped refusing a dateless reminder');
 });
