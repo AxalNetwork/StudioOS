@@ -419,7 +419,10 @@ test('D4666: a quote is member-bound, signed and short-lived; a rise in the pric
   const [v, payload, sig] = quote.split('.');
   const forgedPayload = btoa(JSON.stringify({ u: 2, f: fp, h: 999999999, m: 'm1', e: Math.floor(t0 / 1000) + 600 })).replace(/=+$/, '');
   assert.equal(await why(`${v}.${forgedPayload}.${sig}`), 'invalid', 'a raised maximum does not verify');
-  assert.equal(await why(`${v}.${payload}.${sig.slice(0, -2)}AA`), 'invalid');
+  // #7244: change the FIRST character. Overwriting the last two with AA was a no-op whenever the signature already
+  // ended that way (the last base64url character carries spare bits a decoder drops): about 1 run in 1,000 passed
+  // the untouched signature off as tampered, and the check answered ok.
+  assert.equal(await why(`${v}.${payload}.${sig[0] === 'A' ? 'B' : 'A'}${sig.slice(1)}`), 'invalid');
   assert.equal(await why(undefined), 'missing');
   assert.equal(await why({ not: 'a string' }), 'missing');
   assert.equal(await checkQuote({ JWT_SECRET: 'another-secret-entirely' } as any, quote, now, t0 + 1000).then((r) => r.ok), false, 'another signing key');
