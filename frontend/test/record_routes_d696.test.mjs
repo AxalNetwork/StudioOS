@@ -48,11 +48,11 @@ test('8. the interview review is Customer research\'s record; the old address an
   assert.match(routeBlock(APP, '/validate/customer-research/:id'), new RegExp(`element=\\{${guard}<CycleRoute cycle="validate" slug="customer-research" record />\\)\\}`));
   assert.equal(routeBlock(APP, '/validate/interviews/:id'), null, 'D2319 retires the alias');
   assert.doesNotMatch(routeBlock(APP, '/validate/interviews/:id') ?? '', /<InterviewReviewPage/, 'the old address renders the page no more');
-  for (const [from, to] of [
-    ['/validate/experiments-and-evidence', '/validate/experiments'],
-    ['/validate/experiments-and-evidence/:id', '/validate/experiments/:id'],
-    ['/validate/demand-and-urgency-signals', '/validate/demand-signals'],
-    ['/validate/demand-and-urgency-signals/:id', '/validate/demand-signals/:id'],
+  for (const from of [
+    '/validate/experiments-and-evidence',
+    '/validate/experiments-and-evidence/:id',
+    '/validate/demand-and-urgency-signals',
+    '/validate/demand-and-urgency-signals/:id',
   ]) {
     assert.equal(routeBlock(APP, from), null);
   }
