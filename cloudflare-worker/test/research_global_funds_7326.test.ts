@@ -103,11 +103,11 @@ function candidate() {
   return item;
 }
 
-function insertExisting(db: DatabaseSync, options: { uid: string; name: string; website?: string | null; source?: string }) {
+function insertExisting(db: DatabaseSync, options: { uid: string; name: string; website?: string | null; source?: string; fundNumber?: string | null }) {
   db.prepare(`INSERT INTO research_fund_directory
     (uid, name, website, fund_number, fund_size_cents, fund_year, notable_lps, eif_flag, source_name, source_url, as_of)
-    VALUES (?, ?, ?, 'III', 12300000000, 2025, 'Recorded LP', 1, ?, 'https://example.org/original-evidence', '2026-01-01')`)
-    .run(options.uid, options.name, options.website ?? null, options.source ?? EUR_SOURCE);
+    VALUES (?, ?, ?, ?, 12300000000, 2025, 'Recorded LP', 1, ?, 'https://example.org/original-evidence', '2026-01-01')`)
+    .run(options.uid, options.name, options.website ?? null, options.fundNumber === undefined ? 'III' : options.fundNumber, options.source ?? EUR_SOURCE);
 }
 
 test('the checked-in migration is reproducible from the evidence manifest', () => {
@@ -183,6 +183,73 @@ test('served manager aliases and vehicle UID prefixes suppress duplicate manager
     apply(db);
     assert.equal(fund(db, item.uid), undefined, `${existing.uid}: existing manager wins`);
     assert.deepEqual({ ...fund(db, existing.uid) }, before, 'the richer vehicle is not modified');
+  }
+});
+
+test('a vehicle suffix suppresses its manager only when the recorded fund number explains it', (t) => {
+  const item = candidate();
+  const alias = item.aliases[0];
+  const duplicates = [
+    { uid: 'named-legacy-vehicle', name: `${item.name} III`, fundNumber: 'III' },
+    { uid: `${alias}iv`, name: 'A separately titled vehicle', fundNumber: 'IV' },
+    { uid: 'numbered-legacy-vehicle', name: `${item.name} 2`, fundNumber: '2' },
+    { uid: `${alias}3`, name: 'A separately titled numeric vehicle', fundNumber: '3' },
+    { uid: 'explicit-fund-vehicle', name: `${item.name} Fund IV`, fundNumber: 'IV' },
+    { uid: `${alias}fundii`, name: 'A separately titled fund vehicle', fundNumber: 'II' },
+  ];
+  for (const existing of duplicates) {
+    const db = emptyDirectory();
+    t.after(() => db.close());
+    insertExisting(db, existing);
+    const before = { ...fund(db, existing.uid) };
+    apply(db);
+    assert.equal(fund(db, item.uid), undefined, `${existing.uid}: its declared number ties the vehicle to the manager`);
+    assert.deepEqual({ ...fund(db, existing.uid) }, before, 'the richer vehicle stays intact');
+  }
+  const distinct = [
+    { uid: `${alias}ii`, name: `${item.name} II`, fundNumber: null },
+    { uid: `${alias}2`, name: `${item.name} 2`, fundNumber: '' },
+    { uid: `${alias}iii`, name: `${item.name} III`, fundNumber: 'IV' },
+    { uid: `${alias}partnersii`, name: `${item.name} Partners II`, fundNumber: 'II' },
+  ];
+  for (const existing of distinct) {
+    const db = emptyDirectory();
+    t.after(() => db.close());
+    insertExisting(db, existing);
+    apply(db);
+    assert.ok(fund(db, item.uid), `${existing.uid}: a similar name or an unexplained number is not evidence of the same manager`);
+  }
+});
+
+test('historical concatenated vehicle IDs stay represented without adding their managers again', async (t) => {
+  const covered = [
+    ['axal-blackbird', 'blackbirdventuresi'],
+    ['axal-goldenventures', 'goldenventuresv'],
+    ['axal-inoviacapital', 'inoviacapitalv'],
+    ['axal-insigniaventurespartners', 'insigniaventurepartnersi'],
+    ['axal-kaszek', 'kaszekventuresiii'],
+    ['axal-magmaventurepartners', 'magmaiv'],
+    ['axal-realventures', 'realventuresiv'],
+    ['axal-sequoiacapital', 'sequoiacapitalseedfundv'],
+    ['axal-sosv', 'sosvinvestmentsiii'],
+    ['axal-tlcom', 'tideafricafundi'],
+    ['axal-versiononeventures', 'versiononeventuresiii'],
+  ];
+  const db = historicalDirectory();
+  t.after(() => db.close());
+  const originals = new Map(covered.map(([, uid]) => [uid, { ...fund(db, uid) }]));
+  for (const [managerUid, vehicleUid] of covered) {
+    assert.ok(fund(db, vehicleUid), `${vehicleUid} already exists in the actual served history`);
+    assert.ok(!manifest.funds.some((row) => row.uid === managerUid), `${managerUid} is not claimed as a new manager`);
+    assert.ok(manifest.excluded.some((row) => row.existing_uid === vehicleUid), `${vehicleUid} explains the exclusion`);
+  }
+  apply(db);
+  for (const [managerUid, vehicleUid] of covered) {
+    assert.equal(fund(db, managerUid), undefined, managerUid);
+    assert.deepEqual({ ...fund(db, vehicleUid) }, originals.get(vehicleUid), vehicleUid);
+    const profile = await getFund(env(db), vehicleUid);
+    assert.equal(profile?.item?.uid, vehicleUid);
+    assert.notEqual(profile?.item?.source_name, manifest.source.name, 'the original vehicle keeps its evidence');
   }
 });
 

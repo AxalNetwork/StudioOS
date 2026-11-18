@@ -128,26 +128,6 @@
       "notes": "Official history confirms Bessemer Venture Partners as the venture firm and describes separate offices in the United States, India, Tel Aviv and London. It does not identify all office countries as headquarters; HQ remains unknown."
     },
     {
-      "uid": "axal-blackbird",
-      "name": "Blackbird",
-      "website": "https://www.blackbird.vc/",
-      "hq": null,
-      "hq_countries": [],
-      "aliases": [
-        "blackbird"
-      ],
-      "hosts": [
-        "blackbird.vc"
-      ],
-      "source_url": "https://www.blackbird.vc/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://www.blackbird.vc/",
-        "https://www.blackbird.vc/about-blackbird"
-      ],
-      "notes": "Official about page says Blackbird is based in Australia and New Zealand. It does not designate a single headquarters, so retain these as possible location evidence only, not HQ."
-    },
-    {
       "uid": "axal-blumeventures",
       "name": "Blume Ventures",
       "website": "https://blume.vc/",
@@ -363,28 +343,6 @@
       "notes": "Official homepage footer explicitly identifies the venture capital firm as Singapore-based and incorporated there; Southeast Asia is not a headquarters country."
     },
     {
-      "uid": "axal-goldenventures",
-      "name": "Golden Ventures",
-      "website": "https://golden.ventures/",
-      "hq": "Canada",
-      "hq_countries": [
-        "CA"
-      ],
-      "aliases": [
-        "goldenventures"
-      ],
-      "hosts": [
-        "golden.ventures"
-      ],
-      "source_url": "https://golden.ventures/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://golden.ventures/",
-        "https://faq.golden.ventures/"
-      ],
-      "notes": "Official FAQ, linked from homepage, explicitly states Toronto headquarters and distinguishes North American investment coverage."
-    },
-    {
       "uid": "axal-greylock",
       "name": "Greylock",
       "website": "https://greylock.com/",
@@ -457,28 +415,6 @@
       "notes": "Optional additional manager with a verified New Zealand base: official homepage confirms VC firm and Auckland address; its own investment-principal posting explicitly says the team is based in Auckland. Check for existing directory manager or vehicle duplicate before insertion."
     },
     {
-      "uid": "axal-inoviacapital",
-      "name": "Inovia Capital",
-      "website": "https://www.inovia.vc/",
-      "hq": "Canada",
-      "hq_countries": [
-        "CA"
-      ],
-      "aliases": [
-        "inoviacapital"
-      ],
-      "hosts": [
-        "inovia.vc"
-      ],
-      "source_url": "https://www.inovia.vc/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://www.inovia.vc/",
-        "https://www.inovia.vc/inovia-conversations/inovia-discovery-fund-i-investing-in-emerging-managers-to-build-a-robust-funding-environment-for-canadian-tech-startups/"
-      ],
-      "notes": "Official article explicitly states firm headquartered in Montreal, distinguishing Canadian and international offices. Current homepage verifies manager continuity."
-    },
-    {
       "uid": "axal-insightpartners",
       "name": "Insight Partners",
       "website": "https://www.insightpartners.com/",
@@ -500,30 +436,6 @@
         "https://www.insightpartners.com/about-us/media/"
       ],
       "notes": "Official contact page explicitly identifies New York headquarters; the current media page independently repeats New York City headquarters while distinguishing other leadership locations."
-    },
-    {
-      "uid": "axal-insigniaventurespartners",
-      "name": "Insignia Ventures Partners",
-      "website": "https://www.insignia.vc/",
-      "hq": null,
-      "hq_countries": [],
-      "aliases": [
-        "insigniaventurepartners",
-        "insigniaventures",
-        "insigniaventurespartners"
-      ],
-      "hosts": [
-        "insignia.vc"
-      ],
-      "source_url": "https://www.insignia.vc/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://www.insignia.vc/",
-        "https://www.insignia.vc/about",
-        "https://www.insignia.vc/contact",
-        "https://www.insignia.vc/press/wovc"
-      ],
-      "notes": "Manager-owned indexed about and press pages verify the exact name with Ventures plural and its venture activity. Contact page gives a Singapore address but no explicit headquarters designation was found."
     },
     {
       "uid": "axal-jafco",
@@ -592,25 +504,6 @@
         "https://kalaari.com/investor-relations"
       ],
       "notes": "Official site verifies Kalaari Capital; contact and investor-relations pages confirm Bangalore contact and registered office. No explicit headquarters designation found, so HQ remains unknown."
-    },
-    {
-      "uid": "axal-kaszek",
-      "name": "Kaszek",
-      "website": "https://www.kaszek.com/",
-      "hq": null,
-      "hq_countries": [],
-      "aliases": [
-        "kaszek"
-      ],
-      "hosts": [
-        "kaszek.com"
-      ],
-      "source_url": "https://www.kaszek.com/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://www.kaszek.com/"
-      ],
-      "notes": "Official site confirms venture funds and Latin American focus, with presence in Buenos Aires, Mexico City, Montevideo and Sao Paulo. Targeted own-site searches found no manager headquarters or unambiguous single-country base statement. Latin America is not a country or a designated headquarters."
     },
     {
       "uid": "axal-khoslaventures",
@@ -695,28 +588,6 @@
         "https://lsvp.com/global-presence/"
       ],
       "notes": "Official site verifies Lightspeed Venture Partners but distinguishes LSVP's US, Europe and Israel offices from independent LSIP's India and Southeast Asia offices. Neither office geography nor the combined network is a headquarters designation."
-    },
-    {
-      "uid": "axal-magmaventurepartners",
-      "name": "Magma Venture Partners",
-      "website": "https://www.magmavc.com/",
-      "hq": null,
-      "hq_countries": [],
-      "aliases": [
-        "magmavc",
-        "magmaventurepartners"
-      ],
-      "hosts": [
-        "magmavc.com"
-      ],
-      "source_url": "https://www.magmavc.com/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://www.magmavc.com/",
-        "https://www.magmavc.com/about/who-we-are.html",
-        "https://www.magmavc.com/contact-us.html"
-      ],
-      "notes": "Official about page verifies Magma Venture Partners, branded Magma VC. Contact page gives a Tel Aviv address; no explicit headquarters designation found."
     },
     {
       "uid": "axal-mainsequence",
@@ -977,28 +848,6 @@
       "notes": "Official site verifies venture investing. Current contact page lists Riyadh and Dubai without designating headquarters. A 2017 own-site article describes a Raed-led round with 'two other Saudi-based VCs'; this is indirect and historical, so it is not treated as a current firm-headquarters claim."
     },
     {
-      "uid": "axal-realventures",
-      "name": "Real Ventures",
-      "website": "https://realventures.com/",
-      "hq": "Canada",
-      "hq_countries": [
-        "CA"
-      ],
-      "aliases": [
-        "realventures"
-      ],
-      "hosts": [
-        "realventures.com"
-      ],
-      "source_url": "https://realventures.com/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://realventures.com/",
-        "https://realventures.com/contact/"
-      ],
-      "notes": "Official site identifies Canadian VC; current FAQ states the firm is located in Montreal. FAQ also says it is currently focused on existing companies and follow-on investments; do not label as actively seeking new initial investments."
-    },
-    {
       "uid": "axal-sawariventures",
       "name": "Sawari Ventures",
       "website": "https://sawariventures.com/",
@@ -1019,27 +868,6 @@
         "https://sawariventures.com/about-us/"
       ],
       "notes": "Optional replacement for redundant Partech Africa row: official manager website explicitly states venture capital firm based in Cairo, investing across North Africa. Check existing directory for duplicate manager or vehicles first."
-    },
-    {
-      "uid": "axal-sequoiacapital",
-      "name": "Sequoia Capital",
-      "website": "https://sequoiacap.com/",
-      "hq": null,
-      "hq_countries": [],
-      "aliases": [
-        "sequoiacapital"
-      ],
-      "hosts": [
-        "sequoiacap.com"
-      ],
-      "source_url": "https://sequoiacap.com/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://sequoiacap.com/",
-        "https://sequoiacap.com/legal",
-        "https://sequoiacap.com/article/arc-americas-build-for-the-next-decade"
-      ],
-      "notes": "Official homepage confirms Sequoia Capital and canonical non-www URL. The reviewed official material identifies Menlo Park and London offices, but does not explicitly designate one headquarters; HQ remains unknown."
     },
     {
       "uid": "axal-shorooq",
@@ -1085,29 +913,6 @@
       "notes": "Official Vision Fund site confirms the investment platform. Contact page lists London, Silicon Valley and Tokyo as main offices without selecting one headquarters; leave HQ unknown."
     },
     {
-      "uid": "axal-sosv",
-      "name": "SOSV",
-      "website": "https://sosv.com/",
-      "hq": "United States",
-      "hq_countries": [
-        "US"
-      ],
-      "aliases": [
-        "sosv"
-      ],
-      "hosts": [
-        "sosv.com"
-      ],
-      "source_url": "https://sosv.com/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://sosv.com/",
-        "https://sosv.com/sosv-announces-the-close-of-its-100m-select-fund-the-venture-investors-first-growth-stage-fund/",
-        "https://sosv.com/privacy-statement/"
-      ],
-      "notes": "Official fund announcement explicitly identifies Princeton, New Jersey headquarters. Privacy statement updated February 2026 retains the Princeton address; current homepage confirms venture investing."
-    },
-    {
       "uid": "axal-squarepeg",
       "name": "Square Peg",
       "website": "https://www.squarepeg.vc/",
@@ -1149,28 +954,6 @@
       "notes": "Official site verifies STV venture capital and growth equity manager. Its own internship page establishes a Riyadh program location, but this is not a firm-wide headquarters declaration. Proposed UID stvc does not normalize the displayed name."
     },
     {
-      "uid": "axal-tlcom",
-      "name": "TLCOM",
-      "website": "https://www.tlcomcapital.com/",
-      "hq": null,
-      "hq_countries": [],
-      "aliases": [
-        "tlcom",
-        "tlcomcapital"
-      ],
-      "hosts": [
-        "tlcomcapital.com"
-      ],
-      "source_url": "https://www.tlcomcapital.com/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://www.tlcomcapital.com/",
-        "https://www.tlcomcapital.com/perspectives/the-signal-of-trust-introducing-tlcom",
-        "https://www.tlcomcapital.com/contact"
-      ],
-      "notes": "Official July 2026 rebrand article standardizes name to TLCOM. Africa is investment focus, not HQ; source shows multiple offices without a designated headquarters."
-    },
-    {
       "uid": "axal-valorcapitalgroup",
       "name": "Valor Capital Group",
       "website": "https://valorcapitalgroup.com/",
@@ -1192,26 +975,6 @@
         "https://valorcapitalgroup.com/companies/"
       ],
       "notes": "Official companies page, in The Hive entry, explicitly describes Valor Capital Group as an NY-based firm. The manager's current contact page lists NYC and Sao Paulo offices. United States reflects the explicit firm-base description, not its Brazilian investment market."
-    },
-    {
-      "uid": "axal-versiononeventures",
-      "name": "Version One Ventures",
-      "website": "https://versionone.vc/",
-      "hq": null,
-      "hq_countries": [],
-      "aliases": [
-        "versiononeventures"
-      ],
-      "hosts": [
-        "versionone.vc"
-      ],
-      "source_url": "https://versionone.vc/",
-      "checked_on": "2026-11-18",
-      "evidence_urls": [
-        "https://versionone.vc/",
-        "https://versionone.vc/people/"
-      ],
-      "notes": "Official website and copyright identify Version One Ventures. Team page locates founding partner in Vancouver and other partner in United States; no firm HQ is designated."
     },
     {
       "uid": "axal-vertexventuressoutheastasiaandindia",
@@ -1326,6 +1089,18 @@
       "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
     },
     {
+      "uid": "blackbird",
+      "name": "Blackbird",
+      "existing_uid": "blackbirdventuresi",
+      "reason": "The existing Blackbird Ventures I vehicle covers the Australian manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.blackbird.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.blackbird.vc/",
+        "https://www.blackbird.vc/about-blackbird"
+      ]
+    },
+    {
       "uid": "btoventures",
       "name": "b2venture",
       "existing_uid": "b2venture-v",
@@ -1356,6 +1131,18 @@
       "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
     },
     {
+      "uid": "goldenventures",
+      "name": "Golden Ventures",
+      "existing_uid": "goldenventuresv",
+      "reason": "The existing Golden Ventures V vehicle covers this manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://golden.ventures/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://golden.ventures/",
+        "https://faq.golden.ventures/"
+      ]
+    },
+    {
       "uid": "heartcorecapital",
       "name": "Heartcore Capital",
       "existing_uid": "heartcorecapital-v",
@@ -1380,10 +1167,47 @@
       "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
     },
     {
+      "uid": "inoviacapital",
+      "name": "Inovia Capital",
+      "existing_uid": "inoviacapitalv",
+      "reason": "The existing iNovia Capital V vehicle covers this manager, also represented as iNovia IV. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.inovia.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.inovia.vc/",
+        "https://www.inovia.vc/inovia-conversations/inovia-discovery-fund-i-investing-in-emerging-managers-to-build-a-robust-funding-environment-for-canadian-tech-startups/"
+      ]
+    },
+    {
+      "uid": "insigniaventurespartners",
+      "name": "Insignia Ventures Partners",
+      "existing_uid": "insigniaventurepartnersi",
+      "reason": "The existing Insignia Venture Partners I vehicle covers this manager; the historical spelling omits the plural s. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.insignia.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.insignia.vc/",
+        "https://www.insignia.vc/about",
+        "https://www.insignia.vc/contact",
+        "https://www.insignia.vc/press/wovc"
+      ]
+    },
+    {
       "uid": "inventure",
       "name": "Inventure",
       "existing_uid": "inventure-iv",
       "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "kaszek",
+      "name": "Kaszek",
+      "existing_uid": "kaszekventuresiii",
+      "reason": "The existing Kaszek Ventures III vehicle covers this manager under its longer name. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.kaszek.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.kaszek.com/"
+      ]
     },
     {
       "uid": "kindredcapital",
@@ -1408,6 +1232,19 @@
       "name": "LocalGlobe",
       "existing_uid": "localglobe-x",
       "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "magmaventurepartners",
+      "name": "Magma Venture Partners",
+      "existing_uid": "magmaiv",
+      "reason": "The existing Magma IV vehicle covers this Israeli manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.magmavc.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.magmavc.com/",
+        "https://www.magmavc.com/about/who-we-are.html",
+        "https://www.magmavc.com/contact-us.html"
+      ]
     },
     {
       "uid": "northzone",
@@ -1464,6 +1301,18 @@
       "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
     },
     {
+      "uid": "realventures",
+      "name": "Real Ventures",
+      "existing_uid": "realventuresiv",
+      "reason": "The existing Real Ventures IV vehicle covers this manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://realventures.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://realventures.com/",
+        "https://realventures.com/contact/"
+      ]
+    },
+    {
       "uid": "redalpine",
       "name": "redalpine",
       "existing_uid": "redalpineventures-vii",
@@ -1476,10 +1325,63 @@
       "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
     },
     {
+      "uid": "sequoiacapital",
+      "name": "Sequoia Capital",
+      "existing_uid": "sequoiacapitalseedfundv",
+      "reason": "The existing Sequoia Capital Seed Fund V vehicle covers this manager. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://sequoiacap.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://sequoiacap.com/",
+        "https://sequoiacap.com/legal",
+        "https://sequoiacap.com/article/arc-americas-build-for-the-next-decade"
+      ]
+    },
+    {
+      "uid": "sosv",
+      "name": "SOSV",
+      "existing_uid": "sosvinvestmentsiii",
+      "reason": "The existing SOSV Investments III vehicle covers this manager; the official footer identifies SOSV Investments LLC as the owner of the SOSV trademarks. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://sosv.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://sosv.com/",
+        "https://sosv.com/sosv-announces-the-close-of-its-100m-select-fund-the-venture-investors-first-growth-stage-fund/",
+        "https://sosv.com/privacy-statement/",
+        "https://sosv.com/external-footer/"
+      ]
+    },
+    {
       "uid": "speedinvest",
       "name": "Speedinvest",
       "existing_uid": "speedinvest-iv",
       "reason": "Already represented by a served manager/vehicle; preserve richer records and any retired-UID redirect."
+    },
+    {
+      "uid": "tlcom",
+      "name": "TLCOM",
+      "existing_uid": "tideafricafundi",
+      "reason": "The existing TIDE Africa Fund I vehicle covers TLCOM; the manager explicitly identifies TIDE Africa Fund I as its first Africa-focused fund. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://www.tlcomcapital.com/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://www.tlcomcapital.com/",
+        "https://www.tlcomcapital.com/perspectives/the-signal-of-trust-introducing-tlcom",
+        "https://www.tlcomcapital.com/contact",
+        "https://www.tlcomcapital.com/perspectives/tlcom-closes-africas-largest-early-stage-vc-fund-at-154-million"
+      ]
+    },
+    {
+      "uid": "versiononeventures",
+      "name": "Version One Ventures",
+      "existing_uid": "versiononeventuresiii",
+      "reason": "The existing Version One Ventures III vehicle covers this manager, also represented as Version One IV. Preserve the served vehicle and its richer facts; do not add a duplicate manager row.",
+      "official_website": "https://versionone.vc/",
+      "checked_on": "2026-11-18",
+      "evidence_urls": [
+        "https://versionone.vc/",
+        "https://versionone.vc/people/"
+      ]
     }
   ]
 }

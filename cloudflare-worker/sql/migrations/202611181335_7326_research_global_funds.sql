@@ -31,7 +31,6 @@ WITH candidates(uid,name,website,hq,source_url,as_of,aliases,hosts) AS (VALUES
   ('axal-andreessenhorowitz','Andreessen Horowitz','https://a16z.com/',NULL,'https://a16z.com/','2026-11-18','["a16z","andreessenhorowitz"]','["a16z.com"]'),
   ('axal-benchmark','Benchmark','https://www.benchmark.com/',NULL,'https://www.benchmark.com/','2026-11-18','["benchmark"]','["benchmark.com"]'),
   ('axal-bessemerventurepartners','Bessemer Venture Partners','https://www.bvp.com/',NULL,'https://www.bvp.com/','2026-11-18','["bessemerventurepartners"]','["bvp.com"]'),
-  ('axal-blackbird','Blackbird','https://www.blackbird.vc/',NULL,'https://www.blackbird.vc/','2026-11-18','["blackbird"]','["blackbird.vc"]'),
   ('axal-blumeventures','Blume Ventures','https://blume.vc/',NULL,'https://blume.vc/','2026-11-18','["blumeventures"]','["blume.vc"]'),
   ('axal-chirataeventures','Chiratae Ventures','https://chiratae.com/','India','https://chiratae.com/','2026-11-18','["chiratae","chirataeventures"]','["chiratae.com"]'),
   ('axal-eastventures','East Ventures','https://east.vc/','Indonesia / Singapore','https://east.vc/','2026-11-18','["eastventures"]','["east.vc"]'),
@@ -42,22 +41,17 @@ WITH candidates(uid,name,website,hq,source_url,as_of,aliases,hosts) AS (VALUES
   ('axal-globiscapitalpartners','GLOBIS Capital Partners','https://www.globiscapital.co.jp/en',NULL,'https://www.globiscapital.co.jp/en','2026-11-18','["globis","globiscapitalpartners"]','["globiscapital.co.jp"]'),
   ('axal-gobipartners','Gobi Partners','https://www.gobi.vc/','Hong Kong / Malaysia','https://www.gobi.vc/','2026-11-18','["gobipartners"]','["gobi.vc"]'),
   ('axal-goldengateventures','Golden Gate Ventures','https://www.goldengate.vc/','Singapore','https://www.goldengate.vc/','2026-11-18','["goldengateventures"]','["goldengate.vc"]'),
-  ('axal-goldenventures','Golden Ventures','https://golden.ventures/','Canada','https://golden.ventures/','2026-11-18','["goldenventures"]','["golden.ventures"]'),
   ('axal-greylock','Greylock','https://greylock.com/','United States','https://greylock.com/','2026-11-18','["greylock","greylockpartners"]','["greylock.com"]'),
   ('axal-hiventures','Hi Ventures','https://www.hi.vc/','Mexico','https://www.hi.vc/','2026-11-18','["allvp","hiventures"]','["allvp.com","hi.vc"]'),
   ('axal-icehouseventures','Icehouse Ventures','https://www.icehouseventures.co.nz/','New Zealand','https://www.icehouseventures.co.nz/','2026-11-18','["icehouseventures"]','["icehouseventures.co.nz"]'),
-  ('axal-inoviacapital','Inovia Capital','https://www.inovia.vc/','Canada','https://www.inovia.vc/','2026-11-18','["inoviacapital"]','["inovia.vc"]'),
   ('axal-insightpartners','Insight Partners','https://www.insightpartners.com/','United States','https://www.insightpartners.com/','2026-11-18','["insightpartners"]','["insightpartners.com"]'),
-  ('axal-insigniaventurespartners','Insignia Ventures Partners','https://www.insignia.vc/',NULL,'https://www.insignia.vc/','2026-11-18','["insigniaventurepartners","insigniaventures","insigniaventurespartners"]','["insignia.vc"]'),
   ('axal-jafco','JAFCO','https://www.jafco.co.jp/english/','Japan','https://www.jafco.co.jp/english/','2026-11-18','["jafco","jafcocoltd","jafcogroup"]','["jafco.co.jp"]'),
   ('axal-jungleventures','Jungle Ventures','https://www.jungle.vc/','Singapore','https://www.jungle.vc/','2026-11-18','["jungleventures"]','["jungle.vc"]'),
   ('axal-kalaaricapital','Kalaari Capital','https://kalaari.com/',NULL,'https://kalaari.com/','2026-11-18','["kalaari","kalaaricapital"]','["kalaari.com"]'),
-  ('axal-kaszek','Kaszek','https://www.kaszek.com/',NULL,'https://www.kaszek.com/','2026-11-18','["kaszek"]','["kaszek.com"]'),
   ('axal-khoslaventures','Khosla Ventures','https://www.khoslaventures.com/','United States','https://www.khoslaventures.com/','2026-11-18','["khoslaventures"]','["khoslaventures.com"]'),
   ('axal-kimaventures','Kima Ventures','https://www.kimaventures.com/',NULL,'https://www.kimaventures.com/','2026-11-18','["kima","kimaventures"]','["kimaventures.com"]'),
   ('axal-launchafricaventures','Launch Africa Ventures','https://www.launchafrica.vc/',NULL,'https://www.launchafrica.vc/','2026-11-18','["launchafricaventures"]','["launchafrica.vc"]'),
   ('axal-lightspeedventurepartners','Lightspeed Venture Partners','https://lsvp.com/',NULL,'https://lsvp.com/','2026-11-18','["lightspeedmanagementcompany","lightspeedventurepartners"]','["lsvp.com"]'),
-  ('axal-magmaventurepartners','Magma Venture Partners','https://www.magmavc.com/',NULL,'https://www.magmavc.com/','2026-11-18','["magmavc","magmaventurepartners"]','["magmavc.com"]'),
   ('axal-mainsequence','Main Sequence','https://www.mseq.vc/',NULL,'https://www.mseq.vc/','2026-11-18','["mainsequence"]','["mseq.vc"]'),
   ('axal-monashees','Monashees','https://www.monashees.com/',NULL,'https://www.monashees.com/','2026-11-18','["monashees"]','["monashees.com","monashees.com.br"]'),
   ('axal-monkshillventures','Monk''s Hill Ventures','https://www.monkshill.com/',NULL,'https://www.monkshill.com/','2026-11-18','["monkshillventures"]','["monkshill.com"]'),
@@ -70,41 +64,37 @@ WITH candidates(uid,name,website,hq,source_url,as_of,aliases,hosts) AS (VALUES
   ('axal-plugandplayventures','Plug and Play Ventures','https://www.plugandplaytechcenter.com/venture-capital/ventures-team','United States','https://www.plugandplaytechcenter.com/venture-capital/ventures-team','2026-11-18','["plugandplay","plugandplayventures"]','["plugandplaytechcenter.com"]'),
   ('axal-radicalventures','Radical Ventures','https://radical.vc/',NULL,'https://radical.vc/','2026-11-18','["radicalventures"]','["radical.vc"]'),
   ('axal-raedventures','Raed Ventures','https://raed.vc/',NULL,'https://raed.vc/','2026-11-18','["raedventures"]','["raed.vc"]'),
-  ('axal-realventures','Real Ventures','https://realventures.com/','Canada','https://realventures.com/','2026-11-18','["realventures"]','["realventures.com"]'),
   ('axal-sawariventures','Sawari Ventures','https://sawariventures.com/','Egypt','https://sawariventures.com/','2026-11-18','["sawariventures"]','["sawariventures.com"]'),
-  ('axal-sequoiacapital','Sequoia Capital','https://sequoiacap.com/',NULL,'https://sequoiacap.com/','2026-11-18','["sequoiacapital"]','["sequoiacap.com"]'),
   ('axal-shorooq','Shorooq','https://www.shorooq.com/','United Arab Emirates','https://www.shorooq.com/','2026-11-18','["shorooq","shorooqpartners"]','["shorooq.com"]'),
   ('axal-softbankvisionfund','SoftBank Vision Fund','https://visionfund.com/',NULL,'https://visionfund.com/','2026-11-18','["softbankvisionfund"]','["visionfund.com"]'),
-  ('axal-sosv','SOSV','https://sosv.com/','United States','https://sosv.com/','2026-11-18','["sosv"]','["sosv.com"]'),
   ('axal-squarepeg','Square Peg','https://www.squarepeg.vc/',NULL,'https://www.squarepeg.vc/','2026-11-18','["squarepeg"]','["squarepeg.vc"]'),
   ('axal-stv','STV','https://stv.vc/',NULL,'https://stv.vc/','2026-11-18','["stv"]','["stv.vc"]'),
-  ('axal-tlcom','TLCOM','https://www.tlcomcapital.com/',NULL,'https://www.tlcomcapital.com/','2026-11-18','["tlcom","tlcomcapital"]','["tlcomcapital.com"]'),
   ('axal-valorcapitalgroup','Valor Capital Group','https://valorcapitalgroup.com/','United States','https://valorcapitalgroup.com/','2026-11-18','["valorcapitalgroup"]','["valorcapitalgroup.com"]'),
-  ('axal-versiononeventures','Version One Ventures','https://versionone.vc/',NULL,'https://versionone.vc/','2026-11-18','["versiononeventures"]','["versionone.vc"]'),
   ('axal-vertexventuressoutheastasiaandindia','Vertex Ventures Southeast Asia and India','https://www.vertexventures.sg/','Singapore','https://www.vertexventures.sg/','2026-11-18','["vertexventuressea","vertexventuresseai","vertexventuressoutheastasiaandindia","vertexventuressoutheastasiaindia","vvseai"]','["vertexventures.sg"]'),
   ('axal-wamdacapital','Wamda Capital','https://wamdacapital.com/','United Arab Emirates','https://wamdacapital.com/','2026-11-18','["wamdacapital"]','["wamdacapital.com"]'),
   ('axal-z47','Z47','https://www.z47.com/',NULL,'https://www.z47.com/','2026-11-18','["matrixpartnersindia","z47"]','["z47.com"]')),
 -- Match the API's served-source rule. Withheld legacy rows are never
 -- overwritten or relabelled; these new IDs have independent evidence.
 served_base AS (
-  SELECT d.uid,d.name,lower(trim(coalesce(d.website,''))) AS web
+  SELECT d.uid,d.name,d.fund_number,lower(trim(coalesce(d.website,''))) AS web
   FROM research_fund_directory d
   WHERE NOT EXISTS (SELECT 1 FROM research_fund_sources s
     WHERE s.source_name = d.source_name AND s.verdict = 'not allowed')
 ),
 authorities AS (
-  SELECT uid,name,CASE WHEN instr(web,'://') > 0
+  SELECT uid,name,fund_number,CASE WHEN instr(web,'://') > 0
     THEN substr(web,instr(web,'://')+3) ELSE web END AS authority FROM served_base
 ),
 host_ports AS (
-  SELECT uid,name,substr(authority,1,min(instr(authority||'/','/'),
+  SELECT uid,name,fund_number,substr(authority,1,min(instr(authority||'/','/'),
     instr(authority||'?','?'),instr(authority||'#','#'))-1) AS host_port FROM authorities
 ),
 bare_hosts AS (
-  SELECT uid,name,rtrim(substr(host_port,1,instr(host_port||':',':')-1),'.') AS host FROM host_ports
+  SELECT uid,name,fund_number,rtrim(substr(host_port,1,instr(host_port||':',':')-1),'.') AS host FROM host_ports
 ),
 served AS (
   SELECT lower(uid) AS uid,replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(name, '')), ' ', ''), '.', ''), ',', ''), '-', ''), '_', ''), '''', ''), '’', ''), '&', ''), '(', ''), ')', ''), char(9), ''), char(10), ''), char(13), '') AS name_key,
+    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(fund_number, '')), ' ', ''), '.', ''), ',', ''), '-', ''), '_', ''), '''', ''), '’', ''), '&', ''), '(', ''), ')', ''), char(9), ''), char(10), ''), char(13), '') AS fund_number_key,
     CASE WHEN substr(host,1,4) = 'www.' THEN substr(host,5) ELSE host END AS host FROM bare_hosts
 )
 INSERT OR IGNORE INTO research_fund_directory
@@ -118,6 +108,11 @@ AND NOT EXISTS (
   SELECT 1 FROM served s WHERE s.uid = c.uid
     OR EXISTS (SELECT 1 FROM json_each(c.aliases) a
       WHERE s.name_key = a.value OR s.uid = a.value
+        -- Only remove an explicitly recorded vehicle number; do not guess
+        -- suffixes from manager names such as Norrsken22 or Z47.
+        OR (s.fund_number_key <> '' AND (
+          s.name_key IN (a.value||s.fund_number_key,a.value||'fund'||s.fund_number_key)
+          OR s.uid IN (a.value||s.fund_number_key,a.value||'fund'||s.fund_number_key)))
         OR substr(s.uid,1,length(a.value)+1) = a.value||'-')
     OR EXISTS (SELECT 1 FROM json_each(c.hosts) h WHERE s.host = h.value)
 );
