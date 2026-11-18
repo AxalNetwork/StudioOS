@@ -11,14 +11,12 @@ import { investorZoneActions } from '../src/workspaces/investorZoneActions.js';
 
 const op = (zone, label) => investorZoneActions(zone).find((a) => a.label === label);
 
-test('IN1 Add person and IN2 Offer one are held, and say their decision is open', () => {
-  const add = op('network/relationships', 'Add person');
-  assert.equal(add.disabled, true);
-  assert.match(add.title, /not decided yet/);
-  assert.match(add.title, /without a user directory/);
-  const offer = op('network/introductions', 'Offer one');
-  assert.equal(offer.disabled, true);
-  assert.match(offer.title, /not decided yet/);
+test('D6636: Add person is live when its page supplies the picker, while the other decision remains held', () => {
+  const calls=[];
+  const built=investorZoneActions('network/relationships',{handlers:{addPerson:{onClick:()=>calls.push('open'),title:'Choose recorded people.'}}}).find(a=>a.label==='Add person');
+  assert.ok(built); assert.ok(!built.disabled); built.onClick(); assert.deepEqual(calls,['open']);
+  assert.doesNotMatch(built.title,/#\d+/);
+  assert.equal(op('network/introductions','Offer one').disabled,true);
 });
 
 test('IN3 Organizations: the two ops stay held, and say why the counterpart’s company is not theirs to edit (D6258)', () => {

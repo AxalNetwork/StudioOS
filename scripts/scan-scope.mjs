@@ -43,7 +43,12 @@ function context(env) {
 export async function selectScope(env = process.env, readApi = api) {
   const payload = jsonFile(env.GITHUB_EVENT_PATH);
   const event = env.GITHUB_EVENT_NAME;
-  const labels = payload.pull_request?.labels || [];
+  const pull = payload.pull_request;
+  // The initial GITHUB_TOKEN PR event precedes labeling. Its approved run must already select both scanners.
+  if (event === 'pull_request' && env.GITHUB_REPOSITORY === 'AxalNetwork/StudioOS'
+      && pull?.head?.repo?.full_name === env.GITHUB_REPOSITORY && pull.user?.login === 'github-actions[bot]'
+      && /^alert-(?:auto)?fix-[1-9]\d*$/.test(pull.head.ref)) return true;
+  const labels = pull?.labels || [];
   if (event !== 'pull_request' || labels.some(label => label?.name === 'security-scan')) return scanScope({ event, labels });
   const { repo } = context(env);
   const number = Number(payload.pull_request?.number || payload.number);
