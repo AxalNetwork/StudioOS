@@ -286,6 +286,7 @@ test('3. publish approval is bound to digest, audience, profile and authority', 
   await refuse({ audience: 'public' }, 'audience_forbidden');
   await refuse({ reviewer: { kind: 'agent', agentRunId: 'run_x', onBehalfOfUserId: 13, chargeId: null } }, 'agent_review');
   await refuse({ authority: 'maintainer' }, 'no_authority');
+  await refuse({ authority: 'maintainer', reviewer: BOB }, 'no_authority'); // BOB holds maintainer, which marketing does not accept
   await refuse({ reviewer: DAVE }, 'no_authority'); // DAVE holds founder, not brand_owner
   await refuse({ rightsRef: null }, 'approval_incomplete');
   await refuse({ citations: [] }, 'approval_incomplete', 'investor_pitch');
@@ -434,6 +435,18 @@ test('6b. concurrent publishers: exactly one release wins from one base; a doubl
   assert.equal(count(w2, 'SELECT COUNT(*) AS n FROM work_graph_effects'), 4);
   assert.equal(count(w2, `SELECT COUNT(*) AS n FROM work_graph_events WHERE action = 'advance_head' AND asset_uid = ?`, r2.c.line), 1);
   assert.equal(count(w2, `SELECT COUNT(*) AS n FROM work_graph_integrity_events WHERE action = 'effect_enqueued'`), 4);
+});
+
+test('6d. an effect already queued under the same key is neither duplicated nor audited twice', async () => {
+  const w = world();
+  const { c, m } = await ready(w);
+  w.db.prepare(`INSERT INTO work_graph_effects (tenant_id, company_id, effect_kind, idempotency_key, request_hash, payload_json,
+    max_attempts, next_attempt_ms, created_at) VALUES (7, 70, 'release_stream', ?, ?, '{}', 5, 0, '2026-11-18T21:00:00Z')`)
+    .run(`release:${m.manifestUid}:stream:vid-campaign`, 'f'.repeat(64));
+  const r = await publish(w, c.line, m.manifestUid, null, 'pre');
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.equal(count(w, 'SELECT COUNT(*) AS n FROM work_graph_effects'), 4);
+  assert.equal(count(w, `SELECT COUNT(*) AS n FROM work_graph_integrity_events WHERE action = 'effect_enqueued'`), 3);
 });
 
 test('6c. a full outbox refuses the publication before the pointer moves', async () => {
