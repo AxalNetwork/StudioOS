@@ -7,20 +7,21 @@
 // 1. ACCESS STATE IS DERIVED, NOT CHOSEN. The export drives every gate off
 //    `st.access`, flipped by a row of buttons. Shipping that would hand any
 //    logged-in viewer a control that unlocks the reporting package, the LP data
-//    room and the allocation sliders by claiming "$250K committed". Here the
-//    state comes from the caller's own rows in GET /api/funds/lp-portal via the
+//    room by claiming a commitment. Here the state comes from the caller's
+//    own rows in GET /api/funds/lp-portal via the
 //    pure `lpAccessState()` (see lib/spinoutFundModel.js). Admins keep a preview
 //    switcher because the five states are otherwise unreachable to look at, and
 //    it is inert — nothing on this page writes.
-// 2. FUND-LEVEL FIGURES ARE LABELLED AS OPERATOR-MAINTAINED. No endpoint reports
-//    raise progress or portfolio marks, so the design's "Live program telemetry ·
-//    updated daily" caption would be a false provenance claim and is not used.
-// 3. NO FAKE WRITES. Application submit and allocation submit have no backing
-//    endpoint, so they state that plainly instead of pretending to persist.
+// 2. NO FUND FIGURE WITHOUT A RECORD (D6137). Target, close status, raise and
+//    portfolio come from GET /api/spinout-lab/fund-metrics through
+//    lib/spinoutFundFigures.js; a figure with no record reads "Not recorded".
+//    A visitor's read carries the target and close status only, so the raise
+//    and underwriting blocks are drawn for committed LPs alone.
+// 3. Demo-day sliders were removed following the owner’s decision (#6138).
 //
 // Everything else — thesis hero, raise progress, key terms, tier matrix,
 // commitment process, application form, underwriting KPIs, report archive,
-// participation-rights ladder, IR, allocation gate, onboarding requirements and
+// participation-rights ladder, IR, onboarding requirements and
 // the compliance footer — is preserved.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -42,10 +43,11 @@ import { useAuth } from '../hooks/useAuthSync';
 import { api, spinoutLab } from '../lib/api';
 import { fundReportingApi } from '../lib/api/fundReporting.js';
 import {
-  fundModel, money, lpAccessState, lpHasReports, lpAllocationOpen,
-  ALLOC_THRESHOLD_K, LP_STATES, FUND, PROGRAM, THESIS, fundTerms,
-  TIERS, TIER_RIGHTS, PROCESS_STEPS, allocationCandidates, SPINOUT_FUND_SLUG,
+  lpAccessState, lpHasReports,
+  ALLOC_THRESHOLD_K, LP_STATES, FUND, THESIS, fundTerms,
+  TIERS, TIER_RIGHTS, PROCESS_STEPS, SPINOUT_FUND_SLUG,
 } from '../lib/spinoutFundModel';
+import { fundFigures, programFigures, LP_ONLY, LP_ONLY_PHRASE } from '../lib/spinoutFundFigures';
 import {
   selectHolding, quarterOf, lastClosedQuarter, fmtDate,
 } from '../lib/quarterlyReportViewModel';
@@ -106,17 +108,17 @@ const GATE = {
   },
   approved: {
     tone: 'violet', icon: Check, title: 'You are approved. Complete your commitment to activate participation.',
-    body: 'Approved LPs can review full reporting. Commit capital to receive the quarterly reporting package, and reach $250K to hold allocation and decision rights.',
+    body: 'Approved LPs can review full reporting. Commit capital to receive the quarterly reporting package.',
     wrap: 'border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30',
   },
   committed: {
     tone: 'violet', icon: Check, title: 'You are a committed LP.',
-    body: 'You receive the full reporting package, portfolio updates and demo-day observer access. Increase your commitment to $250K to hold allocation and decision rights.',
+    body: 'You receive the full reporting package, portfolio updates and demo-day observer access.',
     wrap: 'border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30',
   },
   voting: {
-    tone: 'green', icon: ShieldCheck, title: 'Full participation active.',
-    body: `You hold allocation and decision rights for Cohort 4 and complete reporting access. Scheduled demo day: ${FUND.demoDay}.`,
+    tone: 'green', icon: ShieldCheck, title: 'You are a committed LP.',
+    body: `You receive the full reporting package, portfolio updates and demo-day observer access. Scheduled demo day: ${FUND.demoDay}.`,
     wrap: 'border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30',
   },
 };
@@ -126,7 +128,7 @@ const PROFILE_CHIP = {
   pending: ['amber', 'Applicant · under review'],
   approved: ['violet', 'Approved LP'],
   committed: ['violet', 'Committed LP'],
-  voting: ['green', 'Committed LP · full rights'],
+  voting: ['green', 'Committed LP'],
 };
 
 /* --------------------------------------------------------------- static data */
@@ -157,7 +159,7 @@ const LADDER = [
   ['Invited', 0, 'Review the thesis, key terms and cohort summaries.'],
   ['Approved', 1, 'Full reporting archive and diligence data room.'],
   ['Committed', 2, 'Quarterly reporting package, portfolio updates, demo day.'],
-  [`Allocator · $${ALLOC_THRESHOLD_K}K`, 3, 'Allocation preferences and decision rights.'],
+  [`Participation · $${ALLOC_THRESHOLD_K}K`, 3, 'Decision rights.'],
 ];
 
 // Documents this platform does NOT produce. The design listed them beside the
@@ -199,9 +201,9 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     : null;
 
   const [portal, setPortal] = useState(null);
-  // GET /spinout-lab/fund-metrics — live program track record + raise
-  // aggregates. Each block carries `available`; anything unavailable falls
-  // back to the operator-maintained model in lib/spinoutFundModel.js.
+  // GET /spinout-lab/fund-metrics — live program track record and the fund
+  // block (D6137). Every fund figure carries `available`; one with no record
+  // is drawn "Not recorded", never a figure from lib/spinoutFundModel.js.
   const [live, setLive] = useState(null);
   const [loading, setLoading] = useState(true);
   const { hash } = useLocation();
@@ -230,12 +232,6 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   // be used to self-grant access; see the file header.
   const [preview, setPreview] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('all');
-  // Sliders come from the shared Cohort 4 list (everything the IC has moved
-  // past 'Track'), which is the same list the fund brief prints as the current
-  // pipeline — so the document can never name a different cohort than the one
-  // being allocated across.
-  const [alloc, setAlloc] = useState(() =>
-    Object.fromEntries(allocationCandidates().map((c) => [c.company, c.allocDefault ?? 0])));
   // The caller's own LP application (null = never applied). `applicationLoaded`
   // separates "no application" from "could not tell", so a failed read never
   // renders a fresh form to someone who has already applied.
@@ -254,9 +250,8 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     setErr('');
     // The portal (the viewer's own position) and the fund metrics (program +
     // raise aggregates) fail independently: a metrics outage must not blank
-    // the viewer's standing, and vice versa. Metrics failure degrades to the
-    // operator-maintained model below — with its provenance caption, so the
-    // page never claims live telemetry it does not have.
+    // the viewer's standing, and vice versa. A metrics failure draws its fund
+    // figures "Unreadable", never a stand-in.
     const [portalRes, metricsRes, appRes, kycRes] = await Promise.allSettled([
       api.fundsLpPortal(),
       spinoutLab.fundMetrics(),
@@ -293,55 +288,24 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   }, [hash, derived.holdings, err]);
 
   const state = isAdmin && preview ? preview : derived.state;
-  const M = useMemo(() => fundModel(), []);
 
   const gate = GATE[state] || GATE.visitor;
   const GateIcon = gate.icon;
   const [chipTone, chipText] = PROFILE_CHIP[state] || PROFILE_CHIP.visitor;
   const hasReports = lpHasReports(state);
-  const allocOpen = lpAllocationOpen(state);
   const showApply = state === 'visitor';
   const showPending = state === 'pending';
 
   const commitLabel = derived.commitmentK > 0 ? `$${derived.commitmentK}K` : '—';
 
-  // Live-vs-operator-maintained resolution, per block. The endpoint answers
-  // in DOLLARS; the model's vocabulary is $M / $K, so convert once here.
-  // `available: false` (or a failed fetch) falls back to the static model —
-  // the provenance captions below follow the same flags, so the page states
-  // where each number came from instead of guessing.
-  const liveProgram = live?.program?.available ? live.program : null;
-  const liveFund = live?.fund?.available ? live.fund : null;
-  const P = liveProgram
-    ? {
-      graduates: liveProgram.graduates,
-      onTimeIncorpPct: liveProgram.on_time_pct, // may be null: no measurable starts
-      alumniRaisedM: liveProgram.alumni_raised != null ? liveProgram.alumni_raised / 1e6 : null,
-    }
-    : PROGRAM;
-  const F = liveFund
-    ? {
-      committed: (Number(liveFund.committed) || 0) / 1e6,
-      softCircled: (Number(liveFund.soft_circled) || 0) / 1e6,
-      lpCount: Number(liveFund.lp_count) || 0,
-      medianTicketK: liveFund.median_commitment != null
-        ? Math.round(Number(liveFund.median_commitment) / 1000)
-        : null,
-      // A fund row with no recorded size keeps the operator-stated target so
-      // the progress bar still has a denominator.
-      target: Number(liveFund.target) > 0 ? Number(liveFund.target) / 1e6 : FUND.target,
-    }
-    : {
-      committed: FUND.committed,
-      softCircled: FUND.softCircled,
-      lpCount: FUND.lpCount,
-      medianTicketK: FUND.medianTicketK,
-      target: FUND.target,
-    };
-  const capacityRemainingM = Math.round((F.target - F.committed) * 100) / 100;
-  const raisePct = F.target > 0
-    ? Math.max(0, Math.min(100, Math.round((F.committed / F.target) * 100)))
-    : 0;
+  // D6137: every figure below is a string from the read, the same strings the
+  // fund brief prints (lib/spinoutFundFigures.js). The program block keeps its
+  // operator-maintained fallback with its caption; the fund block has none: a
+  // figure with no record reads "Not recorded". `F.raise` and `F.portfolio` are
+  // null unless the read carried the LP-only keys, so a visitor's page has
+  // nothing reserved for LPs to draw.
+  const P = programFigures(live);
+  const F = fundFigures(live);
 
   // Which of the viewer's holdings this workspace reports on. The slug first
   // (stable across a rename); a viewer with exactly one holding resolves without
@@ -430,21 +394,27 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     }
   };
 
-  const kpis = [
-    ['Gross MOIC', M.grossMoic.toFixed(2) + '×', 'Held ÷ invested'],
-    ['Capital deployed', money.m(M.investedK), `${M.positions.length} positions`],
-    ['Portfolio value', money.m(M.heldK), 'At latest marks'],
-    ['Follow-ons', String(M.followOnCount), money.m(M.followOnK) + ' drawn'],
-    ['Reserve remaining', `$${M.reserveCloseM}M`, `${Math.round(FUND.reservePolicy * 100)}% policy`],
-  ];
+  // The underwriting block, for a committed LP's read only (F.portfolio is null
+  // for a visitor). Each value is the read's figure or "Not recorded".
+  const kpis = F.portfolio
+    ? [
+      ['Gross MOIC', F.portfolio.moic, 'Held ÷ invested'],
+      ['Capital deployed', F.portfolio.invested, `Positions: ${F.portfolio.positions}`],
+      ['Portfolio value', F.portfolio.held, 'At latest marks'],
+      ['Follow-ons', F.portfolio.followOns, `Drawn: ${F.portfolio.followOnAmount}`],
+      ['Reserve remaining', F.portfolio.reserve, 'No store records the reserve'],
+    ]
+    : [];
 
   // The eight rows flagged `page`; the brief prints the twelve flagged `brief`
   // off the same list, so neither can be edited without the other following.
-  const econ = useMemo(() => fundTerms().filter((t) => t.page), []);
+  // The target row is the read's target (D6137): no hard cap is recorded.
+  const econ = useMemo(() => fundTerms().filter((t) => t.page)
+    .map((t) => (t.k === 'Target / hard cap' ? { ...t, k: 'Target', v: F.target.text } : t)), [F.target.text]);
 
-  // The brief is built at click time from the model above plus the viewer's own
-  // derived standing — never `state`, which an admin can preview. A previewed
-  // state must not be stamped into a document as though it were real.
+  // The brief is built at click time from the same read the page drew plus the
+  // viewer's own derived standing — never `state`, which an admin can preview.
+  // A previewed state must not be stamped into a document as though it were real.
   const downloadBrief = async () => {
     setBriefBusy(true);
     setBriefErr('');
@@ -459,6 +429,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             ? `${PROFILE_CHIP[derived.state]?.[1] || 'Investor'} · $${derived.commitmentK}K committed`
             : PROFILE_CHIP[derived.state]?.[1],
         },
+        metrics: live,
       });
     } catch (e) {
       setBriefErr(e?.message || 'Could not generate the fund brief.');
@@ -518,7 +489,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
             {gate.title}
-            {state === 'committed' && derived.commitmentK > 0 && ` (${commitLabel})`}
+            {(state === 'committed' || state === 'voting') && derived.commitmentK > 0 && ` (${commitLabel})`}
           </div>
           <div className="mt-0.5 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">{gate.body}</div>
         </div>
@@ -529,7 +500,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1e1533] via-[#2d1d52] to-[#3b2470] p-8 text-white">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-green-400/15 px-2.5 py-1 text-[11px] font-bold text-green-300">
-              {FUND.status}
+              {F.close.status}
             </span>
             <span className="text-xs text-white/60">
               Axal VC Spin-Out Fund I · {FUND.stage} · Vintage {FUND.vintage}
@@ -544,15 +515,15 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
               source it does not have. */}
           <div className="mt-5 border-t border-white/10 pt-4">
             <div className="mb-2 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">
-              {liveProgram
+              {P.live
                 ? 'Live program telemetry · computed from graduate records'
-                : 'Operator-maintained track record · live telemetry unavailable'}
+                : 'Program track record not recorded yet · appears once graduate records hold it'}
             </div>
           <div className="flex flex-wrap gap-6">
             {[
-              [String(P.graduates), 'Graduates to date'],
-              [P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', 'Incorporated on time'],
-              [P.alumniRaisedM != null ? money.m(P.alumniRaisedM * 1000) : '—', 'Raised by alumni'],
+              [P.graduates, 'Graduates to date'],
+              [P.onTime, 'Incorporated on time'],
+              [P.alumni, 'Raised by alumni'],
             ].map(([v, k]) => (
               <div key={k}>
                 <div className={`${MONO} text-[17px] font-bold`}>{v}</div>
@@ -568,7 +539,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             <Link to="/spinout-lab" className="rounded-lg bg-white dark:bg-white px-4 py-2.5 text-[13px] font-bold text-[#2d1d52]">
               Explore the Spin-Out Lab
             </Link>
-            {/* Generates the one-pager from this page's own model at click time,
+            {/* Generates the one-pager from this page's own read at click time,
                 so a download always carries what the page is currently showing.
                 The old link went to /spinout-lab/brief — the public PROGRAM
                 brochure, not a fund brief. */}
@@ -588,45 +559,63 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           <p className="mt-2.5 text-[10.5px] leading-relaxed text-white/45">
             {briefErr
               ? briefErr
-              : 'One page, generated now — raise status, structure, tiers, track record, Cohort 4 pipeline and the commitment process, as shown on this page.'}
+              : 'One page, generated now — the fund figures on this page, structure, tiers, track record and the commitment process.'}
           </p>
         </div>
 
         <div className={`${CARD} flex flex-col p-6`}>
-          <SectionLabel right={<Chip tone="gray">First close {FUND.firstClose}</Chip>}>Raise progress</SectionLabel>
-          <div className="flex items-baseline gap-2">
-            <div className={`${MONO} text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100`}>
-              {money.m(F.committed * 1000)}
-            </div>
-            <div className="text-[13px] text-gray-500 dark:text-gray-400">of ${F.target}M target</div>
-          </div>
-          <div className="relative mt-3 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-            <div className="h-full rounded-full bg-violet-600" style={{ width: `${raisePct}%` }} />
-          </div>
-          <div className="mt-1.5 flex justify-between text-[10.5px] text-gray-400 dark:text-gray-500">
-            <span>$0</span><span>${FUND.minCloseM}M minimum close</span><span>${F.target}M</span>
-          </div>
-          <dl className="mt-4 flex flex-1 flex-col gap-2.5 border-t border-gray-100 dark:border-gray-800 pt-4 text-xs">
+          <SectionLabel right={<Chip tone="gray">First close {F.close.label}</Chip>}>Raise progress</SectionLabel>
+          {/* D6137: the target and the close status for every reader; the raise
+              itself only when the read carried it (a committed LP's). */}
+          <dl className="flex flex-col gap-2.5 text-xs" data-testid="raise-headline">
             {[
-              ['Soft-circled', money.m(F.softCircled * 1000)],
-              ['Accepted LPs', String(F.lpCount)],
-              ['Median commitment', F.medianTicketK != null ? money.k(F.medianTicketK) : '—'],
-              ['Capacity remaining', `$${capacityRemainingM}M`],
+              ['Target', F.target.text],
+              ['First close', F.close.label],
             ].map(([k, v]) => (
-              <div key={k} className="flex justify-between">
+              <div key={k} className="flex justify-between gap-3">
                 <dt className="text-gray-500 dark:text-gray-400">{k}</dt>
-                <dd className={`${MONO} font-bold text-gray-900 dark:text-gray-100`}>{v}</dd>
+                <dd className={`${MONO} text-right font-bold text-gray-900 dark:text-gray-100`}>{v}</dd>
               </div>
             ))}
           </dl>
-          <p className="mt-3 text-[10.5px] leading-relaxed text-gray-400 dark:text-gray-500">
-            Committed = commitments the general partner has recorded on the fund's register; no
-            subscription-document store exists, so it does not say a subscription was countersigned.
-            Soft-circled amounts are indications, not commitments.{' '}
-            {liveFund
-              ? 'Figures are computed live from the fund’s limited-partner records.'
-              : 'Fund-level figures are operator-maintained, not live telemetry.'}
-          </p>
+          {F.raise ? (
+            <>
+              <div className="mt-4 flex items-baseline gap-2 border-t border-gray-100 dark:border-gray-800 pt-4">
+                <div className={`${MONO} text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100`}>
+                  {F.raise.committed}
+                </div>
+                <div className="text-[13px] text-gray-500 dark:text-gray-400">committed</div>
+              </div>
+              {F.raise.pctOfTarget != null && (
+                <div className="relative mt-3 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                  <div className="h-full rounded-full bg-violet-600" style={{ width: `${F.raise.pctOfTarget}%` }} />
+                </div>
+              )}
+              <dl className="mt-4 flex flex-1 flex-col gap-2.5 text-xs" data-testid="raise-lp-figures">
+                {[
+                  ['Soft-circled', F.raise.softCircled],
+                  ['Accepted LPs', F.raise.lpCount],
+                  ['Median commitment', F.raise.median],
+                  ['Capacity remaining', F.raise.capacity],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between">
+                    <dt className="text-gray-500 dark:text-gray-400">{k}</dt>
+                    <dd className={`${MONO} font-bold text-gray-900 dark:text-gray-100`}>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 text-[10.5px] leading-relaxed text-gray-400 dark:text-gray-500">
+                Committed = commitments the general partner has recorded on the fund's register; no
+                subscription-document store exists, so it does not say a subscription was countersigned.
+                Soft-circled amounts are indications, not commitments. Figures come from the fund’s
+                limited-partner records; a figure with no record reads Not recorded.
+              </p>
+            </>
+          ) : (
+            <p className="mt-4 flex-1 border-t border-gray-100 dark:border-gray-800 pt-4 text-[12px] leading-relaxed text-gray-500 dark:text-gray-400">
+              Committed capital, the LP count and the portfolio are {LP_ONLY_PHRASE}.
+            </p>
+          )}
         </div>
       </div>
 
@@ -646,9 +635,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
 
       {/* participation tiers */}
       <div>
-        <SectionLabel right={<span className="text-[11.5px] text-gray-400 dark:text-gray-500">Rights scale with commitment · allocation rights begin at ${ALLOC_THRESHOLD_K}K</span>}>
-          Participation tiers
-        </SectionLabel>
+        <SectionLabel>Participation tiers</SectionLabel>
         <div className={`${CARD} overflow-x-auto`}>
           <table className="w-full min-w-[760px] text-left">
             <thead>
@@ -766,18 +753,30 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
 
       {/* underwriting */}
       <div>
-        <SectionLabel right={<span className="text-[11.5px] text-gray-400 dark:text-gray-500">Operator-maintained portfolio model · see lib/spinoutFundModel.js</span>}>
+        <SectionLabel right={(
+          <span className="text-[11.5px] text-gray-400 dark:text-gray-500" data-testid="underwriting-provenance">
+            {F.portfolio
+              ? `From the fund’s position and mark records · as of ${F.portfolio.asOf}`
+              : LP_ONLY}
+          </span>
+        )}>
           Underwriting data · portfolio to date
         </SectionLabel>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          {kpis.map(([k, v, note]) => (
-            <div key={k} className={`${CARD} p-4`}>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">{k}</div>
-              <div className={`${MONO} mt-1 text-lg font-bold text-gray-900 dark:text-gray-100`}>{v}</div>
-              <div className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{note}</div>
-            </div>
-          ))}
-        </div>
+        {F.portfolio ? (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="underwriting-kpis">
+            {kpis.map(([k, v, note]) => (
+              <div key={k} className={`${CARD} p-4`}>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">{k}</div>
+                <div className={`${MONO} mt-1 text-lg font-bold text-gray-900 dark:text-gray-100`}>{v}</div>
+                <div className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{note}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={`${CARD} px-5 py-4 text-[12.5px] leading-relaxed text-gray-500 dark:text-gray-400`}>
+            Positions, capital deployed, marks, follow-ons and MOIC are {LP_ONLY_PHRASE}.
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.6fr_1fr]">
@@ -940,63 +939,6 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
       {/* GP desk — admin only */}
       {isAdmin && <GpReportDesk />}
 
-      {/* allocation gate */}
-      <div>
-        <SectionLabel right={<Chip tone={allocOpen ? 'green' : 'gray'}>{allocOpen ? 'Allocation open' : `Opens at $${ALLOC_THRESHOLD_K}K`}</Chip>}>
-          Demo day · allocation preferences
-        </SectionLabel>
-        {!allocOpen ? (
-          <div className={`${CARD} flex flex-col items-center justify-center px-6 py-10 text-center`}>
-            <Lock size={24} className="text-gray-400 dark:text-gray-500" />
-            <div className="mt-2.5 text-[15px] font-bold text-gray-900 dark:text-gray-100">
-              Allocation rights begin at ${ALLOC_THRESHOLD_K}K committed
-            </div>
-            <div className="mt-1.5 max-w-md text-[12.5px] leading-relaxed text-gray-500 dark:text-gray-400">
-              {derived.commitmentK > 0
-                ? `You are committed at ${commitLabel}. Increase your commitment to $${ALLOC_THRESHOLD_K}K to express allocation preferences across graduating companies.`
-                : 'Commit capital to participate in the allocation window for graduating companies.'}
-            </div>
-          </div>
-        ) : (
-          <div className={`${CARD} p-6`}>
-            <div className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-              Cohort 4 allocation window
-            </div>
-            <p className="mt-1 text-[12.5px] text-gray-500 dark:text-gray-400">
-              Express allocation preferences across graduating companies. Preferences are
-              commitment-weighted, pooled across LPs, and settle at close after the fund team
-              confirms final terms.
-            </p>
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 px-3 py-2.5 text-[11px] text-gray-500 dark:text-gray-400">
-              <AlertCircle size={13} className="flex-none" />
-              Preferences are a decision input, not an order. Final allocations are set by the fund
-              within its reserve policy and confirmed in your closing statement.
-            </div>
-            <div className="mt-4 flex flex-col gap-3">
-              {Object.entries(alloc).map(([name, pct]) => (
-                <div key={name} className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="min-w-0 flex-1 text-[13.5px] font-bold text-gray-900 dark:text-gray-100">{name}</div>
-                    <input
-                      type="range" min="0" max="100" step="5" value={pct}
-                      onChange={(e) => setAlloc((a) => ({ ...a, [name]: Number(e.target.value) }))}
-                      className="w-56 accent-violet-600"
-                      aria-label={`Allocation preference for ${name}`}
-                    />
-                    <div className={`${MONO} w-24 text-right text-sm font-bold text-gray-900 dark:text-gray-100`}>{pct}%</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="mt-4 text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
-              Preferences are held in this view only — no allocation-submission endpoint exists yet,
-              so nothing is transmitted to the fund team. Confirm your intended allocation with the
-              GP directly until that lands.
-            </p>
-          </div>
-        )}
-      </div>
-
       {/* onboarding */}
       <div>
         <SectionLabel>Onboarding requirements</SectionLabel>
@@ -1075,7 +1017,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
       <WorkspaceHeader
         icon={Landmark}
         title="Spin-Out Lab &middot; LP &amp; Investor Workspace"
-        description="Curated capital participation in Axal VC Spin-Out Fund I — thesis, key terms, underwriting data, reporting, and commitment-gated allocation."
+        description="Curated capital participation in Axal VC Spin-Out Fund I — thesis, key terms, underwriting data, reporting, and participation."
       />
       {/* Standing, stated up front — as the design does. The same fact appears
           under "Participation rights" further down, but an LP arriving here
@@ -1145,7 +1087,7 @@ const fmtTicket = (dollars) => (dollars >= 1_000_000
  *
  * Submitting grants nothing. The workspace's access ladder still derives from
  * `limited_partners` rows the GP writes; an application moves the viewer to
- * 'pending', which unlocks no reporting, no data room and no allocation.
+ * 'pending', which unlocks neither reporting nor the data room.
  */
 function LpApplicationForm({ loaded, existing, onSubmitted }) {
   const [investorType, setInvestorType] = useState(existing?.investor_type || 'individual');
@@ -1194,8 +1136,6 @@ function LpApplicationForm({ loaded, existing, onSubmitted }) {
     );
   }
 
-  const tier = ticket >= ALLOC_THRESHOLD_K * 1000 ? 'Allocation rights' : 'Standard participation';
-
   return (
     <div className={`${CARD} p-6`} data-testid="lp-application-form">
       <p className="m-0 text-[13px] leading-relaxed text-gray-600 dark:text-gray-400">
@@ -1230,7 +1170,7 @@ function LpApplicationForm({ loaded, existing, onSubmitted }) {
           <div className="flex items-baseline justify-between gap-2">
             <div className={LBL}>Target commitment</div>
             <div className={`${MONO} text-[13px] font-bold text-gray-900 dark:text-gray-100`}>
-              {fmtTicket(ticket)} <span className="font-medium text-gray-400 dark:text-gray-500">· {tier}</span>
+              {fmtTicket(ticket)}
             </div>
           </div>
           <input
@@ -1246,7 +1186,6 @@ function LpApplicationForm({ loaded, existing, onSubmitted }) {
           />
           <div className="mt-1 flex justify-between text-[10.5px] text-gray-400 dark:text-gray-500">
             <span>{fmtTicket(TICKET_MIN)} minimum</span>
-            <span>${ALLOC_THRESHOLD_K}K unlocks allocation rights</span>
             <span>{fmtTicket(TICKET_MAX)}</span>
           </div>
         </div>

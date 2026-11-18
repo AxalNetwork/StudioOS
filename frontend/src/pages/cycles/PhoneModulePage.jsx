@@ -5,8 +5,9 @@ import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
+import { phoneStateRow } from './BuildStates.jsx';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
-import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
+import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
 import { ExportButton, Sources } from './CycleModulePage.jsx';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 import { asksCountLabel } from './buildEadwyn.js';
@@ -111,6 +112,8 @@ export default function PhoneModulePage({
   phoneRow: rowOf = phoneRow,
   // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
   sources = null, sourcesAction = null, asks = null,
+  // D5081 (#5081, RA-14): a tool that owns its page; its `subnav` is the page, as on the desktop (`CycleModulePage`).
+  owned = null,
   // D6049 (#6049, RA-16): a module that owns its page (Fundraising readiness) draws `home(...)` in place of
   // One next thing, the chart and the rows, with the bar's line (`sub`) its own; the same props as the desktop page.
   home = null, sub = undefined,
@@ -126,7 +129,9 @@ export default function PhoneModulePage({
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
   const bar = header === undefined ? (
-    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : card?.caption || undefined}
+    // D5081 part 4 (#5081): a tool that owns its page says its own line, as the desktop header does, never the
+    // caption of the generic card it no longer draws.
+    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : owned ? owned.sub : card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
@@ -145,10 +150,16 @@ export default function PhoneModulePage({
     </div>;
   }
 
+  if (owned) {
+    return <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">{bar}{tabs}
+      {Children.toArray(children).length > 0 && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+    </div>;
+  }
+
   const rStatus = recordsStatus || (recs ? 'ready' : status);
   // D5076: the same stages as the desktop table (progressiveList.js).
   const progressive = progressiveFor(meta.key, slug);
-  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? listStage(recs, query) : 'many';
+  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? moduleStage(recs, query, progressive) : 'many';
   const zero = stage === 'zero';
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
   const hasChildren = Children.toArray(children).length > 0;
@@ -163,7 +174,7 @@ export default function PhoneModulePage({
   const title = data?.module?.records_title || name;
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
-  const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
+  const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href)); // D6010: `tool` may be several
   if (typeof home === 'function') {
     const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
     return (
@@ -190,7 +201,8 @@ export default function PhoneModulePage({
       const href = rowLinks(recs, r) ? recordHref(meta.key, slug, recordId(r), search) : null;
       const act = !href && typeof rowAction === 'function' ? rowAction(r) : null;
       return {
-        key: r.id ?? i, ...base, testid: 'phone-module-row',
+        // D4846 part 2 (#6032, BD14m): a row whose pill is a state draws that state's chip, as the desktop cell does.
+        key: r.id ?? i, ...phoneStateRow(base), testid: 'phone-module-row',
         ...(href ? { to: href } : act?.text && typeof act.onClick === 'function' ? { onClick: act.onClick } : {}),
       };
     }),

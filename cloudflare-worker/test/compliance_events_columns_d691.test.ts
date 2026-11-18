@@ -57,7 +57,7 @@ test('1: Grow obligations save and read on a full fresh build with foreign keys 
   const read = () => call('GET', '/modules/durable-company-building?project=' + PROJECT);
   const module = await read();
   assert.deepEqual(module.body.records.rows.find((r: any) => r.id === add.body.id),
-    { id: add.body.id, title: 'Example board', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
+    { id: add.body.id, title: 'Example board', kind: 'governance', due_at: due, owner_name: null, owner: null, owner_user_id: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
   assert.ok(module.body.card.series.calendar.some((event: any) => event.title === 'Example board' && event.due === due));
   const patch = (body: unknown) => call('PATCH', '/obligations/' + add.body.id, body);
   for (const [status, completion] of [['done', 'completed'], ['snoozed', 'snoozed'], ['overdue', 'pending'],
@@ -76,7 +76,8 @@ test('1: Grow obligations save and read on a full fresh build with foreign keys 
   await patch({ due_at: '2020-01-01' });
   assert.equal(row().reminders_sent_json, '[]');
   assert.deepEqual([(await read()).body.records.rows[0].due_at, (await read()).body.records.rows[0].status], ['2020-01-01', 'overdue']);
-  const mappings = [['compliance', 'other'], ['risk', 'risk'], ['culture', 'culture'], ['tax', 'franchise_tax'], ['other', 'other']];
+  // D6872 (#6872): compliance has its own event type, apart from other.
+  const mappings = [['compliance', 'compliance'], ['risk', 'risk'], ['culture', 'culture'], ['tax', 'franchise_tax'], ['other', 'other']];
   for (const [index, [kind, eventType]] of mappings.entries()) {
     const date = '2099-01-' + String(index + 1).padStart(2, '0');
     const result = await call('POST', '/obligations', { title: 'Example ' + kind, kind, due_at: date });

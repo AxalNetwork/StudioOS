@@ -16,11 +16,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
+import { readAccountPage } from './_accountSource.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const src = codeOnly(fs.readFileSync(
-  path.join(__dirname, '../src/pages/SettingsPage.jsx'), 'utf8',
-));
+const src = codeOnly(readAccountPage());
 // D336 moved the matrix to one module. The lock is a property of those
 // objects, so it is asserted there, and the table behaviour stays on the page.
 const types = codeOnly(fs.readFileSync(

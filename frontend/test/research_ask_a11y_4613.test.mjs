@@ -192,11 +192,11 @@ test('Add to my funds: two presses in one frame send one request, carrying the c
     assert.equal(m.sent.length, 1);
     assert.equal(m.sent[0].catalogue_uid, 'northwind2');
     assert.equal(m.props(byTid(m, 'fund-catalog-add')).disabled, true);
-    assert.match(textOf(byTid(m, 'fund-catalog-add')), /Adding…/);
+    assert.match(textOf(byTid(m, 'fund-catalog-add')), /Saving…/);
     await act(async () => { release(); });
     for (let i = 0; i < 3; i += 1) await m.flush();
     const notice = byTid(m, 'fund-catalog-notice');
-    assert.deepEqual([m.props(notice).role, textOf(notice)], ['status', 'Added to My funds.']);
+    assert.deepEqual([m.props(notice).role, textOf(notice)], ['status', 'Saved to your shortlist.']);
   } finally { await m.close(); }
 });
 
@@ -205,7 +205,7 @@ test('Add to my funds answered by an earlier add says it is already there; a fai
   try {
     await act(async () => { await again.props(byTid(again, 'fund-catalog-add')).onClick(); });
     for (let i = 0; i < 3; i += 1) await again.flush();
-    assert.equal(textOf(byTid(again, 'fund-catalog-notice')), 'Already on My funds.');
+    assert.equal(textOf(byTid(again, 'fund-catalog-notice')), 'Already on your shortlist.');
   } finally { await again.close(); }
   const failed = await mountCatalog(async () => { throw new Error('That fund did not save.'); });
   try {

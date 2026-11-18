@@ -11,6 +11,7 @@ import {
 } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
+import { SidebarSubpagesProvider } from './ui/SidebarNav'; // D6029: from the sidebar's own module (App.jsx imports are frozen, D5615)
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
@@ -43,7 +44,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { collectRouteModules } from './lib/routeModules';
 const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 import { useRedirectBeacon } from './lib/redirectBeacon';
-import { ventureSearch } from './pages/raise/pitch/pitchRoutes';
+import { pitchFocusMode, ventureSearch } from './pages/raise/pitch/pitchRoutes';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -506,7 +507,6 @@ const RoundCallIndex = lazy(() => import('./pages/founder/RoundCallPage').then(m
 const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
 const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent'));
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
-const FounderGrowPartnerships = lazy(() => import('./pages/founder/FounderGrowPartnerships'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
@@ -1218,7 +1218,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // `.main { padding }`, so a workspace route wants `p-0` here on every
   // licence — including `/research/*`, which was carved out of both lists
   // precisely because the shell had no padding of its own.
+  const pitchFocused = pitchFocusMode(location.pathname);
+  const appScroll = useRef(null);
+  useLayoutEffect(() => {
+    if (pitchFocused && appScroll.current) appScroll.current.scrollTop = 0;
+  }, [pitchFocused, location.pathname]);
   const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
+    || pitchFocused
     || SHARED_FULL_BLEED.includes(location.pathname)
     // D631's two fund child pages carry WorkspaceShell's own inset and rail.
     || /^\/funds\/[1-9][0-9]*(?:\/reporting\/(?:new|[1-9][0-9]*))?$/.test(location.pathname)
@@ -1440,7 +1446,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
             and up, gets the header below unchanged. One is mounted, never both. */}
         {/* ── Carta-style global top header ─────────────────────────────── */}
-        <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
+        {!pitchFocused && <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <button
@@ -1550,10 +1556,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <Link
                 to="/email"
                 data-testid="email-door"
-                className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+                aria-label="Email"
+                title="Email"
+                className="hidden sm:inline-flex items-center justify-center rounded-lg p-2 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
               >
-                <Mail size={14} />
-                Email
+                <Mail size={18} aria-hidden="true" />
               </Link>
             )}
             {/* D563 — no Workspaces launcher. Its 28 pages each light the
@@ -1573,10 +1580,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <UserDropdown user={user} onLogout={onLogout} />
           </div>
         </header>
-        </HeaderForWidth>
+        </HeaderForWidth>}
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className={`
+          {!pitchFocused && <aside className={`
             fixed ${sidebarOpen ? 'lg:relative' : ''}
             inset-y-0 left-0 z-50 ${effectiveCollapsed ? 'w-20' : 'w-64'} bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
             flex flex-col
@@ -1584,9 +1591,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
             <SidebarNav groups={sidebarGroups} role={shellRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
-          </aside>
+          </aside>}
 
-          {sidebarOpen && (
+          {!pitchFocused && sidebarOpen && (
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
           {/* D504 — the phone's tab bar (D425): four tabs and More below 1024px,
@@ -1594,7 +1601,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               resolved, without the sidebar's `|| 'founder'` fallback, so a
               viewer with no role gets no bar. The bar renders nothing for a
               licence whose plan is not built yet (`mobilePlan` returns null). */}
-          <MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />
+          {!pitchFocused && <MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />}
           {/* D699 — the founder's last opened cycle per company, for the
               company sheet. Never while an operator acts as someone else. */}
           <CompanyVisits role={shellRole} record={!isImpersonating && !(isAdmin && activeRole !== 'admin')} />
@@ -1611,6 +1618,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               at the end of the scroll. */}
           <main
             data-app-scroll
+            ref={appScroll}
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
@@ -1624,6 +1632,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
             {/* D768 (#2092): every rail below reads its page key from the route (lib/railPages.js). */}
+            {/* D6029 (#6029): which sidebar rows list their own pages now, so Build's header drops its desktop module tabs only then. */}
+            <SidebarSubpagesProvider groups={sidebarGroups} open={sidebarOpen && isDesktop} collapsed={effectiveCollapsed}>
             <RailPageProvider role={shellRole}>
             <RailStripSlot.Provider value={railStrip}>
               <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
@@ -1631,7 +1641,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </div>
             </RailStripSlot.Provider>
             </RailPageProvider>
-            {!onboardingCanvas && (
+            </SidebarSubpagesProvider>
+            {!onboardingCanvas && !pitchFocused && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 <span>
@@ -2565,6 +2576,13 @@ function AppInner() {
       ? investorWorkspace('deals', <Component embedded />)
       : <Component />
   );
+  // D6160 (#6160): an investor's round calls list is a page of Deals, drawn in
+  // InvestorDealsRoutes' shell; a founder's `?project_id` list keeps RoundCallIndex.
+  const investorRoundCallList = () => (
+    user?.role === 'investor' && effectiveRole === 'investor'
+      ? <InvestorDealsRoutes />
+      : <RoundCallIndex />
+  );
   const trustCenter = user
     ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
     : <TrustCenter />;
@@ -3361,8 +3379,9 @@ function AppInner() {
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
       {/* #2333 — one publications list: /articles carries the briefs the
-          /insights index listed; each brief keeps its share link below. */}
-      <Route path="/insights" element={<Navigate to="/articles#briefs" replace />} />
+          /insights index listed; each brief keeps its share link below.
+          #6999: /insights lands on the list itself, not on a Briefs shelf that may be hidden. */}
+      <Route path="/insights" element={<Navigate to="/articles" replace />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       {/* D1244 (#2385) — the list's tabs and the case's tabs are addresses; the
@@ -3674,7 +3693,7 @@ function AppInner() {
           redirects' `mode=workspace` is kept only so old links stay stable. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderWorkspace('grow', founderEditor(<FounderTeamPage />)))} />
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
-      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCall(RoundCallIndex))} />
+      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCallList())} />
       <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], investorRoundCall(RoundCallPage))} />
       {/* D668 (#1498): approve an AI assistant for the companies ticked. Outside
           the shell's guard on purpose: the assistant's OAuth flow lands here,
@@ -3705,7 +3724,11 @@ function AppInner() {
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
-      <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <FounderGrowPartnerships />)} />
+      {/* D6118 (#6118, GR-09): one Partnerships page. It is the partner-network module (partners by stage,
+          revenue and terms, Rank by fit, the Mercury proposal) with co-marketing as one of its parts. The
+          module's own address forwards here; its records, /new and /co-marketing keep their addresses. */}
+      <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="partner-network" />)} />
+      <Route path="/grow/partner-network" element={guard(['admin', 'founder'], <ParamRedirect to="/grow/partnerships" />)} />
       {/* D1194 (#3128): Investor match is Capital relationships › Match; /grow/capital-match goes straight there too. */}
       {/* #2343: one brand page. Grow's read of pages and leads moved into the
           builder (`BrandPagesSection`); the old address forwards there. */}
@@ -3996,7 +4019,8 @@ function AppInner() {
           founder's board and the partner's bucket root with it. */}
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
-      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? investorFundWorkspace(<FundPerformancePage embedded />) : <FundOpsRedirect />)} />
+      {/* #6245 (owner: C): the Worker's gate, so no tier here. An LP reads their funds and a GP of record theirs (#6246). */}
+      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? <FundPerformancePage fundUnlocked={hasInvestorTier(user, 'institutional')} /> : effectiveRole !== 'admin' ? <FundPerformancePage locked /> : <FundOpsRedirect />)} />
       <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
       <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
       <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />

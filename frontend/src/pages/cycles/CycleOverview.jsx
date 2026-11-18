@@ -1,9 +1,12 @@
+import { useSidebarListsSubpages } from '../../lib/sidebarSubpages.js';
 import { Lock } from 'lucide-react';
 import { openCheckout } from '../../components/checkout/checkoutEntry.js';
 import { Link, useNavigate } from 'react-router-dom';
-import { Unrecorded, Unreadable } from '../../ui';
+import { DataState, StateChip, Unrecorded, Unreadable } from '../../ui';
+import { BuildPartialNotice, BuildStateTag } from './BuildStates.jsx';
+import { TABLET_CARD_COLS, TABLET_FIGURE_COLS, tabletLastSpan } from '../../ui/phone/tabletTier.js';
 import { Chart, Spark } from './CycleCharts';
-import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
+import { cardView, cycleOf, cycleTabGroups, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 import { MODULES } from './modules';
 import { mvpTargetHref } from './mvpTable.js';
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
@@ -92,9 +95,11 @@ export function GrowSubsections({ search, active }) {
 export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null, slots = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
+  const sidebarLists = useSidebarListsSubpages(`/${meta.key}`);
   const legacyTabs = cycleTabs(meta.key, cards, active, search);
   const tabs = meta.key === 'grow' ? growTabs(search, active) : legacyTabs;
   const current = tabs.find((t) => t.active) || tabs[0];
+  const groups = cycleTabGroups(meta.key, tabs);
   const backHref = record ? (legacyTabs.find((t) => t.key === active)?.href || `/${meta.key}${linkSearch(search)}`) : null;
   // #6109: Team expansion and Partner network say which half of their pair they are; #6090's subsections name theirs.
   const displayTitle = meta.key === 'grow' && !record && active ? GROW_MODULE_TITLES[active] || growSubsections(search, active).find(tab => tab.active)?.name || growArea(active)?.name || title : title;
@@ -122,14 +127,28 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           {record && slots && <div ref={slots.actions} className="flex flex-wrap items-center justify-end gap-2" data-testid="record-header-actions" />}
         </div>
       </div>
-      <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`}</p>
-      <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 lg:flex" data-testid="cycle-tabs">
-        {tabs.map((t) => (
-          <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !record ? 'page' : undefined}
-            className={`whitespace-nowrap rounded-full border px-[11px] py-[5px] text-[11px] ${t.active ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white font-semibold text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`}>
-            {t.name}
-          </Link>
-        ))}
+      <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? (sidebarLists ? `${meta.outcome}. The cycle’s data at a glance.` : `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`)}</p>
+      {/* D5081 part 5 (#5081, RA-12): the one desktop navigation, from 1024px. Raise's tabs sit under its four
+          stage headings (`cycleTabGroups`); headings, not routes. Below 1024px the select replaces it, and each
+          is `display: none` where the other shows, so only one is ever in the accessibility tree.
+          D6029 (#6029, BD23): where the sidebar lists this cycle's pages (Build), it is the one module switcher on
+          desktop, so no tabs are drawn there; tablet and phone keep the module select below. */}
+      <nav aria-label={`${meta.name} modules`} className={`mt-1 hidden flex-wrap gap-1.5 ${sidebarLists ? '' : 'lg:flex '}items-center`} data-testid="cycle-tabs" data-sidebar-lists={sidebarLists ? 'true' : undefined}>
+        {groups.map((g) => {
+          const links = g.tabs.map((t) => (
+            <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !record ? 'page' : undefined}
+              className={`whitespace-nowrap rounded-full border px-[11px] py-[5px] text-[11px] ${t.active ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white font-semibold text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`}>
+              {t.name}
+            </Link>
+          ));
+          if (!g.label) return links;
+          return (
+            <div key={g.label} role="group" aria-label={g.label} className="flex flex-wrap items-center gap-1.5" data-testid="cycle-tab-stage">
+              <span aria-hidden="true" className={`${SECTION} ml-1.5 text-axal-muted dark:text-gray-400`}>{g.label}</span>
+              {links}
+            </div>
+          );
+        })}
       </nav>
       <label className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3.5 lg:hidden dark:border-gray-700 dark:bg-gray-900">
         <span className={`${SECTION} text-axal-muted dark:text-gray-400`}>{record ? 'Record' : 'Module'}</span>
@@ -137,7 +156,11 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
         <select className="min-w-0 flex-1 bg-transparent text-sm font-bold text-axal-ink outline-none dark:text-gray-100" value={record ? 'record' : current.key || 'overview'}
           onChange={(e) => { const to = tabs.find((t) => (t.key || 'overview') === e.target.value); if (to) navigate(to.href); }} aria-label={`${meta.name} module`}>
           {record && <option value="record">{title}</option>}
-          {tabs.map((t) => <option key={t.key || 'overview'} value={t.key || 'overview'}>{t.name}</option>)}
+          {/* RA-12's compact select: the same stages as optgroups. */}
+          {groups.map((g) => {
+            const opts = g.tabs.map((t) => <option key={t.key || 'overview'} value={t.key || 'overview'}>{t.name}</option>);
+            return g.label ? <optgroup key={g.label} label={g.label}>{opts}</optgroup> : opts;
+          })}
         </select>
       </label>
       {meta.key === 'grow' && !record && <GrowSubsections search={search} active={active} />}
@@ -159,14 +182,14 @@ export function FigureTile({ fig, details = null, setLink = null }) {
       <span className={`${SECTION} text-axal-muted dark:text-gray-400`}>{fig?.label}</span>
       <span className="text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">
         {value ?? (unreadable
-          ? <span className="text-[13px] font-semibold text-red-700 dark:text-red-300">{fig?.source ? `${fig.source} could not be read` : 'Could not be read'}</span>
+          ? <span className="flex flex-col items-start gap-1 text-[12px] font-normal text-axal-muted dark:text-gray-400" data-testid={`cycle-figure-${fig?.key}-unavailable`}><StateChip kind="unavailable" />{fig?.source ? `${fig.source} could not be read` : 'This figure could not be read'}</span>
           : <span className="text-[15px]"><Unrecorded reason={fig?.source ? `${fig.source} does not hold this yet.` : undefined} /></span>)}
       </span>
       {fig?.coverage && <span className="text-xs text-axal-muted">{fig.coverage.scored} of {fig.coverage.total} items scored</span>}
       <div className="flex items-center justify-between gap-2">
         {value == null && !unreadable && setLink?.href
           ? <Link to={setLink.href} className="text-[11.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid={`cycle-figure-${fig?.key}-set`}>{setLink.text} ›</Link>
-          : <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>}
+          : <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : (unreadable ? '' : delta || (value == null ? 'nothing recorded yet' : 'change not recorded'))}</span>}
         {value != null && sparkDrawable(fig.spark) && <Spark values={fig.spark} label={`${fig.label}, last points`} />}
       </div>
       {details}
@@ -232,17 +255,13 @@ export function CardBody({ card, onRetry, charts, compact = false, search = '', 
   if (view.state === 'not_recorded') {
     return (
       <div className="flex flex-col items-start gap-1.5" data-testid="card-not-recorded">
-        <span className="rounded-full border border-axal-hairline bg-axal-ground px-2 py-0.5 text-[11.5px] font-semibold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">Not recorded</span>
+        <StateChip kind="not_recorded" />
         <span className="text-[12.5px] text-axal-muted dark:text-gray-400">{view.reason}</span>
       </div>
     );
   }
-  return (
-    <div role="alert" className="flex items-center justify-between gap-2.5 rounded-[10px] border border-red-200 bg-red-50 p-3.5 dark:border-red-900 dark:bg-red-950/30" data-testid="card-unreadable">
-      <span className="text-[12.5px] text-red-700 dark:text-red-300">{view.reason}</span>
-      {onRetry && <button type="button" onClick={onRetry} className="shrink-0 text-[12px] font-bold text-red-700 hover:underline dark:text-red-300">Try again</button>}
-    </div>
-  );
+  // D4846 part 2 (#6032, BD14 A): Unavailable, D5129's one shape, never a red "negative" box; the card keeps its own Retry.
+  return <DataState state="unavailable" size="block" reason={view.reason} onRetry={onRetry} retryLabel="Try again" data-testid="card-unreadable" />;
 }
 
 /** One module's card: its name (linking to its page), range, chart or state, caption and the one next action. */
@@ -301,10 +320,18 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
   const more = readOnly ? null : (moreIn ? <>{moreIn}{askNode}</> : askNode);
   const figureCount = status === 'loading' ? figurePlaceholders : figures.length;
   const cardCount = status === 'loading' ? placeholders : cards.length;
+  // D4846 part 2 (#6032, BD14 B): Build alone draws this page from 768px (its tablet tier); the others' phone page stays below 1024px.
+  const tabletCols = meta.key === 'build';
+  const lastSpan = [lastCardSpan(cardCount), tabletCols ? tabletLastSpan(cardCount) : ''].filter(Boolean).join(' ');
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-overview" data-cycle={meta.key}>
       <CycleHeader cycle={meta.key} cards={cards} action={action} search={search} chip={chip} more={more} />
-      {readOnly && status === 'ready' && (
+      {readOnly && status === 'ready' && meta.key === 'build' ? (
+        // D4846 part 2 (BD14 A): Build's Read only is its own state, a lock and a sentence, not a warning.
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-[10px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200" data-testid="cycle-overview-read-only">
+          <BuildStateTag state="read_only" />{data?.mode === 'summary' ? 'HQ summary. Counts only; the founder’s records stay with the founder.' : 'You can read this venture’s Build but not change it.'}
+        </div>
+      ) : readOnly && status === 'ready' && (
         <div role="status" className="flex items-center gap-2 rounded-[10px] border border-amber-300 bg-amber-50 px-3.5 py-2 text-[12.5px] font-bold text-amber-900 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-200" data-testid="cycle-overview-read-only">
           Read only · {data?.mode === 'summary' ? 'HQ summary. Counts only; the founder’s records stay with the founder.' : 'You can read this cycle but not change it.'}
         </div>
@@ -320,7 +347,7 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
       ) : (
         <>
           {figureCount > 0 && (
-            <div className={`grid gap-3 ${figureCols(figureCount)}`} data-testid="cycle-figures" data-count={figureCount}>
+            <div className={`grid gap-3 ${figureCols(figureCount)} ${tabletCols ? TABLET_FIGURE_COLS[figureCount] || '' : ''}`.trim()} data-testid="cycle-figures" data-count={figureCount}>
               {status === 'loading'
                 ? Array.from({ length: figurePlaceholders }, (_, i) => <div key={i} className="h-[92px] rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" aria-busy="true" />)
                 : figures.map((f) => <FigureTile key={f.key} fig={f}
@@ -328,10 +355,13 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
             </div>
           )}
           {status !== 'loading' && lead}
-          <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2 xl:grid-cols-3" data-testid="cycle-cards">
+          {/* D4846 part 2 (#6032, BD14 A): one notice when some module reads failed; each card keeps its own Retry. */}
+          {meta.key === 'build' && status === 'ready' && <BuildPartialNotice cards={cards} onRetryCard={onRetryCard} />}
+          {/* BD14 B: from 768px (Build's tablet tier; other cycles draw their phone page below 1024px) two columns. */}
+          <div className={['grid grid-cols-1 items-stretch gap-3', tabletCols ? TABLET_CARD_COLS : '', 'lg:grid-cols-2 xl:grid-cols-3'].filter(Boolean).join(' ')} data-testid="cycle-cards">
             {status === 'loading'
-              ? Array.from({ length: placeholders }, (_, i) => <CycleCard key={i} cycle={meta.key} card={null} slug="" search={search} span={i === placeholders - 1 ? lastCardSpan(cardCount) : ''} />)
-              : cards.map((c, i) => <CycleCard key={c.slug} cycle={meta.key} card={c} search={search} span={i === cards.length - 1 ? lastCardSpan(cardCount) : ''} onRetry={onRetryCard ? () => onRetryCard(c.slug) : undefined} />)}
+              ? Array.from({ length: placeholders }, (_, i) => <CycleCard key={i} cycle={meta.key} card={null} slug="" search={search} span={i === placeholders - 1 ? lastSpan : ''} />)
+              : cards.map((c, i) => <CycleCard key={c.slug} cycle={meta.key} card={c} search={search} span={i === cards.length - 1 ? lastSpan : ''} onRetry={onRetryCard ? () => onRetryCard(c.slug) : undefined} />)}
           </div>
         </>
       )}

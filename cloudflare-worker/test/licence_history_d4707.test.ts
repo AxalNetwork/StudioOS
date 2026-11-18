@@ -178,3 +178,25 @@ test('history pages by id with no fixed cap: every row is reachable, none twice'
   assert.notEqual(big.body.next_before, null, 'a capped page says there is more');
   assert.equal((await call(db, '/events?before=abc')).status, 400);
 });
+
+// D4819 part 21 (#5928, L18): "Retry branch sync" — POST /:uid/sync/retry re-pushes the current copy.
+test('sync retry: a draft has no copy to sync; an issued licence pushes again and records how it ended', async () => {
+  // Mutations checked: the draft refusal dropped; the audit row not written; the outcome always committed.
+  const db = freshDb();
+  const audit = () => (db.prepare("SELECT details FROM activity_logs WHERE action = 'licence_sync_retried' ORDER BY id").all() as any[]).map((r) => JSON.parse(r.details));
+  const draft = await call(db, '/sync/retry', 'POST');
+  assert.equal(draft.status, 409);
+  assert.equal(draft.body.error, 'not_issued');
+  assert.deepEqual(audit(), [], 'a refused retry records nothing');
+  db.exec("UPDATE territory_licences SET status = 'active'");
+  const none = await call(db, '/sync/retry', 'POST');
+  assert.equal(none.status, 200, JSON.stringify(none.body));
+  assert.equal(none.body.pushed.no_deployment, true, 'no branch: nothing owed');
+  db.prepare("INSERT INTO licence_deployments (licence_uid, code, hostname, status) VALUES (?, 'fr', 'fr.axal.vc', 'linked')").run(LIC);
+  const partial = await call(db, '/sync/retry', 'POST');
+  assert.equal(partial.status, 200, 'the retry itself answers whatever the branch does');
+  assert.equal(partial.body.pushed.ok, false);
+  assert.deepEqual(audit().map((d) => [d.licence_uid, d.outcome]), [[LIC, 'committed'], [LIC, 'partial']], 'each retry is audited with how it ended');
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM licence_events').get() as any).n, 0, 'no licence event: the retry changes nothing at HQ');
+  assert.equal((db.prepare('SELECT status FROM territory_licences WHERE uid = ?').get(LIC) as any).status, 'active');
+});

@@ -146,7 +146,8 @@ for (const [n, pages] of [[100, 1], [101, 2]] as const) {
     let published = 0, opens = 0;
     for (let i = 1; i <= n; i += 1) if (i % 10 !== 0) { published += 1; opens += i === 1 ? 5000 : i; }
     for (const b of read) {
-      assert.deepEqual(b.counts, { published, drafts: n - published, best_reach: 5000, total_reach: opens, talk_reach: null });
+      // Every tenth piece is a draft, so it Needs you; none is with the editors.
+      assert.deepEqual(b.counts, { total: n, needs_you: n - published, with_editors: 0, published, drafts: n - published, best_reach: 5000, total_reach: opens, talk_reach: null });
     }
   });
 }
@@ -157,6 +158,30 @@ test('thinking: the most-opened piece on page 2 is still the best reach on page 
   const r = await get('/me/thinking');
   assert.ok(!r.body.items.some((x: any) => x.id === 1), 'piece 1 is not on page 1');
   assert.equal(r.body.counts.best_reach, 5000);
+});
+
+// D4826 part 2 (#4826): EX-11's chip figures, one piece per state, read over the
+// whole shelf. Scheduled (approved with a `publish_at`) and Not accepted are in
+// neither set; another advisor's pieces are in no count at all.
+test('thinking: Needs you and With editors count whose move it is, over every page', async () => {
+  const { db, get } = fixture();
+  const a = db.prepare('INSERT INTO articles(id,slug,title,author_user_id,status,publish_at,created_at) VALUES (?,?,?,?,?,?,?)');
+  const mine: Array<[string, string | null]> = [
+    ['draft', null], ['changes_requested', null], ['submitted', null], ['in_review', null],
+    ['approved', null], ['approved', '2026-12-01T09:00:00Z'], ['rejected', null], ['published', null],
+  ];
+  // 101 drafts first, so most of the shelf is past page 1.
+  for (let i = 1; i <= 101; i += 1) a.run(i, `d-${i}`, `Draft ${i}`, 21, 'draft', null, SAME);
+  mine.forEach(([status, at], k) => a.run(500 + k, `s-${k}`, `State ${k}`, 21, status, at, SAME));
+  a.run(9000, 'x-1', 'Theirs', 22, 'changes_requested', null, SAME);
+  a.run(9001, 'x-2', 'Theirs too', 22, 'in_review', null, SAME);
+  const r = await get('/me/thinking');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.items.length, 100, 'a page of the shelf');
+  assert.equal(r.body.counts.total, 109);
+  assert.equal(r.body.counts.needs_you, 103, '102 drafts and the piece sent back');
+  assert.equal(r.body.counts.with_editors, 3, 'submitted, in review, and approved with no time set');
+  assert.equal(r.body.counts.published, 1);
 });
 
 function addLinks(db: any, n: number) {

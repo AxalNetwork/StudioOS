@@ -23,19 +23,20 @@ const PILL_VIO = `${PILL} border-axal-lavender-edge bg-axal-lavender text-axal-v
  * while it reads, `'error'` when it failed (the cells then say Not read, never
  * Not checked), else a Map by deck id.
  */
-export function useDeckChecks(projectId, count) {
+export function useDeckChecks(projectId, count, versionId = null, retry = null) {
   const [state, setState] = useState(null);
+  const key = `${projectId}/${versionId}/${count}/${retry}`;
   useEffect(() => {
     if (projectId == null) { setState(null); return undefined; }
     let live = true;
     setState(null);
     deckCheckApi.versions(projectId).then(
-      (r) => { if (live) setState(checksByDeck(r) ?? 'error'); },
-      (e) => { if (live) setState('error'); reportError('pitch-studio:checks', e); },
+      (r) => { if (live) setState({ key, value: checksByDeck(r) ?? 'error' }); },
+      (e) => { if (live) setState({ key, value: [401, 402, 403].includes(e?.status) && versionId != null ? 'refused' : 'error' }); reportError('pitch-studio:checks', e); },
     );
     return () => { live = false; };
-  }, [projectId, count]);
-  return state;
+  }, [projectId, key, versionId]);
+  return state?.key === key ? state.value : null;
 }
 
 const SELECT = 'min-h-[30px] rounded-[8px] border border-axal-hairline bg-white px-2 font-mono text-[11px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';

@@ -10,12 +10,20 @@
  * A failed positions read never looks like an empty book (#5365 F-01), and a
  * Worker `detail` never reaches the page (F-26).
  *
+ * D6208 (#6208): the table narrows by Sector, Stage, Health and Reporting and
+ * sorts by health, invested, multiple or last update; its caption states the
+ * filters in force. The header's Export writes the rows shown, each with its
+ * basis and as-of, through `exportView`.
  * D6207 (#6207) reverses one D4817 departure: under the hero NAV, the change
  * since the last completed quarter-end, from one extra quarter-end read.
+ *
+ * D6867 (#6867, canvas D6217 PF-13a): the Statement action opens the
+ * statement sheet over the Overview (no route of its own).
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, RefreshCw, Search } from 'lucide-react';
+import { ArrowUpRight, FileText, RefreshCw, Search } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuthSync';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
@@ -25,13 +33,16 @@ import { titleCase } from '../../lib/absence';
 import { ACCOUNT_LINK } from '../account/companies/companiesModel.js';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
+import StatementSheet from '../portfolio/StatementSheet';
 import {
   AttentionItem, HealthStatus, ObligationStatus, PerformanceSummary, Skeleton, SourceFailure, SummaryTile,
 } from '../portfolio/PortfolioParts';
 import {
-  HEALTH, NOT_RECORDED, SHAPES, UNREADABLE, attentionOf, companyRowsOf, filterRows, lastQuarterEndOf, navChangeOf, performanceOf, quarterShape,
-  reportingSummaryOf, valueAddSummaryOf,
+  HEALTH, NOT_RECORDED, SHAPES, SORTS, UNREADABLE, attentionOf, companyExportOf, companyRowsOf, filterOptionsOf, filterRows,
+  filterWordsOf, lastQuarterEndOf, navChangeOf, performanceOf, quarterShape, reportingSummaryOf, sortRows, tableCaptionOf,
+  valueAddSummaryOf,
 } from '../portfolio/portfolioModel';
+import PortfolioExport from '../portfolio/PortfolioExport';
 
 const label = (value) => titleCase(value) || 'Unknown';
 const ATTENTION_PREVIEW = 5;
@@ -111,9 +122,10 @@ function ReportingCard({ summary, onRetry }) {
   else if (summary.total === 0) figures = <p className="pf-note" data-testid="portfolio-reporting-empty">No company is in the reporting population{summary.period ? ` for ${summary.period}` : ''}.</p>;
   else {
     figures = (
-      <div className="pf-tiles" data-testid="portfolio-reporting-figures">
+      <div className="pf-tiles pf-tiles-4" data-testid="portfolio-reporting-figures">
         <SummaryTile label="Received" value={`${summary.received} of ${summary.total}`} />
         <SummaryTile label={summary.inProgress ? 'Outstanding' : 'Not received'} value={String(summary.outstanding)} tone={summary.outstanding && !summary.inProgress ? 'late' : null} />
+        <SummaryTile label="Overdue" value={summary.overdue == null ? NOT_RECORDED : String(summary.overdue)} tone={summary.overdue ? 'late' : null} note={summary.overdue == null ? 'No due dates in the reporting read' : 'Past the due date'} />
         <SummaryTile label="Period" value={summary.period || NOT_RECORDED} note={summary.period ? (summary.inProgress ? 'In progress' : 'Complete') : null} />
       </div>
     );
@@ -165,10 +177,26 @@ function ValueAddCard({ summary, onRetry }) {
 }
 
 const HEALTH_FILTERS = ['all', ...HEALTH];
+const NO_FILTERS = { query: '', sector: 'all', stage: 'all', health: 'all', reporting: 'all' };
 
-function CompanyTable({ rows, positionsState, onRetry }) {
-  const [query, setQuery] = useState('');
-  const [health, setHealth] = useState('all');
+/** One filter select; the visible first option names the filter, so the label stays for screen readers. */
+function FilterSelect({ name, value, onChange, options, testid }) {
+  return (
+    <label className="pf-select"><span className="pf-sr">{name}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid}>
+        <option value="all">{`${name}: all`}</option>
+        {options.map((o) => <option key={o.value} value={o.value}>{`${name}: ${o.label}`}</option>)}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * D6208 (#6208): the table's filters and sort live on the page, not in the
+ * table, because the header's Export writes exactly the rows shown.
+ */
+function CompanyTable({ rows, shown, filters, setFilters, sort, setSort, options, positionsState, onRetry }) {
+  const set = (key) => (value) => setFilters((f) => ({ ...f, [key]: value }));
   if (positionsState === 'loading') return <section className="pf-card"><Skeleton rows={4} /></section>;
   if (positionsState !== 'ok') {
     return (
@@ -181,29 +209,43 @@ function CompanyTable({ rows, positionsState, onRetry }) {
       </section>
     );
   }
-  const shown = filterRows(rows, { query, health });
+  const words = filterWordsOf(filters, options);
   return (
     <section className="pf-card pf-table-card" id="portfolio-positions" aria-labelledby="pf-co-title">
       <div className="pf-card-head">
         <h2 id="pf-co-title">Portfolio companies</h2>
-        <div className="pf-tools">
+        <div className="pf-tools pf-filters" data-testid="portfolio-filters">
           <label className="pf-search"><Search size={13} aria-hidden="true" /><span className="pf-sr">Search companies</span>
-            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search companies" data-testid="input-portfolio-search" />
+            <input type="search" value={filters.query} onChange={(e) => set('query')(e.target.value)} placeholder="Search companies" data-testid="input-portfolio-search" />
           </label>
+          <FilterSelect name="Sector" value={filters.sector} onChange={set('sector')} options={options.sector} testid="select-portfolio-sector" />
+          <FilterSelect name="Stage" value={filters.stage} onChange={set('stage')} options={options.stage} testid="select-portfolio-stage" />
           <label className="pf-select"><span className="pf-sr">Health</span>
-            <select value={health} onChange={(e) => setHealth(e.target.value)} data-testid="select-portfolio-health">
+            <select value={filters.health} onChange={(e) => set('health')(e.target.value)} data-testid="select-portfolio-health">
               {HEALTH_FILTERS.map((h) => <option key={h} value={h}>{h === 'all' ? 'Health: all' : `Health: ${h}`}</option>)}
+            </select>
+          </label>
+          <FilterSelect name="Reporting" value={filters.reporting} onChange={set('reporting')} options={options.reporting} testid="select-portfolio-reporting" />
+          <label className="pf-select"><span className="pf-sr">Sort by</span>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} data-testid="select-portfolio-sort">
+              {SORTS.map((s) => <option key={s.value} value={s.value}>{`Sort: ${s.label}`}</option>)}
             </select>
           </label>
           <Link className="pf-btn is-quiet" to="/portfolio/positions" data-testid="link-investor-positions-detail">Open Positions <ArrowUpRight size={13} aria-hidden="true" /></Link>
         </div>
       </div>
+      {words.length ? (
+        <div className="pf-fchips" data-testid="portfolio-filter-chips">
+          <span className="pf-sm">{shown.length} of {rows.length} {rows.length === 1 ? 'company' : 'companies'}</span>
+          <button type="button" className="pf-link-button" onClick={() => setFilters(NO_FILTERS)} data-testid="button-portfolio-clear-filters">Clear filters</button>
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <p className="pf-note" data-testid="portfolio-no-positions">No position is recorded for this investor account yet. Positions appear here once a confirmed commitment is recorded.</p>
       ) : (
         <div className="pf-table-wrap">
           <table className="pf-table">
-            <caption>{shown.length} of {rows.length} {rows.length === 1 ? 'company' : 'companies'} · sorted by health, then invested · values gross</caption>
+            <caption data-testid="portfolio-table-caption">{tableCaptionOf(shown.length, rows.length, words, sort)}</caption>
             <thead><tr>
               <th scope="col">Company</th><th scope="col">Sector · stage</th><th scope="col" className="n">Invested</th><th scope="col" className="n">Latest FMV</th>
               <th scope="col" className="n">Ownership</th><th scope="col" className="n">MOIC</th><th scope="col">Reporting</th><th scope="col">Health</th><th scope="col">Last update</th>
@@ -223,7 +265,7 @@ function CompanyTable({ rows, positionsState, onRetry }) {
                   <td data-label="Last update">{r.lastUpdate || <span className="pf-not-recorded">{r.reporting.state === 'Unreadable' ? 'Unreadable' : NOT_RECORDED}</span>}</td>
                 </tr>
               ))}
-              {shown.length === 0 ? <tr><td colSpan={9} className="pf-note">No company matches these filters.</td></tr> : null}
+              {shown.length === 0 ? <tr><td colSpan={9} className="pf-note" data-testid="portfolio-no-match">No company matches these filters.</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -238,12 +280,19 @@ export default function InvestorPortfolioCanvas() {
   const perf = useMemo(() => performanceOf(reads.analytics, reads.positions), [reads.analytics, reads.positions]);
   const attention = useMemo(() => attentionOf(reads), [reads]);
   const rows = useMemo(() => companyRowsOf(reads), [reads]);
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const [sort, setSort] = useState('health');
+  const options = useMemo(() => filterOptionsOf(rows || []), [rows]);
+  const shown = useMemo(() => sortRows(filterRows(rows || [], filters), sort), [rows, filters, sort]);
+  const exportPlan = useMemo(() => companyExportOf(reads, rows, shown), [reads, rows, shown]);
   const reporting = useMemo(() => reportingSummaryOf(reads.compliance, reads.updates), [reads.compliance, reads.updates]);
   const support = useMemo(() => valueAddSummaryOf(reads.support), [reads.support]);
   const quarterEnd = lastQuarterEndOf(reads.positions, reads.compliance);
   const navChange = quarterEnd ? <NavChangeLine key={quarterEnd} date={quarterEnd} analytics={reads.analytics} /> : null;
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
   const positionCount = reads.positions.state === 'ok' ? reads.positions.value.items.length : null;
+  const { user } = useAuth() || {};
+  const [statement, setStatement] = useState(false);
 
   return (
     <PortfolioFrame
@@ -253,7 +302,9 @@ export default function InvestorPortfolioCanvas() {
       tools={(
         // The root has no primary; Ask stays gated (ProfileHeaderAsk).
         <ZoneHeaderTools role="investor">
+          <PortfolioExport choices={[{ key: 'companies', label: 'Export', zone: 'overview', plan: exportPlan }]} testid="button-export-portfolio-overview" />
           <Link to={ACCOUNT_LINK.to} className="pf-btn is-quiet" data-testid="link-account-portfolio">{ACCOUNT_LINK.label}</Link>
+          <button type="button" className="pf-btn" onClick={() => setStatement(true)} data-testid="button-open-statement"><FileText size={14} aria-hidden="true" /> Statement</button>
           <button type="button" className="pf-icon-button" onClick={reload} data-testid="button-refresh-investor-portfolio" aria-label="Refresh Portfolio"><RefreshCw size={15} aria-hidden="true" /></button>
         </ZoneHeaderTools>
       )}
@@ -287,7 +338,10 @@ export default function InvestorPortfolioCanvas() {
         <ReportingCard summary={reporting} onRetry={() => retry('compliance')} />
         <ValueAddCard summary={support} onRetry={() => retry('support')} />
       </div>
-      <CompanyTable rows={rows || []} positionsState={reads.positions.state} onRetry={() => retry('positions')} />
+      <CompanyTable rows={rows || []}
+        shown={shown} filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} options={options}
+        positionsState={reads.positions.state} onRetry={() => retry('positions')}
+      />
       {/* D6212 (#6212): a departure from D4817's PFA17, which draws no band here. */}
       <ZoneDraft
         surface="portfolio/overview"
@@ -301,6 +355,16 @@ export default function InvestorPortfolioCanvas() {
       />
       <AlsoIn role="investor" row="Portfolio" />
       <p className="pf-boundary">Investor workspace. Data shown is governed by your existing access and permissions.</p>
+      {statement ? (
+        <StatementSheet
+          positions={reads.positions}
+          compliance={reads.compliance}
+          investor={user?.name || null}
+          from="Overview"
+          onClose={() => setStatement(false)}
+          onRetry={retry}
+        />
+      ) : null}
     </PortfolioFrame>
   );
 }

@@ -123,14 +123,14 @@ jobs:
         with:
           node-version: '22'
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended,security-and-quality
           config-file: ./.github/codeql/codeql-config.yml
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           category: '/language:${{ matrix.language }}'
           output: codeql-results
@@ -191,3 +191,19 @@ jobs:
         env:
           SCAN_FACTS_FILE: .scan-state/facts.json
         run: node scripts/github-alerts.mjs scan
+
+  remediate:
+    name: Request alert reconciliation
+    needs: [visibility, analyze]
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' && needs.visibility.outputs.upload == 'always'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch trusted remediation on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --silent --method POST repos/AxalNetwork/StudioOS/actions/workflows/scan-remediation.yml/dispatches -f ref=main

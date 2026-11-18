@@ -101,7 +101,7 @@ export const FUND = {
   k1Date: 'Mar 15',
 };
 
-/** Commitment (in $K) at or above which allocation + decision rights open. */
+/** Commitment (in $K) of the participation tier. */
 export const ALLOC_THRESHOLD_K = FUND.allocThresholdK;
 
 /**
@@ -116,22 +116,11 @@ export const ALLOC_THRESHOLD_K = FUND.allocThresholdK;
  */
 export const SPINOUT_FUND_SLUG = 'spinout-fund-i';
 
-/**
- * Program-level track record shown in the workspace hero and repeated on the
- * fund brief.
- *
- * NOTE ON A PRE-EXISTING CONFLICT: pages/SpinoutLabBriefPage.jsx (the public
- * *program* brochure, a different document) states "12 companies built to date"
- * and "$2.4M total capital raised by graduates". Those numbers disagree with
- * these and predate this module. The LP workspace is the stated authority for
- * the fund brief, so the brief follows these; reconciling the brochure is a
- * separate decision for whoever owns that page.
- */
-export const PROGRAM = {
-  graduates: 37,
-  onTimeIncorpPct: 86,
-  alumniRaisedM: 8.6,
-};
+// The program track record (graduates, incorporated on time, raised by alumni)
+// used to be fixed here: 37, 86% and $8.6M, with no recorded source. The owner
+// took them down on 2026-11-17 (#5513, D5513-p2): those figures now come only
+// from GET /api/spinout-lab/fund-metrics, through `programFigures` in
+// spinoutFundFigures.js, and read "Not recorded" until the read has them.
 
 /** Narrative copy. Shared so the hero and the brief cannot say different things. */
 export const THESIS = {
@@ -155,7 +144,7 @@ export const THESIS = {
  * Fund terms, in one list, derived from FUND.
  *
  * `page` marks the eight rows the workspace "Key terms" grid shows (with their
- * notes); `brief` marks the twelve the one-pager's "Fund structure" block shows.
+ * notes); `brief` marks those shown in the one-pager's "Fund structure" block.
  * Target/hard cap is page-only because the brief already carries it in the raise
  * strip and would otherwise state it twice.
  */
@@ -169,8 +158,7 @@ export function fundTerms() {
     { k: 'Initial check', v: `$${FUND.checkLowK}–${FUND.checkHighK}K`, note: `Up to ${k(FUND.convictionCheckK)} high conviction`, page: true, brief: true },
     { k: 'High conviction', v: `up to ${k(FUND.convictionCheckK)}`, brief: true },
     { k: 'Reserve policy', v: `${FUND.reserveLowPct}–${FUND.reserveHighPct}%`, note: 'Follow-ons only', page: true, brief: true },
-    { k: 'Minimum ticket', v: k(FUND.minTicketK), note: `Allocation rights from ${k(FUND.allocThresholdK)}`, page: true, brief: true },
-    { k: 'Allocation rights', v: `from ${k(FUND.allocThresholdK)}`, brief: true },
+    { k: 'Minimum ticket', v: k(FUND.minTicketK), page: true, brief: true },
     { k: 'Management fee', v: `${FUND.mgmtFeePct}%`, note: `Carried interest ${FUND.carryPct}%`, page: true, brief: true },
     { k: 'Carried interest', v: `${FUND.carryPct}%`, brief: true },
     { k: 'Reporting', v: 'Quarterly', note: `Annual audit · ${FUND.auditDate}`, page: true, brief: true },
@@ -184,8 +172,8 @@ export const TIERS = [
     rights: 'Quarterly reports, audited statement, cohort dashboard, demo-day livestream.' },
   { name: 'Member', amountK: 100, amount: '$100K', sub: '',
     rights: 'Adds in-person demo day, portfolio deep-dives, founder introductions.' },
-  { name: 'Allocator', amountK: 250, amount: '$250K', sub: 'Allocation rights', hl: true,
-    rights: 'Adds commitment-weighted allocation preferences and voting.' },
+  { name: 'Participant', amountK: 250, amount: '$250K', sub: 'Decision rights', hl: true,
+    rights: 'Adds voting.' },
   { name: 'Anchor', amountK: 500, amount: '$500K+', sub: 'By discussion',
     rights: 'Adds LPAC seat eligibility. Terms by discussion.' },
 ];
@@ -196,7 +184,6 @@ export const TIER_RIGHTS = [
   { right: 'Cohort dashboard', note: 'Live readiness + revenue telemetry', c: ['✓', '✓', '✓', '✓'] },
   { right: 'Demo day', note: 'Livestream at Supporter; in person above', c: ['Stream', 'In person', 'In person', 'In person'] },
   { right: 'Portfolio deep-dives', note: 'Company-level diligence sessions', c: ['—', '✓', '✓', '✓'] },
-  { right: 'Allocation preferences', note: `Commitment-weighted, from $${FUND.allocThresholdK}K`, c: ['—', '—', '✓', '✓'] },
   { right: 'LPAC seat eligibility', note: 'Three seats at first close', c: ['—', '—', '—', '✓'] },
 ];
 
@@ -213,31 +200,18 @@ export const PROCESS_STEPS = [
 ];
 
 /**
- * Cohort 4 — the companies graduating into the current allocation window.
+ * Cohort 4 pipeline for the Fund I brief.
  * Operator-maintained like the rest of this module: `score` is the readiness
  * score at last review and `revenueK` the observed first revenue in $K.
- *
- * This list feeds BOTH the brief's pipeline table and the workspace's
- * allocation sliders (see allocationCandidates), so the document can never name
- * a different cohort than the one an LP is allocating across.
  */
 export const COHORT_4 = [
-  { company: 'NovaCraft AI', sector: 'Async workflow automation', score: 71, revenueK: 12.8, ic: 'Advance', allocDefault: 30 },
-  { company: 'MeridianIQ', sector: 'Deal intelligence', score: 68, revenueK: 9.2, ic: 'Advance', allocDefault: 25 },
-  { company: 'LoopSense', sector: 'Sensor analytics', score: 62, revenueK: 6.1, ic: 'Watch', allocDefault: 20 },
-  { company: 'Foundry Legal', sector: 'Contract operations', score: 59, revenueK: 4.9, ic: 'Watch', allocDefault: 10 },
+  { company: 'NovaCraft AI', sector: 'Async workflow automation', score: 71, revenueK: 12.8, ic: 'Advance' },
+  { company: 'MeridianIQ', sector: 'Deal intelligence', score: 68, revenueK: 9.2, ic: 'Advance' },
+  { company: 'LoopSense', sector: 'Sensor analytics', score: 62, revenueK: 6.1, ic: 'Watch' },
+  { company: 'Foundry Legal', sector: 'Contract operations', score: 59, revenueK: 4.9, ic: 'Watch' },
   { company: 'Arcline', sector: 'Financial infrastructure', score: 49, revenueK: 5.4, ic: 'Track' },
   { company: 'Kelp Bio', sector: 'Materials science', score: 51, revenueK: null, ic: 'Track' },
 ];
-
-/**
- * The subset of Cohort 4 open to allocation preferences: everything the IC has
- * moved past 'Track'. Returns fresh objects so a caller's slider state cannot
- * mutate the shared list.
- */
-export function allocationCandidates() {
-  return COHORT_4.filter((c) => c.ic !== 'Track').map((c) => ({ ...c }));
-}
 
 /**
  * Fund-level fees and expenses, in $M. Operator-maintained like the rest of this
@@ -350,8 +324,8 @@ export const money = {
 // string flipped by a row of buttons (`onClick={() => this.set('access', s.k)}`).
 // That is the right way to demo five states in a design file and exactly the
 // wrong way to ship one: the same control that previews "Committed LP · $250K ·
-// full rights" would ALSO unlock the LP data room, the reporting package and the
-// allocation sliders for any logged-in viewer who clicked it.
+// full rights" would unlock the LP data room and reporting package for anyone
+// who clicked it.
 //
 // So the shipped state is DERIVED, never chosen. It reads the caller's own rows
 // from GET /api/funds/lp-portal — the canonical limited_partners store — and is
@@ -361,8 +335,8 @@ export const money = {
 //   visitor   — no LP row at all: browsing by invitation
 //   pending   — an LP row exists but no countersigned LPA: under review
 //   approved  — LPA countersigned, nothing committed yet
-//   committed — commitment > 0 but under the allocation threshold
-//   voting    — commitment >= $250K: allocation + decision rights
+//   committed — commitment > 0 but under the participation threshold
+//   voting    — commitment >= $250K: participation tier
 // ---------------------------------------------------------------------------
 
 export const LP_STATES = ['visitor', 'pending', 'approved', 'committed', 'voting'];
@@ -381,8 +355,8 @@ export const LP_STATE_RANK = { visitor: 0, pending: 0, approved: 1, committed: 2
  * WHY AN APPLICATION IS SAFE TO READ HERE. The applicant authors their own
  * application row, so it must never be able to unlock anything — and it does
  * not. A pending application moves the ladder from 'visitor' to 'pending'
- * ONLY, and 'pending' is rank 0 exactly like 'visitor': lpHasReports() and
- * lpAllocationOpen() are both false for it. Everything above 'pending' still
+ * ONLY, and 'pending' is rank 0 exactly like 'visitor': lpHasReports() is
+ * false for it. Everything above 'pending' still
  * requires `limited_partners` rows the GP wrote. The application changes what
  * the page SAYS to the applicant, never what it SHOWS them.
  *
@@ -423,8 +397,7 @@ export function lpAccessState(portal, application = null) {
     return sum + (Number.isFinite(n) && n > 0 ? n : 0);
   }, 0);
   // Compare in DOLLARS and floor only for display. Rounding first would let
-  // $249,999 become 250 and clear a $250K rights threshold it does not meet —
-  // a display concern silently granting allocation and decision rights.
+  // $249,999 become 250 and clear the $250K participation tier.
   const commitmentK = Math.floor(commitmentDollars / 1000);
   const lpaSigned = rows.some((r) => !!r?.lpa_signed);
 
@@ -453,9 +426,4 @@ export function lpWorkspaceCallToAction(portalResult, applicationResult) {
 /** Full reporting archive + package unlock. Mirrors the design's `hasReports`. */
 export function lpHasReports(state) {
   return LP_STATE_RANK[state] >= LP_STATE_RANK.approved;
-}
-
-/** Allocation + decision rights. Mirrors the design's `allocOpen`. */
-export function lpAllocationOpen(state) {
-  return state === 'voting';
 }

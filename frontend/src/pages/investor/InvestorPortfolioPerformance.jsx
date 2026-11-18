@@ -14,10 +14,21 @@
  * browser's), at most two years. A quarter-end that answers with no book is
  * Not recorded; one that fails is Unreadable with a Retry of its own. Neither
  * is drawn, and nothing is drawn between two reads.
+ *
+ * D6208 (#6208): the header's Export writes the quarter-end series (a gap
+ * written as Not recorded or Unreadable, never 0) or the vintage cohorts,
+ * through `exportView`; over nothing loaded it is disabled with its reason.
+ *
+ * D6867 (#6867, canvas D6217 PF-13): the Statement action opens the
+ * statement sheet, and `?as_of=` (a quarter-end) reads the summary as of that
+ * date, so the sheet's "Open Performance as of …" lands on the figures its
+ * page 1 printed. The methodology is `METHODOLOGY`, the one list the
+ * statement prints word for word.
  */
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowUpRight, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowUpRight, FileText, RefreshCw } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuthSync';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
@@ -26,40 +37,38 @@ import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import { PerformanceSummary, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
 import { QuarterEndPlot, QuarterEndTable } from '../portfolio/QuarterEndChart';
+import StatementSheet from '../portfolio/StatementSheet';
+import { METHODOLOGY } from '../portfolio/statementModel';
 import {
-  DEFINITIONS, NOT_RECORDED, SHAPES, cohortsOf, performanceOf, quarterSeriesOf, quarterShape, quarterWindowOf,
+  NOT_RECORDED, SHAPES, cohortExportOf, cohortsOf, day, isQuarterEnd, performanceOf, quarterExportOf, quarterSeriesOf, quarterShape, quarterWindowOf,
 } from '../portfolio/portfolioModel';
+import PortfolioExport from '../portfolio/PortfolioExport';
 
-const SOURCES = {
-  analytics: { call: () => api.positionsAnalytics(), shape: SHAPES.analytics },
+/** The page's reads; the summary is cut at `asOf` when the address names a quarter-end. */
+const sourcesFor = (asOf) => ({
+  analytics: asOf
+    ? { call: () => api.positionsAnalytics(asOf), shape: quarterShape(asOf) }
+    : { call: () => api.positionsAnalytics(), shape: SHAPES.analytics },
   positions: { call: () => api.positionsList(), shape: SHAPES.positions },
   compliance: { call: () => api.positionsKpiCompliance(), shape: SHAPES.compliance },
-};
+});
 
 const SOURCE_NAMES = { analytics: 'Performance', positions: 'Positions', compliance: 'Reporting' };
 
-/** What the platform computes today (`portfolioMetrics.ts`, `/api/positions/analytics`). */
-const METHODOLOGY = [
-  ['TVPI', DEFINITIONS.tvpi],
-  ['DPI', DEFINITIONS.dpi],
-  ['RVPI', DEFINITIONS.rvpi],
-  ['IRR', 'XIRR on dated contributions and distributions, with NAV as the terminal value. Reads Unavailable, with the reason, when no rate solves; never 0%.'],
-  ['NAV', 'Σ the latest mark per company on or before the as-of date; a company with no usable mark carries at cost.'],
-  ['Paid-in', 'Σ recorded contributions dated on or before the as-of date.'],
-  ['Distributed', 'Σ recorded distributions dated on or before the as-of date.'],
-  ['Mark coverage', 'Positions with a usable mark, out of every position held at that date.'],
-  ['Quarter-ends', 'Each point is the book read as of that quarter-end. A quarter-end with no book, or one that could not be read, is a gap: no bar, no zero, no line across it.'],
-  ['Basis', 'Gross of fees and carry: management fees, carry and fund expenses are not deducted, so these are not net returns.'],
-];
 
-/** NAV at each quarter-end: one read per quarter-end, each committed and retried on its own. */
-function QuarterEndSeries({ dates, view }) {
+/**
+ * NAV at each quarter-end: one read per quarter-end, each committed and
+ * retried on its own. The series is handed up (`onSeries`) because the
+ * header's Export writes it (D6208).
+ */
+function QuarterEndSeries({ dates, view, onSeries }) {
   const sources = useMemo(
     () => Object.fromEntries(dates.map((d) => [d, { call: () => api.positionsAnalytics(d), shape: quarterShape(d) }])),
     [dates],
   );
   const { reads, retry } = usePortfolioReads(sources);
   const series = useMemo(() => quarterSeriesOf(dates, reads), [dates, reads]);
+  useEffect(() => { onSeries(series); }, [series, onSeries]);
   const failed = series.points.filter((p) => p.state === 'unreadable');
   const missing = series.points.filter((p) => p.state === 'not_recorded');
   return (
@@ -83,7 +92,7 @@ function QuarterEndSeries({ dates, view }) {
   );
 }
 
-function QuarterEnds({ window: win, retry, refresh }) {
+function QuarterEnds({ window: win, retry, refresh, onSeries }) {
   const [view, setView] = useState('chart');
   let body;
   if (win.state === 'loading') body = <Skeleton rows={3} />;
@@ -92,7 +101,7 @@ function QuarterEnds({ window: win, retry, refresh }) {
   } else if (win.state !== 'ok') {
     body = <p className="pf-note" data-testid="perf-quarters-not-recorded"><span className="pf-not-recorded">{NOT_RECORDED}</span> · {win.reason}</p>;
   } else {
-    body = <QuarterEndSeries key={`${win.dates.join(',')}#${refresh}`} dates={win.dates} view={view} />;
+    body = <QuarterEndSeries key={`${win.dates.join(',')}#${refresh}`} dates={win.dates} view={view} onSeries={onSeries} />;
   }
   return (
     <section className="pf-card" aria-labelledby="pf-quarters-title" data-testid="perf-quarters">
@@ -171,13 +180,31 @@ function Cohorts({ cohorts, onRetry }) {
   );
 }
 
+/** `?as_of=` names a quarter-end the statement was made for; anything else reads the latest book. */
 export default function InvestorPortfolioPerformance() {
-  const { reads, retry, reload } = usePortfolioReads(SOURCES);
+  const [params] = useSearchParams();
+  const raw = params.get('as_of');
+  const asOf = isQuarterEnd(raw) ? raw : null;
+  return <PerformanceBody key={asOf || 'latest'} asOf={asOf} />;
+}
+
+function PerformanceBody({ asOf }) {
+  const sources = useMemo(() => sourcesFor(asOf), [asOf]);
+  const { reads, retry, reload } = usePortfolioReads(sources);
+  const { user } = useAuth() || {};
   const [refresh, setRefresh] = useState(0);
+  const [statement, setStatement] = useState(false);
   const perf = useMemo(() => performanceOf(reads.analytics, reads.positions), [reads.analytics, reads.positions]);
   const win = useMemo(() => quarterWindowOf(reads.positions, reads.compliance), [reads.positions, reads.compliance]);
   const cohorts = useMemo(() => cohortsOf(reads.positions), [reads.positions]);
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
+  const [series, setSeries] = useState(null);
+  // A series belongs to the window it was read for; a new window waits for its own.
+  const current = series && win.state === 'ok' && series.points.map((p) => p.date).join(',') === win.dates.join(',') ? series : null;
+  const exports = [
+    { key: 'quarters', label: 'Quarter-end series', zone: 'performance-quarter-ends', plan: quarterExportOf(win, current, reads.analytics) },
+    { key: 'cohorts', label: 'Vintage cohorts', zone: 'performance-cohorts', plan: cohortExportOf(cohorts) },
+  ];
 
   return (
     <PortfolioFrame
@@ -187,6 +214,8 @@ export default function InvestorPortfolioPerformance() {
       context={perf.asOf ? `Gross of fees and carry · ${perf.asOf.replace(/^As of/, 'as of')}` : null}
       tools={(
         <ZoneHeaderTools role="investor">
+          <PortfolioExport choices={exports} testid="button-export-portfolio-performance" />
+          <button type="button" className="pf-btn" onClick={() => setStatement(true)} data-testid="button-open-statement"><FileText size={14} aria-hidden="true" /> Statement</button>
           <button type="button" className="pf-icon-button" onClick={() => { reload(); setRefresh((n) => n + 1); }} aria-label="Refresh performance" data-testid="button-refresh-investor-performance"><RefreshCw size={15} aria-hidden="true" /></button>
         </ZoneHeaderTools>
       )}
@@ -203,9 +232,14 @@ export default function InvestorPortfolioPerformance() {
         />
       )}
     >
+      {asOf ? (
+        <p className="pf-partial" data-testid="perf-as-of">
+          The summary is the book as of {day(asOf)}, the date of a statement. <Link to="/portfolio/performance" data-testid="link-perf-latest">Show the latest book</Link>
+        </p>
+      ) : null}
       <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} methodologyTo="#portfolio-methodology" />
       <div className="pf-perf-grid">
-        <QuarterEnds window={win} retry={retry} refresh={refresh} />
+        <QuarterEnds window={win} retry={retry} refresh={refresh} onSeries={setSeries} />
         <Methodology />
       </div>
       <Cohorts cohorts={cohorts} onRetry={() => retry('positions')} />
@@ -229,6 +263,16 @@ export default function InvestorPortfolioPerformance() {
         </div>
       </section>
       <p className="pf-boundary">Investor workspace. Data shown is restricted to this investor’s accessible position book.</p>
+      {statement ? (
+        <StatementSheet
+          positions={reads.positions}
+          compliance={reads.compliance}
+          investor={user?.name || null}
+          from="Performance"
+          onClose={() => setStatement(false)}
+          onRetry={retry}
+        />
+      ) : null}
     </PortfolioFrame>
   );
 }

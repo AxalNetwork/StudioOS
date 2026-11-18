@@ -26,9 +26,10 @@
  * the page.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { portfolioFounderAsksApi } from '../../lib/api/portfolioFounderAsks';
 import { titleCase } from '../../lib/absence';
 import { currencyFromLabel } from '../../lib/money';
 import { WorkerRail } from '../../ui';
@@ -83,6 +84,13 @@ const SOURCE_NAMES = { compliance: 'Reporting', updates: 'Founder updates', posi
 
 const NotRecorded = ({ children = NOT_RECORDED, title: why }) => <span className="pf-not-recorded" title={why}>{children}</span>;
 
+/** D6204: the Worker's due day, Overdue by N days, or Not recorded with the reason. */
+function DueCell({ due }) {
+  if (!due || due.state === 'none') return <><NotRecorded title={due?.reason || NO_DUE_DATE} /><small>{due?.reason || NO_DUE_DATE}</small></>;
+  if (due.state === 'overdue') return <><span className="pf-late-text">{due.text}</span><small className="pf-mono" title={due.basis || undefined}>Due {due.date}</small></>;
+  return <span className="pf-mono" title={due.basis || undefined}>{due.text}</span>;
+}
+
 /** A cell whose source failed: the word, and a Retry for that source alone. */
 function UnreadableCell({ source, retry, testid }) {
   return (
@@ -134,7 +142,7 @@ function Inbox({ inbox, reads, retry, visible, filter, setFilter, chaseOverdue, 
                   {companyHref(row.uid) ? <Link className="pf-co" to={companyHref(row.uid)} data-testid={`link-company-${row.projectId}`}>{row.name}</Link> : <span className="pf-co">{row.name}</span>}
                 </th>
                 <td data-label="Period">{row.period || <NotRecorded />}</td>
-                <td data-label="Due"><NotRecorded title={NO_DUE_DATE}>No due date recorded</NotRecorded></td>
+                <td data-label="Due" data-testid={`due-obligation-${row.projectId}`}><DueCell due={row.due} /></td>
                 <td data-label="Received">
                   {row.received ? <span className="pf-mono">{row.received}</span> : <NotRecorded>Never reported</NotRecorded>}
                   {row.update && reads.updates.state === 'ok' ? <small data-testid={`text-update-kpis-${row.projectId}`} title={`${row.update.title || 'Untitled update'}${kpiText(row.update, rules) ? ` · ${kpiText(row.update, rules)}` : ''}`}>{row.update.title || 'Untitled update'}{kpiText(row.update, rules) ? ` · ${kpiText(row.update, rules)}` : ''}</small> : null}
@@ -164,7 +172,58 @@ function Inbox({ inbox, reads, retry, visible, filter, setFilter, chaseOverdue, 
         actions={investorZoneActions('portfolio/updates', { handlers: { chaseOverdue }, view })}
       />
       {body}
-      <p className="pf-foot">A company has reported when a submitted founder update speaks for the period; a month inside the quarter counts for it. The reporting cadence records no due date, so no row counts days overdue. A chase notifies the founder and is logged; delivery is attempted, not guaranteed.</p>
+      <p className="pf-foot">A company has reported when a submitted founder update speaks for the period; a month inside the quarter counts for it. A report is due the reporting duty's own number of days after the period ends, else 30; Overdue counts the days past that, by the Worker's date (UTC). A chase notifies the founder and is logged; delivery is attempted, not guaranteed.</p>
+    </section>
+  );
+}
+
+const ASK_WORDS = {
+  hire: ['A hire', 'hiring'], customer: ['A customer introduction', 'customer'],
+  partner: ['A partner', 'intro'], market: ['A market contact', 'other'], capital: ['Capital', 'fundraising'],
+};
+
+function ReportAsks({ updateUid, row }) {
+  const { reads, retry } = usePortfolioReads({ asks: {
+    call: async () => {
+      try { return await portfolioFounderAsksApi.list(updateUid); }
+      catch (e) {
+        if (e.status === 403) return { refused: true };
+        if (e.status === 404) return { asks: [] };
+        throw e;
+      }
+    },
+    shape: (value) => value.refused === true || Array.isArray(value.asks),
+  } });
+  const read = reads.asks;
+  return (
+    <section data-testid="report-founder-asks">
+      <h3>Asks in this update</h3>
+      {read.state === 'loading' ? <Skeleton rows={2} /> : null}
+      {read.state === 'unreadable' ? <div data-testid="report-asks-unreadable"><p>Unavailable. The asks could not be read.</p><button type="button" className="pf-btn" onClick={() => retry('asks')}>Retry</button></div> : null}
+      {read.state === 'ok' && read.value.refused ? <p>Refused. This account cannot read these asks.</p> : null}
+      {read.state === 'ok' && read.value.asks?.length === 0 ? <p className="pf-muted">This item carries no shared asks.</p> : null}
+      {read.state === 'ok' && read.value.asks?.length > 0 ? (
+        <>
+          <ul className="pf-required">
+            {read.value.asks.map((ask) => {
+              const [label, kind] = ASK_WORDS[ask.kind] || ['Support', 'other'];
+              return <li key={ask.uid} data-testid={`report-ask-${ask.uid}`}>
+                <div><strong>{label}</strong><p>{ask.text}</p>
+                  <p className="pf-muted">{ask.support_state ? `Your support · ${titleCase(ask.support_state)}` : ask.answered ? 'Answered' : 'No answer recorded'}</p>
+                  {ask.kind === 'capital' ? (ask.link_ref
+                    ? <Link className="pf-btn" to={`/round-calls/${encodeURIComponent(ask.link_ref)}`}>Open the round call</Link>
+                    : <p className="pf-muted">{ask.link_reason || 'No round call is available.'}</p>) : null}
+                </div>
+                {!ask.support_state && row.uid ? <Link className="pf-btn is-primary" to="/portfolio/value-add"
+                  state={{ founderAsk: { uid: ask.uid, kind, label, updateUid, text: ask.text, projectUid: row.uid, reportKey: row.key } }}>
+                  Promise support
+                </Link> : null}
+              </li>;
+            })}
+          </ul>
+          <Link className="pf-btn" to={`/updates/${encodeURIComponent(updateUid)}`}>Open the update</Link>
+        </>
+      ) : null}
     </section>
   );
 }
@@ -260,6 +319,7 @@ function ReportDetail({ row, reads, retry, rules, cadence, onClose }) {
           <h3>Update as written</h3>
           {update ? (update.body ? <blockquote className="pf-quote" data-testid="report-detail-body-text">{update.body}</blockquote> : <p className="pf-muted">No narrative was written.</p>) : <p className="pf-muted">{updates.state === 'unreadable' ? 'Unreadable.' : NOT_RECORDED}</p>}
         </section>
+        {update?.uid ? <ReportAsks key={update.uid} updateUid={update.uid} row={row} /> : null}
         <section><h3>History</h3>{history}</section>
         {row.uid && companyHref(row.uid) ? <Link className="pf-btn" to={companyHref(row.uid, 'reports')} data-testid="link-report-detail-company">Open {row.name} · Reports</Link> : null}
       </div>
@@ -269,7 +329,8 @@ function ReportDetail({ row, reads, retry, rules, cadence, onClose }) {
 
 export default function InvestorPortfolioUpdates() {
   const [filter, setFilter] = useState('period');
-  const [open, setOpen] = useState(null);
+  const location = useLocation();
+  const [open, setOpen] = useState(() => location.state?.founderAskReportKey ?? null);
   const [chasing, setChasing] = useState(false);
   const [chaseNote, setChaseNote] = useState('');
   const { reads, retry, reload } = usePortfolioReads(SOURCES);
@@ -291,15 +352,16 @@ export default function InvestorPortfolioUpdates() {
   const storedUpdates = reads.updates.state !== 'ok' ? null : rows.map((row) => row.update).filter(Boolean);
   // `Rules` is a VIEW, not a row predicate: it swaps the body.
   const showingRules = filter === 'rules';
-  const visible = rows.filter((row) => (filter === 'overdue' ? row.reported === false : true));
+  // D6204: Overdue is the Worker's overdue set (past the due day, unreported), not every unreported company.
+  const visible = rows.filter((row) => (filter === 'overdue' ? row.overdue === true : true));
 
   /**
-   * THE CHASE (D464), as today. The set is the page's own: the companies the
-   * reporting read says have not reported. The route re-checks the tenancy of
+   * THE CHASE (D464). Chase all overdue sends the Worker's overdue set (D6204):
+   * the companies past their due day that have not reported. The route re-checks the tenancy of
    * each id; one row per chase lands in the log and the founder is notified;
    * a repeat inside the hour answers the existing row.
    */
-  const overdueRows = rows.filter((row) => row.reported === false);
+  const overdueRows = rows.filter((row) => row.overdue === true);
   const afterChase = useCallback(() => { retry('chases'); retry('compliance'); }, [retry]);
   const chaseOne = useCallback(async (row) => {
     setChasing(true); setChaseNote('');
@@ -319,8 +381,11 @@ export default function InvestorPortfolioUpdates() {
     if (reads.compliance.state !== 'ok') {
       return { onClick: () => {}, disabled: true, title: 'The cadence record is unavailable, so which companies are overdue is unknown — chasing blind is not offered.' };
     }
+    if (inbox.dueRead === 'unreadable') {
+      return { onClick: () => {}, disabled: true, title: 'The due dates could not be read, so which companies are overdue is unknown — chasing blind is not offered.' };
+    }
     if (!overdueRows.length) {
-      return { onClick: () => {}, disabled: true, title: 'No company is overdue this period, so there is nobody to chase.' };
+      return { onClick: () => {}, disabled: true, title: 'No company is past its due date this period, so there is nobody to chase.' };
     }
     return {
       onClick: async () => {
@@ -337,12 +402,12 @@ export default function InvestorPortfolioUpdates() {
       },
       busy: chasing,
     };
-  }, [overdueRows, reads.compliance.state, chasing, afterChase]);
+  }, [overdueRows, reads.compliance.state, inbox.dueRead, chasing, afterChase]);
 
   const view = {
     header: ['Company', 'Period', 'Due', 'Received', 'Status', 'Missing', 'Last chase'],
     rows: visible,
-    cells: (r) => [r.name, r.period || NOT_RECORDED, 'No due date recorded', r.received || 'Never reported', r.reporting.state,
+    cells: (r) => [r.name, r.period || NOT_RECORDED, r.due.state === 'overdue' ? `${r.due.text} (due ${r.due.date})` : r.due.text, r.received || 'Never reported', r.reporting.state,
       r.missing.text || NOT_RECORDED, r.chase.state === 'ok' ? r.chase.date : r.chase.state === 'none' ? 'Not chased' : 'Unreadable'],
   };
 
@@ -370,7 +435,10 @@ export default function InvestorPortfolioUpdates() {
       <section className="pf-tiles pf-tiles-4" aria-label="This period" data-testid="reports-tiles">
         <SummaryTile label="Received" value={inbox.state === 'ok' ? `${received} of ${rows.length}` : inbox.state === 'loading' ? 'Reading…' : 'Unreadable'} note={inbox.state === 'ok' ? `for ${inbox.period || 'the period measured'}` : 'Reporting source'} />
         <SummaryTile label="Not received" tone={inbox.state === 'ok' && rows.length - received > 0 ? 'late' : null} value={inbox.state === 'ok' ? String(rows.length - received) : inbox.state === 'loading' ? 'Reading…' : 'Unreadable'} note={inbox.state === 'ok' ? (inbox.inProgress ? 'period still in progress' : 'period complete') : 'Reporting source'} />
-        <SummaryTile label="Due date" value={NOT_RECORDED} note="The cadence records none; no days overdue are counted" />
+        {/* D6204: the board's Due date tile, now the Worker's: how many are past it, and the rule. */}
+        <SummaryTile label="Due date" tone={inbox.state === 'ok' && inbox.overdueCount > 0 ? 'late' : null}
+          value={inbox.state !== 'ok' ? (inbox.state === 'loading' ? 'Reading…' : 'Unreadable') : inbox.dueRead === 'ok' ? (inbox.overdueCount ? `${inbox.overdueCount} overdue` : 'None overdue') : NOT_RECORDED}
+          note={inbox.state !== 'ok' ? 'Reporting source' : inbox.dueRead === 'ok' ? `The reporting duty's own days after the period ends, else ${inbox.dueDefaultDays ?? 30}` : inbox.dueRead === 'unreadable' ? 'The due dates could not be read' : NO_DUE_DATE} />
         <SummaryTile label="Source handling" value="Source-preserved" note="KPI values and narrative are shown as submitted" />
       </section>
       {showingRules

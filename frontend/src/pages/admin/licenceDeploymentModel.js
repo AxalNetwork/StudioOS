@@ -10,7 +10,7 @@
  * D5924 (#5924) adds the branch-sync card and the provisioning line of boards
  * L14 and L15 (below), and Reconcile on a failed deployment.
  */
-import { describeOutcome } from '../../lib/mutationOutcome.js';
+import { describeOutcome, outcomeFromError } from '../../lib/mutationOutcome.js';
 import { toUtcInstant } from '../../lib/notices';
 import { NOT_RECORDED } from '../../lib/absence';
 import { clockText, syncFailureSentence } from './licenceOverviewModel';
@@ -75,8 +75,48 @@ export function attemptLine(a) {
  */
 export const SYNC_RETRY_WINDOW_MINUTES = 60;
 
-/** Why Retry sync is drawn but cannot be pressed: no Worker route re-sends a copy on demand. */
-export const RETRY_SYNC_REASON = 'HQ has no way yet to re-send a copy on demand. It re-sends a copy that has not landed by itself, at most once an hour.';
+/**
+ * D6733 (#6733): what Retry sync does, beside it. It posts to
+ * `POST /api/admin/licences/:uid/sync/retry`, which sends the owed copy now
+ * through the cron's own push and records the attempt as the cron does.
+ */
+export const RETRY_SYNC_NOTE = 'Sends the owed copy now. HQ also re-sends it by itself, at most once an hour after the last attempt.';
+
+/** Compatibility name used by the ledger action surfaces (D4819 part 21). */
+export const RETRY_SYNC_REASON = RETRY_SYNC_NOTE;
+
+/** D6733: why Retry sync cannot be pressed when no copy is queued (the route would answer `nothing_pending`). */
+export const RETRY_SYNC_NOTHING_OWED = 'No copy is queued, so there is nothing to re-send.';
+
+/**
+ * D6733: the notice for Retry sync's answer, `{ ok, pushed, sync }`. Accepted,
+ * or the failure code's sentence and the code, never the error's own text.
+ */
+export function noticeForSyncRetry(body) {
+  const p = body?.pushed;
+  if (!p) return describeOutcome('unknown');
+  if (p.ok) {
+    const rev = p.revision ?? p.branch_revision ?? null;
+    return describeOutcome('committed', { message: `Sent. The branch accepted ${rev != null ? `revision ${rev}` : 'the copy'}.` });
+  }
+  if (p.no_deployment) {
+    return describeOutcome('committed', { message: 'Nothing was sent: this licence has no branch deployment. A branch reads its copy from HQ the first time it asks.' });
+  }
+  const code = p.failure_code || null;
+  const at = body?.sync?.pending?.last_attempt_at;
+  const t = instant(at);
+  const next = t != null && t > 0 ? ` HQ tries again by itself not before ${clockText(new Date(t + SYNC_RETRY_WINDOW_MINUTES * 60000).toISOString())}.` : '';
+  return describeOutcome('refused', {
+    message: `Sent, and not accepted: ${syncFailureSentence(code) || 'It has not landed yet.'}${code ? ` (code ${code})` : ''} The attempt is recorded.${next}`,
+  });
+}
+
+/** D6733: the notice for a refused Retry sync. The Worker's sentence, or one for its code. */
+export function noticeForSyncRetryError(e) {
+  if (e?.code === 'nothing_pending') return describeOutcome('refused', { message: 'No copy is owed to the branch, so nothing was sent.' });
+  if (e?.code === 'retry_in_flight') return describeOutcome('pending', { message: e.message || 'A sync attempt started moments ago. Read again to see how it ended.' });
+  return outcomeFromError(e, 'Retry sync did not run, and nothing was sent. Try again.');
+}
 
 /** Where the branch line comes from. HQ never reads the branch itself, so the line never says the branch "responded". */
 export const BRANCH_LINE_NOTE = 'This is the branch’s answer to HQ’s last push. HQ does not read what a branch holds on its own yet.';

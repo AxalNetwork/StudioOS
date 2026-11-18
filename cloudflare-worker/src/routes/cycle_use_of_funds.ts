@@ -6,8 +6,9 @@ import { canWrite } from './_founder_validate_helpers';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { isSupportSession } from '../integrations/providers/mercury';
-import { base,createHire,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
-import { planRead,runwayToday } from '../services/useOfFunds/read';
+import { base,createHire,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,saveCapTableLink,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
+import { capTableOptions } from '../services/useOfFunds/capTableLink';
+import { committedRead,planRead,runwayToday } from '../services/useOfFunds/read';
 import useOfFundsEadwyn from './use_of_funds_eadwyn';
 import { uofCan, uofCapabilities, uofStanding, type UofCapabilities } from '../services/useOfFunds/capabilities';
 import { exportAudit, planCsv, planPdf, readBasePlan } from '../services/useOfFunds/exportPlan';
@@ -52,7 +53,8 @@ r.get('/plan',async c=>{
 r.get('/scenarios',async c=>{
   const s=c.get('uof'); await base(c.env,s);
   const rows=await c.env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id=? ORDER BY is_base DESC,id').bind(s.projectId).all<any>();
-  return c.json({items:await Promise.all((rows.results??[]).map(row=>view(c.env,s,row)))});
+  // D5074 part 6: the scenarios and compare reads carry the caller's map too, so Runway's pages draw from it.
+  return c.json({items:await Promise.all((rows.results??[]).map(row=>view(c.env,s,row))),capabilities:c.get('caps')});
 });
 r.get('/scenarios/:id',async c=>c.json(await view(c.env,c.get('uof'),await scenario(c.env,c.get('uof'),idOf(c.req.param('id'))))));
 r.post('/scenarios',async c=>c.json(await saveScenario(c.env,c.get('uof'),null,await body(c)),201));
@@ -63,6 +65,17 @@ r.post('/scenarios/:id/make-base',async c=>{
   if (c.req.header('content-length')!=='0'&&c.req.header('content-type')?.includes('json')) fields(await body(c),[]);
   return c.json(await makeBase(c.env,c.get('uof'),idOf(c.req.param('id'))));
 });
+/**
+ * D6085 (#6085): which cap-table scenario pays for a plan scenario. The picker
+ * lists this venture's cap-table scenarios (Modelled) against the plan's raise;
+ * the link is set, changed or cleared with the scenario's revision.
+ */
+r.get('/cap-table-scenarios',async c=>{
+  const s=c.get('uof');
+  const sc=await scenario(c.env,s,c.req.query('scenario_id')==null?await base(c.env,s):idOf(c.req.query('scenario_id')));
+  return c.json({scenario_id:sc.id,linked_uid:sc.cap_table_scenario_uid??null,...await capTableOptions(c.env,s.projectId,sc.amount_to_raise_cents??null)});
+});
+r.put('/scenarios/:id/cap-table',async c=>c.json(await saveCapTableLink(c.env,c.get('uof'),idOf(c.req.param('id')),await body(c))));
 r.get('/compare',async c=>{
   const raw=c.req.query('ids')??'';
   if (!/^[1-9][0-9]{0,9}(,[1-9][0-9]{0,9}){0,3}$/.test(raw)) throw new PlanError(400,'invalid_ids','Choose one to four scenario ids.');
@@ -70,7 +83,8 @@ r.get('/compare',async c=>{
   if (new Set(ids).size!==ids.length) throw new PlanError(400,'invalid_ids','Choose each scenario once.');
   const s=c.get('uof');
   const items=await Promise.all(ids.map(async id=>view(c.env,s,await scenario(c.env,s,id))));
-  return c.json({today:await runwayToday(c.env,s,c.get('mercury')),scenarios:items,source:'Modelled',reason:'Today is the measured record. Scenarios are models, not runway today.'});
+  const [today,committed]=await Promise.all([runwayToday(c.env,s,c.get('mercury')),committedRead(c.env,s,c.get('mercury'))]);
+  return c.json({today,committed,scenarios:items,source:'Modelled',reason:'Today is the measured record. Scenarios are models, not runway today.',capabilities:c.get('caps')});
 });
 r.get('/milestones',async c=>{
   const s=c.get('uof');const sc=await scenario(c.env,s,c.req.query('scenario_id')==null?await base(c.env,s):idOf(c.req.query('scenario_id')));

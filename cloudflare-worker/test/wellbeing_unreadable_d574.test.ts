@@ -14,6 +14,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 
 import wellbeing from '../src/routes/wellbeing.ts';
@@ -28,6 +30,8 @@ function env(fail: boolean) {
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, email TEXT, name TEXT,
              is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, subscription_tier TEXT, subscription_status TEXT);
            CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);`);
+  // D7118 — the aggregate also reads reflections; their table comes from its migration.
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611171643_7118_wellbeing_reflections.sql'), 'utf8'));
   db.prepare(`INSERT INTO users (id, role, email) VALUES (?, 'founder', 'f@example.test'), (?, 'admin', 'a@example.test')`).run(FOUNDER, ADMIN);
   const real: any = d1Over(db);
   const DB = fail ? {

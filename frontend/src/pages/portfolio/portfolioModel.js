@@ -255,7 +255,10 @@ export function reportingFor(position, compliance) {
   if (!row) return { state: 'Not recorded', period, reason: 'This company is not in the reporting population.' };
   const last = row.last_reported_at || null;
   if (row.reported) return { state: 'Received', period, last };
-  return { state: c.period_in_progress ? 'Due' : 'Not received', period, last, days: isNum(row.days_since_report) ? Number(row.days_since_report) : null };
+  // D6204: past its due day by the Worker's date, the obligation is Overdue, with the days.
+  const due = dueOf(row);
+  if (due.state === 'overdue') return { state: 'Overdue', period, last, overdueDays: due.days, due: due.date, reason: `${due.text} · due ${due.date}` };
+  return { state: c.period_in_progress ? 'Due' : 'Not received', period, last, days: isNum(row.days_since_report) ? Number(row.days_since_report) : null, due: due.date || null };
 }
 
 /** The Reporting summary card. */
@@ -282,6 +285,8 @@ export function reportingSummaryOf(compliance, updates) {
     total,
     received,
     outstanding: total - received,
+    // D6204: the Worker's overdue set; null when the read carries none (an older Worker or no due read).
+    overdue: c.due_read === 'ok' && isNum(c.overdue_count) ? Number(c.overdue_count) : null,
     submissions,
     updatesState: updates.state,
   };
@@ -360,7 +365,10 @@ export function evidenceFor(position, { health, compliance, updates }, reference
   }
 
   const r = reportingFor(position, compliance);
-  if (r.state === 'Not received') {
+  if (r.state === 'Overdue') {
+    // D6204: past the due day by the Worker's date, the line says by how much.
+    lines.push({ label: 'Report', text: `${r.period || 'Last period'} overdue by ${r.overdueDays} ${r.overdueDays === 1 ? 'day' : 'days'} · due ${day(r.due)} · ${r.last ? `last reported ${day(r.last)}` : 'never reported'}`, weight: 3 });
+  } else if (r.state === 'Not received') {
     lines.push({ label: 'Report', text: `${r.period || 'Last period'} not received · ${r.last ? `last reported ${day(r.last)}` : 'never reported'}`, weight: 2 });
   }
 
@@ -433,6 +441,11 @@ export function companyRowsOf(reads) {
         stage: p.project?.stage || null,
         invested: money(p.total_invested),
         investedRaw: Number(p.total_invested) || 0,
+        // D6208: the sort keys, null where nothing is recorded, so a missing
+        // figure sorts last instead of sorting as a zero.
+        investedValue: isNum(p.total_invested) ? Number(p.total_invested) : null,
+        multipleValue: isNum(p.multiple) ? Number(p.multiple) : null,
+        lastValue: r.last ? String(r.last) : null,
         fmv: mark.kind === 'marked' ? money(p.fmv) : null,
         markDate: p.mark_as_of ? day(p.mark_as_of) : null,
         atCost: mark.kind === 'marked' ? null : money(p.total_invested),
@@ -449,11 +462,204 @@ export function companyRowsOf(reads) {
     .sort((a, b) => HEALTH.indexOf(a.health.state) - HEALTH.indexOf(b.health.state) || b.investedRaw - a.investedRaw || a.name.localeCompare(b.name));
 }
 
-/** Filter the table by a search string and a health state ('all' for every row). */
-export function filterRows(rows, { query = '', health = 'all' } = {}) {
+/**
+ * The value a Sector or Stage filter uses for a row that records none: the
+ * filter offers "Not recorded" as its own choice rather than hiding the row.
+ */
+export const NONE = '__none';
+
+/** The reporting states a row can carry (`reportingFor`), most urgent first. */
+export const REPORTING = ['Not received', 'Due', 'Received', 'Not recorded', 'Unreadable'];
+
+const matches = (want, have) => want === 'all' || (want === NONE ? !have : have === want);
+
+/**
+ * Filter the table by a search string and by Sector, Stage, Health and
+ * Reporting ('all' for every row). Sector and stage are the project's own
+ * (`companyRowsOf`); Reporting is the row's obligation for the measured
+ * period (`reportingFor`), the same word the Reporting column shows.
+ */
+export function filterRows(rows, {
+  query = '', health = 'all', sector = 'all', stage = 'all', reporting = 'all',
+} = {}) {
   const q = query.trim().toLowerCase();
   return rows.filter((r) => (!q || r.name.toLowerCase().includes(q) || String(r.sector || '').toLowerCase().includes(q))
-    && (health === 'all' || r.health.state === health));
+    && (health === 'all' || r.health.state === health)
+    && matches(sector, r.sector)
+    && matches(stage, r.stage)
+    && (reporting === 'all' || r.reporting.state === reporting));
+}
+
+/**
+ * The choices each filter offers, from the rows the book holds: a sector or
+ * stage nobody carries is not offered, and a row with none is reachable
+ * through "Not recorded". Reporting offers only the states present, in
+ * REPORTING order.
+ */
+export function filterOptionsOf(rows) {
+  const distinct = (pick) => {
+    const seen = new Map();
+    let none = false;
+    for (const r of rows) {
+      const v = pick(r);
+      if (v) seen.set(v, titleCase(v) || v); else none = true;
+    }
+    const list = [...seen].map(([value, text]) => ({ value, label: text })).sort((a, b) => a.label.localeCompare(b.label));
+    return none ? [...list, { value: NONE, label: NOT_RECORDED }] : list;
+  };
+  const present = new Set(rows.map((r) => r.reporting?.state));
+  return {
+    sector: distinct((r) => r.sector),
+    stage: distinct((r) => r.stage),
+    reporting: REPORTING.filter((s) => present.has(s)).map((s) => ({ value: s, label: s })),
+  };
+}
+
+/** The sort control's choices; `health` is the table's own order (`companyRowsOf`). */
+export const SORTS = [
+  { value: 'health', label: 'Health', words: 'health, then invested' },
+  { value: 'invested', label: 'Invested', words: 'invested, largest first' },
+  { value: 'multiple', label: 'Multiple', words: 'multiple, highest first' },
+  { value: 'updated', label: 'Last update', words: 'last update, newest first' },
+];
+
+const SORT_KEY = { invested: 'investedValue', multiple: 'multipleValue', updated: 'lastValue' };
+
+/**
+ * Sort the rows. A row with nothing recorded for the key sorts last, never as
+ * a zero; ties keep the health order.
+ */
+export function sortRows(rows, by = 'health') {
+  const key = SORT_KEY[by];
+  if (!key) return rows.slice();
+  const cmp = (a, b) => (typeof a === 'number' ? b - a : String(b).localeCompare(String(a)));
+  return rows.slice().sort((a, b) => {
+    const x = a[key];
+    const y = b[key];
+    if (x == null || y == null) return (x == null) - (y == null);
+    return cmp(x, y);
+  });
+}
+
+/**
+ * The words for the filters in force, in the order the controls sit:
+ * `['Search: “kit”', 'Sector: Robotics', …]`. Empty when nothing narrows.
+ */
+export function filterWordsOf(filters, options) {
+  const named = (list, value) => (list.find((o) => o.value === value) || {}).label || value;
+  const out = [];
+  const q = String(filters.query || '').trim();
+  if (q) out.push(`Search: “${q}”`);
+  if (filters.sector && filters.sector !== 'all') out.push(`Sector: ${named(options.sector, filters.sector)}`);
+  if (filters.stage && filters.stage !== 'all') out.push(`Stage: ${named(options.stage, filters.stage)}`);
+  if (filters.health && filters.health !== 'all') out.push(`Health: ${filters.health}`);
+  if (filters.reporting && filters.reporting !== 'all') out.push(`Reporting: ${filters.reporting}`);
+  return out;
+}
+
+/** The table's caption: the count, the filters in force, the sort and the basis. */
+export function tableCaptionOf(shown, total, filterWords, sort = 'health') {
+  const sorted = (SORTS.find((s) => s.value === sort) || SORTS[0]).words;
+  return [
+    `${shown} of ${total} ${total === 1 ? 'company' : 'companies'}`,
+    ...(filterWords.length ? [`filtered by ${filterWords.join(', ')}`] : []),
+    `sorted by ${sorted}`,
+    'values gross',
+  ].join(' · ');
+}
+
+/* ----------------------------------------------------------------- exports */
+
+/*
+ * D6208: what Export writes. Each builder returns `{ header, rows }` for
+ * `exportView` (`lib/csvExport.js`), or `{ reason }` when there is nothing to
+ * write yet. A cell never holds a zero, a blank or "Reading…" in place of a
+ * figure: a gap is written as the word the screen shows (Not recorded,
+ * Unreadable), so the file cannot claim more than the page does.
+ */
+
+/** The basis and as-of every exported row carries, from the performance read. */
+export function exportBasisOf(analytics) {
+  if (!analytics || analytics.state === 'loading') return null;
+  if (analytics.state !== 'ok') return { basis: 'Gross of fees and carry', asOf: UNREADABLE };
+  const a = analytics.value;
+  return {
+    basis: a.basis === 'gross' || a.basis == null ? 'Gross of fees and carry' : `Basis: ${a.basis}`,
+    asOf: a.as_of ? day(a.as_of) : 'Latest recorded marks',
+  };
+}
+
+const LOADING_NAMES = { positions: 'Positions', health: 'Health', compliance: 'Reporting', analytics: 'Performance' };
+
+/** The Overview's export: the rows shown, in the order shown, each with its basis and as-of. */
+export function companyExportOf(reads, rows, shown) {
+  const loading = Object.keys(LOADING_NAMES).filter((k) => !reads[k] || reads[k].state === 'loading');
+  if (loading.length) return { reason: `${loading.map((k) => LOADING_NAMES[k]).join(', ')} ${loading.length === 1 ? 'is' : 'are'} still loading, so there is nothing to export yet.` };
+  if (reads.positions.state !== 'ok' || !rows) return { reason: 'Positions could not be read, so there is nothing to export.' };
+  if (rows.length === 0) return { reason: 'No position is recorded, so there is nothing to export.' };
+  if (shown.length === 0) return { reason: 'No company matches these filters, so there is nothing to export.' };
+  const { basis, asOf } = exportBasisOf(reads.analytics);
+  return {
+    header: ['Company', 'Sector', 'Stage', 'Invested', 'Latest FMV', 'Mark date', 'Ownership', 'MOIC', 'Reporting', 'Period', 'Health', 'Last update', 'Basis', 'As of'],
+    rows: shown.map((r) => [
+      r.name,
+      r.sector ? titleCase(r.sector) || r.sector : NOT_RECORDED,
+      r.stage ? titleCase(r.stage) || r.stage : NOT_RECORDED,
+      r.invested || NOT_RECORDED,
+      r.fmv || (r.markReason ? 'Mark not usable' : 'No mark recorded'),
+      r.fmv ? (r.markDate || NOT_RECORDED) : (r.atCost ? `Carried at cost ${r.atCost}` : NOT_RECORDED),
+      r.ownership || NOT_RECORDED,
+      r.moic ? `${r.moic}${r.moicAtCost ? ' at cost' : ''}` : NOT_RECORDED,
+      r.reporting.state,
+      r.reporting.period || NOT_RECORDED,
+      r.health.state,
+      r.lastUpdate || (r.reporting.state === UNREADABLE ? UNREADABLE : NOT_RECORDED),
+      basis,
+      asOf,
+    ]),
+  };
+}
+
+/** Performance's quarter-end export: every quarter-end in the window, a gap written as its word. */
+export function quarterExportOf(win, series, analytics) {
+  if (!win || win.state === 'loading') return { reason: 'The quarter-end series is still loading, so there is nothing to export yet.' };
+  if (win.state === 'unreadable') return { reason: 'The quarter-end series could not be read, so there is nothing to export.' };
+  if (win.state !== 'ok') return { reason: `No quarter-end is recorded (${win.reason}), so there is nothing to export.` };
+  if (!series || series.points.some((p) => p.state === 'loading')) return { reason: 'Some quarter-ends are still loading, so there is nothing to export yet.' };
+  const basis = (exportBasisOf(analytics) || {}).basis || 'Gross of fees and carry';
+  return {
+    header: ['Quarter-end', 'Quarter', 'NAV', 'Paid-in', 'Distributed', 'TVPI', 'Mark coverage', 'Note', 'Basis'],
+    rows: series.points.map((p) => {
+      const gap = p.state === 'ok' ? null : pointWords(p);
+      return [
+        p.date,
+        quarterName(p.date) || p.label,
+        gap || p.navText,
+        gap || p.paidIn,
+        gap || p.distributed,
+        gap || p.tvpi.value,
+        gap || p.coverage,
+        p.reason || '',
+        basis,
+      ];
+    }),
+  };
+}
+
+/**
+ * Performance's cohort export: one row per vintage, as the table shows it.
+ * A cohort's carrying value is the positions read's latest recorded mark (or
+ * cost), not the performance read's as-of, so that is what its As of says.
+ */
+export function cohortExportOf(cohorts) {
+  if (!cohorts || cohorts.state === 'loading') return { reason: 'Positions are still loading, so there is nothing to export yet.' };
+  if (cohorts.state === 'unreadable') return { reason: 'Positions could not be read, so there is nothing to export.' };
+  if (cohorts.state !== 'ok') return { reason: `${cohorts.reason} There is nothing to export.` };
+  if (cohorts.rows.length === 0) return { reason: 'No position records a first-cheque date, so no cohort is drawn and there is nothing to export.' };
+  return {
+    header: ['Vintage', 'Companies', 'Invested', 'Carrying value', 'Carried at cost', 'Carrying ÷ invested', 'Basis', 'As of'],
+    rows: cohorts.rows.map((r) => [r.vintage, r.companies, r.invested, r.carrying, r.atCost, r.multiple || NOT_RECORDED, 'Gross of fees and carry', 'Latest recorded marks']),
+  };
 }
 
 /* ------------------------------------------------- positions register (PF-02) */
@@ -950,8 +1156,32 @@ export function periodCovers(cadence, period, stored) {
   return Boolean(m) && `${m[1]}-Q${Math.floor((Number(m[2]) - 1) / 3) + 1}` === due;
 }
 
-/** Why an obligation shows no due date: the cadence read records none, so no overdue days are counted. */
-export const NO_DUE_DATE = 'The reporting cadence records no due date for this period, so no days overdue are counted.';
+/** Why an obligation shows no due date when the reporting read carries none for it (D6204). */
+export const NO_DUE_DATE = 'The reporting read gives no due date for this period, so no days overdue are counted.';
+
+/**
+ * #6204 (D6204): one obligation's due day, from the Worker's own `due_date`, `days_overdue` and
+ * `overdue` on the kpi-compliance row (per book, else 30 days after the period ends). The page
+ * never works out lateness itself:
+ *
+ *   reported   it reported; the due day is shown as it was
+ *   overdue    'Overdue by N days', with the due day
+ *   due        'Due <day>', not yet past it
+ *   none       Not recorded, with the Worker's reason (or NO_DUE_DATE)
+ */
+export function dueOf(row) {
+  const date = day(row?.due_date);
+  if (!date) return { state: 'none', text: NOT_RECORDED, reason: String(row?.due_reason || '').trim() || NO_DUE_DATE };
+  const basis = row.due_basis === 'reporting_duty'
+    ? `${row.due_days} days after the period ends, from the reporting duty`
+    : row.due_basis === 'firm_default' ? `${row.due_days} days after the period ends, the firm default` : null;
+  if (row.reported === true) return { state: 'reported', text: `Due ${date}`, date, basis };
+  if (row.overdue === true && isNum(row.days_overdue) && Number(row.days_overdue) > 0) {
+    const n = Number(row.days_overdue);
+    return { state: 'overdue', text: `Overdue by ${n} ${n === 1 ? 'day' : 'days'}`, date, days: n, basis };
+  }
+  return { state: 'due', text: `Due ${date}`, date, basis };
+}
 
 const blank = (v) => v === undefined || v === null || String(v).trim() === '';
 const keyWords = (key) => titleCase(key) || NOT_RECORDED;
@@ -977,7 +1207,7 @@ export function missingFor(reporting, update, compliance, updates) {
   if (reporting.state === 'loading' || updates.state === 'loading') return { state: 'loading' };
   if (reporting.state === 'Unreadable') return { state: 'unreadable', text: UNREADABLE };
   const period = periodName(reporting.period);
-  if (reporting.state === 'Not received' || reporting.state === 'Due') {
+  if (reporting.state === 'Not received' || reporting.state === 'Due' || reporting.state === 'Overdue') {
     return { state: 'missing', text: `The ${period || 'period'} update` };
   }
   if (reporting.state !== 'Received') return { state: 'not_measured', text: NOT_RECORDED };
@@ -1012,9 +1242,8 @@ export function lastChaseOf(projectId, chases) {
  * PF-04's obligations inbox: one row per company in the reporting population
  * (`kpi-compliance`'s companies, the caller's book) for the period the Worker
  * measured, companies that have not reported first. A name the reporting read
- * does not carry comes from the positions read. No row carries a due date:
- * the cadence read records none (`NO_DUE_DATE`), so no overdue days are
- * computed.
+ * does not carry comes from the positions read. Each row's due day and
+ * lateness are the Worker's (`dueOf`, D6204).
  */
 export function obligationRowsOf(reads) {
   const { compliance, updates, positions, chases } = reads;
@@ -1035,6 +1264,9 @@ export function obligationRowsOf(reads) {
       period: periodName(reporting.period),
       reporting,
       reported: co.reported === true,
+      // D6204: the Worker's overdue set, never one worked out here.
+      overdue: co.reported !== true && co.overdue === true,
+      due: dueOf(co),
       received: day(co.last_reported_at),
       update,
       missing: missingFor(reporting, update, compliance, updates),
@@ -1048,6 +1280,9 @@ export function obligationRowsOf(reads) {
     cadence: c.cadence || null,
     inProgress: c.period_in_progress === true,
     until: day(c.period_until),
+    overdueCount: rows.filter((r) => r.overdue).length,
+    dueDefaultDays: isNum(c.due_default_days) ? Number(c.due_default_days) : null,
+    dueRead: c.due_read === 'unreadable' ? 'unreadable' : c.due_read === 'ok' ? 'ok' : 'absent',
   };
 }
 

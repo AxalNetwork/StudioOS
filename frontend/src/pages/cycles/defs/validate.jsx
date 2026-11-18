@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
+import { cycleValidateApi } from '../../../lib/api/cycleValidate';
 import { validateExportsApi } from '../../../lib/api/founderValidateExports';
 import { useRailOption } from '../../../ui/railCrumbs';
 import Lightbox from '../../../ui/Lightbox';
@@ -18,15 +19,18 @@ import RecordView from '../RecordView';
 import FromLovable from '../FromLovable';
 import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
+import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
 import MarketFigureHistory from '../MarketFigureHistory';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
-import { InterviewsSection, PainThemesSection, HypothesesSection } from '../ValidateSections';
+import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection } from '../ValidateSections';
+import HypothesisRecord from '../HypothesisRecord';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
 import WaitlistBar from '../ValidateWaitlistBar.jsx';
+import { PrepareQuestions } from '../InterviewGuide.jsx';
 import { WaitlistLeads, addLeadButton, moveStageAction } from '../ResearchPipeline.jsx';
 import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
 
@@ -154,7 +158,14 @@ const validate = {
   Mount: ValidateMount,
   action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
   tools: toFnMap({
-    'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
+    // D6010 (#6010): Size the market opens the sizing tool for this venture, to any founder of it.
+    'market-intelligence': (q) => {
+      const venture = new URLSearchParams(projectSearch(q)).get('project_id');
+      return [
+        { label: 'Open the competitor tracker', href: '/build/competitors' },
+        { label: 'Size the market', href: venture ? sizingHref(venture) : '/validate/market-intelligence/sizing' },
+      ];
+    },
     'demand-signals': (search) => ({ label: 'Open the landing-page builder', href: '/build/brand' + projectSearch(search) }),
   }),
   add: toFnMap({
@@ -177,6 +188,8 @@ const validate = {
     // D1092 (#2957): each of the three modules Google feeds draws its From Google part after its own section.
     'customer-research': (data, ctx) => (
       <>
+        {/* D6008 (#6008): Prepare questions, the interview guide as a sheet (D5995 V27 B). */}
+        <PrepareQuestions projectId={ctx.projectId} />
         <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
           onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
           onExport={() => api.exportValidateInterviews(ctx.projectId)} />
@@ -190,11 +203,13 @@ const validate = {
         <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
       </>
     ),
+    // D6010 (#6010): the stored positioning and assumptions marks and the sources, under the table.
     // D1087 (#2952): research pages from Notion, as sources (title and link).
     // D6019 (#6019): each of the next three modules' parts opens with its Export.
     'market-intelligence': (data, ctx) => (
       <>
         <ModuleExport slug="market-intelligence" projectId={ctx.projectId} />
+        <MarketReadiness projectId={ctx.projectId} />
         <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />
         {/* D6011 (#6011): every change to the three figures, with who and when. */}
         <MarketFigureHistory part={data?.parts?.market_history} />
@@ -213,6 +228,8 @@ const validate = {
         <ValidateDemandPosthog projectId={ctx.projectId} />
       </>
     ),
+    'ideal-customer-profile': (data, ctx) => <SegmentsSection key={ctx.projectId} parts={data?.parts}
+      onAssign={(interviewId, segmentId) => cycleValidateApi.setInterviewSegment(ctx.projectId, interviewId, segmentId).then(ctx.reload)} />,
     'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
       onExport={() => api.exportValidatePainMap(ctx.projectId)}
       // #1692's `attach` on the theme record, so the theme's activity logs it.
@@ -250,9 +267,9 @@ const validate = {
         onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
     )} />,
     // D1083 (#2948, LV5–LV7): From Lovable under the claim's record, one slot per experiment.
+    // D6016 (#6016, V8): computed state and the founder's decision apart, evidence split by direction.
     experiments: (read, ctx) => <div className="space-y-3">
-      <RecordView record={read} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
-        onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+      <HypothesisRecord read={read} {...ctx} />
       {read?.parts?.lovable && <FromLovable part={read.parts.lovable} cycle="validate" projectId={ctx.projectId} onRetry={ctx.reload} />}
     </div>,
   }),
