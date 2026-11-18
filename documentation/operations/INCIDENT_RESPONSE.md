@@ -272,6 +272,10 @@ live backup heartbeat. Retain the run link and its redacted counts/heartbeat
 receipt. This is transport recovery evidence, not evidence that live record
 classes or the #6654 suppression-aware live restore have been enabled.
 
+| Hosted file proof | Outcome | Heartbeat / restore evidence |
+|---|---|---|
+| [s39 synthetic preview attempt, 2026-11-18](https://github.com/AxalNetwork/StudioOS/actions/runs/44409361430) | Skipped: preview enablement gate did not admit the job | None; owner preview configuration and a verified run remain required. Configuration metadata was inaccessible (403), so presence is unknown. |
+
 **File recovery verification (#6428):** the synthetic-only drill writes and
 checks archive bytes, removes its synthetic source, restores one object and
 suppresses another. It does not read production files or establish live backup
