@@ -47,6 +47,8 @@ const PROFILES = {
     // comment is here because the symmetry is the tempting wrong guess. Since
     // D704 that folder mounts no zone: `FounderValidateWorkspace` is deleted.
     pages: ['frontend/src/pages/founder', 'frontend/src/pages/research', 'frontend/src/workspaces'],
+    // D6118 (#6118): `grow/partnerships` is mounted by Partnerships' co-marketing part, a cycle page part.
+    extra: ['frontend/src/pages/cycles/PartnershipsCoMarketing.jsx'],
     call: 'founderZoneActions',
     canvas: /^Pages · Founder /,
     buckets: /^(validate|build|grow|network|raise|research)\//,
@@ -253,7 +255,10 @@ const PROFILES = {
     // TWENTY-FIRST: `funds/calls`'s `Send reminders` (#6238, D6238) — it opens
     // the call's chase: one Eadwyn draft per line behind, each logged as sent
     // only when the GP confirms it.
-    handlers: 21,
+    //
+    // TWENTY-SECOND: `network/relationships`'s `Add person` (D6636) — the
+    // network picker is now supplied by its page.
+    handlers: 22,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,

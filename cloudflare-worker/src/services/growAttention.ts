@@ -164,13 +164,13 @@ export async function growAttention(x: Ctx, writable: boolean, options: { user?:
     for (const f of options.figures || []) {
       if (f.state === 'unreadable' && !items.some((i) => i.key === 'focus_unreadable')) add('focus_unreadable', 40, 'Check the KPI source', 'One or more growth figures could not be read.', '/grow/focus', 'Focus');
     }
-    if (partner_proposals.state === 'recorded' && partner_proposals.value > 0) add('partner_proposal', 50, 'Review saved partner proposals', `${partner_proposals.value} pending proposal${partner_proposals.value === 1 ? '' : 's'} from Mercury.`, '/grow/partner-network', 'Partnerships');
+    if (partner_proposals.state === 'recorded' && partner_proposals.value > 0) add('partner_proposal', 50, 'Review saved partner proposals', `${partner_proposals.value} pending proposal${partner_proposals.value === 1 ? '' : 's'} from Mercury.`, '/grow/partnerships', 'Partnerships');
     if (partner_renewals.state === 'recorded' && renewing.length) {
       const first = renewing[0];
       const left = Math.round((Date.parse(`${first.renewal_on}T00:00:00Z`) - Date.parse(`${new Date(x.now).toISOString().slice(0, 10)}T00:00:00Z`)) / 86400000);
       const when = left === 0 ? 'today' : `in ${left} day${left === 1 ? '' : 's'}`;
       if (renewing.length === 1) add('partner_renewal', 55, `Prepare for ${first.name}'s renewal`, `The partnership renews ${first.renewal_on}, ${when}.`, `/grow/partner-network/${encodeURIComponent(first.uid)}`, 'Partnerships');
-      else add('partner_renewal', 55, 'Review partner renewals', `${renewing.length} signed partners renew within 30 days; ${first.name} first, ${when}.`, '/grow/partner-network', 'Partnerships');
+      else add('partner_renewal', 55, 'Review partner renewals', `${renewing.length} signed partners renew within 30 days; ${first.name} first, ${when}.`, '/grow/partnerships', 'Partnerships');
     }
     const team = options.cards?.find((c) => c.slug === 'team-expansion');
     const series = team?.series as { roles_by_stage?: Array<{ stage: string; count: number }> } | null;

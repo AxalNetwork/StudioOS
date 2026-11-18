@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Organizations Partner · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Organizations · #7052 · addendum to #4799 Network workspace and #6256 Network v2</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Organizations for the Operating Partner — the companies in your book, and changing a whole company’s relationship type on purpose</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Network → Organizations (/network/organizations) for the partner licence. The populated company list leads, with its source in the partner’s relationship book, the people known at each company and the relationship type recorded on their contacts: Client, Prospect, Referral source, Mixed when contacts disagree (with a plain breakdown), Partial when some have none, and Not recorded. Changing a company’s type is Choose → Review → Result: a choice is staged, the review shows the exact group with current → proposed values and the full count, and only “Apply to 3 contacts” commits. Saved shows the server’s count; Not saved, an unknown outcome (checked by reloading before any retry) and a group that changed since review are separate states. Dialog on desktop, sheet on phone. It keeps the Network v2 shell, four links, Person Sheet, tables and state words (D5129), with the partner accent in the sidebar. Keys carry the NOP prefix; sections are numbered NW4-P (NW4 Organizations, partner variant). Violet dashed ◇ tags mark backend work; amber ⚑ tags mark the owner pick drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main c59a9f2f66 · [Northstar Capital], [Tom Becker] and every person, company and figure (186 contacts, 64 companies, [Elm Studio] 7 contacts, 3 changing) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Organizations Partner Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW4-P.1', 'Organizations · the populated list first', 'The source line (186 contacts read, 171 with a company, 15 without), search, the type filter with counts that add up to 64, and the table: organization, type with who-says-what, people known, latest interaction, firm owners. Not recorded fields are named, not estimated. Below it, how each of the six readings looks.', [F('NOP1', false, 1120), C('NOP1B', 'How a company’s type reads', 1100, 470)]],
+      ['NW4-P.2', 'Company detail and Person Sheet', '[Elm Studio]: the type and its breakdown (4 Client · 2 Prospect · 1 not recorded), the seven people with the company as typed, and About with the Not recorded fields. One primary: Change relationship type. The Person Sheet edits one contact, which works on main today.', [F('NOP2', false, 1000), F('NOP2S', 'Person Sheet open', 1000)]],
+      ['NW4-P.3', 'Choose', 'A dialog. Choosing a value stages it and says how many contacts would change; nothing is saved. Clear the type is one of the options.', [F('NOP3', false, 1000)]],
+      ['NW4-P.4', 'Review', 'The exact group: 7 contacts, current → proposed, 3 changing and 4 already Client, with the read time and group version. A scrollable list with Changing / All. Apply to 3 contacts commits; Back and Cancel return. Clearing on [Kelp Bio] uses the same flow.', [F('NOP4', false, 1000), C('NOP4C', 'Clearing a type · [Kelp Bio]', 1400, 640)]],
+      ['NW4-P.5', 'Saving, Saved, Not saved', 'Saving with the buttons off; Saved with the server’s count of 3; Not saved with nothing changed and Review again.', [C('NOP5', false, 1400, 520)]],
+      ['NW4-P.6', 'Outcome unknown', 'The response dropped: Checking reloads the group before anything else, then It was saved (no retry) or It was not saved (Review again).', [C('NOP6', false, 1400, 470)]],
+      ['NW4-P.7', 'The group changed since review', 'Nothing saved: one contact added and one type changed in another tab. The new preview has 8 contacts and still 3 changing.', [C('NOP7', false, 1400, 640)]],
+      ['NW4-P.8', 'Back on the company', 'The saved line, [Elm Studio] reading ■ Client 7 of 7, focus back on Change relationship type. Back to Organizations keeps search and filter.', [F('NOP8', false, 1000)]],
+      ['NW4-P.9', 'Directory states', 'Loading, None (no contacts), contacts without companies, no search matches, Unavailable with Try again, and Partial when the read stops at 500.', [C('NOP9', false, 1400, 640)]],
+      ['NW4-P.10', 'Tablet 768', 'The company page with the review dialog over it.', [C('NOP10', false, 768, 1024)]],
+      ['NW4-P.11', 'Phone 390', 'The list as labelled rows, the company, then Choose, Review, Saved, Checking and The group changed as sheets. 44px targets and sticky actions.', [C('NOPM1', 'Organizations', 390, 1600), P('NOPM2', '[Elm Studio]'), P('NOPM3', 'Choose'), P('NOPM4', 'Review'), P('NOPM5', 'Saved'), P('NOPM6', 'Checking'), P('NOPM7', 'Group changed')]],
+      ['NW4-P.12', 'Dark', 'The list and the review dialog on the dark tokens, and the phone review sheet. States keep their words and shapes.', [F('NOPD1', 'Organizations · dark', 1120), F('NOPD2', 'Review · dark', 1000), P('NOPDM', 'Phone review · dark')]],
+      ['Prototype', 'Task flow, keyboard and focus', 'The frame links of the clickable flow, keyboard order, Escape, focus containment, focus return and announcements.', [W('NOPK')]],
+      ['Handoff', 'Handoff', 'What was checked on main, the data source and what each count means, backend required (◇), frontend only, the owner pick (⚑) and what is open.', [W('NOPH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
