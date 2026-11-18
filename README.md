@@ -40,22 +40,20 @@ See `documentation/architecture/PRODUCTION.md` for the production Cloudflare dep
 
 ## Claude Code setup
 
-Claude Code in this repo authenticates with an Anthropic API key
-(`ANTHROPIC_API_KEY`) — **not** the Claude.ai subscription, which is
-disabled at the org level for this account.
+Claude Code bills Anthropic API credits — **not** the Claude.ai
+subscription, which is disabled at the org level for this account.
 
-- **Replit**: add `ANTHROPIC_API_KEY` to Replit Secrets (lock icon →
-  New secret).
-- **GitHub Actions**: add `ANTHROPIC_API_KEY` under
-  **Settings → Secrets and variables → Actions → New repository secret**.
-- **Workflow**: `.github/workflows/claude-code.yml` runs on `@claude`
-  mentions in issues / PRs and on manual dispatch. It hard-fails with a
-  readable message if the secret is missing.
-- **Verify locally**: `bash scripts/check-anthropic-key.sh` (or
-  `npm run claude:check`).
-
-Full walkthrough + auth-error troubleshooting:
-[`docs/claude-code-setup.md`](./docs/claude-code-setup.md).
+- **Replit / local shell**: add `ANTHROPIC_API_KEY` to Replit Secrets
+  (lock icon → New secret), or export it. Verify with
+  `bash scripts/check-anthropic-key.sh` (or `npm run claude:check`).
+- **GitHub Actions**: `.github/workflows/claude-code.yml` runs on `@claude`
+  mentions from owners, members and collaborators, and on manual dispatch.
+  It stores no key: it exchanges the job's GitHub OIDC token for a
+  short-lived Anthropic token through workload identity federation
+  (D5530). Set the repository variables `CLAUDE_CODE_FEDERATION_RULE_ID`
+  and `CLAUDE_CODE_ORGANIZATION_ID` (setup:
+  `documentation/operations/CLAUDE_REVIEW.md` §4b). Its first step fails
+  with a readable message if they are missing.
 
 ## License
 

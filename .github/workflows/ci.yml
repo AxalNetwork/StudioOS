@@ -10,9 +10,17 @@ on:
   # branch through this event, and waits for main's required checks there.
   # Four of them are this file's: `frontend (build)`, `worker (typecheck)`,
   # `test:drift (full suite)` and `api ↔ worker drift`. They run on every
-  # entry. The other jobs here are not required, already ran on the pull
-  # request, and would only hold runners the queue needs, so each is skipped
-  # under `merge_group` (`if: github.event_name != 'merge_group'`).
+  # entry, with `plan` and `suite`, which the full-suite check needs. Three
+  # jobs that are not required also run in the queue: `ci / fast` and
+  # `landing gate` (D5606's shadow checks) and `test deps` (D5608, which
+  # records the traces `plan` reads). In the queue, fast runs only the checks
+  # it alone makes, the migration and drift checkers loaded from the trusted
+  # base; its gitleaks, typecheck and build steps are skipped there because
+  # the required `scan`, `worker (typecheck)` and `frontend (build)` run the
+  # same commands on the same candidate (D7108). Every other job here is not
+  # required, already ran on the pull request, and would only hold runners
+  # the queue needs, so each is skipped under `merge_group`
+  # (`if: github.event_name != 'merge_group'`).
   # frontend/test/merge_queue_ci_4107.test.mjs keeps both lists honest.
   merge_group:
     types: [checks_requested]
@@ -223,11 +231,16 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: suite-plan
-      # The suite imports React deck templates and the worker's TypeScript, so
-      # it needs both workspaces' dependencies installed.
+      # Every part installs the worker's and the root dependencies. Only the
+      # frontend-* parts and rest install frontend's: they import React deck
+      # templates through the vite loader and run the root SPA build, which
+      # needs vite. The worker-* parts run test:worker alone, which reads
+      # neither frontend/node_modules nor docs/ (D7108,
+      # frontend/test/ci_worker_parts_7108.test.mjs).
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci
+        if: ${{ !startsWith(matrix.part, 'worker') }}
       - name: Install worker deps
         working-directory: cloudflare-worker
         run: npm ci
@@ -242,9 +255,11 @@ jobs:
         run: bash scripts/ci/install-age-linux.sh
       # docs/ is not committed (D529), and part of the suite reads the built
       # SPA (check-docs-assets-closure, the tests that open docs/), so build
-      # it first — the same root build the deploy runs.
+      # it first — the same root build the deploy runs. Those tests are all in
+      # test:frontend and rest; the worker-* parts read no docs/ (D7108).
       - name: Build the SPA
         run: npm run build
+        if: ${{ !startsWith(matrix.part, 'worker') }}
       - name: Check merge queue ref still exists
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
@@ -344,7 +359,7 @@ jobs:
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
         id: install_scanner
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: Determine scan range
         id: range
         run: |
@@ -382,7 +397,7 @@ jobs:
             --no-banner \
             --exit-code=1
         id: scan
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: Load static checkers from the trusted base
         shell: bash
         env:
@@ -440,20 +455,20 @@ jobs:
       - run: npm ci
         working-directory: cloudflare-worker
         id: worker_install
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: TypeScript check
         run: npx --no-install tsc --noEmit
         working-directory: cloudflare-worker
         id: worker_typecheck
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - run: npm ci
         working-directory: frontend
         id: frontend_install
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - run: npm run build
         working-directory: frontend
         id: frontend_build
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: npm audit (prod deps, critical fail)
         run: node ../scripts/npm-audit-gate.mjs --level=critical
         id: frontend_audit
@@ -537,10 +552,18 @@ jobs:
           ROUTING_UPLOAD: ${{ steps.routing_upload.outcome }}
         run: |
           required=pass
-          for outcome in "$CHECKOUT" "$NODE" "$INSTALL_SCANNER" "$RANGE" "$SCAN" "$TRUSTED" \
-                         "$MIGRATIONS" "$DRIFT" "$WORKER_INSTALL" "$WORKER_TYPECHECK" \
-                         "$FRONTEND_INSTALL" "$FRONTEND_BUILD"; do
+          # Run on every event, so each must succeed.
+          for outcome in "$CHECKOUT" "$NODE" "$RANGE" "$TRUSTED" "$MIGRATIONS" "$DRIFT"; do
             if [[ "$outcome" != success ]]; then required=fail; fi
+          done
+          # D7108: skipped in the merge queue only, where the required `scan`,
+          # `worker (typecheck)` and `frontend (build)` jobs run the same
+          # commands on the same candidate. Skipped anywhere else is a fail.
+          for outcome in "$INSTALL_SCANNER" "$SCAN" "$WORKER_INSTALL" "$WORKER_TYPECHECK" \
+                         "$FRONTEND_INSTALL" "$FRONTEND_BUILD"; do
+            if [[ "$outcome" == success ]]; then continue; fi
+            if [[ "$EVENT" == merge_group && "$outcome" == skipped ]]; then continue; fi
+            required=fail
           done
           advisory=pass
           if [[ "$EVENT" == pull_request && ( "$LFS_BASE" != success || "$LFS" != success ) ]]; then
