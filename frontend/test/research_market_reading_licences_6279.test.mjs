@@ -46,7 +46,21 @@ function page({ role, item = reading(), attachments = [], proposals = [] }) {
 const words = (html) => renderedText(html.replace(/></g, '> <')).replace(/\s+/g, ' ').trim();
 const PARTNER_ONLY = /partner profile|quote/i;
 
-for (const role of ['investor', 'founder']) {
+// D7174: an investor reads no pricing readings (D6273 Q2, RS-17; D7039 RMP-11,
+// the owner's answer A). Whatever the payload holds, the page says the reading
+// is not on their list and draws no figure, tile or form.
+test('investor: the reading page draws no reading, only "not on your list"', () => {
+  for (const days of [24, 130]) {
+    const html = page({ role: 'investor', item: reading({ ran_at: ago(days) }), proposals: QUOTES });
+    const text = words(html);
+    assert.match(text, /This reading is not on your list\. Readings are private to whoever recorded them\./);
+    assert.doesNotMatch(text, /\$38,000|Comparable range|Record this reading|Design system build|Draft, not saved/);
+    assert.ok(!html.includes('data-testid="market-reading-tiles"'));
+    assert.ok(!html.includes('<input'), 'an investor is offered a form');
+  }
+});
+
+for (const role of ['founder']) {
   test(`${role}: no proposal card, tile or pill, and one line says what a reading is`, () => {
     for (const days of [24, 42, 130]) {
       const html = page({ role, item: reading({ ran_at: ago(days) }) });
