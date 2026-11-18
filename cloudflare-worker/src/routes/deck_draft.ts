@@ -38,6 +38,19 @@ const UID = /^[A-Za-z0-9_-]{1,40}$/;
 /** As many cards as a deck may hold (`sanitizeSlides`). */
 export const DRAFT_MAX_CARDS = 60;
 
+/**
+ * D6045: whether a deck has unsaved edits (any working-copy card or deck-level
+ * state). Yes or no only, never a card: the Raise Overview's Pitch state
+ * (`services/raiseJourney.ts`) asks this so nothing outside these routes names
+ * the working copy's tables.
+ */
+export async function hasWorkingCopy(db: D1Database, deckId: number): Promise<boolean> {
+  const r = await db.prepare(
+    'SELECT (SELECT COUNT(*) FROM pitch_deck_cards WHERE deck_id = ?1) + (SELECT COUNT(*) FROM pitch_deck_draft_doc WHERE deck_id = ?1) AS n',
+  ).bind(deckId).first<{ n: number }>();
+  return Number(r?.n ?? 0) > 0;
+}
+
 type CardRow = { card_uid: string; ord: number; json: string; rev: number; updated_at: string };
 const cardOf = (r: CardRow) => {
   let card: unknown = null;
