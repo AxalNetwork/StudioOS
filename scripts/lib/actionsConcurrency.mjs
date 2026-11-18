@@ -296,7 +296,7 @@ export function report({ result, coverage, phantom }) {
     : `Phantom runs: ${phantom.runs} runs still queued and created before ${iso(coverage.phantomBefore ?? coverage.listedFrom)}; ${phantom.checked} job lists read, ${phantom.jobs} jobs, ${phantom.held} with a runner. `
       + (phantom.heldSlot ? '**They did hold slots.**' : '**They never held a slot**' + (phantom.jobs ? ' (their jobs never got a runner).' : ' (they have no jobs at all).'))
       + (phantom.checked < phantom.runs ? ` ${phantom.runs - phantom.checked} were not read (request cap).` : '');
-  const rows = list => list.map(x => `| ${x.name.replace(/\|/g, '\\|')} | ${x.minutes.toFixed(0)} | ${pct(x.share)} |`);
+  const rows = list => list.map(x => `| ${x.name.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${x.minutes.toFixed(0)} | ${pct(x.share)} |`);
   return [
     '## Effective Actions concurrency (#6462)', '',
     `Window measured: ${iso(coverage.from)} to ${iso(coverage.to)} (${(r.minutes / 60).toFixed(1)} h of the ${coverage.requestedHours} h asked; ${pct(coverage.fraction)}). `
