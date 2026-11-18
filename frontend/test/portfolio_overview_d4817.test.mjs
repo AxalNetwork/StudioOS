@@ -165,7 +165,8 @@ test('1. populated: performance with basis and as-of, evidence-backed attention,
     assert.doesNotMatch(view.text('attention-2'), /Health turned to Attention/, 'one snapshot proves no status change');
     assert.match(view.text('attention-3'), /Kite SystemsNot recordedHealthNo health snapshot is recorded for this company\..*MarkNo mark recorded · carried at cost \$1,000,000/);
     // Summaries.
-    assert.match(view.text('portfolio-reporting-figures'), /^Received2 of 3Not received1Period2026-Q3Complete$/);
+    // D6204: this fixture's reporting read carries no due dates, so Overdue is Not recorded, never 0.
+    assert.match(view.text('portfolio-reporting-figures'), /^Received2 of 3Not received1OverdueNot recordedNo due dates in the reporting readPeriod2026-Q3Complete$/);
     assert.match(view.text('portfolio-support-figures'), /^Open commitments5.*Delivered7.*Introductions made3.*Meetings resulting2.*No support recorded12 of 3 companies supported$/);
     // The table: sorted by health, the name is the link, an unmarked position says so.
     const table = all.slice(all.indexOf('Portfolio companies'));
