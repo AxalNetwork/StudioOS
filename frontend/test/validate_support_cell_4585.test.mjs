@@ -26,7 +26,9 @@ test('nothing at all is null (Not recorded), never "0"', () => {
   assert.equal(supportCell({ evidence: null, linked_evidence: { signal: null } }), null);
 });
 
-test('the experiments row uses it', () => {
+test('the experiments row draws relationships and distinct sources apart (D6016)', () => {
   const row = RECORDS.experiments.row({ id: 1, hypothesis: 'H1 · x', status: 'testing', evidence: 1, strength: null, linked_evidence: { metric: 1 } });
-  assert.equal(row.cells.evidence, '1 interview · 1 other linked, not in status');
+  // D6016 (#6016, V7): the list draws relationships and distinct sources as two cells; supportCell stays the record's.
+  assert.equal(row.cells.relationships, '1 interview link');
+  assert.equal(row.cells.sources, '1 metric');
 });

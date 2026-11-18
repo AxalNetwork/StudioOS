@@ -21,6 +21,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 
 import deals from '../src/routes/deals.ts';
@@ -116,6 +117,7 @@ function freshDb() {
       period_end TEXT, stripe_customer_id TEXT
     );
   `);
+  db.exec(readFileSync(new URL('../sql/migrations/202611161505_6195_commitment_route_preference.sql', import.meta.url), 'utf8')); // D6195: commitments.route_preference
   const u = db.prepare('INSERT INTO users (id, role, founder_id, investor_tier) VALUES (?, ?, ?, ?)');
   u.run(INVESTOR, 'investor', null, 'institutional');
   u.run(FOUNDER.user, 'founder', FOUNDER.founder_id, null);
