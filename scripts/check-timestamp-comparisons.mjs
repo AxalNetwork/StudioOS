@@ -68,7 +68,10 @@ const problems = [];
 // comparison: the scheduled-post sweep reads Telegram and X rows due by the
 // tick's minute. The column has held ISO strings, SQL strings and strings
 // with an offset, so it is exactly the column this guard exists for.
-const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at|occurred_at|attempted_at|scheduled_for)';
+// `invited_at` joined with D6052, in the commit that creates
+// `raise_prospect_invites.invited_at`: a prospect waits a day between sent
+// invitations, compared against a bound clock.
+const TTL_COLUMN = '(?:expires_at|valid_until|confirm_expires_at|starts_at|start_at|respond_by|due_at|occurred_at|attempted_at|invited_at|scheduled_for)';
 // D250 — A COLUMN COMPARED AGAINST A BOUND CLOCK. The sweep binds its clock as
 // `?`, so the clock-literal pattern below could never see a bare comparison
 // of `scheduled_for`. For the columns listed here the guard also refuses a

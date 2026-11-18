@@ -294,6 +294,24 @@ export function whatChanged(reports, periods = []) {
   return out;
 }
 
+/**
+ * D6222 (#6222): the two reports What changed compared, as a saved note's
+ * source, or null when fewer than two reports arrived (a note saved then
+ * carries no source). Same order as `whatChanged`: the earlier, then the last.
+ */
+export function whatChangedSource(reports) {
+  const list = (Array.isArray(reports) ? reports : []).slice().sort((a, b) => String(a?.period?.start).localeCompare(String(b?.period?.start)));
+  if (list.length < 2) return null;
+  const [prev, last] = list.slice(-2);
+  if (!prev?.uid || !last?.uid) return null;
+  return { source: 'what_changed', from_report_uid: String(prev.uid), to_report_uid: String(last.uid) };
+}
+
+/** D6222: What changed as the text of a note, one line per change, each with its source and periods. */
+export function whatChangedText(changes) {
+  return (Array.isArray(changes) ? changes : []).map((c) => (c.sub ? `${c.text} (${c.sub})` : c.text)).join('\n');
+}
+
 // ───────────────────────────────────────────────────────────── RPT10r: the Reports timeline
 
 /** Each period, newest first, with its words and what the investor can do: read, ask, or waive. */

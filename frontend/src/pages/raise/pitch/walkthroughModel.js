@@ -170,3 +170,23 @@ export function linkName(row) {
   const label = row?.investor?.label;
   return String(fund || label || 'this investor').trim();
 }
+
+/** D6061 (#6061, PS-07): Share's Walkthrough row, before the link exists. */
+export const WALK_NONE = 'Not recorded yet. Record it in Present, then attach it here.';
+export const WALK_ATTACHED = 'Walkthrough attached to this link.';
+export const WALK_NOT_ATTACHED = 'The link was made, but the walkthrough was not attached. Attach it from Investor links.';
+
+/**
+ * The walkthrough read (`deckV2Adapter.walkthrough`) as Share's row, read honestly: still reading; could not be
+ * read; HQ's `deck:walkthrough` switch off (the route's 404, in the adapter's own words — never "Coming later"
+ * once the feature exists); on with nothing recorded; or on with `recorded` cards to attach to the new link.
+ */
+export function walkthroughOption(answer) {
+  if (!answer) return { kind: 'reading', line: READING, recorded: null };
+  if (answer.available !== true) {
+    return answer.unreadable ? { kind: 'unreadable', line: UNREADABLE, recorded: null } : { kind: 'off', line: answer.reason || 'Not switched on yet.', recorded: null };
+  }
+  const n = walkthroughOf(answer.value).recorded;
+  if (!n) return { kind: 'none', line: WALK_NONE, recorded: 0 };
+  return { kind: 'ready', line: `Attach your recorded pitch · ${n} ${n === 1 ? 'slide' : 'slides'}`, recorded: n };
+}

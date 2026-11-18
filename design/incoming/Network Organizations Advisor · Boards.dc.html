@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Organizations Advisor · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · #7053 · advisor addendum to #4799 Network workspace and #6256 (NW4, NW4.1)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Organizations for advisors — who you know at each company, from accepted relationships</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Network → Organizations (/network/organizations) for advisors. It answers “Who do I know at this company, and how do I know they belong here?” from one read that exists on main: the advisor’s accepted relationships, each with the company linked on the other person’s own account. A company lists the people you know there, their relationship types and the latest recorded interaction, and every row says “Linked on their account”. Known people counts distinct accounts, so two people named [Jules Avery] count as two. Pending requests, public company profiles, email domains and companies typed on referrals never add anything, and nothing here is referral credit. It reuses the investor addendum’s shell, header, tables, Sheet and state words (#6256), with the advisor sidebar, three Network zones and emerald accent. Boards continue NW4 and NW4.1 with an -A suffix; keys carry the NOA prefix. Violet dashed ◇ tags mark backend work; amber ⚑ tags mark an owner pick drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main c59a9f2f66 · [Ada Okafor], [Okafor Advisory] and every person, company and figure (12 accepted relationships, 7 companies, 10 people linked, 2 without a company) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Organizations Advisor Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW4-A', 'Organizations directory · advisor', 'Search, sort, and a table of companies from accepted relationships: the people you know (a repeated name carries the role), known people as distinct accounts, relationship types, the latest recorded interaction and the source “Linked on their account”. People without a linked company sit in their own group with a link to their relationship record. Affiliation is kept apart from referral credit. ⚑ Q1: one company per person.', [F('NOA4', false, 1180)]],
+      ['NW4.1-A', 'Company detail and Person Sheet', '[Quill Analytics]: the two [Jules Avery]s as two rows told apart by role and type, why each person is here, and what is left out. A name opens the Person Sheet (company and source, last recorded interaction, type, role); Open relationship record goes to that card in the Relationship book with a way back.', [F('NOA4_1', 'Company', 900), F('NOA4_1S', 'Person Sheet open', 900), F('NOA4_1R', 'Relationship record, opened from the company', 900)]],
+      ['NW4.2-A', 'Back to the directory', '‹ Back restores the search “quill”, the sort, scroll position and focus on the company row, and announces it.', [F('NOA4_2', false, 900)]],
+      ['NW5-A', 'States', 'No accepted relationships (View relationships), companies unreadable with the relationship book still reachable and no total shown, and the relationship read failed with Try again. Then loading, accepted with none linked, no matches, and two linked profiles with one name (◇ #7054).', [F('NOA5_1', 'None', 700), F('NOA5_2', 'Companies could not be read', 1040), F('NOA5_3', 'Relationships could not be read', 620), C('NOA5', 'More states', 1400, 640)]],
+      ['NW8-A', 'Phone 390', 'Directory as labelled cards, the company, the Person Sheet full height, the return with search kept, companies unreadable and None. 44px targets, sticky primary.', [C('NOA8A', 'Directory', 390, 1500), P('NOA8B', 'Company'), P('NOA8C', 'Person Sheet'), P('NOA8D', 'Back, search kept'), P('NOA8E', 'Companies could not be read'), P('NOA8F', 'None')]],
+      ['NW9-A', 'Tablet 768', 'The directory in one column: company with its people underneath, known people and latest interaction; people without a company below.', [C('NOA9', false, 768, 1024)]],
+      ['NW10-A', 'Dark', 'The directory and the Person Sheet over the company on the dark tokens; states keep their words and shapes.', [F('NOA10', 'Directory · dark', 1180), F('NOA10B', 'Person Sheet · dark', 900)]],
+      ['Prototype', 'Task flow and keyboard', 'Find a company, open a person, open the record, come back: the frame order, keyboard order, focus return, visible focus and announcements.', [W('NOA11')]],
+      ['Handoff', 'Handoff', 'What was checked on main, the data source and what each count means, backend required (◇), the owner pick (⚑), frontend-only work, what is kept out and what is open.', [W('NOAH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

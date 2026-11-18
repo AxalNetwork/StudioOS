@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundCallsApi } from '../../lib/api/roundCalls';
+import { prospectInvitesApi } from '../../lib/api/prospectInvites';
 import { reportError } from '../../lib/log';
 import { callHref } from '../raise/calls/callsModel';
 import Lightbox from '../../ui/Lightbox';
@@ -182,6 +183,8 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[outcome,setOutcome]=useState(null),[note,setNote]=useState(null);
   const [dismissed,setDismissed]=useState(false),[acks,setAcks]=useState([]),[cleared,setCleared]=useState(false),[savedDraft,setSavedDraft]=useState(false);
   const [wording,setWording]=useState(null);
+  // D6052 (#6052): each prospect's invitation state, read on the audience step, and the open invite form.
+  const [invites,setInvites]=useState(null),[inviteRun,setInviteRun]=useState(0),[inviting,setInviting]=useState(null);
   const termsInput=useRef(null);
   const saved=useRef(null),touched=useRef(false),[matchRun,setMatchRun]=useState(0);
   useEffect(()=>{
@@ -205,6 +208,24 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
       e=>{reportError('round-calls:matches',e);if(alive)setMatches({error:e});});
     return()=>{alive=false;};
   },[step,uid,chosen,matchRun]);
+  useEffect(()=>{
+    if(step!==2)return;
+    let alive=true;setInvites({loading:true});
+    prospectInvitesApi.states(projectId).then(
+      data=>{if(alive)setInvites({data});},
+      e=>{reportError('round-calls:invites',e);if(alive)setInvites({error:e});});
+    return()=>{alive=false;};
+  },[step,projectId,inviteRun]);
+  async function sendInvite(){
+    const form=inviting;if(!form||form.busy)return;
+    setInviting({...form,busy:true,error:''});
+    try{
+      const result=await prospectInvitesApi.send({projectId,prospectId:form.prospectId,email:form.email.trim()});
+      if(!result?.email_sent||!result.invite?.invited_at){setInviting({...form,busy:false,error:INVITE_NOT_SENT});return;}
+      setInvites(current=>current?.data?{data:invitedLocally(current.data,form.prospectId,result.invite.invited_at)}:current);
+      setInviting(null);
+    }catch(e){reportError('round-calls:invite',e);setInviting({...form,busy:false,error:e.status>=500||!e.status?INVITE_NOT_SENT:e.message||INVITE_NOT_SENT});}
+  }
   function change(key,value){
     if(fields[key]!==value&&(['amount','instrument','minimum','target'].includes(key)||(TERM_KEYS[fields.instrument]||[]).includes(key)))setWording(null);
     setFields(current=>{
@@ -265,11 +286,13 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     draftTerms, termsInput, acceptTerms:(text, edit)=>{setFields(f=>acceptPlainTerms(f,text));if(edit)termsInput.current?.focus?.();},dismissTerms:()=>setDismissed(true),
     ack:key=>setAcks(list=>list.includes(key)?list.filter(k=>k!==key):[...list,key]),back:()=>setStep(n=>Math.max(0,n-1)),goto:n=>setStep(n),edit:setEditing,choosing:()=>setChoosing(v=>!v),
     recheck:()=>run(async()=>setPage(await roundCallsApi.page(uid))),
+    retryInvites:()=>setInviteRun(n=>n+1),inviteOpen:id=>setInviting({prospectId:id,email:'',busy:false,error:''}),
+    inviteEmail:value=>setInviting(form=>form&&{...form,email:value}),inviteCancel:()=>setInviting(null),inviteSend:sendInvite,
     requestCounsel:()=>run(async()=>{await roundCallsApi.requestCounsel(uid,page.call.revision);setCleared(false);setPage(await roundCallsApi.page(uid));}),retryMatches:()=>setMatchRun(n=>n+1),
     includeMatches:value=>{touched.current=true;setIncludeMatches(value);},
     choose:id=>{touched.current=true;setChosen(values=>values.includes(id)?values.filter(value=>value!==id):[...values,id]);}};
   const ready=context.data&&resume.data;
-  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft,wording:wording?.uid===uid&&wording?.projectId===projectId?wording:null}} on={on} onClose={onClose}/>;
+  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,invites,inviting,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft,wording:wording?.uid===uid&&wording?.projectId===projectId?wording:null}} on={on} onClose={onClose}/>;
   return <ActionSheet {...CALL_SHEET} onClose={onClose}><CallReadState read={context}><CallReadState read={resume}>{ready&&<OpenCallNotice call={resume.data.open}/>}</CallReadState></CallReadState></ActionSheet>;
 }
 
@@ -398,12 +421,17 @@ function AudienceStep({s,on}) {
     <ul className="divide-y divide-axal-hairline border-y border-axal-hairline" aria-label="Your pipeline">
       {s.context.chosen.map(p=><li key={p.prospect_id} className="flex items-center gap-3 py-2"><input type="checkbox" aria-label={'Choose '+(p.name||'this investor')} checked={s.chosen.includes(p.prospect_id)} onChange={()=>on.choose(p.prospect_id)}/>
         <span className="min-w-0 flex-1 font-semibold">{p.name||'Name not recorded'}</span><span className={chip}>Verified on Axal</span></li>)}
-      {others.map(p=><li key={'n'+p.prospect_id} className="flex items-center gap-3 py-2 text-axal-muted" data-testid="call-not-on-axal"><input type="checkbox" disabled aria-label={(p.name||'This investor')+' is not on Axal'} checked={false} readOnly/>
-        <span className="min-w-0 flex-1">{p.name||'Name not recorded'}</span><span className={chip}>Not on Axal</span>
-        <button type="button" className={callButton} disabled title={INVITE_WAIT}>Invite to Axal</button></li>)}
+      {others.map(p=>{const row=inviteRow(s.invites,p.prospect_id),open=s.inviting?.prospectId===p.prospect_id;
+        return <li key={'n'+p.prospect_id} className="py-2 text-axal-muted" data-testid="call-not-on-axal"><div className="flex flex-wrap items-center gap-3"><input type="checkbox" disabled aria-label={(p.name||'This investor')+' is not on Axal'} checked={false} readOnly/>
+          <span className="min-w-0 flex-1">{p.name||'Name not recorded'}</span>
+          {row.kind==='joined'?<span className={chip}>Joined · not verified yet</span>
+            :row.kind==='invited'?<span className={chip}>Invited · {shortDate(row.date)||'date not recorded'}</span>
+            :<><span className={chip}>Not on Axal</span><button type="button" className={callButton} disabled={row.kind!=='open'||open} title={row.reason||undefined} onClick={()=>on.inviteOpen(p.prospect_id)}>Invite to Axal</button></>}</div>
+          {open&&<InviteForm s={s} on={on} name={p.name} hasEmail={row.hasEmail}/>}</li>;})}
       {!s.context.chosen.length&&!others.length&&<li className="py-2">No investor from this venture’s pipeline is available.</li>}
     </ul>
-    {others.length>0&&<p className="text-xs text-axal-muted">Invite to Axal: {INVITE_WAIT}</p>}
+    {others.length>0&&(s.invites?.error?<p role="alert" className="text-xs">Invitations are unreadable · <button type="button" className={callButton} onClick={on.retryInvites}>Try again</button></p>
+      :<p className="text-xs text-axal-muted">{s.invites?.data&&!s.invites.data.can_invite?'Invite to Axal: '+(s.invites.data.reason||INVITE_ROLE_FALLBACK):INVITE_NOTE}</p>)}
     <div className={card} aria-live="polite">
       {!m||m.loading?<p role="status">Checking matches…</p>
         :m.error?<p role="alert">Matches are unreadable · <button type="button" className={callButton} onClick={on.retryMatches}>Try again</button></p>
@@ -415,7 +443,42 @@ function AudienceStep({s,on}) {
     </div>
   </>;
 }
-export const INVITE_WAIT='not offered here yet. Axal has no route that invites a pipeline investor; they can sign up and verify, then be chosen.';
+/**
+ * D6052 (#6052): Invite to Axal, through Contacts' one invite path. An invited investor is chosen only once
+ * their investor account is verified; inviting adds nobody to the audience.
+ */
+export const INVITE_NOTE='Invite to Axal emails them an invitation from you. They can be chosen once their investor account is verified.';
+export const INVITE_ROLE_FALLBACK='Only the venture’s founder can invite an investor to Axal.';
+export const INVITE_NOT_SENT='The invitation was not sent. Try again.';
+/** One not-on-Axal row's invite state, from the invitations read: joined, invited, open, or why not. */
+export function inviteRow(invites,prospectId) {
+  if(!invites||invites.loading)return {kind:'loading',reason:'Checking invitations…',hasEmail:false};
+  if(invites.error||!invites.data)return {kind:'unreadable',reason:'Invitations are unreadable.',hasEmail:false};
+  const item=(invites.data.items||[]).find(i=>i.prospect_id===prospectId);
+  const hasEmail=!!item?.has_email;
+  if(item?.joined_at)return {kind:'joined',date:item.joined_at,hasEmail};
+  if(item?.invited_at)return {kind:'invited',date:item.invited_at,hasEmail};
+  if(!invites.data.can_invite)return {kind:'refused',reason:invites.data.reason||INVITE_ROLE_FALLBACK,hasEmail};
+  return {kind:'open',reason:null,hasEmail};
+}
+/** The read after a sent invitation: that prospect Invited at the Worker's date, and holding an address. */
+export function invitedLocally(data,prospectId,invitedAt) {
+  const items=data.items||[];
+  const known=items.some(i=>i.prospect_id===prospectId);
+  return {...data,items:known?items.map(i=>i.prospect_id===prospectId?{...i,invited_at:invitedAt,has_email:true}:i)
+    :[...items,{prospect_id:prospectId,has_email:true,invited_at:invitedAt,joined_at:null}]};
+}
+function InviteForm({s,on,name,hasEmail}) {
+  const form=s.inviting,id='call-invite-email';
+  return <div className="mt-2 space-y-2 rounded-xl border border-axal-hairline p-3 text-axal-ink dark:text-gray-100" data-testid="call-invite-form">
+    {hasEmail?<p className="text-sm">Axal emails {name||'this investor'} at the address in your pipeline.</p>
+      :<div className="space-y-1"><label htmlFor={id} className="block text-xs font-semibold">Email for {name||'this investor'}</label>
+        <input id={id} type="email" className={callInput} value={form.email} maxLength={320} onChange={e=>on.inviteEmail(e.target.value)}/></div>}
+    {form.error&&<p role="alert" className="text-sm">{form.error}</p>}
+    <div className="flex flex-wrap gap-2"><button type="button" className={primary} disabled={form.busy||(!hasEmail&&!form.email.trim())} onClick={on.inviteSend}>{form.busy?'Sending…':'Send invitation'}</button>
+      <button type="button" className={ghost} disabled={form.busy} onClick={on.inviteCancel}>Cancel</button></div>
+  </div>;
+}
 
 /** The four counsel states the preview draws, and the button each shows. */
 export function counselState(page,cleared=false) {
