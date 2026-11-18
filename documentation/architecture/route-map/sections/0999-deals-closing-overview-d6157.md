@@ -1,0 +1,4 @@
+### Deals › Closing: the per-deal rows in one read (D6157, #6157)
+
+- **`deal_closing_overview.ts`** (self-mounting, ahead of `deals.ts`): `GET /api/deals/closing-overview` returns the funded deals the caller may read, each with `checklist` (done of counted), `envelopes` (executed of total, signatures outstanding), `conditions` (the open ones the caller may see; `held` when another firm's open condition holds it, with no number), `transfer` (recorded or not) and `closing` (the uid and status of the closing the caller reads, and the caller's own lines). A part that cannot be read is `{ state: 'unreadable', reason }`, never 0. Canvas: `Deals v2` DE08 A (D4815).
+- **Frontend:** `dealClosingOverviewApi.read()` (`lib/api/dealClosingOverview.js`); `ClosingZone.jsx` still joins its four lists until the #4815 rebuild switches `closingListModel.js` to it.
