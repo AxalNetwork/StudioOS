@@ -18,7 +18,7 @@
  *   saved    a saved version (`pitch_decks.is_current`) that `/deck-ready` still has rows against;
  *   reviewed a saved version `/deck-ready` passes;
  *   shared   a live investor link (not revoked, expired or used up) on any version.
- * `unsaved_changes` says whether a working copy (`pitch_deck_cards`, `pitch_deck_draft_doc`) or an
+ * `unsaved_changes` says whether a working copy (`hasWorkingCopy` in `routes/deck_draft.ts`) or an
  * unkept proposal sits beside a saved version; null when that could not be read.
  *
  * RA-02's investor activity reads three sources, each with its own freshness
@@ -33,6 +33,7 @@ import { deckReady } from './narrative/coach';
 import { deckShareMetrics } from './deckShareUse';
 import { roundCallsEnabled } from './roundCallPolicy';
 import { IN_CONVERSATION, LIST_STAGE_LABEL, raiseLinks, type Ctx } from './raiseCycle';
+import { hasWorkingCopy } from '../routes/deck_draft';
 
 export type Unreadable = { state: 'unreadable'; reason: string };
 
@@ -127,12 +128,7 @@ function sources(ctx: Ctx, deps: JourneyDeps) {
       // A link is live as the Pitch card's records say it (`pitchRecords`): not revoked, not expired, not used up.
       return (res.results || []).filter((t) => !t.revoked_at && !(String(t.expires_at) < now) && !deckShareMetrics(t).exhausted);
     }, 'links'),
-    workingCopy: (deckId: number) => got(async () => {
-      const r = await db.prepare(
-        `SELECT (SELECT COUNT(*) FROM pitch_deck_cards WHERE deck_id = ?) + (SELECT COUNT(*) FROM pitch_deck_draft_doc WHERE deck_id = ?) AS n`,
-      ).bind(deckId, deckId).first<{ n: number }>();
-      return Number(r?.n ?? 0) > 0;
-    }, 'working copy'),
+    workingCopy: (deckId: number) => got(() => hasWorkingCopy(db, deckId), 'working copy'),
   };
 }
 type Sources = ReturnType<typeof sources>;
