@@ -1,3 +1,4 @@
+import { liveFiles } from '../services/dataRoomTrash';
 import { heldLicences } from '../services/accountLicences';
 import { decodeCursor, encodeCursor, listLimit, trimPage } from '../util/keyset';
 /**
@@ -56,6 +57,9 @@ import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from 
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
+import { PORTFOLIO_NOTE_INSTRUCTION, portfolioNoteMaterial } from '../services/portfolioNotes';
+import { STATEMENT_COVER_INSTRUCTION, statementCoverMaterial, statementDate } from '../services/statementCoverNote';
+import positionsRoutes from './positions';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 // The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
 // below decides what is expiring, and it has to agree with what the zone shows
@@ -82,6 +86,7 @@ import { refuse } from '../util/refusal';
 // read their SQL from there.
 import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
+import { investorHasDealRelationship } from '../services/dealAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { ventureNdaStatus, type VentureNdaStatus } from '../services/dealAccess';
@@ -609,6 +614,8 @@ research.delete('/documents/:uid', async (c) => {
 interface AskSessionRow {
   id: number; uid: string; owner_user_id: number;
   last_asked_at: string | null; created_at: string;
+  /** D6272: set by Clear history, NULL again on Restore. Missing before the migration. */
+  cleared_at?: string | null;
 }
 
 interface AskAnswerRow {
@@ -694,7 +701,10 @@ async function scopeTotals(env: Env, userId: number, scope: string, sessionId: n
   } else if (scope === 'discarded') {
     row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1`).bind(userId).first<Row>();
   } else if (scope === 'all') {
-    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ?`).bind(userId).first<Row>();
+    // D6272: All is the history that is not cleared; Cleared is the rest.
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL)`).bind(userId, userId).first<Row>();
+  } else if (scope === 'cleared') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL)`).bind(userId, userId).first<Row>();
   } else if (sessionId != null) {
     row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ?`).bind(sessionId, userId).first<Row>();
   } else {
@@ -764,10 +774,12 @@ async function askSession(c: { env: Env }, userId: number, uid: string) {
 async function resolveAskSession(c: { env: Env }, userId: number, wanted: string) {
   if (wanted) {
     const named = await askSession(c, userId, wanted);
-    if (named) return named;
+    // D6272: a cleared thread is not appended to. A question sent from a
+    // session that was cleared in another tab starts in the newest open one.
+    if (named && !named.cleared_at) return named;
   }
   const latest = await c.env.DB.prepare(
-    `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+    `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
   ).bind(userId).first<AskSessionRow>();
   if (latest) return latest;
   const uid = newUid();
@@ -837,7 +849,7 @@ research.get('/ask/sessions', async (c) => {
     session = await askSession(c, user.id, wanted);
   } else {
     session = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+      `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
     ).bind(user.id).first<AskSessionRow>();
   }
 
@@ -876,7 +888,7 @@ research.get('/ask/sessions', async (c) => {
    * appears after submission" is then true of the first page by construction,
    * rather than true only while the history is short.
    */
-  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded'].includes(scope)) ? 'asc' : 'desc';
+  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded', 'cleared'].includes(scope)) ? 'asc' : 'desc';
   const limit = listLimit(c.req.query('limit'));
   // `decodeCursor` refuses a malformed cursor by THROWING a Response, which
   // `index.ts` turns into that response. This handler answers it itself rather
@@ -908,13 +920,23 @@ research.get('/ask/sessions', async (c) => {
         `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 AND id < ? ORDER BY id DESC LIMIT ?`
       ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (scope === 'all') {
+    // D6272: everything except the sessions Clear history hid.
     rows = from == null
       ? await c.env.DB.prepare(
-        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT ?`
-      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, limit + 1).all<AskAnswerRow>()
       : await c.env.DB.prepare(
-        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
-      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, from, limit + 1).all<AskAnswerRow>();
+  } else if (scope === 'cleared') {
+    // D6272: `Show cleared` — the answers of the sessions Clear history hid.
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (session) {
     rows = from == null
       ? await c.env.DB.prepare(
@@ -992,6 +1014,39 @@ research.patch('/ask/answers/:uid', async (c) => {
     'SELECT * FROM research_ask_answers WHERE uid = ? AND owner_user_id = ?'
   ).bind(uid, user.id).first<AskAnswerRow>();
   return c.json({ item: row ? answerDto(row) : null });
+});
+
+/**
+ * D6272 — CLEAR HISTORY HIDES; RESTORE BRINGS IT BACK.
+ *
+ * The owner's answer on #6274 (question 4, B). Clearing stamps `cleared_at` on
+ * every one of the caller's sessions not already cleared; nothing is deleted,
+ * so a cited answer stays traceable and `scope=cleared` reads the hidden
+ * history back. The next question starts a fresh thread, because every
+ * "latest session" read skips a cleared one. Saved and Archived are the
+ * reader's own dispositions and stay where they are.
+ *
+ * Owner-scoped like every write here: the statement names the caller, so no
+ * id from the request reaches it. The counts are the only thing logged.
+ */
+research.post('/ask/history/clear', async (c) => {
+  const user = await requireAuth(c);
+  const r = await c.env.DB.prepare(
+    `UPDATE research_ask_sessions SET cleared_at = datetime('now') WHERE owner_user_id = ? AND cleared_at IS NULL`
+  ).bind(user.id).run();
+  const cleared = Number(r?.meta?.changes ?? 0);
+  await logAdminAction(c.env, user.id, user.email, 'research_ask_history_cleared', { sessions: cleared });
+  return c.json({ cleared });
+});
+
+research.post('/ask/history/restore', async (c) => {
+  const user = await requireAuth(c);
+  const r = await c.env.DB.prepare(
+    `UPDATE research_ask_sessions SET cleared_at = NULL WHERE owner_user_id = ? AND cleared_at IS NOT NULL`
+  ).bind(user.id).run();
+  const restored = Number(r?.meta?.changes ?? 0);
+  await logAdminAction(c.env, user.id, user.email, 'research_ask_history_restored', { sessions: restored });
+  return c.json({ restored });
 });
 
 /**
@@ -1369,9 +1424,71 @@ async function founderProject(
   return ids.length === 1 ? ids[0] : null;
 }
 
+/**
+ * D6212 (#6212): the quarter-end material for the Portfolio notes, scoped as every
+ * read in `routes/positions.ts` is (the same `investorProjectIds` predicate the
+ * Positions draft uses). An empty accessible set is an empty draft, never an
+ * unscoped one: the CSV predicate reads NULL as "all rows".
+ */
+async function portfolioNoteGather(c: any, userId: number, quarters: number): Promise<string[]> {
+  const me = (await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+    .bind(userId).first()) as { id: number; role: string | null } | null;
+  const role = String(me?.role || '');
+  if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some((licence: string) => licence === 'partner' || licence === 'investor')) return [];
+  const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+  if (ids != null && ids.length === 0) return [];
+  const csv = ids == null ? null : ids.join(',');
+  // The same CSV predicate every positions read uses, written out in each query so no SQL is interpolated.
+  const [positions, distributions, marks] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.invested_amount, x.position_date, x.created_at, p.name AS project_name
+         FROM portfolio_positions x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all(),
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.amount, x.distribution_date, p.name AS project_name
+         FROM portfolio_distributions x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all().catch(() => ({ results: [] })),
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.as_of_date, x.fmv, x.basis, x.event, p.name AS project_name
+         FROM portfolio_marks x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all(),
+  ]);
+  return portfolioNoteMaterial({
+    positions: (positions.results || []) as any[],
+    distributions: (distributions.results || []) as any[],
+    marks: (marks.results || []) as any[],
+    today: todayIso(),
+    quarters,
+  });
+}
+
+/**
+ * D6888 (#6888): one of the statement sheet's own reads, called in-process with
+ * the caller's own headers, as `admin_insights_export.ts` calls its page's read:
+ * the same session, the same position scope (`positionScope`, the active
+ * company header included) and the same arithmetic, so the cover note's material
+ * can only carry what the statement prints. A refused or failed read is null.
+ */
+async function statementRead(c: any, path: string): Promise<any | null> {
+  let ctx: any;
+  try { ctx = c.executionCtx; } catch { /* no execution context outside a live request */ }
+  const res = await positionsRoutes.request(path, { headers: c.req.raw.headers }, c.env, ctx);
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
+}
+
 const DRAFT_SURFACES: Record<string, {
   instruction: string;
   gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
+  /**
+   * D6888: false for a surface whose canvas says nothing is kept. The run's text
+   * goes back to the member and is not stored: no `research_zone_drafts` row, so
+   * there is nothing to list, accept or discard on the Worker.
+   */
+  keep?: false;
   /**
    * What Accept writes BESIDES stamping the draft, for a surface whose canvas
    * says Accept writes somewhere ("Accept writes the note"). It runs before
@@ -1403,7 +1520,7 @@ const DRAFT_SURFACES: Record<string, {
             `SELECT id FROM research_ask_sessions WHERE uid = ? AND owner_user_id = ?`
           ).bind(scope, userId).first<{ id: number }>()
         : await c.env.DB.prepare(
-            `SELECT id FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+            `SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
           ).bind(userId).first<{ id: number }>();
       if (!session) return [];
       const rows = await c.env.DB.prepare(
@@ -1516,31 +1633,6 @@ const DRAFT_SURFACES: Record<string, {
         ...theirs,
         ...(ours.results || []).map((r) => `${r.section} (ours${r.open ? ', open' : ''}): ${r.body}`),
       ];
-    },
-  },
-
-  'research/market': {
-    // The artboard: "on six comparables — a thin base, which the reading states
-    // rather than smoothing", and "points to the two stale readings as the ones
-    // to re-run". Both halves are instructions, because a model summarising
-    // ranges will otherwise average them and drop the sample size.
-    instruction: [
-      'Summarise what these comparable readings say about the firm’s own service lines.',
-      'Carry each range’s comparable count and run date into any statement about it; never average ranges together.',
-      'Name the readings that are stale as the ones to re-run before a proposal cites them.',
-    ].join(' '),
-    gather: async (c, userId) => {
-      const rows = await c.env.DB.prepare(
-        `SELECT metric, range_low_cents, range_high_cents, comparable_count, ran_at, scope
-           FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 40`
-      ).bind(userId).all<{
-        metric: string; range_low_cents: number; range_high_cents: number;
-        comparable_count: number; ran_at: string; scope: string | null;
-      }>();
-      const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
-      return (rows.results || []).map((r) =>
-        `${r.metric}${r.scope ? ` (${r.scope})` : ''}: ${money(r.range_low_cents)} – ${money(r.range_high_cents)}`
-        + `, from ${r.comparable_count} comparable${r.comparable_count === 1 ? '' : 's'}, run ${r.ran_at}`);
     },
   },
 
@@ -1972,10 +2064,15 @@ const DRAFT_SURFACES: Record<string, {
       'Check the client’s stated budget against the firm’s stated floor and say plainly whether it clears it. Where either number is absent, say which is missing rather than estimating it.',
       'Never invent a capability, a rate or a timeline. A lead the firm’s rules exclude is not a lead to draft for — say so and stop.',
     ].join(' '),
-    gather: async (c, userId) => {
+    gather: async (c, userId, scope) => {
       const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
         .bind(userId).first<{ partner_id: number | null }>();
       if (!me?.partner_id) return [];
+      // D4838 part 10 (#5936): the opportunity sheet's Draft proposal names ONE lead by its need id
+      // as `scope`. A scope that was sent must resolve to one of this firm's open leads or draft
+      // nothing — never fall through to the whole list. No scope is the Leads page's band, as before.
+      const leadId = scope === '' ? 0 : Number(scope);
+      if (scope !== '' && !(Number.isInteger(leadId) && leadId > 0)) return [];
       // The open leads, plus the two things a shape recommendation needs: what
       // this firm sells and what it says it will not take.
       const [leads, offerings, rules] = await Promise.all([
@@ -1985,10 +2082,11 @@ const DRAFT_SURFACES: Record<string, {
              FROM founder_needs n
              LEFT JOIN founders f ON f.id = n.founder_id
             WHERE n.status = 'open'
+              AND (? = 0 OR n.id = ?)
               AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
             ORDER BY n.created_at DESC LIMIT 25`
-        ).bind(me.partner_id, me.partner_id).all<any>(),
+        ).bind(leadId, leadId, me.partner_id, me.partner_id).all<any>(),
         // THE SAME `service_offerings` MISTAKE THAT TOOK /pipeline/leads DOWN,
         // twice in one string. The table keys on `owner_user_id REFERENCES
         // users(id)` and has never had a `partner_id`, so `o.partner_id` was
@@ -2024,6 +2122,8 @@ const DRAFT_SURFACES: Record<string, {
         `FIRM BUDGET FLOOR: ${floor ? `$${Math.round(Number(floor.floor_cents) / 100).toLocaleString('en-US')}` : 'NOT STATED — do not estimate one'}`,
         `FIRM EXCLUSIONS: ${(rules.results || []).filter((r: any) => r.kind !== 'budget_floor' && r.kind !== 'best_fit').map((r: any) => r.value).join('; ') || 'none stated'}`,
       ];
+      // A named lead that is not one of this firm's open leads drafts nothing (409 nothing_to_draft).
+      if (leadId && !(leads.results || []).length) return [];
       return context.concat((leads.results || []).map((l: any) =>
         `LEAD — ${l.client || 'client not recorded'}: ${l.title}; `
         + `${l.description || 'no description given'}; `
@@ -2654,6 +2754,40 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  // D6212 (#6212): Performance's and the Overview's note on what moved. Both read
+  // the same quarter-end series `/api/positions/analytics?as_of=` computes, built in
+  // `services/portfolioNotes.ts`; Performance reads eight quarter-ends, the
+  // Overview the last two. A book with nothing recorded gathers [] and the route
+  // answers `nothing_to_draft` before any model is called.
+  'portfolio/performance': {
+    instruction: PORTFOLIO_NOTE_INSTRUCTION,
+    gather: async (c, userId) => portfolioNoteGather(c, userId, 8),
+  },
+  'portfolio/overview': {
+    instruction: PORTFOLIO_NOTE_INSTRUCTION,
+    gather: async (c, userId) => portfolioNoteGather(c, userId, 2),
+  },
+  // D6888 (#6888): Eadwyn's covering-note proposal in the statement sheet (D6217
+  // PF-13a, PF-13h). `scope_key` is the statement's quarter-end. The material is
+  // the sheet's own two reads for that date, page 1 (`/analytics?as_of=`) and
+  // page 2 (`/?as_of=`), formatted by `services/statementCoverNote.ts`. A date
+  // that is not a completed quarter-end, a failed read or a date with no book
+  // gathers [] and the route answers `nothing_to_draft` before any model call.
+  // Nothing is kept: the investor copies, edits or discards it in the sheet.
+  'portfolio/statement': {
+    instruction: STATEMENT_COVER_INSTRUCTION,
+    keep: false,
+    gather: async (c, _userId, scope) => {
+      const asOf = statementDate(scope, todayIso());
+      if (!asOf) return [];
+      const [analytics, positions] = await Promise.all([
+        statementRead(c, `/analytics?as_of=${asOf}`),
+        statementRead(c, `/?as_of=${asOf}`),
+      ]);
+      return statementCoverMaterial(asOf, analytics, positions);
+    },
+  },
+
   'portfolio/updates': {
     // IP2's band: "Proposal · parse N updates ... arriving as editable
     // proposals. Where a figure is ambiguous the extractor flags rather than
@@ -2802,13 +2936,14 @@ const DRAFT_SURFACES: Record<string, {
              FROM portfolio_support_entries s
              LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
             WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+              AND s.ask_uid IS NULL
             ORDER BY s.created_at DESC LIMIT 60`
         ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
         c.env.DB.prepare(
           `SELECT DISTINCT pp.project_id, pr.name AS project_name
              FROM portfolio_positions pp
              LEFT JOIN projects pr ON pr.id = pp.project_id AND pr.deleted_at IS NULL
-             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id
+             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id AND s.ask_uid IS NULL
             WHERE s.id IS NULL
               AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(pp.project_id AS TEXT) || ',') > 0)`
         ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
@@ -3299,13 +3434,13 @@ const DRAFT_SURFACES: Record<string, {
       if (pid == null) return [];
       const folders = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
-                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id) AS files
+                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id${await liveFiles(c.env.DB, 'x')}) AS files
            FROM data_room_folders f WHERE f.project_id = ? ORDER BY f.display_order, f.name LIMIT 60`
       ).bind(pid).all<{ name: string; visibility: string; files: number }>();
       const files = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
                 (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id AND l.action = 'download') AS viewers
-           FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name LIMIT 120`
+           FROM data_room_files f WHERE f.project_id = ?${await liveFiles(c.env.DB, 'f')} ORDER BY f.name LIMIT 120`
       ).bind(pid).all<{ name: string; visibility: string; viewers: number }>();
       const grants = await c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active' AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`
@@ -3719,6 +3854,10 @@ research.post('/drafts', async (c) => {
   if (!drafted) return c.json({ detail: 'draft_unavailable' }, 503);
   const text = spec.finish ? await spec.finish(c, user.id, scope, drafted) : drafted;
   if (!text) return c.json({ detail: 'draft_unfaithful' }, 503);
+  // D6888: a surface that keeps nothing hands the text back and writes no row.
+  if (spec.keep === false) {
+    return c.json({ item: { uid: null, surface, scope_key: scope || null, body: text, kept: false, accepted: false } });
+  }
 
   const uid = newUid();
   await c.env.DB.prepare(
@@ -4706,6 +4845,32 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
 // diligence information too." So the response returns both numbers and never
 // the ratio alone.
 
+/**
+ * D6266 (#6266): the deals on a room's company that this investor may open.
+ * `deals.project_id` and `data_room_grants.project_id` are the key between a
+ * room and a deal; which of those deals the caller may see is the deal page's
+ * own rule (`investorHasDealRelationship`: invited to it, or committed on it),
+ * reused rather than copied. A deal the caller cannot open is never named or
+ * counted. The stage is the deal's own `status`, the word the deal page shows.
+ */
+export const NO_ROOM_DEAL = 'No deal you are invited to is recorded for this company.';
+export const ROOM_DEAL_UNREADABLE = 'Unreadable: the deals on this company could not be read. That is not a claim that there are none.';
+/** `null` when the read failed: the room still opens, and says Unreadable rather than "no deal". */
+async function roomDeals(env: Env, userId: number, projectId: number) {
+  try { return await roomDealsOf(env, userId, projectId); } catch { return null; }
+}
+async function roomDealsOf(env: Env, userId: number, projectId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT d.id, d.status, p.name FROM deals d JOIN projects p ON p.id = d.project_id
+      WHERE d.project_id = ? ORDER BY d.created_at DESC, d.id DESC LIMIT 20`
+  ).bind(projectId).all<{ id: number; status: string; name: string | null }>();
+  const out: { id: number; stage: string; name: string | null }[] = [];
+  for (const r of rows.results || []) {
+    if (await investorHasDealRelationship(env, userId, Number(r.id))) out.push({ id: Number(r.id), stage: r.status, name: r.name ?? null });
+  }
+  return out;
+}
+
 /** #6267: `{ status: none | out_for_signature | on_file, valid_until }` — the deal page's NDA status, no NDA as `none`. */
 const NDA_NONE = { status: 'none', valid_until: null } as const;
 function ndaView(nda: VentureNdaStatus | null) {
@@ -4749,6 +4914,12 @@ research.get('/diligence', async (c) => {
     counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
+  const dealsByProject = new Map<number, Awaited<ReturnType<typeof roomDeals>>>();
+  for (const r of rows.results || []) {
+    const pid = Number(r.project_id);
+    if (!dealsByProject.has(pid)) dealsByProject.set(pid, await roomDeals(c.env, user.id, pid));
+  }
+
   // #6267: where each room's NDA stands (none, out for signature, on file until a date), from the
   // deal page's own status read (`ventureNdaStatus`), once per venture.
   const ndaStatusByProject = new Map<number, ReturnType<typeof ndaView>>();
@@ -4759,6 +4930,7 @@ research.get('/diligence', async (c) => {
 
   const items = (rows.results || []).map((r: any) => {
     const nda = ndaByProject.get(Number(r.project_id)) === true;
+    const deals = dealsByProject.get(Number(r.project_id)) ?? null;
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
     return {
       grant_uid: r.grant_uid,
@@ -4774,6 +4946,8 @@ research.get('/diligence', async (c) => {
       last_opened_at: r.last_opened_at ?? null,
       expires_at: r.expires_at ?? null,
       created_at: r.created_at,
+      deals,
+      ...(deals === null ? { deal_stage_note: ROOM_DEAL_UNREADABLE } : deals.length ? {} : { deal_stage_note: NO_ROOM_DEAL }),
     };
   });
 
@@ -4790,13 +4964,6 @@ research.get('/diligence', async (c) => {
     // Rooms where the founder staged less than everything they hold. Not a
     // complaint — it is the signal the zone exists to surface.
     partial_count: items.filter((r) => r.withheld_behind_nda > 0).length,
-    // Deal stage is on the canvas and is NOT joined here. A grant is between a
-    // founder and an investor; a deal is a separate record that may or may not
-    // exist for the same company, and joining them on a name rather than a key
-    // would attach a stage to the wrong room. Stated rather than guessed.
-    deal_stage: null,
-    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
-      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
   });
 });
 
@@ -4883,7 +5050,7 @@ async function roomMaterial(env: Env, userId: number, grantUid: string): Promise
   const pid = room.grant.project_id;
   const files = await env.DB.prepare(
     `SELECT name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`
+       FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)} ORDER BY name`
   ).bind(pid).all<any>();
   // D691 decision 6 — only what the tier and expiry admit is described, or
   // counted. D1103 — and only what the grant's folders hold.
@@ -4913,7 +5080,7 @@ research.get('/diligence/:grantUid', async (c) => {
 
   const tiered = await c.env.DB.prepare(
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`
+       FROM data_room_files WHERE project_id = ?${await liveFiles(c.env.DB)} ORDER BY name`
   ).bind(pid).all<any>();
   // D691 decision 6 — a file the tier or its expiry hides is neither listed nor
   // counted. D1103 — nor is one outside the grant's folders.
@@ -4978,6 +5145,7 @@ research.get('/diligence/:grantUid', async (c) => {
     };
   });
 
+  const roomDealRows = await roomDeals(c.env, user.id, pid);
   await logAccess(c.env, pid, user.id, 'open_room', null);
 
   return c.json({
@@ -4995,10 +5163,9 @@ research.get('/diligence/:grantUid', async (c) => {
     files: openFiles,
     activity: yourActivity,
     download_note: DOWNLOAD_NOTE,
-    // Same reason as the list: no key joins a grant to a deal.
-    deal_stage: null,
-    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
-      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+    // D6266: the room's company's deals this investor may open, as the list returns them.
+    deals: roomDealRows,
+    ...(roomDealRows === null ? { deal_stage_note: ROOM_DEAL_UNREADABLE } : roomDealRows.length ? {} : { deal_stage_note: NO_ROOM_DEAL }),
   });
 });
 
@@ -5010,7 +5177,7 @@ research.get('/diligence/:grantUid/files/:fileUid', async (c) => {
 
   const found = await c.env.DB.prepare(
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE uid = ? AND project_id = ?`
+       FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)}`
   ).bind(c.req.param('fileUid'), pid).first<any>();
   const roomRef = { grant_uid: room.grant.uid, project_name: room.project.name };
   // D691 decision 6 — a file the tier or its expiry hides reads as not in the room.

@@ -37,6 +37,7 @@ function built(): DatabaseSync {
   loadSchema(db, { below: 575 });
   db.exec(readFileSync(resolve(MIGRATIONS, '575_cap_table_access.sql'), 'utf8')); // whole: must apply cleanly
   db.exec(readFileSync(resolve(MIGRATIONS, '202611031740_cap_table_access_requests.sql'), 'utf8')); // D1130: the stored ask
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611152340_6086_grant_vesting.sql'), 'utf8')); // D6086: a grant's schedule, read with the record
   return db;
 }
 const BUILT = built();

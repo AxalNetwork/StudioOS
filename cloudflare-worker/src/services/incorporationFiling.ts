@@ -11,9 +11,12 @@
  *                     submitted to the state (YYYY-MM-DD; not in the future,
  *                     not before the order was paid).
  *
- * Each is one conditional UPDATE: the status it moves from is in the WHERE, so
- * two admins pressing at once, or a step pressed twice, change the row once and
- * the second call answers 409. Who recorded each step and when are stored on
+ * D6686 (#6686): each step is a transition of the order's formation case
+ * (`formationCase.ts`): ready_to_file and registered. The case and the order
+ * move in one batch guarded on the stage, revision and status that were read,
+ * so two admins pressing at once, or a step pressed twice, change the row once
+ * and the second call answers 409. A v2 case is refused (`case_not_legacy`):
+ * these two hand steps are the legacy track's. Who recorded each step and when are stored on
  * the row (migration 411); the route also logs it through logAdminAction.
  * Nothing here builds a packet or files anything: it records what an admin did.
  */
@@ -23,28 +26,19 @@ import { ensureIncorporationsSchema } from './incorporations';
 import { isCalendarDate } from './section83b';
 import { LAB_PARTICIPANT_IDS } from './labParticipants';
 import { filingCompanyStatements, type CompanyOutcome } from './incorporationCompany';
+import { ensureCaseForOrder, transition } from './formationCase';
 
 export const PACKET_FROM = ['paid', 'packet_processing'] as const;
 
 const ORDER = 'SELECT id, project_id, status, paid_at FROM incorporations WHERE id = ?';
 const PROJECT_DOC = 'SELECT id FROM documents WHERE id = ? AND project_id = ?';
 
-const SET_PACKET_READY =
-  "UPDATE incorporations SET status = 'packet_ready', packet_document_id = ?, packet_ready_by = ?, "
-  + "packet_ready_at = datetime('now'), updated_at = datetime('now') "
-  + "WHERE id = ? AND status IN ('paid', 'packet_processing')";
-
-const SET_FILED =
-  "UPDATE incorporations SET status = 'filed', filed_on = ?, filed_by = ?, "
-  + "filed_recorded_at = datetime('now'), updated_at = datetime('now') "
-  + "WHERE id = ? AND status = 'packet_ready'";
-
 export type FilingResult =
   | { ok: true; id: number; status: 'packet_ready' | 'filed'; company?: CompanyOutcome }
   | { ok: false; status: 400 | 404 | 409; error: string };
 
 // D1415 Part 3 (#3855): what the filing copies onto the company.
-const ORDER_FACTS = 'SELECT id, project_id, company_name, jurisdiction_id, registered_agent_name, registered_agent_address FROM incorporations WHERE id = ?';
+const ORDER_FACTS = 'SELECT id, project_id, subject_company_id, company_name, jurisdiction_id, registered_agent_name, registered_agent_address FROM incorporations WHERE id = ?';
 
 type OrderRow = { id: number; project_id: number; status: string; paid_at: string | null };
 
@@ -54,38 +48,51 @@ async function order(env: Env, id: number): Promise<OrderRow | null> {
 }
 
 /** "Packet ready": attach one of the project's documents as the packet. */
-export async function markPacketReady(env: Env, id: number, documentId: unknown, adminId: number): Promise<FilingResult> {
+export async function markPacketReady(env: Env, id: number, documentId: unknown, adminId: number, adminEmail?: string): Promise<FilingResult> {
   await ensureIncorporationsSchema(env);
   const o = await order(env, id);
   if (!o) return { ok: false, status: 404, error: 'order_not_found' };
+  const c = await ensureCaseForOrder(env, id);
+  if (c && c.track !== 'legacy_v1') return { ok: false, status: 409, error: 'case_not_legacy' };
   if (!(PACKET_FROM as readonly string[]).includes(o.status)) return { ok: false, status: 409, error: 'order_not_awaiting_packet' };
   const docId = Number(documentId);
   if (!Number.isInteger(docId) || docId <= 0) return { ok: false, status: 400, error: 'document_id_required' };
   const doc = await env.DB.prepare(PROJECT_DOC).bind(docId, o.project_id).first();
   if (!doc) return { ok: false, status: 400, error: 'document_not_on_project' };
-  const r = await env.DB.prepare(SET_PACKET_READY).bind(docId, adminId, id).run();
-  if (!(Number(r.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'order_not_awaiting_packet' };
+  if (!c) return { ok: false, status: 409, error: 'order_not_awaiting_packet' };
+  const t = await transition(env, c.id, 'ready_to_file', { party: 'hq', userId: adminId, email: adminEmail }, {
+    orderSet: { packet_document_id: docId, packet_ready_by: adminId }, orderNow: ['packet_ready_at'],
+    detail: { step: 'packet_ready', document_id: docId },
+  });
+  if (!t.ok) return { ok: false, status: 409, error: 'order_not_awaiting_packet' };
   return { ok: true, id, status: 'packet_ready' };
 }
 
 /** "Filed with the state": the date the filing was submitted. */
 export async function markFiled(
-  env: Env, id: number, filedOn: unknown, adminId: number, today = new Date().toISOString().slice(0, 10),
+  env: Env, id: number, filedOn: unknown, adminId: number, today = new Date().toISOString().slice(0, 10), adminEmail?: string,
 ): Promise<FilingResult> {
   await ensureIncorporationsSchema(env);
   const o = await order(env, id);
   if (!o) return { ok: false, status: 404, error: 'order_not_found' };
+  const c = await ensureCaseForOrder(env, id);
+  if (c && c.track !== 'legacy_v1') return { ok: false, status: 409, error: 'case_not_legacy' };
   if (o.status !== 'packet_ready') return { ok: false, status: 409, error: 'packet_not_ready' };
   if (!isCalendarDate(filedOn)) return { ok: false, status: 400, error: 'filed_on_invalid' };
   if (filedOn > today) return { ok: false, status: 400, error: 'filed_on_future' };
   const paidDay = o.paid_at ? String(o.paid_at).slice(0, 10) : null;
   if (paidDay && filedOn < paidDay) return { ok: false, status: 400, error: 'filed_on_before_payment' };
-  // D1415 Part 3 (#3855): one batch, SET_FILED first, then the company statements, each guarded by
-  // "filed and not yet linked" (`incorporationCompany.ts`). A repeat changes nothing; a failure leaves the order as it was.
+  if (!c) return { ok: false, status: 409, error: 'packet_not_ready' };
+  // D1415 Part 3 (#3855): one batch, the transition's order update first, then the company statements,
+  // each guarded by "filed and not yet linked" (`incorporationCompany.ts`). A repeat changes nothing;
+  // a failure leaves the order and the case as they were (D6686).
   const facts = await env.DB.prepare(ORDER_FACTS).bind(id).first<any>();
   const { statements, outcome } = await filingCompanyStatements(env, facts, filedOn, adminId);
-  const results = await env.DB.batch([env.DB.prepare(SET_FILED).bind(filedOn, adminId, id), ...statements]);
-  if (!(Number(results[0]?.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'packet_not_ready' };
+  const t = await transition(env, c.id, 'registered', { party: 'hq', userId: adminId, email: adminEmail }, {
+    orderSet: { filed_on: filedOn, filed_by: adminId }, orderNow: ['filed_recorded_at'], extra: statements,
+    detail: { step: 'filed', filed_on: filedOn },
+  });
+  if (!t.ok) return { ok: false, status: 409, error: 'packet_not_ready' };
   // #3850 (E6): the venture moved into its new company in that batch; its in-flight agent runs end `scope_moved`.
   if (outcome && (outcome as { created?: boolean }).created && facts?.project_id) {
     const made = await env.DB.prepare('SELECT id FROM company_profiles WHERE uid = ?').bind((outcome as { uid: string }).uid).first<{ id: number }>();

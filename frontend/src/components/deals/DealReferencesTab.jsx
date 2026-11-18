@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../lib/api';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { Lightbox, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { CARD, SUB, H3 } from '../../pages/deal/DealFrame';
 import {
-  NOT_AVAILABLE_YET, REFERENCE_ARTEFACTS, REFERENCE_CONSENT_CONFIRM, REFERENCE_DELETE_CONFIRM, REFERENCE_INTRO,
-  REFERENCE_PILLS, REFERENCE_STATUS, STATES, whenLine,
+  REFERENCE_CONSENT_CONFIRM, REFERENCE_DELETE_CONFIRM, REFERENCE_PILLS,
+  REFERENCE_STATUS, REFERENCE_SUMMARY, STATES, SUMMARY_MIN_NOTES, whenLine,
 } from './dealRoomCopy';
 import { Loading, Empty, Unreadable, NotRecorded } from './DealRoomKit';
 
@@ -17,28 +18,38 @@ import { Loading, Empty, Unreadable, NotRecorded } from './DealRoomKit';
  * Each check: name, email, role, relationship, scheduled time, consent (given
  * or not, and when), status and notes. Schedule, edit and delete.
  *
- * RECORDING, TRANSCRIPT AND SUMMARY READ "NOT AVAILABLE YET". The Worker
- * stubs all three with 501 (`routes/references.ts`), so the tab offers no
- * upload, no transcribe and no summarise button: a control that can only
- * fail is not drawn. `components/ReferenceChecksPanel.jsx`, which drew them,
- * was never mounted.
+ * D6183 (#6183): NOTES, AND EADWYN'S SUMMARY OF THEM. The owner chose
+ * notes-to-summary only, so there is no recording and no transcript, and no
+ * row for either. "Summarise notes" appears once a check has enough notes;
+ * the summary says when the notes changed after it. The never-mounted
+ * `ReferenceChecksPanel.jsx`, which drew upload and transcribe, is deleted.
  *
  * D6182 (#6182) — the card on `/deals/:dealId/diligence` follows the deal
  * page's rules: Delete and Record consent each open the shared Lightbox,
  * which says what changes, and a refusal stays inside it. The card draws on
  * the deal page's CARD/SUB/H3 and axal tokens, with the canvas's pills
- * (Consent given or Consent asked, Notes kept). The canvas's "Only your firm
- * sees these." is left out: the read is deal-scoped.
+ * (Consent given or Consent asked, Notes kept). D6735 scopes investor reads
+ * to the verified firm and the investor's own checks.
  */
 export default function DealReferencesTab({ dealId }) {
+  const firmId = useActiveCompany().company?.id ?? '';
+  // A firm switch discards the old rows and any open reference dialog.
+  return <FirmReferences key={`${dealId}:${firmId}`} dealId={dealId} />;
+}
+
+function FirmReferences({ dealId }) {
   const [state, setState] = useState({ loading: true, error: false, rows: null });
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: false }));
     try {
       const rows = await api.listReferences(dealId);
       setState({ loading: false, error: false, rows: Array.isArray(rows) ? rows : [] });
-    } catch {
-      setState({ loading: false, error: true, rows: null });
+    } catch (error) {
+      if (error?.code === 'no_visible_references') {
+        setState({ loading: false, error: false, rows: [] });
+      } else {
+        setState({ loading: false, error: true, rows: null });
+      }
     }
   }, [dealId]);
   useEffect(() => { load(); }, [load]);
@@ -74,6 +85,15 @@ export function ReferencesView({ dealId, state, onRetry, onChanged, initialConfi
   const [editing, setEditing] = useState(null); // null | 'new' | a row
   // D6182: Delete and Record consent each ask first, in the shared Lightbox.
   const [confirm, setConfirm] = useState(initialConfirm); // null | { kind: 'delete' | 'consent', row }
+
+  const [rowError, setRowError] = useState('');
+  const [summarising, setSummarising] = useState(null);
+  const summarise = async (r) => {
+    setRowError(''); setSummarising(r.id);
+    try { await api.summarizeReference(r.id); await onChanged?.(); }
+    catch (e) { setRowError(e?.message || REFERENCE_SUMMARY.failed); }
+    finally { setSummarising(null); }
+  };
 
   const cta = <button type="button" onClick={() => setEditing('new')} className={`${actionPrimary} ${TAP}`} data-testid="dr-reference-cta"><Plus size={14} aria-hidden="true" /> Schedule a reference</button>;
   const form = editing && (
@@ -117,16 +137,22 @@ export function ReferencesView({ dealId, state, onRetry, onChanged, initialConfi
                     ? `Given ${whenLine(r.consent_given_at) || ''}`.trim()
                     : <NotRecorded reason={STATES.references.nrConsent} />}
                 </dd>
-                {REFERENCE_ARTEFACTS.map((a) => (
-                  <React.Fragment key={a}>
-                    <dt className="text-axal-muted dark:text-gray-400">{a}</dt>
-                    <dd className="m-0 italic text-axal-muted dark:text-gray-400" data-testid="dr-reference-artefact">{NOT_AVAILABLE_YET}</dd>
-                  </React.Fragment>
-                ))}
+                <dt className="text-axal-muted dark:text-gray-400">Summary</dt>
+                <dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="dr-reference-summary-state">
+                  {r.summary
+                    ? (r.summary_stale ? REFERENCE_SUMMARY.stale : `Written ${whenLine(r.summarized_at) || ''}`.trim())
+                    : <NotRecorded reason={canSummarise(r) ? REFERENCE_SUMMARY.none : REFERENCE_SUMMARY.needNotes} />}
+                </dd>
               </dl>
             </div>
+            {r.summary && <ReferenceSummary summary={r.summary} />}
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setEditing(r)} className={`${actionGhost} ${TAP}`} data-testid="dr-reference-edit"><Pencil size={13} aria-hidden="true" /> Edit</button>
+              {canSummarise(r) && (!r.summary || r.summary_stale) && (
+                <button type="button" onClick={() => summarise(r)} disabled={summarising === r.id} className={`${actionGhost} ${TAP}`} data-testid="dr-reference-summarise">
+                  {summarising === r.id ? REFERENCE_SUMMARY.busy : r.summary ? REFERENCE_SUMMARY.again : REFERENCE_SUMMARY.run}
+                </button>
+              )}
               {!r.consent_given && <button type="button" onClick={() => setConfirm({ kind: 'consent', row: r })} className={`${actionGhost} ${TAP}`} data-testid="dr-reference-consent-open">Record consent</button>}
               <button type="button" onClick={() => setConfirm({ kind: 'delete', row: r })} className={`${actionDanger} ${TAP}`} data-testid="dr-reference-delete-open"><Trash2 size={13} aria-hidden="true" /> Delete</button>
             </div>
@@ -143,8 +169,9 @@ export function ReferencesView({ dealId, state, onRetry, onChanged, initialConfi
         <h3 className={H3}>Reference calls</h3>
         {hasRows && !editing && cta}
       </div>
-      <p className={`m-0 ${SUB}`}>{REFERENCE_INTRO}</p>
+      <p className={`m-0 ${SUB}`}>{REFERENCE_SUMMARY.lead}</p>
       {form}
+      {rowError && <p className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" role="alert" data-testid="dr-reference-summary-error">{rowError}</p>}
       {body}
       {confirm && (
         <ReferenceConfirm kind={confirm.kind} row={confirm.row}
@@ -193,10 +220,29 @@ export function ReferenceConfirm({ kind, row, onClose }) {
   );
 }
 
+/** A check whose notes are long enough to summarise (the Worker refuses shorter ones). */
+export function canSummarise(r) {
+  return String(r?.notes ?? '').trim().length >= SUMMARY_MIN_NOTES;
+}
+
+function ReferenceSummary({ summary }) {
+  const list = (items) => (Array.isArray(items) ? items.filter((x) => typeof x === 'string' && x) : []);
+  const strengths = list(summary.strengths);
+  const concerns = list(summary.concerns);
+  return (
+    <div className="mt-2 rounded-axal-lg border border-axal-lavender-edge bg-axal-lavender/40 p-2 text-sm dark:border-violet-900 dark:bg-violet-950/20" data-testid="dr-reference-summary">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-axal-violet-deep dark:text-violet-300">{REFERENCE_SUMMARY.from}</div>
+      <p className="mt-1 text-axal-ink dark:text-gray-200">{summary.summary}</p>
+      {strengths.length > 0 && <><div className="mt-1 text-xs font-semibold text-axal-muted dark:text-gray-400">Strengths</div><ul className="list-disc pl-5 text-xs text-axal-ink dark:text-gray-300">{strengths.map((s, i) => <li key={`s${i}`}>{s}</li>)}</ul></>}
+      {concerns.length > 0 && <><div className="mt-1 text-xs font-semibold text-axal-muted dark:text-gray-400">Concerns</div><ul className="list-disc pl-5 text-xs text-axal-amber-deep dark:text-amber-300">{concerns.map((s, i) => <li key={`c${i}`}>{s}</li>)}</ul></>}
+    </div>
+  );
+}
+
 /**
- * The statuses an edit may set. Recorded, Transcribed and Summarised follow a
- * recording, and no recording can be made yet, so setting one by hand would
- * claim an artefact that does not exist. A row already in one keeps it.
+ * A manual edit can schedule or cancel a reference. The summary action sets
+ * Summarised. A row can also keep its existing status, including legacy
+ * Recorded and Transcribed values.
  */
 export function editableStatuses(current) {
   const keys = ['scheduled', 'cancelled'];

@@ -277,7 +277,7 @@ const chooseProposal = async (m, id) => {
   await act(async () => { m.props(sel).onChange({ target: { value: id == null ? '' : String(id) } }); });
 };
 
-test('a version typed for one proposal is submitted to that proposal, whatever History is open', async () => {
+test('a version typed for one proposal is submitted to that proposal, whatever sheet is open', async () => {
   const calls = [];
   const { m, restore, u } = await mountProposals(
     [{ ...proposal(1, 'Acme'), versions: [{ id: 11, version: 1, change_summary: 'first', created_at: '2026-11-01', price_cents: null, note: '' }] }, proposal(2, 'Birch')].map((p, i) => (i === 1 ? { ...p, versions: [{ id: 21, version: 1, change_summary: 'b first', created_at: '2026-11-01', price_cents: null, note: '' }] } : p)),
@@ -287,8 +287,10 @@ test('a version typed for one proposal is submitted to that proposal, whatever H
     await chooseProposal(m, 1);
     const [what] = versionInputs(m);
     await u.type(what, 'Split into phases');
-    // Look at the other proposal's history. This used to retarget the form to it.
-    await u.press('History', 1);
+    // Look at the other proposal's history, in its sheet (D4838 PP04, #5937). Its
+    // History button used to retarget the form to it; opening the sheet must not either.
+    await u.press('Birch');
+    await u.press('Versions');
     assert.match(m.text(), /Version history · Birch/);
     await u.press('Add the version');
     await m.flush();
@@ -531,7 +533,8 @@ test('Negotiations: a failed term save keeps the term editor and what was typed;
   const u = ui(m);
   try {
     await m.flush();
-    await u.press('Update');
+    // D5938: a negotiation's terms open in its sheet (PP05b), from the card's "Open terms".
+    await u.press('Open terms');
     await u.press('Edit');
     await u.type(termBoxes(m)[0], 'Payment terms: net 45');
     await u.press('Save term');
@@ -547,7 +550,9 @@ test('Negotiations: a failed term save keeps the term editor and what was typed;
   } finally { await m.unmount(); restore(); }
 });
 
-test('Negotiations: saving one card refreshes in the background; another card’s open term editor keeps its draft', async () => {
+// D5938: one negotiation's sheet is open at a time (PP05b), so the background
+// refresh is the one its own stage save starts, under a term still being typed.
+test('Negotiations: saving a stage refreshes in the background; the sheet’s open term editor keeps its draft', async () => {
   const reload = deferred();
   let reads = 0;
   const items = [negotiation(1, 'Acme site', [term(7, 'Payment terms')]), negotiation(2, 'Birch app')];
@@ -559,10 +564,9 @@ test('Negotiations: saving one card refreshes in the background; another card’
   const u = ui(m);
   try {
     await m.flush();
-    await u.press('Update', 0);
+    await u.press('Open terms', 0);
     await u.press('Edit');
     await u.type(termBoxes(m)[0], 'Half-typed clause');
-    await u.press('Update', 0); // card 2 (card 1 now reads "Hide")
     await u.press('Save');
     await m.flush();
     assert.equal(reads, 2);
@@ -584,7 +588,7 @@ test('Negotiations: a failed new term keeps the new-term form and its text', asy
   const u = ui(m);
   try {
     await m.flush();
-    await u.press('Update');
+    await u.press('Open terms');
     const addToggle = m.nodes().find((n) => n.tagName === 'BUTTON' && /^(Add a term|Add term|Add)$/.test(u.textOf(n).trim()) && !m.props(n).disabled);
     await act(async () => { m.props(addToggle).onClick({ stopPropagation() {} }); });
     await u.type(termBoxes(m)[0], 'Liability cap');

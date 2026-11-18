@@ -82,6 +82,9 @@ export const SYNC_RETRY_WINDOW_MINUTES = 60;
  */
 export const RETRY_SYNC_NOTE = 'Sends the owed copy now. HQ also re-sends it by itself, at most once an hour after the last attempt.';
 
+/** Compatibility name used by the ledger action surfaces (D4819 part 21). */
+export const RETRY_SYNC_REASON = RETRY_SYNC_NOTE;
+
 /** D6733: why Retry sync cannot be pressed when no copy is queued (the route would answer `nothing_pending`). */
 export const RETRY_SYNC_NOTHING_OWED = 'No copy is queued, so there is nothing to re-send.';
 

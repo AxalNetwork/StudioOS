@@ -56,6 +56,21 @@ async function call(env: any, id: number | null, path: string, method = 'GET', b
 }
 const rows = (db: any) => db.prepare('SELECT COUNT(*) n FROM studio_layouts').get().n;
 
+test('#6133: a saved investor layout still reads with the retired score tile omitted', async () => {
+  const w = world();
+  try {
+    const keep = { key: 'quick_stats', size: 'full' };
+    const layout = JSON.stringify([{ key: 'scored_opportunities', size: '1/2' }, keep]);
+    w.db.prepare("INSERT INTO studio_layouts(user_id,profile,layout) VALUES(2,'investor',?)").run(layout);
+    const r = await call(w.env, 2, '/layout');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.source, 'saved');
+    assert.deepEqual(r.body.layout, [keep]);
+    assert.deepEqual(r.body.dropped, []);
+    assert.equal(w.db.prepare('SELECT layout FROM studio_layouts WHERE user_id=2').get()?.layout, layout);
+  } finally { w.db.close(); }
+});
+
 test('every route needs a session; an account with no Studio is refused; a Lab member is a founder', async () => {
   const w = world();
   try {
@@ -98,8 +113,10 @@ test('each catalogue is its registry rows, in order, and never offers a fixed or
       assert.deepEqual(r.body.modules.map((m: any) => m.key), STUDIO_MODULES.filter((m) => m.profile === profile).map((m) => m.key));
       for (const m of r.body.modules) {
         assert.deepEqual(Object.keys(m).sort(), ['cohort_only', 'default_size', 'group', 'href', 'in_default', 'key', 'locked_by_plan', 'plan', 'purpose', 'title']);
-        assert.equal(m.locked_by_plan, false, `${m.key}: no block on /studio is plan-locked on main`);
-        assert.equal(m.plan, null);
+        // D6129 (#6129): Thesis fit reads /api/deals/flow and /api/deals/fit, behind Investor Pro, so a Free investor's is the one locked block.
+        const locked = profile === 'investor' && m.key === 'thesis_fit';
+        assert.equal(m.locked_by_plan, locked, `${m.key}: only Thesis fit is plan-locked, for a Free investor`);
+        assert.equal(m.plan?.tier ?? null, locked ? 'professional' : null);
         assert.ok(![...STUDIO_FIXED, ...STUDIO_REMOVED].includes(m.key));
       }
     }
@@ -117,7 +134,9 @@ test('no row: the read answers the default and writes nothing', async () => {
       assert.equal(r.status, 200);
       assert.equal(r.body.source, 'default');
       assert.equal(r.body.updated_at, null);
-      assert.deepEqual(r.body.layout.map(({ key, size }: any) => ({ key, size })), STUDIO_DEFAULTS[profile]);
+      // D6129: a Free investor's default leaves out the plan-locked Thesis fit, and names nothing dropped (a default is not a saved layout).
+      assert.deepEqual(r.body.layout.map(({ key, size }: any) => ({ key, size })), STUDIO_DEFAULTS[profile].filter((d) => !(profile === 'investor' && d.key === 'thesis_fit')));
+      assert.deepEqual(r.body.dropped, []);
     }
     assert.equal(rows(w.db), 0);
   } finally { w.db.close(); }

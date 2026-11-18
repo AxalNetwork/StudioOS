@@ -21,7 +21,7 @@
  *   POST  /readiness/rescore         { items?, since?, pmf? }
  *   GET   /pmf/history?project=&limit=&before=  stored Product-market fit points
  *   D1146 (#3032): GET /pmf/model?project=  → { version, stored, scored_with, published_at, model, grades }, RD4's model
- *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
+ *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, deck_version? (D6069, with start_from: deck), one_liner?, why_now?, ask?, check_against? }
  *   PATCH /narrative-versions/:version   the same fields but start_from
  *   D908 (#2692): the narrative's own stores (`services/narrative/store.ts`).
  *   GET   /narrative/compare?a=&b=   → { a, b, pairs: [{ key, label, a: { body }, b: { body }, state }] }
@@ -205,6 +205,7 @@ import useOfFunds from './cycle_use_of_funds';
 import { prospectBrief } from '../services/prospectBrief';
 import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
 import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
+import { addTypedEvidence, createPackLink, createReadinessLink, listPackLinks, revokePackLink, EvidenceShareError } from '../services/raiseEvidenceShare';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -420,10 +421,13 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (pmf) parts.pmf = pmf;
   // D909 (#2693): Home's tiles, Needs you and the Versions tab. It fails on its own, never the module.
   if (slug === 'investor-narrative') {
-    parts.narrative = await narrativeHome(ctx, sectionOfField).catch((e) => {
+    const home = await narrativeHome(ctx, sectionOfField).catch((e) => {
       console.warn('[cycle_raise] narrative part unreadable:', (e as Error)?.message);
       return { state: 'unreadable', reason: 'The narrative versions could not be read' };
     });
+    // D5074 part 7: the caller's narrative map rides with the part, so the overview card and the cycle's New version
+    // dialog draw from the map the writes refuse from (part 3), never from the account.
+    parts.narrative = { ...home, capabilities: narrativeCapabilities(await narrativeStanding(c, s.user, s.projectId)) };
   }
   // The Mercury part fails on its own: an owner check that cannot be read shows no part, never a failed module.
   // D882: the founder with no usable sign-in reads how to connect, never an empty figure.
@@ -689,7 +693,7 @@ cycleRaise.post('/readiness/rescore', async (c) => {
 });
 
 const narrativeFields = (b: Record<string, unknown>) => ({
-  investorType: b.investor_type, basedOnVersion: b.based_on_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
+  investorType: b.investor_type, basedOnVersion: b.based_on_version, deckVersion: b.deck_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
 });
 
 cycleRaise.post('/narrative-versions', async (c) => {
@@ -1780,6 +1784,32 @@ cycleRaise.delete('/evidence/claims/:id/note', async c => {
 cycleRaise.delete('/evidence/claims/:id/link', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c), true)); }
   catch (error) { return evidenceFailure(c, error); }
+});
+// D6864 (#6864, canvas D6054 RA-27/RA-29/RA-32): evidence added by hand, and packs shared outside Axal as links.
+// Founder-only; nothing here sends anything. The reader's public page is routes/evidence_share_public.ts.
+function shareFailure(c: any, error: unknown) {
+  return error instanceof EvidenceShareError ? c.json({ error: error.code, message: error.sentence }, error.status) : evidenceFailure(c, error);
+}
+cycleRaise.post('/evidence/items', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await addTypedEvidence(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.get('/evidence/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await listPackLinks(ctx)); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/evidence/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createPackLink(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 (#6897, RA-30): the readiness snapshot as a link. Listed and revoked with the pack links above.
+cycleRaise.post('/readiness/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createReadinessLink(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/evidence/share-links/:uid/revoke', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await revokePackLink(ctx, c.req.param('uid'))); }
+  catch (error) { return shareFailure(c, error); }
 });
 
 export default cycleRaise;

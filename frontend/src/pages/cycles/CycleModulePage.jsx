@@ -1,14 +1,16 @@
 import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
+import { BuildStateTag } from './BuildStates.jsx';
+import { cellState } from './buildSystemStates.js';
 import { FillMark } from '../../ui/FillMark.jsx';
 import { CardBody, CycleHeader } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
-import { cardView, cellView, cycleOf, isPlainClick, optionLabel, pageButtons, recordsCount, safeHref } from './cycleModel';
+import { cardView, cellView, cycleOf, isPlainClick, moduleSubtitle, optionLabel, pageButtons, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
-import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
+import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 
 /**
@@ -50,10 +52,14 @@ export const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-gro
 const CONTROL = 'rounded-full border border-axal-hairline bg-white px-[11px] py-[5px] text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
 export function Cell({ cell, first = false, linkState = undefined, plain = false }) {
+  if (cell?.blank === true) return null;
   // D1327: a provenance cell is Fill with Eadwyn's one mark.
   if (cell && typeof cell === 'object' && cell.fill) return <FillMark mark={cell.fill} />;
   const v = cellView(cell);
-  if (v.nr) return <span className={NR}>Not recorded</span>;
+  // D4846 part 2 (#6032, BD14 A): a cell that is a state (Not recorded, Not expected yet, Unavailable, Waiting,
+  // Needs attention, Read only) draws that state's one chip, so none carries another's weight.
+  const st = cellState(cell);
+  if (st) return <BuildStateTag state={st.state} label={st.label} />;
   // #6030: several links, each its own record (a pain theme, a hypothesis), drawn apart.
   if (!plain && v.links) {
     return <span className="flex flex-wrap gap-x-2 gap-y-0.5" data-testid="cell-links">{v.links.map((l, i) => (l.href
@@ -132,7 +138,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
   const tracks = cols.map((_, i) => (i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)'));
   const grid = { gridTemplateColumns: [...tracks, ...(acts && tracks.length ? ['auto'] : [])].join(' ') || '1fr' };
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
-  const stage = progressive && status === 'ready' ? listStage(records, query) : 'many';
+  const stage = progressive && status === 'ready' ? moduleStage(records, query, progressive) : 'many';
   const controls = stage === 'many';
 
   if (stage === 'zero') {
@@ -160,6 +166,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
           })}
           {status === 'ready' && rows.length > 0 && <ExportButton onExport={onExport} />}
           {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
+          {/* D6043 (#6043): Export from the 'few' stage on (the zero stage returned above), once the list has read. */}
           {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
         {controls && <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
@@ -208,7 +215,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
                   {ci > 0 && <span className="mr-1.5 text-[10.5px] uppercase tracking-[.06em] text-axal-faint lg:hidden">{c.label}</span>}
                   {ci === 0 && href ? <Link to={href} className="after:absolute after:inset-0 focus-visible:underline">
                     <Cell cell={r.cells?.[c.key]} first plain />
-                  </Link> : <Cell cell={r.cells?.[c.key]} first={ci === 0} plain={!!href} />}
+                  </Link> : <span className={r.cells?.[c.key]?.separateLink ? 'relative z-10' : undefined}><Cell cell={r.cells?.[c.key]} first={ci === 0} plain={!!href && !r.cells?.[c.key]?.separateLink} /></span>}
                 </span>
               ))}
               {acts && <RowAction action={rowAction(r)} />}
@@ -258,13 +265,14 @@ function RowAction({ action }) {
  * page with nothing recorded shows no connector state; it is still one press
  * away. From the first record it is an open section under the records.
  */
-export function Sources({ children, phone = false, zero = false, action = null, drafts = false }) {
+export function Sources({ children, phone = false, zero = false, action = null, drafts = false, fold = null }) {
   const manage = <ManageTools action={action} />;
   if (zero) {
     return (
       <details className={`group rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900 ${phone ? 'mt-[18px]' : ''}`.trim()} data-testid="module-sources" data-stage="zero">
         <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-x-2 px-4 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100">
-          <span>{drafts ? 'Sources and Eadwyn drafts' : 'Sources'}</span>
+          {/* D6100: a module's own fold label (progressiveList.js `fold`) where it sets one. */}
+          <span>{fold || (drafts ? 'Sources and Eadwyn drafts' : 'Sources')}</span>
           <span className="text-[11.5px] font-normal text-axal-faint dark:text-gray-500">What your tools report appears here once the first record exists</span>
         </summary>
         <div className="flex min-w-0 flex-col gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">{manage}{children}</div>
@@ -332,6 +340,12 @@ export default function CycleModulePage({
   // D5077 (#5077): the module's connector parts, drawn in the Sources region below the records; the
   // region's Connect or manage tools (`sourcesAction`); and the module's Eadwyn asks for the zero state.
   sources = null, sourcesAction = null, asks = null,
+  // D5081 (#5081, RA-14): a mature tool that owns its page (`{ sub }`): its `subnav` is the page, so the module's
+  // generic "at a glance", its tool doors and its records are not drawn under it, and the header says the tool's line.
+  owned = null,
+  // D6049 (#6049, RA-16): a module that owns its page draws `home(...)` in place of the generic chart
+  // and records table, with the header's line (`sub`) its own. Only Fundraising readiness has one.
+  home = null, sub = undefined,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -340,25 +354,34 @@ export default function CycleModulePage({
   const interviewLine = verdictInterviewLine(data);
   // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
   const name = card?.name || data?.module?.name || moduleName || slug;
-  const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
+  // D6010: a cycle's `tool` may be one link or several (Market intelligence draws two).
+  const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href));
   const recs = records ?? data?.records;
   // D5076: on a Build module with no records, the zero state's first action is
   // the page's one dominant action: the header's and the card's step give way.
   const progressive = progressiveFor(meta.key, slug);
   const recsStatus = recordsStatus || (recs ? 'ready' : status);
-  const zero = !!progressive && showRecords && status === 'ready' && recsStatus === 'ready' && listStage(recs, query) === 'zero';
+  const zero = !!progressive && showRecords && status === 'ready' && recsStatus === 'ready' && moduleStage(recs, query, progressive) === 'zero';
   // The card's step is the table's own Add on a progressive module: draw it once, in the table.
   const addTexts = (Array.isArray(add) ? add : [add || recs?.add]).map((x) => x?.text).filter(Boolean);
   const dupNext = !!progressive && !!card?.next?.text && addTexts.includes(card.next.text);
   const shownCard = (zero || dupNext) && card?.next ? { ...card, next: null } : card;
-  const stage = progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined;
+  const stage = progressive && status === 'ready' && recsStatus === 'ready' ? moduleStage(recs, query, progressive) : undefined;
   // D6004: with a few records the header's action gives way when it is the table's own Add (Customer research's Record a session).
   const dupAction = stage === 'few' && !!action?.label && addTexts.includes(action.label);
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
   const hasChildren = Children.toArray(children).length > 0;
+  const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
+  // D6049's `home(...)` and D5081's `owned` both own the page; `home` draws the module's own Home, `owned` the tool's subnav.
+  const ownsHome = typeof home === 'function';
+  const doors = toolLinks.map((item) => (
+    <Link key={item.href} to={item.href} className={MODULE_LINK_CLASS} data-testid="cycle-module-tool">
+      {item.label || `Open ${name}`}
+    </Link>
+  ));
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
-      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : moduleSubtitle(meta.key, slug, card?.caption)} search={search} more={more} /> : header}
       {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
@@ -370,7 +393,13 @@ export default function CycleModulePage({
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-module-unreadable">
           <Unreadable what={name} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />
         </div>
-      ) : (
+      ) : ownsHome ? (
+        <>
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search })}
+          {doors}
+          {children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}
+        </>
+      ) : owned ? children : (
         <>
           <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-module-chart" data-state={view.state}>
             <div className="flex flex-wrap items-baseline justify-between gap-2.5">
@@ -383,11 +412,7 @@ export default function CycleModulePage({
             {interviewLine && <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
 
           </section>
-          {toolLinks.map((item) => (
-            <Link key={item.href} to={item.href} className={MODULE_LINK_CLASS} data-testid="cycle-module-tool">
-              {item.label || `Open ${name}`}
-            </Link>
-          ))}
+          {doors}
           {/* #3938 (D1478 part 9): a control that acts on the records themselves (Partner network's Rank by fit). */}
           {aboveRecords}
           {showRecords && <RecordsTable
@@ -404,12 +429,12 @@ export default function CycleModulePage({
             rowAction={rowAction}
             progressive={progressive}
             onExport={onExport}
-            rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
+            rowHref={rowHref}
           />}
           {/* D5077 (BD18 A): before the first record, the module's own asks; the rail carries them after. */}
           {zero && <ModuleAsk asks={asks} />}
           {zero
-            ? (hasChildren || sources) && <Sources zero action={sourcesAction} drafts={hasChildren}>{children}{sources}</Sources>
+            ? (hasChildren || sources) && <Sources zero action={sourcesAction} drafts={hasChildren} fold={progressive?.fold}>{children}{sources}</Sources>
             : <>{children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}</>}
         </>
       )}

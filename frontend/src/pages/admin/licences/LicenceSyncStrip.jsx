@@ -102,12 +102,12 @@ function Sources({ sync, host }) {
  * (`onRetrySync`). With no copy queued it is drawn disabled, because the route
  * would send nothing, and says so beside it rather than only on hover.
  */
-function RetrySync({ nextTry, owed, onRetrySync, retrying }) {
+function RetrySync({ nextTry, owed, onRetrySync, retrying, busy = false }) {
   const usable = owed && Boolean(onRetrySync);
   return (
     <div className="flex flex-col gap-1 sm:items-end">
       <button
-        type="button" disabled={!usable || retrying} data-testid="licence-sync-retry" aria-describedby="licence-sync-retry-reason"
+        type="button" disabled={!usable || retrying || busy} data-testid="licence-sync-retry" aria-describedby="licence-sync-retry-reason"
         onClick={usable ? onRetrySync : undefined}
         className={`${BUTTON} bg-indigo-600 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400`}
       >
@@ -162,7 +162,7 @@ function SyncCard({ board, busy, onReread, onRetrySync, retrying }) {
             <p data-testid="licence-sync-lead" className="mt-1 break-words text-[13px] text-amber-900 dark:text-amber-200">{lead}</p>
           </div>
           <RetrySync nextTry={state === 'pending' ? board.nextTry : null} owed={state === 'pending'}
-            onRetrySync={onRetrySync} retrying={retrying} />
+            onRetrySync={onRetrySync} retrying={retrying} busy={busy} />
         </div>
         <dl className="space-y-2 p-4">
           {state === 'pending' && (
@@ -238,7 +238,7 @@ function SyncCard({ board, busy, onReread, onRetrySync, retrying }) {
  * stays disabled. Its notice sits under the card, so an accepted copy still
  * says so once the re-read draws the branch as synced.
  */
-export function LicenceSyncStrip({ sync, busy, onResume, part, deployment, deploymentAvailable, onReread, now, licenceUid }) {
+export function LicenceSyncStrip({ sync, busy, onResume, part, deployment, deploymentAvailable, onReread, now, licenceUid, onRetry = null }) {
   const [retrying, setRetrying] = useState(false);
   const [retryNotice, setRetryNotice] = useState(null);
   const retrySync = licenceUid ? async () => {
@@ -252,7 +252,7 @@ export function LicenceSyncStrip({ sync, busy, onResume, part, deployment, deplo
       setRetrying(false);
     }
     if (onReread) await onReread();
-  } : null;
+  } : onRetry;
   const t = sync?.termination;
   const strip = part !== 'termination';
   const termination = part !== 'strip';

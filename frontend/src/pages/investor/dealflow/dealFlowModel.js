@@ -17,6 +17,8 @@ export const BASE = '/deals';
 export const COMPARE = '/deals/compare';
 /** D4815 (#4815): the deal rooms' own route, linked from "Other deal activity". */
 export const ROOMS = '/deals/rooms';
+/** D6160 (#6160): the investor's round calls, a page of Deals at its own address (D6159 Q1). */
+export const ROUND_CALLS = '/round-calls';
 
 /** The page's title (DLS1). The Deals bucket's root is this page. */
 export const TITLE = 'Deal flow';
@@ -31,16 +33,18 @@ export const DEALS_PAGE_TITLES = Object.freeze({
   root: 'Deal flow · Axal VC',
   compare: 'Compare · Axal VC',
   rooms: 'Deal rooms · Axal VC',
+  roundCalls: 'Round calls · Axal VC',
   screening: 'Screening · Axal VC',
   commit: 'Investment committee · Axal VC',
   closing: 'Closing · Axal VC',
 });
 
 /** The tab title for a Deals route: the root, Compare, the deal rooms, or a zone by its slug. */
-export function dealsPageTitle({ isRoot, isCompare, isRooms, slug }) {
+export function dealsPageTitle({ isRoot, isCompare, isRooms, isRoundCalls, slug }) {
   if (isRoot) return DEALS_PAGE_TITLES.root;
   if (isCompare) return DEALS_PAGE_TITLES.compare;
   if (isRooms) return DEALS_PAGE_TITLES.rooms;
+  if (isRoundCalls) return DEALS_PAGE_TITLES.roundCalls;
   return DEALS_PAGE_TITLES[slug] || DEALS_PAGE_TITLES.root;
 }
 
@@ -99,6 +103,22 @@ export function compareIds(search = '') {
 export function compareHref(ids = []) {
   const clean = compareIds(`ids=${ids.join(',')}`);
   return clean.length ? `${COMPARE}?ids=${clean.join(',')}` : COMPARE;
+}
+
+/**
+ * D6149 (#6149): the picks Compare carries back to the table, `&pick=`, read by
+ * the same rule as `?ids=` (digits only, no repeats, at most four, in order).
+ */
+export const picksOf = (search = '') => compareIds(`ids=${new URLSearchParams(String(search)).get('pick') || ''}`);
+
+/**
+ * D6149: Compare's "Add a venture" — the table under All deals (Compare reads
+ * every listed round, so each pick has a row there), with the current picks
+ * ticked.
+ */
+export function addVentureHref(ids = []) {
+  const picks = compareIds(`ids=${ids.join(',')}`);
+  return `${BASE}?view=table&scope=all${picks.length ? `&pick=${picks.join(',')}` : ''}`;
 }
 
 /** SCORING's eleven scopes (#2428), in its order, from the scorecard's one list (D1253). There is no Overall. */

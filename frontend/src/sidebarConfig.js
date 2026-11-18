@@ -78,6 +78,26 @@ export function hasInvestorTier(user, required) {
 // were removed: every item that used to live here still does, so the
 // learning curve drops without losing reachability. Advisor is already lean
 // and is left unchanged.
+/**
+ * D6029 (#6029, BD23) — Build's sub-pages in the sidebar: Overview · Plan ·
+ * Progress, then the six modules. BD23 also draws Tools after Progress; Build ›
+ * Tools is one page only once #5078 lands, so it is not listed yet (#6029
+ * stays open for it). `end` rows light on their exact path only; the others
+ * light on their subtree too. Old addresses are untouched.
+ */
+export const BUILD_SUBPAGES = Object.freeze([
+  { to: '/build', label: 'Overview', end: true },
+  { to: '/build/plan', label: 'Plan', end: true },
+  { to: '/build/plan/progress', label: 'Progress', end: true },
+  { heading: 'Modules' },
+  { to: '/build/solution-design', label: 'Solution design' },
+  { to: '/build/prototype-mvp', label: 'Prototype / MVP' },
+  { to: '/build/product-roadmap', label: 'Product roadmap' },
+  { to: '/build/founding-team', label: 'Founding team' },
+  { to: '/build/company-creation', label: 'Company creation' },
+  { to: '/build/operating-systems', label: 'Operating systems' },
+]);
+
 export const SIDEBAR_GROUPS = {
   // ── Super Admin ──────────────────────────────────────────────────────────
   //
@@ -365,8 +385,11 @@ export const SIDEBAR_GROUPS = {
       // keeps every legacy and section URL highlighting the right row.
       { to: '/validate', icon: ShieldCheck, label: 'Validate',
         match: ['/validate', '/build/marketplace'] },
+      // D6029 (#6029, BD23): Build lists its own pages, so the sidebar is the one module switcher on desktop.
       { to: '/build', icon: Cog, label: 'Build',
-        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
+        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution',
+          ...BUILD_SUBPAGES.filter((c) => c.to && c.to !== '/build').map((c) => c.to)],
+        children: BUILD_SUBPAGES },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
       // D1384: /compliance is retired into Calendar, so it lights nothing here.
@@ -525,8 +548,9 @@ export const SIDEBAR_GROUPS = {
       // renders the sections. A row aimed at a zone skips the overview, which
       // is precisely how the founder overviews were lost the first time.
       // D1226: a round call sent to an investor (/round-calls/:uid) sits under Deals.
+      // #6155: so do the IC decision pages (/ic, /ic/:uid), which lit no row.
       { to: '/deals', icon: Handshake, label: 'Deals',
-        match: ['/deals', '/pipeline', '/raise/data-room', '/round-calls'] },
+        match: ['/deals', '/pipeline', '/raise/data-room', '/round-calls', '/ic'] },
       // Positions is the canvas's word for the holdings view. /portfolio is the
       // overview; /portfolio/positions is the book; /portfolio/health is the
       // legacy alias that still renders the overview, and the generic tab bar
@@ -643,7 +667,7 @@ function insertAt(groups, { gi, at }, row) {
 }
 
 export function withDiligenceRow(groups, role, involved) {
-  if (involved !== true || !DILIGENCE_ROLES.includes(role) || !Array.isArray(groups) || !groups.length) return groups;
+  if ((role !== 'investor' && involved !== true) || !DILIGENCE_ROLES.includes(role) || !Array.isArray(groups) || !groups.length) return groups;
   if (groups.some((g) => (g.items || []).some((it) => it.to === DILIGENCE_ROW.to))) return groups;
   const licenceSpot = beforeLicenceFoot(groups, [INFLUENCER_ROW.to, '/trust/me']);
   if (licenceSpot) return insertAt(groups, licenceSpot, DILIGENCE_ROW);
@@ -786,8 +810,9 @@ export const INVESTOR_FULL_BLEED = [
   // Legacy mounts the shell config does not claim, each still live and still
   // rendering the same canvas at the same width.
   '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
-  '/portfolio/health', '/portfolio/performance',
-  '/portfolio/waterfall',
+  '/portfolio/health', '/portfolio/waterfall',
+  // D6160 (#6160): the investor's round calls list, a page of Deals in its shell.
+  '/round-calls',
 ];
 
 /**

@@ -80,7 +80,9 @@ export function slaBand(sla) {
   return { key: 'ok', label: 'Under 24 hours', tone: null };
 }
 
-const LANE_BY_KEY = Object.fromEntries([...LANES.map((l) => [l.key, l]), ...HQ_LANES.map((l) => [l.key, { ...l, group: 'hq' }])]);
+// D5880: every lane the UI names, with its group (`hq` for HQ's own), exported so
+// `approval_lanes_registry_5880.test.mjs` holds it to the Worker's registry.
+export const LANE_BY_KEY = Object.fromEntries([...LANES.map((l) => [l.key, l]), ...HQ_LANES.map((l) => [l.key, { ...l, group: 'hq' }])]);
 const groupLabel = (g) => (g === 'hq' ? HQ_GROUP.label : GROUPS.find((x) => x.key === g)?.label || null);
 export const laneLabelOf = (key, fallback) => LANE_BY_KEY[key]?.label || fallback || key;
 
@@ -336,7 +338,7 @@ export function urgencyPill(sla) {
 }
 
 /** The lane boards on this page, by the name the Review line gives them. */
-const BOARD_NAMES = { product_testers: 'Product testers', wellbeing_experts: 'Wellbeing experts', comarketing: 'Co-marketing' };
+const BOARD_NAMES = { product_testers: 'Product testers', wellbeing_experts: 'Wellbeing experts', comarketing: 'Co-marketing', best_fit: 'Best-Fit' };
 
 /**
  * D4814: where review continues, for the Review cell's "in [destination]".
@@ -345,8 +347,6 @@ const BOARD_NAMES = { product_testers: 'Product testers', wellbeing_experts: 'We
  */
 export function reviewDestination(lane) {
   if (BOARD_NAMES[lane]) return `${BOARD_NAMES[lane]} · Approvals`;
-  // Best-Fit has no page of its own that decides it yet (LaneDoor says the same).
-  if (lane === 'best_fit') return 'Best-Fit · no review page yet';
   const studio = LANES.find((l) => l.key === lane);
   if (studio?.door) return studio.door;
   const hq = HQ_LANES.find((l) => l.key === lane);
@@ -713,7 +713,6 @@ export function queueStep(reply, at) {
  */
 export function continueLine(lane) {
   if (BOARD_NAMES[lane]) return `This decision is made on the ${BOARD_NAMES[lane]} board in Approvals, where its evidence and notification rules live.`;
-  if (lane === 'best_fit') return 'Best-Fit has no review page yet, so nowhere in the admin decides this item.';
   const dest = reviewDestination(lane);
   if (dest === 'its own page' || /not built yet/.test(dest)) return 'This lane’s review page is not built yet.';
   return `This decision is completed in ${dest}, where its evidence and notification rules live.`;

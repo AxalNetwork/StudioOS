@@ -36,10 +36,11 @@ import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
   TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
-  markHeld, obligationKind, obligationState, openMinutes, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
-  updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
+  markHeld, obligationKind, obligationState, openMinutes, removeEntryStep, removeMarket, removeObligation, removePartner, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
+  updateEntryStep, updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
-import { dayList, reminderLabel } from '../growDaily';
+import { dayList, reminderAssignee, reminderLabel } from '../growDaily';
+import { companyTeam, onCompanyTeam, ownerShown } from '../obligationOwner';
 import { partnerRevenueSource, setPartnerRevenue } from '../growWriters';
 import { parseMinor, plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
 import type {
@@ -105,6 +106,16 @@ async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult
 }
 /** `ownedRow` passed before the spec ran, so a missing row is a race with a delete. */
 const vanished = () => new Response(JSON.stringify({ detail: 'Record not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+
+/**
+ * D6115 (#6115): Remove, a danger write behind a confirmation, for a record
+ * added by mistake. The writer deletes it or refuses (409) with what to do
+ * instead; the page's re-read then 404s and goes back to the list.
+ */
+const remove = (title: string, body: string, run: (c: RecordContext) => Promise<unknown>): RecordAction => ({
+  key: 'remove', label: 'Remove', kind: 'write', tone: 'danger', confirm: { title, body, cta: 'Remove' },
+  execute: (c) => refusing(async () => ({ ok: true, record: await run(c) })),
+});
 
 /** What a record read loaded, for its sections and actions; never sent (the route spreads the record). */
 const loaded = new WeakMap<RecordContent, Any>();
@@ -346,7 +357,7 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
       .bind(rc.projectId, since).all<{ utm_json: string }>();
     const signups = (res.results || []).filter((c) => utmSource(c.utm_json) === ch.utm_source).length;
     return { rows: [
-      notRecorded('Visits', 'No page-visit store'),
+      notRecorded('Visits', 'No per-channel visit count'), // D6107: PostHog visits are venture-wide, on the Distribution card
       { a: 'Sign-ups', b: 'contacts from this channel, last 30 days', c: String(signups) },
       { a: 'Paying', b: 'customers from this channel this month', c: String(row?.customers ?? 0) },
     ] };
@@ -405,11 +416,13 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
 // ── Revenue and traction — id: the KPI key ──────────────────────────────────
 
 /** Worked out by the platform, never typed (decision 4). */
-const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway']);
+const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway', 'arr', 'burn_multiple']);
 const DERIVED_REASON: Record<string, string> = {
   new_mrr: 'New MRR is worked out from the revenue ledger.',
   expansion_mrr: 'Expansion MRR is worked out from the revenue ledger.',
   runway: 'Runway is worked out from cash and burn.',
+  arr: 'ARR is worked out as 12 × MRR.',
+  burn_multiple: 'Burn multiple is worked out from burn and the ledger\'s net new ARR.',
 };
 
 export function kpiValueText(value: number | null, unit: string | null): string | null {
@@ -418,6 +431,7 @@ export function kpiValueText(value: number | null, unit: string | null): string 
   if (unit === 'usd_cents') return money(value);
   if (unit === 'pct') return `${Math.round(value * 100) / 100}%`;
   if (unit === 'months') return `${Math.round(value * 10) / 10} months`;
+  if (unit === 'multiple') return `${Math.round(value * 100) / 100}×`;
   return Number(value).toLocaleString('en-US');
 }
 const signed = (text: string | null, v: number) => (text == null ? null : v > 0 ? `+${text}` : v < 0 ? `−${text.replace(/^-/, '')}` : text);
@@ -888,7 +902,8 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
       { key: 'contact_email', label: 'Contact email', kind: 'T', input: 'email', value: g.contact_email ?? '' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, pick(body, PARTNER_EDIT)) })),
-  });
+  }, remove(`Remove ${g.name}?`, 'For a partner added by mistake: it leaves the partner list, its card and its counts. A partner with revenue or deals stays; end it instead.',
+    (c) => removePartner(c.env, c.projectId, userOf(c), id)));
   return actions;
 }, async () => ({ types: opts(PARTNER_TYPES, LABEL), stages: opts(PARTNER_STAGES, LABEL), terms_kinds: opts(TERMS_KINDS, LABEL) }));
 
@@ -901,6 +916,11 @@ async function marketGeographies(rc: RecordContext) {
   const res = await rc.env.DB.prepare('SELECT code, name FROM research_countries ORDER BY name').all<{ code: string; name: string }>().catch(() => null);
   return (res?.results ?? []).map(({ code, name }) => ({ value: code, label: name }));
 }
+
+/** D6113 (#6113): an entry step's Edit sends these keys only. */
+const ENTRY_STEP_EDIT = ['text', 'owner_name', 'due_on'] as const;
+/** The step a row names is checked in its own store (the venture's), then against this market by the writer. */
+const stepRef = (body: Body): Array<{ store: Store; id: string | number }> => [{ store: 'market_entry_steps', id: refOf(field(body, 'step')) }];
 
 const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['market-expansion'], async (rc, id) => {
   const m = await rc.env.DB.prepare('SELECT * FROM markets WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
@@ -917,10 +937,20 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
 }, [
   section('entry-plan', 'Entry plan', async (rc, _id, record) => {
     const { m } = loadedOf(record);
-    const res = await rc.env.DB.prepare('SELECT text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30')
+    const res = await rc.env.DB.prepare('SELECT uid, text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30')
       .bind(m.id).all<Any>();
-    return { rows: (res.results || []).map((s) => ({ a: String(s.text), b: joined(s.owner_name, dMon(s.due_on)), c: s.done_at ? 'Done' : 'Open', tone: s.done_at ? 'ok' : 'amb' })),
-      empty: 'No entry step recorded.', action: 'add-entry-step' };
+    // D6113 (#6113): each step names itself by uid, so Mark done or Reopen, Edit and Remove address it.
+    return { rows: (res.results || []).map((s) => {
+      const step = { step: String(s.uid) };
+      return {
+        a: String(s.text), b: joined(s.owner_name, dMon(s.due_on)), c: s.done_at ? 'Done' : 'Open', tone: s.done_at ? 'ok' : 'amb',
+        action: { key: s.done_at ? 'reopen-entry-step' : 'mark-entry-step-done', body: step },
+        actions: [
+          { key: 'edit-entry-step', body: step, values: { text: String(s.text), owner_name: s.owner_name ?? '', due_on: s.due_on ?? '' } },
+          { key: 'remove-entry-step', body: step },
+        ],
+      };
+    }), empty: 'No entry step recorded.', action: 'add-entry-step' };
   }),
   section('localisation', 'Localisation', async (rc, _id, record) => {
     const { m } = loadedOf(record);
@@ -962,7 +992,30 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await addEntryStep(c.env, c.projectId, userOf(c), id, plain(body)) })),
   }, {
-    key: 'localisation-check', label: 'Tick a localisation check', kind: 'write',
+    key: 'mark-entry-step-done', label: 'Mark done', kind: 'write', row_only: true,
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), { done: true }) })),
+  }, {
+    key: 'reopen-entry-step', label: 'Reopen', kind: 'write', row_only: true,
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), { done: false }) })),
+  }, {
+    key: 'edit-entry-step', label: 'Edit', kind: 'form', row_only: true,
+    references: stepRef,
+    form: { title: 'Edit entry step', cta: 'Save', fields: [
+      { key: 'text', label: 'Step', kind: 'T', required: true },
+      { key: 'owner_name', label: 'Owner', kind: 'T' },
+      { key: 'due_on', label: 'Due', kind: 'T', input: 'date' },
+    ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true,
+      record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), pick(body, ENTRY_STEP_EDIT)) })),
+  }, {
+    key: 'remove-entry-step', label: 'Remove', kind: 'write', tone: 'danger', row_only: true,
+    confirm: { title: 'Remove this entry step?', body: 'It leaves the entry plan. Activity keeps a line that a step was removed.', cta: 'Remove' },
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step')) })),
+  }, {
+    key: 'localisation-check', label: 'Tick a localisation check', kind: 'write', row_only: true,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setLocalisation(c.env, c.projectId, userOf(c), id, plain(body)) })),
   }, {
     key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
@@ -977,7 +1030,8 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
       { key: 'size_source', label: 'Size source', kind: 'T', value: m.size_source ?? '' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateMarket(c.env, c.projectId, userOf(c), id, pick(body, MARKET_EDIT)) })),
-  }];
+  }, remove(`Remove ${m.name}?`, 'For a market added by mistake: it leaves the market list, its card and its counts, with its entry plan and localisation checks.',
+    (c) => removeMarket(c.env, c.projectId, userOf(c), id))];
 }, async (rc) => {
   return { states: opts(MARKET_STATES, LABEL), decisions: opts(DECISIONS, LABEL),
     geographies: await marketGeographies(rc) };
@@ -986,26 +1040,35 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
 // ── Durable company-building — id: the obligation's id ──────────────────────
 
 export const REMIND_PRESETS = [30, 14, 7, 1, 0] as const;
-const OBLIGATION_EDIT = ['title', 'kind', 'due_at', 'owner_name', 'repeats', 'status'] as const;
+// D6790: the owner is picked from the company team (`owner_user_id`); `owner_name` stays for older callers.
+const OBLIGATION_EDIT = ['title', 'kind', 'due_at', 'owner_user_id', 'owner_name', 'repeats', 'status'] as const;
+/** D6790 (GR-23): the owner listbox — the company team, and "No one yet" to name nobody. */
+const ownerChoices = (team: Array<{ value: string; label: string }>) => [{ value: '', label: 'No one yet' }, ...team];
 
 const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_ROWS['durable-company-building'], async (rc, id) => {
-  const e = await rc.env.DB.prepare('SELECT * FROM compliance_events WHERE id = ? AND project_id = ?').bind(Number(id), rc.projectId).first<Any>();
+  const e = await rc.env.DB.prepare(
+    'SELECT e.*, o.name AS owner_user_name FROM compliance_events e LEFT JOIN users o ON o.id = e.owner_user_id WHERE e.id = ? AND e.project_id = ?',
+  ).bind(Number(id), rc.projectId).first<Any>();
   if (!e) throw vanished();
+  // D6790: the owner every surface shows, and whether the picked one is still on the company team.
+  const owner = ownerShown(e.owner_user_name, e.owner_name);
+  e.owner_on_team = e.owner_user_id != null && await onCompanyTeam(rc.env, rc.projectId, Number(e.owner_user_id)) ? 1 : 0;
   const kind = obligationKind(e);
   const state = obligationState(e.completion_status, kind, String(e.due_date), new Date().toISOString().slice(0, 10));
   const repeats = REPEATS_OF[String(e.recurrence)] ?? null;
   return keep({
     title: String(e.title),
-    sub: joined(label(kind), `due ${dMon(e.due_date) ?? e.due_date}`, e.owner_name),
+    sub: joined(label(kind), `due ${dMon(e.due_date) ?? e.due_date}`, owner),
     pills: [pill(state), ...(repeats ? [{ text: label(repeats), tone: 'grey' }] : [])],
     facts: [
       fact('Kind', label(kind), ''),
       fact('Due', e.due_date, ''),
-      fact('Owner', e.owner_name, 'No owner named'),
+      // D6790: an ownerless obligation offers Pick owner in place of the reason.
+      { ...fact('Owner', owner, 'No owner named'), ...(owner ? {} : { action: 'pick-owner' }) },
       fact('Repeats', repeats ? label(repeats) : null, 'Repeat not recorded'),
     ],
     createdBy: e.created_by_user_id, createdAt: e.created_at,
-  }, { e, kind, state, repeats });
+  }, { e, kind, state, repeats, owner });
 }, [
   section('agenda', 'Agenda', async (rc, id) => {
     const res = await rc.env.DB.prepare('SELECT text, owner_name FROM obligation_agenda_items WHERE event_id = ? ORDER BY id LIMIT 30').bind(Number(id)).all<Any>();
@@ -1023,7 +1086,12 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
   section('reminders', 'Reminders', async (_rc, _id, record) => {
     const { e } = loadedOf(record);
     const sent = dayList(e.reminders_sent_json);
-    return { rows: dayList(e.remind_days_json).sort((a, b) => b - a).map((n) => ({ a: reminderLabel(n), c: sent.includes(n) ? 'Sent' : 'On', tone: sent.includes(n) ? 'grey' : 'ok' })),
+    const days = dayList(e.remind_days_json).sort((a, b) => b - a);
+    // D6790: the step names who it reminds, as the daily run decides it (`reminderAssignee`).
+    const assignee = reminderAssignee(e);
+    const to = assignee.to === 'owner' ? ownerShown(e.owner_user_name, null) ?? 'Unnamed member' : 'The founder';
+    return { rows: [...days.map((n) => ({ a: reminderLabel(n), c: sent.includes(n) ? 'Sent' : 'On', tone: sent.includes(n) ? 'grey' : 'ok' })),
+      ...(days.length ? [{ a: 'Goes to', b: to }] : [])],
       empty: 'No reminder set.' };
   }, { side: true }),
   section('documents', 'Documents', async (rc, id) => {
@@ -1033,7 +1101,12 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
     return { rows: [{ a: 'Minutes', b: `${Number(minutes?.n ?? 0)} stored` }, notRecorded('Resolutions', 'No resolution store')] };
   }, { side: true }),
 ], async (rc, id, record): Promise<RecordAction[]> => {
-  const { e, kind, repeats } = loadedOf(record);
+  const { e, kind, repeats, owner } = loadedOf(record);
+  const members = await companyTeam(rc.env, rc.projectId);
+  const team = ownerChoices(members);
+  // D6790: a name typed before #6790 stays until someone on the team is picked.
+  const typedNote = e.owner_user_id == null && ownerShown(null, e.owner_name)
+    ? `Typed before owners were picked from the team: ${ownerShown(null, e.owner_name)}. It stays until you pick someone.` : undefined;
   const hasMinutes = await rc.env.DB.prepare('SELECT 1 FROM obligation_occurrences WHERE event_id = ? AND minutes_file_key IS NOT NULL LIMIT 1').bind(Number(id)).first();
   const actions: RecordAction[] = [{
     key: 'mark-held', label: 'Mark held', kind: 'form', tone: 'primary',
@@ -1057,7 +1130,7 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
   }];
   if (hasMinutes) {
     actions.push({
-      key: 'open-minutes', label: 'Open minutes', kind: 'write',
+      key: 'open-minutes', label: 'Open minutes', kind: 'write', row_only: true,
       // The occurrence is checked in its own store, then against this obligation by the writer.
       references: (body) => [{ store: 'obligation_occurrences', id: refOf(field(body, 'occurrence')) }],
       execute: (c, _id, body) => refusing(async () => ({ ok: true, ...(await openMinutes(c.env, c.projectId, userOf(c), Number(id), Number(field(body, 'occurrence')))) })),
@@ -1069,7 +1142,8 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       { key: 'title', label: 'Obligation', kind: 'T', value: e.title, required: true },
       { key: 'kind', label: 'Kind', kind: 'CH', value: kind, options: opts(OBLIGATION_KINDS, LABEL) },
       { key: 'due_at', label: 'Due', kind: 'T', input: 'date', value: e.due_date, required: true },
-      { key: 'owner_name', label: 'Owner', kind: 'T', value: e.owner_name ?? '' },
+      { key: 'owner_user_id', label: 'Owner', kind: 'CH', value: e.owner_user_id == null ? '' : String(e.owner_user_id), options: team,
+        ...(typedNote ? { note: typedNote } : {}) },
       { key: 'repeats', label: 'Repeats', kind: 'CH', value: repeats ?? 'once', options: opts(Object.keys(REPEATS), LABEL) },
       { key: 'remind_days', label: 'Remind', kind: 'CK', value: dayList(e.remind_days_json).map(String),
         options: REMIND_PRESETS.map((n) => ({ value: String(n), label: reminderLabel(n) })), note: 'At most three.' },
@@ -1084,9 +1158,25 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       return { ok: true, record: await updateObligation(c.env, c.projectId, userOf(c), Number(id), b) };
     }),
   });
+  if (!owner) {
+    // D6790 (GR-23): Pick owner, drawn from the Owner fact of an ownerless obligation, opens the same listbox.
+    actions.push({
+      key: 'pick-owner', label: 'Pick owner', kind: 'form', row_only: true,
+      form: { title: 'Pick owner', cta: 'Save',
+        sub: members.length ? 'Someone on the company team. Its reminders then go to them.'
+          : 'No one is on the company team yet, so there is no one to pick. Add people to the company first.',
+        fields: [{ key: 'owner_user_id', label: 'Owner', kind: 'CH', value: '', options: members, required: true }] },
+      execute: (c, _id, body) => refusing(async () => ({ ok: true,
+        record: await updateObligation(c.env, c.projectId, userOf(c), Number(id), { owner_user_id: field(body, 'owner_user_id') ?? null }) })),
+    });
+  }
+  actions.push(remove(`Remove ${e.title}?`, 'For an obligation added by mistake: it leaves the list, its card and its counts, with its agenda. One that has been held stays; mark it done instead.',
+    (c) => removeObligation(c.env, c.projectId, userOf(c), Number(id))));
   return actions;
-}, async () => ({
+}, async (rc) => ({
   kinds: opts(OBLIGATION_KINDS, LABEL),
+  // D6790: the Add and Edit owner listbox, the company team.
+  owners: await companyTeam(rc.env, rc.projectId),
   repeats: opts(Object.keys(REPEATS), LABEL),
   remind_presets: REMIND_PRESETS.map((n) => ({ value: String(n), label: reminderLabel(n) })),
 }));

@@ -384,7 +384,8 @@ function cleanName(v: unknown): string {
   return s;
 }
 
-function cleanVesting(v: unknown): HolderVesting | null {
+/** The one vesting validator: Add holder's founders (D691) and, from D6086, a grant on the record (`capTableRecord.ts`). */
+export function cleanVesting(v: unknown): HolderVesting | null {
   if (v == null) return null;
   const o = v as Record<string, unknown>;
   const start = typeof o.start_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.start_date) ? o.start_date : null;
@@ -528,6 +529,89 @@ export async function addHolder(env: Env, args: AddHolderArgs): Promise<{ id: st
     throw e;
   }
   return { id: `h-${holderId}`, holderId };
+}
+
+/**
+ * #6041 (owner's answer A): what is attached to a founder holder, in words.
+ * Any of these keeps the holder: its vesting schedule, issued shares, a
+ * co-founder agreement naming them, a filing for them (an 83(b) and the rest),
+ * or logged contributions. The register row's own founding split is what an
+ * added-by-mistake founder consists of, so it is not an attachment: the delete
+ * takes it out of the founding table. A store missing from this database
+ * (or column) holds nothing; any other failed read throws, so nothing is deleted on a
+ * read that did not answer.
+ */
+export async function founderAttachments(env: Env, projectId: number, holder: { id: number; name: string; email: string | null }): Promise<string[]> {
+  const any = async (sql: string, binds: unknown[]) => {
+    try { return !!(await env.DB.prepare(sql).bind(...binds).first()); }
+    catch (e) { if (/no such (table|column)/i.test(String((e as Error)?.message))) return false; throw e; }
+  };
+  const out: string[] = [];
+  if (await any('SELECT 1 FROM cap_table_vesting WHERE holder_id = ? LIMIT 1', [holder.id])) out.push('a vesting schedule');
+  if (await any('SELECT 1 FROM cap_table_issuances WHERE holder_id = ? OR from_holder_id = ? LIMIT 1', [holder.id, holder.id])) out.push('issued shares');
+  if (await any(
+    `SELECT 1 FROM documents d JOIN cofounder_agreement_parties p ON p.document_id = d.id
+      WHERE d.project_id = ? AND d.template_name = 'cofounder_agreement'
+        AND ((? IS NOT NULL AND lower(p.email) = lower(?)) OR lower(trim(p.name)) = lower(trim(?))) LIMIT 1`,
+    [projectId, holder.email, holder.email, holder.name],
+  )) out.push('a co-founder agreement');
+  if (await any("SELECT 1 FROM formation_steps WHERE project_id = ? AND for_holder_id = ? AND kind = '83b' LIMIT 1", [projectId, holder.id])) out.push('an 83(b) filing');
+  else if (await any('SELECT 1 FROM formation_steps WHERE project_id = ? AND for_holder_id = ? LIMIT 1', [projectId, holder.id])) out.push('a filing for them');
+  if (await any('SELECT 1 FROM founder_contributions WHERE project_id = ? AND holder_id = ? LIMIT 1', [projectId, holder.id])) out.push('logged contributions');
+  return out;
+}
+
+/**
+ * #6041: remove a founder added by mistake, through the cap table's own code.
+ * Only a founder holder of this venture with nothing attached
+ * (`founderAttachments`); otherwise 409 with a sentence naming what is
+ * attached. A Carta row is read only here (D1020). The register row goes, then
+ * the base scenario is saved without its founding entry; if that save fails,
+ * the row is put back, so nothing is half-removed. One cap table activity row
+ * records it.
+ */
+export async function removeFounderHolder(env: Env, args: { projectId: number; actor: User; id: string }): Promise<{ id: string }> {
+  ensureTier(args.actor, 'studio');
+  const m = /^h-([1-9][0-9]{0,9})$/.exec(String(args.id || ''));
+  if (!m) throw new HolderError(404, 'Holder not found');
+  const holderId = Number(m[1]);
+  const reg = await env.DB.prepare(
+    `SELECT id, user_id, project_id, name, email, security_type, shares, ownership_pct, source, kind, founder_role, created_at
+       FROM cap_table_holders WHERE id = ? AND project_id = ?`,
+  ).bind(holderId, args.projectId).first<any>();
+  // A founder is a holder the founding team lists: `kind` founder, or a founder role (records/build.ts).
+  if (!reg || !(reg.kind === 'founder' || reg.founder_role != null)) throw new HolderError(404, 'Holder not found');
+  if (reg.source === 'connector_carta') throw new HolderError(409, 'This holder comes from Carta. Remove it in Carta; the next sync brings it here.');
+  const attached = await founderAttachments(env, args.projectId, { id: holderId, name: String(reg.name ?? ''), email: reg.email ?? null });
+  if (attached.length) {
+    const list = attached.length === 1 ? attached[0] : `${attached.slice(0, -1).join(', ')} and ${attached[attached.length - 1]}`;
+    throw new HolderError(409, `${reg.name} cannot be removed: they have ${list}. Remove those first, or keep them on the founding team.`);
+  }
+  const base = await baseScenario(env, args.projectId);
+  const stored: Record<string, any> = storedInputs(base) || {};
+  const founders: any[] = Array.isArray(stored.founders) ? stored.founders.filter((f: any) => !(isEntry(f) && Number(f.holder_id) === holderId)) : [];
+  if (base && !founders.length) {
+    throw new HolderError(409, `${reg.name} is the only founder on the cap table, which needs at least one. Edit this founder instead.`);
+  }
+  if (base) checkInputs({ ...stored, founders } as Inputs);
+  // The vesting check is repeated in the delete itself, so a schedule added in between keeps the holder.
+  const del = await env.DB.prepare(
+    'DELETE FROM cap_table_holders WHERE id = ? AND project_id = ? AND NOT EXISTS (SELECT 1 FROM cap_table_vesting v WHERE v.holder_id = cap_table_holders.id)',
+  ).bind(holderId, args.projectId).run();
+  if (!Number(del.meta?.changes)) throw new HolderError(409, `${reg.name} cannot be removed: something was attached to them meanwhile. Read the founder again.`);
+  let row: ScenarioRow | null = null;
+  try {
+    // With no saved cap table yet there is no founding entry to take out.
+    if (base) row = await recompute(env, args.actor, args.projectId, base, { ...stored, founders } as Inputs);
+  } catch (e) {
+    await env.DB.prepare(
+      `INSERT INTO cap_table_holders (id, user_id, project_id, name, email, security_type, shares, ownership_pct, source, kind, founder_role, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(reg.id, reg.user_id, reg.project_id, reg.name, reg.email, reg.security_type, reg.shares, reg.ownership_pct, reg.source, reg.kind, reg.founder_role, reg.created_at).run();
+    throw e;
+  }
+  await logScenarioAct(env, args.actor as any, 'cap_table_holder_removed', (row ?? { uid: 'none', project_id: args.projectId }) as any, { holder_id: holderId, reason: 'added_by_mistake' });
+  return { id: `h-${holderId}` };
 }
 
 export async function updateHolder(env: Env, args: UpdateHolderArgs): Promise<{ id: string; holderId: number | null }> {

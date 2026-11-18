@@ -68,5 +68,5 @@ test('D6084: the client methods read the Worker routes for this venture', async 
 
 test('D6084: Home draws Export beside Edit split on the desktop only', () => {
   const tool = readFileSync(new URL('../src/pages/raise/useoffunds/UseOfFundsTool.jsx', import.meta.url), 'utf8');
-  assert.match(tool, /\{!phone \? <ExportMenu projectId=\{projectId\} capabilities=\{plan\.viewer\?\.capabilities\} api=\{api\} \/> : null\}/);
+  assert.match(tool, /\{!phone \? <ExportMenu projectId=\{projectId\} capabilities=\{plan\.capabilities\} api=\{api\} \/> : null\}/);
 });

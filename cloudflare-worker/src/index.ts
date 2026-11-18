@@ -611,7 +611,7 @@ app.use(
     // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
     // requests. Without it in the allowlist, the browser preflight blocks
     // every POST/PUT/PATCH/DELETE from the SPA in production.
-    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
+    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record', 'X-Axal-Preview-Shell'],
   }),
 );
 
@@ -3134,6 +3134,16 @@ export default {
           } catch (e) {
             taskFailed('project trash sweep', e);
           }
+          // D6073 (#6073) — a data-room file thirty days in Trash: its objects, then its rows.
+          try {
+            const { purgeExpiredTrash } = await import('./services/dataRoomTrash');
+            const r = await purgeExpiredTrash(env, now);
+            if (r.scanned || r.purged || r.failed) {
+              console.info(`[cron] data room trash purge scanned=${r.scanned} purged=${r.purged} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('data room trash purge', e);
+          }
         }
         // Task #5 (AV) — hourly Vectorize re-embed for axal-search.
         // Walks every entity table, finds rows with id > last watermark
@@ -3262,6 +3272,20 @@ export default {
             }
           } catch (e) {
             taskFailed('hubspot sync', e);
+          }
+        }
+        // D5867 (#5867) — the daily TikTok sync. Hourly at :41, and a connection already synced today (UTC) is
+        // skipped, so each linked connection lands at most one snapshot a day and a failed hour is retried the next.
+        // Totals only in the log: no figure, title or open_id.
+        if (now.getUTCMinutes() === 41) {
+          try {
+            const { syncAllTiktokIntegrations } = await import('./services/tiktok/daily');
+            const r = await syncAllTiktokIntegrations(env, now.getTime());
+            if (r.scanned > 0) {
+              console.info(`[cron] tiktok sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed} skipped=${r.skipped} snapshots=${r.snapshots} videos=${r.videos} kept_deleted=${r.kept_deleted}`);
+            }
+          } catch (e) {
+            taskFailed('tiktok sync', e);
           }
         }
         // Task #3 — Calendly 15-minute reconcile. Webhooks deliver real-time

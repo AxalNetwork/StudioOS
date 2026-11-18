@@ -30,10 +30,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * profile is empty, and it stays that way by construction: a zone without a
  * row fails the exact-set check there.
  *
- * SOME ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED. `funds/lps` and
- * `funds/reporting` each carry four real predicates over rows they load; their
- * entries here name the keys those pages already use, and not one predicate is
- * touched. The point of the move is the header row's shape, not a rewrite of
+ * SOME ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED. `funds/lps`
+ * carries four real predicates over rows it loads; its entry here names the
+ * keys that page already uses, and not one predicate is touched.
+ * (`funds/reporting` was listed here too, and two of its four keys matched no
+ * stored status; #6230 fixed them.) The point of the move is the header row's shape, not a rewrite of
  * working code.
  */
 
@@ -133,6 +134,8 @@ export const INVESTOR_ZONE_FILTERS = {
   // tracked, so there is no notice state to filter lines by.
   'funds/calls': [
     { canvas: 'Call 3', label: 'Current call', key: 'latest' },
+    // D6238: every numbered call as one row (number, issued, due, amount,
+    // collected, outstanding, lines behind), each opening its own page.
     { canvas: 'All calls', key: 'all' },
     { canvas: 'Outstanding', key: 'outstanding' },
     { canvas: 'Notices', unbuilt: 'an in-app notice is logged for each LP account when a call is issued, but no letter is kept and no delivery is tracked, so there is no notice state to filter by', hover: 'Call notices are logged, but their delivery is not tracked, so there is nothing to filter.' },
@@ -150,15 +153,17 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Audit trail', unbuilt: NO_LEDGER_AUDIT },
   ],
 
-  // Four real predicates over `api.lpReportsList` / `api.fundsReportPeriods`.
-  // `Delivery` narrows on optional fields, which is honest: a period with no
-  // delivery record simply does not match, and the zone's ops half already
-  // notes that delivery is counted and never itemised.
+  // #6230: three predicates over `api.fundsReportPeriods`, the selected fund's
+  // periods. A period's `status` is `draft` or `issued` (migration 163); the
+  // keys were `published` and `drafted`, which no period carries, so both
+  // chips selected nothing. They wear the stored words now. `Delivery` narrowed
+  // on delivery fields no period has, so it also selected nothing; it is a
+  // stated gap instead.
   'funds/reporting': [
-    { canvas: 'All periods', key: 'all' },
-    { canvas: 'Published', key: 'published' },
-    { canvas: 'Drafted', key: 'drafted' },
-    { canvas: 'Delivery', key: 'delivery' },
+    { canvas: 'All periods', key: 'all', label: 'All periods {n}' },
+    { canvas: 'Published', key: 'issued', label: 'Issued {n}' },
+    { canvas: 'Drafted', key: 'draft', label: 'Draft {n}' },
+    { canvas: 'Delivery', unbuilt: 'a period records when it was issued, not which LP received it, so there is no delivery state to filter by', hover: 'Delivery to each LP is not tracked, so there is nothing to filter.' },
   ],
 
   // ── Portfolio ────────────────────────────────────────────────────────────
@@ -338,11 +343,13 @@ export const INVESTOR_ZONE_FILTERS = {
   'research/ask': [
     { canvas: 'All sessions', key: 'all' },
     { canvas: 'Saved', key: 'saved' },
-    {
-      canvas: 'Cited in a memo',
-      unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
-    },
+    // D6272: `Cited in a memo` is gone. No store can select it — a citation
+    // names a passage and carries no memo — so it was a control that could
+    // only refuse. `Show cleared` takes its place: the sessions Clear history
+    // hid (owner, #6274 question 4 B), read back by the Worker's `cleared`
+    // scope with Restore beside them.
     { canvas: 'Discarded', key: 'discarded' },
+    { canvas: 'Show cleared', key: 'cleared' },
   ],
   // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
   // THE WORD SUGGESTS. Its own artboard code reads
@@ -379,13 +386,14 @@ export const INVESTOR_ZONE_FILTERS = {
   'research/benchmarking': [
     { canvas: 'Peer set', key: 'comparison', label: 'Compared' },
     { canvas: 'Metrics', key: 'all' },
+    { canvas: 'No read yet', key: 'unread' },
     {
       canvas: 'Saved',
       unbuilt: 'a benchmark row has no draft state; the form writes a finished row on submit, so every metric on this page is saved',
     },
     {
       canvas: 'Export',
-      unbuilt: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn', hover: 'Export is an action, not a view — it sits in the other half of this row.',
+      unbuilt: 'the action row has the CSV download and it follows the current filter and sort', hover: 'Use Export in the action row to download this view.',
     },
   ],
   'research/markets': [

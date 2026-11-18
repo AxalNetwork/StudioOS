@@ -89,6 +89,11 @@ test('L15: HQ revision against the branch revision, the failed attempt’s time 
   assert.match(text, new RegExp(`${escapeRe(RETRY_SYNC_NOTE)} The next try is not before 9 Nov 2026, 12:54 UTC\\.`));
   assert.match(strip({ sync: PENDING, licenceUid: undefined }), /<button type="button" disabled="" data-testid="licence-sync-retry"/,
     'with no licence to name, there is nothing to post, so it stays disabled');
+  assert.match(strip({ sync: PENDING, licenceUid: undefined, onRetry: () => {} }),
+    /<button type="button" data-testid="licence-sync-retry"/, 'legacy ledger callbacks remain live');
+  assert.match(strip({ sync: PENDING, busy: true }),
+    /<button type="button" disabled="" data-testid="licence-sync-retry"/, 'a busy ledger does not send a second action');
+
   assert.match(html, /data-testid="licence-sync-reread"/, 'Read again re-reads the licence');
 });
 
@@ -122,7 +127,7 @@ test('an unreadable sync is never drawn as synced', () => {
   assert.equal(stateOf(reg), 'unreadable');
   assert.doesNotMatch(renderedText(reg), /Synced with HQ/);
   // The Retry on an unreadable record is there.
-  assert.match(strip({ sync: { ...SYNCED, available: false } }), /<button type="button" class="[^"]*"><svg[^>]*>.*?<\/svg> Retry<\/button>/);
+  assert.match(strip({ sync: { ...SYNCED, available: false } }), /<button type="button" class="[^"]*"[^>]*><svg[^>]*>.*?<\/svg> Retry<\/button>/);
   assert.equal(syncBoard({ ...SYNCED, branch_revision: 141 }, NOW).queueUnread, false);
   assert.equal(syncBoard({ ...SYNCED, branch_revision: 141, pending_available: false }, NOW).queueUnread, true);
 });
@@ -244,6 +249,8 @@ async function mount(handle) {
   return {
     calls, has: (id) => Boolean(byId(id)), text: () => text(container),
     async click(id) { await act(async () => { await props(byId(id)).onClick({ preventDefault() {} }); }); await flush(); },
+    // D4819 part 21: a press that opens the consequence sheet resolves only when the sheet is answered.
+    async press(id) { await act(async () => { props(byId(id)).onClick({ preventDefault() {} }); }); await flush(); },
     async clickText(label) {
       const n = walk(container).find((x) => x.tagName === 'BUTTON' && text(x).includes(label));
       assert.ok(n, `a ${label} button`);
@@ -262,7 +269,11 @@ test('mounted: Reconcile on a failed deployment asks the Worker, dispatches noth
   try {
     assert.ok(v.has('deploy-provisioning'));
     assert.ok(v.has('deploy-retry-form'), 'Retry stays beside it');
-    await v.click('deploy-reconcile');
+    await v.press('deploy-reconcile');
+    assert.ok(v.has('licence-consequence-sheet'), 'Reconcile asks in the consequence sheet first (D4819 part 21)');
+    assert.deepEqual(v.calls.filter(([m]) => m === 'POST'), [], 'nothing is sent before the sheet is confirmed');
+    assert.match(v.text(), /Reconcile never starts a run/);
+    await v.press('licence-consequence-confirm');
     assert.deepEqual(v.calls.filter(([m]) => m === 'POST'), [['POST', '/admin/licences/lic_fr/deploy/reconcile']], 'Reconcile is the read-only check; no retry is sent');
     assert.match(v.text(), /Reconciled\. Attempt 1 is recorded as failed \(run_failed\), and nothing was sent\. Retry starts attempt 2\./);
   } finally { await v.close(); }

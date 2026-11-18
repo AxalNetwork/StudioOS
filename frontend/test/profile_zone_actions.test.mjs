@@ -174,6 +174,8 @@ const PROFILES = {
     // mark-history Sheet). Each label here must still be on its artboard and
     // must not be in the table.
     withheld: { 'portfolio/positions': ['Add follow-on'] },
+    // #6276 adds a visible-row CSV beside the original canvas controls.
+    offCanvas: { 'research/benchmarking': ['Export'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -182,7 +184,7 @@ const PROFILES = {
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
     // is stored to export" was true until migration 312's receipts (D371).
     // 14 since D1243: `deals/pipeline`'s Export left with its zone.
-    exports: 14,
+    exports: 15,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -238,9 +240,20 @@ const PROFILES = {
     // FIFTEENTH: `funds/calls`'s `New call` — migration 312 built the call
     // header and receipts, and D371 put the form on the Calls page.
     //
-    // SEVENTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
+    // SEVENTEENTH (#6230): `funds/reporting`'s `New reporting period`, which
+    // replaced `Build pack`. That gap was never real: `FundReportPeriodPage`
+    // drafts and issues a period at `/funds/:fundId/reporting/new`.
+    // EIGHTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
     // stores the log and the page draws it; the op scrolls to that card.
-    handlers: 17,
+    // NINETEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
+    // hide over delete on #6274 (question 4 B); the Worker stamps `cleared_at`
+    // and `Show cleared` reads it back.
+    // D6276 also supplies New benchmark from the page.
+    //
+    // TWENTY-FIRST: `funds/calls`'s `Send reminders` (#6238, D6238) — it opens
+    // the call's chase: one Eadwyn draft per line behind, each logged as sent
+    // only when the GP confirms it.
+    handlers: 21,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -410,6 +423,13 @@ const PROFILES = {
     // ops come from the backlog file, by route rather than by directory. See
     // the `alsoZones` block in `canvasOps` for why the whole file is not swept.
     alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
+    // #4832 (D4832): Sessions' header is the Practice v2 canvas's (PX-05),
+    // written as `hdr('Sessions', '…', 'Block time', 'Share booking link')`, so
+    // its ops are that call's string arguments after the title and the blurb.
+    v2Ops: [['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions', { args: true }]],
+    // `Export to calendar` stays on the page off the v2 canvas: an .ics of the
+    // tab's sessions, built in the browser (D4832).
+    offCanvas: { 'practice/sessions': ['Export to calendar'] },
     buckets: /^(expertise|network|research|practice)\//,
     // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
     // TWO HAVE MOVED APART. PR1, PR2 and PR3 each drew exactly two ops, one of
@@ -455,7 +475,8 @@ const PROFILES = {
     // (#4681) — Profile's `Preview as founder` and Proof's `Public preview`
     // said no public profile page existed, and `/advisors/:uid` does; both
     // are the page's `openPublicPreview`. Two gaps became two handlers.
-    handlers: 13,
+    // FOURTEEN: #4832 (D4832) — Sessions' `Share booking link` (PX-05).
+    handlers: 14,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -809,12 +830,15 @@ function canvasOps(profile) {
   // #5935 (D4838): A ZONE A V2 CANVAS REDREW. Its section builder passes the
   // header's buttons to `hdr(…)` before `+ zones(…)`, so the ops are read from
   // that call, and they override the older artboard's row for the same route.
-  for (const [zone, file, section] of profile.v2Ops || []) {
+  for (const [zone, file, section, { args = false } = {}] of profile.v2Ops || []) {
     const src = read(file);
     const at = src.indexOf(`const ${section} = () => hdr(`);
     assert.ok(at >= 0, `${file} has no ${section} section builder`);
-    const call = src.slice(at, src.indexOf('+ zones(', at));
-    const ops = [...call.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
+    // #4832 (D4832): a header written as string arguments (`hdr(title, blurb,
+    // primary, secondary)`) names its ops from the third argument on.
+    const ops = args
+      ? [...callText(src, src.indexOf('hdr(', at)).matchAll(/'([^']*)'/g)].map((m) => m[1].trim()).slice(2)
+      : [...src.slice(at, src.indexOf('+ zones(', at)).matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
     assert.ok(ops.length, `${file}'s ${section} header parsed with no ops`);
     out[zone] = ops;
   }
@@ -1448,7 +1472,7 @@ test('a gap note describes the screen, never a capability the API already has', 
   assert.match(table, /\{ label: 'New call', kind: 'handler', handler: 'newCall', primary: true \}/,
     'New call is neither a handler nor a stated gap — it is unaccounted for');
   const page = read('frontend/src/pages/investor/InvestorFundCalls.jsx');
-  assert.match(page, /handlers: \{ newCall \}/, 'the Calls page does not supply the New call handler');
+  assert.match(page, /handlers: \{ newCall, sendReminders \}/, 'the Calls page does not supply the New call and Send reminders handlers');
   assert.match(api, /\n  fundsCapitalCallV2:/, 'api.js no longer declares fundsCapitalCallV2');
   assert.match(api, /\n  fundsCallPreview:/, 'api.js no longer declares the preview the form reads first');
   assert.ok(worker.includes("post('/:id/capital-call'"), "funds.ts no longer serves post('/:id/capital-call'");
@@ -1462,15 +1486,11 @@ test('a gap note describes the screen, never a capability the API already has', 
     'the call job no longer writes through the ledger, so the queued path and the form can disagree');
   assert.doesNotMatch(handler, /SET deployed_capital = deployed_capital \+/,
     'the call job bumps deployed_capital again, which double-counts against the receipts');
-  // The zone's one remaining gap must not deny what exists either: a notice IS
-  // logged per LP account when a call is issued, so "nothing sends" or "no
-  // notice is stored" would be this test's original error in a new place.
-  const at = table.indexOf("'funds/calls'");
-  const entry = table.slice(at, table.indexOf('],', at));
-  const reminders = entry.match(/\{ label: 'Send reminders', unbuilt: '([^']*)'/);
-  assert.ok(reminders, "funds/calls' Send reminders is no longer a stated gap — if it was wired, assert the handler");
-  assert.doesNotMatch(reminders[1], /nothing on this desk sends|no (call )?notice is (stored|sent|logged)/i,
-    `Send reminders denies the notice the call already logs: "${reminders[1]}"`);
+  // D6238 (#6238): Send reminders was the zone's last gap and is wired: it
+  // opens the chase, which drafts and logs, and sends nothing itself.
+  assert.match(table, /\{ label: 'Send reminders', kind: 'handler', handler: 'sendReminders' \}/,
+    "funds/calls' Send reminders is neither a handler nor a stated gap");
+  assert.match(page, /export function ReminderQueue\(/, 'the chase Send reminders opens is gone');
 });
 
 test('the shared surfaces dispatch on the role, and refuse an unknown one', () => {
@@ -1697,7 +1717,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasOps(profile);
     const table = tableEntries(SRC);
     const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
-    assert.equal(primaries.length, { founder: 0, investor: 6, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
+    assert.equal(primaries.length, { founder: 0, investor: 7, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
     for (const e of primaries) {
       const zone = e.zone;
       // `canvas:` is the artboard's word where the rendered label differs.

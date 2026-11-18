@@ -105,8 +105,10 @@ const RESEARCH_BODIES = {
   // WAS `pages/SignalsPage.jsx`, AND THE ZONE'S OBJECT IS WHY IT MOVED. That
   // page is the `market_intel_rows` sector feed and keeps its own route at
   // `/signals`; the `pr3` artboard is about comparable RANGES for the firm's
-  // own service lines, which is what `MarketZone` reads.
-  'research/markets': 'frontend/src/pages/research/MarketZone.jsx',
+  // own service lines. D6285: this named `MarketZone.jsx`, a body nothing had
+  // mounted since D593, so the mount checks below read a page no one saw. The
+  // body `ResearchWorkspace` mounts at this slug is the market directory.
+  'research/markets': 'frontend/src/pages/research/MarketDirectoryZone.jsx',
   'research/companies': 'frontend/src/components/CompetitorAnalysis.jsx',
   'research/funds': 'frontend/src/pages/research/FundsZone.jsx',
   'research/benchmarking': 'frontend/src/pages/research/BenchmarkingZone.jsx',
@@ -278,6 +280,13 @@ const PROFILES = {
       ['practice/engagements', 'design/incoming/Practice v2 Page.dc.html', 'engagements'],
       ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery'],
       ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
+      // #4832 (D4832): Sessions' row (PX-05), `Upcoming · Past · Cancelled`.
+      ['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions'],
+      // #4826 (D4826 part 2): Thinking is redrawn to the Expertise v2 canvas
+      // (EX-11), whose chips are literal radio buttons in the `thinking`
+      // section builder — `All · Needs you · With editors · Published` — read
+      // by `row: 'radios'`. It overrides AX4's `All · Published · Drafts · Essays`.
+      ['expertise/thinking', 'design/incoming/Expertise v2 Page.dc.html', 'thinking', { row: 'radios' }],
     ],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
@@ -362,6 +371,10 @@ const PROFILES = {
     // `row: 'list'`.
     v2Zones: [
       ['pipeline/leads', 'design/incoming/Pipeline v2 Page.dc.html', 'leads', { row: 'list' }],
+      // #4842 (D4842): Proof is redrawn to the Offers v2 canvas (OF-03), whose
+      // chips are literal radio buttons in the `proof` section builder, read
+      // by `row: 'radios'`. It overrides the po4 artboard's row.
+      ['offers/proof', 'design/incoming/Offers v2 Page.dc.html', 'proof', { row: 'radios' }],
     ],
     // `pages/partner/offers` IS ITS OWN ENTRY BECAUSE `mountingFile` DOES NOT
     // RECURSE. Three of the five Offers zones have their own file in there and
@@ -513,7 +526,8 @@ function canvasFilters(profile) {
   // fails here rather than quietly dropping nothing.
   for (const [zone, file, section, { omit = [], why, row } = {}] of profile.v2Zones || []) {
     const chips = row === 'seg' ? v2SectionSeg(read(file), section)
-      : (row === 'list' ? v2SectionList(read(file), section) : v2SectionChips(read(file), section));
+      : row === 'radios' ? v2SectionRadios(read(file), section)
+        : (row === 'list' ? v2SectionList(read(file), section) : v2SectionChips(read(file), section));
     assert.ok(chips.length, `${file} draws no chips for its ${section} section`);
     for (const name of omit) {
       assert.ok(chips.includes(name), `${zone}: ${name} is omitted but the canvas does not draw it`);
@@ -538,6 +552,22 @@ function v2SectionList(src, section) {
   const from = src.indexOf('J([', row);
   const end = src.indexOf(']', from);
   return [...src.slice(from, end).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+}
+
+/**
+ * #4842 (D4842): the chips of a `class="chips"` radiogroup written as literal
+ * buttons (`<button type="button" role="radio" …>All<span>5</span></button>`)
+ * in one Offers v2 section builder, in canvas order. The `<span>` is the
+ * sample count, so only the text before it is the chip's name.
+ */
+function v2SectionRadios(src, section) {
+  const at = src.indexOf(`const ${section} = () =>`);
+  if (at < 0) return [];
+  const row = src.indexOf('class="chips" role="radiogroup"', at);
+  const next = src.indexOf('\n    const ', at + 10);
+  if (row < 0 || (next >= 0 && row > next)) return [];
+  const end = src.indexOf('</div>', row);
+  return [...src.slice(row, end).matchAll(/role="radio" aria-checked="(?:true|false)">([^<]+)</g)].map((m) => m[1].trim());
 }
 
 /**
@@ -760,6 +790,12 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     if (name === 'founder') canvas['research/ask'] = canvas['research/ask'].filter((label) => label !== 'Cited in deck');
     // #5365 (F-09) retires IP2's Parse review chip: it was internal working copy shown to investors, and no extraction layer exists.
     if (name === 'investor') canvas['portfolio/updates'] = canvas['portfolio/updates'].filter((label) => label !== 'Parse review');
+    // #6276 adds No read yet after Metrics.
+    if (name === 'investor') canvas['research/benchmarking'].splice(2, 0, 'No read yet');
+    // D6272 (#6272): no store selects `Cited in a memo` (a citation names a
+    // passage, never a memo), so it is retired; `Show cleared` is the owner's
+    // filter for Clear history (#6274 question 4 B) and has no artboard label.
+    if (name === 'investor') canvas['research/ask'] = [...canvas['research/ask'].filter((label) => label !== 'Cited in a memo'), 'Show cleared'];
     const zones = Object.keys(profile.table);
     assert.equal(zones.length, profile.zones, 'the table gained or lost a zone');
     for (const zone of zones) {

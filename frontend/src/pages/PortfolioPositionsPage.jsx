@@ -5,6 +5,9 @@ import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
 import WriteFlow from './portfolio/WriteFlow.jsx';
+import MarkRequestsAdmin from './portfolio/MarkRequestsAdmin.jsx';
+import MarkRequestQueue from './portfolio/MarkRequestQueue.jsx';
+import { markRequestsApi } from '../lib/api/markRequests';
 
 const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
 const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
@@ -27,6 +30,14 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   // each goes Prepare → Review → Confirm → Receipt in `WriteFlow`.
   const [flow, setFlow] = useState(null); // { kind: 'mark' | 'distribution', n }
   const [closeAsked, setCloseAsked] = useState(false);
+  // D6205 part 2: investors' requests for the company the sheet is about, read
+  // on their own so a failed read says so instead of hiding the sheet. The mark
+  // the write flow just stored is the one a Resolve starts on.
+  const [requests, setRequests] = useState({ state: 'loading', items: [] });
+  const [justRecorded, setJustRecorded] = useState(null);
+  // D6909 part 2 (PRM22): every open request across companies, oldest first, above the register.
+  const [queue, setQueue] = useState({ state: 'loading', items: [] });
+  const [queueNote, setQueueNote] = useState(null);
 
   // Task #83 — when we arrive from an IC "invest" decision the startup + round
   // are handed over via router state; prefill the form and open it so the admin
@@ -53,9 +64,46 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   };
   useEffect(load, []);
 
-  const openDetail = async (projectUid) => {
+  const loadQueue = () => {
+    if (!isAdmin) return;
+    setQueue((cur) => ({ state: 'loading', items: cur.items }));
+    markRequestsApi.queue().then(
+      (res) => setQueue(Array.isArray(res?.items) ? { state: 'ok', items: res.items } : { state: 'unreadable', items: [] }),
+      () => setQueue({ state: 'unreadable', items: [] }),
+    );
+  };
+  useEffect(loadQueue, [isAdmin]);
+  // Decline: the queue is read again either way, so a request answered meanwhile leaves it.
+  const declineFromQueue = async (row, note) => {
+    try { await markRequestsApi.answer(row.uid, { state: 'declined', note }); }
+    finally { loadQueue(); }
+  };
+  const evidenceFromQueue = async (row) => {
+    setQueueNote(null);
+    try {
+      const { blob, filename } = await markRequestsApi.downloadEvidence(row.uid);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename || 'evidence'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setQueueNote(e?.message || 'The evidence file could not be downloaded.'); }
+  };
+
+  const loadRequests = (projectUid) => {
+    if (!isAdmin || !projectUid) return;
+    setRequests((cur) => ({ state: 'loading', items: cur.items }));
+    markRequestsApi.list({ projectUid }).then(
+      (res) => setRequests(Array.isArray(res?.items) ? { state: 'ok', items: res.items } : { state: 'unreadable', items: [] }),
+      () => setRequests({ state: 'unreadable', items: [] }),
+    );
+  };
+
+  const openDetail = async (projectUid, { keepRecorded = false } = {}) => {
     if (!projectUid) return;
     setErr(null);
+    if (!keepRecorded) setJustRecorded(null);
+    loadRequests(projectUid);
     try { setDetail(await api.positionsByProject(projectUid)); }
     catch (e) { setErr(e.message || 'Failed to load company'); }
   };
@@ -83,7 +131,14 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   const saveDist = (body) => api.positionDistributionCreate(detail.project.uid, { ...body });
   const rereadDetail = () => api.positionsByProject(detail.project.uid);
   // The histories behind the flow refresh once the Worker has the record.
-  const onFlowSaved = () => { if (detail?.project?.uid) openDetail(detail.project.uid); };
+  const onFlowSaved = () => { if (detail?.project?.uid) openDetail(detail.project.uid, { keepRecorded: true }); };
+  const onMarkSaved = (stored) => { if (stored?.uid) setJustRecorded(String(stored.uid)); onFlowSaved(); };
+  // D6205 part 2: HQ answers a request; the list is read again either way, so
+  // a request answered meanwhile shows as answered rather than as a failure.
+  const answerRequest = async (req, answer) => {
+    try { await markRequestsApi.answer(req.uid, answer); }
+    finally { loadRequests(detail?.project?.uid); loadQueue(); }
+  };
   const openFlow = (kind) => setFlow((cur) => ({ kind, n: (cur?.n || 0) + 1 }));
   // The page's clock, read when a draft opens: the flow's model reads none.
   const today = () => new Date().toISOString().slice(0, 10);
@@ -142,6 +197,13 @@ export default function PortfolioPositionsPage({ embedded = false }) {
         </form>
       )}
 
+      {isAdmin ? (
+        <>
+          <MarkRequestQueue read={queue} today={today()} onRetry={loadQueue} onRecord={(r) => openDetail(r.projectUid)}
+            onDecline={declineFromQueue} onEvidence={evidenceFromQueue} />
+          {queueNote ? <p role="alert" className="-mt-4 mb-4 text-sm text-rose-700 dark:text-rose-300" data-testid="mark-queue-evidence-error">{queueNote}</p> : null}
+        </>
+      ) : null}
       {loading ? (
         <div className="text-gray-500 text-center py-16">Loading…</div>
       ) : items.length === 0 ? (
@@ -250,7 +312,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
             {isAdmin && (
               flow?.kind === 'mark' ? (
                 <WriteFlow key={`mark-${flow.n}`} kind="mark" detail={detail} today={today()} save={saveMark} reread={rereadDetail}
-                  onSaved={onFlowSaved} onClose={() => setFlow(null)} closeAsked={closeAsked} onCloseAnswered={closeAnswered} />
+                  onSaved={onMarkSaved} onClose={() => setFlow(null)} closeAsked={closeAsked} onCloseAnswered={closeAnswered} />
               ) : (
                 <button type="button" onClick={() => openFlow('mark')} disabled={Boolean(flow)} data-testid="button-mark-open" className="mb-4 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
                   Record a mark
@@ -288,6 +350,11 @@ export default function PortfolioPositionsPage({ embedded = false }) {
                   Record a distribution
                 </button>
               )
+            )}
+
+            {isAdmin && (
+              <MarkRequestsAdmin companyName={detail.project?.name || 'this company'} read={requests} marks={detail.marks || []}
+                justRecorded={justRecorded} onAnswer={answerRequest} onRetry={() => loadRequests(detail.project?.uid)} />
             )}
           </div>
         </Sheet>

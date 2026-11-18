@@ -175,6 +175,7 @@ test('D6733: Retry sync sends the owed copy now, inside the cron window, and the
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(b.calls.length, 1, 'one copy sent');
   assert.equal(b.calls[0].hq_revision, 144, 'under a new revision, read fresh');
+  assert.equal(r.body.status, 'active', 'the ledger retry response keeps its status');
   assert.equal(r.body.pushed.ok, true);
   assert.equal(r.body.pushed.revision, 144);
   assert.equal(pending(db).length, 0, 'the owed copy landed, so nothing stays owed');
@@ -298,4 +299,14 @@ test('D6733: an unknown licence is 404 not_found', async () => {
   assert.equal(r.status, 404);
   assert.equal(r.body.error, 'not_found');
   assert.equal(b.calls.length, 0);
+});
+
+test('D6733 integration: a draft is not issued, even if a pending row exists', async () => {
+  const db = freshDb();
+  db.prepare("UPDATE territory_licences SET status = 'draft' WHERE uid = ?").run(LIC);
+  owe(db, 10);
+  const b = branch();
+  const result = await retry(db, b);
+  assert.deepEqual([result.status, result.body.error, b.calls.length], [409, 'not_issued', 0]);
+  assert.equal(syncState(db).hq_revision, 143, 'a draft spends no revision');
 });

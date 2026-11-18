@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 // #4574 H4 moved these shared modules out of the shell. Preload them as a browser would after their chunks arrive.
 await import('../src/ui/index.js');
 await import('../src/pages/founder/RecordingView.jsx');
@@ -83,21 +83,27 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
   if (viewMode) localStorage.setItem('viewMode', viewMode);
   localStorage.setItem('hqView', hq);
   let at = null, navigate = null;
-  function Landed() { at = useLocation(); navigate = useNavigate(); return null; }
+  let navigationType;
+  function Landed() { at = useLocation(); navigationType = useNavigationType(); navigate = useNavigate(); return null; }
   const host = dom.document.createElement('div'); dom.document.body.appendChild(host);
   const root = createRoot(host);
   const { error, warn } = console; console.error = () => {}; console.warn = () => {};
   const read = () => ({
     path: at?.pathname,
+    search: at?.search,
+    hash: at?.hash,
+    navigation: navigationType,
     studio: select(dom.document, STUDIO).length,
     canvas: select(dom.document, '[data-testid="investor-portfolio-canvas"]').length,
     preview: select(dom.document, '[data-testid="portfolio-preview"]').length,
     h1: select(dom.document, 'h1').map((n) => n.textContent.trim()),
+    tabs: select(dom.document, 'button').map((n) => n.textContent.trim())
+      .filter((label) => ['Overview', 'Health', 'Reports', 'Positions', 'Cap Table', 'Performance', 'Value-add'].includes(label)),
     links: select(dom.document, 'a').map((n) => n.getAttribute?.('href')).filter(Boolean),
   });
   const investorView = (viewMode ?? member.role) === 'investor';
   async function settle(route) {
-    const heading = investorView ? PORTFOLIO_ROUTES[route] ?? OTHER_ROUTES[route] : undefined;
+    const heading = PORTFOLIO_ROUTES[route] ?? (investorView ? OTHER_ROUTES[route] : undefined);
     const ready = () => {
       if (route === '/studio') return at?.pathname === route && select(dom.document, STUDIO).length > 0;
       const headings = select(dom.document, 'h1');
@@ -114,9 +120,9 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
   try {
     return await run({
       /** A direct load, as a refresh is. */
-      async load(route) {
+      async load(route, expectedPath = route) {
         await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route], key: `${route}:${Math.random()}` }, h(App), h(Landed))); });
-        return settle(route);
+        return settle(expectedPath);
       },
       /** A client-side move, as a click in the shell is. */
       async go(route) { await act(async () => { navigate(route); }); return settle(route); },
@@ -162,11 +168,28 @@ test('2. the root is Portfolio\'s own Overview, never the Studio home: the PF-08
     }
   });
   await app(INVESTOR, {}, async (a) => {
-    for (const route of ['/portfolio', '/portfolio/health']) {
-      const r = await a.load(route);
-      assert.equal(r.canvas, 1, `${route} draws InvestorPortfolioCanvas for an investor`);
-    }
+    const overview = await a.load('/portfolio');
+    assert.equal(overview.canvas, 1);
+    const alias = await a.load('/portfolio/health?source=report&as_of=2026-09-30#basis', '/portfolio');
+    assert.equal(alias.canvas, 1);
+    assert.deepEqual([alias.path, alias.search, alias.hash, alias.navigation],
+      ['/portfolio', '?source=report&as_of=2026-09-30', '#basis', 'REPLACE']);
   });
+});
+
+test('#6211: Admin sees the matching labels; Founder and Partner keep the Health tab and address', async () => {
+  const route = '/portfolio/health';
+  for (const [member, tabs] of [
+    [PLAIN, ['Overview', 'Reports', 'Positions', 'Performance', 'Value-add']],
+    [{ ...INVESTOR, role: 'founder' }, ['Health']],
+    [{ ...INVESTOR, role: 'partner' }, ['Health']],
+  ]) {
+    await app(member, {}, async (a) => {
+      const r = await a.load(route + '?source=saved', route);
+      assert.deepEqual([r.path, r.search, r.navigation], [route, '?source=saved', 'POP'], member.role);
+      assert.deepEqual(r.tabs, tabs, member.role);
+    });
+  }
 });
 
 test('3. the HQ view and a plain admin change nothing: Portfolio stays Portfolio', async () => {

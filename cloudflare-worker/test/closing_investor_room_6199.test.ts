@@ -51,6 +51,7 @@ function freshDb() {
   db.exec(BASELINE);
   for (const f of ['312_fund_call_ledger.sql', '335_deal_transfers_and_closing_checklists.sql', '340_deal_transfer_company.sql',
     '410_safe_issuances.sql', '599_deal_currency.sql']) db.exec(MIG(f));
+    db.exec(MIG('202611161505_6195_commitment_route_preference.sql')); // D6195: commitments.route_preference
   db.exec('ALTER TABLE raise_prospects ADD COLUMN amount_cents INTEGER');
   db.exec(`
     INSERT INTO founders (id, name, email) VALUES (31, 'Fay Founder', 'fay@example.test');
@@ -64,6 +65,7 @@ function freshDb() {
       (101, 'cm-a', 41, 6, 250000.5, 'confirmed'), (102, 'cm-b', 41, 7, 125000, 'pending'), (103, 'cm-c', 41, 8, 50000, 'withdrawn');
   `);
   db.exec(MIG('612_closings.sql'));
+  db.exec(MIG('202611151545_6198_closing_sender_declarations.sql')); // D6198: the line status reads the sender's declarations
   db.exec(MIG('579_reporting_duties.sql'));
   db.exec(MIG('633_staged_signing.sql'));
   return db;
@@ -257,4 +259,53 @@ test('open: a paper read that fails makes only the investor part Unreadable; the
   assert.deepEqual(a.body.for_investor, { unreadable: true });
   assert.equal(a.body.lines.length, 1);
   assert.equal(a.body.total_cents, 37500050);
+});
+
+// ── D6198 (#6198): "I have sent it" without Mercury — the investor's own declaration ─────────
+test('D6198: the investor declares on their own line; it reads Sent and never Received, and the studio is told in app', async () => {
+  const { db, uid, lines } = await opened();
+  const path = `/api/closings/${uid}/lines/${lines[INV_A]}/declaration`;
+  const r = await call(db, 'POST', path, INV_A, { sent_on: '2026-10-20', amount_cents: 25000050, reference: 'Seed wire, Oct' });
+  assert.equal(r.status, 201, r.text);
+  const status = (u: number) => (db.prepare('SELECT status FROM closing_lines WHERE investor_user_id = ?').get(u) as any).status;
+  assert.equal(status(INV_A), 'sent', 'a declaration is Sent, not yet confirmed');
+  const read = await call(db, 'GET', `/api/closings/${uid}`, INV_A);
+  const own = read.body.lines.find((l: any) => l.uid === lines[INV_A]);
+  assert.deepEqual(own.sender_declarations.map((d: any) => [d.sent_on, d.amount_cents, d.reference, d.withdrawn_at]), [['2026-10-20', 25000050, 'Seed wire, Oct', null]]);
+  // The studio (the closing's opener, an admin) is told in the app.
+  const notes = db.prepare("SELECT user_id, type, link FROM notifications_inbox WHERE type = 'closing_sender_declared'").all() as any[];
+  assert.deepEqual(notes.map((n) => [n.user_id, n.link]), [[ADMIN, '/admin/contracts/closings/41']]);
+  // Only receiving evidence turns it Received; a second declaration is refused until the first is withdrawn.
+  const again = (await call(db, 'POST', path, INV_A, { sent_on: '2026-10-21', amount_cents: 1 })).body;
+  assert.equal(again?.code ?? again?.error, 'already_declared');
+  const lineId = Number((db.prepare('SELECT id FROM closing_lines WHERE investor_user_id = ?').get(INV_A) as any).id);
+  db.prepare("INSERT INTO closing_evidence (line_id, kind, side, source_ref, recorded_by, created_at) VALUES (?, 'company_mercury', 'receiving', 'mercury:r9', 1, '2026-10-22 09:00:00')").run(lineId);
+  db.exec(`UPDATE closing_lines SET status = 'received' WHERE id = ${lineId}`);
+  const w = await call(db, 'POST', `${path}/withdraw`, INV_A);
+  assert.equal(w.status, 200, w.text);
+  assert.equal(status(INV_A), 'received', 'withdrawing the declaration never undoes received evidence');
+});
+
+test('D6198: another investor, the founder and an admin cannot declare on a line; no bank details; bad input refused', async () => {
+  const { db, uid, lines } = await opened();
+  const path = `/api/closings/${uid}/lines/${lines[INV_A]}/declaration`;
+  const ok = { sent_on: '2026-10-20', amount_cents: 100 };
+  for (const who of [INV_B, FOUNDER, ADMIN]) {
+    const r = await call(db, 'POST', path, who, ok);
+    assert.equal(r.status, 404, `user ${who}: another's line reads as missing`);
+  }
+  for (const [body, code] of [
+    [{ ...ok, reference: '12345678' }, 'reference_account_like'],
+    [{ ...ok, reference: 'GB29NWBK60161331926819' }, 'reference_account_like'],
+    [{ ...ok, reference: '4111 1111 1111 1111' }, 'reference_account_like'],
+    [{ ...ok, sent_on: '2099-01-01' }, 'sent_on_future'],
+    [{ ...ok, sent_on: '2026-02-30' }, 'sent_on_invalid'],
+    [{ ...ok, amount_cents: 0 }, 'amount_invalid'],
+    [{ ...ok, amount_cents: 1.5 }, 'amount_invalid'],
+  ] as const) {
+    const r = await call(db, 'POST', path, INV_A, body);
+    assert.equal(r.body?.code ?? r.body?.error, code, JSON.stringify(body));
+  }
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM closing_sender_declarations').get() as any).n, 0, 'nothing was stored');
+  assert.equal((await call(db, 'POST', `${path}/withdraw`, INV_B)).status, 404, 'another investor withdraws nothing');
 });

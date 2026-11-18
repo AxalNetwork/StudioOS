@@ -15,6 +15,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
 import { api } from '../src/lib/api.js';
 import InvestorMyThesisCard from '../src/pages/account/InvestorMyThesisCard.jsx';
+import { useInvestorProfile } from '../src/pages/account/useInvestorProfile.js';
 import { codeOnly } from './_codeOnly.mjs';
 import WorkspaceShell from '../src/workspaces/WorkspaceShell.jsx';
 import { PRIMARY_ACCENT, ZonePrimary } from '../src/workspaces/ZoneActions.jsx';
@@ -145,7 +146,7 @@ test('Investor Home: the thesis band reads, links to Settings, and never guesses
   assert.deepEqual(thesisBandState({ status: 'error' }), { kind: 'unreadable' });
   assert.deepEqual(thesisBandState({ status: 'ready', profile: { thesis_text: '  ' } }), { kind: 'empty' });
   assert.deepEqual(thesisBandState({ status: 'ready', profile: null }), { kind: 'empty' });
-  assert.deepEqual(thesisBandState({ status: 'ready', profile: { thesis_text: 'Seed B2B infra' } }), { kind: 'set', text: 'Seed B2B infra' });
+  assert.deepEqual(thesisBandState({ status: 'ready', profile: { thesis_text: 'Seed B2B infra' } }), { kind: 'set', text: 'Seed B2B infra', groups: [] });
   const unreadable = routed(h(ThesisBandView, { state: { kind: 'unreadable' }, onRetry: () => {} }));
   assert.match(unreadable, /Your thesis could not be read ·/);
   assert.match(unreadable, />Try again</);
@@ -243,6 +244,11 @@ test('no new client method: every read and write here is one main already serves
   assert.match(codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx')), /api\.getMyAdvisorVisibility\(days\)/);
 });
 
+function LinkedThesis({ role }) {
+  const investorProfile = useInvestorProfile(true);
+  return h(InvestorMyThesisCard, { flash() {}, role, linked: true, investorProfile });
+}
+
 test('the linked thesis card has an anchor and offers a return only after a save for a known source', async () => {
   const originals = [api.getInvestorProfile, api.saveInvestorProfile];
   const profile = { completed_at: '2026-11-14', sectors: [], stages: [], geos: [], thesis_text: 'Initial thesis' };
@@ -254,7 +260,7 @@ test('the linked thesis card has an anchor and offers a return only after a save
       ['deal-flow', 'Back to Deal flow', '/deals'],
       ['unknown', null, null],
     ]) {
-      const view = await mountContracts(h(InvestorMyThesisCard, { flash() {}, role: 'investor', linked: true }),
+      const view = await mountContracts(h(LinkedThesis, { role: 'investor' }),
         `/account/security-privacy?from=${source}#my-thesis`);
       try {
         assert.ok(view.nodes().some(node => view.props(node)?.id === 'my-thesis'));
@@ -275,10 +281,10 @@ test('a linked thesis shows its loading and unavailable states with the same anc
   const restore = api.getInvestorProfile;
   let finish;
   api.getInvestorProfile = () => new Promise(resolve => { finish = resolve; });
-  const view = await mountContracts(h(InvestorMyThesisCard, { flash() {}, role: 'partner', linked: true }),
+  const view = await mountContracts(h(LinkedThesis, { role: 'partner' }),
     '/account/security-privacy?from=deal-flow#my-thesis');
   try {
-    assert.match(view.text(), /Loading/);
+    assert.ok(view.nodes().some(node => view.props(node)?.['aria-label'] === 'Reading investor profile'));
     assert.ok(view.nodes().some(node => view.props(node)?.id === 'my-thesis'));
     finish({ profile: { completed_at: null } });
     await view.flush();

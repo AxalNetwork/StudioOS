@@ -150,7 +150,8 @@ interface CertificateInputs {
   date: string;
 }
 
-const JURISDICTION_CERT_TITLES: Record<string, string> = {
+/** D6690: exported for the catalogue's version 1 seed; Wyoming has none (the generic title applies). */
+export const JURISDICTION_CERT_TITLES: Record<string, string> = {
   us_de_ccorp: 'Certificate of Formation — Delaware C-Corporation',
   us_de_llc: 'Certificate of Formation — Delaware Limited Liability Company',
   uk_ltd: 'Certificate of Incorporation — United Kingdom Private Limited Company',
@@ -219,9 +220,9 @@ function jurisdictionBoilerplate(jurisdictionId: string): string {
     case 'uk_ltd':
       return 'The company is incorporated with limited liability under the Companies Act 2006. The liability of each member is limited to the amount unpaid on their shares. The company has a standard set of articles (Model Articles) unless otherwise filed with Companies House.';
     case 'sg_pte':
-      return 'The company is incorporated as a private company limited by shares under the Companies Act (Cap. 50) of Singapore. The company has a share capital and the liability of members is limited to the amount unpaid on their shares.';
+      return 'The company is incorporated as a private company limited by shares under the Companies Act of Singapore. The company has a share capital and the liability of members is limited to the amount unpaid on their shares.';
     case 'ee_oy':
-      return 'The company is established as a private limited company (Osa\u00FChing) under the Estonian Commercial Code. The share capital is EUR 2,500 unless a higher amount is specified in the articles of association.';
+      return 'The company is established as a private limited company (O\u00DC) under the Estonian Commercial Code.';
     default:
       return 'The undersigned hereby forms a legal entity in the specified jurisdiction. All information provided is true and accurate to the best of the incorporator\'s knowledge.';
   }

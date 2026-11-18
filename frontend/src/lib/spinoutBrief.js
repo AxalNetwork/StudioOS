@@ -27,6 +27,7 @@
 
 import { SLIDE_META } from './pitchDeckViewModel';
 import { numberWord, numberWordCap } from './numberWords';
+import { FOUNDER_DIMENSIONS } from './founderDimensions';
 
 // The brief spells its counts out; `numberWords.js` holds the words, so the
 // arsenal can say the deck's length the same way without importing this file.
@@ -85,7 +86,8 @@ export const JURISDICTIONS = [
 /** What a founder leaves with. */
 export const DELIVERABLES = [
   'Incorporated entity', 'Vesting cap table', 'Equity filing', `${numberWordCap(DECK_SLIDES)}-slide pitch deck`,
-  '3-year financial model', '5–10 warm introductions', '2 matched advisors', 'Data room',
+  // #6990: no introduction count is promised.
+  '3-year financial model', '2 matched advisors', 'Data room',
   'Alumni badge',
 ];
 
@@ -96,9 +98,10 @@ export const COMMUNITY = [
 ];
 
 export const SUPPORT = [
-  { k: 'Advisors', v: 'Two, matched against the nine-dimension score' },
+  // #6990: advisor matching reads the founder profile, so its count is that model's.
+  { k: 'Advisors', v: `Two, matched against the founder profile's ${numberWord(FOUNDER_DIMENSIONS.length)} dimensions` },
   { k: 'Office hours', v: 'Partner organisations, booked with a pre-session brief' },
-  { k: 'Introductions', v: 'Five to ten warm, through the Axal VC network' },
+  { k: 'Introductions', v: 'Not promised' },
   { k: 'Investors', v: 'Fund I invests exclusively in graduates' },
 ];
 

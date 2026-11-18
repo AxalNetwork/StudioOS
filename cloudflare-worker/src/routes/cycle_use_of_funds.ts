@@ -6,13 +6,15 @@ import { canWrite } from './_founder_validate_helpers';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { isSupportSession } from '../integrations/providers/mercury';
-import { base,createHire,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
-import { planRead,runwayToday } from '../services/useOfFunds/read';
+import { base,createHire,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,saveCapTableLink,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
+import { capTableOptions } from '../services/useOfFunds/capTableLink';
+import { committedRead,planRead,runwayToday } from '../services/useOfFunds/read';
 import useOfFundsEadwyn from './use_of_funds_eadwyn';
+import { uofCan, uofCapabilities, uofStanding, type UofCapabilities } from '../services/useOfFunds/capabilities';
 import { exportAudit, planCsv, planPdf, readBasePlan } from '../services/useOfFunds/exportPlan';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
-const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean}}>();
+const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean;caps:UofCapabilities}}>();
 r.use('*',async(c,next)=>{
   let user:User;
   try { user=await requireAuth(c as any) as User; } catch { return c.json({code:'unauthorized',detail:'Sign in first.'},401); }
@@ -21,13 +23,16 @@ r.use('*',async(c,next)=>{
   if (!project) return c.json({code:'not_found',detail:'Project not found.'},404);
   if (!canWrite(project,user)) return c.json({code:'forbidden',detail:'Use of funds is available to the venture founder or an admin.'},403);
   const support=await isSupportSession(c as any);
-  if (support&&c.req.method!=='GET') return c.json({code:'support_read_only',detail:'A support session cannot change the plan.'},403);
+  // D5074 slice 5: who the caller is, once, as the capability map the plan read returns; writes refuse from it.
+  const caps=uofCapabilities(uofStanding(user,project,support));
+  if (c.req.method!=='GET'&&!uofCan(caps,'edit')) return c.json({code:'support_read_only',detail:'A support session cannot change the plan.'},403);
   const company=await activeCompanyFor(c,user);
   if (!projectInActiveCompany(company,project)) return c.json({code:'not_found',detail:'Project not found.'},404);
   const owner=await c.env.DB.prepare("SELECT id FROM users WHERE founder_id=? AND role='founder' AND is_active=1 ORDER BY id LIMIT 1").bind(project.founder_id).first<{id:number}>();
   if (!owner) return c.json({code:'owner_unavailable',detail:'The active founder for this plan is Not recorded.'},409);
-  c.set('uof',{projectId:pid,user,founderUserId:owner.id,readOnly:support});
-  c.set('mercury',user.role==='founder'&&Number(user.founder_id)===Number(project.founder_id)&&!support);
+  c.set('uof',{projectId:pid,user,founderUserId:owner.id,readOnly:!uofCan(caps,'edit')});
+  c.set('mercury',uofCan(caps,'mercury'));
+  c.set('caps',caps);
   await next();
 });
 r.onError((e,c)=> e instanceof PlanError ? c.json({code:e.code,error:e.code,detail:e.sentence,...(e.recovery?{recovery:e.recovery}:{}),...(e.currentRevision!==undefined?{current_revision:e.currentRevision}:{})},e.status as any)
@@ -38,11 +43,18 @@ const body=async(c:any)=>{
   return b;
 };
 r.route('/eadwyn', useOfFundsEadwyn);
-r.get('/plan',async c=>c.json(await planRead(c.env,c.get('uof'),c.get('mercury'))));
+// D5074 slice 5: the plan read carries the caller's capabilities beside the plan.
+// D6084's Export and Add to data room depend on the plan's data, so the read adds them to the caller's map:
+// one map, which the page reads alone (D5074 part 5).
+r.get('/plan',async c=>{
+  const plan=await planRead(c.env,c.get('uof'),c.get('mercury'));
+  return c.json({...plan,capabilities:{...c.get('caps'),...plan.viewer.capabilities}});
+});
 r.get('/scenarios',async c=>{
   const s=c.get('uof'); await base(c.env,s);
   const rows=await c.env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id=? ORDER BY is_base DESC,id').bind(s.projectId).all<any>();
-  return c.json({items:await Promise.all((rows.results??[]).map(row=>view(c.env,s,row)))});
+  // D5074 part 6: the scenarios and compare reads carry the caller's map too, so Runway's pages draw from it.
+  return c.json({items:await Promise.all((rows.results??[]).map(row=>view(c.env,s,row))),capabilities:c.get('caps')});
 });
 r.get('/scenarios/:id',async c=>c.json(await view(c.env,c.get('uof'),await scenario(c.env,c.get('uof'),idOf(c.req.param('id'))))));
 r.post('/scenarios',async c=>c.json(await saveScenario(c.env,c.get('uof'),null,await body(c)),201));
@@ -53,6 +65,17 @@ r.post('/scenarios/:id/make-base',async c=>{
   if (c.req.header('content-length')!=='0'&&c.req.header('content-type')?.includes('json')) fields(await body(c),[]);
   return c.json(await makeBase(c.env,c.get('uof'),idOf(c.req.param('id'))));
 });
+/**
+ * D6085 (#6085): which cap-table scenario pays for a plan scenario. The picker
+ * lists this venture's cap-table scenarios (Modelled) against the plan's raise;
+ * the link is set, changed or cleared with the scenario's revision.
+ */
+r.get('/cap-table-scenarios',async c=>{
+  const s=c.get('uof');
+  const sc=await scenario(c.env,s,c.req.query('scenario_id')==null?await base(c.env,s):idOf(c.req.query('scenario_id')));
+  return c.json({scenario_id:sc.id,linked_uid:sc.cap_table_scenario_uid??null,...await capTableOptions(c.env,s.projectId,sc.amount_to_raise_cents??null)});
+});
+r.put('/scenarios/:id/cap-table',async c=>c.json(await saveCapTableLink(c.env,c.get('uof'),idOf(c.req.param('id')),await body(c))));
 r.get('/compare',async c=>{
   const raw=c.req.query('ids')??'';
   if (!/^[1-9][0-9]{0,9}(,[1-9][0-9]{0,9}){0,3}$/.test(raw)) throw new PlanError(400,'invalid_ids','Choose one to four scenario ids.');
@@ -60,7 +83,8 @@ r.get('/compare',async c=>{
   if (new Set(ids).size!==ids.length) throw new PlanError(400,'invalid_ids','Choose each scenario once.');
   const s=c.get('uof');
   const items=await Promise.all(ids.map(async id=>view(c.env,s,await scenario(c.env,s,id))));
-  return c.json({today:await runwayToday(c.env,s,c.get('mercury')),scenarios:items,source:'Modelled',reason:'Today is the measured record. Scenarios are models, not runway today.'});
+  const [today,committed]=await Promise.all([runwayToday(c.env,s,c.get('mercury')),committedRead(c.env,s,c.get('mercury'))]);
+  return c.json({today,committed,scenarios:items,source:'Modelled',reason:'Today is the measured record. Scenarios are models, not runway today.',capabilities:c.get('caps')});
 });
 r.get('/milestones',async c=>{
   const s=c.get('uof');const sc=await scenario(c.env,s,c.req.query('scenario_id')==null?await base(c.env,s):idOf(c.req.query('scenario_id')));

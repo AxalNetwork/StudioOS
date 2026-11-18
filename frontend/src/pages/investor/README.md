@@ -41,6 +41,11 @@ the generic route wrapper once a canvas has graduated.
   `GET /api/investor-profile/me`, with "Edit in Settings ›" to the My thesis
   card (`/account/security-privacy`), "No thesis set" when empty and
   "Your thesis could not be read · Try again" on a failed read.
+  D6129 (#6129) adds the profile's own chips and a struck-through Excludes group.
+- `investorHomeModel.js` (D6129, #6129) holds Investor Studio home v2's
+  rules, pure, with `today` handed in: Needs you's rows and order, Funds per
+  fund, Returns, Thesis fit's chips and Arrivals. Its modules are drawn by
+  `../studio/tiles/investorHomeModules.jsx`.
 - The seven Portfolio and Fund zone pages draw their header through
   `frontend/src/workspaces/ZoneHeader.jsx` inside a `ZonePrimaryScope` (D1424), so the zone's
   indigo primary (Chase all overdue, Log support, Add LP, New call) sits in the
@@ -83,6 +88,9 @@ the generic route wrapper once a canvas has graduated.
   registry and the rule for adding to it; a zone with no file there still falls
   through to the workspace, which serves the bucket root at `/deals` either
   way.
+- `FundOverviewParts.jsx`, `FundQuarterChart.jsx` and `fundOverviewModel.js`
+  (D6234, #6234) are the Fund overview's tiles, quarterly chart and pack gaps;
+  `FundHistoryPage.jsx` is a fund's quarterly history at `/funds/history`.
 
 `/network` and `/research` are role-branched on one route rather than
 split into two — see the comment above each `<Route>` in `App.jsx` before
@@ -236,3 +244,12 @@ The owner removed the AI side rail from `/spinout-lab/investor-workspace`
 (2026-10-21). Its LP content, refresh control and access gates remain. The
 zero-rail expectation is recorded in `NO_RAIL_ROUTES` for investors;
 other Investor boards retain their existing rails.
+
+`RoundCallIndex.jsx` (D6160, #6160) is the investor's round calls list at
+`/round-calls`, drawn inside `../../workspaces/investor/InvestorDealsRoutes.jsx`'
+shell (canvas DCA16, DCA17, DCA20, DCA21): each row names the company and
+shows the investor's own response or "No response recorded", with Coming
+soon, verification, empty and Unreadable states. Its words, filters and sort
+live in `roundCallsModel.js`, pure. A founder's `?project_id` list stays in
+`../founder/RoundCallPage.jsx`.
+`introCreditModel.js` (D6262) uses the introduction service's spendable balance and counterpart answer, preserving unknown versus recorded zero and preventing acceptance against an unread balance.

@@ -2730,3 +2730,43 @@ Forty-nine board sets from the owner's Claude Design canvas "Axal VC – platfor
 - **`WorkGraph PR Conflicts and Reservations Page.dc.html`**, **`WorkGraph PR Conflicts and Reservations · Boards.dc.html`**: WorkGraph · PR Conflicts and Reservations (#5580, D5580-p3).
 
 None is built yet. Ventures, investors, funds, people and amounts are sample content. Owner questions in the briefs are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.
+
+## Landed 2026-11-15 — Incorporate in any country: entry points, the founder flow, the HQ formation console and the partner workspace (#6719, #6720, #6721, #6722)
+
+Four board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-15 from the briefs under #6681, each as a page plus its boards under the names Claude Design gave them. They extend `Incorporate Flow Page.dc.html` (D1414) and continue its INC numbering:
+- **`Incorporate Entry Points Page.dc.html`**, **`Incorporate Entry Points · Boards.dc.html`**: INC8 to INC12 (D6719).
+- **`Incorporate Any Country Page.dc.html`**, **`Incorporate Any Country · Boards.dc.html`**: INC13 to INC26 (D6720).
+- **`HQ Formation Console Page.dc.html`**, **`HQ Formation Console · Boards.dc.html`**: HQI-01 to HQI-14 (D6721).
+- **`Formation Partner Workspace Page.dc.html`**, **`Formation Partner Workspace · Boards.dc.html`**: FORM-00 to FORM-10 (D6722). Not scheduled: #6681 question 4 is A, partners are HQ records first.
+
+None is built yet. Companies, founders, partners, countries' details and amounts are sample content; government fees read Not recorded and legal and tax wording waits on counsel. Open owner questions on #6681 and #6682 are drawn as option A and marked ⚑.
+
+
+## Landed 2026-11-16 — Research v2: Companies, Markets and Funds (#7031–#7046)
+
+Fifteen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the Research briefs, each as a page plus its boards. They extend Research v2 (`Research v2 Page.dc.html`) and the Platform States vocabulary (D5129).
+
+Companies (RS-13 to RS-18):
+- **`Research Companies Analysis Setup and Results Page.dc.html`**, **`Research Companies Analysis Setup and Results · Boards.dc.html`**: RCA00 to RCA13, 25 frames (D7041).
+- **`Research Companies Saved Analyses and Export Page.dc.html`**, **`Research Companies Saved Analyses and Export · Boards.dc.html`**: RCS01 to RCS10, 24 frames (D7042).
+- **`Research Companies Comparisons Page.dc.html`**, **`Research Companies Comparisons · Boards.dc.html`**: RCC00 to RCC09, 24 frames (D7043).
+- **`Research Companies Sign-in and Licence Access Page.dc.html`**, **`Research Companies Sign-in and Licence Access · Boards.dc.html`**: RCL00 to RCL17, 32 frames (D7044).
+- **`Research Companies Directory Search Page.dc.html`**, **`Research Companies Directory Search · Boards.dc.html`**: RCD00 to RCD08, 24 frames (D7045).
+- **`Research Companies Profiles Peers and Evidence Page.dc.html`**, **`Research Companies Profiles Peers and Evidence · Boards.dc.html`**: RCP01B to RCPH, 21 frames (D7046).
+
+Markets:
+- **`Research Markets Directory and Investor View Page.dc.html`**, **`Research Markets Directory and Investor View · Boards.dc.html`**: RMD00 to RMD14, 29 frames (D7036).
+- **`Research Markets Listed Search and CSV Exports Page.dc.html`**, **`Research Markets Listed Search and CSV Exports · Boards.dc.html`**: RMLJ to RMLH, 20 frames (D7037).
+- **`Research Markets Ranked Signals and Evidence Page.dc.html`**, **`Research Markets Ranked Signals and Evidence · Boards.dc.html`**: RMS01 to RMS08B, 18 frames (D7038).
+- **`Research Markets Comparable Prices Page.dc.html`**, **`Research Markets Comparable Prices · Boards.dc.html`**: RMP00 to RMPH, 28 frames (D7039).
+
+Funds (FND-D, FND-P, FND-S, FND-Q and FND-G on the canvas):
+- **`Research Funds Directory and Discovery Page.dc.html`**, **`Research Funds Directory and Discovery · Boards.dc.html`**: RFD00 to RFD07, 22 frames (D7031).
+- **`Research Funds Fund Profile and Comparison Page.dc.html`**, **`Research Funds Fund Profile and Comparison · Boards.dc.html`**: RFP00 to RFPH, 25 frames (D7032).
+- **`Research Funds My Funds and Dossier Page.dc.html`**, **`Research Funds My Funds and Dossier · Boards.dc.html`**: RFM00 to RFM09, 26 frames (D7033).
+- **`Research Funds Quarterly Reports Page.dc.html`**, **`Research Funds Quarterly Reports · Boards.dc.html`**: RFQ00 to RFQ11, 25 frames (D7034).
+- **`Research Funds Google Sheets Sync Page.dc.html`**, **`Research Funds Google Sheets Sync · Boards.dc.html`**: RFG00 to RFG10, 26 frames (D7035).
+
+The two sign-in canvases (D7044, D7031) load the production artwork from `frontend/public/auth/login-background.webp`, and D7044 also loads `frontend/public/site/ead-map.webp`, so no second copy is committed.
+
+None is built yet. Companies, funds, markets, people and amounts are sample content; the Funds boards cite the committed fund lists only with their publisher and date. Owner questions on each issue are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.

@@ -1,6 +1,7 @@
+import { liveFiles } from './dataRoomTrash';
 import { holdsLicence, holdsOnlyLicence, heldLicences } from './accountLicences';
 import type { Env, User } from '../types';
-import { positiveCents, validClose, counselApproved, termsHash, deckContentHash, readiness, ventureReadiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor } from './roundCallPolicy';
+import { positiveCents, validClose, counselApproved, termsHash, deckContentHash, readiness, ventureReadiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor, effectiveCallState } from './roundCallPolicy';
 import type { RoundCallTerms, InvestorThesis } from './roundCallPolicy';
 import { notify } from './notify';
 import { hashEmail } from '../util/hashEmail';
@@ -159,7 +160,7 @@ export async function roundContext(env: Env, project: ProjectFacts, ownerId: num
   const decks = await env.DB.prepare(`SELECT id, version, title, is_current, created_at,
     CASE WHEN json_valid(slides) AND json_type(slides) = 'array' THEN json_array_length(slides) END AS slide_count FROM pitch_decks WHERE project_id = ? ORDER BY version DESC, id DESC`).bind(project.id).all();
   const scenario = await env.DB.prepare('SELECT uid, name, inputs_json, result_json, computed_at FROM cap_table_scenarios WHERE project_id = ? AND owner_user_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1').bind(project.id, ownerId).first();
-  const room = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id = ?) + (SELECT COUNT(*) FROM data_room_folders WHERE project_id = ?) AS count').bind(project.id, project.id).first<{ count: number }>();
+  const room = await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)}) + (SELECT COUNT(*) FROM data_room_folders WHERE project_id = ?) AS count`).bind(project.id, project.id).first<{ count: number }>();
   const chosen = await env.DB.prepare("SELECT p.id AS prospect_id, u.name, u.email FROM raise_prospects p JOIN users u ON LOWER(u.email) = LOWER(p.email) WHERE p.project_id = ? AND u.role = 'investor' AND u.is_active = 1 AND u.kyc_status = 'approved' ORDER BY u.name, p.id").bind(project.id).all();
   const issuance = await env.DB.prepare('SELECT valuation_cap_cents FROM safe_issuances WHERE project_id = ? ORDER BY id DESC LIMIT 1').bind(project.id).first<{ valuation_cap_cents: number }>();
   return { project, round, scenario, term_seeds: keyTermSeeds(round, issuance, scenario), decks: decks.results || [], chosen: chosen.results || [],
@@ -174,7 +175,7 @@ export async function roundContext(env: Env, project: ProjectFacts, ownerId: num
 export async function ventureReadinessRead(env: Env, project: ProjectFacts) {
   const round = await env.DB.prepare("SELECT target_amount, close_date FROM raise_rounds WHERE project_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1").bind(project.id).first<{ target_amount: number | null; close_date: string | null }>();
   const decks = await env.DB.prepare('SELECT COUNT(*) AS n FROM pitch_decks WHERE project_id = ?').bind(project.id).first<{ n: number }>();
-  const room = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id = ?) + (SELECT COUNT(*) FROM data_room_folders WHERE project_id = ?) AS n').bind(project.id, project.id).first<{ n: number }>();
+  const room = await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)}) + (SELECT COUNT(*) FROM data_room_folders WHERE project_id = ?) AS n`).bind(project.id, project.id).first<{ n: number }>();
   const items = ventureReadiness({ round: round ?? null, decks: Number(decks?.n) || 0, data_room_items: Number(room?.n) || 0,
     use_of_funds: project.use_of_funds, traction_summary: project.traction_summary, revenue: project.revenue, mrr: project.mrr, users_count: project.users_count }, today());
   return { project_id: project.id, enabled: roundCallsEnabled(env), items,
@@ -237,7 +238,7 @@ export async function normalizeTerms(env: Env, project: ProjectFacts, input: Rec
   let roomUid: string | null = null;
   if (input.data_room_project_uid != null) {
     if (input.data_room_project_uid !== project.uid) throw new RoundCallError('invalid_data_room');
-    const room = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id = ?) + (SELECT COUNT(*) FROM data_room_folders WHERE project_id = ?) AS count').bind(project.id, project.id).first<{ count: number }>();
+    const room = await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)}) + (SELECT COUNT(*) FROM data_room_folders WHERE project_id = ?) AS count`).bind(project.id, project.id).first<{ count: number }>();
     if (!room || room.count === 0) throw new RoundCallError('data_room_not_recorded', 409);
     roomUid = project.uid;
   }
@@ -393,6 +394,33 @@ export async function sendCall(env: Env, call: CallRow, actor: User, acknowledge
     if(id!=null) notified++;
   }
   return { uid:call.uid,state:'sent',recipients:recipients.length,notified,not_delivered:recipients.length-notified };
+}
+/**
+ * D6160 (#6160), CLS16: the calls sent to this investor, each with the company's
+ * name (only the name, as `investorPage` reads it), the recorded terms the list
+ * shows, the state it reads as, and this investor's OWN response: their
+ * indication, their data-room request and how many questions they asked. Every
+ * response column is read from this investor's recipient row and questions
+ * alone, so no other recipient's indication, request, question or count can
+ * reach the reply. A draft is never listed.
+ */
+export async function investorList(env: Env, investor: User) {
+  await verifiedReader(env,investor);
+  const rows=await env.DB.prepare(`SELECT rc.uid,rc.name,rc.instrument,rc.amount_cents,rc.minimum_cheque_cents,rc.target_close,rc.state,rc.sent_at,rc.closed_at,
+      p.name AS company_name,rr.opened_at,rr.commitment_cents,rr.data_room_requested_at,
+      (SELECT COUNT(*) FROM round_call_questions q WHERE q.call_id=rc.id AND q.investor_user_id=rr.investor_user_id) AS question_count,
+      (SELECT COUNT(*) FROM round_call_questions q WHERE q.call_id=rc.id AND q.investor_user_id=rr.investor_user_id AND q.answer IS NOT NULL) AS answered_count
+    FROM round_calls rc JOIN round_call_recipients rr ON rr.call_id=rc.id
+    LEFT JOIN projects p ON p.id=rc.project_id AND p.deleted_at IS NULL
+    WHERE rr.investor_user_id=? AND rc.state<>'draft' ORDER BY rc.sent_at DESC,rc.id DESC`).bind(investor.id).all<Record<string,unknown>>();
+  const day=today();
+  return { viewer:'investor', items:(rows.results||[]).map(r=>({
+    uid:r.uid,name:r.name,instrument:r.instrument,amount_cents:r.amount_cents,minimum_cheque_cents:r.minimum_cheque_cents,
+    target_close:r.target_close,state:r.state,effective_state:effectiveCallState(r as {state:string;target_close:string},day),
+    sent_at:r.sent_at,closed_at:r.closed_at??null,company:{name:(r.company_name as string|null)??null},
+    mine:{opened_at:r.opened_at??null,commitment_cents:r.commitment_cents??null,data_room_requested_at:r.data_room_requested_at??null,
+      question_count:Number(r.question_count),answered_count:Number(r.answered_count)},
+  })) };
 }
 export async function investorPage(env: Env, call: CallRow, investor: User) {
   await verifiedReader(env,investor);

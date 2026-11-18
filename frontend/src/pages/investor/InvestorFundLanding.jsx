@@ -3,21 +3,20 @@ import { ArrowUpRight, CircleAlert, FileText, LockKeyhole, RefreshCw } from 'luc
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { fmtCents, fmtMultiple, fmtRate, useFundAnalytics } from '../../lib/fundAnalytics';
-import { WorkerRail } from '../../ui';
+import { Unrecorded, Unreadable as SharedUnreadable, WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
 import { titleCase as caseLabel } from '../../lib/absence';
-import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, collectedLine, fundZoneHref, lpCommitmentText } from './investorFundLandingModel';
+import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, PERFORMANCE_UNREADABLE, collectedLine, fundZoneHref, lpCommitmentText, performanceFigures } from './investorFundLandingModel';
+import { fundPerformanceApi } from '../../lib/api/fundPerformance.js';
+import FundOverviewPanel from './FundOverviewParts';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
 
-function Unrecorded({ children = 'Unrecorded' }) {
-  return <span className="i6-unrecorded">{children}</span>;
-}
 
 function LockedFund() {
   return (
@@ -47,15 +46,37 @@ function LockedFund() {
 // each card now says which of the two it is.
 const UNAVAILABLE = Symbol('unavailable');
 const unread = (value) => value === UNAVAILABLE;
-const Unreadable = ({ what }) => (
-  <p className="i6-load-error"><CircleAlert size={13} />{what} could not be read. This is not a claim that none exist.</p>
-);
+// D5129 (#5129): the shared Unavailable treatment, with this page's claim.
+const Unreadable = ({ what }) => <SharedUnreadable what={what} claim="This is not a claim that none exist." />;
+
+// #6248: NAV, RVPI, TVPI and IRR from the performance read, each its value or Not recorded with
+// the Worker's reason; a failed read says it failed and claims nothing.
+function Performance({ perf }) {
+  const view = performanceFigures(perf);
+  return (
+    <div className="i6-performance" data-testid="fund-performance-figures" data-state={view.state}>
+      {view.state === 'unreadable'
+        ? <div data-testid="text-fund-performance-unreadable"><SharedUnreadable what="Fund performance" claim={PERFORMANCE_UNREADABLE} /></div>
+        : (
+          <dl className="i6-summary-stats">
+            {view.figures.map((f) => (
+              <div key={f.key} data-testid={`fund-performance-${f.key}`}>
+                <dt>{f.label}</dt>
+                <dd>{view.state === 'loading' ? <span className="i6-muted">Reading…</span> : f.value ?? <Unrecorded reason={f.reason} reasonVisible>{NOT_RECORDED}</Unrecorded>}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      {view.asOf || view.basis ? <p className="i6-footnote">{view.asOf ? `As of ${view.asOf}. ` : ''}{view.basis || ''}</p> : null}
+    </div>
+  );
+}
 
 function FundDetail({ fund }) {
-  const [detail, setDetail] = useState({ lps: null, calls: null, periods: null });
+  const [detail, setDetail] = useState({ lps: null, calls: null, periods: null, perf: null });
   const load = useCallback(() => {
     if (!fund?.id) return;
-    setDetail({ lps: null, calls: null, periods: null });
+    setDetail({ lps: null, calls: null, periods: null, perf: null });
     const settle = (p) => p.then((value) => value, () => UNAVAILABLE);
     Promise.all([
       settle(api.fundsLpsList(fund.id).then((r) => r?.items || [])
@@ -69,7 +90,9 @@ function FundDetail({ fund }) {
         return r.filter((call) => String(call.fund_id) === String(fund.id));
       })),
       settle(api.fundsReportPeriods(fund.id).then((r) => r?.items || r?.periods || [])),
-    ]).then(([lps, calls, periods]) => setDetail({ lps, calls, periods }));
+      // #6248: the same read the performance page draws (D627, D6246 admits the GP of record).
+      settle(fundPerformanceApi.read(fund.id).then((r) => { if (!r || typeof r !== 'object') throw new Error('unreadable'); return r; })),
+    ]).then(([lps, calls, periods, perf]) => setDetail({ lps, calls, periods, perf: unread(perf) ? 'unreadable' : perf }));
   }, [fund?.id]);
   useEffect(() => { load(); }, [load]);
 
@@ -91,14 +114,16 @@ function FundDetail({ fund }) {
           <div><dt>Collected</dt><dd data-testid="text-fund-collected">{collected.value ?? <Unrecorded>{NOT_RECORDED}</Unrecorded>}</dd></div>
           <div><dt>Deployed</dt><dd>{fmtCents(fund.deployed_cents)}</dd></div>
           <div><dt>DPI</dt><dd>{fmtMultiple(fund.dpi) || <Unrecorded />}</dd></div>
-          <div><dt>RVPI · on NAV</dt><dd><Unrecorded>Unavailable</Unrecorded></dd></div>
         </dl>
-        <p>Every recorded amount originates in this fund’s operating record. NAV, RVPI, TVPI, IRR, and expense accruals are unavailable until the underlying records exist.</p>
+        <Performance perf={detail.perf} />
+        <p>Every recorded amount originates in this fund’s operating record. Expense accruals are not recorded on Axal.</p>
+        {/* #6245: NAV and the multiples are read on Fund performance, from recorded marks and cash flows. */}
+        <Link to="/funds/performance" className="i6-perf-link" data-testid="link-fund-performance">Open fund performance <ArrowUpRight size={12} /></Link>
       </section>
 
       <div className="i6-grid">
         <section className="i6-card i6-registry" id="lps">
-          <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count unrecorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to={zone('/funds/lps')} data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
+          <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count not recorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to={zone('/funds/lps')} data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
           {detail.lps === null ? <div className="i6-skeleton" /> : unread(detail.lps) ? <Unreadable what="The LP register" /> : lpRows.length === 0 ? <p className="i6-empty">No LP records are available for this fund.</p> : (
             <table><thead><tr><th>LP</th><th className="right">Committed</th><th>LPA</th></tr></thead><tbody>
               {lpRows.slice(0, 8).map((lp) => <tr key={lp.id}><td>{lp.name || lp.email || `LP #${lp.id}`}</td><td className="right">{lpCommitmentText(lp) ?? <Unrecorded>{NOT_RECORDED}</Unrecorded>}</td><td><span className={lp.lpa_signed ? 'i6-ok' : 'i6-alert'}>{lp.lpa_signed ? 'LPA signed' : 'LPA unsigned'}</span></td></tr>)}
@@ -203,6 +228,8 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
               </select>
               <span>{titleCase(active.status)}</span>
             </div>
+            {/* #6234: IF0's tiles, quarterly chart and pack gaps (FundOverviewParts.jsx). */}
+            <FundOverviewPanel key={`overview-${active.id}-${detailKey}`} fund={active} />
             <FundDetail key={`${active.id}-${detailKey}`} fund={active} />
           </>
         );
@@ -244,7 +271,7 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
         coverageNote="Open a detailed workspace to review the underlying LP record, notice or issued period."
         unavailable={[[
           'Drafting and modelling',
-          'Unavailable values stay unavailable. Nothing on this page proposes a letter, a pack or a projected figure.',
+          'A figure that is not recorded says why. Nothing on this page proposes a letter, a pack or a projected figure.',
         ]]}
         action={(
           <button type="button" onClick={refresh} disabled={loading} data-testid="button-refresh-fund-landing">

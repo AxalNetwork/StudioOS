@@ -55,53 +55,64 @@ test('the Administrators tab is mounted, unnumbered, beside History', () => {
     'Administrators was added to the numbered issue flow, which renumbers the canvas');
 });
 
-test('Detach is disabled while the account still holds the admin role', () => {
-  // Bounded to the Detach button's own JSX so a NEIGHBOURING control's disabled
-  // expression cannot satisfy it — the correction #576 and D132 both made.
+// D4819 part 11 (#5922) redrew the card to board L11. Detach and Remove… (the
+// demote) are now NOT OFFERED where they cannot work, rather than drawn
+// disabled, so the guards below read the condition each button is drawn
+// under. The claim is the same, and stronger: no click on a row can reach a
+// route that will refuse it. The appointment's reason moved from a textarea to
+// the labelled reason dialog, which states the consequence first and refuses
+// fewer than ten characters, as the Worker does.
+test('Detach is offered only once the account no longer holds the admin role', () => {
   const at = CODE.indexOf('api.licenceAdminRemove(licence.uid');
   assert.ok(at > 0, 'the Detach action is gone');
-  const before = CODE.slice(Math.max(0, at - 200), at);
-  assert.match(before, /disabled=\{busy \|\| isAdmin\}/,
+  const before = CODE.slice(Math.max(0, at - 400), at);
+  assert.match(before, /\{!isAdmin && st\.key === 'demoted' && \(/,
     'Detach is offered while the account is still an admin, and the server refuses every click');
 
   const demoteAt = CODE.indexOf('api.adminDemoteAdmin(a.user_id');
   assert.ok(demoteAt > 0, 'the Demote action is gone');
-  const demoteBefore = CODE.slice(Math.max(0, demoteAt - 400), demoteAt);
-  assert.match(demoteBefore, /disabled=\{busy \|\| !isAdmin\}/,
-    'Demote is offered for an account that is not an admin');
+  const demoteBefore = CODE.slice(Math.max(0, demoteAt - 700), demoteAt);
+  assert.match(demoteBefore, /\{isAdmin && \(/,
+    'Remove… (the demote) is offered for an account that is not an admin');
 });
 
 test('the transient state between demote and detach is rendered, not inferred', () => {
-  assert.ok(PAGE.includes('no longer an admin — detach'),
+  const MODEL = read('frontend/src/pages/admin/licenceAccessModel.js');
+  assert.ok(MODEL.includes("word: 'No longer an admin', note: 'Detach to finish removing it'"),
     'an account that has been demoted but not detached renders as an administrator');
-  assert.ok(PAGE.includes('admin · deactivated'),
+  assert.ok(MODEL.includes("{ key: 'deactivated', word: 'Deactivated'"),
     'a deactivated administrator renders identically to a live one');
-  // The row's own sentence, so the two-step order is on screen rather than
-  // discoverable only by clicking a disabled button.
-  assert.match(PAGE, /Detach is available once this account is no longer an admin/);
+  // The row's own sentence, so the two-step order is on screen.
+  assert.match(PAGE, /Detach is offered once this account is no longer an admin/);
 });
 
-test('appointing requires a reason before the button is live', () => {
-  assert.match(CODE, /form\.reason\.trim\(\)\.length >= 10/,
+test('appointing asks for a reason of ten characters, after the consequence, and sends it', () => {
+  // D4819 part 21 (#5928): the reason is asked in the one consequence sheet.
+  const MODEL = codeOnly(read('frontend/src/pages/admin/licenceConsequenceModel.js'));
+  const askAt = MODEL.indexOf("case 'addAdmin':");
+  assert.ok(askAt > 0);
+  assert.match(MODEL.slice(askAt, askAt + 1600), /reason: \{ min: 10,/,
     'the ten-character reason is server-side only, so the form posts a request it knows will fail');
   const at = CODE.indexOf('api.licenceAdminAdd(licence.uid');
   assert.ok(at > 0);
-  assert.match(CODE.slice(at, at + 200), /reason: form\.reason\.trim\(\)/,
+  assert.match(CODE.slice(Math.max(0, at - 400), at), /const out = await ask\('addAdmin', licence,/,
+    'the appointment is sent without asking');
+  assert.match(CODE.slice(at, at + 200), /reason: out\.reason/,
     'the reason is collected and not sent');
 });
 
-test('a failed read renders the reason, never an empty list', () => {
+test('a failed read renders Unreadable, never an empty list', () => {
   // `items === null` is the failure state and is distinct from `[]`. Without
   // the distinction the page would say "nobody administers this licence" about
-  // a request that never arrived — a claim about the business made by a network
-  // error, which is the exact shape this repo keeps deleting.
+  // a request that never arrived.
   assert.match(CODE, /setItems\(null\)/,
     'a failed read falls back to an empty array, so a network error reads as "nobody"');
-  assert.ok(PAGE.includes('This is not the same as having none — nothing was read.'),
+  assert.ok(PAGE.includes('This is not the same as having none: nothing was read.'),
     'the unreadable state does not say what it is');
-  assert.match(CODE, /items === null &&/,
+  const MODEL = codeOnly(read('frontend/src/pages/admin/licenceAccessModel.js'));
+  assert.match(MODEL, /if \(!Array\.isArray\(items\)\) return \{ state: 'unreadable'/,
     'nothing renders the unreadable state');
-  assert.match(CODE, /Array\.isArray\(items\) && items\.length === 0/,
+  assert.match(MODEL, /if \(items\.length === 0\) return \{ state: 'none'/,
     'the empty state is not guarded on the read having succeeded');
 });
 

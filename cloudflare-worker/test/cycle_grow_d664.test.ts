@@ -424,7 +424,7 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   const mod = await module_(f, 'durable-company-building');
   assert.equal(mod.status, 200);
   assert.deepEqual(mod.body.records.rows.find((r: any) => r.id === ob.body.id),
-    { id: ob.body.id, title: 'Board meeting', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
+    { id: ob.body.id, title: 'Board meeting', kind: 'governance', due_at: due, owner_name: null, owner: null, owner_user_id: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
   const list = Object.fromEntries(mod.body.parts.checklist.map((i: any) => [i.key, i]));
   assert.deepEqual([list.section83b_filed.done, list.section83b_filed.source], [true, 'Spin-Out Lab']);
   assert.deepEqual([list.key_person_cover.done, list.key_person_cover.source], [true, 'manual']);

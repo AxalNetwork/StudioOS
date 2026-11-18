@@ -29,6 +29,10 @@ import { holdsOnlyLicence } from '../services/accountLicences';
  * `primary_location`, `location_count`, `formation` and `status` for the
  * Portfolio cards (PF1, PF5, PF7), each block read once for every company.
  *
+ * D6685 (#6685): each company and each venture row also carries the flat
+ * `formation_state` and `formation_order_id` (`services/formationState.ts`);
+ * `status` stays as it was.
+ *
  * A block whose store failed is `{ available: false, reason }`, never a zero.
  * No member email, no token or hash, and no inviter address is returned.
  */
@@ -40,6 +44,7 @@ import { cyclesActive, visitsFor, CYCLE_STORES } from '../services/companySheet'
 import { canAccessProject, ensureProjectMembershipSchema, normalizeEmail } from '../services/projectAccess';
 import { SEARCH_MAX_LEN, SEARCH_MIN, searchPeople } from '../services/peopleReach';
 import { refuse } from '../util/refusal';
+import { companyFormations, projectFormations } from '../services/formationState';
 
 type Row = Record<string, any>;
 type Block<T> = { available: true; value: T } | { available: false; reason: string };
@@ -135,7 +140,7 @@ account.get('/account/companies', async (c) => {
     const editorOf = (l: Row) => isAdmin(user) || Number(l.is_primary_admin) === 1 || EDITOR_ROLES.includes(String(l.role_in_company));
     const editorIds = JSON.stringify(mine.filter(editorOf).map((l) => Number(l.company_id)));
 
-    const [members, invitations, projects, funds, engagements, quotes, offers, visits, cycles, legal, locations, formations] = await Promise.all([
+    const [members, invitations, projects, funds, engagements, quotes, offers, visits, cycles, legal, locations, formations, formationStateOf] = await Promise.all([
       rows(c.env, 'The member counts', `SELECT company_id, COUNT(*) AS n FROM user_company_links
           WHERE company_id IN (SELECT value FROM json_each(?)) GROUP BY company_id`, [ids]),
       rows(c.env, 'The pending invitations', `SELECT company_id, COUNT(*) AS n FROM company_invitations
@@ -160,12 +165,14 @@ account.get('/account/companies', async (c) => {
       rows(c.env, 'The locations', `SELECT company_id, label, kind, city, country FROM company_locations
           WHERE company_id IN (SELECT value FROM json_each(?)) AND closed_on IS NULL
           ORDER BY company_id, CASE kind WHEN 'headquarters' THEN 0 WHEN 'registered' THEN 1 ELSE 2 END, id`, [ids]),
-      // An order in formation belongs to the company it was linked to, else its venture's company now.
-      rows(c.env, 'The formation orders', `SELECT COALESCE(i.company_id, p.company_id) AS company_id, i.id AS order_id, i.status AS order_status, i.jurisdiction_id
+      // An order in formation belongs to the company it was linked to, else the company it was placed for (D6687), else its venture's company now.
+      rows(c.env, 'The formation orders', `SELECT COALESCE(i.company_id, i.subject_company_id, p.company_id) AS company_id, i.id AS order_id, i.status AS order_status, i.jurisdiction_id
           FROM incorporations i LEFT JOIN projects p ON p.id = i.project_id
           WHERE i.status IN ('paid', 'packet_processing', 'packet_ready')
-            AND COALESCE(i.company_id, p.company_id) IN (SELECT value FROM json_each(?))
+            AND COALESCE(i.company_id, i.subject_company_id, p.company_id) IN (SELECT value FROM json_each(?))
           ORDER BY COALESCE(i.paid_at, i.created_at) DESC, i.id DESC`, [ids]),
+      // D6685 (#6685): incorporated, in formation or neither, each read once for every company.
+      companyFormations(c.env, mine.map((l) => Number(l.company_id))),
     ]);
     const legalOf = byCompany(legal, 'id');
     const locationsOf = groupedByCompany(locations);
@@ -200,6 +207,7 @@ account.get('/account/companies', async (c) => {
           ...(editorOf(l) ? { pending_invitations: countFor(invitesN, id) } : {}),
           counts: Object.fromEntries(Object.entries(counts).map(([k, b]) => [k, countFor(b, id)])),
           ...cardFacts(id, l.archived_at ?? null, legalOf, locationsOf, formationOf),
+          ...formationStateOf(id),
         };
       }),
     });
@@ -249,7 +257,7 @@ account.get('/account/projects', async (c) => {
     if (!ventures.available) return refuse(c, 503, { code: 'projects_unreadable', message: 'Your ventures could not be read. That is not the same as none.' });
     const ids = JSON.stringify(ventures.value.map((v) => Number(v.id)));
 
-    const [members, owners, cycleRows] = await Promise.all([
+    const [members, owners, cycleRows, formationOf] = await Promise.all([
       rows(c.env, 'The member counts', `SELECT project_id, COUNT(*) AS n FROM project_members
           WHERE project_id IN (SELECT value FROM json_each(?)) AND status = 'accepted' AND removed_at IS NULL AND role <> 'owner'
           GROUP BY project_id`, [ids]),
@@ -258,6 +266,8 @@ account.get('/account/projects', async (c) => {
           LEFT JOIN users u ON u.id = (SELECT MIN(x.id) FROM users x WHERE x.founder_id = p.founder_id)
           WHERE p.id IN (SELECT value FROM json_each(?)) GROUP BY p.id`, [ids]),
       rows(c.env, 'The cycles in use', PROJECT_CYCLES_SQL, [ids]),
+      // D6685 (#6685): each venture's own orders and its company's legal identity, read once for every venture.
+      projectFormations(c.env, ventures.value.map((v) => ({ id: Number(v.id), company_id: v.company_id == null ? null : Number(v.company_id) }))),
     ]);
     const memberN = countsBy(members, 'project_id');
     const ownerN = countsBy(owners, 'project_id');
@@ -282,6 +292,7 @@ account.get('/account/projects', async (c) => {
           cycles_active: cycleRows.available
             ? ok(order.filter((k) => (cycles.get(id) ?? []).includes(k)))
             : cycleRows,
+          ...formationOf(id),
         };
       }),
     });

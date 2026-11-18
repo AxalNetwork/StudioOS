@@ -32,7 +32,6 @@ const rootPath = fileURLToPath(root);
 const ALLOW = [
   { kind: 'not-money', reason: "A percentage, ratio or rounding to two places, not an amount of currency: the line has a money word beside it.", files: {
     "frontend/src/pages/PortfolioPerformancePage.jsx": 1,
-    "frontend/src/pages/SpinoutLabLpWorkspacePage.jsx": 1,
     "frontend/src/pages/SpinoutLabMarketPage.jsx": 2,
     "frontend/src/pages/admin/insights/insightsModel.js": 1,
     "frontend/src/pages/admin/payments/dialogModel.js": 1,
@@ -112,6 +111,7 @@ const ALLOW = [
     "cloudflare-worker/src/services/fundReportDrafts.ts": 1,
     "cloudflare-worker/src/services/fundReports.ts": 1,
     "cloudflare-worker/src/services/fundRollup.ts": 2,
+    "cloudflare-worker/src/services/fundSnapshotFigures.ts": 1,
     "cloudflare-worker/src/services/queueWorker.ts": 1,
     "cloudflare-worker/src/services/mercury/investorFeeds.ts": 3,
     "cloudflare-worker/src/services/mercury/match.ts": 2,
@@ -146,7 +146,8 @@ const ALLOW = [
     "cloudflare-worker/src/services/mercury/raiseFeeds.ts": 3,
     "cloudflare-worker/src/services/mercurySpend.ts": 1,
     "frontend/src/pages/admin/consoles/bankCashModel.js": 1,
-    "cloudflare-worker/src/services/reportFigures.ts": 1,
+    // D6104: +1, burn multiple (net burn dollars ÷ the USD-only ledger's net new cents).
+    "cloudflare-worker/src/services/reportFigures.ts": 2,
   } },
   { kind: 'usd', reason: "The spin-out revenue ledger is US dollars only: the Worker refuses any other currency (`currency_unsupported`).", files: {
     "frontend/src/components/spinout/RevenueLedger.jsx": 1,
@@ -183,7 +184,6 @@ const ALLOW = [
     "frontend/src/pages/research/FundDossier.jsx": 2,
     "frontend/src/pages/research/FundReportsPanel.jsx": 2,
     "frontend/src/pages/research/FundsZone.jsx": 1,
-    "frontend/src/pages/research/MarketZone.jsx": 3,
     "frontend/src/pages/research/marketReadingRead.js": 5,
     "frontend/src/pages/wellbeing/wellbeingModel.js": 1,
     "cloudflare-worker/src/routes/admin_network_reads.ts": 1,
@@ -192,14 +192,15 @@ const ALLOW = [
     "cloudflare-worker/src/routes/partner_delivery.ts": 1,
     "cloudflare-worker/src/routes/partner_pipeline.ts": 1,
     "cloudflare-worker/src/routes/partnernet.ts": 2,
-    "cloudflare-worker/src/routes/research.ts": 7,
+    "cloudflare-worker/src/routes/research.ts": 6,
     // #4680 snapshots a legacy USD-only price in the atomic INSERT … SELECT.
     "cloudflare-worker/src/routes/services.ts": 4,
     "cloudflare-worker/src/services/conversationItems.ts": 1,
     "cloudflare-worker/src/services/decks/newDeck.ts": 1,
     "cloudflare-worker/src/services/decks/recordSources.ts": 2,
     "cloudflare-worker/src/services/growCycle.ts": 1,
-    "cloudflare-worker/src/services/growKpis.ts": 3,
+    // D6104: +1, burn multiple divides the USD-only ledger's cents into project_metrics dollars.
+    "cloudflare-worker/src/services/growKpis.ts": 4,
     "cloudflare-worker/src/services/marketReadingRead.ts": 1,
     "cloudflare-worker/src/services/publishSources.ts": 1,
     "cloudflare-worker/src/services/raiseClaims.ts": 1,

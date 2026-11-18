@@ -43,7 +43,7 @@ import { pushLicenceToBranch, type LicencePushResult } from '../services/licence
 import { byUid } from '../services/licenceLedgerCore';
 import { logAdminAction } from '../services/adminAudit';
 import { syncSummary } from '../services/licenceSyncView';
-import type { LicenceSyncSummary } from '../services/licenceContracts';
+import type { LicenceSyncSummary, LicenceTransitionResult } from '../services/licenceContracts';
 import type { Env } from '../types';
 import type { RouteMount } from '../util/routeRegistry';
 import adminLicences from './admin_licences';
@@ -51,7 +51,7 @@ import adminLicences from './admin_licences';
 /** How long one attempt holds the row against a second manual retry. */
 export const SYNC_RETRY_LEASE_SECONDS = 120;
 
-export type LicenceSyncRetryResult = { ok: true; pushed: LicencePushResult; sync: LicenceSyncSummary };
+export type LicenceSyncRetryResult = { ok: true; status: LicenceTransitionResult['status']; pushed: LicencePushResult; sync: LicenceSyncSummary };
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -60,6 +60,8 @@ r.post('/:uid/sync/retry', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return refuse(c, 404, { code: 'not_found', message: 'No such licence.' });
+    // Keep the ledger action's refusal: an unissued draft has no branch copy.
+    if (licence.status === 'draft') return refuse(c, 409, { code: 'not_issued', message: 'A draft licence has no branch copy to sync yet.' });
     const at = nowIso();
     const leaseCutoff = new Date(Date.parse(at) - SYNC_RETRY_LEASE_SECONDS * 1000).toISOString();
     let claimed: { licence_id: number } | null;
@@ -98,7 +100,7 @@ r.post('/:uid/sync/retry', async (c) => {
       revision: pushed.revision ?? null, accepted: pushed.ok,
       failure_code: pushed.ok ? null : (pushed.failure_code ?? null),
     });
-    return c.json({ ok: true, pushed, sync: await syncSummary(c.env, licence.id) } satisfies LicenceSyncRetryResult);
+    return c.json({ ok: true, status: licence.status as LicenceTransitionResult['status'], pushed, sync: await syncSummary(c.env, licence.id, licence.uid) } satisfies LicenceSyncRetryResult);
   } catch (e) { return mapError(c, e); }
 });
 
