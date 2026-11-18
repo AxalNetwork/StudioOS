@@ -55,7 +55,8 @@ import { fundOverlapNote } from '../services/researchFundRead';
 import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkDetail, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
 import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
-import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
+import { DirectoryQueryError, citeSource, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
+import { SOURCE_WITHDRAWN_MESSAGE, withdrawnSourceOf } from '../services/researchFundProfile';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
 import { PORTFOLIO_NOTE_INSTRUCTION, portfolioNoteMaterial } from '../services/portfolioNotes';
@@ -4145,7 +4146,8 @@ research.get('/fund-directory/:uid', async (c) => {
   if (!fund) return c.json({ detail: 'Not found' }, 404);
   // D597: a fund of a list taken down for its terms says so, and why — never its fields.
   if (fund.removed) {
-    return c.json({ detail: 'Removed', reason: `This fund's list was taken down. ${fund.removed.reason}`, removed: fund.removed }, 410);
+    // D7167: `error` names the refusal, so a page that re-reads before Save, Add or Compare can tell it from a 404.
+    return c.json({ error: 'source_withdrawn', detail: 'Removed', reason: `This fund's list was taken down. ${fund.removed.reason}`, removed: fund.removed }, 410);
   }
   return c.json({ ...fund, source_boundary: FUND_DIRECTORY_BOUNDARY });
 });
@@ -4184,6 +4186,14 @@ research.post('/funds', async (c) => {
   const catalogueUid = rawCatalogue == null || rawCatalogue === '' ? null : String(rawCatalogue);
   if (catalogueUid !== null && !CATALOGUE_UID_RE.test(catalogueUid)) {
     return c.json({ detail: 'catalogue_uid_invalid' }, 400);
+  }
+  // D7167: a directory fund whose list was withdrawn is refused by name. A
+  // failed check does not block the save: the fund's facts are gated on read.
+  if (catalogueUid !== null) {
+    const gone = await withdrawnSourceOf(c.env, catalogueUid).catch(() => null);
+    if (gone) {
+      return c.json({ error: 'source_withdrawn', detail: 'source_withdrawn', message: SOURCE_WITHDRAWN_MESSAGE, removed: citeSource(gone.source_name, gone.published_url, gone) }, 410);
+    }
   }
   const uid = newUid();
   const now = nowIso();
