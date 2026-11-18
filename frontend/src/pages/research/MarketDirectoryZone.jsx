@@ -14,6 +14,7 @@ import { SaveNote } from '../advisor/expertise/kit';
 import { STALE_AT, ageBand, daysSince } from './marketReadingRead';
 import { comparableCount, dollarsToCents, freshReadingForm, rangeReadsForward } from './marketReadingRead';
 import { LatestSignals } from './RankedSignals.jsx';
+import { ExportNote, useMarketHeaderOps } from './MarketHeaderOps.jsx';
 
 export { LatestSignals };
 
@@ -619,6 +620,9 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
   // The directory reports the page it shows: its rows are what Export writes,
   // and its directory total is the tab's count.
   const [shown, setShown] = useState(null);
+  // D7171 part 2: the directory's read and request, which Export view pages through.
+  const [dirRead, setDirRead] = useState(null);
+  const headerOps = useMarketHeaderOps({ tab, read: dirRead, params, navigate });
   const [listedOffset, setListedOffset] = useState(0);
   const listedKey = `${listedOffset}|${listedQuery.q}|${listedQuery.source}|${listedQuery.sort}`;
   const [listed, reloadListed] = useRead(() => researchMarketsApi.listedCompanies({
@@ -674,6 +678,10 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
             ? `Record a fresh reading for ${rerun.metric}.`
             : `No reading is past ${STALE_AT} days, and every service line has one.`),
     },
+    // D7171 part 2: the D7036 header ops (MarketHeaderOps.jsx).
+    exportFilteredView: headerOps.handlers.exportFilteredView,
+    newMarketResearch: headerOps.handlers.newMarketResearch,
+    editThesis: headerOps.handlers.editThesis,
   };
   const tabCount = {
     directory: shown ? `${fmt(shown.directory_total ?? shown.total ?? 0)}` : null,
@@ -683,6 +691,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
   return (
     <div data-testid="market-directory" className="space-y-4">
       {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(exportRows, opsHandlers)} /> : null}
+      <ExportNote note={headerOps.note} />
       <div>
         <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Markets</h1>
         <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-axal-muted dark:text-gray-400">
@@ -709,7 +718,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
         </div>
         <div className="mt-3"><CoverageNote asOf={shown?.items?.[0]?.as_of} /></div>
         <div className="mt-4" role="tabpanel" id="markets-tabpanel" aria-labelledby={`markets-tab-${tab}`}>
-          {tab === 'directory' ? <MarketDirectoryPanel role={role} onData={setShown} /> : null}
+          {tab === 'directory' ? <MarketDirectoryPanel role={role} onData={setShown} onRead={setDirRead} /> : null}
           {tab === 'listed' ? (
             <>
               <ListedControls query={listedQuery} onChange={setListedQuery} />

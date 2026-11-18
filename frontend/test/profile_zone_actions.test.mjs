@@ -101,7 +101,7 @@ const PROFILES = {
     // `Export` went with that zone (owner, 2026-10-20). 20 → 19 (D1109):
     // `raise/data-room`'s `Export log`; Activity's Export (CSV) is the tool's.
     // 19 → 18 (D1194): `raise/capital-match`'s `Export shortlist` went with that zone.
-    exports: 18,
+    exports: 17,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
     // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
@@ -138,7 +138,10 @@ const PROFILES = {
     // `logInterview` and `exportInterviews` (interviews), `exportPainMap`
     // (pain map), `newHypothesis` and `linkPain` (hypotheses), `exportSummary`
     // (verdict). Each has its home on a module page or record (#1659, #1704).
-    handlers: 10,
+    handlers: 12,
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
+    offCanvas: { 'research/markets': ['Export view', 'New market research'] },
     // NOTHING IS EXCLUDED BUT VALIDATE'S RETIRED ZONES. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -175,9 +178,10 @@ const PROFILES = {
     // ever be a disabled button. The investor asks instead (Ask HQ in the
     // mark-history Sheet). Each label here must still be on its artboard and
     // must not be in the table.
-    withheld: { 'portfolio/positions': ['Add follow-on'] },
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'portfolio/positions': ['Add follow-on'], 'research/markets': ['New deep-dive', 'Export', 'Cite in a memo'] },
     // #6276 adds a visible-row CSV beside the original canvas controls.
-    offCanvas: { 'research/benchmarking': ['Export'] },
+    offCanvas: { 'research/benchmarking': ['Export'], 'research/markets': ['Export view', 'Edit thesis'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -186,7 +190,7 @@ const PROFILES = {
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
     // is stored to export" was true until migration 312's receipts (D371).
     // 14 since D1243: `deals/pipeline`'s Export left with its zone.
-    exports: 15,
+    exports: 14,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -260,7 +264,7 @@ const PROFILES = {
     // TWENTY-SECOND: `network/relationships`'s `Add person` (D6636) — the
     // network picker is now supplied by its page.
     // TWENTY-THIRD: `network/introductions`'s `Offer one` (D6637), supplied by its page.
-    handlers: 23,
+    handlers: 25,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -331,7 +335,7 @@ const PROFILES = {
     // inside each. The two absent columns ship as empty cells rather than as
     // the words "Not recorded", which in a spreadsheet invite a formula over a
     // fact that does not exist. Was 19.
-    exports: 20,
+    exports: 19,
     // Eight page-supplied ops. `research/ask`: `New session` starts a thread,
     // `Saved answers` switches the view to the kept ones. `research/library`:
     // `Add document` opens the file picker, `Re-index` re-queues every document
@@ -373,11 +377,13 @@ const PROFILES = {
     // Was 0, then 5, then 7, then 8, then 9, then 10, then 12, then 13, then 14,
     // then 15. SIXTEEN NOW: D1424 (#3700, PH14s) adds Status reports' `New
     // report`, the zone's primary, which opens the page's own Composer.
-    handlers: 16,
+    handlers: 17,
     // D1424 (#3700): labels the profiles canvas adds that no `Pages · …` artboard
     // draws. Each is listed by zone, so the canvas-order check still pins the
     // rest of the row exactly and this list cannot grow by accident.
-    offCanvas: { 'delivery/status-reports': ['New report'] },
+    offCanvas: { 'delivery/status-reports': ['New report'], 'research/markets': ['Export view', 'New market research'] },
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['Attach to proposal', 'Export'] },
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.
@@ -436,7 +442,9 @@ const PROFILES = {
     v2Ops: [['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions', { args: true }]],
     // `Export to calendar` stays on the page off the v2 canvas: an .ics of the
     // tab's sessions, built in the browser (D4832).
-    offCanvas: { 'practice/sessions': ['Export to calendar'] },
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['Re-run stale', 'Add source', 'Export'] },
+    offCanvas: { 'practice/sessions': ['Export to calendar'], 'research/markets': ['Export view', 'New market research'] },
     buckets: /^(expertise|network|research|practice)\//,
     // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
     // TWO HAVE MOVED APART. PR1, PR2 and PR3 each drew exactly two ops, one of
@@ -454,7 +462,7 @@ const PROFILES = {
     // dump `exportView` produces. Was 15/14 at PR4.
     zones: 16,
     links: 1,
-    exports: 14,
+    exports: 13,
     // FIVE PAGE-SUPPLIED OPS, AND THE FIFTH IS THE FIRST ONE THIS PROFILE DID
     // NOT SHARE WITH PARTNER. Four of them are `AskZone` and `LibraryZone`,
     // which are each one file serving both licences. The fifth is Delivery's
@@ -483,7 +491,7 @@ const PROFILES = {
     // said no public profile page existed, and `/advisors/:uid` does; both
     // are the page's `openPublicPreview`. Two gaps became two handlers.
     // FOURTEEN: #4832 (D4832) — Sessions' `Share booking link` (PX-05).
-    handlers: 14,
+    handlers: 15,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -1724,7 +1732,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasOps(profile);
     const table = tableEntries(SRC);
     const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
-    assert.equal(primaries.length, { founder: 0, investor: 7, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
+    assert.equal(primaries.length, { founder: 0, investor: 8, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
     for (const e of primaries) {
       const zone = e.zone;
       // `canvas:` is the artboard's word where the rendered label differs.

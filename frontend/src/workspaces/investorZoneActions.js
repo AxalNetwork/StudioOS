@@ -301,10 +301,13 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export chart', unbuilt: 'no chart is drawn here — each comparison is a row carrying the base it rests on' },
     { label: 'Export', kind: 'export' },
   ],
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view pages the whole filtered view from the
+  // Worker (the page supplies it); Edit thesis opens Settings › My thesis. They
+  // replace New deep-dive, Export and Cite in a memo.
   'research/markets': [
-    { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },
-    { label: 'Export', kind: 'export' },
-    { label: 'Cite in a memo', unbuilt: 'nothing carries a sector into a memo' },
+    { label: 'Export view', kind: 'handler', handler: 'exportFilteredView' },
+    { label: 'Edit thesis', kind: 'handler', handler: 'editThesis', primary: true },
   ],
   // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
   // `Add document`, and it opens the same file picker. It was
