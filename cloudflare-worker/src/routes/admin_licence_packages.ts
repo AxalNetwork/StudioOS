@@ -31,7 +31,7 @@ import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 import {
-  PackageError, activePackageDetail, createPackage, deleteDraftVersion, draftNextVersion, isPackageKey, listPackages,
+  PackageError, readDelivery, activePackageDetail, createPackage, deleteDraftVersion, draftNextVersion, isPackageKey, listPackages,
   listVersions, publishVersion, retireVersion, unknownProgramKeys, updateDraftVersion, validatePackageInput, versionDetail,
 } from '../services/licencePackagesStore';
 
@@ -127,6 +127,28 @@ packages.get('/:packageKey/versions/:version', async (c) => {
     const version = versionParam(c);
     if (version === null) return badVersion(c);
     return c.json({ package: await versionDetail(c.env, c.req.param('packageKey'), version) });
+  } catch (e) { return answer(c, e); }
+});
+
+packages.patch('/:packageKey/versions/:version/items/:program/delivery', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const version = versionParam(c);
+    if (version === null) return badVersion(c);
+    const key = c.req.param('program');
+    const body = await c.req.json().catch(() => null);
+    if (!body || !(body.expected_description === null || typeof body.expected_description === 'string')) {
+      return refuse(c, 400, { code: 'invalid_delivery', message: 'Send the previously displayed delivery terms.' });
+    }
+    const delivery = readDelivery(key, body.delivery);
+    const packageKey = c.req.param('packageKey');
+    const updated = await c.env.DB.prepare(`UPDATE program_package_items SET hq_service_description = ?
+      WHERE program_key = ? AND hq_service_description IS ? AND package_uid IN
+      (SELECT uid FROM program_packages WHERE package_key = ? AND version = ? AND status = 'draft')`)
+      .bind(delivery?.description ?? null, key, body.expected_description, packageKey, version).run();
+    if (!updated.meta.changes) return refuse(c, 409, { code: 'changed_since_open', message: 'The draft or its delivery terms changed. Reload the version.' });
+    await logAdminAction(c.env, admin.id, admin.email || '', 'licence_package_edited', { package_key: packageKey, version, program_key: key });
+    return c.json({ delivery });
   } catch (e) { return answer(c, e); }
 });
 

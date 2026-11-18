@@ -277,7 +277,8 @@ test('Settings and Availability are the shell\'s: HQ sets member access on refer
   const avail = await mounted(`${BASE}/availability`, worker(ADMIN), ADMIN);
   try {
     assert.match(avail.textOf('programs-generic-availability'), /not switched on to be offered to studios/);
-    assert.ok(avail.has('programs-generic-manage-grants'));
+    assert.ok(avail.has('studio-program-access'));
+    assert.ok(!avail.has('programs-generic-manage-grants'), 'a studio Admin cannot manage HQ grants');
   } finally { await avail.close(); }
 
   const down = () => response({ error: 'down' }, 503);

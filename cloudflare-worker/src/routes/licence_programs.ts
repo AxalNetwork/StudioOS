@@ -70,7 +70,7 @@ async function fromCopy(c: any) {
   let copy;
   try { copy = parseProgramCopy(String(row.program_grants_json)); } catch { copy = null; }
   if (!copy) return refuse(c, 503, { ...UNREADABLE, raw: new Error('branch_licence.program_grants_json is not a program copy') });
-  return c.json({ ...head, programs: studioPrograms(copy, licence, today()), reason: null });
+  return c.json({ ...head, programs: studioPrograms(copy, licence, today()), hq_services: copy.hq_services, reason: null });
 }
 
 // GET /api/licence/mine/programs
@@ -93,7 +93,7 @@ r.get('/mine/programs', async (c) => {
     const copy = await programCopy(c.env, Number(licence.id));
     return c.json({
       linked: true, source: 'hq', as_of: null, age_seconds: null, licence: licenceOut(licence),
-      programs: studioPrograms(copy, licence, today()), reason: null,
+      programs: studioPrograms(copy, licence, today()), hq_services: copy.hq_services, reason: null,
     });
   } catch (e) {
     return refuse(c, 503, { ...UNREADABLE, raw: e });

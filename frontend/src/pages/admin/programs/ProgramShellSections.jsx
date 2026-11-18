@@ -45,7 +45,6 @@ export function Availability({ data }) {
       {data.grantable === true ? <p className={`m-0 ${SUB}`}>This program can be offered to studios.</p> : null}
       {data.grantable === false ? <p className={`m-0 ${SUB}`}>This program is not switched on to be offered to studios.</p> : null}
       {data.grantable === null || data.grantable === undefined ? <p className={`m-0 ${SUB}`}>Whether it can be offered to studios could not be read.</p> : null}
-      <Link to="/admin/licences/programs" className="self-start text-[12.5px] font-bold text-axal-violet underline dark:text-violet-300" data-testid="programs-generic-manage-grants">Manage grants →</Link>
     </section>
   );
 }

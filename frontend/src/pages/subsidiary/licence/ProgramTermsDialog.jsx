@@ -11,7 +11,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Sheet from '../../../ui/Sheet.jsx';
-import { PROGRAM_PAGE, grantDates, isHeld, termRows } from '../../../lib/studioPrograms';
+import { asksFor, grantDates, programPageOf, termRows } from '../../../lib/studioPrograms';
 import { longDate } from '../../../lib/licencePage';
 
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400';
@@ -20,10 +20,10 @@ export default function ProgramTermsDialog({ program, status, onClose, onRequest
   if (!program) return null;
   const rows = termRows(program);
   const dates = grantDates(program);
-  const page = PROGRAM_PAGE[program.program_key] || null;
+  const page = programPageOf(program);
   const footer = (
     <div className="flex gap-2">
-      {isHeld(program) && (
+      {asksFor(program).includes('change') && (
         <button type="button" onClick={() => onRequestChange?.(program)} className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:flex-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800" data-testid="program-terms-change">
           Request a change
         </button>

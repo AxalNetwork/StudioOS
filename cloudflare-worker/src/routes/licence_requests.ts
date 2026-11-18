@@ -57,7 +57,9 @@ async function toBranchLane(c: any, method: 'GET' | 'POST') {
   if (method === 'POST') init.body = await c.req.text();
   let ctx: unknown;
   try { ctx = c.executionCtx; } catch { ctx = undefined; }
-  return branchLane.request('/escalations', init, c.env, ctx as any);
+  const program = method === 'GET' ? c.req.query('program') : null;
+  const path = program == null ? '/escalations' : `/escalations?program=${encodeURIComponent(program)}`;
+  return branchLane.request(path, init, c.env, ctx as any);
 }
 
 // GET /api/licence/mine/requests
@@ -69,7 +71,7 @@ r.get('/mine/requests', async (c) => {
     const licence = await administeredLicence(c.env, user.id);
     if (!licence) return c.json(NO_LICENCE, 404);
 
-    const listed = await listLicenceRequests(c.env, licence.uid);
+    const listed = await listLicenceRequests(c.env, licence.uid, 100, c.req.query('program') ?? null);
     const gate = escalationKindsFor(licence.kind);
     return c.json({
       licence_uid: licence.uid,

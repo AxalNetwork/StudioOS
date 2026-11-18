@@ -18,7 +18,7 @@
  */
 import { NOT_RECORDED } from './absence';
 import { bpsPercent } from './bps';
-import { longDate, dayOf } from './licencePage';
+import { longDate, dayOf, tabPath } from './licencePage';
 import { PROGRAMS } from './programGrants';
 import { formatMinorOrCount } from './money.js';
 import {
@@ -55,6 +55,10 @@ export const PROGRAM_PAGE = {
   'ai-native-venture': '/admin/programs/ai-native-venture',
   'investor-cohorts': '/admin/programs/investor-cohorts',
 };
+
+export const programPageOf = (p) => p.custom
+  ? `/admin/programs/${encodeURIComponent(p.program_key)}`
+  : PROGRAM_PAGE[p.program_key] || null;
 
 const WORDS = {
   playbook: { as_written: 'Follow HQ’s playbook as written', may_adapt: 'The studio may adapt HQ’s playbook' },
@@ -132,6 +136,7 @@ export const isOffered = (p) => OFFERED.includes(p?.standing);
 const WAITING = {
   licence_active: 'the licence to be active',
   schedule_signed: 'the schedule to be signed',
+  agreement_executed: 'the required agreement to be signed',
   start_date: 'its start date',
   ended_by_date: 'nothing: its end date has passed',
 };
@@ -199,12 +204,62 @@ export function scheduleOf(p) {
  * the request. Runs at HQ, and a program HQ does not offer, have none.
  */
 export function actionOf(p, status) {
-  if (status.word === 'Requested') return { kind: 'view_request' };
+  if (status.request?.kind === 'program_grant') return { kind: 'view_request' };
   if (HELD.includes(p.standing)) {
-    return { kind: 'open', page: PROGRAM_PAGE[p.program_key] || null, change: isHeld(p), end: isHeld(p) };
+    return { kind: 'open', page: programPageOf(p), change: isHeld(p) && !p.custom, end: isHeld(p) && !p.custom };
   }
   if (p.standing === 'not_recorded') return { kind: 'request' };
   return null;
+}
+
+/** The status for a single studio uses the same grant and request records from both pages. */
+export function studioProgramAccess(program, requestList) {
+  const items = Array.isArray(requestList?.items) && requestList.available !== false ? requestList.items : null;
+  const status = statusOf(program, openProgramRequests(items));
+  // An issued grant controls access even if its request has since left the history window.
+  if (program.grant || status.request || program.standing !== 'not_recorded') {
+    return { status, action: actionOf(program, status) };
+  }
+  // Both lanes return newest requests first. A newer decline or withdrawal supersedes an older approval.
+  const latest = items?.find((r) => r.kind === 'program_grant' && r.request?.program === program.program_key);
+  if (latest?.status === 'undelivered') {
+    return {
+      status: { word: 'Not delivered', tone: 'waiting', line: 'Your studio recorded this request. It has yet to reach HQ.', request: latest },
+      action: { kind: 'view_request' },
+    };
+  }
+  // Older branch answers recorded only that HQ replied. Keep that distinction until a decision is available.
+  const decision = requestList?.branch ? latest?.hq_decision : latest?.status;
+  if (latest?.status === 'answered' && requestList?.branch && !decision) {
+    return {
+      status: { word: 'Answered by HQ', tone: 'muted', line: 'HQ replied. The decision on this request is not recorded on this branch.', request: latest },
+      action: { kind: 'view_request' },
+    };
+  }
+  if (latest?.status === 'answered' && decision === 'answered') {
+    return {
+      status: { word: 'Approved · awaiting grant', tone: 'waiting', line: 'HQ approved your request. The studio grant has yet to be issued.', request: latest },
+      action: { kind: 'view_request' },
+    };
+  }
+  if (!items || (!latest && requestList.complete === false)) {
+    const line = requestList === undefined ? 'Reading your requests…' : !items ? 'Your requests could not be read.' : 'The available history does not confirm whether your studio has requested this program.';
+    return { status: { ...status, line }, action: items ? { kind: 'check_history' } : null };
+  }
+  return { status, action: actionOf(program, status) };
+}
+
+export function serviceTermLine(s) {
+  const parts = [`${s.package_name} · version ${s.package_version}`];
+  if (s.starts_on) parts.push(`From ${longDate(s.starts_on)}`);
+  if (s.ends_on) parts.push(`Until ${longDate(s.ends_on)}`);
+  return parts.join(' · ');
+}
+
+/** The exact program is resolved again against the signed-in studio’s own records at the destination. */
+export function studioProgramAccessPath(key, kind) {
+  const action = kind === 'request' ? 'request' : kind === 'open' ? 'terms' : 'status';
+  return `${tabPath('programs')}?${new URLSearchParams({ program: key, action })}`;
 }
 
 // ──────────────────────────────────────────────────────────────── the tiles
@@ -230,9 +285,10 @@ export function programTiles({ programs, requests, today = new Date() }) {
   });
 
   const asked = requests === undefined ? { value: '', sub: 'Reading…' }
-    : requests === null ? { value: UNREADABLE, sub: 'Your requests could not be read' }
+    : !Array.isArray(requests?.items) || requests.available === false ? { value: UNREADABLE, sub: 'Your requests could not be read' }
       : (() => {
         const open = openProgramRequests(requests.items);
+        if (requests.complete === false) return { value: open.length ? `${open.length}+` : '—', sub: 'Recent requests only' };
         return { value: String(open.length), sub: open.length ? requestLine(open[0]) : 'none waiting on HQ' };
       })();
 
@@ -386,11 +442,11 @@ export const ASKS = [
 ];
 
 /** Only programs HQ offers can be asked for (GR9's "Only programs HQ offers"). */
-export const requestablePrograms = (programs) => (Array.isArray(programs) ? programs : []).filter(isOffered);
+export const requestablePrograms = (programs) => (Array.isArray(programs) ? programs : []).filter((p) => !p.custom && isOffered(p));
 
 /** Which asks a program allows: Grant when the studio does not hold it, Change and End when it does. */
 export function asksFor(p) {
-  if (!p) return [];
+  if (!p || p.custom) return [];
   if (isHeld(p)) return ['change', 'end'];
   if (p.standing === 'not_recorded' || p.standing === 'ended') return ['grant'];
   return [];

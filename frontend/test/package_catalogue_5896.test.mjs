@@ -11,9 +11,10 @@ import React from 'react';
 import { readFileSync } from 'node:fs';
 import { matchRoutes } from 'react-router-dom';
 import { licencePackagesApi } from '../src/lib/api/licencePackages.js';
+import { programGrantsApi } from '../src/lib/api/programGrants.js';
 import { PackageCatalogueView } from '../src/pages/admin/licences/PackageCatalogue.jsx';
 import {
-  CATALOGUE_COLUMNS, NOT_RECORDED, catalogueRows, effectiveWord, guidanceRange, historyRows, money, programList, rowCells,
+  CATALOGUE_COLUMNS, NOT_RECORDED, catalogueRows, effectiveWord, guidanceRange, historyRows, money, localGrantLabel, rowCells,
 } from '../src/pages/admin/licences/packageCatalogueModel.js';
 import { HQ_STRIPS } from '../src/lib/hqStrips.js';
 import { readRoutesSource } from './_routesSource.mjs';
@@ -70,21 +71,31 @@ test('effective dates: a draft is not in force, a retired version reads its span
   assert.equal(effectiveWord(OLD_V1), '1 Dec 2026 – 31 Oct 2026');
   assert.equal(effectiveWord(SEED), 'Not in force');
   assert.deepEqual(historyRows([VB_V1, VB_V2]).map((r) => `${r.version} ${r.status} ${r.created}`), ['v2 Draft 12 Nov 2026', 'v1 Active 9 Nov 2026']);
-  assert.equal(programList(ITEMS['core_network:1']), 'referral-partners, perks');
+  assert.equal(localGrantLabel(undefined), 'Requires an existing studio grant');
+  assert.equal(localGrantLabel({ readiness: 'yes', grantable: false }), 'New studio grants disabled');
+  assert.equal(localGrantLabel({}), 'Availability not recorded');
 });
 
 /* ── the page ──────────────────────────────────────────────────────────────── */
 
 const original = { ...licencePackagesApi };
+const originalDefaults = programGrantsApi.defaults;
+const delivery = [
+  { program_key: 'spinout-lab', name: 'Spin-Out Lab', readiness: 'yes', grantable: true },
+  { program_key: 'ai-native-venture', name: 'AI-native Venture', readiness: 'notready', grantable: false },
+  { program_key: 'product-testing', name: 'Product testing', readiness: 'hq', grantable: false },
+  { program_key: 'mentor-cohorts', name: 'Mentor cohort access', readiness: 'yes', grantable: false },
+];
 const never = () => new Promise(() => {});
-function stub({ catalogue, versions, version } = {}) {
+function stub({ catalogue, versions, version, defaults } = {}) {
+  programGrantsApi.defaults = defaults || (async () => ({ programs: delivery }));
   const calls = [];
   licencePackagesApi.catalogue = async () => { calls.push('catalogue'); return catalogue(); };
   licencePackagesApi.versions = async (key) => { calls.push(`versions:${key}`); return versions ? versions(key) : never(); };
   licencePackagesApi.version = async (key, n) => { calls.push(`version:${key}:${n}`); return version ? version(key, n) : never(); };
   return calls;
 }
-const restore = () => Object.assign(licencePackagesApi, original);
+const restore = () => { Object.assign(licencePackagesApi, original); programGrantsApi.defaults = originalDefaults; };
 const all = [CORE_V1, VB_V2, VB_V1, SEED];
 const byKey = (key) => all.filter((x) => x.package_key === key).sort((a, b) => b.version - a.version);
 
@@ -114,8 +125,43 @@ test('a Super Admin sees every package\'s version, status, programs, fee, guidan
   await page.click('Venture Building');
   await page.flush(); await page.flush();
   const h = page.text().slice(page.text().indexOf('Version history · Venture Building'));
-  assert.match(h, /v2Draftspinout-lab, ai-native-venture, product-testing, mentor-cohortsNot in force12 Nov 2026v1Activespinout-lab, ai-native-venture, product-testing1 Dec 20269 Nov 2026/);
+  assert.match(h, /v2DraftSpin-Out Lab · Studio operation · Offered for local operationAI-native Venture · Studio operation · Not ready for local operationProduct testing · Studio operation · Run by HQEdit deliveryMentor cohort access · Studio operation · New studio grants disabled/);
+  assert.match(h, /v1ActiveSpin-Out Lab · Studio operation · Offered for local operationAI-native Venture · Studio operation · Not ready for local operationProduct testing · Studio operation · Run by HQ/);
   assert.doesNotMatch(page.text(), /package plan/i);
+});
+
+test('an explicitly defined HQ service keeps its description even if local grant rules cannot be read', async (t) => {
+  t.after(restore);
+  stub({
+    catalogue: () => ({ packages: [VB_V1] }),
+    versions: () => ({ versions: [VB_V1] }),
+    version: () => ({ package: { items: [{ program_key: 'product-testing', included_by_default: true,
+      delivery: { kind: 'hq_service', description: 'HQ coordinates the testing panel.' } }] } }),
+    defaults: async () => { throw new Error('Unavailable'); },
+  });
+  const page = await mountContracts(React.createElement(PackageCatalogueView), '/admin/licences/packages');
+  t.after(() => page.unmount());
+  await page.flush(); await page.flush();
+  assert.match(page.text(), /product-testing · HQ service · HQ coordinates the testing panel\./);
+  assert.doesNotMatch(page.text(), /product-testing · Studio operation/);
+});
+
+test('an unavailable grant rule read preserves version contents and offers a retry', async (t) => {
+  t.after(restore);
+  let fail = true;
+  stub({
+    catalogue: () => ({ packages: [VB_V1] }),
+    versions: () => ({ versions: [VB_V1] }),
+    version: () => ({ package: { items: ITEMS['venture_building:1'] } }),
+    defaults: async () => { if (fail) throw new Error('Unavailable'); return { programs: delivery }; },
+  });
+  const page = await mountContracts(React.createElement(PackageCatalogueView), '/admin/licences/packages');
+  t.after(() => page.unmount());
+  await page.flush(); await page.flush();
+  assert.match(page.text(), /product-testing · Studio operation · Availability unreadable/);
+  fail = false;
+  await page.click('Try again'); await page.flush();
+  assert.match(page.text(), /Product testing · Studio operation · Run by HQ/);
 });
 
 test('an empty catalogue is None, and a failed read is Unreadable with Try again, never an empty catalogue', async (t) => {
@@ -159,6 +205,96 @@ test('a failed history read is its own Unreadable, and the table stays', async (
   assert.match(page.text(), /Unreadable\. The versions of this Axal VC package could not be read/);
 });
 
+test('HQ can describe and remove a draft HQ service, reloading only the edited version', async (t) => {
+  t.after(restore);
+  const versions = [VB_V2, VB_V1, { ...VB_V1, version: 0, status: 'retired' }];
+  let service = null;
+  const program = 'product-testing';
+  const calls = stub({
+    catalogue: () => ({ packages: versions }),
+    versions: () => ({ versions }),
+    version: (_, n) => ({ package: { ...versions.find((v) => v.version === n), items: [
+      { program_key: 'spinout-lab' }, { program_key: program, ...(n === 2 && service ? { delivery: service } : {}) },
+    ] } }),
+  });
+  const writes = [];
+  licencePackagesApi.updateItemDelivery = async (...args) => {
+    writes.push(args);
+    service = args[3].delivery.kind === 'hq_service' ? args[3].delivery : null;
+  };
+  const page = await mountContracts(React.createElement(PackageCatalogueView), '/admin/licences/packages');
+  t.after(() => page.unmount());
+  await page.flush();
+  const buttons = () => page.nodes().filter((node) => node.tagName === 'BUTTON').map(page.props);
+  assert.deepEqual(buttons().map((p) => p['aria-label']).filter((a) => a?.startsWith('Edit delivery')), ['Edit delivery for Product testing, v2']);
+  const mark = calls.length;
+  await page.click('Edit delivery');
+  await page.fill('Delivered by', 'hq_service');
+  await page.fill('Service provided by HQ', '   ');
+  assert.ok(buttons().find((p) => p.children === 'Save delivery').disabled);
+  await page.fill('Service provided by HQ', 'a'.repeat(501));
+  assert.ok(buttons().find((p) => p.children === 'Save delivery').disabled);
+  assert.equal(page.props(page.nodes().find((n) => n.tagName === 'TEXTAREA')).maxLength, 500);
+  await page.fill('Service provided by HQ', '  HQ runs one testing panel.  ');
+  await page.click('Save delivery'); await page.flush();
+  assert.deepEqual(writes[0], ['venture_building', 2, program, { expected_description: null,
+    delivery: { kind: 'hq_service', description: 'HQ runs one testing panel.' } }]);
+  assert.deepEqual(calls.slice(mark), ['version:venture_building:2']);
+  assert.match(page.text(), /HQ service · HQ runs one testing panel/);
+  await page.click('Edit delivery');
+  await page.fill('Delivered by', 'studio_operation');
+  await page.click('Save delivery'); await page.flush();
+  assert.deepEqual(writes[1][3], { expected_description: 'HQ runs one testing panel.', delivery: { kind: 'studio_operation' } });
+  assert.doesNotMatch(page.text(), /HQ service · HQ runs/);
+  assert.match(page.text(), /Product testing · Studio operation · Run by HQ/);
+
+  licencePackagesApi.publish = async () => {
+    versions[0] = { ...VB_V2, status: 'active' };
+    versions[1] = { ...VB_V1, status: 'retired' };
+    return { package: versions[0], retired_version: 1 };
+  };
+  await page.click('Publish…');
+  const { act } = await import('react');
+  await act(async () => page.props(page.nodes().find((n) => n.tagName === 'TEXTAREA')).onChange({ target: { value: 'Publish reviewed delivery terms' } }));
+  await page.click('Publish');
+  await page.flush(); await page.flush();
+  assert.doesNotMatch(page.text(), /Edit delivery/, 'publication refreshes each history detail before offering draft-only editing');
+});
+
+test('a refused save preserves the draft input; conflicting publication reloads the version and removes editing', async (t) => {
+  t.after(restore);
+  let status = 'draft';
+  const message = 'The draft or its delivery terms changed. Reload the version.';
+  stub({
+    catalogue: () => ({ packages: [VB_V2] }),
+    versions: () => ({ versions: [VB_V2] }),
+    version: () => ({ package: { ...VB_V2, status, items: [{ program_key: 'product-testing' }] } }),
+  });
+  let writes = 0;
+  licencePackagesApi.updateItemDelivery = async () => {
+    writes++;
+    if (writes === 1) throw new Error('Your session needs a recent sign-in.');
+    status = 'active';
+    throw Object.assign(new Error(message), { code: 'changed_since_open', status: 409 });
+  };
+  const page = await mountContracts(React.createElement(PackageCatalogueView), '/admin/licences/packages');
+  t.after(() => page.unmount());
+  await page.flush();
+  await page.click('Edit delivery');
+  await page.fill('Delivered by', 'hq_service');
+  await page.fill('Service provided by HQ', 'HQ provides a testing panel.');
+  await page.click('Save delivery');
+  assert.match(page.text(), /Your session needs a recent sign-in/);
+  assert.equal(page.props(page.nodes().find((n) => n.tagName === 'TEXTAREA')).value, 'HQ provides a testing panel.');
+  await page.click('Save delivery');
+  assert.ok(page.text().includes(message));
+  assert.doesNotMatch(page.text(), /Save delivery/);
+  await page.click('Reload version'); await page.flush();
+  assert.equal(writes, 2);
+  assert.match(page.text(), /Version history[\s\S]+v2Active/);
+  assert.doesNotMatch(page.text(), /Edit delivery/);
+});
+
 /* ── the address and the door ─────────────────────────────────────────────── */
 
 test('/admin/licences/packages outranks /admin/licences/:uid, is HQ only, and the Licences strip opens it', () => {
@@ -177,4 +313,6 @@ test('the client reads with ?all=1 for the catalogue and encoded keys; it has no
   const src = readFileSync(new URL('../src/lib/api/licencePackages.js', import.meta.url), 'utf8');
   assert.match(src, /request\('\/admin\/licence-packages\?all=1'\)/);
   assert.doesNotMatch(src, /method:\s*'DELETE'/);
+  assert.match(src, /versions[/][$][{]enc[(]version[)][}][/]items[/][$][{]enc[(]program[)][}][/]delivery/);
+  assert.match(src, /method: 'PATCH', body: JSON.stringify[(]body[)]/);
 });

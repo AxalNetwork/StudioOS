@@ -233,7 +233,7 @@ test('D1123: Users admits through a cohort and reason dialog, no label or browse
 });
 test('D1123: a branch without a Lab grant never mounts tools; a failed copy is Unreadable', async () => {
   const m = await mount(BranchGrant, { '/api/licence/mine/programs': { programs: [{ program_key: 'spinout-lab', standing: 'not_recorded' }] } }, { children: h('div', { 'data-testid': 'private-lab-tools' }, 'Lab tools') });
-  try { assert.match(m.text(), /has not been granted/); assert.match(m.text(), /Request it/); assert.equal(m.has('private-lab-tools'), false); } finally { await m.close(); }
+  try { assert.match(m.text(), /is not in force for this studio/); assert.equal(m.has('private-lab-tools'), false); } finally { await m.close(); }
   const failed = await mount(BranchGrant, { '/api/licence/mine/programs': json({ error: 'unreadable' }, 503) }, { children: h('div', { 'data-testid': 'private-lab-tools' }, 'Lab tools') });
   try { assert.match(failed.text(), /Unreadable/); assert.match(failed.text(), /Try again/); assert.equal(failed.has('private-lab-tools'), false); } finally { await failed.close(); }
   const granted = await mount(BranchGrant, { '/api/licence/mine/programs': { programs: [{ program_key: 'spinout-lab', standing: 'in_force' }] } }, { children: h('div', { 'data-testid': 'private-lab-tools' }, 'Lab tools') });

@@ -6,6 +6,9 @@ kind filter in the URL, and draws the list and the detail pane. Everything the
 detail pane renders lives here, one file per domain, moved out of that page
 unchanged when it was split.
 
+- `PackageCatalogue.jsx` displays versioned package items and current grant eligibility.
+  `PackageItemDeliveryEditor.jsx` lets HQ set or clear the service description on an HQ-delivered
+  item in a draft. Saving checks the previously displayed description and refreshes that version.
 - `LicenceDetail.jsx` — lifecycle: one licence, its actions (activate,
   suspend, reinstate, renew, terminate) and its sections. D4819 part 3: the
   canvas's six sections (Overview, Terms, Agreement, Access, Operations,
