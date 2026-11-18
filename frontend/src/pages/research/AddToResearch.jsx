@@ -132,7 +132,7 @@ function CompareSheet({ kind, items, read, retry, choices, onClose, onDone, onSa
   else if (status) {
     panel = (
       <Outcome kind={status.kind} chip={status.chip} head={status.head} body={status.body} role={status.kind === 'saved' ? 'status' : 'alert'} testId="add-to-research-status">
-        {status.kind === 'saved' ? <Link className={`${LINK_BTN} bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600`} to={comparisonHref(status.res.project?.uid, status.res.item?.uid)} data-testid="add-to-research-open">Open the comparison →</Link> : null}
+        {status.kind === 'saved' ? <Link className={`${LINK_BTN} bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500`} to={comparisonHref(status.res.project?.uid, status.res.item?.uid)} data-testid="add-to-research-open">Open the comparison →</Link> : null}
         {status.kind === 'not_found' ? <button type="button" className={BTN_PRIMARY} onClick={save} data-testid="button-outcome-retry">Try again</button> : null}
         {status.kind === 'unreadable' ? <button type="button" className={BTN_PRIMARY} onClick={check} data-testid="button-outcome-check">Check again</button> : null}
       </Outcome>
@@ -142,7 +142,7 @@ function CompareSheet({ kind, items, read, retry, choices, onClose, onDone, onSa
     if (outcome.kind === 'ok') {
       panel = (
         <Outcome kind="ok" chip={copy.chip} head={copy.head} body={savedSentence(outcome.res)} role={copy.role}>
-          <Link className={`${LINK_BTN} bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600`} to={comparisonHref(outcome.res.project?.uid, outcome.res.item?.uid)} data-testid="add-to-research-open">Open the comparison →</Link>
+          <Link className={`${LINK_BTN} bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500`} to={comparisonHref(outcome.res.project?.uid, outcome.res.item?.uid)} data-testid="add-to-research-open">Open the comparison →</Link>
           <button type="button" className={SECONDARY} onClick={onClose} data-testid="button-outcome-done">Done</button>
         </Outcome>
       );
