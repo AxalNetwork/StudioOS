@@ -72,6 +72,7 @@ const MODE = process.argv.includes('--write') ? 'write' : process.argv.includes(
 // a newcomer's attention. Adding a folder here is the cheap part; the README
 // it then demands is the point.
 const DOCUMENTED = new Map([
+  ['frontend/src/pages/relationships', 'relationship intelligence, consent pickers and introduction records'],
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
   ['cloudflare-worker/src/agents', 'the agent engine runtime (D1528): the seam, the AgentScope object, the task Workflow, the agent queue and the sweep'],
   ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],
@@ -108,6 +109,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
   ['cloudflare-worker/src/services/posthog', 'PostHog, read-only (D1385): the MCP reads, the tracked metrics and each section\'s sync (D1605–D1609), and Distribution\'s visits (D6107)'],
   ['cloudflare-worker/src/services/calendar', 'personal sources, external copies and calendar sync state'],
+  ['cloudflare-worker/src/services/wellbeing', 'Wellbeing: expert matching, slots, bookings, reflection periods (D7118) and recommendations (D7119)'],
   ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
   ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
@@ -116,6 +118,7 @@ const DOCUMENTED = new Map([
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
   ['scripts/landing-bot',             'pull request admission, queue requests and bot safeguards'],
+  ['scripts/landing-bot/model',       'the landing bot\'s model runner: task caps, edit tools, provider order, patch checks'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
   ['scripts/lib/fixtures',            'evidence-backed offline replay fixtures'],
   ['documentation',                   'every hand-written document'],

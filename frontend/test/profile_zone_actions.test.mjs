@@ -256,9 +256,11 @@ const PROFILES = {
     // TWENTY-FIRST: `funds/calls`'s `Send reminders` (#6238, D6238) — it opens
     // the call's chase: one Eadwyn draft per line behind, each logged as sent
     // only when the GP confirms it.
-    // TWENTY-SECOND: `network/introductions`'s `Offer one` (D6637), the
-    // network picker noted above, which its page supplies.
-    handlers: 22,
+    //
+    // TWENTY-SECOND: `network/relationships`'s `Add person` (D6636) — the
+    // network picker is now supplied by its page.
+    // TWENTY-THIRD: `network/introductions`'s `Offer one` (D6637), supplied by its page.
+    handlers: 23,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,

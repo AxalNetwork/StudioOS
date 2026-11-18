@@ -13,6 +13,10 @@ Who on the member's teams knows an investor, a founder or a company, the ask for
 | `introRecordModel.js` | D5310 part 3: recorded state, outcome and action words for the introduction-request record. |
 | `NetworkIntroOffer.jsx` | D6637: names-only consent picker using the existing Sheet. |
 
+| `NetworkTieRequest.jsx` | D6636: names-only consent picker using the existing Sheet. |
+| `IntroRecordSheet.jsx` | D5310 part 3: one introduction request in the shared detail Sheet, with actions allowed to its reader. |
+| `introRecordModel.js` | D5310 part 3: recorded states and actions for the introduction request detail. |
+
 ## The rules for adding here
 
 - **No contact detail, ever.** A person is a name, a company and a title. No email, phone, notes or LinkedIn link reaches these files.
