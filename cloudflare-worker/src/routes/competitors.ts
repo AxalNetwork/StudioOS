@@ -30,6 +30,7 @@ import {
 } from '../services/competitorAnalysis';
 import { fetchPage } from '../services/webFetch';
 import { linkCandidatesToDirectory } from '../services/competitorDirectoryLink';
+import { parseSubjectUid, readSubject } from '../services/competitorSubject';
 
 const competitors = new Hono<{ Bindings: Env }>();
 
@@ -194,6 +195,10 @@ async function loadAnalysis(env: Env, userId: number, id: string): Promise<Recor
     title: a.title,
     status: a.status,
     edited: !!a.edited,
+    // D7180: the directory company this analysis is about, read back from
+    // the directory; null when the run has no subject.
+    subject_uid: a.subject_uid ?? null,
+    subject: a.subject_uid ? await readSubject(env, String(a.subject_uid)) : null,
     inputs: safeParse(a.inputs_json, {}),
     created_at: a.created_at,
     updated_at: a.updated_at,
@@ -288,10 +293,27 @@ competitors.post('/analyze', async (c) => {
     return c.json({ error: 'market_required', message: 'A market / industry is required to run the analysis.' }, 400);
   }
 
+  // D7180: the subject company, set from a profile's link. It must be a
+  // directory company; the run is never written with a uid nothing holds.
+  const subjectUid = parseSubjectUid(body.subject_uid);
+  if (subjectUid === undefined) {
+    return c.json({ error: 'subject_invalid', message: 'The subject must be a directory company id.' }, 400);
+  }
+  if (subjectUid) {
+    const subject = await readSubject(c.env, subjectUid);
+    if (subject.status === 'not_found') {
+      return c.json({ error: 'subject_not_found', message: 'No directory company has that id.' }, 400);
+    }
+    if (subject.status === 'unreadable') {
+      return c.json({ error: 'subject_unreadable', message: 'The subject company could not be read. Try again.' }, 503);
+    }
+  }
+
   const id = crypto.randomUUID();
   const title = (typeof body.title === 'string' && body.title.trim()) || inputs.market.slice(0, 80);
   await sql`INSERT INTO competitor_analyses (id, user_id, project_id, mode, title, inputs_json, status, created_at, updated_at)
     VALUES (${id}, ${user.id}, ${projectId}, ${mode}, ${title}, ${JSON.stringify(inputs)}, 'running', ${nowIso()}, ${nowIso()})`;
+  if (subjectUid) await sql`UPDATE competitor_analyses SET subject_uid = ${subjectUid} WHERE id = ${id}`;
 
   try {
     // D778 part 9: the press's page and option win; the record is the analysis this route made.
