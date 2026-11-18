@@ -5,6 +5,8 @@ import { FillLabel } from '../../../ui/useScopedFill.jsx';
 import { moneyCents } from '../../../workspaces/boards/format';
 import { amountToCents } from '../../../lib/moneyInput';
 import { LICENCE_SENTENCES, isLicenceSentence } from './licenceRefusal';
+// D4828 (#4828): the shared section states, the limit counter and the one save status.
+import { SectionState, useLimit } from './sectionStates';
 
 /**
  * Shared pieces for the five Expertise zones.
@@ -70,7 +72,7 @@ export function ZoneHeading({ title, blurb, action }) {
 // #5363: the licence refusal's sentences and reader (`licenceRefusal.js`).
 export { ADVISOR_LICENCE_REQUIRED, LICENCE_SENTENCES, isLicenceSentence, zoneError } from './licenceRefusal';
 
-export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, notice, children }) {
+export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, notice, what, children }) {
   // `actions` renders ABOVE all four states, on purpose. A zone's header row is
   // as true while the store is loading, or failed, or empty, as it is when rows
   // are on screen — "no cadence is stored, so there is no set of reports to
@@ -91,18 +93,20 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, not
   const row = actions?.length ? <ZoneActions className="mb-3" items={actions} /> : null;
   const head = (row || notice) ? <>{row}{notice}</> : null;
   const wrap = (body) => (head ? <>{head}{body}</> : body);
+  // D4828 (EX-14): a zone naming `what` it reads draws #5129's states (`sectionStates.jsx`).
+  const shared = what && (loading || error) ? <SectionState what={what} loading={loading} error={error} onRetry={onRetry} /> : null;
   if (loading) {
     // D4711: a skeleton is shapes; the sentence is what a screen reader hears.
-    return wrap(
+    return wrap(shared || (
       <div className="space-y-3" aria-busy="true" role="status">
         <span className="sr-only">Loading…</span>
         <Skeleton className="h-9" /><Skeleton className="h-28" />
-      </div>,
-    );
+      </div>
+    ));
   }
   if (error && isLicenceSentence(error)) {
     // #5363: not a failed read, so no "Source unavailable" and no Try again.
-    return wrap(
+    return wrap(shared || (
       <Card variant="dashed" padding="lg" role="alert" data-testid="advisor-licence-required">
         <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           Advisor licence
@@ -111,13 +115,13 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, not
         <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
           This account does not hold the Advisor licence today, so nothing here can be read.
         </p>
-      </Card>,
-    );
+      </Card>
+    ));
   }
   if (error) {
     // D4711: `role="alert"` so a read that fails after the page is open is
     // announced, not only drawn.
-    return wrap(
+    return wrap(shared || (
       <Card variant="dashed" padding="lg" role="alert">
         <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           Source unavailable
@@ -133,8 +137,8 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, not
             Try again
           </button>
         )}
-      </Card>,
-    );
+      </Card>
+    ));
   }
   if (isEmpty) return wrap(empty);
   return wrap(children);
@@ -236,17 +240,20 @@ export function StatedLimit({ title, children }) {
  * "Not saved". The controls sit outside the `<label>`, so a press on the
  * trigger never lands in the box.
  */
-export function Field({ label, hint, fill = null, children }) {
+export function Field({ label, hint, fill = null, limit, children }) {
   // D4711: the hint is the control's description, not only text beside it. A
   // hint such as "blank reads as not recorded, not as free" is the rule the
   // field follows, so a screen reader hears it on the field itself.
   const hintId = React.useId();
-  const described = hint && React.isValidElement(children)
+  // D4828 (EX-16): `limit` adds a live counter, described by the control and never cutting it.
+  const count = useLimit(children, limit);
+  const described = (hint || count.id) && React.isValidElement(children)
     ? React.cloneElement(children, {
-      'aria-describedby': [children.props['aria-describedby'], hintId].filter(Boolean).join(' '),
+      'aria-describedby': [children.props['aria-describedby'], hint ? hintId : null, count.id].filter(Boolean).join(' '),
+      ...count.props,
     })
     : children;
-  const hintNode = hint ? <span id={hintId} className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span> : null;
+  const hintNode = (hint || count.node) ? <>{hint ? <span id={hintId} className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span> : null}{count.node}</> : null;
   if (fill?.ctl) {
     return (
       <div className="block">
@@ -280,38 +287,23 @@ export const inputClass =
   + 'focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 '
   + 'dark:border-gray-700 dark:bg-gray-900';
 
+// D4828 (EX-16): a visible keyboard focus, and a 44px target below 1024px.
+const FOCUS_TARGET = ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 min-h-[44px] lg:min-h-0';
+
 export const buttonClass =
   'rounded-lg bg-emerald-700 px-3 py-1.5 text-[12px] font-semibold text-white '
-  + 'hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50';
+  + 'hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50' + FOCUS_TARGET;
 
 export const ghostButtonClass =
   'rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold '
-  + 'hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800';
+  + 'hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800' + FOCUS_TARGET;
 
 /**
- * Saved / failed, said once, above the thing that was saved.
- *
- * D4711: THE REGION IS ALWAYS THERE, EMPTY OR NOT. A screen reader announces a
- * live region's changes, not its arrival: a `role="status"` mounted together
- * with its sentence is read by some readers and silently skipped by others. So
- * the region renders empty from the start and the sentence lands in it. A
- * failure's sentence is `role="alert"` (it interrupts: the person has to
- * act); a save is the polite status. Empty, it draws nothing visible.
+ * Saved / failed, said once, above the thing that was saved (D4711): the live
+ * region mounted empty, a failure an alert. D4828: this is `InlineSaveStatus`,
+ * the one feedback component, drawn in `sectionStates.jsx`.
  */
-export function SaveNote({ note, testid }) {
-  // A failure is also `role="alert"` (#4698, D4924's Delivery forms): an alert
-  // interrupts, and it is how a refusal is found by role. A save stays the
-  // polite status around it.
-  return (
-    <div role="status" aria-live="polite" aria-atomic="true" data-testid={testid}>
-      {note ? (
-        <p role={note.ok ? undefined : 'alert'} className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
-          {note.text}
-        </p>
-      ) : null}
-    </div>
-  );
-}
+export { InlineSaveStatus, SaveNote } from './sectionStates';
 
 /**
  * D4670: what a refused read or write says, by the Worker's code. Anything

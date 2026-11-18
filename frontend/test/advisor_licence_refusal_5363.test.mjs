@@ -52,16 +52,20 @@ for (const [surface, path, other] of [
     // The zone's own card. Services also draws its add-service form above it,
     // whose suggestion line has a retry of its own; that is not the zone's.
     const refused = await mounted(module, 'advisor_licence_required');
-    const card = refused.slice(refused.indexOf('Advisor licence'));
-    assert.ok(refused.includes('Advisor licence'), refused.slice(0, 400));
+    // D4828: the Expertise zones draw the refusal as #5129's Refused block.
+    const mark = surface === 'Expertise' ? 'Refused' : 'Advisor licence';
+    const card = refused.slice(refused.indexOf(mark));
+    assert.ok(refused.includes(mark), refused.slice(0, 400));
     assert.ok(card.includes(LICENCE_SENTENCES[surface.toLowerCase()]), card);
     assert.ok(!card.includes('Try again'), `no retry for a licence refusal: ${card}`);
     assert.ok(!refused.includes('Synthetic refusal text'), 'never the thrown text');
     assert.ok(!refused.includes('This did not load'));
 
     const failed = await mounted(module, null);
-    const failedCard = failed.slice(failed.indexOf('Source unavailable'));
-    assert.ok(failed.includes('Source unavailable'), failed.slice(0, 400));
+    // D4828: on Expertise a failed read is #5129's Unavailable.
+    const failedMark = surface === 'Expertise' ? 'Unavailable' : 'Source unavailable';
+    const failedCard = failed.slice(failed.indexOf(failedMark));
+    assert.ok(failed.includes(failedMark), failed.slice(0, 400));
     assert.ok(failedCard.includes(other), failedCard);
     assert.ok(failedCard.includes('Try again'), 'any other failure keeps its retry');
     assert.ok(!failed.includes('needs the Advisor licence'));

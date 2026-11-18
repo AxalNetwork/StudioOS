@@ -35,7 +35,6 @@ const SIGNED = 2;      // grant on p-room, live NDA with FOUNDER
 const UNSIGNED = 3;    // grant on p-room, no NDA
 const RIVAL = 4;       // a founder who owns p-rival
 
-const ago = (days: number) => new Date(Date.now() - days * 86400_000).toISOString();
 
 function freshDb() {
   const db = new DatabaseSync(':memory:');

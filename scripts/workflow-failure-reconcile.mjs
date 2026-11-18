@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { reconcileWindow } from '../engineering-notifications/reconcile.mjs';
 import { createWorkflowFailureReporter } from './lib/workflowFailureIssues.mjs';
 import { ensureMainRedIssue } from './health-alert-episodes.mjs';
-import { workflowFailureHints } from './lib/workflowFailureHints.mjs';
+import { isSuccessfulProductionRun, workflowFailureHints } from './lib/workflowFailureHints.mjs';
 
 const repository = 'AxalNetwork/StudioOS';
 const base = '/repos/' + repository + '/actions/runs';
@@ -49,13 +49,14 @@ export async function reportAttempt({ api, reporter, hints = workflowFailureHint
     if (!knownRun) throw new Error('attempt_not_terminal');
     return { action: 'ignored' };
   }
-  if (!failure.has(run.conclusion)) {
+  const actionable = failure.has(run.conclusion);
+  if (!actionable && !(observe && isSuccessfulProductionRun(run))) {
     observe?.(run, {}, []);
     return { action: 'ignored' };
   }
   const jobs = await attemptJobs(api, run);
   const evidence = await hints({ api, repository, run, jobs });
-  const result = await reporter.report({ run, jobs, ...evidence });
+  const result = actionable ? await reporter.report({ run, jobs, ...evidence }) : { action: 'ignored' };
   observe?.(run, evidence, jobs);
   return result;
 }
@@ -189,7 +190,7 @@ export async function reconcileFailures(options, state, now) {
     await collectRuns(api, auditStart, auditEnd, run => {
       if (recent.has(run.id)) return;
       if (run.run_attempt > 1 || run.status !== 'completed' ||
-          (failure.has(run.conclusion) && Date.parse(run.updated_at) >= activation)) recent.set(run.id, run);
+          ((failure.has(run.conclusion) || isSuccessfulProductionRun(run)) && Date.parse(run.updated_at) >= activation)) recent.set(run.id, run);
     });
   }
 
