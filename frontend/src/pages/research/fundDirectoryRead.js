@@ -132,9 +132,19 @@ export function vehicleLabel(item) {
   const name = String(item?.name || '').trim();
   const number = String(item?.fund_number || '').trim();
   if (!number) return { vehicle: name, manager: name };
-  const escaped = number.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const already = new RegExp(`(^|[^A-Za-z0-9])${escaped}($|[^A-Za-z0-9])`, 'i').test(name);
-  return { vehicle: already ? name : `${name} ${number}`, manager: name };
+  return { vehicle: carriesWord(name, number) ? name : `${name} ${number}`, manager: name };
+}
+
+const isWordChar = (ch) => /[A-Za-z0-9]/.test(ch || '');
+
+/** Whether `name` holds `word` with no letter or digit either side (case-insensitive). */
+function carriesWord(name, word) {
+  const hay = name.toLowerCase();
+  const needle = word.toLowerCase();
+  for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + 1)) {
+    if (!isWordChar(hay[at - 1]) && !isWordChar(hay[at + needle.length])) return true;
+  }
+  return false;
 }
 
 /**
