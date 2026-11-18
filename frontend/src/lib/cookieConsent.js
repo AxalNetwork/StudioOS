@@ -37,8 +37,12 @@ const TOGGLEABLE = ['functional', 'analytics', 'advertising'];
  *
  * The canvas drew four rows: Essential, Preferences, Analytics, Marketing.
  *   - Essential is locked on.
- *   - Analytics controls signup funnel measurement and handle visit counts.
- *   - Marketing controls first-touch referral attribution.
+ *   - Analytics controls signup funnel measurement and handle visit counts
+ *     (#6998: titled "Sign-up measurement", as it is first-party only).
+ *   - Marketing controls first-touch referral attribution (#6998: titled
+ *     "Referral cookie", the one cookie it sets).
+ *   - Each optional row's `banner` is how the first-visit banner names it, so
+ *     the banner can only name a category that has a row and a gate.
  *   - Preferences (view state, saved filters) has no row: those settings are
  *     kept whatever the visitor chooses, so a switch for them would do nothing.
  *     They are named under Essential instead.
@@ -52,13 +56,15 @@ export const COOKIE_ROWS = [
     key: 'essential',
     title: 'Essential',
     description:
-      'Session, authentication, and security. Required for the workspaces to function. '
-      + 'This also keeps the settings you choose.',
+      'Session, authentication and security, and error reports sent only to Axal. Required for the workspaces '
+      + 'to function. This also keeps the settings you choose, including this one.',
     locked: true,
   },
   {
     key: 'analytics',
-    title: 'Analytics',
+    // #6998: named for what it is. It is Axal's own sign-up measurement, not a third-party analytics product.
+    title: 'Sign-up measurement',
+    banner: 'sign-up measurement',
     description:
       'Which steps of signing up are reached and which link brought you here, kept under a random ID '
       + 'in this browser and sent only to Axal. Handle visits are counted using a random ID kept for the tab session.',
@@ -69,7 +75,9 @@ export const COOKIE_ROWS = [
   },
   {
     key: 'advertising',
-    title: 'Marketing',
+    // #6998: the one cookie behind this switch is the first-party referral cookie (D5509); no ad network loads.
+    title: 'Referral cookie',
+    banner: 'a referral cookie',
     description:
       'Remembers the first referral link you use so Axal can credit the referrer and apply eligible offers. '
       + 'The cookie lasts up to 30 days for a code or 90 days for a handle.',

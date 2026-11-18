@@ -16,6 +16,7 @@ import NetworkSubNav from '../../components/site/NetworkSubNav';
 import { EmptyNote, FilterPills } from '../../components/site/SiteBlocks';
 import { jobsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { useAuth } from '../../hooks/useAuthSync';
 import {
   JOBS_COPY, JOB_TYPE_FILTERS, EMPLOYMENT_LABELS, SENIORITY_LABELS, avatarTone, companyInitials, jobGeo,
 } from '../../lib/siteNetwork2';
@@ -23,6 +24,16 @@ import '../site/network2.css';
 
 /** Where "Post a role" goes: the job editor, behind sign-in (the founder workspace's own "Post a role"). */
 export const POST_ROLE_HREF = '/jobs/new';
+
+/**
+ * #6999: the band's action. Signed out, it says it needs sign-in and returns to the editor after it
+ * (`next` is a same-origin path); signed in, it opens the editor.
+ */
+export function postRoleAction(user) {
+  return user
+    ? { label: 'Post a role →', href: POST_ROLE_HREF }
+    : { label: 'Sign in to post a role', href: `/login?next=${encodeURIComponent(POST_ROLE_HREF)}` };
+}
 
 /** One role, as the canvas's row: initials, title, company, type, place, View role. */
 export function JobRow({ job }) {
@@ -48,6 +59,8 @@ export function JobRow({ job }) {
 }
 
 export default function PublicJobsPage() {
+  const { user } = useAuth() || {};
+  const postRole = postRoleAction(user);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -149,7 +162,7 @@ export default function PublicJobsPage() {
             <h2 id="ax-n2-post" className="ax-n2-band-t">{JOBS_COPY.bandTitle}</h2>
             <p className="ax-n2-band-d">{JOBS_COPY.bandCopy}</p>
           </div>
-          <Link to={POST_ROLE_HREF} className="ax-btn ax-btn-md ax-btn-primary">Post a role →</Link>
+          <Link to={postRole.href} className="ax-btn ax-btn-md ax-btn-primary" data-testid="jobs-post-role">{postRole.label}</Link>
         </section>
       </div>
     </SitePage>

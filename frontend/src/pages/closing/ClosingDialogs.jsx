@@ -11,7 +11,7 @@ import { closingsApi, stagedSigningApi } from '../../lib/api/closings';
 import { Lightbox, Unreadable } from '../../ui';
 import { BTN, INPUT } from '../account/AccountCenter';
 import {
-  NOT_YET, DESK_WAITS, ROUTES, ROUTE_NEEDS, ROUTE_WORD, STEP_UP_LINE, VEHICLE_ASK, moneyCents, openableDeals, paperWord, routeBody, syndicateRef,
+  NOT_YET, DESK_WAITS, ROUTES, ROUTE_NEEDS, ROUTE_WORD, STEP_UP_LINE, VEHICLE_ASK, moneyCents, openableDeals, paperWord, preferenceSentence, routeBody, syndicateRef,
 } from './deskModel';
 
 const refusal = (e, fallback) => (typeof e?.message === 'string' && e.message.trim() ? e.message.trim() : fallback);
@@ -112,6 +112,7 @@ export function RouteDialog({ closing, line, envelopes, onClose, onSaved }) {
       sub={`${moneyCents(line.amount_cents, line.currency) || 'Amount not recorded'}${closing.instrument ? ` · ${closing.instrument}` : ''}`}
       testId="closing-route-dialog" onClose={onClose} width={720}>
       <div className="flex flex-col gap-3 px-5 py-4">
+        {preferenceSentence(line) && <p className="m-0 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-[12.5px] text-gray-700 dark:border-gray-700 dark:text-gray-300" data-testid="closing-route-preference">{preferenceSentence(line)}</p>}
         <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Capital route">
           {ROUTES.map((r) => (
             <label key={r} className={`flex cursor-pointer flex-col gap-1.5 rounded-xl border p-3 text-[12.5px] ${route === r ? 'border-violet-500 bg-violet-50 dark:border-violet-400 dark:bg-violet-950/30' : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900'}`} data-testid={`closing-route-${r}`}>

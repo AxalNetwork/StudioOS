@@ -144,7 +144,8 @@ test('Past sessions asks for the window that just ended and shows the real rows'
   });
   try {
     assert.ok(!m.text().includes('Last week'), 'the default window is forward, so a finished slot is not in it');
-    await m.press(/^Past sessions$/);
+    // #4832 (D4832): the hours grid's own window; `Past` is the sessions' tab.
+    await m.press(/^Past hours$/);
     const reqs = m.seen.filter((c) => c.path === '/api/advisors/me/slots');
     const asked = reqs.at(-1);
     assert.equal(asked.params.days, '31');
