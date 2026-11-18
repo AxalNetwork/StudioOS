@@ -215,6 +215,9 @@ over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
 When main is green again, let PRs revalidate as they merge through the queue.
 Do not press "Update branch" on every PR at once.
 
+Fetch and merge your own branch before you push to it: the landing bot may have
+added a merge commit from main (#6474).
+
 While `[alert] the Actions queue is backed up` is open, the same backpressure
 applies to everything that is not a fix for a PR's own failure:
 

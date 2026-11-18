@@ -371,19 +371,37 @@ before it can dispatch. Do not share HQ's secret with a branch.
    SDK JWT expiry follows the run deadline, capped at two hours, subject to
    Zoom's 30-minute minimum. The container receives a derived run-only key;
    it never receives the master secret or long-lived SDK/OAuth credentials.
-4. After merge and owner verification, set the Actions variable
-   `MEETING_BOT_DEPLOY_ENABLED=true`, then manually dispatch
-   `meeting-bot-deploy.yml` on main. It builds/tests the image before deploying
-   only the preview and production bot hosts, in that order. Later main changes
-   under `meeting-bot/` or the bundled shared helpers trigger it.
-   Disabling this variable freezes bot deployments without affecting the site.
-5. After both production and preview hosts exist, run
+4. To pause automatic and manual bot releases, set the repository Actions variable
+   `MEETING_BOT_DEPLOY_ENABLED=false`. This skips new deploy jobs. Check Actions
+   separately for a job already running.
+5. Confirm the private preview observer and response owner, including #5671's
+   preview failure and recovery delivery. In Cloudflare, select
+   `studioos-meeting-bot-preview` and verify that its Container application and
+   `MEETING_BOT_CONTAINER` namespace belong to preview. Under **Settings →
+   Domains & Routes**, enable and verify the preview Worker's own workers.dev
+   route. Copy its exact HTTPS origin of the form
+   `https://studioos-meeting-bot-preview.<account-subdomain>.workers.dev`.
+   The canary sends its synthetic callback back to this same Worker.
+6. Generate a dedicated random signing key of at least 32 characters. Using
+   secret-entry fields, save the same value as `MEETING_BOT_PREVIEW_SECRET`
+   on the preview Worker and in the repository's **Settings → Secrets and
+   variables → Actions → Secrets**. Under **Variables**, set
+   `MEETING_BOT_PREVIEW_ORIGIN` to the copied origin with no trailing slash and
+   `MEETING_BOT_PREVIEW_ROUTE_VERIFIED=true` after the owner verifies step 5.
+7. Set `MEETING_BOT_DEPLOY_ENABLED=true`. In **Actions → Meeting bot deploy →
+   Run workflow**, select the current `main`. If a newer commit supersedes
+   the candidate, dispatch again from the current `main`. Confirm that the
+   `meeting-bot-preview-result` artifact records the run's exact SHA,
+   `state: pass`, `stage: complete`, `cleaned: true` and an image digest.
+   Check that production promotion then succeeded for that SHA. See
+   [D5675](decisions/D5675.md) for the owner-controlled rollback procedure.
+8. After both production and preview hosts exist, run
    `node scripts/configure-meeting-bot-binding.mjs` to review the full site
    config and matching HQ-only architecture catalogue entry, then use
    `--write` in a follow-up owner PR. Run the full build/drift suite, including
    binding parity, branch isolation and topology, before normal site deployment. This adds all three
    remote bindings together; absent bindings keep `botConfigured` false.
-6. Record first deployment and remaining live checks on #1008. No production
+9. Record first deployment and remaining live checks on #1008. No production
    bot deployment was performed by this implementation. First deployment,
    container sandbox compatibility, D886 §7 memory/CPU/size and two-hour soak,
    and real calls remain owner follow-up, not implementation prerequisites.

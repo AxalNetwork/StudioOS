@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import { Card, Pill, Skeleton, Unrecorded, Unreadable } from '../../ui';
 import {
   SESSION_MINUTES, arrivedExpert, bookingPayload, servicePrice, chosenServiceLabel, browserTimeZone, countLabel, expertRate, formatWhen, groupSlots,
-  nextOpening, safeHref, specialties, wantedCategories, withArrived,
+  nextOpening, safeHref, specialties, withArrived,
 } from './wellbeingModel';
 import { BTN, FIELD, PageHeader, CardHead, NotRecorded, StepChips, Outcome } from './WellbeingParts';
 
@@ -337,7 +337,6 @@ export default function WellbeingBookPage() {
   const timeZone = useMemo(() => browserTimeZone(), []);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [query, setQuery] = useState(EMPTY_FILTERS);
-  const [goals, setGoals] = useState(null);
   const [categories, setCategories] = useState([]);
   const [list, setList] = useState({ status: 'loading', experts: [], filtered: null, total: null });
   const [slots, setSlots] = useState({});
@@ -350,17 +349,16 @@ export default function WellbeingBookPage() {
   const arrived = useMemo(() => arrivedExpert(navState, wanted), [navState, wanted]);
   const experts = useMemo(() => withArrived(list.experts, arrived), [list.experts, arrived]);
 
-  // The catalogue names the specialties; the member's own past topics rank
-  // the directory, as the home page's directory always did. Neither failing
-  // stops the list: unnamed keys are shown cased, and no topics ranks plainly.
+  // The catalogue names the specialties; a failed read stops nothing, and
+  // unnamed keys are shown cased. D7119: the directory is ranked by the
+  // member's own choices, read by the Worker (`personalise`). This page never
+  // reads the member's check-ins, and the Worker reads the topics on their
+  // reflections only when they have allowed it.
   useEffect(() => {
     let alive = true;
     api.wellbeingExpertCategories()
       .then((r) => { if (alive) setCategories(Array.isArray(r?.categories) ? r.categories : []); })
       .catch(() => {});
-    api.wellbeingMyCheckins()
-      .then((r) => { if (alive) setGoals(wantedCategories(r?.checkins)); })
-      .catch(() => { if (alive) setGoals([]); });
     return () => { alive = false; };
   }, []);
 
@@ -370,11 +368,10 @@ export default function WellbeingBookPage() {
   }, [filters]);
 
   const loadExperts = useCallback(async () => {
-    if (goals === null) return;
     setList((l) => ({ ...l, status: 'loading' }));
     try {
       const r = await api.wellbeingExperts({
-        ...query, tz: timeZone, want_categories: goals, want_languages: ['en'], limit: LIST_LIMIT,
+        ...query, tz: timeZone, personalise: true, want_languages: ['en'], limit: LIST_LIMIT,
       });
       setList({
         status: 'ready',
@@ -385,7 +382,7 @@ export default function WellbeingBookPage() {
     } catch {
       setList({ status: 'unreadable', experts: [], filtered: null, total: null });
     }
-  }, [goals, query, timeZone]);
+  }, [query, timeZone]);
   useEffect(() => { loadExperts(); }, [loadExperts]);
 
   const loadSlots = useCallback((uid) => {

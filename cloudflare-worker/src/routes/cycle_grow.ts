@@ -23,6 +23,10 @@
  *                                  into another (`merge: true`; without it a merge is a 409 with the counts),
  *                                  with the roadmap items that answer it; the read's `parts.themes` (writers only)
  *                                  carries each theme's counts
+   POST  /feedback/told           { project, uids[], via }  D6865 (#6865): Mark told for several (GR-26); each
+                                  row that cannot be told (not shipped, did not ask, already told) is named
+   GET   /feedback/weight?project&theme  D6865: one theme's weight (GR-23), a writer's read; the list read's
+                                  `parts.counts` is everyone's
  *   POST  /channels                PATCH /channels/:uid      PUT /channels/:uid/spend/:month
  *   POST  /channels/content        PATCH /channels/content/:uid   DELETE /channels/content/:uid
  *     D1090 (#2955): Distribution's content calendar, typed by hand. A piece
@@ -145,6 +149,7 @@ import {
 } from '../services/facebook/grow';
 import { workspaceContext, workspaceMember } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
+import { feedbackCounts, markFeedbackToldMany, themeWeight } from '../services/feedbackLoop';
 import { codeAmount } from '../../../frontend/src/lib/money.js';
 import {
   CALENDAR_TAGS, GoogleGrowRefused, calendarProposals, decideProposal, deleteSheetFact, pendingProposal, proposeFromCalendar,
@@ -277,14 +282,24 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
   const { env, projectId } = x;
   if (slug === 'product-improvement') {
     const q = await env.DB.prepare(
-      `SELECT uid, body, source, theme, roadmap_item_ref, roadmap_item_label, status, from_name, created_at FROM product_feedback
-        WHERE project_id = ? ORDER BY created_at DESC, id DESC`,
+      `SELECT f.uid, f.body, f.source, f.theme, f.roadmap_item_ref, f.roadmap_item_label, f.status, f.from_name, f.created_at,
+              f.from_email, f.from_company, f.notify_on_ship, f.told_at, f.told_via, f.shipped_on, f.origin, f.contact_uid,
+              c.name AS contact_name, c.audience AS contact_audience, c.status AS contact_status
+         FROM product_feedback f LEFT JOIN contacts c ON c.uid = f.contact_uid AND c.project_id = f.project_id
+        WHERE f.project_id = ? ORDER BY f.created_at DESC, f.id DESC`,
     ).bind(projectId).all<Row>();
     const rows = (q.results || []).map((f) => {
-      const { from_name, ...rest } = f;
+      const { from_name, from_email, from_company, notify_on_ship, told_at, told_via, contact_uid, contact_name, contact_audience, contact_status, ...rest } = f;
       // A customer's name is for the venture's writers; every reader sees the feedback (decision 9).
       // D969: the linked roadmap item's id, so Edit feedback's chip opens on it.
-      return { id: f.uid, ...rest, ...(writer ? { from_name } : {}), theme: f.theme ?? null, roadmap_item_ref: f.roadmap_item_ref ?? null, roadmap_item_label: f.roadmap_item_label ?? null };
+      // D6865 (#6865): the told state, the email, the company and the linked record are a writer's too (GR-28: an
+      // advisor reads without names, the Customer panel or Closing the loop). The origin and shipped date are everyone's.
+      const linked = !!contact_uid && contact_audience != null;
+      return { id: f.uid, ...rest, theme: f.theme ?? null, roadmap_item_ref: f.roadmap_item_ref ?? null, roadmap_item_label: f.roadmap_item_label ?? null,
+        origin: f.origin ?? null, shipped_on: f.shipped_on ?? null,
+        ...(writer ? { from_name, from_email: from_email ?? null, from_company: from_company ?? null,
+          notify_on_ship: Number(notify_on_ship) === 1, told_at: told_at ?? null, told_via: told_via ?? null,
+          contact: linked ? { uid: contact_uid, name: contact_name ?? null, audience: contact_audience, status: contact_status ?? null } : null } : {}) };
     });
     return { cols: ['Feedback', 'Source', 'Theme', 'Roadmap item', 'Status'], rows,
       filters: [{ key: 'source', label: 'Source', options: fixed(FEEDBACK_SOURCES) }, { key: 'theme', label: 'Theme', options: present(rows, 'theme') },
@@ -292,10 +307,17 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
       sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }],
       // D6098 (#6098): each theme's counts, for Rename or merge; a writer's only. A failed
       // read draws no Rename and never blanks the feedback.
-      ...(writer ? { parts: { themes: await feedbackThemes(env, projectId).catch((e) => {
-        console.error('[cycle_grow] feedback themes unreadable:', (e as Error).name);
-        return null;
-      }) } } : {}) };
+      // D6865: the tab's three counts are everyone's (they name nobody); a failed read is null, never zeros.
+      parts: {
+        counts: await feedbackCounts(env, projectId).catch((e) => {
+          console.error('[cycle_grow] feedback counts unreadable:', (e as Error).name);
+          return null;
+        }),
+        ...(writer ? { themes: await feedbackThemes(env, projectId).catch((e) => {
+          console.error('[cycle_grow] feedback themes unreadable:', (e as Error).name);
+          return null;
+        }) } : {}),
+      } };
   }
   if (slug === 'distribution') {
     const extra = new Map(((await env.DB.prepare('SELECT uid, kind, cac_bar_cents, bar_currency FROM growth_channels WHERE project_id = ?')
@@ -628,6 +650,17 @@ r.delete('/campaigns/:uid/items/:kind/:itemUid', write((c, u, pid) => campaignIt
 r.delete('/campaigns/:uid', write((c, u, pid) => archiveCampaign(c.env, pid, u, param(c, 'uid'))));
 
 r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true));
+// D6865 (#6865): Mark told for several (GR-26), before `/feedback/:uid`.
+r.post('/feedback/told', write((c, u, pid, b) => markFeedbackToldMany(c.env, pid, u, b)));
+// D6865: one theme's weight (GR-23): people, their records, and recurring revenue in the last 60 days. It names
+// people, so it is a writer's read; an advisor gets the same refusal as any write.
+r.get('/feedback/weight', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), true);
+    return c.json(await themeWeight(c.env, pid, c.req.query('theme')));
+  } catch (e) { return fail(c, e); }
+});
 // D6098 (#6098): before `/feedback/:uid`, so `themes` is never read as a uid.
 r.patch('/feedback/themes', write((c, u, pid, b) => renameFeedbackTheme(c.env, pid, u, b)));
 r.patch('/feedback/:uid', write((c, u, pid, b) => updateFeedback(c.env, pid, u, param(c, 'uid'), b)));

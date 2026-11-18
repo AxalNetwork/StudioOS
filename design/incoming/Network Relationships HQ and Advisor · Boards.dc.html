@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Relationships HQ and Advisor · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Relationships · #7057 · addendum to #4799 and #6256</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Relationships — ordinary HQ reads its own book; advisors see ties, requests and referrals apart</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Network › Relationships (/network/relationships) for two viewers. Ordinary HQ opens its own book read-only (owner choice C1 on #4799): the page says whose book is open, HQ can search, open a person and return to the results, and no write control is drawn across the book, the Person Sheet, sharing or requests. A comparison board sets ordinary HQ beside a role preview (View as Advisor) and a genuine advisor, with the server permission behind each action. Advisors get three records with three statuses: accepted ties (both agreed), requests (waiting for one person to accept) and referrals (Axal’s review). Each section reads and retries on its own, so a failed ties read never hides referrals, and the reverse. Removing a tie names the person and the effect before it commits, and every view that shows the tie updates. It continues the #4799 and #6256 canvases (shell, header, four links, Sheet, NW5 state words); HQ boards extend NW11 as NW11.1 onward, advisor boards start at NW13; keys carry the NRH prefix. Violet dashed ◇ tags mark backend work; amber ⚑ tags mark the owner picks drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main c59a9f2f66 · [Axal HQ], [Okafor Advisory] and every person, company and figure (HQ 54 ties and 310 contacts; advisor 12 ties, 4 requests, 5 referrals with 3 in motion) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Relationships HQ and Advisor Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW11.1', 'Ordinary HQ · own book, read-only', 'The banner and the header say whose book is open ([Noor Haddad], HQ account). Figures, search, view filters, two groups with two counts, the one tie request shown without Accept or Decline (⚑ Q3). No Add, Import, Invite or Remove. The server does not refuse these writes yet (◇).', [F('NRH11_1', false, 1450)]],
+      ['NW11.2', 'HQ · search, open a person, return', 'Search “Kite” finds one tie and one contact, announced. The read-only Person Sheet shows company, last touch, touches, reminders, the private note and sharing as text. Back returns to the two results with focus on the row that opened the sheet.', [F('NRH11_2', 'Person Sheet open', 940), F('NRH11_2B', 'Back at the results', 940)]],
+      ['NW11.3', 'HQ · read-only across book, detail, sharing, requests', 'What each part shows and leaves out in the read-only view, and what the Worker enforces today.', [C('NRH11_3', false, 1400, 440)]],
+      ['NW11.4', 'Role preview · View as Advisor', 'HQ previewing the advisor view: the advisor layout over HQ’s own book, every write off with its reason, End preview. What the server allows a preview is marked for validation (◇); a read-only preview is ⚑ Q2 A.', [F('NRH11_4', false, 1210)]],
+      ['NW11.5', 'Comparison · HQ, role preview, genuine member', 'The role and action matrix: each action for ordinary HQ, a role preview and a genuine advisor, with the server permission found on main and what engineering must validate.', [W('NRH11_5')]],
+      ['NW13', 'Advisor Relationships', 'Three records, each with its glyph, word and status: requests (to you and from you, with plain words on who must accept), accepted ties with last touch, and referrals with Axal’s status. Each section has its own refresh. [Priya Nair] is a tie and a referral: two records.', [F('NRH13', false, 1920)]],
+      ['NW13.1', 'Tie Sheet', 'Tie type with change, last touch, touch history, the open reminder, and Remove tie… in its own section. Saving a type names every view it updates.', [F('NRH13_1', false, 1920)]],
+      ['NW13.2', 'Remove a tie · Scope → Review → Result', 'The review names the person and the tie, what changes (both books, both scores, 12 → 11) and what does not (referrals). Result, failure and already-ended, with focus and announcements.', [C('NRH13_2', false, 1400, 600)]],
+      ['NW13.3', 'One change, every view', 'After a remove: the Overview figure, the ties list and Organizations update; referrals are not re-read. A type change shows in the row, Sheet, export and the other person’s view.', [C('NRH13_3', false, 1400, 410)]],
+      ['NW13.4', 'Partial outages', 'The same scenario three ways: ties failed with referrals and requests loaded, referrals failed with ties loaded, and ties still loading with referrals already in. Each has its own Try again.', [F('NRH13_4', 'Ties could not be read · referrals fine', 1470), F('NRH13_4B', 'Referrals could not be read · ties fine', 1710), F('NRH13_4C', 'Ties slow · referrals in', 1470)]],
+      ['NW13.5', 'States', 'Loading, a real zero for ties and for referrals (read just now), filtered empty, requests unreadable, companies unreadable, saving, save failed, accept failed, accepted and refused.', [C('NRH13_5', false, 1400, 660)]],
+      ['NW13.6', 'Tablet 768', 'Advisor Relationships with the ties section failed and the rest loaded; HQ search results with the read-only Person Sheet as an overlay.', [C('NRH13_T', 'Advisor', 768, 1024), C('NRH11_T', 'HQ', 768, 1024)]],
+      ['NW13.7', 'Phone 390', 'Advisor list with record kinds as cards, the Tie Sheet, the Remove review as a full-height sheet, and ties failed with referrals loaded. HQ search results and the read-only Person Sheet. 44 px targets, sticky actions.', [P('NRH13_P1', 'Advisor list'), P('NRH13_P2', 'Tie Sheet'), P('NRH13_P3', 'Remove review'), P('NRH13_P4', 'Ties failed'), P('NRH11_P1', 'HQ results'), P('NRH11_P2', 'HQ person')]],
+      ['NW13.8', 'Dark', 'Advisor with the ties outage, HQ read-only, and the advisor phone list on the dark tokens; states keep their words and glyphs.', [F('NRH13_D', 'Advisor · dark', 1470), F('NRH11_D', 'HQ · dark', 1450), P('NRH13_PD', 'Advisor phone · dark')]],
+      ['Prototype', 'Prototype, keyboard and announcements', 'Frame links, keyboard order, focus on open and return, screen-reader announcements, mobile keyboard and error recovery.', [W('NRHA')]],
+      ['Handoff', 'Handoff', 'Checked on main, preserved, backend required (◇), owner picks drawn (⚑), frontend-only work and what is open.', [W('NRHH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

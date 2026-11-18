@@ -195,5 +195,27 @@ export default {
         { label: 'Advisors', href: '#validate-grow/advisors' },
       ],
     },
+    {
+      id: 'board-meeting-resolutions',
+      title: 'Board meeting resolutions',
+      overview: 'A board meeting record in Grow › Company keeps the resolutions recorded for each held meeting. Its next due date can change without changing that history.',
+      howto: [
+        'Open the board meeting record, then choose Mark held.',
+        'Enter Held on and, if needed, upload PDF or DOCX minutes of up to 20 MB.',
+        'Enter one resolution per line, up to 20, with up to 2000 characters each. Leave Resolutions blank when none were passed.',
+        'Set Resolutions passed on if it differs from Held on. Choose Yes to cite the uploaded minutes; otherwise leave No selected.',
+        'Choose Mark held to save the meeting, resolutions and next due date together.',
+      ],
+      tips: [
+        'Resolutions are listed by held meeting, newest first. A meeting without entries says None recorded.',
+        'Calendar → Compliance edits the same obligation, preserving its held meetings and resolutions.',
+        'The venture’s writers can record resolutions. An advisor can read them but cannot mark a meeting held.',
+      ],
+      pitfalls: [
+        'A next-date clash refuses the save; your meeting and resolutions are not partially recorded.',
+        'Citing minutes requires uploading that meeting’s minutes. Recording resolutions does not verify their legal effect.',
+      ],
+      related: [],
+    },
   ],
 };

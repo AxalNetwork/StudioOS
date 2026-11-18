@@ -337,6 +337,7 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
 | `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |
 | `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
+| `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
 | `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory and classification/provenance guard; `--write` renders the generated, gitignored Markdown inventory beside the policy JSON. |
 
 | `report-incorporation-state.mjs` | #6684: read-only incorporation state by jurisdiction id (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals, ids outside the six, multi-paid projects, a US beneficial-ownership step); counts and yes/no only. |

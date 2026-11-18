@@ -8,6 +8,7 @@
  *
  * Run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/narrative_home_d909.test.mjs
  */
+import './_cycleSteps.mjs'; // D7103: Home is a lazy step (NarrativeOwnedHome), loaded before CycleRoute mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -205,7 +206,9 @@ test('Versions: a failed compare says so, never "the same"', async () => {
 
 test('the wiring: Home is the module part, never a fork; /new is today\'s address; the client calls D908\'s compare', () => {
   const route = cycleRouteText();
-  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*<NarrativeHome data=\{data\} admin=\{narrativeStanding\(data\?\.parts\?\.narrative\?\.capabilities\)\.readOnly\} projectId=\{ctx\.projectId\} \/>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
+  // D7103 (#7103): Home is the module's own page (`homes`), which draws NarrativeHome inside it; the part keeps only the sources.
+  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\{\s*sub: NARRATIVE_LINE,\s*action: saveVersionAction\(data, \{ projectId: ctx\.projectId \}\),\s*body: \(p\) => <NarrativeOwnedHome \{\.\.\.p\} data=\{data\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
+  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
   assert.equal((route.match(/<CycleModulePage|<ModulePage/g) || []).length >= 1, true);
   const api = read('frontend/src/lib/api/cycles.js');
   assert.ok(api.includes('narrativeCompare: (projectId, a, b) => request(`/cycles/raise/narrative/compare?project=${encodeURIComponent(projectId)}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`)'));

@@ -226,10 +226,8 @@ export const INVESTOR_ZONE_ACTIONS = {
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
-    // D497 (#1023): built up to the owner's line. A tie is a request the other
-    // person accepts (D493), and finding that person without opening a user
-    // directory is question 7 on #1023.
-    { label: 'Add person', unbuilt: 'a tie is a request the other person accepts, and who you may find to send one to, without opening a directory of every account, is the owner’s decision, asked on #1023', hover: 'Adding a person is not decided yet: it needs a way to find someone without a user directory.' },
+    // D6636 / D6263 Q7: select an existing shared-resource person; D493 consent still applies.
+    { label: 'Add person', kind: 'handler', handler: 'addPerson' },
     // LIVE WITH D465 (migration 338): `partner_reminders` is the store, and a
     // reminder surfaces on the desk when it is due — no notification fan-out.
     { label: 'Set reminders', kind: 'handler', handler: 'setReminders' },

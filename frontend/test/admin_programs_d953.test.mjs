@@ -568,9 +568,9 @@ test('Referral partners links D923\'s tabs, with Commissions for a Super Admin o
   } finally { await hq.close(); }
   const investor = await mounted('/admin/programs/investor-cohorts', ProgramPage, worker());
   try {
-    assert.match(investor.textOf('programs-investor-banner'), /^Not running yet\./);
+    assert.match(investor.textOf('programs-investor-banner'), /current assignment and a signed cohort NDA/);
     assert.ok(investor.has('programs-tabs'), 'Overview and Activity');
-    assert.equal(investor.textOf('programs-header-status'), '○Not built yet');
+    assert.match(investor.textOf('programs-header-status'), /Reading…$/, 'the registry detail has not answered');
   } finally { await investor.close(); }
   const ai = await mounted('/admin/programs/ai-native-venture', ProgramPage, worker());
   try {

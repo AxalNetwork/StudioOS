@@ -406,6 +406,7 @@ async function growFixture() {
   db.exec(migDdl('125')); db.exec(migFile('437'));
   db.exec(migFile('443'));
   db.exec(migFile('462'));
+  db.exec(migFile('202611161128_6865')); // D6865: the feedback's contact link and origin
   db.exec(sqlOf('202611041912_growth_channel_details.sql'));
   db.exec(migFile('507'));
   // D6107: PostHog's link and tracked metrics, so the Visit stage reads its real store (no link here: not connected).

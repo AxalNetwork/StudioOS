@@ -121,7 +121,7 @@ const trimPath = (p) => String(p || '').replace(/\/+$/, '') || '/';
 
 /** The other pages these pages link to. */
 export const SPINOUT_LAB_PATH = '/admin/programs/spinout-lab';
-export const PRODUCT_TESTING_PATH = '/admin?tab=product-testing';
+export const PRODUCT_TESTING_PATH = '/admin/platform/product-testing/programs';
 export const COMMISSIONS_PATH = '/admin/commissions';
 export const CONTRACT_TEMPLATES_PATH = '/admin/contracts?tab=templates';
 export const PARTNER_INVITATIONS_PATH = '/admin/partner-invitations';
@@ -200,8 +200,8 @@ export const PROGRAMS = Object.freeze([
   },
   {
     key: 'investor-cohorts', group: 'Access', name: 'Investor cohort access',
-    purpose: 'Verified investors follow one Lab cohort to Demo Day.',
-    status: 'Not built yet', grant: 'Not offered yet', hqGrant: 'HQ only', who: 'Investors', join: 'Assigned by an admin',
+    purpose: 'Give verified investors access to venture summaries and weekly progress for one assigned Lab cohort after they sign its NDA.',
+    status: 'Partly built', grant: 'Not offered yet', hqGrant: 'HQ only', who: 'Investors', join: 'Assigned by an admin',
   },
   {
     key: 'referral-partners', group: 'Network and referrals', name: 'Referral partners',
@@ -354,7 +354,8 @@ export function programDimensions(card, { superAdmin = false, grantBadge = null,
   const field = superAdmin && row?.grant && row.grant.available !== false ? row.grant : null;
   const values = {
     build: built || NOT_RECORDED,
-    operation: OPERATION[card?.status] || NOT_RECORDED,
+    // HQ has built the investor cohort workflow. Its catalogue figures stay not running until marked Live.
+    operation: card?.key === 'investor-cohorts' && built === 'Partly built' ? 'Not running' : OPERATION[card?.status] || NOT_RECORDED,
     access: row ? memberAccessOf(row).value
       : card?.who === 'Not open to members yet' ? 'Not open to members yet' : card?.join || NOT_RECORDED,
     offering: field?.state === 'hq_only' ? 'HQ only' : field?.state === 'granted_to' ? 'Offered to studios'
@@ -457,7 +458,7 @@ export const PAGES = Object.freeze({
   },
   'investor-cohorts': {
     title: 'Investor cohort access', workspace: 'Programs',
-    line: 'Verified investors follow one Lab cohort and meet its founders at Demo Day.',
+    line: 'Give verified investors access to venture summaries and weekly progress for one assigned Lab cohort after they sign its NDA.',
     facts: ['Who: Verified investors', 'Join: Assigned by an admin', 'Cycle: one Lab cohort'],
     tabs: [
       { key: 'overview', label: 'Overview', path: INVESTOR_PATH },
@@ -610,7 +611,7 @@ export const HOW_IT_RUNS = Object.freeze({
 });
 
 /** D963: the banner stands until part 1's registry says the program runs (`live`). */
-export const INVESTOR_BANNER = 'Not running yet. Investors have no page to read a cohort on yet, and HQ has not marked this program running.';
+export const INVESTOR_BANNER = 'Cohort access is restricted. To read a cohort, a verified investor needs a current assignment and a signed cohort NDA.';
 export const AI_NATIVE_FOOT = 'When HQ publishes it, you can request it.';
 export const NOT_RUNNING_YET = 'Not running yet';
 

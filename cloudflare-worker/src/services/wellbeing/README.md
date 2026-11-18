@@ -14,3 +14,10 @@ The route layer keeps verification/restoration behind the branch-suspension
 gate; takedowns remain available. Review reads require Admin, with another
 admin's credentials restricted to Super Admin. File reads require ownership
 or the same review permission; the bucket key is never returned.
+
+`reflectionPeriods.ts` (D7118) is the member-local day, week and month a
+reflection belongs to, and the rules a write's period must meet.
+`recommend.ts` (D7119) holds the kinds of support, what a consented topic may
+suggest (never therapy, dietetics or spiritual guidance), the "Why this?"
+reasons, and the two reads the routes share: a member's preferences, and their
+topics only while consent covers them.
