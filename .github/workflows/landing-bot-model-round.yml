@@ -1,0 +1,181 @@
+name: Landing bot model round
+
+# #6473: one round of the landing bot's model runner, called only by
+# landing-bot-model.yml. `edit` holds the model credentials and runs no
+# repository code; `verify` runs the repository's code and holds no secret.
+# scripts/landing-bot/model/README.md explains the design.
+
+on:
+  workflow_call:
+    inputs:
+      round:
+        type: number
+        required: true
+      previous:
+        description: The round whose verify output this round reads; 0 for the first
+        type: number
+        required: true
+      sha:
+        description: The commit to edit, resolved by the caller from a branch of this repository
+        type: string
+        required: true
+      merge:
+        description: Merge mode (#6475) needs the branch's history, so main can be merged into it
+        type: boolean
+        required: false
+        default: false
+    outputs:
+      outcome:
+        description: passed, verify_failed or no_patch
+        value: ${{ jobs.verify.outputs.outcome || jobs.edit.outputs.outcome }}
+
+permissions: {}
+
+jobs:
+  edit:
+    name: Edit (round ${{ inputs.round }})
+    environment: repair
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      # Workload identity federation for Claude; grants no repository write.
+      id-token: write
+    outputs:
+      outcome: ${{ steps.edit.outputs.outcome }}
+    steps:
+      - name: Check out the runner from main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          path: runner
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - name: Check out the commit to edit, as data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.sha }}
+          path: work
+          persist-credentials: false
+          # Merge mode needs the history for the merge base; blobs arrive only as the merge reads them.
+          fetch-depth: ${{ inputs.merge && 0 || 1 }}
+          filter: ${{ inputs.merge && 'blob:none' || '' }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Install the runner's pinned SDKs (no lifecycle scripts)
+        run: npm ci --prefix runner/scripts/landing-bot/model --ignore-scripts --no-audit --no-fund
+      - name: Download the task
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-model-task
+          path: in
+      - name: Download the previous round's verify output
+        if: inputs.previous > 0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-model-verify-${{ inputs.previous }}
+          path: feedback
+      - name: Stage the merge (merge mode only, #6475)
+        if: inputs.merge
+        run: node runner/scripts/landing-bot/model/stage.mjs --task in/task.json --work work --out stage.json
+      - name: Edit
+        id: edit
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY_2: ${{ secrets.ANTHROPIC_API_KEY_2 }}
+          ANTHROPIC_API_KEY_3: ${{ secrets.ANTHROPIC_API_KEY_3 }}
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LANDING_BOT_PROVIDERS: ${{ vars.LANDING_BOT_PROVIDERS }}
+          LANDING_BOT_CLAUDE_MODEL: ${{ vars.LANDING_BOT_CLAUDE_MODEL }}
+          LANDING_BOT_OPENAI_MODEL: ${{ vars.LANDING_BOT_OPENAI_MODEL }}
+          LANDING_BOT_GEMINI_MODEL: ${{ vars.LANDING_BOT_GEMINI_MODEL || vars.GEMINI_MODEL }}
+          ROUND: ${{ inputs.round }}
+          BASE_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          feedback=()
+          if [ "$ROUND" -gt 1 ]; then feedback=(--feedback feedback/verify.json); fi
+          if [ -f stage.json ]; then feedback+=(--stage stage.json); fi
+          node runner/scripts/landing-bot/model/edit.mjs --task in/task.json --work work --out out \
+            --round "$ROUND" --base "$BASE_SHA" "${feedback[@]}"
+          outcome=$(node -e 'process.stdout.write(require("./out/result.json").outcome === "patched" ? "patched" : "no_patch")')
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+      - name: Upload the round's result
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: landing-bot-model-edit-${{ inputs.round }}
+          path: out/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  verify:
+    name: Verify (round ${{ inputs.round }})
+    needs: edit
+    if: needs.edit.outputs.outcome == 'patched'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    outputs:
+      outcome: ${{ steps.verify.outputs.outcome }}
+    steps:
+      - name: Check out the runner from main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          path: runner
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - name: Check out the commit to verify
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.sha }}
+          path: work
+          persist-credentials: false
+          # Merge mode needs the history for the merge base; blobs arrive only as the merge reads them.
+          fetch-depth: ${{ inputs.merge && 0 || 1 }}
+          filter: ${{ inputs.merge && 'blob:none' || '' }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-model-task
+          path: in
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-model-edit-${{ inputs.round }}
+          path: patch
+      - name: Stage the merge (merge mode only, #6475)
+        if: inputs.merge
+        run: node runner/scripts/landing-bot/model/stage.mjs --task in/task.json --work work --out stage.json
+      - name: Re-check, apply and verify
+        id: verify
+        run: |
+          set -euo pipefail
+          stage=()
+          if [ -f stage.json ]; then stage=(--stage stage.json); fi
+          node runner/scripts/landing-bot/model/verify.mjs --task in/task.json --work work --patch patch --out out "${stage[@]}"
+          outcome=$(node -e 'process.stdout.write(require("./out/verify.json").passed === true ? "passed" : "verify_failed")')
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+      - name: Upload the verify result
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: landing-bot-model-verify-${{ inputs.round }}
+          path: out/
+          if-no-files-found: ignore
+          retention-days: 7

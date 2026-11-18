@@ -6,6 +6,7 @@ version: 2
 #  - npm (cloudflare-worker) — Hono + Workers types (PRODUCTION dep tree)
 #  - npm (cloudflare-worker-tail) — wrangler tail consumer (dev/deploy tooling)
 #  - npm (scripts/claude-review) — the Anthropic SDK the advisory PR review pins
+#  - npm (scripts/landing-bot/model) — the same SDKs, pinned for the landing bot's model runner
 #  - bun (brandtemplates/*) — the Lovable templates, security updates only
 #  - pip (root) — FastAPI dev backend
 #  - github-actions — keep CI actions current
@@ -50,6 +51,18 @@ updates:
   # its README asks for an SDK release at least two weeks old.
   - package-ecosystem: npm
     directory: /scripts/claude-review
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 2
+    labels: ['deps']
+
+  # The landing bot's model runner (#6473): the same three SDKs, pinned exactly,
+  # 14 days like the review's. Its edit job holds model keys, so a bump is T2.
+  - package-ecosystem: npm
+    directory: /scripts/landing-bot/model
     schedule:
       interval: weekly
       day: monday

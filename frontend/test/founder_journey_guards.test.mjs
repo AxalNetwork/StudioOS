@@ -75,7 +75,8 @@ test('the founder signup lane promises nothing the system does not enforce', () 
       `${f} re-promises a 72-hour SLA — nothing in the codebase enforces one`,
     );
   }
-  assert.match(fe('src/lib/registerCopy.js'), /Submit your pitch/, 'the guard reads the file the founder copy is in');
+  // #6983 (X1): the founder heading is "Create your founder account" now; the guard still reads that file.
+  assert.match(fe('src/lib/registerCopy.js'), /Create your founder account/, 'the guard reads the file the founder copy is in');
 });
 
 test('the exploring holding screen offers the founder lane its real next step', () => {

@@ -72,6 +72,7 @@ const MODE = process.argv.includes('--write') ? 'write' : process.argv.includes(
 // a newcomer's attention. Adding a folder here is the cheap part; the README
 // it then demands is the point.
 const DOCUMENTED = new Map([
+  ['frontend/src/pages/relationships', 'relationship intelligence, consent pickers and introduction records'],
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
   ['cloudflare-worker/src/agents', 'the agent engine runtime (D1528): the seam, the AgentScope object, the task Workflow, the agent queue and the sweep'],
   ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],
@@ -108,6 +109,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
   ['cloudflare-worker/src/services/posthog', 'PostHog, read-only (D1385): the MCP reads, the tracked metrics and each section\'s sync (D1605–D1609), and Distribution\'s visits (D6107)'],
   ['cloudflare-worker/src/services/calendar', 'personal sources, external copies and calendar sync state'],
+  ['cloudflare-worker/src/services/wellbeing', 'Wellbeing: expert matching, slots, bookings, reflection periods (D7118) and recommendations (D7119)'],
   ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
   ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
@@ -116,6 +118,7 @@ const DOCUMENTED = new Map([
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
   ['scripts/landing-bot',             'pull request admission, queue requests and bot safeguards'],
+  ['scripts/landing-bot/model',       'the landing bot\'s model runner: task caps, edit tools, provider order, patch checks'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
   ['scripts/lib/fixtures',            'evidence-backed offline replay fixtures'],
   ['documentation',                   'every hand-written document'],
@@ -190,6 +193,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
+  ['frontend/src/pages/relationships',         'relationship intelligence, introduction records and consent-based offers'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
   ['frontend/src/pages/raise/pitch',          'the Pitch deck studio (D894): its shell, its tabs and the model they read'],
   ['frontend/src/pages/raise/narrative',      'the Investor narrative tool (D906): its tabs inside the module page, and the model they read'],
@@ -200,6 +204,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/raise/useoffunds',     'the Use of funds tool (D1173, D1177, D1178, D5081): Home and its tabs inside the module page, the dialogs, the shared plan read and the models they read'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
+  ['frontend/src/pages/partner/offers',       'the partner Offers bucket’s zones and the pure rules they read (#4688, D4842, D4843)'],
   ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/portfolio',            'the Portfolio v2 frame, its shared parts and models, the company workspace and the Admin Investor preview (D4817)'],

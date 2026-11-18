@@ -2,8 +2,8 @@
  * #6247: /funds/:fundId hands its reader to the next page, and each link is shown only to a reader its
  * destination admits. A manager (`can_manage`: the GP of record on the institutional tier, or an admin) gets
  * the fund's zones opened on this fund; an LP gets their own commitment and statements; every reader gets fund
- * performance (#6245, owner answer C). Fund facts are edited in the admin console, so only an admin gets the
- * edit link and a GP who is not an admin is told it is not available. No new API call: everything below is
+ * performance (#6245, owner answer C). An admin edits fund facts in the admin console; a GP of record who is not
+ * an admin gets Edit terms on the page (#6235). No new API call: everything below is
  * drawn from the page read the test supplies.
  */
 import test from 'node:test';
@@ -35,7 +35,7 @@ test('an LP gets their commitment and statements and fund performance, and no ma
   assert.doesNotMatch(html, /Edit fund facts/);
 });
 
-test('a GP of record gets the fund zones on this fund, performance, and edit facts as Not available', () => {
+test('a GP of record gets the fund zones on this fund, performance, and Edit terms on the page', () => {
   const html = render(gp, 'investor');
   assert.equal(href(html, 'link-fund-calls'), '/funds/calls?fund=10');
   assert.equal(href(html, 'link-fund-ledger'), '/funds/ledger?fund=10');
@@ -45,14 +45,15 @@ test('a GP of record gets the fund zones on this fund, performance, and edit fac
   assert.equal(href(html, 'link-fund-performance'), '/funds/performance');
   assert.equal(href(html, 'link-fund-my-commitment'), null);
   assert.equal(href(html, 'link-fund-edit-facts'), null);
-  assert.match(html, /data-testid="text-fund-edit-unavailable">Edit fund facts: Not available\./);
+  assert.match(html, /<button[^>]*data-testid="button-fund-edit-terms"[^>]*>Edit terms<\/button>/);
+  assert.doesNotMatch(html, /Not available/);
 });
 
 test('an admin gets the console edit link for fund facts', () => {
   const html = render(gp, 'admin');
   assert.equal(href(html, 'link-fund-edit-facts'), '/admin/fund-admin/funds/10?edit=facts');
   assert.equal(fundFactsEditHref(10), '/admin/fund-admin/funds/10?edit=facts');
-  assert.doesNotMatch(html, /text-fund-edit-unavailable/);
+  assert.doesNotMatch(html, /button-fund-edit-terms/);
   assert.equal(fundHandoffs({ ...gp, can_manage: false }, 'admin').edit, null, 'no edit link without can_manage, whatever the role');
 });
 

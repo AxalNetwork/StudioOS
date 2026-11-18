@@ -1,14 +1,15 @@
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Search, SlidersHorizontal } from 'lucide-react';
 import { Card, Skeleton, Unrecorded } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
-  EMPTY_QUERY, PAGE_SIZES, SIZE_BANDS, SORT_OPTIONS, STAGE_REASON, VERDICT_LABELS,
-  activeFilters, backingOf, citationOf, coverageRows, directoryLine, directoryTotalOf, formatCount, pageInfo, pageList,
-  queryFromSearch, rangeLabel, recorded, searchFromQuery, sizeOf, toParams,
+  EMPTY_QUERY, GEOGRAPHY_REASON, PAGE_SIZES, SIZE_CURRENCIES, SORT_OPTIONS, STAGE_REASON, VERDICT_LABELS,
+  activeFilters, backingOf, citationOf, coverageRows, directoryLine, directoryTotalOf, formatCount, matchLine, pageInfo, pageList,
+  queryFromSearch, recorded, removeFilter, searchFromQuery, sizeExclusion, sizeOf, toParams, vehicleLabel, zeroHint,
 } from './fundDirectoryRead';
+import { FUNDS_FILTERS_DROPPED } from '../../lib/pendingNext.js';
 import { canAddToResearch } from './researchComparisons.js';
 
 const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
@@ -46,6 +47,17 @@ const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
  * name the list, its publisher and its terms verdict, linked to where the
  * list is published. A list taken down for its terms is never served; the
  * footer names it and says why (`removed_sources`).
+ *
+ * RESULTS FIRST, ONE ROW PER VEHICLE (D7166, #7166, boards RFD-00 to RFD-05).
+ * Search, filters, sort, the active chips and the count come first: "N fund
+ * vehicles match" beside the unfiltered total, announced politely. Coverage,
+ * the lists and "Where the money is" sit in a closed disclosure below the
+ * results. A row names the vehicle from `fund_number` and its manager under
+ * it; a size reads in its list's own currency, and the size filter works in
+ * one currency and says how many funds it leaves out. On a phone the rows are
+ * cards and nothing scrolls sideways. "Save to shortlist" is the add's name.
+ * A link opened with filters says so; Back to results from a full profile
+ * returns to the same query with the row selected and focused.
  */
 
 const SELECT = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
@@ -104,10 +116,11 @@ export function FundDetails({ item, reports = null, reportsState = 'ok' }) {
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-[minmax(96px,auto)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 text-[12.5px]">
-        <dt className={DT}>Size</dt>
+        <dt className={DT}>Reported size</dt>
         <dd className="m-0">
           {size.text
             ? <><span className="font-mono text-[15px] font-semibold text-axal-ink dark:text-gray-100">{size.text}</span>
+              <span className="ml-1.5 font-mono text-[11px] text-axal-faint">{size.currency}</span>
               {recorded(item.fund_date) ? <span className="block text-[11.5px] text-axal-faint">as reported on {item.fund_date}</span> : null}</>
             : <NotRecorded reason={size.reason === 'Not recorded' ? 'The source lists no size for this fund.' : size.reason} />}
         </dd>
@@ -115,16 +128,20 @@ export function FundDetails({ item, reports = null, reportsState = 'ok' }) {
         <dd className="m-0"><NotRecorded reason={STAGE_REASON} /></dd>
         <dt className={DT}>Vintage</dt>
         <dd className="m-0">{item.fund_year != null ? <span className="font-mono">{item.fund_year}</span> : <NotRecorded reason="The source lists no vintage for this fund." />}</dd>
-        <dt className={DT}>HQ</dt>
-        <dd className="m-0">{recorded(item.hq) ? item.hq : <NotRecorded reason="The source lists no HQ for this fund." />}</dd>
+        <dt className={DT}>Manager HQ</dt>
+        <dd className="m-0">{recorded(item.hq)
+          ? <>{item.hq}<span className="block text-[11.5px] text-axal-faint">Where the manager is based, not where it invests.</span></>
+          : <NotRecorded reason="The source lists no HQ for this fund." />}</dd>
+        <dt className={DT}>Investment geography</dt>
+        <dd className="m-0"><NotRecorded reason={GEOGRAPHY_REASON} /></dd>
         <dt className={DT}>Stated focus</dt>
         <dd className="m-0">{recorded(item.sector_focus) ? item.sector_focus : <NotRecorded reason="The source states no focus for this fund." />}</dd>
         <dt className={DT}>Notable LPs</dt>
         <dd className="m-0">{recorded(item.notable_lps) ? item.notable_lps : <NotRecorded reason="With no LPs listed, EIF and EIFO backing is unknown, not absent." />}</dd>
         <dt className={DT}>EIF / EIFO</dt>
         <dd className="m-0"><Backing item={item} long /></dd>
-        <dt className={DT}>Fund</dt>
-        <dd className="m-0">{recorded(item.fund_number) ? `Fund ${item.fund_number}` : <NotRecorded />}</dd>
+        <dt className={DT}>Vehicle</dt>
+        <dd className="m-0">{recorded(item.fund_number) ? `${vehicleLabel(item).vehicle} · managed by ${item.name}` : <NotRecorded reason="The source names no fund number, so this row is the manager's." />}</dd>
         <dt className={DT}>Website</dt>
         <dd className="m-0">{website ? <a href={website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-axal-violet dark:text-violet-300">{website.replace(/^https?:\/\//i, '')} <ExternalLink size={12} /></a> : <NotRecorded />}</dd>
         <dt className={DT}>LinkedIn</dt>
@@ -214,15 +231,15 @@ function facetOptions(list, value) {
 
 function Filters({ search, onSearch, query, onQuery, facets, open, onToggle }) {
   const active = activeFilters(query, facets);
-  const band = (v) => (facets?.size_band || []).find((x) => x.value === v)?.count;
+  const ccy = query.size_currency || 'EUR';
   return (
     <Card padding="md">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-0 flex-[1_1_320px]">
-          <label htmlFor="fd-q" className={LABEL}>Search</label>
+          <label htmlFor="fd-q" className={LABEL}>Search fund vehicles or managers</label>
           <div className="relative">
             <Search size={14} className="pointer-events-none absolute left-3 top-2.5 text-axal-faint" aria-hidden="true" />
-            <input id="fd-q" type="search" placeholder="Fund name" value={search} onChange={(e) => onSearch(e.target.value)}
+            <input id="fd-q" type="search" placeholder="e.g. Dawn Capital" value={search} onChange={(e) => onSearch(e.target.value)}
               className={`${SELECT} pl-9`} />
           </div>
         </div>
@@ -232,14 +249,14 @@ function Filters({ search, onSearch, query, onQuery, facets, open, onToggle }) {
             {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
-        <button type="button" className={`${GHOST} w-full justify-between sm:hidden`} onClick={onToggle}
+        <button type="button" className={`${GHOST} min-h-[44px] w-full justify-between sm:hidden`} onClick={onToggle}
           aria-expanded={open ? 'true' : 'false'} aria-controls="fd-filters">
           <span className="inline-flex items-center gap-2"><SlidersHorizontal size={14} aria-hidden="true" /> Filters</span>
           <span className="text-[12px] font-medium text-axal-muted">{active.length ? `${active.length} active` : 'None active'}</span>
         </button>
       </div>
       <div id="fd-filters" className={`${open ? 'flex' : 'hidden'} mt-3 flex-wrap items-end gap-3 sm:flex`}>
-        <Select id="fd-hq" label="HQ country" value={query.hq_country} onChange={(v) => onQuery({ hq_country: v })}>
+        <Select id="fd-hq" label="Manager HQ" value={query.hq_country} onChange={(v) => onQuery({ hq_country: v })}>
           <option value="">All HQs</option>
           {facetOptions(facets?.hq_country, query.hq_country)}
         </Select>
@@ -247,10 +264,20 @@ function Filters({ search, onSearch, query, onQuery, facets, open, onToggle }) {
           <option value="">Any focus</option>
           {facetOptions(facets?.focus, query.focus)}
         </Select>
-        <Select id="fd-size" label="Fund size, in euros" value={query.size_band} onChange={(v) => onQuery({ size_band: v })}>
-          <option value="">Any size</option>
-          {SIZE_BANDS.map(([v, l]) => <option key={v} value={v}>{band(v) == null ? l : `${l} (${formatCount(band(v))})`}</option>)}
-        </Select>
+        {/* D7166: the size filter works in one currency (the existing size_min and size_max, in millions). */}
+        <fieldset className="m-0 min-w-0 flex-1 basis-[260px] border-0 p-0">
+          <legend className={LABEL}>{`Size · ${ccy} only`}</legend>
+          <div className="flex gap-2">
+            <select aria-label="Size currency" className={`${SELECT} w-[88px] shrink-0`} value={ccy}
+              onChange={(e) => onQuery({ size_currency: e.target.value })}>
+              {SIZE_CURRENCIES.map(([v, l]) => <option key={v} value={v} title={l}>{v}</option>)}
+            </select>
+            <input id="fd-size-min" type="text" inputMode="decimal" aria-label={`Size from, in millions of ${ccy}`} placeholder="From (M)"
+              className={SELECT} value={query.size_min} onChange={(e) => onQuery({ size_min: e.target.value.replace(/[^\d.]/g, ''), size_band: '' })} />
+            <input id="fd-size-max" type="text" inputMode="decimal" aria-label={`Size to, in millions of ${ccy}`} placeholder="To (M)"
+              className={SELECT} value={query.size_max} onChange={(e) => onQuery({ size_max: e.target.value.replace(/[^\d.]/g, ''), size_band: '' })} />
+          </div>
+        </fieldset>
         <Select id="fd-vint" label="Vintage" value={query.vintage} onChange={(v) => onQuery({ vintage: v })}>
           <option value="">Any vintage</option>
           {facetOptions(facets?.vintage, query.vintage)}
@@ -268,7 +295,7 @@ function Filters({ search, onSearch, query, onQuery, facets, open, onToggle }) {
         </fieldset>
         {facets && (
           <p className="basis-full text-[11px] text-axal-faint">
-            Size bands count euro sizes only: {formatCount(facets.size_not_comparable || 0)} matching funds have no size in a known currency and sit in no band.
+            {`Sizes compare in ${ccy} only: ${formatCount(facets.size_not_comparable || 0)} matching funds have no size in ${ccy === 'USD' ? 'US dollars' : 'euros'} and sit outside the size filter.`}
             {facets.eif ? ` ${formatCount(facets.eif.unknown)} list no notable LPs, so their EIF backing is unknown.` : ''}
           </p>
         )}
@@ -408,22 +435,23 @@ function AddOrOpen({ item, dossier, added, busy, onAdd, listState }) {
   }
   return (
     <button type="button" className={GHOST} disabled={added || !!busy || !onAdd} onClick={() => onAdd && onAdd(item)}>
-      {added ? 'In My funds' : busy === item.uid ? 'Adding…' : 'Add to my funds'}
+      {added ? 'Saved to shortlist' : busy === item.uid ? 'Saving…' : 'Save to shortlist'}
     </button>
   );
 }
 
-function Drawer({ item, drawer, onClose, onAdd, busy, isAdded, dossierOf, notice, listState }) {
+function Drawer({ item, drawer, onClose, onAdd, busy, isAdded, dossierOf, notice, listState, backTo }) {
   const added = isAdded(item);
+  const v = vehicleLabel(item);
   const dossier = dossierOf(item);
   const note = notice && notice.uid === item.uid ? notice : null;
   const reportsState = drawer.loading ? 'loading' : (drawer.error || drawer.data?.reports_status === 'unreadable') ? 'unreadable' : 'ok';
   return (
-    <Sheet label={item.name} eyebrow="Fund details" title={item.name} onClose={onClose} width={480} phone="sheet" testId="fd-drawer-sheet">
+    <Sheet label={v.vehicle} eyebrow={v.manager !== v.vehicle ? v.manager : 'Fund details'} title={v.vehicle} onClose={onClose} width={480} phone="sheet" testId="fd-drawer-sheet">
       <div id="fd-drawer" className="px-5 pb-5 pt-1">
         <div className="mt-3 flex flex-wrap gap-2">
           <AddOrOpen item={item} dossier={dossier} added={added} busy={busy} onAdd={onAdd} listState={listState} />
-          <Link to={`/research/funds/catalog/${encodeURIComponent(item.uid)}`} className={GHOST}>Open full profile</Link>
+          <Link to={`/research/funds/catalog/${encodeURIComponent(item.uid)}`} state={{ back: backTo, selected: item.uid }} className={GHOST}>Open full profile</Link>
         </div>
         {/* The add's outcome, beside the control that made it. Always in the
             tree, so a screen reader hears the sentence when it arrives. */}
@@ -451,27 +479,48 @@ export function FundDirectoryView({
   query, onQuery, search, onSearch, result, facets, selected, onSelect, onClose, drawer = { loading: false, error: null, data: null },
   onAdd = null, busy = null, isAdded = () => false, dossierOf = () => null, listState = 'ok', notice = null, band = null,
   filtersOpen = false, onToggleFilters = () => {},
-  onRetry = () => {}, onClear = () => {}, onResearch = null,
+  onRetry = () => {}, onClear = () => {}, onResearch = null, opened = null, backTo = '/research/funds?view=directory',
 }) {
   const { loading, error, data } = result;
   const active = activeFilters(query, facets);
   const reasons = data ? [...new Set(data.items.map((x) => sizeOf(x)).filter((s) => !s.text).map((s) => s.reason))] : [];
+  const excluded = sizeExclusion(query, facets);
+  const hint = data && data.total === 0 ? zeroHint(query, facets) : null;
   return (
     <section data-testid="fund-directory" className="space-y-4">
       <div>
         <h2 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Fund directory</h2>
         <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-axal-muted">
-          {data ? `${directoryLine(data.coverage, data.sources)}. ` : ''}
-          HQ, focus and notable LPs are shown as the sources wrote them. A size is shown only where its currency is recorded; what no source holds reads “Not recorded”.
+          Find venture fund vehicles, check where each fact came from, and keep a shortlist. HQ, focus and notable LPs are shown as the sources wrote them; what no source holds reads “Not recorded”.
         </p>
+        {/* D7166 (RFD-01B, RFD-04): how this list was opened. */}
+        {opened === 'link' && active.length > 0 && (
+          <p data-testid="fund-directory-opened" className="mt-1 text-[12px] text-axal-muted">
+            Opened from a link, with {formatCount(active.length)} {active.length === 1 ? 'filter' : 'filters'} applied.
+          </p>
+        )}
+        {opened === 'dropped' && (
+          <p data-testid="fund-directory-dropped" role="status" className="mt-1 text-[12px] text-axal-muted">
+            Signed in. The link was too long to keep its filters, so this is the Directory without them.
+          </p>
+        )}
       </div>
-
-      {data?.coverage && <CoverageCard coverage={data.coverage} sources={data.sources} />}
-
-      {band}
 
       <Filters search={search} onSearch={onSearch} query={query} onQuery={onQuery} facets={facets}
         open={filtersOpen} onToggle={onToggleFilters} />
+
+      {active.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="fund-directory-chips">
+          <span className="text-[11px] font-semibold text-axal-muted">Active filters</span>
+          {active.map((f) => (
+            <button key={f.key} type="button" className={`${CHIP} gap-1.5 py-1.5`} onClick={() => onQuery(removeFilter(f.key))}
+              aria-label={`Remove filter ${f.label}`}>
+              {f.label}<span aria-hidden="true">×</span>
+            </button>
+          ))}
+          <button type="button" className="px-2 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" onClick={onClear}>Clear all</button>
+        </div>
+      )}
 
       {loading && (
         <Card padding="md" aria-busy="true" data-testid="fund-directory-loading">
@@ -494,29 +543,24 @@ export function FundDirectoryView({
         <Card padding="md" data-testid="fund-directory-empty">
           <p className="text-[13px] font-semibold">
             {query.q || active.length
-              ? `No fund matches${query.q ? ` “${query.q}”` : ''}${active.length ? ' with these filters' : ''}.`
+              ? `No fund vehicle matches${query.q ? ` “${query.q}”` : ''}${active.length ? ` with ${active.length === 1 ? 'this filter' : `these ${formatCount(active.length)} filters`}` : ''}.`
               : 'The fund directory holds no funds.'}
           </p>
-          {active.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {active.map((f) => (
-                <button key={f.key} type="button" className={`${CHIP} gap-1.5 py-1.5`} onClick={() => onQuery({ [f.key]: f.key === 'eif' || f.key === 'eifo' ? false : '' })}>
-                  {f.label}<span aria-hidden="true">×</span><span className="sr-only">Remove filter</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <p className="mt-2 text-[12px] text-axal-muted">About half the funds have no vintage or focus recorded, so those filters narrow fast.</p>
-          {(query.q || active.length > 0) && <button type="button" className={`${GHOST} mt-3`} onClick={onClear}>Clear all filters</button>}
+          {hint
+            ? <p className="mt-2 text-[12px] text-axal-muted" data-testid="fund-directory-hint">{hint.text}{' '}
+              <button type="button" className="font-semibold text-axal-violet underline dark:text-violet-300" onClick={() => onQuery(removeFilter(hint.key))}>Remove it</button></p>
+            : <p className="mt-2 text-[12px] text-axal-muted">About half the funds have no vintage or focus recorded, so those filters narrow fast.</p>}
+          {(query.q || active.length > 0) && <button type="button" className={`${GHOST} mt-3`} onClick={onClear}>Clear all</button>}
         </Card>
       )}
 
       {!loading && !error && data && data.total > 0 && (
         <div className="space-y-3" data-testid="fund-directory-results">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 id="fd-results" className="text-[14px] font-extrabold">
-              <span className="font-mono">{rangeLabel(data.offset, data.items.length, data.total)}</span> funds
-            </h3>
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <h3 id="fd-results" className="text-[14px] font-extrabold" aria-live="polite">{matchLine(data).match}</h3>
+              <span className="text-[12px] text-axal-muted">{matchLine(data).of}</span>
+            </div>
             <div className="flex items-center gap-2">
               <label htmlFor="fd-rows" className="text-[12px] font-semibold text-axal-muted">Rows per page</label>
               <select id="fd-rows" className={`${SELECT} w-20`} value={query.limit} onChange={(e) => onQuery({ limit: Number(e.target.value) })}>
@@ -524,16 +568,40 @@ export function FundDirectoryView({
               </select>
             </div>
           </div>
+          {excluded && <p data-testid="fund-directory-excluded" className="text-[12px] text-axal-muted">{excluded}</p>}
           <div className="flex flex-wrap items-start gap-4">
             <Card padding="none" className="min-w-0 flex-[999_1_600px] overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-[12.5px]" aria-labelledby="fd-results">
+              {/* D7166 (RFD-03): on a phone the rows are cards; nothing scrolls sideways. */}
+              <ul className="divide-y divide-axal-hairline sm:hidden dark:divide-gray-800" aria-labelledby="fd-results" data-testid="fund-directory-cards">
+                {data.items.map((x) => {
+                  const s = sizeOf(x);
+                  const v = vehicleLabel(x);
+                  const on = selected?.uid === x.uid;
+                  return (
+                    <li key={x.uid} className={`px-4 py-3 ${on ? 'bg-violet-50/70 dark:bg-violet-950/20' : ''}`}>
+                      <button type="button" data-fund-uid={x.uid} className="min-h-[44px] w-full text-left" onClick={() => onSelect(x)}
+                        aria-expanded={on ? 'true' : 'false'} aria-controls="fd-drawer">
+                        <span className="block text-[14px] font-semibold text-axal-ink dark:text-gray-100">{v.vehicle}</span>
+                        {v.manager !== v.vehicle && <span className="block text-[12px] text-axal-muted">{v.manager}</span>}
+                        <span className="mt-1 block text-[12px] text-axal-muted">
+                          {s.text ? <span className="font-mono text-axal-ink dark:text-gray-100">{s.text} {s.currency}</span> : 'Size not recorded'}
+                          {` · ${x.fund_year != null ? x.fund_year : 'vintage not recorded'} · ${recorded(x.hq) ? x.hq : 'HQ not recorded'}`}
+                        </span>
+                      </button>
+                      {isAdded(x) && <div className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300">Saved to shortlist</div>}
+                      <SourceLine item={x} />
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="hidden sm:block">
+                <table className="w-full table-fixed text-left text-[12.5px]" aria-labelledby="fd-results">
                   <thead className="bg-axal-ground dark:bg-gray-950">
                     <tr>
-                      <th scope="col" className={TH}>Fund</th>
-                      <th scope="col" className={TH}>HQ</th>
-                      <th scope="col" className={`${TH} text-right`}>Size</th>
+                      <th scope="col" className={`${TH} w-[30%]`}>Fund vehicle · manager</th>
+                      <th scope="col" className={`${TH} text-right`}>Reported size</th>
                       <th scope="col" className={`${TH} text-right`}>Vintage</th>
+                      <th scope="col" className={TH}>Manager HQ</th>
                       <th scope="col" className={TH}>Stated focus</th>
                       <th scope="col" className={TH}>EIF / EIFO</th>
                       {onResearch ? <th scope="col" className={TH}><span className="sr-only">Research</span></th> : null}
@@ -542,21 +610,24 @@ export function FundDirectoryView({
                   <tbody className="divide-y divide-axal-hairline dark:divide-gray-800">
                     {data.items.map((x) => {
                       const s = sizeOf(x);
+                      const v = vehicleLabel(x);
                       const on = selected?.uid === x.uid;
                       return (
                         <tr key={x.uid} className={on ? 'bg-violet-50/70 dark:bg-violet-950/20' : 'hover:bg-violet-50/40 dark:hover:bg-violet-950/10'}>
-                          <td className="px-3 py-2.5">
-                            <button type="button" className="text-left text-[13px] font-semibold text-axal-ink hover:text-axal-violet hover:underline dark:text-gray-100"
-                              onClick={() => onSelect(x)} aria-expanded={on ? 'true' : 'false'} aria-controls="fd-drawer">{x.name}</button>
-                            {recorded(x.website) && <div className="max-w-[280px] truncate text-[11px] text-axal-faint">{String(x.website).replace(/^https?:\/\//i, '')}</div>}
-                            {isAdded(x) && <div className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300">In My funds</div>}
+                          <td className="px-3 py-2.5 align-top">
+                            <button type="button" data-fund-uid={x.uid} className="text-left text-[13px] font-semibold text-axal-ink hover:text-axal-violet hover:underline dark:text-gray-100"
+                              onClick={() => onSelect(x)} aria-expanded={on ? 'true' : 'false'} aria-controls="fd-drawer">{v.vehicle}</button>
+                            {v.manager !== v.vehicle && <div className="truncate text-[11.5px] text-axal-muted">{v.manager}</div>}
+                            {isAdded(x) && <div className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300">Saved to shortlist</div>}
                             <SourceLine item={x} />
                           </td>
-                          <td className="px-3 py-2.5 text-axal-muted">{recorded(x.hq) ? x.hq : <Unrecorded>Not recorded</Unrecorded>}</td>
-                          <td className="px-3 py-2.5 text-right">{s.text ? <span className="font-mono text-axal-ink dark:text-gray-100">{s.text}</span> : <Unrecorded reason={s.reason}>Not recorded</Unrecorded>}</td>
-                          <td className="px-3 py-2.5 text-right">{x.fund_year != null ? <span className="font-mono">{x.fund_year}</span> : <Unrecorded>Not recorded</Unrecorded>}</td>
-                          <td className="px-3 py-2.5 text-axal-muted">{recorded(x.sector_focus) ? x.sector_focus : <Unrecorded>Not recorded</Unrecorded>}</td>
-                          <td className="px-3 py-2.5"><Backing item={x} /></td>
+                          <td className="px-3 py-2.5 text-right align-top">{s.text
+                            ? <span className="font-mono text-axal-ink dark:text-gray-100">{s.text}<span className="block text-[10.5px] text-axal-faint">{s.currency}</span></span>
+                            : <Unrecorded reason={s.reason}>Not recorded</Unrecorded>}</td>
+                          <td className="px-3 py-2.5 text-right align-top">{x.fund_year != null ? <span className="font-mono">{x.fund_year}</span> : <Unrecorded>Not recorded</Unrecorded>}</td>
+                          <td className="break-words px-3 py-2.5 align-top text-axal-muted">{recorded(x.hq) ? x.hq : <Unrecorded>Not recorded</Unrecorded>}</td>
+                          <td className="break-words px-3 py-2.5 align-top text-axal-muted">{recorded(x.sector_focus) ? x.sector_focus : <Unrecorded>Not recorded</Unrecorded>}</td>
+                          <td className="px-3 py-2.5 align-top"><Backing item={x} /></td>
                           {/* D5157 part 3 (RS-05 A): the row's Add to my research, in the founder shell. */}
                           {onResearch ? (
                             <td className="px-3 py-2.5 text-right">
@@ -581,12 +652,23 @@ export function FundDirectoryView({
         </div>
       )}
 
-      {data && <SourcesList data={data} />}
+      {/* D7166 (RFD-02): coverage, the lists and "Where the money is" below the results, closed until asked for. */}
+      <details data-testid="fund-directory-disclosure" className="rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900">
+        <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-baseline justify-between gap-2 px-4 py-3">
+          <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Source coverage and where the money is</span>
+          {data ? <span className="text-[12px] text-axal-muted">{directoryLine(data.coverage, data.sources)} · what each field covers</span> : null}
+        </summary>
+        <div className="space-y-4 px-4 pb-4">
+          {data?.coverage && <CoverageCard coverage={data.coverage} sources={data.sources} />}
+          {band}
+          {data && <SourcesList data={data} />}
+        </div>
+      </details>
 
       {/* D1317: the fund's details, the shared right-side Sheet over the list;
           a bottom sheet on a phone, as it was. */}
       {data && selected && (
-        <Drawer item={selected} drawer={drawer} onClose={onClose}
+        <Drawer item={selected} drawer={drawer} onClose={onClose} backTo={backTo}
           onAdd={onAdd} busy={busy} isAdded={isAdded} dossierOf={dossierOf} notice={notice} listState={listState} />
       )}
     </section>
@@ -613,10 +695,16 @@ export default function FundDirectory({
   // is written back (replacing the entry, so Back leaves the directory rather
   // than stepping through each filter).
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  // D7166 (RFD-01B, RFD-04): how the list was opened, read once — a link that
+  // carried filters, or a sign-in return whose filters were too long to keep.
+  const [opened] = useState(() => (params.get(FUNDS_FILTERS_DROPPED) === '1' ? 'dropped'
+    : activeFilters(queryFromSearch(params), null).length > 0 && !location.state?.selected ? 'link' : null));
   const [query, setQuery] = useState(() => queryFromSearch(params));
   const [search, setSearch] = useState(() => queryFromSearch(params).q);
   useEffect(() => {
     const next = searchFromQuery(query, params);
+    next.delete(FUNDS_FILTERS_DROPPED);
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
     // `params` is read, not followed: following it would undo a change before it is written.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -643,6 +731,17 @@ export default function FundDirectory({
     }
   }, [query]);
   useEffect(() => { load(); }, [load]);
+
+  // D7166 (RFD-04C): Back to results from a full profile names the row that was
+  // open. Once the same list has answered, focus returns to that row.
+  const [restore, setRestore] = useState(() => location.state?.selected || null);
+  useEffect(() => {
+    if (!restore || !result.data) return;
+    setRestore(null);
+    if (!result.data.items.some((x) => x.uid === restore)) return;
+    const el = [...document.querySelectorAll('[data-fund-uid]')].find((b) => b.getAttribute('data-fund-uid') === restore && b.offsetParent !== null);
+    el?.focus();
+  }, [restore, result.data]);
 
   // The tab's N: the directory's own total from the read on screen, never a
   // filtered page's count, and nothing at all until a read has answered.
@@ -683,6 +782,7 @@ export default function FundDirectory({
         filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((o) => !o)}
         onRetry={load} onClear={clear}
         onResearch={canAddToResearch(role) ? (x, el) => { researchOpener.current = el; setResearching({ uid: x.uid, name: x.name }); } : null}
+        opened={opened} backTo={`${location.pathname}${location.search}`}
       />
       {researching ? (
         <Suspense fallback={null}>

@@ -182,7 +182,6 @@ const ALLOW = [
     "frontend/src/pages/partner/delivery/boardAttention.js": 2,
     "frontend/src/pages/PerksPage.jsx": 7,
     "frontend/src/pages/research/FundDossier.jsx": 2,
-    "frontend/src/pages/research/FundReportsPanel.jsx": 2,
     "frontend/src/pages/research/FundsZone.jsx": 1,
     "frontend/src/pages/wellbeing/wellbeingModel.js": 1,
     "cloudflare-worker/src/routes/admin_network_reads.ts": 1,

@@ -23,13 +23,13 @@
 .fd-pill-status { color: #6d28d9; background: #f4f0fe; border-color: #ddd0fb; text-transform: capitalize; }
 .fd-pill-draft { color: #92400e; background: #fffbeb; border-color: #fcd34d; }
 .fd-empty a { font-weight: 600; text-decoration: underline; }
-.fd-unavailable { align-self: center; font-size: 12px; color: #686b7b; }
+.fd-saved { font-size: 12px; color: #1f6f4a; }
 .dark .fd-surface { color: #e6e7ee; }
 .dark .fd-pill { color: #d4d6e2; background: #262838; border-color: #383b4d; }
 .dark .fd-pill-status { color: #c4b5fd; background: #2a1f4a; border-color: #4c3a8a; }
 .dark .fd-pill-draft { color: #fcd34d; background: #3a2a0c; border-color: #6b4f12; }
-.dark .fd-unavailable { color: #adb0c2; }
+.dark .fd-saved { color: #8fd6b1; }
 .dark .fd-card, .dark .fd-surface button, .dark .fd-actions a, .dark .fd-surface input, .dark .fd-surface textarea { background: #1e202a; color: #e6e7ee; border-color: #383b4d; }
 .dark .fd-card small, .dark .fd-card dt { color: #adb0c2; }
 .dark .fd-card dl > div, .dark .fd-entry { border-color: #383b4d; }
-@media (max-width: 640px) { .fd-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fd-two { grid-template-columns: minmax(0, 1fr); } .fd-number { font-size: 17px; } .fd-actions a { flex: 1 1 calc(50% - 10px); text-align: center; } .fd-unavailable { flex-basis: 100%; } }
+@media (max-width: 640px) { .fd-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fd-two { grid-template-columns: minmax(0, 1fr); } .fd-number { font-size: 17px; } .fd-actions a { flex: 1 1 calc(50% - 10px); text-align: center; } }

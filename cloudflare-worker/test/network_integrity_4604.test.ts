@@ -69,6 +69,11 @@ function book() {
   u.run(IDA, 'ida@example.test', 'Synthetic Ida', 'investor');
   u.run(PAM, 'pam@example.test', 'Synthetic Pam', 'partner');
   u.run(OLI, 'oli@example.test', 'Synthetic Oli', 'investor');
+  // D6636: a request starts from actual shared participation; that does not accept a tie.
+  db.prepare("INSERT INTO projects (id, name) VALUES (501, 'Synthetic shared venture')").run();
+  db.prepare("INSERT INTO deals (id, project_id, status) VALUES (501, 501, 'active')").run();
+  const invite = db.prepare('INSERT INTO deal_invitations (deal_id, investor_user_id) VALUES (501, ?)');
+  for (const userId of [IDA, PAM, OLI]) invite.run(userId);
   const hooks: Hook[] = [];
   const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: hooked(d1Over(db), hooks) };
   const as = async (who: number, role: string, path: string, init: { method?: string; body?: unknown } = {}) => {

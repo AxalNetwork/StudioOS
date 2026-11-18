@@ -24,7 +24,7 @@ test('I6 renders the requested institutional fund surfaces', () => {
   assert.match(page, /<WorkerRail[\s\S]*?workspace="Fund"[\s\S]*?role="investor"/,
     'the landing must mount the shared Worker AI rail');
   assert.match(page, /function EmptyFundDetail/);
-  assert.match(page, /items\.length === 0\s*\?\s*<EmptyFundDetail \/>/);
+  assert.match(page, /items\.length === 0\s*\?\s*<EmptyFundDetail[\s/]/);
 });
 
 test('I6 composes live fund sources and preserves detailed tools', () => {
