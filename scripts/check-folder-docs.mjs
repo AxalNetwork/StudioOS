@@ -203,6 +203,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/raise/useoffunds',     'the Use of funds tool (D1173, D1177, D1178, D5081): Home and its tabs inside the module page, the dialogs, the shared plan read and the models they read'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
+  ['frontend/src/pages/partner/offers',       'the partner Offers bucket’s zones and the pure rules they read (#4688, D4842, D4843)'],
   ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/portfolio',            'the Portfolio v2 frame, its shared parts and models, the company workspace and the Admin Investor preview (D4817)'],
