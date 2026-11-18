@@ -84,6 +84,8 @@ const dayTime = (v) => {
   return t ? `${t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ${t.toTimeString().slice(0, 5)}` : null;
 };
 const clock = (v) => stamp(v)?.toTimeString().slice(0, 5) || null;
+/** A proposed competitor's relevance as the review words it; a blank score is left out, never 0. */
+const relevanceOf = (s) => (s == null ? null : `relevance ${s} / 100`);
 
 /** The four kinds of content in a dossier (RS-14 A2), plus the edited mark on generated text. */
 const KIND = {
@@ -632,7 +634,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                   <input type="checkbox" className="mt-0.5 h-4 w-4 accent-violet-700" checked={selection.add.has(c.id)} onChange={() => toggle('add', c.id)} aria-label={`Add ${c.name}`} />
                   <span className="font-bold text-emerald-700 dark:text-emerald-300">+ Add</span>
                   <span className="min-w-0"><b>{c.name}</b> <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">New in rerun</span>
-                    <small className="block text-axal-muted">{[c.domain, c.category === 'adjacent' ? 'Adjacent' : 'Direct', c.relevance_score == null ? null : `relevance ${c.relevance_score} / 100`, c.summary].filter(Boolean).join(' · ')}</small>
+                    <small className="block text-axal-muted">{[c.domain, c.category === 'adjacent' ? 'Adjacent' : 'Direct', relevanceOf(c.relevance_score), c.summary].filter(Boolean).join(' · ')}</small>
                   </span>
                 </label>
               ))}
