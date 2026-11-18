@@ -71,10 +71,8 @@ const token = (): string => {
 // The current recipients of a version: people with an account, whose delivery
 // of that version was made (or who were sent the update before D4636 recorded
 // deliveries). The version is bound twice: NULL matches the pre-version rows.
-const RECIPIENTS_OF_VERSION = `SELECT DISTINCT ur.user_id FROM update_recipients ur
-  WHERE ur.update_id = ? AND ur.user_id IS NOT NULL
-    AND ((? IS NULL AND ur.version_id IS NULL) OR ur.version_id = ?)
-    AND (ur.delivery_state IS NULL OR ur.delivery_state = 'delivered')`;
+// The same subquery is written out in `openRound` and `notDueReason` (no
+// interpolation into prepared SQL, check-sql-prepare).
 
 /** The update's current published version's id; null for an update sent before D4636 versions. */
 export async function currentVersionId(env: Env, updateId: number): Promise<number | null> {
@@ -124,7 +122,10 @@ export async function openRound(env: Env, args: {
     env.DB.prepare(
       `INSERT OR IGNORE INTO update_ask_reminder_deliveries (reminder_id, user_id, delivery_uid)
        SELECT r.id, x.user_id, lower(hex(randomblob(16))) FROM update_ask_reminders r
-         JOIN (${RECIPIENTS_OF_VERSION}) x
+         JOIN (SELECT DISTINCT ur.user_id FROM update_recipients ur
+               WHERE ur.update_id = ? AND ur.user_id IS NOT NULL
+                 AND ((? IS NULL AND ur.version_id IS NULL) OR ur.version_id = ?)
+                 AND (ur.delivery_state IS NULL OR ur.delivery_state = 'delivered')) x
         WHERE r.uid = ?`,
     ).bind(args.updateId, args.versionId, args.versionId, uid),
   ]);
@@ -143,7 +144,10 @@ export async function notDueReason(env: Env, round: ReminderRow, userId: number)
     `SELECT EXISTS (SELECT 1 FROM update_ask_replies WHERE ask_id = ?) AS replied,
             (SELECT v.id FROM portfolio_updates u JOIN portfolio_update_versions v ON v.update_id = u.id AND v.version = u.published_version
               WHERE u.id = ?) AS current_version,
-            EXISTS (SELECT 1 FROM (${RECIPIENTS_OF_VERSION}) x WHERE x.user_id = ?) AS recipient`,
+            EXISTS (SELECT 1 FROM (SELECT DISTINCT ur.user_id FROM update_recipients ur
+               WHERE ur.update_id = ? AND ur.user_id IS NOT NULL
+                 AND ((? IS NULL AND ur.version_id IS NULL) OR ur.version_id = ?)
+                 AND (ur.delivery_state IS NULL OR ur.delivery_state = 'delivered')) x WHERE x.user_id = ?) AS recipient`,
   ).bind(round.ask_id, round.update_id, round.update_id, round.version_id, round.version_id, userId)
     .first<{ replied: number; current_version: number | null; recipient: number }>();
   if (!row) throw new Error('reminder check unreadable');

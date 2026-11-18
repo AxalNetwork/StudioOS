@@ -41,6 +41,7 @@ import updates from '../src/routes/portfolio_updates.ts';
 import { ASK_AGAIN_DAYS, canAskAgain, stampMs } from '../src/services/updateShare.ts';
 import { ensureInbox } from '../src/services/notify.ts';
 import { STALE_ATTEMPT_MS } from '../src/services/updateLifecycle.ts';
+import { openRound, runRound } from '../src/services/updateAskReminders.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -186,7 +187,7 @@ test('a new version or a removed recipient mid-round stops the rest, each with i
   const bumped = await fixture();
   await askAgain(bumped, {}, onFirstSend(() => {
     bumped.prepare(`INSERT INTO portfolio_update_versions (id, uid, update_id, version, title, content_sha256, published_by_user_id, published_at)
-                    VALUES (3, 'v3', 1, 3, 'October', ?, ?, ?)`).run(SHA, FOUNDER, new Date().toISOString());
+                    VALUES (3, 'v3', 1, 3, 'October', ?, ?, ?)`).run(SHA, FOUNDER, new Date().toISOString()); // clock-ok: relative
     bumped.prepare('UPDATE portfolio_updates SET published_version = 3 WHERE id = 1').run();
   }));
   assert.deepEqual(deliveries(bumped).map((d) => d.skip_reason), [null, 'version_changed']);
@@ -202,8 +203,8 @@ test('a new version or a removed recipient mid-round stops the rest, each with i
 // 4 ───────────────────────────────────────────────────────────────────────────
 test('an interrupted round is reconciled: found is delivered, not found stays unconfirmed, never attempted is sent', async () => {
   const db = await fixture();
-  const claimed = new Date(Date.now() - 60 * 60_000).toISOString();
-  const stale = new Date(Date.now() - STALE_ATTEMPT_MS - 60_000).toISOString();
+  const claimed = new Date(Date.now() - 60 * 60_000).toISOString(); // clock-ok: relative
+  const stale = new Date(Date.now() - STALE_ATTEMPT_MS - 60_000).toISOString(); // clock-ok: relative
   db.prepare('UPDATE update_asks SET asked_again_at = ? WHERE id = 1').run(claimed);
   db.prepare(`INSERT INTO update_ask_reminders (id, uid, ask_id, update_id, version_id, requested_by_user_id, claimed_at)
               VALUES (1, 'round-1', 1, 1, 2, ?, ?)`).run(FOUNDER, claimed);
@@ -212,7 +213,8 @@ test('an interrupted round is reconciled: found is delivered, not found stays un
   d.run(ALEX, 'rd-alex', 'attempting', 1, 'tok-a', stale);   // landed: its inbox row exists
   d.run(BEA, 'rd-bea', 'attempting', 1, 'tok-b', stale);     // the Worker stopped; no row
   d.run(CASS, 'rd-cass', 'reserved', 0, null, null);         // never attempted (Cass is no longer a recipient)
-  d.run(DAN, 'rd-dan', 'attempting', 1, 'tok-d', new Date().toISOString()); // another request is on it now
+  // Dan: another request is on it now.
+  d.run(DAN, 'rd-dan', 'attempting', 1, 'tok-d', new Date().toISOString()); // clock-ok: relative
   db.prepare(`INSERT INTO notifications_inbox (user_id, type, title, payload) VALUES (?, 'followed_entity_news', 'Asked again', ?)`)
     .run(ALEX, JSON.stringify({ ask_uid: 'ask-1', reminder_delivery_uid: 'rd-alex' }));
   const before = inbox(db).length;
@@ -264,10 +266,41 @@ test('the cooldown reads a zone-less stored time as UTC, in JS and in the SQL cl
   assert.equal(canAskAgain(sent, 0, null, due - 60_000), false, 'and not a minute before');
 
   const db = await fixture();
-  const old = new Date(Date.now() - (ASK_AGAIN_DAYS + 1) * 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
+  const old = new Date(Date.now() - (ASK_AGAIN_DAYS + 1) * 86_400_000).toISOString().replace('T', ' ').slice(0, 19); // clock-ok: relative
   db.prepare('UPDATE portfolio_updates SET sent_at = ? WHERE id = 1').run(old);
   assert.equal((await askAgain(db)).status, 200, 'a zone-less sent_at past the window is claimable');
-  const recent = new Date(Date.now() - 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
+  const recent = new Date(Date.now() - 86_400_000).toISOString().replace('T', ' ').slice(0, 19); // clock-ok: relative
   db.prepare('UPDATE update_asks SET asked_again_at = ? WHERE id = 2').run(recent);
   assert.equal((await call(db, '/asks/ask-2/ask-again')).status, 409, 'a zone-less last ask inside the window is not');
+
+  // The SQL claim on its own: as text, '2026-11-17 10:00:00' sorts before
+  // '2026-11-17T09:00:00.000Z' (a space before 'T') although it is an hour
+  // later. Compared through datetime() it is inside the window and not claimed.
+  const sql = await fixture();
+  sql.prepare(`UPDATE update_asks SET asked_again_at = '2026-11-17 10:00:00' WHERE id = 1`).run();
+  const args = { askId: 1, updateId: 1, versionId: 2, requestKey: null, actorId: FOUNDER, claimedAt: '2026-11-18T10:00:00.000Z' };
+  assert.equal(await openRound({ DB: d1Over(sql) } as any, { ...args, earliest: '2026-11-17T09:00:00.000Z' }), null);
+  assert.ok(await openRound({ DB: d1Over(sql) } as any, { ...args, earliest: '2026-11-17T11:00:00.000Z' }), 'and is claimed once it is past');
+});
+
+// 7 ───────────────────────────────────────────────────────────────────────────
+test('a send that answers null is looked for before it is called declined; a throw is unconfirmed', async () => {
+  const db = await fixture();
+  const DB = d1Over(db);
+  const round = await openRound({ DB } as any, {
+    askId: 1, updateId: 1, versionId: 2, requestKey: null, actorId: FOUNDER,
+    claimedAt: '2026-11-18T10:00:00.000Z', earliest: '2026-11-04T10:00:00.000Z',
+  });
+  assert.ok(round, 'the round opened');
+  // Alex: the path wrote the row and then answered null. Bea: it threw.
+  const provider = {
+    async send(d: any) { if (d.user_id === BEA) throw new Error('provider down'); return null; },
+    async find(d: any) { return d.user_id === ALEX ? 'inbox-41' : null; },
+  };
+  const sum = await runRound({ DB } as any, round!, provider);
+  const by = Object.fromEntries(deliveries(db).map((x) => [x.user_id, x]));
+  assert.equal(by[ALEX].delivery_state, 'delivered');
+  assert.equal(by[ALEX].provider_ref, 'inbox-41');
+  assert.equal(by[BEA].delivery_state, 'ambiguous');
+  assert.deepEqual([sum.notified, sum.unconfirmed, sum.failed], [1, 1, 0]);
 });
