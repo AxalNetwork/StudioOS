@@ -47,6 +47,8 @@ const PROFILES = {
     // comment is here because the symmetry is the tempting wrong guess. Since
     // D704 that folder mounts no zone: `FounderValidateWorkspace` is deleted.
     pages: ['frontend/src/pages/founder', 'frontend/src/pages/research', 'frontend/src/workspaces'],
+    // D6118 (#6118): `grow/partnerships` is mounted by Partnerships' co-marketing part, a cycle page part.
+    extra: ['frontend/src/pages/cycles/PartnershipsCoMarketing.jsx'],
     call: 'founderZoneActions',
     canvas: /^Pages · Founder /,
     buckets: /^(validate|build|grow|network|raise|research)\//,

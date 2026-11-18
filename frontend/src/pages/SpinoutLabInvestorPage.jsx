@@ -43,10 +43,10 @@ import { useAuth } from '../hooks/useAuthSync';
 import { api, spinoutLab } from '../lib/api';
 import { reportError } from '../lib/log';
 import { lpWorkspaceCallToAction } from '../lib/spinoutFundModel';
-import { fundFigures, LP_ONLY } from '../lib/spinoutFundFigures';
+import { fundFigures, programFigures, LP_ONLY, NOT_RECORDED, UNREADABLE } from '../lib/spinoutFundFigures';
 import {
-  HERO, JOURNEY, STACK, WHY_NOW, EDGE, NETWORK, PROOF_STUDIO_STATIC,
-  COHORT_SNAPSHOT, CASE_ITEMS, FINAL_CTA, DISCLAIMER, PROGRAM,
+  HERO, JOURNEY, STACK, WHY_NOW, EDGE, NETWORK, PROOF_STUDIO,
+  COHORT_SNAPSHOT, CASE_ITEMS, FINAL_CTA, DISCLAIMER,
 } from '../lib/spinoutInvestorContent';
 
 /** The deeper LP workspace — the single destination every CTA points at. */
@@ -138,64 +138,60 @@ export default function SpinoutLabInvestorPage() {
   const cta = standing?.viewerId === viewerId && standing ? standing.cta : lpWorkspaceCallToAction();
   const workspaceHref = LP_WORKSPACE_PATH + cta.hash;
 
-  // Live program overlay: the program block is used only when it answers
-  // `available: true`; otherwise the operator-maintained track record, and the
-  // provenance caption follows the same flag. Fund figures have no fallback
-  // (D6137): they come from the read's fund block or read "Not recorded".
+  // Program figures come only from the read's program block (#5513, D5513-p2):
+  // there is no fixed track record behind them any more, so a figure the read
+  // does not carry reads "Not recorded" ("Unreadable" when the read failed).
+  // Fund figures have no fallback either (D6137).
   const [live, setLive] = useState(null);
+  const [readFailed, setReadFailed] = useState(false);
   useEffect(() => {
     let alive = true;
     spinoutLab.fundMetrics()
-      .then((r) => { if (alive) setLive(r); })
-      .catch(() => { if (alive) setLive(null); });
+      .then((r) => { if (alive) { setLive(r); setReadFailed(false); } })
+      .catch(() => { if (alive) { setLive(null); setReadFailed(true); } });
     return () => { alive = false; };
   }, []);
 
   const liveProgram = live?.program?.available ? live.program : null;
   const F = fundFigures(live);
-
-  const P = liveProgram
-    ? {
-      graduates: liveProgram.graduates,
-      onTimeIncorpPct: liveProgram.on_time_pct,
-      alumniRaisedM: liveProgram.alumni_raised != null ? liveProgram.alumni_raised / 1e6 : null,
-    }
-    : PROGRAM;
+  // Before the read answers, figures read Not recorded rather than Unreadable.
+  const P = programFigures(live ?? (readFailed ? null : {}));
+  const missing = readFailed ? UNREADABLE : NOT_RECORDED;
 
   // Capacity remaining is target minus committed, so it is a committed LP's
   // figure: drawn only when the read carried the raise (D6137).
   const capacity = F.raise && F.raise.recorded && F.target.recorded ? F.raise.capacity : null;
 
   const heroProof = [
-    { k: 'Graduates to date', v: String(P.graduates), tone: 'ink', note: 'Across three completed cohorts' },
-    { k: 'Incorporated on time', v: P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', tone: 'green', note: 'Within the 28-day schedule' },
-    { k: 'Raised post-program', v: P.alumniRaisedM != null ? `$${P.alumniRaisedM.toFixed(1)}M` : '—', tone: 'green', note: 'External capital, alumni companies' },
+    { k: 'Graduates to date', v: P.graduates, tone: 'ink', note: 'Across completed cohorts' },
+    { k: 'Incorporated on time', v: P.onTime, tone: 'green', note: 'Incorporation ordered within the 28-day programme' },
+    { k: 'Raised post-program', v: P.alumni, tone: 'green', note: 'External capital, alumni companies' },
     F.portfolio
       ? { k: 'Deployed by the fund', v: F.portfolio.invested, tone: 'violet', note: `Positions held: ${F.portfolio.positions}` }
       : { k: 'Deployed by the fund', v: '—', tone: 'violet', note: LP_ONLY },
   ];
 
-  // Studio throughput, tile by tile. Each takes the live value when
-  // /fund-metrics reports one and falls back to the operator-maintained figure
-  // in spinoutInvestorContent.js otherwise — per TILE, not per page, because
-  // the endpoint can measure some of these and not others (a null percentage
-  // there means "no denominator", never 0%). `liveNote` records which side a
-  // tile landed on so the caption below can count them honestly.
-  const pick = (liveValue, format, staticTile) => (liveValue != null
-    ? { ...staticTile, v: format(liveValue), live: true }
-    : { ...staticTile, live: false });
-  const staticBy = Object.fromEntries(PROOF_STUDIO_STATIC.map((t) => [t.key, t]));
-  const pctFmt = (n) => `${n}%`;
+  // Studio throughput, tile by tile: the live value when the program block
+  // reports one, else Not recorded. Per tile, because the endpoint can measure
+  // some of these and not others (a null percentage there means "no
+  // denominator", never 0%). `live` counts the tiles for the caption below.
+  const fmt = (unit, n) => (unit === 'days' ? `${n} days` : `${n}%`);
+  const tile = (t) => {
+    const n = liveProgram ? liveProgram[t.field] : null;
+    return n != null && Number.isFinite(Number(n))
+      ? { ...t, v: fmt(t.unit, Number(n)), live: true }
+      : { ...t, v: missing, live: false };
+  };
 
   const proofStudio = [
-    { key: 'graduates', k: 'Graduates to date', v: String(P.graduates), tone: 'ink', note: 'Across completed cohorts', live: !!liveProgram },
-    pick(liveProgram?.incorporation_pct, pctFmt, staticBy.incorporation_rate),
-    { key: 'on_time', k: 'Incorporated on time', v: P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', tone: 'green', note: 'Inside the 28-day window', live: !!liveProgram && P.onTimeIncorpPct != null },
-    pick(liveProgram?.verified_discovery_pct, pctFmt, staticBy.verified_discovery),
-    pick(liveProgram?.revenue_proof_pct, pctFmt, staticBy.revenue_proof),
-    { key: 'alumni', k: 'Alumni follow-on', v: P.alumniRaisedM != null ? `$${P.alumniRaisedM.toFixed(1)}M` : '—', tone: 'green', note: 'Raised externally post-program', live: !!liveProgram && P.alumniRaisedM != null },
-    pick(liveProgram?.formation_velocity_days, (n) => `${n} days`, staticBy.formation_velocity),
-    pick(liveProgram?.graduation_to_investment_pct, pctFmt, staticBy.graduation_investment),
+    { key: 'graduates', k: 'Graduates to date', v: P.graduates, tone: 'ink', note: 'Across completed cohorts', live: P.graduates !== NOT_RECORDED && P.graduates !== UNREADABLE },
+    tile(PROOF_STUDIO[0]),
+    { key: 'on_time', k: 'Incorporated on time', v: P.onTime, tone: 'green', note: 'Inside the 28-day window', live: P.onTimePct != null },
+    tile(PROOF_STUDIO[1]),
+    tile(PROOF_STUDIO[2]),
+    { key: 'alumni', k: 'Alumni follow-on', v: P.alumni, tone: 'green', note: 'Raised externally post-program', live: P.alumniRaisedM != null },
+    tile(PROOF_STUDIO[3]),
+    tile(PROOF_STUDIO[4]),
   ];
   const liveTiles = proofStudio.filter((t) => t.live).length;
 
@@ -231,7 +227,7 @@ export default function SpinoutLabInvestorPage() {
           <div className="mt-3 text-[11px] text-gray-400 dark:text-gray-500" data-testid="text-proof-provenance">
             {liveProgram
               ? 'Program figures are live from platform records; fund deployment comes from the fund’s position records, or reads Not recorded.'
-              : 'Program figures are operator-maintained until live platform metrics are available; fund deployment comes from the fund’s position records, or reads Not recorded.'}
+              : 'Program figures appear once platform records hold them, and read Not recorded until then; fund deployment comes from the fund’s position records, or reads Not recorded.'}
           </div>
         </div>
       </div>
@@ -372,8 +368,8 @@ export default function SpinoutLabInvestorPage() {
           {liveTiles === proofStudio.length
             ? 'All figures are live from platform records.'
             : liveTiles > 0
-              ? `${liveTiles} of ${proofStudio.length} figures are live from platform records; the rest are operator-maintained until the platform can measure them.`
-              : 'Figures are operator-maintained; live platform metrics substitute automatically as they become measurable.'}
+              ? `${liveTiles} of ${proofStudio.length} figures are live from platform records; the rest read Not recorded until the platform can measure them.`
+              : 'No figure is recorded yet; each appears here once platform records can measure it.'}
         </p>
         <div className={`${CARD} mt-5 flex flex-wrap items-center gap-3.5 px-5 py-4`}>
           <span className="min-w-[260px] flex-1 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">

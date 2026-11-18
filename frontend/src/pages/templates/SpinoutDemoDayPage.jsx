@@ -11,7 +11,6 @@ import useForcedLightTheme from '../../hooks/useForcedLightTheme';
 import ProofBar from '../../templates/components/ProofBar';
 import OutcomeCards from '../../templates/components/OutcomeCards';
 import Timeline from '../../templates/components/Timeline';
-import TestimonialBlock from '../../templates/components/TestimonialBlock';
 import FAQ from '../../templates/components/FAQ';
 import ValidationBlock from '../../templates/components/ValidationBlock';
 import SectionHeader from '../../templates/components/SectionHeader';
@@ -164,26 +163,9 @@ const WHAT_FOUNDERS_GET = [
   { icon: Lightbulb, title: 'Early Resources', desc: 'Access Spin-Out Lab templates, discovery tools, and brand builder before the next cohort starts.' },
 ];
 
-const TESTIMONIALS = [
-  {
-    quote: "I attended Demo Day with no intention of applying. I left with a co-founder and a signed partnership agreement. The quality of people in the room was unlike anything at a traditional pitch event.",
-    name: 'Nadia F.',
-    role: 'Founder, Cohort 2',
-    company: 'Applied after Demo Day 1',
-  },
-  {
-    quote: "As an investor, I have sat through hundreds of demo days. This is the first one where every company came with actual evidence — customer interviews, verified revenue, signed legal docs. No vaporware.",
-    name: 'Oliver K.',
-    role: 'Angel Investor',
-    company: 'Frontier Tech LP',
-  },
-  {
-    quote: "The 28-day timeline seemed impossible. Then I watched seven companies present real traction, real customers, and real incorporation docs. I applied the next morning.",
-    name: 'Yasmin T.',
-    role: 'Founder, Cohort 3',
-    company: 'Spin-Out Lab Graduate',
-  },
-];
+// The attendee quotes (three named people) are taken down until each has
+// recorded consent and a source (owner, 2026-11-17, #5513, D5513-p2). A quote
+// returns through the partner proof flow's consent record.
 
 const FAQS = [
   {
@@ -345,13 +327,6 @@ export default function SpinoutDemoDayPage() {
         outcomes={WHAT_FOUNDERS_GET}
         cols={4}
         bg="bg-gray-50"
-      />
-
-      <TestimonialBlock
-        eyebrow="Past Attendees"
-        headline="What they said after Demo Day."
-        testimonials={TESTIMONIALS}
-        bg="bg-white"
       />
 
       <FAQ items={FAQS} headline="Demo Day questions answered." bg="bg-gray-50" />
