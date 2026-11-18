@@ -134,6 +134,8 @@ export const INVESTOR_ZONE_FILTERS = {
   // tracked, so there is no notice state to filter lines by.
   'funds/calls': [
     { canvas: 'Call 3', label: 'Current call', key: 'latest' },
+    // D6238: every numbered call as one row (number, issued, due, amount,
+    // collected, outstanding, lines behind), each opening its own page.
     { canvas: 'All calls', key: 'all' },
     { canvas: 'Outstanding', key: 'outstanding' },
     { canvas: 'Notices', unbuilt: 'an in-app notice is logged for each LP account when a call is issued, but no letter is kept and no delivery is tracked, so there is no notice state to filter by', hover: 'Call notices are logged, but their delivery is not tracked, so there is nothing to filter.' },
@@ -384,13 +386,14 @@ export const INVESTOR_ZONE_FILTERS = {
   'research/benchmarking': [
     { canvas: 'Peer set', key: 'comparison', label: 'Compared' },
     { canvas: 'Metrics', key: 'all' },
+    { canvas: 'No read yet', key: 'unread' },
     {
       canvas: 'Saved',
       unbuilt: 'a benchmark row has no draft state; the form writes a finished row on submit, so every metric on this page is saved',
     },
     {
       canvas: 'Export',
-      unbuilt: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn', hover: 'Export is an action, not a view — it sits in the other half of this row.',
+      unbuilt: 'the action row has the CSV download and it follows the current filter and sort', hover: 'Use Export in the action row to download this view.',
     },
   ],
   'research/markets': [

@@ -3,9 +3,9 @@ import { currencyCode, toMajorString } from '../../../lib/money.js';
 import { Link, useNavigate } from 'react-router-dom';
 import { api as legacyApi } from '../../../lib/api';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
-import { NOT_RECORDED, SECTIONS, TABS, money, sourceText, tabHref } from './useOfFundsModel';
+import { NOT_RECORDED, SECTIONS, TABS, money, sourceText, tabHref, uofViewer } from './useOfFundsModel';
 import {
-  BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, FIELD, H3, MONO, MUTED, NotRecorded, Pill, SECTION_BG,
+  BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, SECTION_BG,
   Skeleton, Source, useRead,
 } from './UseOfFundsParts';
 import {
@@ -14,6 +14,7 @@ import {
 } from './scenariosForecastModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { CapTableLinkDialog } from './CapTableLink';
 
 /**
  * D1178 (#3105) — Use of funds part 5: Runway › Forecast (UF8), Scenarios
@@ -133,6 +134,9 @@ function SeriesTable({ rows, testId }) {
   );
 }
 
+/** D5074 part 6: what a caller whose map does not allow `edit` (a support session) reads instead of the forecast's controls. */
+export const READ_ONLY_FORECAST = 'You can read the forecast. A support session does not change it.';
+
 export function Forecast({ projectId, search = '', api = useOfFundsApi }) {
   const read = useRead(() => api.forecast(projectId), projectId ? `forecast:${projectId}` : null);
   const [dialog, setDialog] = useState(false);
@@ -140,6 +144,8 @@ export function Forecast({ projectId, search = '', api = useOfFundsApi }) {
   const [exportError, setExportError] = useState('');
   const runway = TABS.find((t) => t.id === 'runway');
   const d = read.data;
+  // D5074 part 6: the forecast read's map decides Edit drivers and Save forecast; no map draws neither.
+  const canEdit = uofViewer(d?.capabilities).can_write;
   const gap = d ? forecastGap(d) : null;
   const series = d ? forecastSeries(d) : null;
   const sens = d ? sensitivityRows(d) : null;
@@ -174,7 +180,8 @@ export function Forecast({ projectId, search = '', api = useOfFundsApi }) {
                 </li>
               ))}
             </ul>
-            <button type="button" className={`${BTN} w-fit`} onClick={() => setDialog(true)} data-testid="uof-drivers-edit">Edit drivers</button>
+            {canEdit ? <button type="button" className={`${BTN} w-fit`} onClick={() => setDialog(true)} data-testid="uof-drivers-edit">Edit drivers</button>
+              : <p className={`m-0 text-[12px] ${MUTED}`} data-testid="uof-forecast-read-only">{READ_ONLY_FORECAST}</p>}
           </Card>
           <div className="flex min-w-0 flex-col gap-3 lg:col-span-2">
             <Tiles tiles={forecastTiles(d)} />
@@ -215,13 +222,13 @@ export function Forecast({ projectId, search = '', api = useOfFundsApi }) {
             <div className="flex flex-wrap items-center justify-end gap-2">
               {exportError ? <span role="alert" className="mr-auto text-[12.5px] text-red-700 dark:text-red-300">{exportError}</span> : null}
               <button type="button" className={BTN_GHOST} onClick={exportIt} disabled={d.exists === false} data-testid="uof-forecast-export">Export</button>
-              <button type="button" className={BTN} onClick={() => setDialog(true)} data-testid="uof-forecast-save">Save forecast</button>
+              {canEdit ? <button type="button" className={BTN} onClick={() => setDialog(true)} data-testid="uof-forecast-save">Save forecast</button> : null}
             </div>
             <p className={`m-0 text-[11.5px] ${MUTED}`}>The forecast is a model you set. It is not your runway today.</p>
           </div>
         </div>
       ) : null}
-      {dialog && d ? <DriversDialog projectId={projectId} read={d} api={api} onClose={() => setDialog(false)} onSaved={() => { setDialog(false); read.reload(); }} /> : null}
+      {dialog && d && canEdit ? <DriversDialog projectId={projectId} read={d} api={api} onClose={() => setDialog(false)} onSaved={() => { setDialog(false); read.reload(); }} /> : null}
     </div>
   );
 }
@@ -329,6 +336,8 @@ export function Scenarios({ projectId, search = '', api = useOfFundsApi }) {
   const [dialog, setDialog] = useState(null);
   const [open, setOpen] = useState(null);
   const items = read.data?.items || [];
+  // D5074 part 6: the scenarios read's map decides every scenario write; no map draws none.
+  const canEdit = uofViewer(read.data?.capabilities).can_write;
   const base = items.find((s) => s.is_base) || null;
   const done = () => { setDialog(null); read.reload(); };
   const toggle = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < MAX_COMPARE ? [...p, id] : p));
@@ -336,7 +345,7 @@ export function Scenarios({ projectId, search = '', api = useOfFundsApi }) {
     <div className="flex flex-col gap-3" data-testid="uof-scenarios">
       <section className="flex flex-wrap items-center gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
         <span className="mr-auto text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="uof-scenarios-count">{read.data ? `${items.length} ${items.length === 1 ? 'scenario' : 'scenarios'}` : 'Scenarios'}</span>
-        <button type="button" className={BTN_GHOST} onClick={() => setDialog({ kind: 'new' })} disabled={!read.data} data-testid="uof-scenarios-new">New scenario</button>
+        {canEdit ? <button type="button" className={BTN_GHOST} onClick={() => setDialog({ kind: 'new' })} data-testid="uof-scenarios-new">New scenario</button> : null}
         <button type="button" className={BTN} disabled={!picked.length} onClick={() => navigate(compareHref(picked, search))} data-testid="uof-scenarios-compare">Compare selected{picked.length ? ` (${picked.length})` : ''}</button>
         <p className={`m-0 w-full text-[11.5px] ${MUTED}`}>A new scenario starts from the base or blank. Pick up to {MAX_COMPARE} to compare with today. Only the base reaches the deck.</p>
       </section>
@@ -355,7 +364,11 @@ export function Scenarios({ projectId, search = '', api = useOfFundsApi }) {
               <SplitBar card={c} />
               <div className="flex flex-wrap items-center justify-between gap-1 text-[12.5px]"><span>Runway after the raise</span><span className="flex items-center gap-2"><span className={MONO} data-testid="uof-scenario-runway">{c.runway.value || NOT_RECORDED}</span><Source source="Modelled" /></span></div>
               <div className="flex justify-between text-[12.5px]"><span>Milestones funded</span><span className={MONO}>{c.milestones}</span></div>
-              <div className="flex justify-between gap-2 text-[12.5px]"><span>Cap table</span><span className={MUTED}>{c.capTable}</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid="uof-scenario-captable" data-state={c.capTableState}>
+                <span>Cap table</span>
+                <span className="flex flex-wrap items-center gap-2"><span className={MUTED}>{c.capTable}</span>
+                  <button type="button" className={`${LINK} text-[12px]`} onClick={() => setDialog({ kind: 'captable', s })} data-testid="uof-scenario-captable-act">{c.capTableState === 'linked' ? 'Change' : c.capTableState === 'deleted' ? 'Pick another' : 'Link'}</button></span>
+              </div>
               {isOpen ? (
                 <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-800" data-testid="uof-scenario-detail">
                   <span className={EYEBROW}>Allocation</span>
@@ -368,9 +381,9 @@ export function Scenarios({ projectId, search = '', api = useOfFundsApi }) {
               <div className="flex flex-wrap items-center gap-2 border-t border-axal-hairline pt-2 dark:border-gray-800">
                 <label className="mr-auto flex items-center gap-2 text-[12.5px] font-semibold"><input type="checkbox" checked={picked.includes(s.id)} onChange={() => toggle(s.id)} disabled={!picked.includes(s.id) && picked.length >= MAX_COMPARE} data-testid="uof-scenario-pick" />Compare</label>
                 <button type="button" className={BTN_GHOST} onClick={() => setOpen(isOpen ? null : s.id)} data-testid="uof-scenario-open">{isOpen ? 'Close' : 'Open'}</button>
-                <button type="button" className={BTN_GHOST} onClick={() => setDialog({ kind: 'edit', s })} data-testid="uof-scenario-edit">Edit</button>
-                {!c.base ? <button type="button" className={BTN_GHOST} onClick={() => setDialog({ kind: 'base', s })} data-testid="uof-scenario-make-base">Make this the base</button> : null}
-                {!c.base ? <button type="button" className={BTN_GHOST} onClick={() => setDialog({ kind: 'delete', s })} data-testid="uof-scenario-delete">Delete</button> : null}
+                {canEdit ? <button type="button" className={BTN_GHOST} onClick={() => setDialog({ kind: 'edit', s })} data-testid="uof-scenario-edit">Edit</button> : null}
+                {canEdit && !c.base ? <button type="button" className={BTN_GHOST} onClick={() => setDialog({ kind: 'base', s })} data-testid="uof-scenario-make-base">Make this the base</button> : null}
+                {canEdit && !c.base ? <button type="button" className={BTN_GHOST} onClick={() => setDialog({ kind: 'delete', s })} data-testid="uof-scenario-delete">Delete</button> : null}
               </div>
               {c.changed ? <span className={`text-[11px] ${MUTED}`}>Changed {c.changed}</span> : null}
             </section>
@@ -380,6 +393,7 @@ export function Scenarios({ projectId, search = '', api = useOfFundsApi }) {
       {dialog?.kind === 'new' ? <NewScenarioDialog projectId={projectId} base={base} api={api} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'edit' ? <EditScenarioDialog projectId={projectId} scenario={dialog.s} api={api} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'base' ? <MakeBaseDialog projectId={projectId} scenario={dialog.s} api={api} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {dialog?.kind === 'captable' ? <CapTableLinkDialog projectId={projectId} scenario={dialog.s} api={api} onClose={() => setDialog(null)} onSaved={done} /> : null}
       {dialog?.kind === 'delete' ? <DeleteScenarioDialog projectId={projectId} scenario={dialog.s} api={api} onClose={() => setDialog(null)} onDone={done} /> : null}
     </div>
   );
@@ -420,7 +434,8 @@ export function Compare({ projectId, search = '', api = useOfFundsApi }) {
     );
   }
   const d = read.data;
-  const t = d ? compareTable(d) : null;
+  // D5074 part 6: Today's Mercury state reads the compare read's map (an admin sees "Founder only"), as the plan's does.
+  const t = d ? compareTable(d, uofViewer(d.capabilities)) : null;
   const paths = d ? cashPaths(d) : [];
   const cashCurrencies = new Set(paths.filter((p) => p.points).map((p) => currencyCode(p.currency?.toUpperCase())));
   const showCashChart = cashCurrencies.size <= 1 && !cashCurrencies.has(null);
@@ -444,7 +459,7 @@ export function Compare({ projectId, search = '', api = useOfFundsApi }) {
                 <tr key={r.key} className="border-b border-axal-hairline last:border-0 align-top dark:border-gray-800" data-testid={`uof-compare-row-${r.key}`}>
                   <td className="px-2 py-1.5 font-bold text-axal-ink dark:text-gray-100">{r.label}</td>
                   <td className={`border-l-2 border-dotted border-gray-400 px-2 py-1.5 ${MONO} ${MUTED} dark:border-gray-500`}>{r.today.text}</td>
-                  {r.cells.map((c, i) => <td key={i} className={`px-2 py-1.5 ${MONO} ${c.missing ? MUTED : 'text-axal-ink dark:text-gray-100'}`}>{c.text}{c.missing && c.reason ? <span className="block font-sans text-[11px]">{c.reason}</span> : null}</td>)}
+                  {r.cells.map((c, i) => <td key={i} className={`px-2 py-1.5 ${MONO} ${c.missing ? MUTED : 'text-axal-ink dark:text-gray-100'}`}>{c.text}{c.tag ? <span className="block font-sans text-[11px] text-axal-muted dark:text-gray-400">◇ {c.tag}</span> : null}{c.missing && c.reason ? <span className="block font-sans text-[11px]">{c.reason}</span> : null}</td>)}
                 </tr>
               ))}</tbody>
             </table>

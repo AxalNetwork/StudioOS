@@ -28,6 +28,7 @@ import { readAllLeadPages, readAllPages } from '../../../lib/pagedRead';
 import { NotRecorded } from '../../../workspaces/canvasKit';
 import { Pill, buttonClass, formatDay, moneyCents, moneyDollars } from '../kit';
 import { usePipelineZone } from './usePipelineZone';
+import { activityRows } from './commandCentre';
 
 export const OPPORTUNITY_TABS = Object.freeze(['Overview', 'Activity', 'Fit', 'Proposal', 'Terms', 'Engagement']);
 export const LOAD_FAILED = 'This opportunity could not be read.';
@@ -196,20 +197,8 @@ export function opportunityTabs(r) {
   ));
 }
 
-const EVENT = {
-  passed: 'Lead passed',
-  proposal_version: 'Proposal version recorded',
-  proposal_won: 'Proposal won',
-  proposal_lost: 'Proposal lost',
-  negotiation_moved: 'Negotiation last moved',
-  retainer_created: 'Retainer recorded',
-  retainer_ended: 'Retainer ended',
-};
-
-/** Recorded events only, in the feed's order; a kind this sheet does not know is left out, not guessed at. */
-export function activityRows(items) {
-  return (items || []).filter((e) => EVENT[e?.kind]).map((e) => ({ key: e.key || `${e.kind}:${e.occurred_at}`, at: e.occurred_at, text: EVENT[e.kind] }));
-}
+/** Recorded events only, in the feed's order: the words are Recent movement's (`commandCentre.js`, D4838 part 9). */
+export { activityRows };
 
 const h3 = 'mb-1.5 text-[11px] font-extrabold uppercase tracking-[.07em] text-axal-faint';
 const muted = 'text-[12.5px] text-axal-muted dark:text-gray-400';

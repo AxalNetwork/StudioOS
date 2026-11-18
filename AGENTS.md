@@ -255,8 +255,11 @@ twice within a few lines (D1279). So:
   decision or issue it belongs to. The list is generated from it and never
   committed; `node scripts/check-folder-docs.mjs --write` shows it locally, and
   `--clean` empties it before you stage the README (#4104).
-- Elsewhere, add one row per new file or folder, at the end of its table. Never
-  rewrite another feature's row or paragraph in a task PR.
+- Elsewhere, add one row per new file or folder, at the end of its table,
+  unless the README carries `<!-- index: generated -->` or `<!-- index: none -->`
+  (`documentation/architecture/decisions/README.md` does): such a README takes
+  no row, and the check fails one (#6465). Never rewrite another feature's row
+  or paragraph in a task PR.
 - A feature's notes go in its decision file, not in a shared README.
 - If rule 4 fails after a merge, keep the newer version and delete the other.
 
