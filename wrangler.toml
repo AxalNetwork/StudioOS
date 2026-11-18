@@ -1104,10 +1104,19 @@ crons = [
 # one implements two. Pull-request previews are therefore a separate
 # Worker per PR with no bindings — documentation/architecture/DECISIONS.md
 # D36.
+#
+# #7147 (D7147): this environment is staging (owner decision B1). Its route
+# table is empty on purpose: an environment with no `routes` inherits the
+# top-level ones, and those are the axal.vc and app.axal.vc custom domains,
+# so `wrangler deploy --env preview` would have moved both hosts off
+# production. `routes = []` keeps staging on its workers.dev host only;
+# preview_isolation_4566 resolves the config the way Wrangler does and fails
+# if any route comes back.
 # ===========================================================================
 [env.preview]
 name = "studioos-preview"
 workers_dev = true
+routes = []
 
 [env.preview.vars]
 # D886: preview needs its own explicit enablement.
@@ -1226,12 +1235,6 @@ queue              = "studioos-agent-queue-preview-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
-
-# D886: independent private bot host.
-[[env.preview.durable_objects.bindings]]
-name = "MEETING_BOT_CONTAINER"
-class_name = "MeetingBotContainer"
-script_name = "studioos-meeting-bot-preview"
 
 [[env.preview.durable_objects.bindings]]
 name       = "PIPELINE_ROOM"
