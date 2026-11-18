@@ -119,7 +119,7 @@ test('D900: a founder reads the current version\'s review: score, cost, four col
   try {
     assert.deepEqual(m.calls.filter((c) => c[0] === 'deckReviews'), [['deckReviews', 41]], 'the history is read for the current version');
     const current = m.text(m.by('pitch-review-current'));
-    assert.match(current, /Review v4 · Synthetic seed/);
+    assert.match(current, /AI review of v4 · Synthetic seed/);
     assert.match(current, /Proposed by Eadwyn · ran .* · cost \$0\.0180/);
     assert.match(m.text(m.by('pitch-review-score')), /72 of 100 · returned by the review/);
     assert.match(m.text(m.by('pitch-review-summary')), /Synthetic summary of v4\./);

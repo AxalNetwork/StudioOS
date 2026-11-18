@@ -5,6 +5,7 @@ import { availability } from './deckV2Adapter';
 import { LATER } from './deckV2Model';
 import { cardTitle, keyMove } from './editorModel';
 import useMenuFocus from './useMenuFocus';
+import { isQualitative, markLabel } from './versionReviewModel';
 import { langAttrs } from './deckLanguage';
 import {
   ALL_CARDS, ANYONE, PILL_TONE, STATUSES, STATUS_SEGMENTS, UNASSIGNED,
@@ -24,7 +25,9 @@ import {
  * version is saved; Comments opens the card's threads (pd33, D1570). D1545 (#3788): Hide (Show
  * on a hidden card) and Move to section are local edits too; a hidden card is
  * dimmed and tagged "Hidden" (Present, the share link, the PDF and every export
- * skip it), and a card in a section carries its name. A reader
+ * skip it), and a card in a section carries its name. D6066 (#6060): Mark
+ * as intentionally qualitative / Clear the mark sets the card's `qualitative`
+ * field, tagged "Qualitative", read by Review of that version. A reader
  * reads the strip and moves nothing. The card menu keeps the keyboard a menu
  * promises (`useMenuFocus.js`).
  *
@@ -51,7 +54,7 @@ const MUTED = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
 export const VIRTUALIZE_AT = 24;
 /** A column card's height in the virtual list: the thumbnail and title, plus its pill and tag lines. */
 export const cardHeight = (card, tracked) => 122 + ((statusOf(card, tracked) || card?.assignee != null) ? 22 : 0)
-  + ((card?.appendix || card?.hidden || card?.section) ? 16 : 0);
+  + ((card?.appendix || card?.hidden || card?.section || isQualitative(card)) ? 16 : 0);
 
 const GHOST = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
@@ -88,6 +91,8 @@ export function cardMenuItems(index, count, card, avail = availability, people =
     { id: 'appendix', label: card?.appendix ? 'Not an appendix' : 'Mark as appendix' },
     // D1545 (#3788): wired on main (`deckV2Adapter.media` is swapped); both are local edits held until a save.
     { id: 'hide', label: card?.hidden ? 'Show' : 'Hide' },
+    // D6066 (#6060): the founders' "intentionally qualitative" mark, a local edit held until a version is saved.
+    { id: 'qualitative', label: markLabel(card) },
     { id: 'section', label: card?.section ? 'Change section' : 'Move to section' },
     // D1570 (#3817, pd33): wired on main (`deckV2Adapter.comments` is swapped), so it reads no adapter here.
     { id: 'comments', label: 'Comments' },
@@ -257,10 +262,11 @@ export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move
               <Avatar person={assigneeOfCard(c, people)} testId={`pitch-editor-card-avatar-${i}`} />
             </span>
           ) : null}
-          {c?.appendix || c?.hidden || c?.section ? (
+          {c?.appendix || c?.hidden || c?.section || isQualitative(c) ? (
             <span className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[10px] uppercase text-axal-muted dark:text-gray-400">
               {c?.appendix ? <span>Appendix</span> : null}
               {c?.hidden ? <span data-testid={`pitch-editor-card-hidden-${i}`}>Hidden</span> : null}
+              {isQualitative(c) ? <span data-testid={`pitch-editor-card-qualitative-${i}`}>Qualitative</span> : null}
               {c?.section ? <span className="min-w-0 truncate normal-case" title={`Section: ${c.section}`} data-testid={`pitch-editor-card-section-${i}`}>{c.section}</span> : null}
             </span>
           ) : null}

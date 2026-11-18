@@ -5,12 +5,14 @@ import { reportError } from '../../../lib/log';
 import { railPressHeaders } from '../../../lib/railPage.js';
 import { Lightbox, useRailOption } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
+import VersionReview from './VersionReview';
 import { asList, currentVersion, versionLabel } from './pitchStudioModel';
 import {
   NO_REVIEWS, REVIEW_COLUMNS, REVIEW_READ_ONLY, SCORE_NOT_RETURNED, UPLOAD_LINE, isReviewReadOnly, mayRunReview,
   costLabel, estimateOf, historyRows, lastRunLine, latestReview, notReviewedLine, pointerLabel, ranAt, reviewSentence,
 } from './reviewModel';
 import { reviewFailure } from './pitchSafeErrors.js';
+import { NO_VERSION } from './versionReviewModel';
 
 /**
  * D900 (#2679, part 6 of #2434) — the studio's Review tab (PD14) at
@@ -26,6 +28,12 @@ import { reviewFailure } from './pitchSafeErrors.js';
  *
  * Uploads and pasted text stay the reviewer's own (`DeckReviewerPage`,
  * embedded below), per user and outside the deck's history.
+ *
+ * D6060 (#6060, PS-06): above it all, Review of the exact saved version the
+ * page names (`PitchVersionReview` below, `VersionReview.jsx`): six groups of
+ * checks, no readiness score, each finding linked to its card. The AI review below is
+ * the canvas's optional, priced "AI review of v7"; its score is the
+ * reviewer's own, shown only when it returned one.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -99,7 +107,7 @@ export default function PitchReview({ reads, readOnly }) {
   } else if (reads.versions.status !== 'ok' || reads.projects.status !== 'ok') {
     body = <div className={`${SKEL} h-[140px]`} aria-busy="true" data-testid="pitch-review-loading" />;
   } else if (!current) {
-    body = <p className={`m-0 ${MUTED}`} data-testid="pitch-review-no-deck">There is no deck to review yet. Build one, then review it here.</p>;
+    body = <p className={`m-0 ${MUTED}`} data-testid="pitch-review-no-deck">{NO_VERSION}</p>;
   } else {
     const label = versionLabel(current);
     body = (
@@ -107,7 +115,7 @@ export default function PitchReview({ reads, readOnly }) {
         <section className={`${CARD} flex flex-col gap-4 p-4`} data-testid="pitch-review-current">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-1">
-              <span className={`text-[15px] font-extrabold ${INK}`}>Review {label}{current.title ? ` · ${current.title}` : ''}</span>
+              <h2 className={`m-0 text-[15px] font-extrabold ${INK}`}>AI review of {label}{current.title ? ` · ${current.title}` : ''}</h2>
               {latest ? (
                 <span className={MUTED} data-testid="pitch-review-ran">
                   Proposed by Eadwyn · ran <span className={MONO}>{ranAt(latest.created_at)}</span> · cost <span className={MONO}>{costLabel(latest.cost)}</span>
@@ -223,6 +231,23 @@ export default function PitchReview({ reads, readOnly }) {
       ) : null}
     </div>
   );
+}
+
+/**
+ * D6060 (#6060, PS-06): Review of the exact saved version the studio has
+ * selected (`?deck=`, else the current one), mounted by `PitchStudio` above
+ * the comments and the AI review. Nothing while the versions are read, fail
+ * or there is no version: `PitchReview` below says which.
+ */
+export function PitchVersionReview({ reads, readOnly }) {
+  const versions = reads.versions.status === 'ok' ? asList(reads.versions.data, 'versions', 'decks') : [];
+  const current = reads.selectedDeck === undefined ? currentVersion(versions) : reads.selectedDeck;
+  if (reads.versions.status !== 'ok' || !current) return null;
+  if (reads.deck.status === 'error') {
+    return <Failed text={`The cards of ${versionLabel(current)} could not be read, so nothing was checked.`} onRetry={reads.reload} testId="pitch-version-review-error" />;
+  }
+  if (reads.deck.status !== 'ok') return <div className={`${SKEL} h-[220px]`} aria-busy="true" data-testid="pitch-version-review-loading" />;
+  return <VersionReview deck={reads.deck.data} version={current} projectId={reads.project?.id ?? null} readOnly={readOnly} />;
 }
 
 function Score({ score }) {
