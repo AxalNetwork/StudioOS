@@ -42,7 +42,42 @@ export type VestingRow = {
   id: number; holder_id: number | null; security_id: number | null; start_date: string | null;
   cliff_months: number | null; total_months: number | null; total_shares: number | null;
   vested_shares: number | null; source: string | null; updated_at: string | null;
+  /** D6086: the grant on the record this row was written from (venture reads only). */
+  issuance_uid?: string | null;
 };
+
+const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const daysIn = (y: number, m: number) => [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+
+/**
+ * D6086: whole months from `start` to `today`, both YYYY-MM-DD. A month is
+ * complete on the start's day of the month, or on the month's last day when
+ * it is shorter (a 31 January start completes a month on 28 February).
+ */
+export function monthsElapsed(start: string, today: string): number | null {
+  const a = ISO_DAY.exec(start); const b = ISO_DAY.exec(today);
+  if (!a || !b) return null;
+  const [sy, sm, sd] = [Number(a[1]), Number(a[2]), Number(a[3])];
+  const [ty, tm, td] = [Number(b[1]), Number(b[2]), Number(b[3])];
+  const months = (ty - sy) * 12 + (tm - sm);
+  return td < Math.min(sd, daysIn(ty, tm)) ? months - 1 : months;
+}
+
+/**
+ * D6086: the shares vested on `today` under a schedule StudioOS holds, or null
+ * when the schedule is incomplete. Nothing before the cliff; at the cliff the
+ * months since the start; then one month at a time, rounded down, to the
+ * total. `today` is a parameter: the route passes the date, a test a fixed one.
+ */
+export function vestedOnSchedule(v: Pick<VestingRow, 'start_date' | 'cliff_months' | 'total_months' | 'total_shares'>, today: string): number | null {
+  const total = num(v.total_shares); const months = num(v.total_months); const cliff = num(v.cliff_months);
+  if (total == null || months == null || months <= 0 || cliff == null || cliff < 0 || !v.start_date) return null;
+  const m = monthsElapsed(v.start_date, today);
+  if (m == null) return null;
+  if (m <= 0 || m < cliff) return 0;
+  if (m >= months) return total;
+  return Math.floor((total * m) / months);
+}
 
 /** A stored number, or null when nothing is recorded. */
 export const num = (v: unknown): number | null => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -122,7 +157,8 @@ export async function readEquityPlan(env: Env, scope: RegisterScope): Promise<{ 
   const vesting = scope.kind === 'venture'
     ? await env.DB.prepare(
       `SELECT id, holder_id, security_id, start_date, cliff_months, total_months,
-              total_shares, vested_shares, source, updated_at
+              total_shares, vested_shares, source, updated_at,
+              (SELECT i.uid FROM cap_table_issuances i WHERE i.id = cap_table_vesting.issuance_id) AS issuance_uid
          FROM cap_table_vesting WHERE project_id = ? ORDER BY start_date DESC`,
     ).bind(scope.projectId).all<VestingRow>()
     : await env.DB.prepare(
@@ -140,8 +176,22 @@ export async function readEquityPlan(env: Env, scope: RegisterScope): Promise<{ 
   return { pools: pools.results || [], vesting: vesting.results || [], elections };
 }
 
-/** The equity plan's answer: the rows as recorded, and totals only where every row records the figure. */
-export function equityPlanBody(pools: PoolRow[], vesting: VestingRow[]) {
+/**
+ * The equity plan's answer: the rows as recorded, and totals only where every row records the figure.
+ *
+ * D6086 — WHERE VESTED COMES FROM. A row with a vested count keeps it
+ * (`vested_basis: 'recorded'`): Carta's are as imported and never recomputed.
+ * A row StudioOS holds without one (a grant's schedule, a founder's from Add
+ * holder) is worked out from its dates on `today` (`'schedule'`, with
+ * `vested_as_of`), so it never goes stale in storage. A Carta row without one
+ * stays null: the provider's answer is the provider's.
+ */
+export function equityPlanBody(pools: PoolRow[], rows: VestingRow[], today: string | null = null) {
+  const vesting = rows.map((v) => {
+    const stored = num(v.vested_shares);
+    const computed = stored == null && v.source !== CARTA_SOURCE && today ? vestedOnSchedule(v, today) : null;
+    return { ...v, vested_shares: stored ?? computed, vested_basis: stored != null ? 'recorded' : computed != null ? 'schedule' : null };
+  });
   const granted = knownSum(vesting, 'total_shares');
   const vested = knownSum(vesting, 'vested_shares');
   return {
@@ -154,6 +204,9 @@ export function equityPlanBody(pools: PoolRow[], vesting: VestingRow[]) {
       id: v.id, holder_id: v.holder_id, security_id: v.security_id, start_date: v.start_date,
       cliff_months: num(v.cliff_months), total_months: num(v.total_months),
       total_shares: num(v.total_shares), vested_shares: num(v.vested_shares),
+      unvested_shares: num(v.total_shares) != null && num(v.vested_shares) != null ? Math.max(0, num(v.total_shares)! - num(v.vested_shares)!) : null,
+      vested_basis: v.vested_basis, vested_as_of: v.vested_basis === 'schedule' ? today : null,
+      ...(v.issuance_uid !== undefined ? { issuance_uid: v.issuance_uid } : {}),
       source: v.source, as_of: v.updated_at,
     })),
     summary: {

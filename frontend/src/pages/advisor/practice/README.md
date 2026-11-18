@@ -25,6 +25,7 @@ its `ZONE` map.
 | `practiceCockpit.js` | Practice v2 PX-00/PX-10 | `/practice` | DERIVATIONS | Canonical attention, Today, health and client facts, with timezone and partial-read rules (D4829). |
 | `practiceCockpit.css` | Practice v2 PX-00/PX-10 | `/practice` | STYLES | Emerald cockpit, dark tokens and phone hierarchy (D4829); no store. |
 | `PracticeRecordFocus.jsx` | Practice v2 cockpit links | `/practice/*` | FOCUS | Read-only exact-record focus once the existing zone loads (D4829); no store. |
+| `sessionFeed.js` | Practice v2 PX-05 · Sessions | `/practice/sessions` | DERIVATION | Sessions' operational feed: which tab a booking is under (Upcoming / Past / Cancelled, Past being time that has passed), its recorded price (Free / Included / Unpriced / Priced) apart from its money state, its time line, and what Share booking link can share. Since D4832 the page's header is Block time and Share booking link, the session cards come first and Scheduling setup is its own section below; no store of its own (D4832) |
 
 **THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT
 ZONES OF THEIR OWN (D571).** `design/incoming/Ops Page.dc.html` draws
