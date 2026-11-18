@@ -596,15 +596,16 @@ export function FundDirectoryView({
 const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 /**
- * The live directory. `researchedNames` (normalized names on the founder's own
- * list), `onAdd`, `dossierOf`, `listState` and `notice` come from FundsZone,
+ * The live directory. `isAdded` (D7168: FundsZone answers it by catalogue
+ * uid; `researchedNames`, normalized names, is the fallback for any other
+ * host), `onAdd`, `dossierOf`, `listState` and `notice` come from FundsZone,
  * which owns the shortlist. `onTotal` hears the whole directory's size
  * (`coverage.total`, or null) for the "Directory (N)" tab; `band` is drawn
  * above the list.
  */
 export default function FundDirectory({
   researchedNames = new Set(), onAdd = null, busy = null, dossierOf = null, listState = 'ok', notice = null,
-  onTotal = null, band = null, role = null,
+  onTotal = null, band = null, role = null, isAdded = null,
 }) {
   // D5157 part 3: Add to my research opens one panel, returning focus to its row's button.
   const [researching, setResearching] = useState(null);
@@ -678,7 +679,7 @@ export default function FundDirectory({
         result={result} facets={facets} selected={selected} onSelect={pick}
         onClose={() => { pickSeq.current += 1; setSelected(null); }} drawer={drawer}
         onAdd={onAdd} busy={busy}
-        isAdded={(x) => researchedNames.has(normalize(x.name))}
+        isAdded={isAdded || ((x) => researchedNames.has(normalize(x.name)))}
         dossierOf={dossierOf || (() => null)} listState={listState} notice={notice} band={band}
         filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((o) => !o)}
         onRetry={load} onClear={clear}

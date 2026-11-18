@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Card } from '../../ui';
 import { api } from '../../lib/api';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
+import { researchMyFundsApi } from '../../lib/api/researchMyFunds.js';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import EuroTechFundHistoryChart from './EuroTechFundHistoryChart';
 import { FundDetails, UnreadableBadge } from './FundDirectory';
@@ -30,9 +31,12 @@ import { canAddToResearch } from './researchComparisons.js';
  * A REMOVED LIST SAYS SO (D597, #1232). A fund whose list was taken down for
  * its terms answers 410 with the list and why; the page prints that, links
  * the list, and shows none of the fund.
+ *
+ * YOUR ENTRY IS FOUND BY CATALOGUE UID (D7168), never by name. "Atlas A-I"
+ * and "Atlas AI" normalise to the same letters, and the name match opened one
+ * dossier for both vehicles. The page asks the Worker for the one entry linked
+ * to this vehicle (`?catalogue_uid=`), whatever page of My funds holds it.
  */
-
-const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 /** The page's state after a failed read. A 410 keeps the removed list and why (D597). */
 export function failedRead(e) {
@@ -153,15 +157,16 @@ export default function FundCatalogProfile({ role = 'founder' }) {
   useEffect(() => { load(); }, [load]);
 
   const name = fund.data?.item?.name;
+  const catalogueUid = fund.data?.item?.uid || (fund.data ? id : null);
   useEffect(() => {
-    if (!name) return undefined;
+    if (!catalogueUid) return undefined;
     let alive = true;
     setList({ loading: true, error: null, existing: null });
-    api.research.funds()
-      .then((r) => { if (alive) setList({ loading: false, error: null, existing: (r.items || []).find((x) => normalize(x.name) === normalize(name)) || null }); })
+    researchMyFundsApi.list({ catalogue_uid: catalogueUid, limit: 1 })
+      .then((r) => { if (alive) setList({ loading: false, error: null, existing: (r.items || [])[0] || null }); })
       .catch((e) => { if (alive) setList({ loading: false, error: e?.message || 'Unreadable', existing: null }); });
     return () => { alive = false; };
-  }, [name]);
+  }, [catalogueUid]);
 
   // D4613: one add in flight at a time. A ref, not state: two clicks in the
   // same frame both read the state before React re-renders, so a state flag

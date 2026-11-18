@@ -8,6 +8,11 @@ import { Field, StatedLimit } from '../advisor/expertise/kit';
 import { NO_STORE, gapCount, missingChecklist, nothingToDraft, updatedAgo } from './fundDossierRead';
 import FundReportsPanel from './FundReportsPanel';
 import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
+import { useLeaveGuard } from '../../lib/leaveGuard.js';
+import { CatalogueChooser, ConflictSheet, IdentityBand, PublicRecordCard } from './FundIdentity';
+import {
+  DRAFT_FIELDS, acceptWaitReason, combineNotes, dirtyFields, draftsFrom, leaveMessage, mergeDrafts,
+} from './myFundsRead';
 
 /**
  * `/research/funds/:uid` — one fund the founder has researched.
@@ -39,6 +44,19 @@ import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
  * A BLANK CHEQUE IS NOT ZERO. Empty inputs PATCH null. The overlap sentence is
  * the worker's `overlap_note`, which leaves an unrecorded end open and refuses
  * to print an overlap of 0 against a missing raise.
+ *
+ * D7168 (canvas D7033, FND-S02 to FND-S05). SAVING ONE FIELD NEVER DISCARDS
+ * ANOTHER: each box has its own buffer, and a save refreshes the fields it
+ * sent and the ones nobody is editing, so changing the stage keeps the note
+ * being typed. Every write names the `updated_at` it read; a row changed
+ * elsewhere answers 409 and the conflict Sheet compares both versions before
+ * anything is overwritten. Leaving with unsaved text asks first. The identity
+ * block says whether the entry is linked to a catalogue vehicle (Open
+ * catalogue vehicle →), your own record, or a legacy entry, which opens the
+ * chooser; the public record beside the private dossier is the catalogue's,
+ * read-only. The cheque card runs two tests: the whole round, and an intended
+ * allocation per fund. Write into the note waits while the note is unsaved,
+ * then moves focus to the added text, and every save is announced.
  */
 
 const STAGE = { right: 'Right stage', wrong: 'Wrong stage' };
@@ -191,21 +209,70 @@ export function passCardClass(fund) {
   return fund.pass_reason ? '' : 'border-red-200 dark:border-red-800';
 }
 
+/** Hours and minutes, for "Note saved 14:07". */
+const clock = (d = new Date()) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+/** What each draft field sends when saved, or an error sentence. */
+function patchFor(key, drafts) {
+  const text = drafts[key] ?? '';
+  if (key === 'lo' || key === 'hi' || key === 'alloc') {
+    const parsed = parseDollars(text);
+    if (parsed.error) return { error: parsed.error };
+    const column = key === 'lo' ? 'cheque_min_cents' : key === 'hi' ? 'cheque_max_cents' : 'intended_allocation_cents';
+    return { patch: { [column]: parsed.cents } };
+  }
+  if (key === 'source_url') return { patch: { source_url: text.trim() } };
+  return { patch: { [key]: text } };
+}
+
+const FIELD_NAME = { note: 'Note', thesis: 'Thesis', pass_reason: 'Pass reason', source_url: 'Source', lo: 'Cheque low end', hi: 'Cheque high end', alloc: 'Allocation' };
+const DECISION_NAME = { stage_fit: 'Stage fit', path: 'Route in', status: 'Status' };
+
+/** Whether the browser says it is online; true where there is no browser. */
+function useOnline() {
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+  return online;
+}
+
+/** One field's save state beside it: Unsaved, Saving…, saved at, or failed with the draft kept. */
+function FieldState({ dirty, state }) {
+  if (state?.phase === 'saving') return <Pill tone="neutral">Saving…</Pill>;
+  if (state?.phase === 'failed') return <Pill tone="danger">Save failed · draft kept</Pill>;
+  if (dirty) return <Pill tone="warn">Unsaved changes</Pill>;
+  if (state?.phase === 'saved') return <Pill tone="ok">{`Saved ${state.at}`}</Pill>;
+  return null;
+}
+
 export default function FundDossier({ role = 'founder' }) {
   const { uid } = useParams();
   const [fund, setFund] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [note, setNote] = useState('');
-  const [thesis, setThesis] = useState('');
+  // D7168: one buffer per field. A save refreshes the fields it sent and the
+  // ones nobody is editing; unsaved text in any other box stays (FND-S04).
+  const [drafts, setDrafts] = useState(() => draftsFrom(null));
+  const setDraft = (key, value) => setDrafts((d) => ({ ...d, [key]: value }));
+  const [fieldState, setFieldState] = useState({});
   const [editingThesis, setEditingThesis] = useState(false);
-  const [passReason, setPassReason] = useState('');
-  const [sourceUrl, setSourceUrl] = useState('');
   const [editingSource, setEditingSource] = useState(false);
-  const [loText, setLoText] = useState('');
-  const [hiText, setHiText] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [announcement, setAnnouncement] = useState('');
+  const [conflict, setConflict] = useState(null);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const online = useOnline();
+  const noteRef = useRef(null);
+  const chooseRef = useRef(null);
+  const identityRef = useRef(null);
+  const fundRef = useRef(null);
+  const showFund = (row) => { fundRef.current = row; setFund(row); };
 
   // D4607: the fund this page loaded, by its route identity. A read or a
   // write that answers after the route has moved to another fund is dropped,
@@ -215,7 +282,10 @@ export default function FundDossier({ role = 'founder' }) {
   const gate = useRef(null);
   if (!gate.current) gate.current = createRecordGate();
   const writeFor = useRef(0);
-  useEffect(() => { writeFor.current += 1; setBusy(false); setNotice(null); }, [uid]);
+  // Writes on one fund go one after another, each naming the `updated_at` the
+  // one before it left, so two saves in flight never conflict with each other.
+  const queue = useRef(Promise.resolve());
+  useEffect(() => { writeFor.current += 1; setFieldState({}); setNotice(null); setConflict(null); setChooserOpen(false); }, [uid]);
   useEffect(() => () => { gate.current.invalidate(); writeFor.current += 1; }, []);
 
   const load = useCallback(async () => {
@@ -224,18 +294,14 @@ export default function FundDossier({ role = 'founder' }) {
     setLoading(true);
     setError(null);
     setFund(null);
+    fundRef.current = null;
     setLoadedKey(null);
     try {
       const row = await api.research.fundGet(uid);
       if (!fresh()) return;
       setLoadedKey(key);
-      setFund(row);
-      setNote(row.note || '');
-      setThesis(row.thesis || '');
-      setPassReason(row.pass_reason || '');
-      setSourceUrl(row.source_url || '');
-      setLoText(row.cheque_min_cents == null ? '' : usd(row.cheque_min_cents));
-      setHiText(row.cheque_max_cents == null ? '' : usd(row.cheque_max_cents));
+      showFund(row);
+      setDrafts(draftsFrom(row));
       setEditingThesis(!row.thesis);
       setEditingSource(!row.source_url);
     } catch (e) {
@@ -252,42 +318,157 @@ export default function FundDossier({ role = 'founder' }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const apply = async (patch) => {
-    if (!current) return null;
+  const dirty = fund ? dirtyFields(drafts, fund) : [];
+  const noteDirty = dirty.includes('note');
+  // The leave guard: an in-app link, Back and Forward, a reload or a closed tab
+  // ask first while any field holds unsaved text (D4961's guard).
+  useLeaveGuard(dirty.length > 0, leaveMessage(fund?.name));
+
+  /**
+   * Save `patch`, then re-read the row. `sent` names the draft fields the
+   * patch carries; `label` is what the status line and the announcement say.
+   */
+  const apply = (patch, sent = [], label = 'Changes') => {
+    if (!current) return Promise.resolve(null);
     const target = JSON.parse(loadedKey)[0];
-    const mine = ++writeFor.current;
+    const route = writeFor.current;
+    const keys = sent.length ? sent : Object.keys(patch);
     setNotice(null);
-    setBusy(true);
-    try {
-      await api.research.fundUpdate(target, patch);
-      const row = await api.research.fundGet(target);
-      if (writeFor.current !== mine) return null;
-      setFund(row);
-      setNote(row.note || '');
-      setThesis(row.thesis || '');
-      setPassReason(row.pass_reason || '');
-      setSourceUrl(row.source_url || '');
-      setLoText(row.cheque_min_cents == null ? '' : usd(row.cheque_min_cents));
-      setHiText(row.cheque_max_cents == null ? '' : usd(row.cheque_max_cents));
-      setNotice({ ok: true, text: 'Saved.' });
-      return row;
-    } catch (e) {
-      if (writeFor.current === mine) setNotice({ ok: false, text: e?.message || 'That did not save.' });
-      return null;
-    } finally {
-      if (writeFor.current === mine) setBusy(false);
-    }
+    setFieldState((s) => ({ ...s, ...Object.fromEntries(keys.map((k) => [k, { phase: 'saving' }])) }));
+    const run = async () => {
+      if (writeFor.current !== route) return null;
+      const base = fundRef.current;
+      try {
+        await api.research.fundUpdate(target, { ...patch, expected_updated_at: base?.updated_at || undefined });
+        const row = await api.research.fundGet(target);
+        if (writeFor.current !== route) return null;
+        setDrafts((d) => mergeDrafts(d, base, row, sent));
+        showFund(row);
+        const at = clock();
+        setFieldState((s) => ({ ...s, ...Object.fromEntries(keys.map((k) => [k, { phase: 'saved', at }])) }));
+        const still = dirtyFields(drafts, base).filter((k) => !sent.includes(k));
+        setAnnouncement(`${label} saved.${still.includes('note') ? ' Your note is still unsaved.' : ''}`);
+        return row;
+      } catch (e) {
+        if (writeFor.current !== route) return null;
+        if (e?.code === 'fund_changed' && e?.data?.item) {
+          // Changed elsewhere since it was opened: compare both, overwrite nothing.
+          const field = sent[0] || null;
+          setFieldState((s) => ({ ...s, ...Object.fromEntries(keys.map((k) => [k, null])) }));
+          setConflict({
+            stored: { ...base, ...e.data.item }, patch, sent, label,
+            field, fieldLabel: field ? (DRAFT_FIELDS[field]?.label || field) : 'entry',
+            saved: field ? DRAFT_FIELDS[field].read(e.data.item) : '',
+            mine: field ? (drafts[field] ?? '') : '',
+          });
+          setAnnouncement(`Your ${field ? DRAFT_FIELDS[field].label : 'entry'} changed elsewhere and was not saved. Compare both versions.`);
+          return null;
+        }
+        setFieldState((s) => ({ ...s, ...Object.fromEntries(keys.map((k) => [k, { phase: 'failed' }])) }));
+        const why = !online ? 'You are offline.' : (e?.message || 'That did not save.');
+        const text = sent.length
+          ? `${label} did not save. Your text is still here. Nothing was lost. ${why}`
+          : `${label} did not save. ${why}`;
+        setNotice({ ok: false, text });
+        setAnnouncement(text);
+        return null;
+      }
+    };
+    const next = queue.current.then(run, run);
+    queue.current = next.catch(() => null);
+    return next;
   };
 
-  const saveCheque = async (which, text) => {
-    const parsed = parseDollars(text);
-    if (parsed.error) {
-      setNotice({ ok: false, text: parsed.error });
-      return;
+  const saveField = async (key) => {
+    const built = patchFor(key, drafts);
+    if (built.error) {
+      setNotice({ ok: false, text: built.error });
+      setAnnouncement(built.error);
+      return null;
     }
-    const key = which === 'lo' ? 'cheque_min_cents' : 'cheque_max_cents';
-    if ((fund?.[key] ?? null) === parsed.cents) return;
-    await apply({ [key]: parsed.cents });
+    return apply(built.patch, [key], FIELD_NAME[key] || 'Field');
+  };
+
+  const saveCheque = async (which) => {
+    if (!dirty.includes(which)) return;
+    await saveField(which);
+  };
+
+  const decide = (column, value) => apply({ [column]: value }, [], DECISION_NAME[column]);
+
+  // The conflict's three ways out. Each adopts the stored row as the base, so
+  // the next save names the stamp it now holds.
+  const adoptStored = (stored) => {
+    setDrafts((d) => mergeDrafts(d, fundRef.current, stored, []));
+    showFund(stored);
+  };
+  const conflictKeepMine = async () => {
+    const c = conflict;
+    setConflict(null);
+    adoptStored(c.stored);
+    await apply(c.patch, c.sent, c.label);
+  };
+  const conflictKeepSaved = () => {
+    const c = conflict;
+    setConflict(null);
+    adoptStored(c.stored);
+    setDrafts((d) => ({ ...d, ...Object.fromEntries(c.sent.map((k) => [k, DRAFT_FIELDS[k].read(c.stored)])) }));
+    setAnnouncement(`Kept the saved version of your ${c.fieldLabel}.`);
+  };
+  const conflictCombine = () => {
+    const c = conflict;
+    setConflict(null);
+    adoptStored(c.stored);
+    setDrafts((d) => ({ ...d, note: combineNotes(c.saved, c.mine) }));
+    setAnnouncement('Both versions are in the note. Edit, then save.');
+    setTimeout(() => noteRef.current?.focus?.(), 0);
+  };
+
+  // Linking and Keep as my own record go through the same queue; a refusal
+  // reaches the chooser, which keeps the choice and says why.
+  const link = async (catalogueUid) => {
+    const target = JSON.parse(loadedKey)[0];
+    await api.research.fundUpdate(target, { catalogue_uid: catalogueUid });
+    const row = await api.research.fundGet(target);
+    setDrafts((d) => mergeDrafts(d, fundRef.current, row, []));
+    showFund(row);
+    setChooserOpen(false);
+    setAnnouncement(`Linked to ${row.public_record?.record?.name || catalogueUid}. Catalogue id ${catalogueUid}. Your note and reads are unchanged.`);
+    setTimeout(() => identityRef.current?.focus?.(), 0);
+  };
+  const keepOwn = async () => {
+    const target = JSON.parse(loadedKey)[0];
+    await api.research.fundUpdate(target, { own_record: true });
+    const row = await api.research.fundGet(target);
+    setDrafts((d) => mergeDrafts(d, fundRef.current, row, []));
+    showFund(row);
+    setChooserOpen(false);
+    setAnnouncement('Kept as your own record. It will not be offered a match again. You can link it later from its identity block.');
+    setTimeout(() => identityRef.current?.focus?.(), 0);
+  };
+
+  // Write into the note appended the brief on the Worker. Re-read, take the
+  // stored note (it was not being edited: Accept waits while it is), keep any
+  // other unsaved box, and move focus to the added text.
+  const acceptedBrief = async () => {
+    if (!current) return;
+    const target = JSON.parse(loadedKey)[0];
+    const before = (fundRef.current?.note || '').trim().length;
+    try {
+      const row = await api.research.fundGet(target);
+      setDrafts((d) => mergeDrafts(d, fundRef.current, row, ['note']));
+      showFund(row);
+      setAnnouncement(`Brief written into your note at ${clock()}. Nothing was sent to ${row.name}.`);
+      setTimeout(() => {
+        const el = noteRef.current;
+        if (!el) return;
+        el.focus?.();
+        const at = before ? Math.min(before + 2, String(row.note || '').length) : 0;
+        el.setSelectionRange?.(at, String(row.note || '').length);
+      }, 0);
+    } catch {
+      await load();
+    }
   };
 
   const checklist = missingChecklist(fund);
@@ -296,6 +477,12 @@ export default function FundDossier({ role = 'founder' }) {
   const ch = fund ? chequeTile(fund.cheque_min_cents, fund.cheque_max_cents) : null;
   const passed = fund?.status === 'passed';
   const passMissing = passed && !fund?.pass_reason;
+  const saving = (k) => fieldState[k]?.phase === 'saving';
+  const statusLine = conflict
+    ? 'Your note changed elsewhere · not saved'
+    : dirty.length
+      ? `Unsaved changes to your ${dirty.map((k) => DRAFT_FIELDS[k].label).join(', ')}`
+      : 'All changes saved';
 
   return (
     <WorkspaceShell
@@ -320,6 +507,8 @@ export default function FundDossier({ role = 'founder' }) {
       )}
     >
       <div data-testid="fund-dossier" className="space-y-3">
+        {/* D7168: one polite live region for every save, link and accept. */}
+        <p role="status" aria-live="polite" className="sr-only" data-testid="fund-dossier-announce">{announcement}</p>
         {loading && (
           <Card variant="dashed" padding="lg">
             <p className="text-[12.5px] text-axal-muted">Loading this fund.</p>
@@ -338,6 +527,11 @@ export default function FundDossier({ role = 'founder' }) {
 
         {fund && current && (
           <>
+            {!online && (
+              <p data-testid="fund-dossier-offline" className="rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                You are offline. Your text is kept on this page until you reconnect. It is not stored in the browser after you close the tab.
+              </p>
+            )}
             {notice && (
               <p className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
                 {notice.text}
@@ -354,6 +548,7 @@ export default function FundDossier({ role = 'founder' }) {
                     </Pill>
                     <Pill tone={fund.path === 'warm' ? 'ok' : 'neutral'}>{pathLabel(fund.path)}</Pill>
                   </div>
+                  <IdentityBand fund={fund} onChoose={() => setChooserOpen(true)} chooseRef={chooseRef} focusRef={identityRef} />
                   <div className="mt-2">
                     <SourceLine value={fund.source_url} />
                   </div>
@@ -362,16 +557,16 @@ export default function FundDossier({ role = 'founder' }) {
                       <Field label="Source URL" hint="Optional. A blank stays blank.">
                         <input
                           className={inputClass}
-                          value={sourceUrl}
+                          value={drafts.source_url}
                           placeholder="https://"
-                          onChange={(e) => setSourceUrl(e.target.value)}
+                          onChange={(e) => setDraft('source_url', e.target.value)}
                         />
                       </Field>
                       <button
                         type="button"
                         className={`${primaryBtn} mt-2`}
-                        disabled={busy}
-                        onClick={() => apply({ source_url: sourceUrl.trim() })}
+                        disabled={saving('source_url')}
+                        onClick={() => saveField('source_url')}
                       >
                         Save source
                       </button>
@@ -384,7 +579,8 @@ export default function FundDossier({ role = 'founder' }) {
                   )}
                 </div>
                 <div>
-                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Your read</div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Your read · private</div>
+                  <p className="mt-1 text-[11px] text-axal-muted">Three separate decisions · each saves on its own</p>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <label className="block">
                       <span className="mb-1 block text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Stage</span>
@@ -392,12 +588,13 @@ export default function FundDossier({ role = 'founder' }) {
                         aria-label={`Stage fit for ${fund.name}`}
                         className={selectClass}
                         value={fund.stage_fit || ''}
-                        onChange={(e) => apply({ stage_fit: e.target.value })}
+                        onChange={(e) => decide('stage_fit', e.target.value)}
                       >
                         <option value="">Stage not assessed</option>
                         <option value="right">Right stage</option>
                         <option value="wrong">Wrong stage</option>
                       </select>
+                      <span className="mt-1 block"><FieldState state={fieldState.stage_fit} /></span>
                     </label>
                     <label className="block">
                       <span className="mb-1 block text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Path</span>
@@ -405,12 +602,13 @@ export default function FundDossier({ role = 'founder' }) {
                         aria-label={`Route in for ${fund.name}`}
                         className={selectClass}
                         value={fund.path || ''}
-                        onChange={(e) => apply({ path: e.target.value })}
+                        onChange={(e) => decide('path', e.target.value)}
                       >
                         <option value="">Route not recorded</option>
                         <option value="warm">Warm path</option>
                         <option value="cold">No route in</option>
                       </select>
+                      <span className="mt-1 block"><FieldState state={fieldState.path} /></span>
                     </label>
                     <label className="block">
                       <span className="mb-1 block text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Status</span>
@@ -418,15 +616,17 @@ export default function FundDossier({ role = 'founder' }) {
                         aria-label={`Status for ${fund.name}`}
                         className={selectClass}
                         value={fund.status || 'researching'}
-                        onChange={(e) => apply({ status: e.target.value })}
+                        onChange={(e) => decide('status', e.target.value)}
                       >
                         <option value="researching">Researching</option>
                         <option value="passed">Passed</option>
                       </select>
+                      <span className="mt-1 block"><FieldState state={fieldState.status} /></span>
                     </label>
                   </div>
                 </div>
               </div>
+              <p data-testid="fund-dossier-save-line" className="mt-2 text-[11px] font-semibold text-axal-muted">{statusLine}</p>
             </Card>
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -466,8 +666,13 @@ export default function FundDossier({ role = 'founder' }) {
             )}
 
             <div className="grid gap-3 lg:grid-cols-2">
+              <PublicRecordCard record={fund.public_record} />
               <Card>
-                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Their thesis</div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint"><span aria-hidden="true">🔒 </span>Your private dossier</span>
+                  <span className="text-[10.5px] text-axal-muted">Only you can see this</span>
+                </div>
+                <div className="mt-3 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Their thesis</div>
                 {fund.thesis && !editingThesis ? (
                   <>
                     <p className="mt-2.5 text-[18px] font-medium italic leading-snug text-axal-ink">“{fund.thesis}”</p>
@@ -484,37 +689,50 @@ export default function FundDossier({ role = 'founder' }) {
                     <Field label={fund.thesis ? 'Edit their words' : 'Record their words'}>
                       <textarea
                         className={`${inputClass} min-h-[88px]`}
-                        value={thesis}
-                        onChange={(e) => setThesis(e.target.value)}
+                        value={drafts.thesis}
+                        onChange={(e) => setDraft('thesis', e.target.value)}
                       />
                     </Field>
-                    <button
-                      type="button"
-                      className={`${primaryBtn} mt-2`}
-                      disabled={busy}
-                      onClick={async () => {
-                        const saved = await apply({ thesis });
-                        if (saved) setEditingThesis(!saved.thesis);
-                      }}
-                    >
-                      Save thesis
-                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className={primaryBtn}
+                        disabled={saving('thesis')}
+                        onClick={async () => {
+                          const saved = await saveField('thesis');
+                          if (saved) setEditingThesis(!saved.thesis);
+                        }}
+                      >
+                        Save thesis
+                      </button>
+                      <FieldState dirty={dirty.includes('thesis')} state={fieldState.thesis} />
+                    </div>
                   </>
                 )}
-              </Card>
-              <Card>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">What the research says</span>
-                  <button type="button" className={primaryBtn} disabled={busy} onClick={() => apply({ note })}>Save</button>
+                <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">What the research says · your note</span>
+                  <FieldState dirty={noteDirty} state={fieldState.note} />
                 </div>
                 <textarea
+                  ref={noteRef}
                   aria-label="What the research says"
+                  data-testid="fund-dossier-note"
                   className={`${inputClass} min-h-[88px]`}
-                  value={note}
+                  value={drafts.note}
+                  maxLength={2000}
                   placeholder="Your read of this fund…"
-                  onChange={(e) => setNote(e.target.value)}
+                  onChange={(e) => setDraft('note', e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveField('note'); }
+                  }}
                 />
-                {!fund.note && (
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-[10.5px] text-axal-muted">{`${drafts.note.length.toLocaleString('en-US')} / 2,000 characters`}</span>
+                  <button type="button" className={primaryBtn} disabled={saving('note')} onClick={() => saveField('note')}>
+                    {saving('note') ? 'Saving…' : 'Save note'}
+                  </button>
+                </div>
+                {!fund.note && !noteDirty && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Nr />
                     <span className="text-[12px] text-axal-muted">the reading that matters is yours to write</span>
@@ -524,35 +742,68 @@ export default function FundDossier({ role = 'founder' }) {
             </div>
 
             <div className="grid gap-3 lg:grid-cols-2">
-              <Card>
-                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Cheque range</div>
+              <Card data-testid="fund-dossier-cheque">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Cheque range and your round</span>
+                  <span className="text-[10.5px] text-axal-muted">A note, not a score</span>
+                </div>
                 <div className="mt-2.5 grid grid-cols-2 gap-2.5">
                   <Field label="Low (USD)">
                     <input
                       data-testid="fund-dossier-cheque-low"
                       className={`${inputClass} font-mono`}
-                      value={loText}
+                      value={drafts.lo}
                       placeholder="blank"
                       inputMode="decimal"
-                      onChange={(e) => setLoText(e.target.value)}
-                      onBlur={() => saveCheque('lo', loText)}
+                      onChange={(e) => setDraft('lo', e.target.value)}
+                      onBlur={() => saveCheque('lo')}
                     />
                   </Field>
                   <Field label="High (USD)">
                     <input
                       data-testid="fund-dossier-cheque-high"
                       className={`${inputClass} font-mono`}
-                      value={hiText}
+                      value={drafts.hi}
                       placeholder="blank"
                       inputMode="decimal"
-                      onChange={(e) => setHiText(e.target.value)}
-                      onBlur={() => saveCheque('hi', hiText)}
+                      onChange={(e) => setDraft('hi', e.target.value)}
+                      onBlur={() => saveCheque('hi')}
                     />
                   </Field>
                 </div>
                 <p className="mt-2 text-[12px] leading-relaxed text-axal-muted">
                   Stored as cents; the UI is dollars. A blank stays blank — it is never written as 0.
                 </p>
+                <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Whole-round test</div>
+                  <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">
+                    Compares their range with your whole round, the raise target on the active company’s project.
+                  </p>
+                  <p className="mt-1 text-[12px] font-semibold text-axal-ink dark:text-gray-100">{fund.overlap_note}</p>
+                </div>
+                <div data-testid="fund-dossier-allocation" className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Allocation test</div>
+                  <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">
+                    Compares their range with what you intend to raise from this fund. Set per fund, in USD; a range in another currency is not compared.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                    <Field label="Your allocation (USD)">
+                      <input
+                        data-testid="fund-dossier-allocation-input"
+                        className={`${inputClass} font-mono`}
+                        value={drafts.alloc}
+                        placeholder="blank"
+                        inputMode="decimal"
+                        onChange={(e) => setDraft('alloc', e.target.value)}
+                        onBlur={() => saveCheque('alloc')}
+                      />
+                    </Field>
+                    <FieldState dirty={dirty.includes('alloc')} state={fieldState.alloc} />
+                  </div>
+                  <p className="mt-1.5 text-[12px] font-semibold text-axal-ink dark:text-gray-100">
+                    {fund.allocation_test?.note || 'No allocation is set for this fund, so the test is not run.'}
+                  </p>
+                </div>
               </Card>
               <Card data-testid="fund-dossier-pass-card" className={passCardClass(fund)}>
                 <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Pass reason</div>
@@ -561,13 +812,16 @@ export default function FundDossier({ role = 'founder' }) {
                     <textarea
                       aria-label="Pass reason"
                       className={`${inputClass} min-h-[56px] ${passMissing ? 'border-red-200 text-red-700 placeholder:text-red-400 dark:border-red-800 dark:text-red-300' : ''}`}
-                      value={passReason}
+                      value={drafts.pass_reason}
                       placeholder="Passed with no reason recorded — worth adding one before you rediscover them."
-                      onChange={(e) => setPassReason(e.target.value)}
+                      onChange={(e) => setDraft('pass_reason', e.target.value)}
                     />
-                    <button type="button" className={`${primaryBtn} mt-2`} disabled={busy} onClick={() => apply({ pass_reason: passReason })}>
-                      Save reason
-                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button type="button" className={primaryBtn} disabled={saving('pass_reason')} onClick={() => saveField('pass_reason')}>
+                        Save reason
+                      </button>
+                      <FieldState dirty={dirty.includes('pass_reason')} state={fieldState.pass_reason} />
+                    </div>
                   </>
                 ) : (
                   <p className="mt-2.5 text-[12px] leading-relaxed text-axal-muted">
@@ -637,14 +891,34 @@ export default function FundDossier({ role = 'founder' }) {
               empty="A short brief from this row alone: their thesis quoted back, your note, and every gap above turned into a question to ask. It will not name a partner, cite an AUM, or assume an introduction."
               nothingToDraft={NOTHING_TO_DRAFT}
               blocked={nothingToDraft(fund) ? NOTHING_TO_DRAFT : null}
-              foot="Accept writes your note. It does not email them."
-              onAccepted={load}
+              acceptBlocked={acceptWaitReason(noteDirty)}
+              foot="Accept writes your note. It does not email them. Writes your private note only · the fund receives no message."
+              onAccepted={acceptedBrief}
             />
 
             <StatedLimit title="What this page will not do">
               Nothing here scores a fund for you, ranks your list, or writes to the fund. The brief is drafted
               only when you press for it, from this row alone.
             </StatedLimit>
+
+            {chooserOpen && (
+              <CatalogueChooser
+                fund={fund}
+                onClose={() => setChooserOpen(false)}
+                onLink={link}
+                onKeepOwn={keepOwn}
+                returnFocusTo={chooseRef}
+              />
+            )}
+            {conflict && (
+              <ConflictSheet
+                conflict={{ field: conflict.field, label: conflict.fieldLabel, saved: conflict.saved, mine: conflict.mine }}
+                onCombine={conflictCombine}
+                onKeepMine={conflictKeepMine}
+                onKeepSaved={conflictKeepSaved}
+                onClose={() => setConflict(null)}
+              />
+            )}
           </>
         )}
       </div>
