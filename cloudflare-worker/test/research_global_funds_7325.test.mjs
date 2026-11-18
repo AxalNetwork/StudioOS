@@ -67,7 +67,8 @@ test('the committed migration is exactly reproducible from the reviewed manifest
 test('invalid facts and uncited identities are rejected before SQL is emitted', () => {
   const row = synthetic('Fixture Capital', 'https://fixture.example.test/');
   const invalid = [
-    { ...row, name: '' }, { ...row, website: 'javascript:alert(1)' },
+    { ...row, name: '' }, { ...row, name: '投資基金' }, { ...row, name: '---' },
+    { ...row, website: 'javascript:alert(1)' },
     { ...row, source_url: 'https://missing.example.test/' },
     { ...row, hq_country: 'Worldwide' }, { ...row, verified_on: '2026-02-30' },
     { ...row, aliases: 'Former Name' }, { ...row, evidence: [] },

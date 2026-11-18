@@ -127,6 +127,8 @@ def validate(rows: object) -> list[dict]:
         name = row.get('name')
         if not isinstance(name, str) or not name.strip() or len(name) > 180:
             raise ValueError('name must be nonempty and at most 180 characters')
+        if not normalized(name):
+            raise ValueError('name needs an ASCII letter or digit for a stable manager UID; use a sourced romanized name')
         for field in ('website', 'source_url'):
             if not valid_url(row.get(field)):
                 raise ValueError(f'{name}: invalid {field}')
