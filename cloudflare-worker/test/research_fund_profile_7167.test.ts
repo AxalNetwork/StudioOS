@@ -4,7 +4,8 @@
  * the vehicle-labelled history, and the distinct `source_withdrawn` refusal.
  *
  * Real SQLite: the fund directory and its reports as migration 378 declares
- * them, 406's sources table, research_funds (216 and its catalogue uid), the
+ * them, 406's sources table, research_funds (216, its catalogue uid and
+ * D7168's identity and allocation columns), the
  * project comparisons (5157) and this issue's migration, run whole.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/research_fund_profile_7167.test.ts
@@ -41,6 +42,7 @@ function fixture() {
   db.exec(sql('migrations/202611092035_research_projects.sql'));
   db.exec(sql('migrations/216_research_funds.sql'));
   db.exec(sql('migrations/202611092035_research_fund_catalogue_uid.sql'));
+  db.exec(sql('migrations/202611180053_7168_research_fund_identity_allocation.sql'));
   const m378 = sql('migrations/378_research_fund_directory_rebuild.sql');
   db.exec(m378.match(/CREATE TABLE IF NOT EXISTS research_fund_directory \(.*?\);/)![0]);
   db.exec(m378.match(/CREATE TABLE IF NOT EXISTS research_fund_directory_reports \(.*?\);/)![0]);
