@@ -180,3 +180,15 @@ test('changing the connection that serves the same Page preserves dismissal and 
   await purgeFacebookConnection(w.env, 82);
   assert.equal(proposal(w), undefined);
 });
+
+test('the migration offers existing Page links a proposal without syncing and preserves decisions on replay', async t => {
+  const w = await world(t);
+  w.db.exec('DELETE FROM facebook_proposals');
+  const migration = readdirSync(migrations).find(f => /^\d{12}_5860_facebook_proposals\.sql$/.test(f))!;
+  w.db.exec(readFileSync(`${migrations}/${migration}`, 'utf8'));
+  assert.equal((await part(w) as any).proposal.state, 'pending');
+  assert.equal((await call(w, 'dismiss')).status, 200);
+  w.db.exec(readFileSync(`${migrations}/${migration}`, 'utf8'));
+  assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM facebook_proposals').get().n, 1);
+  assert.equal((await part(w) as any).proposal, null);
+});

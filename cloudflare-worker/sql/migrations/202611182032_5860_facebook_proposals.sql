@@ -17,3 +17,8 @@ CREATE TABLE IF NOT EXISTS facebook_proposals (
   UNIQUE (project_id, kind, subject)
 );
 CREATE INDEX IF NOT EXISTS idx_facebook_proposals_integration ON facebook_proposals (integration_id);
+
+-- Existing Page links from part 2a get the same question without another sync.
+INSERT INTO facebook_proposals (integration_id, project_id, kind, subject)
+SELECT integration_id, project_id, 'channel_link', page_id FROM facebook_page_links WHERE 1
+ON CONFLICT(project_id, kind, subject) DO NOTHING;
