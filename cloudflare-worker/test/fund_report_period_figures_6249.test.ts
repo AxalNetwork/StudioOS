@@ -9,10 +9,10 @@ import {makeD1} from './_d1_sqlite.mjs';
 import {tableFromBaseline,stripForeignKeys} from './_baseline.mjs';
 import funds from '../src/routes/funds.ts';
 const baseline=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
-const tables=['users','vc_funds','limited_partners','portfolio_positions','legal_documents','fund_report_periods','activity_logs','user_company_links'];
+const tables=['users','vc_funds','limited_partners','portfolio_positions','legal_documents','fund_report_periods','activity_logs','user_company_links','capital_calls','fund_distributions','projects'];
 const schema=tables.map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join('\n')
  +'CREATE UNIQUE INDEX periods_unique ON fund_report_periods(fund_id,period);CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);'
- +readFileSync(new URL('../sql/migrations/476_fund_report_drafts.sql',import.meta.url),'utf8');
+ +['312_fund_call_ledger.sql','417_fund_position_valuations.sql','418_fund_ledger.sql','472_entity_bank_accounts.sql','473_fund_management_fees.sql','474_mercury_entity_connections.sql','476_fund_report_drafts.sql','483_mercury_not_ours.sql'].map(m=>readFileSync(new URL('../sql/migrations/'+m,import.meta.url),'utf8')).join('\n');
 const secret='d6249-local-fixture-signing-secret';
 const ADMIN=1,GP=2,LP=3,OTHER=4;
 async function fixture(){
@@ -50,7 +50,11 @@ test('GP-issued period: GP and LP read the whitelisted snapshot totals and the i
  assert.equal(asDraft.status,200);assert.deepEqual(Object.keys(asDraft.body.period).sort(),D631_KEYS);
  assert.equal((await f.request(`/10/report-periods/${id}`,LP)).status,404);
  await f.request('/10/report-periods',GP,'POST',{...draft,id,revision:saved.body.period.revision,issue:true});
- const expected={source:'issue_snapshot',currency:'USD',totals:{committed_cents:123456,committed_reason:null,invested_cents:22222,invested_reason:null}};
+ // D6870: a GP issue also freezes called, collected, NAV and the sector mix.
+ const expected={source:'issue_snapshot',currency:'USD',totals:{committed_cents:123456,committed_reason:null,invested_cents:22222,invested_reason:null,
+  called_cents:0,called_reason:null,collected_cents:0,collected_reason:null,
+  nav_cents:null,nav_reason:'Not recorded: Every attributed position needs a dated valuation; no complete investment NAV is recorded.'},
+  sector_mix:{basis:"Invested amount of the fund's positions at issue, by the sector recorded on each company.",items:[{sector:null,invested_cents:22222,position_count:1}]}};
  for(const user of [GP,LP]){
   const r=await f.request(`/10/report-periods/${id}`,user);
   assert.equal(r.status,200);

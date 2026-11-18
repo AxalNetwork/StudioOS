@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Analysis Setup and Results · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies 1/6 · #7041 (part of #7040) · Research v2 addendum, board RS-13</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Companies — keep the selected company through setup, and show the evidence behind every result</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The journey from a directory company’s Run competitor analysis button (/research/companies/company/:uid) through the run form on the Saved analyses tab (/research/companies?tab=analyses) into one saved analysis (/research/companies/:id), for a founder or advisor checking which companies really compete for a customer. It continues the Research v2 canvas (RS-01 to RS-12) in its shell and tokens: one breadcrumb, one h1, one violet primary, Ask Eadwyn as the secondary, the one Eadwyn rail. The subject company and its website stay on screen from profile to export and are never a candidate; a startup is associated only by an explicit choice. Results carry one evidence vocabulary on desktop, tablet, phone and export: Supported, Partial, Insufficient evidence and No candidates, with Unavailable (a failed read, with Retry), Refused and Not recorded from Platform States (D5129). Suggested research questions sit apart from findings. Violet dashed ◇ tags mark Worker work on #7041; amber ⚑ tags mark owner decisions, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · Halden Grid, Northwind Labs, Kestrel Robotics, Larkspur Bio, Quarry AI, Tidewater Systems, Ferrous Power, Cobalt Bay Storage, Gridlift, Voltaic Software, Meridian Thermal, Lanehaul, Truckwise, Portside Freight OS, Routebook, their .example websites and every figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Analysis Setup and Results Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-13', 'Journey and linked prototype', 'Profile → setup → run → results → export, with each click, the board it opens and where focus lands. The evidence vocabulary and the annotation key.', [W('RCA00')]],
+      ['RS-13 A1', 'Profile entry', 'Halden Grid’s directory record (name, website, field source, as-of) and the one primary, Run competitor analysis →. What the button carries: the uid and the subject, never the website as a known competitor, and no startup chosen for the reader.', [F('RCA01', false, 900)]],
+      ['RS-13 A2', 'Setup · startups loading, loaded, chosen', 'The subject card keeps the name and recorded website together, with the field source and Not verified. Market question, startup association and known competitors are separate groups. While startups load, the subject and typed fields stay; after they load nothing is chosen; after an explicit choice the subject is still Halden Grid and Fill empty fields is offered.', [F('RCA02', 'Opening while startups load', 1300), C('RCA02B', 'After the startups load', 1140, 340), C('RCA02C', 'After you choose a startup', 1140, 412)]],
+      ['RS-13 A3', 'Subject card states', 'Recorded website, not verified; no website recorded (a Companies House record); loading; the record read Unavailable with Retry. Each says its state in words.', [C('RCA02D', false, 1380, 610)]],
+      ['RS-13 A4', 'Custom market from Saved analyses', 'A run started from the tab: Subject None · custom market, an editable Market field with focus, and Pick a company from the Directory.', [F('RCA03', false, 1300)]],
+      ['RS-13 A5', 'Running', 'The subject bar and a disabled Run while the single request runs; leaving keeps the run.', [C('RCA04', false, 1140, 272)]],
+      ['RS-13 B1', 'Results · supported', 'Four tiles as on main, the inputs row, findings that each cite a fetched source, interpretation kept apart, Suggested research questions in their own dashed block, the excluded subject, and the competitor table with the reason and sources behind each Direct or Adjacent. Eadwyn rail open.', [F('RCA05', false, 1500), C('RCA05B', 'Classification support · direct and adjacent', 1380, 354)]],
+      ['RS-13 B2', 'Results · partial', 'Northwind Labs: 3 of 5 sources fetched, 2 Unavailable with Retry, one company without a website. Two findings cite a source; two are Run statements marked No source in this run; unsupported points become questions.', [F('RCA06', false, 1300)]],
+      ['RS-13 B3', 'Results · insufficient evidence', 'Larkspur Bio: 0 sources and 0 candidates, measured zeros, Insufficient evidence, no gaps, classifications or wedge. Add a source is the primary; Revise the search keeps the inputs.', [F('RCA07', false, 960)]],
+      ['RS-13 B4', 'States', 'Loading, No candidates (the search ran) beside Sources Unavailable (reads failed), Insufficient evidence, run failed, saved list Unavailable, Refused startup (403) and Not found or market required, each with its Worker answer.', [C('RCA07B', false, 1480, 412)]],
+      ['RS-13 B5', 'Export preview', 'The Markdown file before download for a supported and an insufficient run: Subject and Evidence lines, cited findings, Interpretation, and Suggested research questions under their own heading.', [C('RCA08', false, 1380, 674)]],
+      ['RS-13 C1', 'Tablet 768', 'Setup with startups loading, and supported results with cards in place of the table. 44px targets.', [C('RCA09', 'Setup', 768, 920), C('RCA09B', 'Results', 768, 1110)]],
+      ['RS-13 C2', 'Phone 390', 'Subject, evidence status and the run action stay visible: setup with a sticky Run bar, supported, insufficient, keyboard order with accessible names for market, customer, region and depth, and a partial result’s classification sheet with Retry and return focus.', [P('RCA10A', 'A · Setup'), P('RCA10B', 'B · Supported'), P('RCA10C', 'C · Insufficient evidence'), P('RCA10D', 'D · Focus and labels'), P('RCA10E', 'E · Classification sheet')]],
+      ['RS-13 C3', 'Dark', 'The supported results and the phone results on the dark tokens; every state keeps its word and shape.', [F('RCA11', 'Results · dark', 1500), P('RCA11B', 'Phone · dark')]],
+      ['RS-13 C4', 'Accessibility', 'Labels, keyboard order, focus, return focus, live regions, state words and targets.', [W('RCA12')]],
+      ['RS-13 H', 'Handoff', 'Checked on main, Worker work on #7041 (subject uid, self-match, verified website, claim-to-source references, no fallback findings, evidence in list and export), frontend only, the owner questions and what is preserved.', [W('RCA13')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
