@@ -3,6 +3,7 @@
  * `/api/admin/licences`, in the order the routes were declared before the split;
  * moved unchanged, with their original comments.
  */
+import { agreementInputs, agreementReadiness, compareAgreementTerms, parseAgreementSnapshot } from '../services/licenceAgreementRevision';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
@@ -89,7 +90,7 @@ r.get('/:uid/contract', async (c) => {
     let store = true;
     try {
       const q = await c.env.DB.prepare(
-        `SELECT uid, template_slug, template_version, template_title, body_sha256, unfilled_fields,
+        `SELECT uid, template_slug, template_version, template_title, body_md, body_sha256, unfilled_fields, terms_revision, schedule_revision, terms_snapshot_json,
                 status, envelope_uid, superseded_at, created_at, sent_at, signed_at
            FROM licence_contracts WHERE licence_uid = ? ORDER BY created_at DESC, id DESC`,
       ).bind(licence.uid).all<any>();
@@ -102,12 +103,27 @@ r.get('/:uid/contract', async (c) => {
       )));
     } catch { store = false; }
 
+    let currentSnapshot: Awaited<ReturnType<typeof agreementInputs>>['snapshot'] | null = null;
+    try { currentSnapshot = (await agreementInputs(c.env, licence)).snapshot; } catch { /* Explicitly unavailable below. */ }
+    const executed = contracts.find(row => row.status === 'signed' && !row.envelope_unreadable);
+    const envelopeUnavailable = contracts.some(row => row.envelope_unreadable);
+    const termsDiffer = store && !envelopeUnavailable ? compareAgreementTerms(parseAgreementSnapshot(executed?.terms_snapshot_json), currentSnapshot) : null;
+    const readiness = agreementReadiness(currentSnapshot);
+    contracts = contracts.map(({ terms_snapshot_json, ...row }) => {
+      const snapshot = parseAgreementSnapshot(terms_snapshot_json);
+      return { ...row, readiness: agreementReadiness(snapshot), terms_current: compareAgreementTerms(snapshot, currentSnapshot),
+        snapshot_recorded: snapshot !== null };
+    });
+
     await ensureLegalTemplatesSchema(c.env);
     const templates = await listTemplates(c.env);
 
     return c.json({
       licence_uid: licence.uid,
       contracts,
+      terms_differ: termsDiffer,
+      terms_differ_reason: termsDiffer ? null : !store ? 'The agreement records could not be read.' : envelopeUnavailable ? 'An agreement envelope could not be read, so the executed comparison is unavailable.' : !currentSnapshot ? 'Current contractual terms could not be read.' : !executed ? 'No executed agreement is recorded.' : 'The executed agreement has no recorded terms snapshot.',
+      readiness,
       contracts_available: store,
       ...(store ? {} : {
         contracts_reason:
@@ -161,29 +177,29 @@ r.post('/:uid/contract', async (c) => {
       return refuse(c, r.status, { code: r.code, message: r.message });
     }
 
-    const [terr, seats] = await Promise.all([
-      c.env.DB.prepare(
-        'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
-      ).bind(licence.id).all<{ country_code: string }>(),
-      c.env.DB.prepare(
-        'SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type',
-      ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
-    ]);
-
-    // D803 (#2240): D797's terms fill `{{terms.<key>}}`. With none recorded, or a store
-    // that cannot be read, every such field stays visible and is named in `unfilled_fields`.
-    let terms: LicenceTerms | null = null;
-    try { terms = (await readLicenceTerms(c.env, licence.uid))?.terms ?? null; } catch { terms = null; }
-    // D5019: a contractual exclusivity fills `{{exclusivity.<name>}}`; none, or one that cannot be read, leaves them unfilled.
-    let excl: Awaited<ReturnType<typeof currentExclusivity>> = null;
-    try { excl = await currentExclusivity(c.env, licence.uid); } catch { excl = null; }
+    let captured: Awaited<ReturnType<typeof agreementInputs>> | null = null;
+    try { captured = await agreementInputs(c.env, licence); } catch { /* Legacy fallback leaves unrecorded merge fields visible. */ }
+    let countries = captured?.countries;
+    let seatRows = captured?.seats;
+    let terms: LicenceTerms | null = captured?.terms ?? null;
+    let exclusivity = captured?.exclusivity ?? null;
+    if (!captured) {
+      const [terr, seats] = await Promise.all([
+        c.env.DB.prepare('SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code').bind(licence.id).all<{country_code:string}>(),
+        c.env.DB.prepare('SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type').bind(licence.id).all<{seat_type:string; seats_licensed:number}>(),
+      ]);
+      countries = (terr.results || []).map(t => t.country_code); seatRows = seats.results || [];
+      try { terms = (await readLicenceTerms(c.env, licence.uid))?.terms ?? null; } catch { terms = null; }
+      try {
+        const excl = await currentExclusivity(c.env, licence.uid);
+        exclusivity = excl && excl.contractual && ['in_force','at_risk'].includes(excl.state)
+          ? { scope_type: excl.scope_type, countries: excl.territory.countries, regions: excl.territory.regions, starts_on: excl.starts_on, ends_on: excl.ends_on,
+            review_on: excl.review_on, cure_period_days: excl.cure_period_days, targets: excl.targets } : null;
+      } catch { exclusivity = null; }
+    }
     const { body, unfilled } = renderContract(
       tpl.body_md,
-      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || [], terms,
-        excl && excl.contractual && ['in_force', 'at_risk'].includes(excl.state)
-          ? { scope_type: excl.scope_type, countries: excl.territory.countries, regions: excl.territory.regions, starts_on: excl.starts_on, ends_on: excl.ends_on,
-            review_on: excl.review_on, cure_period_days: excl.cure_period_days, targets: excl.targets }
-          : null),
+      mergeValues(licence, countries || [], seatRows || [], terms, exclusivity),
     );
 
     // The prior contract is SUPERSEDED, never deleted or edited — the same
@@ -204,11 +220,11 @@ r.post('/:uid/contract', async (c) => {
         c.env.DB.prepare(
           `INSERT INTO licence_contracts
              (uid, licence_uid, template_slug, template_version, template_title, body_md, body_sha256,
-              unfilled_fields, status, created_by_user_id, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?, 'draft', ?,?,?)`,
+              unfilled_fields, status, created_by_user_id, created_at, updated_at, terms_revision, schedule_revision, terms_snapshot_json)
+           VALUES (?,?,?,?,?,?,?,?, 'draft', ?,?,?,?,?,?)`,
         ).bind(
           uid, licence.uid, tpl.slug, tpl.version, tpl.title, body, bodySha,
-          JSON.stringify(unfilled), admin.id, now, now,
+          JSON.stringify(unfilled), admin.id, now, now, captured?.snapshot.terms_revision ?? null, captured?.snapshot.schedule_revision ?? null, captured ? JSON.stringify(captured.snapshot) : null,
         ),
       ]);
     } catch (e) {
@@ -235,6 +251,7 @@ r.post('/:uid/contract', async (c) => {
       unfilled_fields: unfilled,
       body_md: body,
       body_sha256: bodySha,
+      readiness: agreementReadiness(captured?.snapshot ?? null),
       // Said here because the screen's next control is Activate, and the rule
       // is the canvas's own.
       note: 'Instantiated unsigned. A pending signature does not block activation; a territory conflict does.',
@@ -256,13 +273,13 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
     const contractUid = c.req.param('contractUid');
     const row = await c.env.DB.prepare(
       `SELECT id, uid, template_slug, template_version, template_title, body_md, body_sha256,
-              status, envelope_uid, superseded_at
+              status, envelope_uid, superseded_at, terms_snapshot_json
          FROM licence_contracts
         WHERE uid = ? AND licence_uid = ?`,
     ).bind(contractUid, licence.uid).first<{
       id: number; uid: string; template_slug: string; template_version: number; template_title: string;
       body_md: string; body_sha256: string | null; status: string;
-      envelope_uid: string | null; superseded_at: string | null;
+      envelope_uid: string | null; superseded_at: string | null; terms_snapshot_json: string | null;
     }>();
     if (!row || row.superseded_at) {
       return c.json({ error: 'contract_not_found', message: 'No current contract with that id exists for this licence.' }, 404);
@@ -299,6 +316,9 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
         unresolved_fields: unresolved,
       }, 409);
     }
+
+    const frozenSnapshot = parseAgreementSnapshot(row.terms_snapshot_json);
+    if (!agreementReadiness(frozenSnapshot).ready) return c.json({ error: 'agreement_not_ready', message: 'Complete all five readiness fields and prepare a new agreement before sending.' }, 409);
 
     const recipient = await c.env.DB.prepare(
       `SELECT u.id, u.email, u.name

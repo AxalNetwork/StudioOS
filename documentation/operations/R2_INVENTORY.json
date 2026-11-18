@@ -1,0 +1,1247 @@
+{
+  "version": 1,
+  "description": "Source-only R2 classification (#6650); no counsel-approved locked-copy class is enabled. A recorded operational period is not a legal retention basis.",
+  "bucket_aliases": {
+    "studioos-files-preview": "studioos-files",
+    "studioos-publications-preview": "studioos-publications",
+    "studioos-company-logos-preview": "studioos-company-logos"
+  },
+  "classes": [
+    {
+      "id": "backups-d1",
+      "bucket": "studioos-backups",
+      "prefix": "d1/",
+      "class": "record",
+      "purpose": "D1 database recovery exports (external workflow)",
+      "retention_period": "365 days (operational recovery policy)",
+      "retention_days": 365,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (D1/KV recovery rows)"
+      ]
+    },
+    {
+      "id": "backups-drill-d1-history",
+      "bucket": "studioos-backups",
+      "prefix": "drill-d1-history/",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "scripts/dr-drill.sh"
+      ]
+    },
+    {
+      "id": "backups-drill-d1-json",
+      "bucket": "studioos-backups",
+      "prefix": "drill-d1.json",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "scripts/dr-drill.sh"
+      ],
+      "match": "object"
+    },
+    {
+      "id": "backups-heartbeat-d1-independent-json",
+      "bucket": "studioos-backups",
+      "prefix": "heartbeat-d1-independent.json",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "scripts/dr-drill.sh"
+      ],
+      "match": "object"
+    },
+    {
+      "id": "backups-heartbeat-d1-json",
+      "bucket": "studioos-backups",
+      "prefix": "heartbeat-d1.json",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [],
+      "match": "object"
+    },
+    {
+      "id": "backups-heartbeat-kv-json",
+      "bucket": "studioos-backups",
+      "prefix": "heartbeat-kv.json",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [],
+      "match": "object"
+    },
+    {
+      "id": "backups-kv",
+      "bucket": "studioos-backups",
+      "prefix": "kv/",
+      "class": "record",
+      "purpose": "Durable KV snapshots; ephemeral namespaces are refused by code",
+      "retention_period": "365 days (operational recovery policy)",
+      "retention_days": 365,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (D1/KV recovery rows)"
+      ]
+    },
+    {
+      "id": "company-logos-companies",
+      "bucket": "studioos-company-logos",
+      "prefix": "companies/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-83b-receipts",
+      "bucket": "studioos-files",
+      "prefix": "83b-receipts/",
+      "class": "record",
+      "purpose": "Filed tax-election receipts",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-advisor-deliverables",
+      "bucket": "studioos-files",
+      "prefix": "advisor-deliverables/",
+      "class": "record",
+      "purpose": "Original advisor deliverables",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-agent-compute",
+      "bucket": "studioos-files",
+      "prefix": "agent-compute/",
+      "class": "record",
+      "purpose": "Original compute inputs/results; operational per-object expires_at, no uniform legal retention period recorded",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-analytics-exports",
+      "bucket": "studioos-files",
+      "prefix": "analytics-exports/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-articles",
+      "bucket": "studioos-files",
+      "prefix": "articles/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-brand-logos",
+      "bucket": "studioos-files",
+      "prefix": "brand-logos/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-build-proof",
+      "bucket": "studioos-files",
+      "prefix": "build-proof/",
+      "class": "record",
+      "purpose": "Original formation and milestone proof",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-company-documents",
+      "bucket": "studioos-files",
+      "prefix": "company-documents/",
+      "class": "record",
+      "purpose": "Company document originals",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-contracts-evidence",
+      "bucket": "studioos-files",
+      "prefix": "contracts/evidence/",
+      "class": "record",
+      "purpose": "Contract evidence uploads",
+      "retention_period": "7 years (runbook requirement; legal basis not recorded)",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (contracts/KYC retention rows; recovery claim is corrected separately by #6428)"
+      ]
+    },
+    {
+      "id": "files-data-room",
+      "bucket": "studioos-files",
+      "prefix": "data-room/",
+      "class": "record",
+      "purpose": "Original data-room files and versions",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-dd-evidence",
+      "bucket": "studioos-files",
+      "prefix": "dd-evidence/",
+      "class": "record",
+      "purpose": "Diligence evidence uploads",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-dd-ndas",
+      "bucket": "studioos-files",
+      "prefix": "dd-ndas/",
+      "class": "record",
+      "purpose": "Diligence NDA uploads",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-dd-reports",
+      "bucket": "studioos-files",
+      "prefix": "dd-reports/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-audio",
+      "bucket": "studioos-files",
+      "prefix": "deck-audio/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-images",
+      "bucket": "studioos-files",
+      "prefix": "deck-images/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-recordings",
+      "bucket": "studioos-files",
+      "prefix": "deck-recordings/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-rehearsals",
+      "bucket": "studioos-files",
+      "prefix": "deck-rehearsals/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-reviews",
+      "bucket": "studioos-files",
+      "prefix": "deck-reviews/",
+      "class": "record",
+      "purpose": "Original pitch files archived for review",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-videos",
+      "bucket": "studioos-files",
+      "prefix": "deck-videos/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-esign-signed",
+      "bucket": "studioos-files",
+      "prefix": "esign/signed/",
+      "class": "record",
+      "purpose": "Signed envelopes and certificates",
+      "retention_period": "7 years (runbook requirement; legal basis not recorded)",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (contracts/KYC retention rows; recovery claim is corrected separately by #6428)"
+      ]
+    },
+    {
+      "id": "files-events",
+      "bucket": "studioos-files",
+      "prefix": "events/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-fund-notices",
+      "bucket": "studioos-files",
+      "prefix": "fund-notices/",
+      "class": "record",
+      "purpose": "Issued fund notice evidence",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-governance",
+      "bucket": "studioos-files",
+      "prefix": "governance/",
+      "class": "record",
+      "purpose": "Governance versions, resolutions and formation certificates",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-grow-minutes",
+      "bucket": "studioos-files",
+      "prefix": "grow-minutes/",
+      "class": "record",
+      "purpose": "Board and obligation minutes",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-grow-voice",
+      "bucket": "studioos-files",
+      "prefix": "grow-voice/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-headshots",
+      "bucket": "studioos-files",
+      "prefix": "headshots/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-imports",
+      "bucket": "studioos-files",
+      "prefix": "imports/",
+      "class": "record",
+      "purpose": "Imported source CSV evidence",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-insights-exports",
+      "bucket": "studioos-files",
+      "prefix": "insights-exports/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-kyb",
+      "bucket": "studioos-files",
+      "prefix": "kyb/",
+      "class": "record",
+      "purpose": "Business verification documents",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-kyc",
+      "bucket": "studioos-files",
+      "prefix": "kyc/",
+      "class": "record",
+      "purpose": "Member verification documents",
+      "retention_period": "7 years (runbook requirement; legal basis not recorded)",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (contracts/KYC retention rows; recovery claim is corrected separately by #6428)"
+      ]
+    },
+    {
+      "id": "files-learning-courses",
+      "bucket": "studioos-files",
+      "prefix": "learning/courses/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-learning-videos",
+      "bucket": "studioos-files",
+      "prefix": "learning/videos/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-legal-thumbnails",
+      "bucket": "studioos-files",
+      "prefix": "legal/thumbnails/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-licence-marks",
+      "bucket": "studioos-files",
+      "prefix": "licence-marks/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-mark-request-evidence",
+      "bucket": "studioos-files",
+      "prefix": "mark-request-evidence/",
+      "class": "record",
+      "purpose": "Investor evidence attached to a portfolio mark request (D6909); written once with the request and frozen",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/architecture/decisions/D6909.md"
+      ]
+    },
+    {
+      "id": "files-meeting-bot-diagnostics",
+      "bucket": "studioos-files",
+      "prefix": "meeting-bot-diagnostics/",
+      "class": "log",
+      "purpose": "Meeting-bot diagnostic metadata and screenshots; access window is not a retention rule",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-mercury-statements",
+      "bucket": "studioos-files",
+      "prefix": "mercury-statements/",
+      "class": "record",
+      "purpose": "Original financial statements",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-network",
+      "bucket": "studioos-files",
+      "prefix": "network/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-news",
+      "bucket": "studioos-files",
+      "prefix": "news/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-program-exports",
+      "bucket": "studioos-files",
+      "prefix": "program-exports/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-publications",
+      "bucket": "studioos-files",
+      "prefix": "publications/",
+      "class": "record",
+      "purpose": "Publication artifacts explicitly archived for audit",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-reports",
+      "bucket": "studioos-files",
+      "prefix": "reports/",
+      "class": "record",
+      "purpose": "Original statement attachments to investor reports",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-research",
+      "bucket": "studioos-files",
+      "prefix": "research/",
+      "class": "record",
+      "purpose": "Original research-room files",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-resumes",
+      "bucket": "studioos-files",
+      "prefix": "resumes/",
+      "class": "record",
+      "purpose": "Candidate application documents",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-taxforms",
+      "bucket": "studioos-files",
+      "prefix": "taxforms/",
+      "class": "record",
+      "purpose": "Tax forms",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-team",
+      "bucket": "studioos-files",
+      "prefix": "team/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-telegram",
+      "bucket": "studioos-files",
+      "prefix": "telegram/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-testing-logos",
+      "bucket": "studioos-files",
+      "prefix": "testing-logos/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-trust-center-reports",
+      "bucket": "studioos-files",
+      "prefix": "trust-center/reports/",
+      "class": "record",
+      "purpose": "Uploaded issued certification and assurance reports; original evidence",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-validate-audio",
+      "bucket": "studioos-files",
+      "prefix": "validate-audio/",
+      "class": "record",
+      "purpose": "Interview audio chunks, including meeting-bot uploads",
+      "retention_period": "Call-session chunks default to 30 days, with member overrides; no uniform period for the entire prefix",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "cloudflare-worker/src/services/callAudioRetention.ts (D877 default and member choice); legacy/direct uploads share this prefix"
+      ]
+    },
+    {
+      "id": "files-validate-evidence",
+      "bucket": "studioos-files",
+      "prefix": "validate-evidence/",
+      "class": "record",
+      "purpose": "Demand-signal evidence uploads",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-wellbeing-credentials",
+      "bucket": "studioos-files",
+      "prefix": "wellbeing/credentials/",
+      "class": "record",
+      "purpose": "Expert credential evidence",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-wellbeing-resources",
+      "bucket": "studioos-files",
+      "prefix": "wellbeing/resources/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-wg-v1",
+      "bucket": "studioos-files",
+      "prefix": "wg/v1/",
+      "class": "record",
+      "purpose": "Original work-graph blobs; scope-dependent content/TTL",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-x",
+      "bucket": "studioos-files",
+      "prefix": "x/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "logs-undated",
+      "bucket": "studioos-logs",
+      "prefix": "undated/",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "2555 days (configured archive policy; legal basis not recorded)",
+      "retention_days": 2555,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "cloudflare-worker-tail/wrangler.toml (RETENTION_DAYS; setting is not proof of a live lifecycle rule)"
+      ]
+    },
+    {
+      "id": "logs-year",
+      "bucket": "studioos-logs",
+      "prefix": "{year}/",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "2555 days (configured archive policy; legal basis not recorded)",
+      "retention_days": 2555,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "cloudflare-worker-tail/wrangler.toml (RETENTION_DAYS; setting is not proof of a live lifecycle rule)"
+      ],
+      "match": "pattern"
+    },
+    {
+      "id": "publications-publications",
+      "bucket": "studioos-publications",
+      "prefix": "publications/",
+      "class": "record",
+      "purpose": "Publication artifacts explicitly archived for audit",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    }
+  ],
+  "key_references": [
+    {
+      "site": "cloudflare-worker-tail/src/archive.ts | writeArchiveBatch | put | object_key",
+      "classes": [
+        "logs-undated",
+        "logs-year"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker-tail/src/archive.ts:42"
+    },
+    {
+      "site": "cloudflare-worker/src/durable-objects/meeting-bot-run.ts | upload | delete | saved.objectPath",
+      "classes": [
+        "files-validate-audio"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/founder_validate.ts:1235; cloudflare-worker/src/services/interviewSessions.ts:285"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_licences_brand.ts | delete /:uid/brand/mark | delete | existing.row.mark_r2_key",
+      "classes": [
+        "files-licence-marks"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_licences_brand.ts:171"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_licences_brand.ts | post /:uid/brand/mark | delete | existing.row.mark_r2_key",
+      "classes": [
+        "files-licence-marks"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_licences_brand.ts:171"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_network_profiles.ts | post /:id/photo | delete | oldKey",
+      "classes": [
+        "files-network"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_network_profiles.ts:502"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_team.ts | delete /:id | delete | row.photo_r2_key",
+      "classes": [
+        "files-team"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_team.ts:309"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_team.ts | post /:id/photo | delete | oldKey",
+      "classes": [
+        "files-team"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_team.ts:309"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_telegram.ts | delete /posts/:id | delete | post.media_r2_key",
+      "classes": [
+        "files-telegram"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_telegram.ts:492"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_telegram.ts | post /posts/:id/media | delete | oldKey",
+      "classes": [
+        "files-telegram"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_telegram.ts:492"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_x.ts | delete /accounts/:id | delete | key",
+      "classes": [
+        "files-x"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_x.ts:715"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_x.ts | delete /posts/:id | delete | k",
+      "classes": [
+        "files-x"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_x.ts:715"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/advisors_deliverables.ts | dropStored | delete | stored.key",
+      "classes": [
+        "files-advisor-deliverables"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/advisors_deliverables.ts:183"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/articles.ts | post /:id/cover | delete | row.cover_r2_key",
+      "classes": [
+        "files-articles"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/article_assist.ts:245; cloudflare-worker/src/routes/articles.ts:792; cloudflare-worker/src/routes/articles.ts:822; cloudflare-worker/src/services/articleCovers.ts:66"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/company.ts | dropStoredLogo | delete | key",
+      "classes": [
+        "company-logos-companies"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/company.ts:665; cloudflare-worker/src/routes/company.ts:792"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/cycle_build.ts | deleteFormationStep | delete | existing.proof_file_key",
+      "classes": [
+        "files-build-proof"
+      ],
+      "evidence": "formation_steps.proof_file_key selected for the owned project in deleteFormationStep; records/build.ts uploadProof writes build-proof/ and stores that key on formation_steps (reviewed at main 321c9d5eb5)"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/deck_reviewer.ts | delete /:id | delete | String(row.r2_key)",
+      "classes": [
+        "files-deck-reviews"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_reviewer.ts:173; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/deck_reviewer.ts | delete /:id/raw | delete | String(row.r2_key)",
+      "classes": [
+        "files-deck-reviews"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_reviewer.ts:173; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/grow_sequences.ts | delete /:uid | delete | k.recording_asset",
+      "classes": [
+        "files-grow-voice"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/grow_sequences.ts:294"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/grow_sequences.ts | delete /:uid/steps/:position | delete | st.recording_asset",
+      "classes": [
+        "files-grow-voice"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/grow_sequences.ts:294"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/grow_sequences.ts | put /:uid/steps/:position/recording | delete | st.recording_asset",
+      "classes": [
+        "files-grow-voice"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/grow_sequences.ts:294"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/kyb_admin.ts | patch /:id/reject | delete | doc.file_key",
+      "classes": [
+        "files-kyb"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/kyb_admin.ts:426"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/abort | abort | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/abort | resumeMultipartUpload | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | complete | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | delete | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | resumeMultipartUpload | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | put /items/:uid/video/uploads/part | resumeMultipartUpload | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | put /items/:uid/video/uploads/part | uploadPart | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/news.ts | post /:id/cover | delete | row.cover_r2_key",
+      "classes": [
+        "files-news"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/news.ts:422"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/research.ts | delete /documents/:uid | delete | row.r2_key",
+      "classes": [
+        "files-research"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/research.ts:457"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/settings.ts | post /headshot | delete | oldKey",
+      "classes": [
+        "files-headshots"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:132; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/settings.ts | post /profile/linkedin-import/apply | delete | oldKey",
+      "classes": [
+        "files-headshots"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:132; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/wellbeing_expert_review.ts | delete /experts/me/credentials/files/:fileUid | delete | file.file_key",
+      "classes": [
+        "files-wellbeing-credentials"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing_expert_review.ts:113; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/wellbeing.ts | delete /resources/:id | delete | file.file_key",
+      "classes": [
+        "files-wellbeing-resources"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing.ts:972"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/wellbeing.ts | delete /resources/:id/file | delete | row.file_key",
+      "classes": [
+        "files-wellbeing-resources"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing.ts:972"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/wellbeing.ts | put /resources/:id/file | delete | row.file_key",
+      "classes": [
+        "files-wellbeing-resources"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing.ts:972"
+    },
+    {
+      "site": "cloudflare-worker/src/services/agents/computeBridge.ts | computeInternal | delete | key",
+      "classes": [
+        "files-agent-compute"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/agents/computeBridge.ts:105; cloudflare-worker/src/services/agents/computeBridge.ts:253"
+    },
+    {
+      "site": "cloudflare-worker/src/services/agents/computeBridge.ts | eraseComputeData | delete | object.r2_key",
+      "classes": [
+        "files-agent-compute"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/agents/computeBridge.ts:105; cloudflare-worker/src/services/agents/computeBridge.ts:253"
+    },
+    {
+      "site": "cloudflare-worker/src/services/agents/computeBridge.ts | sweepComputeObjects | delete | row.r2_key",
+      "classes": [
+        "files-agent-compute"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/agents/computeBridge.ts:105; cloudflare-worker/src/services/agents/computeBridge.ts:253"
+    },
+    {
+      "site": "cloudflare-worker/src/services/dataRoomTrash.ts | purgeFile | delete | keys",
+      "classes": [
+        "files-data-room"
+      ],
+      "evidence": "D6073 Trash purge: keys are data_room_files.r2_key and data_room_file_versions.r2_key, filtered in purgeFile to data-room/<project uid>/ before the delete; replaces the removeDataRoomFile deletes (Remove is now a removed_at stamp). Writers: cloudflare-worker/src/routes/captable.ts:1475; cloudflare-worker/src/routes/cycle_use_of_funds.ts:140; cloudflare-worker/src/routes/data_room.ts:1028; cloudflare-worker/src/routes/data_room.ts:971; cloudflare-worker/src/services/google/raise.ts:258; cloudflare-worker/src/services/mercury/raiseFeeds.ts:699"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/cardAudio.ts | deleteCardAudio | delete | key",
+      "classes": [
+        "files-deck-audio"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/decks/cardAudio.ts:70; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/cardAudio.ts | sweepOrphanAudio | delete | o.key",
+      "classes": [
+        "files-deck-audio"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/decks/cardAudio.ts:70"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/imageSweep.ts | sweepDeckImages | delete | img.r2_key",
+      "classes": [
+        "files-deck-images"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_image_edits.ts:212; cloudflare-worker/src/routes/deck_image_edits.ts:329; cloudflare-worker/src/routes/deck_images.ts:478; cloudflare-worker/src/services/decks/imageCopy.ts:145; cloudflare-worker/src/services/decks/imageDraw.ts:164"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/imageTakedown.ts | takeDownImage | delete | marked.r2_key",
+      "classes": [
+        "files-deck-images"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_image_edits.ts:212; cloudflare-worker/src/routes/deck_image_edits.ts:329; cloudflare-worker/src/routes/deck_images.ts:478; cloudflare-worker/src/services/decks/imageCopy.ts:145; cloudflare-worker/src/services/decks/imageDraw.ts:164; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/recordings.ts | deleteTake | delete | row.media_r2_key",
+      "classes": [
+        "files-deck-recordings"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_recordings.ts:156"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/recordings.ts | sweepOrphanRecordings | delete | o.key",
+      "classes": [
+        "files-deck-recordings"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_recordings.ts:156"
+    },
+    {
+      "site": "cloudflare-worker/src/services/google/raise.ts | copyFile | delete | old.r2_key",
+      "classes": [
+        "files-data-room"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/captable.ts:1475; cloudflare-worker/src/routes/cycle_use_of_funds.ts:140; cloudflare-worker/src/routes/data_room.ts:1028; cloudflare-worker/src/routes/data_room.ts:971; cloudflare-worker/src/services/google/raise.ts:258; cloudflare-worker/src/services/mercury/raiseFeeds.ts:699"
+    },
+    {
+      "site": "cloudflare-worker/src/services/google/raise.ts | deleteRaiseGoogleCopy | delete | row.r2_key",
+      "classes": [
+        "files-data-room"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/captable.ts:1475; cloudflare-worker/src/routes/cycle_use_of_funds.ts:140; cloudflare-worker/src/routes/data_room.ts:1028; cloudflare-worker/src/routes/data_room.ts:971; cloudflare-worker/src/services/google/raise.ts:258; cloudflare-worker/src/services/mercury/raiseFeeds.ts:699"
+    },
+    {
+      "site": "cloudflare-worker/src/services/interviewSessions.ts | deleteSession | delete | keys.slice(i, i + 1000)",
+      "classes": [
+        "files-validate-audio"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/founder_validate.ts:1235; cloudflare-worker/src/services/interviewSessions.ts:285"
+    },
+    {
+      "site": "cloudflare-worker/src/services/interviewSessions.ts | deleteSessionAudio | delete | keys.slice(i, i + 1000)",
+      "classes": [
+        "files-validate-audio"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/founder_validate.ts:1235; cloudflare-worker/src/services/interviewSessions.ts:285"
+    },
+    {
+      "site": "cloudflare-worker/src/services/learningVideo.ts | sweepLearningVideos | delete | obj.key",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/services/projectTrash.ts | purgeDeckImages | delete | page.objects.map(object => object.key)",
+      "classes": [
+        "files-deck-images"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_image_edits.ts:212; cloudflare-worker/src/routes/deck_image_edits.ts:329; cloudflare-worker/src/routes/deck_images.ts:478; cloudflare-worker/src/services/decks/imageCopy.ts:145; cloudflare-worker/src/services/decks/imageDraw.ts:164"
+    },
+    {
+      "site": "cloudflare-worker/src/services/r2.ts | deleteKycDocument | delete | fileKey",
+      "classes": [
+        "files-kyc"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:64"
+    },
+    {
+      "site": "cloudflare-worker/src/services/records/build.ts | uploadProof | delete | f.proofKey",
+      "classes": [
+        "files-build-proof"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/records/build.ts:457"
+    },
+    {
+      "site": "cloudflare-worker/src/services/rehearsalAudio.ts | deleteRehearsalAudio | delete | row.audio_r2_key",
+      "classes": [
+        "files-deck-rehearsals"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_rehearsals.ts:212"
+    },
+    {
+      "site": "cloudflare-worker/src/services/testingLogo.ts | dropOld | delete | key",
+      "classes": [
+        "files-testing-logos"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/testingLogo.ts:146"
+    },
+    {
+      "site": "cloudflare-worker/src/services/validateWriters.ts | attachDemandEvidence | delete | row.evidence_file_key",
+      "classes": [
+        "files-validate-evidence"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/validateWriters.ts:1281"
+    },
+    {
+      "site": "cloudflare-worker/src/services/workGraphReconcile.ts | reconcileWorkGraph | delete | deleteKeys",
+      "classes": [
+        "files-wg-v1"
+      ],
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/workGraphBlobs.ts:301"
+    }
+  ],
+  "planned_formation_records": [
+    "Filing packs (#6680)",
+    "Registry evidence (#6680)",
+    "Formation certificates (#6680; current governance/build-proof uploads already classified)",
+    "Structure memos (#6680)"
+  ]
+}

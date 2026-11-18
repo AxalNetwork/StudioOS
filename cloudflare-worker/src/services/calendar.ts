@@ -24,6 +24,7 @@ import { encryptString, decryptString } from './cryptoBox';
 import { hostedEvents, staleMyEventCopies, ticketEvents, placeOf } from './calendar/myEvents';
 import { investorMeetingEvents } from './calendar/investorMeetings';
 import { describeItems, type CalendarItem } from './calendar/items';
+import { ownerShown } from './obligationOwner';
 import { HQ_STUDIO, companyOf, personName, scopeCompanies, scopeOpenHref, scopeRowFacts, scopeWhere,
   type ScopeCompany, type ScopeOwner, type ScopeRowFacts, type ScopeStudio } from './calendar/scopeFacts';
 
@@ -1271,7 +1272,8 @@ function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent
   const compliance: ComplianceFacts | undefined = kind === 'compliance_due' ? {
     state: complianceState(row.completion_status, String(row.start_at), new Date().toISOString().slice(0, 10)),
     due_date: String(row.start_at), event_type: row.event_type ?? null, jurisdiction: row.jurisdiction ?? null,
-    recurrence: row.recurrence ?? null, owner: typeof row.owner_name === 'string' && row.owner_name.trim() ? row.owner_name.trim() : null,
+    // D6790: the same owner Grow shows — the picked team member, else the name typed before #6790.
+    recurrence: row.recurrence ?? null, owner: ownerShown(row.owner_user_name, row.owner_name),
     source: row.source ?? null,
     // D1614 CO4 (#3976): a staff scope reads venture rows only, so never a company-level task.
     // The company badge is filled from the one batched lookup in fetchCalendarScope (D4154), not a second join here.

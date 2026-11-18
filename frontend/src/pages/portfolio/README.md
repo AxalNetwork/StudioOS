@@ -49,9 +49,9 @@ own Retry; neither is a bar or a zero. The Overview's summary moved here as
 D4817 part 4 (canvas PF-04) draws Reports
 (`../investor/InvestorPortfolioUpdates.jsx` at `/portfolio/updates`) in the
 same frame (`tab="updates"`). The obligations inbox is one row per company in
-the reporting population (`obligationRowsOf`): its period, a Due cell that
-says no due date is recorded (`NO_DUE_DATE`) rather than counting overdue
-days, the last update received, the shared `ObligationStatus`, what is
+the reporting population (`obligationRowsOf`): its period, a Due cell with
+the Worker's due day or "Overdue by N days" (`dueOf`, D6204; Not recorded
+with the reason, `NO_DUE_DATE`, when the read gives none), the last update received, the shared `ObligationStatus`, what is
 missing against the required KPI set (`missingFor`, measured only against an
 update for the period, `periodCovers`) and the last chase (`lastChaseOf`). The
 report detail opens in the shared Sheet with each field's source and date
@@ -150,3 +150,21 @@ through `PortfolioPreview.jsx`' `OffWrites`. `previewCompanyTabOf` names the
 company addresses, so `pageOwnsPreviewBanner` (and App.jsx's
 `PREVIEW_BANNER_COMPANY`) stand the shell's strip down there too. Decision
 notes: `documentation/architecture/decisions/D4817-p10.md`.
+
+D6867 (#6867, canvas D6217 PF-13) adds the shareable statement: a
+Statement action on Overview and Performance opens `StatementSheet.jsx` (the
+sheet: the quarter-end chooser, the preview strip, the mismatch note, the
+cover note, Download PDF and the downloaded confirmation; `statement.css`
+holds its styles on the frame's tokens). `statementModel.js` is its pure half
+(`statementDatesOf`, `previewOf`, `mismatchOf`, `fundedAfter`,
+`summaryRowsOf`, `positionRowsOf`, `statementOf`) and owns `METHODOLOGY`,
+which Performance draws and page 5 prints word for word. The PDF is
+`../../lib/portfolioStatementPdf.js`. Decision notes:
+`documentation/architecture/decisions/D6867.md`.
+D6888 (#6888, canvas D6217 PF-13a and PF-13h) adds Eadwyn's covering-note
+proposal for the statement: `StatementCoverNote.jsx` is the card (Copy, Edit,
+Discard, and "Eadwyn is unavailable. The statement does not need it." when
+Eadwyn is off), and `coverNoteModel.js` holds its words and what each answer
+reads as. It drafts on the press from the statement's own figures for the date
+and keeps nothing. The Statement sheet mounts it after #6867. Decision notes:
+`documentation/architecture/decisions/D6888.md`.

@@ -13,8 +13,14 @@
  * A total the read does not carry is never taken for zero: with no rows and
  * no total the page keeps the full table, which says "Not recorded".
  * Only the modules listed in PROGRESSIVE are affected (Build's six, D5076,
- * Validate's first three, D6004, and Grow's two, D6100); the others keep
+ * Validate's first three, D6004, and Grow's six, D6100 and D6123); the others keep
  * D661's table as it was.
+ *
+ * D6123 (#6123): Grow's four other record modules (Talent's roles, Partners,
+ * Markets, Obligations) take the zero stage only (`zeroOnly`): with nothing
+ * recorded they show one heading, one outcome line and their form's own button,
+ * with the connector parts folded; with one record or more the page is the full
+ * table, unchanged (`moduleStage`).
  *
  * D6100 (#6100): Grow's Product improvement and Revenue and traction take the
  * same three stages. Their copy carries `fold`, D5076's name for the closed
@@ -29,7 +35,7 @@ export const LIST_CONTROLS_FROM = 10;
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 
 /**
- * Each Build module's zero state: what the founder gets from the first record
+ * Each listed module's zero state: what the founder gets from the first record
  * (`outcome`), the one dominant action's label (`action`), and the noun its
  * plain count uses (`one`, `many`). `fold`, where set, names the closed region
  * the module's connector parts sit in at zero (D6100).
@@ -103,6 +109,31 @@ export const PROGRESSIVE = Object.freeze({
       action: 'Enter a KPI', one: 'KPI', many: 'KPIs',
       fold: 'Bring it in from your tools',
     },
+    // D6123 (#6123): zero stage only; the action is each module's FORMS.grow button.
+    'team-expansion': {
+      heading: 'Plan the hires the next stage needs',
+      outcome: 'Open the roles you will hire for, so each one has an owner, a plan and its applicants in one place.',
+      action: 'Open a role', one: 'role', many: 'roles',
+      fold: 'Bring it in from your tools', zeroOnly: true,
+    },
+    'partner-network': {
+      heading: 'Name the partners who help you grow',
+      outcome: 'Add the partners you work with, so pitches, introductions and what each one brings in stay with them.',
+      action: 'Add partner', one: 'partner', many: 'partners',
+      fold: 'Bring it in from your tools', zeroOnly: true,
+    },
+    'market-expansion': {
+      heading: 'Choose the next market to enter',
+      outcome: 'Add the markets you are weighing, so each entry has its reasons, its steps and its status in one place.',
+      action: 'Add market', one: 'market', many: 'markets',
+      fold: 'Bring it in from your tools', zeroOnly: true,
+    },
+    'durable-company-building': {
+      heading: 'Keep the company in good standing',
+      outcome: 'Add the obligations the company must meet, so every filing and renewal has a due date and an owner.',
+      action: 'Add obligation', one: 'obligation', many: 'obligations',
+      fold: 'Bring it in from your tools', zeroOnly: true,
+    },
   }),
 });
 
@@ -127,6 +158,15 @@ export function listStage(records, query = {}) {
   const n = total ?? (rows || null);
   if (n === null) return 'many';
   return n < LIST_CONTROLS_FROM ? 'few' : 'many';
+}
+
+/**
+ * D6123: the stage a module draws. A `zeroOnly` module has no 'few' stage: one
+ * record or more keeps the full working table, exactly as before.
+ */
+export function moduleStage(records, query = {}, copy = null) {
+  const stage = listStage(records, query);
+  return copy?.zeroOnly && stage === 'few' ? 'many' : stage;
 }
 
 /** A few records' plain count: "1 feature", "3 features". Never "0 of 0". */
