@@ -54,7 +54,8 @@ test('an earlier confirmation that needs reconfirming says so, and does not read
   try {
     await view.flush();
     assert.match(view.text(), /Old: Confirmed before verification, or about an earlier wording: ask again/);
-    assert.match(view.text(), /Self-stated/);
+    // D4825 (EX-08): the card leads with Needs reconfirmation, never with Confirmed.
+    assert.match(view.text(), /Needs reconfirmation/);
     assert.doesNotMatch(view.text(), /Confirmed by Old/);
   } finally { await view.unmount(); restore(); }
 });
@@ -65,8 +66,8 @@ test('asking needs their email, and a refusal is a fixed sentence keyed on its c
   try {
     await view.flush();
     await press(view, 'Ask someone to confirm');
-    await type(view, 'Who confirms this', 'Sam');
-    const form = view.nodes().find((n) => n.tagName === 'FORM' && /Record the ask/.test(walk(n)));
+    await type(view, 'Their name', 'Sam');
+    const form = view.nodes().find((n) => n.tagName === 'FORM' && /Create request/.test(walk(n)));
     await act(async () => { view.props(form).onSubmit({ preventDefault() {} }); });
     assert.ok(view.text().includes(ASK_REFUSALS.attester_email_required), 'the fixed sentence for a missing address');
     assert.equal(calls.filter(([k]) => k === 'requestAdvisorProofConsent').length, 0, 'nothing is sent without an address');
@@ -95,19 +96,18 @@ test('the attester sees the exact claim and answers only with the emailed code',
   try {
     await view.flush();
     const text = view.text();
-    assert.match(text, /Ada asked you to confirm this/);
+    assert.match(text, /Ada asked you to confirm a statement/);
     assert.match(text, /Led the payments rebuild/);
     assert.match(text, /Acme · 2024/);
     assert.match(text, /Rebuilt it\./);
-    assert.match(text, /we email a six-digit code to s\*\*\*@example\.com/);
-    const confirm = view.nodes().find((n) => n.tagName === 'BUTTON' && walk(n).trim() === 'Confirm');
-    assert.equal(view.props(confirm).disabled, true, 'no code, no answer');
+    assert.match(text, /we’ll email a one-time code to s\*\*\*@example\.com/);
+    assert.equal(view.nodes().some((n) => n.tagName === 'BUTTON' && walk(n).trim() === 'Confirm this statement'), false, 'no code, no answer');
     await press(view, 'Email me a code'); await view.flush();
     assert.equal(calls.filter(([k]) => k === 'requestAdvisorProofConsentCode').length, 1);
+    const confirm = view.nodes().find((n) => n.tagName === 'BUTTON' && walk(n).trim() === 'Confirm this statement');
+    assert.equal(view.props(confirm).disabled, true, 'six digits first');
     await type(view, 'Code', '123456');
-    const box = view.nodes().find((n) => n.tagName === 'INPUT' && view.props(n)?.type === 'checkbox');
-    await act(async () => { view.props(box).onChange({ target: { checked: true } }); });
-    await press(view, 'Confirm'); await view.flush();
+    await press(view, 'Confirm this statement'); await view.flush();
     const sent = calls.filter(([k]) => k === 'respondToAdvisorProofConsent').at(-1)[1][1];
     assert.deepEqual([sent.code, sent.claim_sha256], ['123456', 'abc'], 'the code and the claim it was shown travel with the answer');
     assert.ok(view.text().includes(ATTEST_REFUSALS.code_wrong), 'the fixed sentence for a wrong code');
@@ -128,7 +128,9 @@ test('a changed claim cannot be confirmed, and a confirmed one offers withdrawal
   try {
     await view.flush();
     assert.match(view.text(), /You confirmed this/);
-    assert.match(view.text(), /Asked · time not recorded.*Confirmed · time not recorded/s);
+    assert.match(view.text(), /time not recorded · Asked by Ada.*time not recorded · Confirmed by you/s);
+    await press(view, 'Withdraw my confirmation…');
+    await press(view, 'I already have a code');
     assert.ok(view.nodes().some((n) => n.tagName === 'BUTTON' && walk(n).trim() === 'Withdraw my confirmation'));
   } finally { await view.unmount(); restore(); }
   stub({ getAdvisorProofConsentClaim: () => refused('consent_not_found') });
