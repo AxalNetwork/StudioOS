@@ -17,6 +17,7 @@
  * the legacy in-worker routes mounted here as the source of truth.
  */
 
+import { reportPrivateError } from './util/errorPrivacy';
 import { LEGACY_BUILDER_PATHS, builderRedirectTarget } from './services/builderRedirect';
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
@@ -1861,7 +1862,7 @@ app.onError((err: any, c) => {
   }
   const mapped = AUTH_ERROR_STATUSES[msg];
   if (mapped) return c.json({ detail: msg }, mapped);
-  console.error('[edge] unhandled error:', err);
+  reportPrivateError('edge_unhandled', err);
   return c.json({ detail: 'Internal server error' }, 500);
 });
 

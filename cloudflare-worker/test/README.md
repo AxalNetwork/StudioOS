@@ -356,3 +356,7 @@ catalogue version only in the fixture.
 | `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
+
+| File | What it covers |
+|---|---|
+| `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |

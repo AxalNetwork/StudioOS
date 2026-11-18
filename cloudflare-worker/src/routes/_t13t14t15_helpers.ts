@@ -1,3 +1,4 @@
+import { PRIVATE_ERROR_DETAIL, privateFailure, reportPrivateError } from '../util/errorPrivacy';
 import { holdsLicence } from '../services/accountLicences';
 /**
  * Shared helpers for T13/T14/T15 ports.
@@ -111,6 +112,14 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   if (e instanceof Response) return e;
 
   const msg = String(e?.message || e || 'Error');
+  if (e instanceof SyntaxError && /JSON/i.test(msg)) {
+    reportPrivateError('map_error', e);
+    return c.json({ detail: 'Invalid JSON request' }, 400);
+  }
+  if (privateFailure(e, msg)) {
+    reportPrivateError('map_error', e);
+    return c.json({ detail: PRIVATE_ERROR_DETAIL }, 500);
+  }
 
   // A SCHEMA ERROR IS A BUG, NOT A REFUSAL, and the caller must not be handed
   // the query's internals. Every other message this function maps is a sentence
@@ -127,7 +136,7 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   // wording, and swallowing them here would hide a refusal rather than a bug.
   // 500 rather than 400 because nothing about the request was wrong.
   if (/no such column|no such table/i.test(msg)) {
-    console.error('[mapError] schema mismatch — the code and D1 disagree:', msg);
+    reportPrivateError('schema_mismatch', e);
     return c.json({ detail: 'Something went wrong loading this. The failure has been logged.' }, 500);
   }
 
@@ -136,7 +145,7 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   // answer about the caller's data, so it stays a 400. What changes is the
   // text: "D1_ERROR: UNIQUE constraint failed: users.email: SQLITE_CONSTRAINT"
   // names a table and a column and reached the page verbatim once D258 made
-  // `message`/`detail` the sentence the page prints. The raw text goes to the
+  // `message`/`detail` the sentence the page prints. A bounded classification goes to the
   // log; the caller reads which kind of conflict it was.
   const constraint = /\b(UNIQUE|FOREIGN KEY|NOT NULL|CHECK) constraint failed/i.exec(msg);
   if (constraint) {
