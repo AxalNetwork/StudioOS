@@ -14,11 +14,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
-const on = new Proxy({}, { get: () => () => {} });
 const call = { uid: 'c1', project_id: 7, name: 'Seed', amount_cents: 50000000, instrument: 'safe', terms: 'Cap $8M', minimum_cheque_cents: 2500000,
   target_close: '2099-01-15', state: 'sent', sent_at: '2098-10-12 09:00:00', closed_at: null };
-const chosen = (n, o = {}) => ({ origin: 'chosen', investor_user_id: n, name: `Investor ${n}`, email: `i${n}@example.test`, opened_at: null, data_room_requested_at: null, commitment_cents: null, ...o });
-const match = (o = {}) => ({ origin: 'match', opened_at: null, data_room_requested_at: null, commitment_cents: null, ...o });
 
 // D1225 (#3224) redrew the page to CLS8–CLS11 and CLS14: its responses,
 // filters, banners, questions and dialogs are pinned in
