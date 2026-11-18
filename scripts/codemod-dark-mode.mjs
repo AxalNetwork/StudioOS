@@ -41,7 +41,6 @@ export const ALLOWLIST = new Set([
   // Public marketing home template — it calls useForcedLightTheme() so it
   // renders a fixed light palette regardless of the app theme. Exempt like the
   // other public surfaces above.
-  'frontend/src/pages/templates/SpinoutDemoDayPage.jsx',
 ]);
 
 // Pairings — light utility → dark counterpart token.

@@ -111,17 +111,6 @@ export const PROGRAMS = [
     status: 'coming_soon',
   },
   {
-    id: 'spinout-demo-day',
-    name: '30D Spin-Out Demo Day',
-    category: 'demo_day',
-    cadence: 'Monthly',
-    format: 'hybrid',
-    audience: ['founders', 'investors'],
-    description: 'Graduating Spin-Out Lab cohorts pitch to the investor network. Warm intros follow.',
-    nextSession: 'Next cohort — dates TBA',
-    status: 'coming_soon',
-  },
-  {
     id: 'gtm-workshop',
     name: 'GTM Workshop Series',
     category: 'workshop',
