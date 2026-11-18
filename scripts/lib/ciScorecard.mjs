@@ -490,7 +490,15 @@ export function landingPlan(budget = LANDING_BUDGET, bots = dispatchable.length)
 
 const human = actor => actor?.type === 'User';
 const safeLogin = login => typeof login === 'string' && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?$/.test(login) ? login : null;
-const trailer = (message, key) => new RegExp(`^${key}:[ \\t]*([\\w-]+)[ \\t]*$`, 'm').exec(String(message ?? ''))?.[1] ?? null;
+/** A `Key: value` trailer line's value (letters, digits, `_` and `-` only), read line by line rather than with a built pattern. */
+const trailer = (message, key) => {
+  for (const line of String(message ?? '').split('\n')) {
+    if (!line.startsWith(`${key}:`)) continue;
+    const value = line.slice(key.length + 1).trim();
+    if (/^[\w-]+$/.test(value)) return value;
+  }
+  return null;
+};
 const KEPT = ['added_to_merge_queue', 'removed_from_merge_queue', 'merged', 'closed', 'labeled', 'unlabeled',
   'ready_for_review', 'convert_to_draft', 'committed'];
 
