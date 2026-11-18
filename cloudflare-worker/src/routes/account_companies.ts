@@ -165,11 +165,11 @@ account.get('/account/companies', async (c) => {
       rows(c.env, 'The locations', `SELECT company_id, label, kind, city, country FROM company_locations
           WHERE company_id IN (SELECT value FROM json_each(?)) AND closed_on IS NULL
           ORDER BY company_id, CASE kind WHEN 'headquarters' THEN 0 WHEN 'registered' THEN 1 ELSE 2 END, id`, [ids]),
-      // An order in formation belongs to the company it was linked to, else its venture's company now.
-      rows(c.env, 'The formation orders', `SELECT COALESCE(i.company_id, p.company_id) AS company_id, i.id AS order_id, i.status AS order_status, i.jurisdiction_id
+      // An order in formation belongs to the company it was linked to, else the company it was placed for (D6687), else its venture's company now.
+      rows(c.env, 'The formation orders', `SELECT COALESCE(i.company_id, i.subject_company_id, p.company_id) AS company_id, i.id AS order_id, i.status AS order_status, i.jurisdiction_id
           FROM incorporations i LEFT JOIN projects p ON p.id = i.project_id
           WHERE i.status IN ('paid', 'packet_processing', 'packet_ready')
-            AND COALESCE(i.company_id, p.company_id) IN (SELECT value FROM json_each(?))
+            AND COALESCE(i.company_id, i.subject_company_id, p.company_id) IN (SELECT value FROM json_each(?))
           ORDER BY COALESCE(i.paid_at, i.created_at) DESC, i.id DESC`, [ids]),
       // D6685 (#6685): incorporated, in formation or neither, each read once for every company.
       companyFormations(c.env, mine.map((l) => Number(l.company_id))),
