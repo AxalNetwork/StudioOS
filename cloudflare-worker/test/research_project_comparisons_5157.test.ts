@@ -121,7 +121,8 @@ test('Add to research: directory rows only, owner-scoped, kept once, and a taken
   assert.deepEqual([again.body.added, again.body.already], [0, 1]);
   // Mutation checked: read funds from the raw table instead of the served ones → the taken-down fund is added.
   const withdrawn = await call(f, 'POST', `/${uid}/subjects`, { kind: 'fund', uids: ['gone-fund'] });
-  assert.deepEqual([withdrawn.status, withdrawn.body.detail, withdrawn.body.missing], [404, 'not_in_directory', ['gone-fund']]);
+  // D7167: a fund whose list was withdrawn is refused by name (410 source_withdrawn), not as missing.
+  assert.deepEqual([withdrawn.status, withdrawn.body.detail, withdrawn.body.withdrawn], [410, 'source_withdrawn', ['gone-fund']]);
   assert.equal((await call(f, 'POST', `/${uid}/subjects`, { kind: 'company', uids: ['q-nebula', 'nope'] })).status, 404, 'one unknown uid adds none');
   assert.equal((await call(f, 'POST', `/${uid}/subjects`, { kind: 'market', uids: ['q-nebula'] })).body.detail, 'invalid_kind');
   assert.equal((await call(f, 'POST', `/${uid}/subjects`, { kind: 'company', uids: ["x'; DROP TABLE users;--"] })).body.detail, 'invalid_uid');

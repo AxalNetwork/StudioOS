@@ -45,7 +45,7 @@ function Value({ c, testid }) {
     );
   }
   if (c.state === 'not_recorded') return <span data-testid={testid} className="italic text-gray-500 dark:text-gray-400" title={c.reason}>{c.text}<span className="sr-only"> ({c.reason})</span></span>;
-  if (c.state === 'unreadable') return <span data-testid={testid} className="font-semibold text-red-700 dark:text-red-300">Unreadable</span>;
+  if (c.state === 'unreadable') return <span data-testid={testid} className="font-semibold text-red-700 dark:text-red-300"><span aria-hidden="true">! </span>Unavailable</span>;
   return <span data-testid={testid} className={FAINT}>Not shown<span className="sr-only"> ({c.reason})</span></span>;
 }
 

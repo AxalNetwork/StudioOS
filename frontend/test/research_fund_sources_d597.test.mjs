@@ -136,11 +136,11 @@ test('the profile of a fund from a removed list says so, links the list, and sho
   })));
   const text = renderedText(html);
   assert.match(html, /data-testid="fund-catalog-removed"/);
-  assert.match(text, /This fund’s list was removed/);
+  assert.match(text, /This fund’s source list was withdrawn/);
   assert.match(text, /taken down\. Its terms forbid republishing\./);
   assert.match(text, /published by Shai Goldman \(@shaig\)/);
   assert.ok(linksTo(html, SHAI_SHEET), 'the removed list is linked');
-  assert.doesNotMatch(text, /Fund not found|Unreadable|Add to my funds/);
+  assert.doesNotMatch(text, /Fund not found|Unavailable|Save to shortlist/);
 });
 
 test('a 410 read keeps the removed list and why; any other failure keeps neither', () => {

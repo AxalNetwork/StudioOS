@@ -146,9 +146,9 @@ test('loading: no rows and no count until the read answers', () => {
   assert.match(text, /Search/, 'search stays usable');
 });
 
-test('error: "Unreadable", never zero funds', () => {
+test('error: "Unavailable" (D7167), never zero funds', () => {
   const { text } = directory({ result: { loading: false, error: 'The fund directory could not be read.', data: null } });
-  assert.match(text, /Unreadable/);
+  assert.match(text, /Unavailable/);
   assert.match(text, /The fund directory did not answer\./);
   assert.match(text, /a failed read is not zero funds/);
   assert.doesNotMatch(text, /\b0 of\b|funds from/);
@@ -166,18 +166,28 @@ test('empty: names the search and the filters, and offers to clear them', () => 
   assert.match(text, /2,616 funds from 2 public fund lists/, 'the directory\'s own total stays printed');
 });
 
-test('drawer: the fund\'s facts, stage and size "Not recorded" with reasons, reports "Unreadable"', () => {
+test('drawer: the vehicle\'s facts, stage and size "Not recorded" with reasons; loading and a failed read show no facts', () => {
   const { text } = directory({
     result: { loading: false, error: null, data: DATA }, selected: ZETA,
     drawer: { loading: false, error: null, data: { item: ZETA, reports: [], reports_status: 'unreadable' } },
   });
-  assert.match(text, /Fund details/);
-  assert.match(text, /SizeNot recordedNot recorded: this list records no size in a known currency/);
-  assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
+  // D7167 (FND-P01): the Sheet names the vehicle; the old per-manager report list is not shown.
+  assert.match(text, /Fund vehicle/);
+  assert.match(text, /Reported sizeNot recordedNot recorded: this list records no size in a known currency/);
+  assert.ok(text.includes(`Investment stageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
   assert.match(text, /EIF \/ EIFONot recordedWith no LPs listed, EIF and EIFO backing is unknown, not absent\./);
-  assert.match(text, /Unreadable The reports could not be read\. This is not a fund with no reports\./);
-  assert.match(text, /Add to my funds/, 'D593: the button is "Add to my funds"');
-  assert.match(text, /Open full profile/);
+  assert.doesNotMatch(text, /The reports could not be read/);
+  assert.match(text, /Save to shortlist/, 'D7167: the button is "Save to shortlist"');
+  assert.match(text, /Open full profile →/);
+  // Loading: no facts and no action. Failed: Unavailable with Retry, no facts kept from the list row.
+  const loading = directory({ result: { loading: false, error: null, data: DATA }, selected: ZETA, drawer: { loading: true, error: null, data: null } }).text;
+  assert.match(loading, /Loading this fund…/);
+  assert.doesNotMatch(loading, /Save to shortlist|Reported size/);
+  const failed = directory({ result: { loading: false, error: null, data: DATA }, selected: ZETA, drawer: { loading: false, error: 'Network down', status: 503, data: null } }).text;
+  // Mutation checked: render the list row's facts on a failed read → "Reported size" appears.
+  assert.match(failed, /UnavailableThis fund could not be read\./);
+  assert.match(failed, /Retry/);
+  assert.doesNotMatch(failed, /Save to shortlist|Reported size|Open full profile/);
   // D1317: the drawer is the shared right-side Sheet at 480px, a bottom sheet on a phone.
   const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(FundDirectoryView, {
     query: EMPTY_QUERY, onQuery() {}, search: '', onSearch() {}, facets: DATA.facets, onSelect() {}, onClose() {},
@@ -194,16 +204,18 @@ test('drawer: the fund\'s facts, stage and size "Not recorded" with reasons, rep
 const catalog = (props) => renderedText(renderToStaticMarkup(React.createElement(MemoryRouter, null,
   React.createElement(FundCatalogView, props))));
 
-test('catalog profile: a failed read says "Unreadable"; a missing fund says so; loading says so', () => {
+test('catalog profile: a failed read says "Unavailable" (D7167); a missing fund says so; loading says so', () => {
   const failed = catalog({ fund: { loading: false, error: 'Unreadable', status: 503, data: null } });
-  assert.match(failed, /Unreadable/);
+  assert.match(failed, /Unavailable/);
+  assert.match(failed, /Retry/);
   assert.match(failed, /This fund could not be read\./);
   assert.doesNotMatch(failed, /Fund not found/);
   const network = catalog({ fund: { loading: false, error: 'Network down', status: null, data: null } });
-  assert.match(network, /UnreadableRead failed/);
+  assert.match(network, /UnavailableRead failed/);
   const missing = catalog({ fund: { loading: false, error: 'Not found', status: 404, data: null } });
   assert.match(missing, /Fund not found/);
-  assert.doesNotMatch(missing, /Unreadable/);
+  assert.doesNotMatch(missing, /Unavailable/);
+  assert.match(missing, /Back to results/);
   assert.match(catalog({ fund: { loading: true, error: null, status: null, data: null } }), /Loading this fund…/);
 });
 
@@ -211,13 +223,12 @@ test('catalog profile: populated, with "Not recorded" sizes and stage, and an un
   const fund = { loading: false, error: null, status: 200, data: { item: ZETA, reports: [], reports_status: 'ok', source_boundary: 'Reported fund-size snapshots only.' } };
   const text = catalog({ fund, list: { loading: false, error: 'Unreadable', existing: null } });
   assert.match(text, /Zeta Deep Tech/);
-  assert.match(text, /SizeNot recordedNot recorded: this list records no size in a known currency/);
-  assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
-  assert.match(text, /Your list could not be read/);
-  assert.doesNotMatch(text, /Add to my funds/, 'no add while the list is unreadable: it might duplicate a row');
+  assert.match(text, /Reported sizeNot recordedNot recorded: this list records no size in a known currency/);
+  assert.match(text, /Your shortlist could not be read/);
+  assert.doesNotMatch(text, /Save to shortlist/, 'no save while the list is unreadable: it might duplicate a row');
   const ok = catalog({ fund: { ...fund, data: { ...fund.data, item: ALPHA } }, list: { loading: false, error: null, existing: null } });
-  assert.match(ok, /€50M/);
-  assert.match(ok, /Add to my funds/);
+  assert.match(ok, /€50m EUR/);
+  assert.match(ok, /Save to shortlist/);
 });
 
 test('catalog profile sits inside WorkspaceShell and reads only the Worker', () => {

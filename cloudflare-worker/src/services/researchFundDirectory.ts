@@ -55,6 +55,7 @@
  */
 import type { Env } from '../types';
 import { loadOverrides, mapFundFocus, mapFundHq } from './researchTaxonomy';
+import { fundProfile } from './researchFundProfile';
 
 /** The source whose sizes are euros (`fund_size_cents` = euro cents). */
 export const EUR_SOURCE = 'EuroTech VC Funds (public spreadsheet)';
@@ -565,6 +566,9 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
  *
  * A fund of a list taken down (D597) answers `{ removed }`: the list, its
  * publisher and why — never the fund's own fields.
+ *
+ * D7167: the item also carries its dated `provenance` and the four `proposed`
+ * fields, and the answer a vehicle-labelled `history` (services/researchFundProfile.ts).
  */
 export async function getFund(env: Env, uid: string) {
   const [row, reviews] = await Promise.all([
@@ -590,8 +594,10 @@ export async function getFund(env: Env, uid: string) {
       fund_size_cents: eur ? x.fund_size_cents : null,
       size_currency: eur && x.fund_size_cents != null ? 'EUR' : null,
     }));
-    return { item: presentCited(row, reviews), reports, reports_status: 'ok' as const };
+    const profile = await fundProfile(env, row, reviews);
+    return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports, reports_status: 'ok' as const };
   } catch {
-    return { item: presentCited(row, reviews), reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable' };
+    const profile = await fundProfile(env, row, reviews);
+    return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable' };
   }
 }
