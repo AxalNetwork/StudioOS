@@ -7,6 +7,7 @@ import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clear
 import { branchOf } from '../util/branch';
 import { sendVerificationEmail } from '../services/email';
 import { send as sendEmail } from '../services/email/send';
+import { insertCanaryRows } from '../services/magicLinkInsertCanary';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { verifyTurnstile } from '../services/turnstile';
 import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed, hasTotpConfigured, clearTotp } from '../services/authTotp';
@@ -1287,10 +1288,12 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   const tokenHash = await hashToken(raw);
   const expires = new Date(Date.now() + MAGIC_LINK_TTL_MIN * 60 * 1000).toISOString();
   const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  const canary = insertCanaryRows(c.req.raw);
   try {
-    await c.env.DB.prepare(
+    const inserted = await c.env.DB.prepare(
       `INSERT INTO magic_link_tokens (email, token_hash, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)`,
     ).bind(email, tokenHash, expires, ip || null, ua || null).run();
+    if (canary) canary.tokenId = inserted?.meta?.last_row_id ?? null;
   } catch (e) {
     console.error('[AUTH:magic-start] token insert failed', e);
     return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 500);
@@ -1323,6 +1326,7 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   const queued = signup
     ? await sendEmail(c.env, 'auth_signup_link', email, { name, magic_url: magicUrl })
     : await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  if (canary) canary.sendId = queued.log_id;
   if (!queued.ok) {
     console.error('[AUTH:magic-start] email enqueue failed', queued.reason || 'unknown');
     return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 502);

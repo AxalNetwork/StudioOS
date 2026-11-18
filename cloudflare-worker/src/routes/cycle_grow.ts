@@ -112,7 +112,7 @@ import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
 import {
   CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
   REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
-  logGrowWrite, removeMarket, removeObligation, removePartner, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel,
+  logGrowWrite, removeMarket, removeObligation, removePartner, setApplicationStage, setChannelSpend, setChecklistItem, setChecklistNotApplicable, setPartnerRevenue, updateChannel,
   updateFeedback, updateMarket, updateObligation, feedbackThemes, renameFeedbackTheme, updatePartner, updateRole,
 } from '../services/growWriters';
 import { distributionOverview } from '../services/distribution/overview';
@@ -722,6 +722,15 @@ r.delete('/obligations/:id', write((c, u, pid) => removeObligation(c.env, pid, u
 r.put('/checklist/:key', write(async (c, u, pid, b) => {
   const key = param(c, 'key');
   if (!DURABILITY_ITEMS.some((i) => i.key === key)) throw new Refused(404, 'Not a checklist item');
+  // D6789 (#6789): `{ not_applicable: true | false }` marks or clears Not applicable; `{ done }` ticks as before.
+  if (b.not_applicable !== undefined) {
+    if (typeof b.not_applicable !== 'boolean') throw new Refused(400, 'Say whether the item applies', 'not_applicable');
+    if (b.not_applicable) {
+      const item = (await checklist(c.env, pid)).find((i) => i.key === key);
+      if (item?.done && item.source === 'Spin-Out Lab') throw new Refused(409, 'The Spin-Out Lab ticked this item, so it applies', 'not_applicable');
+    }
+    return setChecklistNotApplicable(c.env, pid, u, key, b.not_applicable);
+  }
   return setChecklistItem(c.env, pid, u, key, b.done === true);
 }));
 

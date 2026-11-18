@@ -59,6 +59,7 @@ export async function growDb() {
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(file('443'));
+  db.exec(file('202611161116')); // D6789: durability_checklist's Not applicable mark.
   db.exec(file('462'));
   db.exec(file('507'));
   db.exec(file('580'));

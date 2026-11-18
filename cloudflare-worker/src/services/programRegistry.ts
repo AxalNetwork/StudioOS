@@ -63,7 +63,7 @@ export type MemberAccess = typeof MEMBER_ACCESS[number];
  * column lists the ones a program has; the seed names only the modules that already have an operating screen.
  */
 export const PROGRAM_MODULES = [
-  'applications', 'hosts', 'cohorts', 'referral_queue', 'perk_queue', 'learners', 'influencers', 'offers', 'nda_signature',
+  'applications', 'hosts', 'cohorts', 'referral_queue', 'perk_queue', 'learners', 'influencers', 'offers', 'nda_signature', 'wellbeing',
 ] as const;
 export type ProgramModule = typeof PROGRAM_MODULES[number];
 

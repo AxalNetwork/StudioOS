@@ -143,6 +143,7 @@ async function fixture() {
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(ddl('125')); db.exec(file('437')); db.exec(file('202611091055'));
   db.exec(file('443'));
+  db.exec(file('202611161116')); // D6789: durability_checklist's Not applicable mark.
   db.exec(file('462'));
   db.exec(file('202611161128_6865')); // D6865: the feedback's contact link and origin
   db.exec(file('202611041912'));
@@ -433,7 +434,7 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   const card = (await overview(f)).body.cards.find((c: any) => c.slug === 'durable-company-building');
   // D840 part 3: a Mercury item counts only for a founder with Mercury; this one has none.
   const counted = DURABILITY_ITEMS.filter((i) => !i.mercury).length;
-  assert.deepEqual(card.series.checklist, { done: 2, total: counted, pct: Math.round((2 / counted) * 100) });
+  assert.deepEqual(card.series.checklist, { done: 2, total: counted, not_applicable: 0, pct: Math.round((2 / counted) * 100) });
   assert.equal(card.next.text, 'Give Board meeting an owner.');
   assert.ok(card.series.calendar.some((event: any) => event.title === 'Board meeting' && event.due === due));
   const patch = (body: any) => call(f, FOUNDER, 'PATCH', `/api/cycles/grow/obligations/${ob.body.id}`, { project: PID, ...body });

@@ -166,12 +166,14 @@ test('a zone that cannot produce a figure says so on itself', () => {
   // missing and why. Deleting the card must not delete the honesty: a zone that
   // renders a blank where the canvas asked for a number has told the reader
   // nothing, and a zone that renders a plausible zero has told them something
-  // false. Each body carries a StatedLimit naming what it will not claim.
+  // false. Each body carries a StatedLimit naming what it will not claim, or
+  // (#4843, the Offers v2 spec) a NotMeasured ⓘ that states it in place, with
+  // the reason one press away rather than a paragraph on the page.
   for (const file of zoneBodies()) {
     const src = codeOnly(read(file));
     if (!/<ZoneBody/.test(src)) continue;
-    assert.match(src, /<StatedLimit/,
-      `${file} renders a zone with no StatedLimit — say what it cannot answer`);
+    assert.match(src, /<StatedLimit|<NotMeasured\b[^>]*\bwhy=/,
+      `${file} renders a zone with no StatedLimit or NotMeasured — say what it cannot answer`);
   }
 });
 

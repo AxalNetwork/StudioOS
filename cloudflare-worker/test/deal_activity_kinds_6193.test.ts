@@ -1,3 +1,4 @@
+import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
 /**
  * #6193 (D6193, DL14) — every activity row carries a kind (deal, documents, diligence), and the feed gains the
  * venture's documents and diligence, each behind the rule its own read already has:
@@ -23,21 +24,14 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-function ddl(name: string): string {
-  const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
-  assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
-  return BASELINE.slice(at, BASELINE.indexOf(');', at) + 2);
-}
 
 const ADMIN = 1, ADA = 2, BEN = 3, FOUNDER = 5, PARTNER = 6;
 const ROLE: Record<number, string> = { 1: 'admin', 2: 'investor', 3: 'investor', 5: 'founder', 6: 'partner' };
 const NAMES: Record<number, string> = { 1: 'Sam Staff', 2: 'Ada Angel', 3: 'Ben Backer', 5: 'Fay Founder', 6: 'Pat Partner' };
 
 function freshDb() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  const db = migratedDatabase();
   // #6193: the activity also reads documents and diligence, each behind its own rule.
-  for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'documents', 'pairwise_ndas', 'dd_cases', 'dd_reviewers', 'dd_requests']) db.exec(ddl(t));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, NAMES[Number(id)], `u${id}@example.test`);
   db.exec(`UPDATE users SET founder_id = 50 WHERE id = ${FOUNDER}`);
@@ -143,3 +137,5 @@ test('#6193 each new source is bounded', () => {
   assert.match(body, /FROM documents WHERE project_id = \$\{deal\.project_id\} ORDER BY created_at DESC LIMIT 50/);
   assert.match(body, /AND responded_at IS NOT NULL ORDER BY responded_at DESC LIMIT 50/);
 });
+
+test.after(removeMigratedDatabases);

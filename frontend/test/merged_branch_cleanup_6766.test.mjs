@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { compileFunction } from 'node:vm';
 
 const workflow = readFileSync(new URL('../../.github/workflows/pr-preview.yml', import.meta.url), 'utf8');
-const job = workflow.split('\n  delete-merged-branch:\n')[1].split('\n  deploy:\n')[0];
+const job = workflow.split('\n  delete-merged-branch:\n')[1].split('\n  build:\n')[0];
 const source = job.split('          script: |\n')[1].replace(/^ {12}/gm, '');
 const run = compileFunction('return (async () => {\n' + source + '\n})()', ['github', 'context', 'core']);
 const sha = 'a'.repeat(40);
