@@ -174,22 +174,20 @@ export default {
     },
     {
       id: 'wellbeing',
-      title: 'Founder wellbeing',
+      title: 'Wellness and your Wellbeing workspace',
       overview:
-        "The Wellbeing tracker is a private, encrypted check-in (mood, sleep, stress, support) you can fill in weekly. Only you see the entries; the studio team sees aggregated, anonymized trends across the cohort.",
+        'Founders and Administrators can use their own Wellbeing workspace for weekly check-ins, expert bookings and resources. Administrators can find the Wellness program under Programs. Its My Wellbeing link opens the signed-in person’s workspace.',
       howto: [
-        'Open Wellbeing from the founder support group in the sidebar.',
-        'Take the 60-second weekly check-in.',
-        'Review your trend chart over the past 12 weeks.',
-        'If you flag distress, the platform offers a private link to schedule with the studio’s mental-health partner.',
+        'Open the heart in the desktop header, or open Wellbeing from the founder account menu on a phone.',
+        'Choose the scores you want to record and add a note or topics if you wish. Check the save confirmation before leaving.',
+        'Review your past weeks or browse wellbeing experts. Open an expert’s service to see its availability and booking terms.',
       ],
       tips: [
-        'Set a weekly reminder — the value comes from a continuous trend, not single entries.',
-        'Use the “share with advisor” option only with people you trust to hold the data.',
+        'You can browse resources independently of booking a session.',
+        'The studio’s reporting view shows aggregate trends only when enough members have contributed.',
       ],
       pitfalls: [
-        'Treating the check-in as a performance metric defeats it; honest entries beat optimistic ones.',
-        'The mental-health partner is the right resource for crisis support — don’t rely on chat or community channels.',
+        'Editing the current week updates that reflection. Check your history before expecting separate entries for different days.',
       ],
       related: [
         { label: 'Advisors', href: '#validate-grow/advisors' },
