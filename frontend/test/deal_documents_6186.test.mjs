@@ -62,7 +62,7 @@ async function mounted(url, user, handler) {
       h(Route, { path: '/deals/:dealId', element: h(DealRoomPage) }),
       h(Route, { path: '/deals/:dealId/:tab', element: h(DealRoomPage) })),
     h(Probe)))));
-  await act(async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await act(async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setImmediate(r)); });
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
