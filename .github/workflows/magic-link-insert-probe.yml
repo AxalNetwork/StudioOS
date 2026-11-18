@@ -29,7 +29,14 @@ on:
           - scheduled-canary
   schedule:
     # The Worker requests the link 15 minutes earlier. This job only reads its D1 evidence.
+    # Manual public-edge runs still send; the shared concurrency group below covers them.
     - cron: '0 */4 * * *'
+
+# Both probes send a single-use link to the same test mailbox.
+concurrency:
+  group: production-magic-link-mailbox
+  cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read

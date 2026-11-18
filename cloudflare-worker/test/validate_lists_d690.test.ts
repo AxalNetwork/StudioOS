@@ -138,7 +138,7 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
     sorts: ['newest'],
   },
   experiments: {
-    title: 'Hypotheses', cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
+    title: 'Hypotheses', cols: ['Code', 'Claim', 'Evidence state', 'Relationships', 'Distinct sources', 'Sprint', 'Owner', 'Source'],
     filters: [['status', 'Status', ['untested', 'testing', 'supported', 'contested', 'refuted', 'inconclusive', 'not_recorded', 'retired']],
       ['sprint', 'Sprint', ['Sprint 2', 'Sprint 3']], ['strength', 'Strength', ['anecdote', 'pattern', 'measured', 'not_recorded']],
       ['moved', 'Recently moved', ['recent']], ['history', 'History', ['last_week', 'this_month']]],

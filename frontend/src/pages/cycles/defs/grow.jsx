@@ -14,8 +14,10 @@ import FromNotion from '../FromNotion';
 import { ImprovementPosthog, RevenuePosthog } from '../GrowPosthog';
 import UpdateAskReplies from '../UpdateAskReplies';
 import FeedbackThemes from '../FeedbackThemes';
+import FeedbackLoop from '../FeedbackLoop';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
+import PartnershipsCoMarketing from '../PartnershipsCoMarketing';
 import { lazyStep } from '../lazyStep.jsx';
 import { growModuleTitle } from '../growOverviewModel';
 
@@ -48,13 +50,13 @@ const grow = {
   tools: toFnMap({
     'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
     'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
-    // #6109: the pair's other half. Partnerships reads the co-marketing pitches and attributions.
-    'partner-network': (q) => ({ label: 'Open Partnerships: pitches and attributions', href: `/grow/partnerships${q}` }),
     'durable-company-building': () => ({ label: 'Open compliance in Calendar', href: '/calendar?layer=compliance' }),
   }),
   add: toFnMap({}),
   // D6122 (#6122, GR-21): Company's due strip above the obligations, filtering them by window.
   aboveRecords: toFnMap({
+    // D6118 (GR-09): the Mercury-sourced partner proposal sits on top of the partner table.
+    'partner-network': (data, ctx) => fromMercury('partner-network', data, ctx),
     'durable-company-building': (data, ctx) => (
       <DurableDueStrip counts={data?.parts?.due_counts} on={data?.parts?.due_on} query={ctx.query} onQuery={ctx.onQuery} search={ctx.search} />
     ),
@@ -94,16 +96,21 @@ const grow = {
     </>),
     // D1090 (#2955): a feedback database in Notion, as product feedback.
     // D6098 (#6098): Rename or merge a theme; `parts.themes` reaches writers only.
+    // D6865 (#6865): the counts strip, a theme's weight and Close the loop (GR-21, GR-23, GR-26).
     'product-improvement': (data, ctx) => (<>
+      <FeedbackLoop counts={data?.parts?.counts} themes={data?.parts?.themes} projectId={ctx.projectId}
+        api={cyclesWrite.grow} reload={ctx.reload} />
       <FeedbackThemes themes={data?.parts?.themes}
         onRename={ctx.projectId ? (body) => cyclesWrite.grow.feedbackTheme(ctx.projectId, body).then((out) => { ctx.reload(); return out; }) : undefined} />
       <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />
       {/* D1608 (#3731): survey scores and feedback from the founder's PostHog. */}
       <ImprovementPosthog projectId={ctx.projectId} />
     </>),
+    // D6118 (#6118, GR-09): Partnerships is one page. Co-marketing (pitches and attributions) is drawn
+    // under the partner table; the Mercury proposal is above it (`aboveRecords`).
     'partner-network': (data, ctx) => (<>
       <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
-      {fromMercury('partner-network', data, ctx)}
+      <PartnershipsCoMarketing projectId={ctx.projectId} />
     </>),
     // D840 part 3 (#2348): the founder's own Mercury, anchored at #from-mercury.
     // D1095 (#2960): then a metrics Sheet's figures, From Google.

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Unreadable } from '../../ui';
-import { CARD, Pill, Skeleton } from './MyEventsTabs';
+import { CARD, Skeleton, SourceBadge } from './MyEventsTabs';
+import { typeLabel } from './myEventsTabsModel';
 import { timeLine } from './myEventsModel';
 import {
   FORMATS, GOALS_MAX, HOST_NEVER, NOT_FOR_ME_DONE, NOT_FOR_ME_REASONS, NO_ATTENDEES, RANK_LINE, ROW_TITLE, SIGNALS, TOPICS, TOPICS_MAX,
@@ -16,6 +17,12 @@ import {
  * `act` (the adapter's writes). Every state but `ready` draws the page's own
  * `fallback` (today's Suggested card) under one line saying why, so nothing is
  * faked and nothing is lost.
+ *
+ * `layout="swipe"` is the phone's row (ME11a, #5869): the same cards, actions
+ * and sheets in one sideways row that scrolls inside itself, so the page never
+ * does. The phone has no Suggested card to fall back on, so it passes its own
+ * `state` (`phoneRowState` in myEventsPhoneModel.js), whose words do not point
+ * at one, and the row's title stays above whatever state it is in.
  */
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -28,8 +35,9 @@ const CHIP = (on) => `inline-flex min-h-[32px] items-center rounded-full border 
 const FIELD = 'w-full rounded-[7px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const zone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } };
 
-export default function RecommendedRow({ read, act = {}, explorer = false, layout = 'side', fallback = null }) {
-  const state = rowState(read);
+export default function RecommendedRow({ read, act = {}, explorer = false, layout = 'side', fallback = null, state: given = null }) {
+  const state = given || rowState(read);
+  const swipe = layout === 'swipe';
   const [why, setWhy] = useState(null);
   const [notFor, setNotFor] = useState(null);
   const [tune, setTune] = useState(false);
@@ -42,6 +50,7 @@ export default function RecommendedRow({ read, act = {}, explorer = false, layou
     if (state.kind === 'loading') return fallback || <Skeleton lines={3} testId="my-events-recommended-loading" />;
     return (
       <div className="flex flex-col gap-2" data-testid="my-events-recommended" data-state={state.kind}>
+        {swipe ? <h2 className={`m-0 text-[15px] font-extrabold ${INK}`}>{ROW_TITLE}</h2> : null}
         {state.kind === 'error'
           ? <div className={`${CARD} p-4`}><Unreadable what="Recommendations" claim="That is not the same as having none." onRetry={read?.reload} /></div>
           : <p className={`m-0 text-[12px] ${MUTED}`} role="note" data-testid="my-events-recommended-note">{state.line}</p>}
@@ -60,7 +69,7 @@ export default function RecommendedRow({ read, act = {}, explorer = false, layou
   };
   const grid = layout === 'grid';
   return (
-    <section className={grid ? 'flex flex-col gap-2' : `${CARD} p-4`} aria-labelledby="my-events-recommended-title" data-testid="my-events-recommended" data-state="ready">
+    <section className={grid || swipe ? 'flex flex-col gap-2' : `${CARD} p-4`} aria-labelledby="my-events-recommended-title" data-testid="my-events-recommended" data-state="ready">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="my-events-recommended-title" className={`m-0 text-[15px] font-extrabold ${INK}`}>{ROW_TITLE}</h2>
         <button type="button" className={`${LINK} text-[12px]`} onClick={() => setTune(true)} data-testid="my-events-recommended-tune">Tune recommendations</button>
@@ -78,16 +87,19 @@ export default function RecommendedRow({ read, act = {}, explorer = false, layou
         </p>
       ) : null}
       {!shown.length ? <p className={`m-0 text-[12.5px] ${MUTED}`}>Nothing to recommend right now.</p> : (
-        <ul className={`m-0 list-none p-0 ${grid ? 'grid gap-2.5 md:grid-cols-2 lg:grid-cols-4' : 'flex flex-col gap-2'}`}>
-          {shown.slice(0, grid ? 4 : 3).map((e) => {
+        <ul className={`m-0 list-none p-0 ${swipe ? 'flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-1' : grid ? 'grid gap-2.5 md:grid-cols-2 lg:grid-cols-4' : 'flex flex-col gap-2'}`}
+          data-testid={swipe ? 'my-events-recommended-swipe' : undefined} aria-label={swipe ? `${ROW_TITLE}: swipe for more` : undefined}>
+          {shown.slice(0, swipe ? 8 : grid ? 4 : 3).map((e) => {
             const reg = registerState(e, explorer);
             const reasons = reasonsOf(e, { explorer, limit: 2 });
             return (
-              <li key={e.id} className={`flex flex-col gap-1 rounded-[10px] border border-axal-hairline p-2.5 dark:border-gray-700 ${grid ? 'bg-white dark:bg-gray-900' : ''}`} data-testid="my-events-recommended-card">
+              <li key={e.id} className={`flex flex-col gap-1 rounded-[10px] border border-axal-hairline p-2.5 dark:border-gray-700 ${grid || swipe ? 'bg-white dark:bg-gray-900' : ''} ${swipe ? 'w-[290px] max-w-[85%] flex-none snap-start' : ''}`} data-testid="my-events-recommended-card">
+                {/* ME5: the type, then the source badge from the event's own `source`; none is guessed. */}
                 <span className="flex flex-wrap items-center gap-1.5">
-                  <Link to={`/events/${e.slug || e.id}`} className={`text-[13px] font-bold ${INK}`}>{e.title || 'Not recorded'}</Link>
-                  {e.source === 'axal' || !e.source ? <Pill tone="info">Axal</Pill> : null}
+                  {e.type ? <span className="text-[11px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">{typeLabel(e.type)}</span> : null}
+                  <SourceBadge event={e} />
                 </span>
+                <Link to={`/events/${e.slug || e.id}`} className={`text-[13px] font-bold ${INK}`}>{e.title || 'Not recorded'}</Link>
                 <span className={`text-[11.5px] ${MUTED}`}>{timeLine(e, zone())}</span>
                 {reasons.map((r) => <span key={r} className="text-[11.5px] text-violet-800 dark:text-violet-300">{r}</span>)}
                 <span className="mt-1 flex flex-wrap items-center gap-1.5">
