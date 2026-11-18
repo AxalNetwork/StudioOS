@@ -129,6 +129,14 @@ D6227 (#6227) turns Activity into one timeline: the Worker's joined read
 drawn by `CompanyActivity` through `companyModel.js`' `activityOf`. A source
 the Worker reports as failed is named with its own Retry, never read as no
 activity. Decision notes: `documentation/architecture/decisions/D6227.md`.
+D6222 (#6222) adds the investor's private notes to the company Overview:
+`CompanyNotes.jsx` holds the read and its writes (`useCompanyNotes`, client
+`../../lib/api/portfolioNotes.js`, Worker `/api/portfolio-notes`) and
+draws the Notes card (add, edit, delete, each note with its dates), where
+What changed's "Save as my note" lands. A failed read is Unreadable with a
+Retry, never "no notes"; a failed save keeps the text with the sentence for
+the refusal's code (`NOTE_SENTENCES`). Decision notes:
+`documentation/architecture/decisions/D6222.md`.
 D4817 part 9 (addendum PFA03–PFA05, PFA10) rebuilds the company Reports'
 "Ask for this report" and "Waive this period". `reportAsk.js` holds the pure
 rules (the most pressing open period, its obligation facts, who may act from
@@ -151,6 +159,16 @@ company addresses, so `pageOwnsPreviewBanner` (and App.jsx's
 `PREVIEW_BANNER_COMPANY`) stand the shell's strip down there too. Decision
 notes: `documentation/architecture/decisions/D4817-p10.md`.
 
+D6867 (#6867, canvas D6217 PF-13) adds the shareable statement: a
+Statement action on Overview and Performance opens `StatementSheet.jsx` (the
+sheet: the quarter-end chooser, the preview strip, the mismatch note, the
+cover note, Download PDF and the downloaded confirmation; `statement.css`
+holds its styles on the frame's tokens). `statementModel.js` is its pure half
+(`statementDatesOf`, `previewOf`, `mismatchOf`, `fundedAfter`,
+`summaryRowsOf`, `positionRowsOf`, `statementOf`) and owns `METHODOLOGY`,
+which Performance draws and page 5 prints word for word. The PDF is
+`../../lib/portfolioStatementPdf.js`. Decision notes:
+`documentation/architecture/decisions/D6867.md`.
 D6888 (#6888, canvas D6217 PF-13a and PF-13h) adds Eadwyn's covering-note
 proposal for the statement: `StatementCoverNote.jsx` is the card (Copy, Edit,
 Discard, and "Eadwyn is unavailable. The statement does not need it." when

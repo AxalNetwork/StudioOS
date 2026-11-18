@@ -22,6 +22,7 @@ function fixture() {
     db.exec(tableFromBaseline(baseline, table));
   }
   db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/575_cap_table_access.sql',import.meta.url),'utf8'),'cap_table_access_grants'));
+  db.exec(readFileSync(new URL('../sql/migrations/202611161505_6195_commitment_route_preference.sql', import.meta.url), 'utf8')); // D6195: commitments.route_preference
   db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)'); // D1137 (migration 597)
   for (const [id, role] of [[1,'investor'], [2,'investor'], [3,'founder'], [4,'admin'], [5,'partner'], [6,'advisor'], [7,'exploring']]) {
     db.prepare('INSERT INTO users(id,role,email,name,founder_id,is_active,kyc_status) VALUES(?,?,?,?,?,1,?)')
@@ -49,7 +50,11 @@ test('D1214: private syndicate list/detail; even admins never receive member ema
  const f=fixture();try {
   f.db.exec("INSERT INTO syndicates(id,name,target_cents,min_commitment_cents,created_by) VALUES(1,'Synthetic',10000,100,2); INSERT INTO syndicate_members(syndicate_id,user_id,commitment_cents) VALUES(1,1,10000)");
   for(const id of [1,2,4]) {
-   const r=await call(f,id,'/api/networkfx/syndicates/1',undefined,'GET');assert.equal(r.status,200);assert.equal(r.body.members.length,1);assert.equal(r.body.members[0].commitment_cents,10000);assert.equal('email' in r.body.members[0],false);
+   const r=await call(f,id,'/api/networkfx/syndicates/1',undefined,'GET');
+   assert.equal(r.status,200);
+   assert.equal(r.body.member_count,1);
+   assert.equal(r.body.members.length,id===2?1:0);
+   if(id===2) {assert.equal(r.body.members[0].commitment_cents,10000);assert.equal('email' in r.body.members[0],false);}
    assert.equal(JSON.stringify(r.body).includes('@'),false);
   }
   assert.equal((await call(f,5,'/api/networkfx/syndicates/1',undefined,'GET')).status,403);

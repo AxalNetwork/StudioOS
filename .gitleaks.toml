@@ -52,10 +52,18 @@ regexes = [
   # in-memory capability fixture, whose fetch stub forbids external calls.
   # Anchors preserve detection for prefixed/suffixed values and other seeds.
   '''^synthetic-caprel-capabilities-5074-$''',
+  # D6473-p2: the review loop's numbered Claude accounts are named, never held, in code
+  # (`secret: 'ANTHROPIC_API_KEY_2'`). Anchored to the exact names, so a value is still caught.
+  '''^ANTHROPIC_API_KEY_[23]$''',
   # D4570-p6 (#4570): the Stripe key in the money authz suite is a fixture;
   # every Stripe call in that suite goes to an in-test fake. Pinned as the
   # literal, as D1135 is, rather than rewriting the PR branch's history.
   '''\bsk_test_d4570_fixture\b''',
+  # D7127 (#7127): the D1 backup upload test's synthetic Cloudflare token id,
+  # '0123456789abcdef'.repeat(2): sequential hex, because the script under test
+  # accepts only a 32-hex id. Anchored to the exact literal; pinned rather than
+  # rewriting the PR branch's history, as D1135 and D4570-p6 are.
+  '''^0123456789abcdef$''',
 
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',

@@ -91,13 +91,20 @@ export function PerksTabs({ queue }) {
   );
 }
 
+/**
+ * D5887 (#5887): Learning in the generic shell (PG03a), as Perks moved in D5313. The shell's six core sections in its
+ * order and words, and the Learners module (People's address) between Participation and History.
+ */
 export function LearningTabs() {
   return (
     <Strip label="Learning">
       <Tab to="/admin/programs/learning" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/learning/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/learning/people" testId="programs-tab-people">People</Tab>
-      <Tab to="/admin/programs/learning/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/learning/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/learning/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/learning/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/learning/people" testId="programs-tab-people">Learners</Tab>
+      <Tab to="/admin/programs/learning/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/learning/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }
@@ -148,6 +155,23 @@ export function InfluencerTabs({ queue }) {
       <Tab to="/admin/programs/influencer/payouts" testId="programs-tab-payouts">Payouts</Tab>
       <Tab to="/admin/programs/influencer/activity" testId="programs-tab-activity">History</Tab>
       <Tab to="/admin/programs/influencer/settings" testId="programs-tab-settings">Settings</Tab>
+    </Strip>
+  );
+}
+
+/**
+ * D5895 (#5895): AI-native Venture in the generic shell (PG03a): the shell's six core sections, no module tab. The
+ * paths stay literal, as every strip here is, so the reachability walk reads each one as a door.
+ */
+export function AiNativeTabs() {
+  return (
+    <Strip label="AI-native Venture">
+      <Tab to="/admin/programs/ai-native-venture" end testId="programs-tab-overview">Overview</Tab>
+      <Tab to="/admin/programs/ai-native-venture/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/ai-native-venture/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/ai-native-venture/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/ai-native-venture/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/ai-native-venture/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }

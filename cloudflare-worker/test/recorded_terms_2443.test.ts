@@ -25,6 +25,7 @@ function fixture() {
     'shared_services_log', 'mi_pro_subscriptions', 'raise_prospects', 'raise_rounds', 'raise_closes', 'documents', 'pitch_decks', 'pitch_deck_share_tokens']) {
     db.exec(tableFromBaseline(baseline, table));
   }
+  db.exec(readFileSync(new URL('../sql/migrations/202611161505_6195_commitment_route_preference.sql', import.meta.url), 'utf8')); // D6195: commitments.route_preference
   db.exec("ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT");
   db.exec("ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_forwarding INTEGER DEFAULT 1");
   // 463: who a link was made for. D902 offers no deal pack on a link made for an investor.

@@ -31,18 +31,19 @@ export function RoundCallList({ calls, projectId }) {
   );
 }
 
-export function RoundCallIndex({ embedded = false }) {
-  useRoundCallTitle(embedded);
+/**
+ * A founder's calls for one venture (`?project_id`). The investor's list moved
+ * to `pages/investor/RoundCallIndex.jsx` (D6160, #6160), drawn in the Deals shell.
+ */
+export function RoundCallIndex() {
   const [params] = useSearchParams();
-  const projectId = embedded ? null : params.get('project_id');
+  const projectId = params.get('project_id');
   const read = useCallRead(() => roundCallsApi.list(projectId), [projectId]);
-  const Frame = embedded ? 'section' : 'main';
-  const Heading = embedded ? 'h2' : 'h1';
   return (
-    <Frame className="p-5 space-y-4">
-      <Heading className="text-2xl font-bold">Round calls</Heading>
+    <main className="p-5 space-y-4">
+      <h1 className="text-2xl font-bold">Round calls</h1>
       <CallReadState read={read} index>{read.data && <RoundCallList calls={read.data.items} projectId={projectId} />}</CallReadState>
-    </Frame>
+    </main>
   );
 }
 export default function RoundCallPage({ embedded = false }) {

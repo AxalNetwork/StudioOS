@@ -25,7 +25,6 @@
     "cloudflare-worker/src/services/discoveryInterviewSchema.ts": 14,
     "cloudflare-worker/src/services/fills/provenance.ts": 14,
     "cloudflare-worker/src/services/githubSync.ts": 9,
-    "cloudflare-worker/src/services/incorporations.ts": 7,
     "cloudflare-worker/src/services/jobBoardSchema.ts": 12,
     "cloudflare-worker/src/services/landingPageSchema.ts": 39,
     "cloudflare-worker/src/services/legalTemplateStore.ts": 4,

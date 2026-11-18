@@ -41,6 +41,11 @@ export const PROJECT_INVITE_RESEND = /^\/api\/projects\/\d+\/invitations\/\d+\/r
 // the word, and `[^/]+` rather than `.+` so it cannot span a segment.
 export const COMPANY_INVITE_SEND = /^\/api\/company\/[^/]+\/invitations(\/[^/]+\/resend)?$/;
 
+// D6052 (#6052): Contacts' one invite path, `POST /api/contacts/invite`, which mails an invitation to a
+// typed address or to a raise prospect. It joins the company invitations' reasoning: an outbound-mail route
+// on the generic fail-open bucket is a relay.
+export const CONTACT_INVITE_SEND = /^\/api\/contacts\/invite\/?$/;
+
 // The e-sign routes that mail a signed PDF onward: POST
 // `/api/legal/esign/<id>/forward` (and the `/api/esign` remount index.ts warns
 // against). D410 opened forwarding to the envelope's sender as well as its
@@ -59,8 +64,9 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 // D5791 (#5791): an investor's attached walkthrough on their share link, its
 // takes and each take's file (routes/deck_share_walkthrough.ts).
 export const DECK_SHARE_WALKTHROUGH = /^\/api\/decks\/share\/[^/]+\/walkthrough(?:\/[0-9a-f-]{36}\/media)?$/;
-// D6864 (#6864): the public evidence-pack read. Each open consumes one of the link's views, so a tight per-IP bucket.
-export const EVIDENCE_SHARE_READ = /^\/api\/share\/evidence\/[^/]+$/;
+// D6864 (#6864): the public evidence-pack read, and D6897's readiness snapshot read on the same link store. Each open
+// consumes one of the link's views, so a tight per-IP bucket.
+export const EVIDENCE_SHARE_READ = /^\/api\/share\/(?:evidence|readiness)\/[^/]+$/;
 // D1502 part 2 (#3753): starting a deck generation run. A run holds the
 // member's allowance for its whole quote, so a script starting runs in a loop
 // would lock it up; A3's area routes (#3764) and the one-click build (#3768)
@@ -216,6 +222,16 @@ const BUCKETS: Bucket[] = [
     limit: 10,
     windowSec: 3600,
     test: (p, m) => m === 'POST' && COMPANY_INVITE_SEND.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  // D6052 (#6052): Contacts' invitations, a founder's own and a raise prospect's. 20 an hour per founder,
+  // fail-closed; a prospect also waits a day between sent invitations (services/prospectInvites.ts).
+  {
+    name: 'contact_invite_send',
+    limit: 20,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && CONTACT_INVITE_SEND.test(p),
     scope: 'user',
     failClosed: true,
   },

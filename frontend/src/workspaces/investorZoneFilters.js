@@ -134,6 +134,8 @@ export const INVESTOR_ZONE_FILTERS = {
   // tracked, so there is no notice state to filter lines by.
   'funds/calls': [
     { canvas: 'Call 3', label: 'Current call', key: 'latest' },
+    // D6238: every numbered call as one row (number, issued, due, amount,
+    // collected, outstanding, lines behind), each opening its own page.
     { canvas: 'All calls', key: 'all' },
     { canvas: 'Outstanding', key: 'outstanding' },
     { canvas: 'Notices', unbuilt: 'an in-app notice is logged for each LP account when a call is issued, but no letter is kept and no delivery is tracked, so there is no notice state to filter by', hover: 'Call notices are logged, but their delivery is not tracked, so there is nothing to filter.' },

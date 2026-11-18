@@ -116,22 +116,11 @@ export const ALLOC_THRESHOLD_K = FUND.allocThresholdK;
  */
 export const SPINOUT_FUND_SLUG = 'spinout-fund-i';
 
-/**
- * Program-level track record shown in the workspace hero and repeated on the
- * fund brief.
- *
- * NOTE ON A PRE-EXISTING CONFLICT: pages/SpinoutLabBriefPage.jsx (the public
- * *program* brochure, a different document) states "12 companies built to date"
- * and "$2.4M total capital raised by graduates". Those numbers disagree with
- * these and predate this module. The LP workspace is the stated authority for
- * the fund brief, so the brief follows these; reconciling the brochure is a
- * separate decision for whoever owns that page.
- */
-export const PROGRAM = {
-  graduates: 37,
-  onTimeIncorpPct: 86,
-  alumniRaisedM: 8.6,
-};
+// The program track record (graduates, incorporated on time, raised by alumni)
+// used to be fixed here: 37, 86% and $8.6M, with no recorded source. The owner
+// took them down on 2026-11-17 (#5513, D5513-p2): those figures now come only
+// from GET /api/spinout-lab/fund-metrics, through `programFigures` in
+// spinoutFundFigures.js, and read "Not recorded" until the read has them.
 
 /** Narrative copy. Shared so the hero and the brief cannot say different things. */
 export const THESIS = {

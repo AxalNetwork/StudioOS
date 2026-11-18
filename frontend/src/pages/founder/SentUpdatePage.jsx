@@ -21,7 +21,7 @@ import { ASK_LABELS, metricText, periodTitle } from './ShareUpdateSheet';
 export const MODULE_LINKS = {
   talent: ['Team expansion', '/grow/team-expansion'],
   customers: ['Distribution', '/grow/distribution'],
-  partnerships: ['Partner network', '/grow/partner-network'],
+  partnerships: ['Partnerships', '/grow/partnerships'],
   capital: ['Capital relationships', '/raise/capital-relationships'],
   // D664: a market reply is read under the market its ask links to.
   'market-expansion': ['Market expansion', '/grow/market-expansion'],

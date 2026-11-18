@@ -61,7 +61,9 @@ export type RecordField = {
   key: string;
   label: string;
   kind: 'T' | 'CH' | 'CK';
-  input?: 'date' | 'money' | 'email' | 'file';
+  input?: 'date' | 'money' | 'email' | 'file' | 'textarea';
+  /** D6788: bound the existing text-area renderer for board resolutions. */
+  max?: number;
   placeholder?: string;
   value?: unknown;
   options?: Array<{ value: string; label: string }>;

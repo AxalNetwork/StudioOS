@@ -1819,10 +1819,14 @@ function AccountDeletionCard({ data, flash, reload }) {
   return (
     <Card title="Account & data" description="Export your data, or request account deletion (30-day grace period before hard delete).">
       <div className="flex flex-wrap gap-3">
+        {/* #7002: /trust/data's "Request a copy of your data" lands here (#account-data-export). */}
+        <span id="account-data-export" className="contents" />
         <button onClick={exportData} disabled={exporting}
           className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
           <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data (JSON)'}
         </button>
+        {/* #7002: /trust/data's "Request deletion" lands here (#account-deletion). */}
+        <span id="account-deletion" className="contents" />
         {data.deletion_requested_at ? (
           <div className="flex items-center gap-3">
             <span className="text-xs text-amber-700">Deletion requested {new Date(toUtcInstant(data.deletion_requested_at)).toLocaleDateString()}</span>

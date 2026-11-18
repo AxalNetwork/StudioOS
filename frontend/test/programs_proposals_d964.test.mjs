@@ -199,6 +199,8 @@ test('an Admin\'s catalogue: Propose a program, Your proposals with statuses, no
   const view = await mounted('/admin/programs', ProgramsCatalogue, worker({ user: ADMIN }), { user: ADMIN });
   try {
     assert.equal(view.props('programs-propose').href, '/admin/programs/propose');
+    assert.ok(!view.has('programs-licence-packages'));
+    assert.ok(!view.has('programs-open-testing-campaigns'));
     assert.ok(!view.has('programs-new'), 'New program is HQ\'s');
     assert.ok(!view.has('programs-tabs'), 'an Admin\'s catalogue has one tab, so no strip');
     assert.ok(!view.has('proposals-queue'));
@@ -232,6 +234,8 @@ test('a Super Admin\'s catalogue: New program, the tab strip with the amber coun
   const view = await mounted('/admin/programs', ProgramsCatalogue, worker({ user: SUPER }), { user: SUPER });
   try {
     assert.equal(view.textOf('programs-catalogue-line'), LINE_SUPER);
+    assert.equal(view.props('programs-licence-packages').href, '/admin/licences/packages');
+    assert.equal(view.props('programs-open-testing-campaigns').href, '/admin/platform/product-testing/programs');
     assert.equal(LINE_SUPER, 'Every program on StudioOS, what needs HQ now, and what studios propose.');
     assert.ok(!view.has('programs-propose'), 'HQ does not propose to itself');
     assert.equal(view.textOf('programs-tab-catalogue'), 'Catalogue');

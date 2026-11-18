@@ -9,6 +9,8 @@ import {
   classesFor, correctionBody, draftBody, draftView, isoDay, issuanceBody, poolsOf, registerHolders, voidLine,
 } from './historyModel';
 import { money as moneyOf } from './capTableModel';
+import { Tag } from './CapTableTag';
+import { VESTING_BLANK, VESTING_HELP, VESTING_PRESETS, emptyVesting, vestingBody, vestingPreview } from './poolModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -24,6 +26,11 @@ import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
  *   - Void (CT12b), with its required reason; the row stays, struck through.
  *   - The admin's correction (CT12c): the share count the row should have and
  *     the reason the founder will see, recorded as a correction (D1017).
+ *
+ * D6086 (#6086, RA-27): an option grant carries its vesting schedule, a preset
+ * or Custom, with Start, Months and Cliff months and a Modelled preview. It is
+ * posted with the grant (or the co-founder's proposal) and the Worker writes
+ * the plan's row; Start left blank records the grant without one.
  */
 
 const INPUT = 'w-full rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200';
@@ -79,16 +86,59 @@ function useDataRoom(projectId) {
   return state;
 }
 
+/** RA-27: the grant's vesting, a radio group of presets over Start, Months and Cliff months, and the Modelled preview. */
+export function VestingFields({ value, onChange }) {
+  const set = (k) => (e) => onChange({ ...value, [k]: e.target.value, ...(k === 'start' ? {} : { preset: 'custom' }) });
+  const pick = (p) => onChange({ ...value, preset: p.key, ...(p.months ? { months: p.months, cliff: p.cliff } : {}) });
+  const check = vestingBody(value);
+  const preview = vestingPreview(value);
+  return (
+    <fieldset className="m-0 flex min-w-0 flex-col gap-2.5 rounded-xl border border-axal-hairline px-3.5 pb-3.5 pt-2.5 dark:border-gray-700" data-testid="captable-record-vesting">
+      <legend className={`px-1.5 ${LABEL}`}>Vesting</legend>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Vesting preset" data-testid="captable-record-vesting-presets">
+        {VESTING_PRESETS.map((p) => (
+          <button key={p.key} type="button" role="radio" aria-checked={value.preset === p.key} className={`${CHIP} min-h-[32px] ${value.preset === p.key ? ON : OFF}`}
+            onClick={() => pick(p)} data-testid={`captable-record-vesting-${p.key}`}>{p.label}</button>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        <Field label="Start"><input type="date" className={INPUT} value={value.start} onChange={set('start')} aria-label="Vesting start" data-testid="captable-record-vesting-start" /></Field>
+        <Field label="Months"><input className={INPUT} inputMode="numeric" value={value.months} onChange={set('months')} aria-label="Vesting months" data-testid="captable-record-vesting-months" /></Field>
+        <Field label="Cliff months"><input className={`${INPUT} ${check.sentence && /cliff/i.test(check.sentence) ? 'border-red-400 dark:border-red-400' : ''}`} inputMode="numeric" value={value.cliff} onChange={set('cliff')}
+          aria-label="Cliff months" aria-invalid={check.sentence && /cliff/i.test(check.sentence) ? 'true' : undefined} data-testid="captable-record-vesting-cliff" /></Field>
+      </div>
+      {check.sentence
+        ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="captable-record-vesting-error">{check.sentence}</p>
+        : preview ? (
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-dashed border-violet-300 bg-violet-50/60 px-3 py-2 text-[12.5px] text-axal-ink dark:border-violet-400/50 dark:bg-violet-400/10 dark:text-gray-200" data-testid="captable-record-vesting-preview">
+              <Tag kind="modelled" /><span className="font-semibold">{preview}</span>
+            </div>
+            <span className={`text-[11.5px] ${MUTED}`}>{VESTING_HELP}</span>
+          </div>
+        ) : <span className={`text-[11.5px] ${MUTED}`} data-testid="captable-record-vesting-blank">{VESTING_BLANK}</span>}
+    </fieldset>
+  );
+}
+
+/** A form's body with the grant's schedule, or the sentence that stops it. */
+export function grantBody(built, form) {
+  if (form.kind !== 'grant') return built;
+  const v = vestingBody(form.vest);
+  if (v.sentence) return { ...built, sentence: built.sentence || v.sentence };
+  return v.vesting ? { ...built, body: { ...built.body, vesting: v.vesting } } : built;
+}
+
 /** CT12a: Record an issuance (or Propose one). */
 export function RecordDialog({ projectId, record, mode = 'record', admin = false, onClose, onDone }) {
   const code = record?.currency?.code || 'USD';
-  const [form, setForm] = useState({ kind: 'founding', holder: null, from: null, class_uid: '', pool_uid: '', shares: '', price: '', amount: '', cap: '', discount: '', interest: '', basis: 'post_money', maturity: '', date: '', document_ref: '', reason: '' });
+  const [form, setForm] = useState({ kind: 'founding', holder: null, from: null, class_uid: '', pool_uid: '', shares: '', price: '', amount: '', cap: '', discount: '', interest: '', basis: 'post_money', maturity: '', date: '', document_ref: '', reason: '', vest: emptyVesting() });
   const [draft, setDraft] = useState(null);
   const [reading, setReading] = useState('');
   const room = useDataRoom(projectId);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target ? e.target.value : e }));
   const write = useWrite(onDone);
-  const built = issuanceBody(form, { currency: code, admin });
+  const built = grantBody(issuanceBody(form, { currency: code, admin }), form);
   const holders = registerHolders(record);
   const want = new Set(FIELDS[form.kind]);
   const classes = classesFor(form.kind, record);
@@ -145,7 +195,8 @@ export function RecordDialog({ projectId, record, mode = 'record', admin = false
       {want.has('discount') ? <Field label="Discount (%)" sub="Leave it blank if there is none: it reads Not recorded."><input className={INPUT} inputMode="decimal" value={form.discount} onChange={set('discount')} aria-label="Discount" data-testid="captable-record-discount" /></Field> : null}
       {want.has('interest') ? <Field label="Interest (% a year)"><input className={INPUT} inputMode="decimal" value={form.interest} onChange={set('interest')} aria-label="Interest" /></Field> : null}
       {want.has('maturity') ? <Field label="Maturity"><input type="date" className={INPUT} value={form.maturity} onChange={set('maturity')} aria-label="Maturity" /></Field> : null}
-      {want.has('date') ? <Field label="Date"><input type="date" className={INPUT} value={form.date} onChange={set('date')} aria-label="Date" data-testid="captable-record-date" /></Field> : null}
+      {want.has('date') ? <Field label={form.kind === 'grant' ? 'Granted on' : 'Date'}><input type="date" className={INPUT} value={form.date} onChange={set('date')} aria-label="Date" data-testid="captable-record-date" /></Field> : null}
+      {form.kind === 'grant' ? <VestingFields value={form.vest} onChange={set('vest')} /> : null}
       <Field label="Document" sub={room.status === 'error' ? 'The data room could not be read, so no file can be picked now. You can record it without one.' : 'Pick the signed copy from the data room. Without one the row reads No document.'} testId="captable-record-document">
         <select className={INPUT} value={form.document_ref} onChange={set('document_ref')} aria-label="Document" disabled={room.status !== 'ready'}>
           <option value="">{room.status === 'loading' ? 'Reading the data room…' : 'No document'}</option>

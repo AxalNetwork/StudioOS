@@ -2080,7 +2080,7 @@ function requiresBlockingRoleSchemaBootstrap(pathname: string, method: string): 
   return !(method === 'GET' && isSafeAnonymousRead);
 }
 
-export default {
+const studioos = {
   fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
     // Task #37 — hardened static-asset serving. wrangler.toml lists
     // `/assets/*` in `run_worker_first`, so hashed SPA assets are routed
@@ -2180,6 +2180,13 @@ export default {
     return withThrownResponses(() => app.fetch(request, env, ctx));
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    // The insert probe has its own atomic per-slot claim and is independent of
+    // the queue drain's shared KV lease. It uses exactly the public fetch handler.
+    // Loaded with a dynamic import, as HUBS.md asks of a cron job (D5615).
+    ctx.waitUntil((async () => {
+      const { runMagicLinkInsertCanary } = await import('./services/magicLinkInsertCanary');
+      await runMagicLinkInsertCanary(env, event.scheduledTime, request => studioos.fetch(request, env, ctx));
+    })());
     const work = (async () => {
       // The raw cron expression is stored as trigger_name, so the record is
       // keyed by expression: the key CRON_TRIGGERS (util/cronHistory) reads
@@ -3274,6 +3281,20 @@ export default {
             taskFailed('hubspot sync', e);
           }
         }
+        // D5867 (#5867) — the daily TikTok sync. Hourly at :41, and a connection already synced today (UTC) is
+        // skipped, so each linked connection lands at most one snapshot a day and a failed hour is retried the next.
+        // Totals only in the log: no figure, title or open_id.
+        if (now.getUTCMinutes() === 41) {
+          try {
+            const { syncAllTiktokIntegrations } = await import('./services/tiktok/daily');
+            const r = await syncAllTiktokIntegrations(env, now.getTime());
+            if (r.scanned > 0) {
+              console.info(`[cron] tiktok sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed} skipped=${r.skipped} snapshots=${r.snapshots} videos=${r.videos} kept_deleted=${r.kept_deleted}`);
+            }
+          } catch (e) {
+            taskFailed('tiktok sync', e);
+          }
+        }
         // Task #3 — Calendly 15-minute reconcile. Webhooks deliver real-time
         // booking events; this is the safety-net for portals where webhooks
         // are dropped or disabled.
@@ -3488,6 +3509,8 @@ export default {
     await dispatchQueue(batch, env, ctx, { queue: queueConsumer, dlq: dlqConsumer, agent: agentQueueConsumer, agentDlq: agentDlqConsumer });
   },
 };
+
+export default studioos;
 
 // Durable Object class re-exports — REQUIRED by the Workers runtime so it
 // can find the classes named in wrangler.toml's [[durable_objects.bindings]].

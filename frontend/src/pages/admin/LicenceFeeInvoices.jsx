@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { licenceFeeInvoicesApi } from '../../lib/api/licenceFeeInvoices';
 import { Pill } from '../../ui';
+import { useConsequenceSheet } from './LicenceConsequenceSheet';
+import LicenceOutcomeCard, { useLicenceWrite } from './LicenceOutcomeCard';
 import { FEE_CHANGE_NOTE, feeLine, invoiceStatus, money, paidLine, parseAmount, voidLine } from './licenceFeeInvoicesModel';
 import { TryAgain } from './licences/LicenceOverview';
 import { toMajorString } from '../../lib/money.js';
@@ -31,6 +33,21 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
     );
   }, [api, licence.uid]);
   useEffect(() => { load(); }, [load]);
+  // D4819 part 21 (#5928): Issue and Void go through the one consequence sheet (L17) and report in the L18 card.
+  const [sheet, ask] = useConsequenceSheet();
+  const write = useLicenceWrite({ onSettled: load, tag: 'licence_fee_invoices' });
+  const issue = async () => {
+    const out = await ask('issueInvoice', licence, { target: { amount: money(read.data?.annual_fee_cents, read.data?.currency) } });
+    if (out) await write.run('issueInvoice', () => api.issue(licence.uid));
+  };
+  const voidOne = async (inv) => {
+    const out = await ask('voidInvoice', licence, { target: inv });
+    if (!out?.reason) return;
+    await write.run('voidInvoice', async () => {
+      try { return await api.voidInvoice(licence.uid, inv.uid, out.reason, inv.revision); }
+      catch (e) { if (e?.code === 'invoice_changed') await load(); throw e; } // D4694: show it as it now stands
+    });
+  };
 
   const act = async (fn, done) => {
     setBusy(true); setOutcome(null);
@@ -56,15 +73,17 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
   const invoices = Array.isArray(read.data.invoices) ? read.data.invoices : [];
   return (
     <div data-testid="fee-invoices">
+      {sheet}
       <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Annual licence-fee invoices</h3>
       {fee && <p className={`mt-1 text-[12.5px] ${fee.ok ? 'text-gray-600 dark:text-gray-400' : 'text-amber-800'}`} data-testid="fee-invoices-fee">{fee.text}</p>}
       <div className="mt-3">
-        <button type="button" disabled={busy || !fee?.ok} data-testid="fee-invoices-issue"
+        <button type="button" disabled={busy || write.busy || !fee?.ok} data-testid="fee-invoices-issue"
           className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-          onClick={() => act(() => api.issue(licence.uid), 'Invoice issued.')}>
+          onClick={issue}>
           Issue this licence year's invoice
         </button>
       </div>
+      <LicenceOutcomeCard outcome={write.outcome} busy={write.busy} onReread={load} onDismiss={write.clear} testId="fee-invoices-write-outcome" />
       {outcome && (
         <p role={outcome.tone === 'error' ? 'alert' : 'status'} data-testid={`fee-invoices-outcome-${outcome.tone}`}
           className={`mt-2 text-[12.5px] ${outcome.tone === 'error' ? 'text-red-700' : 'text-emerald-700'}`}>{outcome.text}</p>
@@ -80,7 +99,7 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
             </tr>
           </thead>
           <tbody>
-            {invoices.map((inv) => <InvoiceRow key={inv.uid} inv={inv} licence={licence} api={api} busy={busy} act={act} today={today} />)}
+            {invoices.map((inv) => <InvoiceRow key={inv.uid} inv={inv} licence={licence} api={api} busy={busy || write.busy} act={act} today={today} onVoid={voidOne} />)}
           </tbody>
         </table>
       )}
@@ -89,7 +108,7 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
   );
 }
 
-function InvoiceRow({ inv, licence, api, busy, act, today }) {
+function InvoiceRow({ inv, licence, api, busy, act, today, onVoid }) {
   const status = invoiceStatus(inv, today);
   const [mode, setMode] = useState(null);
   const [amount, setAmount] = useState(inv.paid_cents > 0 ? toMajorString(inv.paid_cents, inv.currency) ?? '' : '');
@@ -113,7 +132,7 @@ function InvoiceRow({ inv, licence, api, busy, act, today }) {
         <td className="py-1.5">
           {inv.pdf_url && <button type="button" className="mr-2 underline" disabled={busy} onClick={download} data-testid="fee-invoice-pdf">PDF</button>}
           {inv.status !== 'void' && <button type="button" className="mr-2 underline" onClick={() => setMode(mode === 'pay' ? null : 'pay')} data-testid="fee-invoice-record">Record payment</button>}
-          {inv.status !== 'void' && inv.paid_cents === 0 && <button type="button" className="underline text-red-700" onClick={() => setMode(mode === 'void' ? null : 'void')} aria-expanded={mode === 'void'} data-testid="fee-invoice-void">Void…</button>}
+          {inv.status !== 'void' && inv.paid_cents === 0 && <button type="button" className="underline text-red-700" disabled={busy} onClick={() => onVoid(inv)} data-testid="fee-invoice-void">Void…</button>}
         </td>
       </tr>
       {mode === 'pay' && (
@@ -127,17 +146,6 @@ function InvoiceRow({ inv, licence, api, busy, act, today }) {
             <input className="w-56 rounded border px-2 py-1" placeholder="Bank reference (optional)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="fee-invoice-note" />
             <button type="submit" className="rounded bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50" disabled={busy || cents === null} data-testid="fee-invoice-save">Save</button>
             {cents === null && <span className="text-[12px] text-red-700" data-testid="fee-invoice-paid-error">Enter the total received, with at most two decimals.</span>}
-          </form>
-        </td></tr>
-      )}
-      {mode === 'void' && (
-        <tr><td colSpan={7} className="pb-2">
-          <form className="flex flex-wrap items-center gap-2" data-testid="fee-invoice-void-form"
-            onSubmit={(e) => { e.preventDefault(); if (note.trim().length >= 10) act(() => api.voidInvoice(licence.uid, inv.uid, note.trim(), inv.revision), 'Invoice voided.'); }}>
-            <label className="text-[12px]">Reason · required, kept with the invoice
-              <input className="ml-2 w-80 rounded border px-2 py-1" placeholder="Why it is void (at least 10 characters)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="fee-invoice-void-note" />
-            </label>
-            <button type="submit" className="rounded border border-red-300 px-3 py-1 text-xs text-red-700 disabled:opacity-50" disabled={busy || note.trim().length < 10} data-testid="fee-invoice-void-save">Void invoice</button>
           </form>
         </td></tr>
       )}

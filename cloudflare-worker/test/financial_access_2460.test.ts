@@ -117,6 +117,7 @@ test('deal-room reader preserves the separate partner permission', async () => {
 test('recompute is protected by the edit policy before schema or model work', () => {
   const source = readFileSync(new URL('../src/routes/financials.ts', import.meta.url), 'utf8');
   const handler = source.split("financials.post('/:projectId/recompute',")[1].split('// CSV export')[0];
-  assert.match(handler, /ensureCanEdit\(project, user\);\s*await ensureFinancialsModelSchema/);
+  // D5074 part 6: a support session's refusal sits between the policy and the schema work, still before any of it.
+  assert.match(handler, /ensureCanEdit\(project, user\);\s*if \(await isSupportSession\(c as any\)\) return c\.json\(SUPPORT_READ_ONLY, 403\);\s*await ensureFinancialsModelSchema/);
   assert.doesNotMatch(handler, /ensureCanView\(/);
 });

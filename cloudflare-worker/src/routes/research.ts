@@ -80,7 +80,8 @@ import {
   parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
   SUGGESTED_SHEET_URL,
 } from '../services/fundSheets';
-import { refuse } from '../util/refusal';
+import { refuse, refusalBody } from '../util/refusal';
+import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldError } from '../services/researchFundReports';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
@@ -2064,10 +2065,15 @@ const DRAFT_SURFACES: Record<string, {
       'Check the client’s stated budget against the firm’s stated floor and say plainly whether it clears it. Where either number is absent, say which is missing rather than estimating it.',
       'Never invent a capability, a rate or a timeline. A lead the firm’s rules exclude is not a lead to draft for — say so and stop.',
     ].join(' '),
-    gather: async (c, userId) => {
+    gather: async (c, userId, scope) => {
       const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
         .bind(userId).first<{ partner_id: number | null }>();
       if (!me?.partner_id) return [];
+      // D4838 part 10 (#5936): the opportunity sheet's Draft proposal names ONE lead by its need id
+      // as `scope`. A scope that was sent must resolve to one of this firm's open leads or draft
+      // nothing — never fall through to the whole list. No scope is the Leads page's band, as before.
+      const leadId = scope === '' ? 0 : Number(scope);
+      if (scope !== '' && !(Number.isInteger(leadId) && leadId > 0)) return [];
       // The open leads, plus the two things a shape recommendation needs: what
       // this firm sells and what it says it will not take.
       const [leads, offerings, rules] = await Promise.all([
@@ -2077,10 +2083,11 @@ const DRAFT_SURFACES: Record<string, {
              FROM founder_needs n
              LEFT JOIN founders f ON f.id = n.founder_id
             WHERE n.status = 'open'
+              AND (? = 0 OR n.id = ?)
               AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
             ORDER BY n.created_at DESC LIMIT 25`
-        ).bind(me.partner_id, me.partner_id).all<any>(),
+        ).bind(leadId, leadId, me.partner_id, me.partner_id).all<any>(),
         // THE SAME `service_offerings` MISTAKE THAT TOOK /pipeline/leads DOWN,
         // twice in one string. The table keys on `owner_user_id REFERENCES
         // users(id)` and has never had a `partner_id`, so `o.partner_id` was
@@ -2116,6 +2123,8 @@ const DRAFT_SURFACES: Record<string, {
         `FIRM BUDGET FLOOR: ${floor ? `$${Math.round(Number(floor.floor_cents) / 100).toLocaleString('en-US')}` : 'NOT STATED — do not estimate one'}`,
         `FIRM EXCLUSIONS: ${(rules.results || []).filter((r: any) => r.kind !== 'budget_floor' && r.kind !== 'best_fit').map((r: any) => r.value).join('; ') || 'none stated'}`,
       ];
+      // A named lead that is not one of this firm's open leads drafts nothing (409 nothing_to_draft).
+      if (leadId && !(leads.results || []).length) return [];
       return context.concat((leads.results || []).map((l: any) =>
         `LEAD — ${l.client || 'client not recorded'}: ${l.title}; `
         + `${l.description || 'no description given'}; `
@@ -4100,7 +4109,10 @@ research.get('/company-directory/:uid', async (c) => {
 // Public fund catalog (D535). Spreadsheet observations are reported fund-size
 // snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
 // Search, filters, sort and paging run on the server (services/researchFundDirectory.ts).
-const FUND_DIRECTORY_SOURCE = 'Public fund spreadsheets (EuroTech VC Funds; Deep Tech Investors Mapping)';
+// D7166 (#7166): the source names the lists served, from the answer itself, so a
+// list taken down for its terms (D597) is never named as a source.
+const fundDirectorySource = (sources: Array<{ name: string }>) =>
+  sources.length ? `Public fund lists (${sources.map((s) => s.name).join('; ')})` : 'Public fund lists';
 const FUND_DIRECTORY_BOUNDARY = 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.';
 
 research.get('/fund-directory', async (c) => {
@@ -4114,7 +4126,7 @@ research.get('/fund-directory', async (c) => {
   }
   try {
     const page = await listDirectory(c.env, query);
-    return c.json({ ...page, source: FUND_DIRECTORY_SOURCE, source_boundary: FUND_DIRECTORY_BOUNDARY });
+    return c.json({ ...page, source: fundDirectorySource(page.sources), source_boundary: FUND_DIRECTORY_BOUNDARY });
   } catch {
     // A failed read says so; it is never an empty directory.
     return c.json({ detail: 'Unreadable', reason: 'The fund directory could not be read' }, 503);
@@ -4431,45 +4443,47 @@ research.post('/funds/:uid/reports', async (c) => {
   ).bind(fundUid, user.id).first();
   if (!fund) return c.json({ detail: 'Not found' }, 404);
   const body = await c.req.json<any>().catch(() => ({}));
-  const period = String(body.period || '').trim();
-  if (!/^\d{4}-Q[1-4]$/.test(period)) return c.json({ detail: 'Period must use YYYY-Q1 through YYYY-Q4.' }, 400);
-  const sourceUrl = clampText(body.source_url, 500);
-  if (!sourceUrl) return c.json({ detail: 'A source URL is required for a quarterly report.' }, 400);
-  const uid = newUid();
-  const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO research_fund_reports
-       (uid, fund_uid, owner_user_id, period, report_date, fund_size_cents,
-        nav_cents, quarterly_return_bps, net_irr_bps, tvpi_bps, source_url,
-        report_url, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (fund_uid, owner_user_id, period) DO UPDATE SET
-       report_date = excluded.report_date,
-       fund_size_cents = excluded.fund_size_cents,
-       nav_cents = excluded.nav_cents,
-       quarterly_return_bps = excluded.quarterly_return_bps,
-       net_irr_bps = excluded.net_irr_bps,
-       tvpi_bps = excluded.tvpi_bps,
-       source_url = excluded.source_url,
-       report_url = excluded.report_url,
-       notes = excluded.notes,
-       updated_at = excluded.updated_at`
-  ).bind(
-    uid, fundUid, user.id, period, clampText(body.report_date, 30),
-    clampInt(body.fund_size_cents), clampInt(body.nav_cents),
-    clampInt(body.quarterly_return_bps), clampInt(body.net_irr_bps),
-    clampInt(body.tvpi_bps), sourceUrl, clampText(body.report_url, 500),
-    clampText(body.notes, 2000), now, now,
-  ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
-            quarterly_return_bps, net_irr_bps, tvpi_bps,
-            source_url, report_url, notes, created_at, updated_at
-       FROM research_fund_reports
-      WHERE fund_uid = ? AND owner_user_id = ? AND period = ?`
-  ).bind(fundUid, user.id, period).first();
-  return c.json(row, 201);
+  // D7169: create-only. A saved period answers `period_exists` with its row,
+  // so the page opens it instead of overwriting it.
+  const out = await createReport(c.env.DB as any, user.id, fundUid, body, newUid(), nowIso());
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'period_exists') {
+    return c.json(refusalBody({
+      code: 'period_exists',
+      message: `${out.report.period} already has a report. Open it to change it.`,
+      extra: { report_uid: out.report.uid, report: out.report },
+    }), 409);
+  }
+  return c.json(out.report, 201);
 });
+
+// D7169: partial update. A field absent from the body keeps its value, null
+// clears it; the row's `updated_at` travels as If-Match.
+research.patch('/funds/:uid/reports/:reportUid', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const body = await c.req.json<any>().catch(() => ({}));
+  const out = await patchReport(c.env.DB as any, user.id, fundUid, c.req.param('reportUid'), body, readIfMatch(c.req.header('If-Match')));
+  if (out.kind === 'not_found') return c.json({ detail: 'Not found' }, 404);
+  if (out.kind === 'invalid') return reportFieldRefusal(c, out.errors);
+  if (out.kind === 'revision_required') {
+    return c.json(refusalBody({ code: 'revision_required', message: 'Send the report\'s updated_at as If-Match so a newer save is not overwritten.' }), 428);
+  }
+  if (out.kind === 'report_changed') {
+    return c.json(refusalBody({
+      code: 'report_changed',
+      message: `${out.report.period} changed after you opened it. Review both versions before saving.`,
+      extra: { report: out.report },
+    }), 409);
+  }
+  return c.json({ ...out.report, changed: out.changed });
+});
+
+const reportFieldRefusal = (c: any, errors: FieldError[]) => c.json(refusalBody({
+  code: 'invalid_report_field',
+  message: fieldErrorSentence(errors),
+  extra: { field: errors[0].field, errors },
+}), 400);
 
 research.delete('/funds/:uid/reports/:reportUid', async (c) => {
   const user = await requireAuth(c);

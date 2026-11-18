@@ -33,7 +33,8 @@ test('D1379 the homepage shell names Axal VC and says what it does before the ap
   assert.match(root, /founders validate an idea with customer interviews/i);
   assert.match(root, /href="\/privacy"/);
   assert.match(root, /href="\/terms"/);
-  assert.match(index, /<title>Axal VC — from idea to funded company<\/title>/);
+  // #6988 (X6): the title no longer promises funding.
+  assert.match(index, /<title>Axal VC — StudioOS, the founder workspace<\/title>/);
   assert.doesNotMatch(index, /Global Venture Partner Network — partners/);
 });
 

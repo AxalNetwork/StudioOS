@@ -80,7 +80,7 @@ export const MODULE_HREFS: Record<string, string> = {
   durable_company_building: '/grow/durable-company-building',
   team_expansion: '/grow/team-expansion',
   distribution: '/grow/distribution',
-  partner_network: '/grow/partner-network',
+  partner_network: '/grow/partnerships', // D6118: Partner network's page is Partnerships (GR-09)
   product_improvement: '/grow/product-improvement',
 };
 

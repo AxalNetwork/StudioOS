@@ -7,6 +7,12 @@
  * member's saved layout or the investor default; the reads below are the
  * same, one per source, shared by the tiles. The header is Studio, the
  * purpose line and Customise. No AIRail on /studio (owner, #3698 G).
+ *
+ * D6129 (#6129, canvas D6126): Investor Studio home v2. The default holds Needs
+ * you, Funds, Returns, Thesis fit on live deals, Arrivals, Upcoming events,
+ * Usage & quota and Deal lifecycle; the thesis band carries the profile's
+ * chips. Customise keeps the header's primary while the owner's "one primary
+ * per screen" question is open.
  */
 import { useState } from 'react';
 import { CircleAlert, Sparkles } from 'lucide-react';
@@ -63,7 +69,8 @@ export default function InvestorStudioHome({
   const retryLifecycle = onRetryLifecycle || refreshContext;
   const quick = quickStats({ previewing, dashboard, dashboardUnavailable, lifecycle, dealCount, dealCountIsLowerBound: dealSummary?.total_is_lower_bound === true });
   const tiles = investorTiles({
-    user, previewing, lifecycle, records, failures, stages, events, eventsCoverage, quick, refreshContext, retryLifecycle, retrySources, retrySource: read,
+    // D6129: Arrivals counts the deals offered to you from the dashboard summary.
+    user, previewing, dashboard, dashboardUnavailable, lifecycle, records, failures, stages, events, eventsCoverage, quick, refreshContext, retryLifecycle, retrySources, retrySource: read,
   });
 
   return (

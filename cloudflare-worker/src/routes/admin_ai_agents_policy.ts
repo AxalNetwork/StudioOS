@@ -7,6 +7,8 @@
  *   POST   /locks   { model, reason }          lock a model off platform-wide
  *   DELETE /locks/:model  { reason }           unlock it
  *   PUT    /caps    { platform_budget_microusd?, default_team_cap_microusd?, max_team_cap_microusd?, per_run_ceiling_microusd?, reason }
+ *   PUT    /capacity { elastic_runs_ceiling?, lanes_ceiling?, reason }   D7074: what a team's capacity may reach; null stops offering it.
+ *                    409 lanes_need_run_ceiling: sub-agents need the per-run ceiling.
  *   PUT    /tools   { tools: [<connector>.<read tool>], reason }   a write tool is 422 write_tool
  *   POST   /pause   { reason, confirm: 'PAUSE' }   the kill switch on
  *   POST   /resume  { reason }                      the kill switch off
@@ -22,7 +24,7 @@ import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { refuse } from '../util/refusal';
 import { aiAdminAuditStatement } from '../services/agents/adminAudit';
 import {
-  PAUSE_WORD, areaModelsOf, capsOf, guardrailCounts, readPolicy, readToolsOf, reasonProblem, type Policy, type Problem,
+  PAUSE_WORD, areaModelsOf, capacityCeilingsOf, capsOf, guardrailCounts, readPolicy, readToolsOf, reasonProblem, type Policy, type Problem,
 } from '../services/agents/aiPolicy';
 import { modelById } from '../services/ai/catalogue';
 
@@ -101,10 +103,30 @@ r.put('/caps', async (c) => {
   const before = { platform_budget_microusd: p.platform_budget_microusd, default_team_cap_microusd: p.default_team_cap_microusd, max_team_cap_microusd: p.max_team_cap_microusd, per_run_ceiling_microusd: p.per_run_ceiling_microusd };
   const caps = capsOf(b, before); if (!caps.ok) return say(c, caps.problem);
   const v = caps.value;
+  // D7074: clearing the per-run ceiling while sub-agents are offered would leave their budget check with no bound.
+  if (v.per_run_ceiling_microusd == null && p.lanes_ceiling != null && p.lanes_ceiling > 1) {
+    return say(c, { code: 'lanes_need_run_ceiling', status: 409, message: 'Sub-agents are offered, and they need the per-run ceiling. Stop offering sub-agents first.' });
+  }
   await write(c, Number(admin.id), 'policy.caps', 'policy:caps', before, v, b.reason, [
     c.env.DB.prepare(`UPDATE ai_agent_policy SET platform_budget_microusd = ?, default_team_cap_microusd = ?, max_team_cap_microusd = ?, per_run_ceiling_microusd = ?,
         updated_by = ?, updated_at = datetime('now') WHERE id = 1`)
       .bind(v.platform_budget_microusd, v.default_team_cap_microusd, v.max_team_cap_microusd, v.per_run_ceiling_microusd, Number(admin.id)),
+  ]);
+  return c.json({ policy: await readPolicy(c.env) });
+});
+
+// D7074 (#7074): what the platform offers a team's capacity. Null (the start) offers neither.
+r.put('/capacity', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const b = await body(c);
+  const why = reasonProblem(b.reason); if (why) return say(c, why);
+  const p = await policyOr(c); if (p instanceof Response) return p;
+  const before = { elastic_runs_ceiling: p.elastic_runs_ceiling, lanes_ceiling: p.lanes_ceiling };
+  const next = capacityCeilingsOf(b, before, p.per_run_ceiling_microusd); if (!next.ok) return say(c, next.problem);
+  const v = next.value;
+  await write(c, Number(admin.id), 'policy.capacity', 'policy:capacity', before, v, b.reason, [
+    c.env.DB.prepare("UPDATE ai_agent_policy SET elastic_runs_ceiling = ?, lanes_ceiling = ?, updated_by = ?, updated_at = datetime('now') WHERE id = 1")
+      .bind(v.elastic_runs_ceiling, v.lanes_ceiling, Number(admin.id)),
   ]);
   return c.json({ policy: await readPolicy(c.env) });
 });

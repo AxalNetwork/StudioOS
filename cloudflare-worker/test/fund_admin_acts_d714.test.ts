@@ -65,6 +65,8 @@ const SCHEMA = [
   read('../sql/migrations/418_fund_ledger.sql'),
   // D709 (#1774): a receipt also settles a fee line linked to its call line.
   read('../sql/migrations/473_fund_management_fees.sql'),
+  // D6238 (#6238): the call list reads each call as corrected.
+  read('../sql/migrations/202611152336_6238_capital_call_amendments.sql'),
   // D6870: issuing a period freezes the fund's NAV, which reads valuations, bank accounts and packs.
   ...['417_fund_position_valuations.sql', '472_entity_bank_accounts.sql', '474_mercury_entity_connections.sql', '476_fund_report_drafts.sql', '483_mercury_not_ours.sql'].map((m) => read(`../sql/migrations/${m}`)),
 ].join('\n');

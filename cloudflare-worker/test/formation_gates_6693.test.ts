@@ -6,7 +6,12 @@
  * partners, templates and reviews. The catalogue price is injected (`priceOf`),
  * so no Stripe mirror is needed. Every firm, person and figure is fictional.
  *
- *   v1 (published, current)
+ * The schema is the fully migrated one, so it already holds the seeded version 1
+ * ("legacy parity", D6690), published and current. The fixture lays its own
+ * version 2 beside it and makes that the current one, as HQ's next published
+ * version would be; its rows take ids from 9001 so they never meet the seed's.
+ *
+ *   v2 (published, current; the seeded v1 stays published, no longer current)
  *     GB  gb_ltd       orderable; partner P1 (priority 10) and P2 (priority 20) cover it;
  *                      template gb_articles needs counsel; one blocking fact
  *     US  us_wy_ccorp  legacy_gate '1'; today's rule (price; Wyoming charter)
@@ -44,6 +49,7 @@ import { readCatalogue, availabilityOf } from '../src/routes/formation_catalogue
 import catalogueRouter from '../src/routes/formation_catalogue.ts';
 import adminRouter from '../src/routes/admin_formation_catalogue.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { currentVersion, versionByNumber } from '../src/services/formationCatalogue.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { grantWriteBar } from './_write_bar_session.mjs';
 import { loadSchema, SCHEMA_OPTIONS } from './_schema_once.mjs';
@@ -63,6 +69,9 @@ const WY_BODY = '# Articles of incorporation, Wyoming (synthetic)';
 const sha = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 const priced: PriceOf = async () => ({ amount_minor: 49900, currency: 'usd' });
 const unpriced: PriceOf = async () => null;
+// The fixture's own version and its first row id, clear of the seeded version 1 (D6690).
+const VERSION = 2, V = 9001;
+const GB = V, US = V + 1, GB_LTD = V, WY = V + 1, DE = V + 2, SOURCE = V;
 let n = 0;
 
 type Over = { factCheckedOn?: string; factStatus?: string; factSourced?: boolean; offerMode?: string };
@@ -77,22 +86,24 @@ function fixture(o: Over = {}) {
   user.run(COUNSEL, 'counsel@example.invalid', 'Cal Counsel', 'admin');
   db.prepare('DELETE FROM super_admins').run();
   db.prepare('INSERT INTO super_admins(user_id) VALUES (?)').run(SUPER);
+  // The seeded version 1 steps down first: one version is current at a time.
+  db.exec(`UPDATE formation_catalogue_versions SET is_current = 0 WHERE is_current = 1`);
   db.exec(`
-    INSERT INTO formation_catalogue_versions (id, version, status, is_current, notes) VALUES (1, 1, 'draft', 0, 'HQ only: synthetic note');
-    INSERT INTO formation_sources (id, kind, title, url) VALUES (1, 'registry', 'Synthetic registry guidance', 'https://registry.example.invalid/guide');
-    INSERT INTO formation_jurisdictions (id, version_id, country, registry_name) VALUES (1, 1, 'GB', 'Synthetic Registry'), (2, 1, 'US', NULL);
+    INSERT INTO formation_catalogue_versions (id, version, status, is_current, notes) VALUES (${V}, ${VERSION}, 'draft', 0, 'HQ only: synthetic note');
+    INSERT INTO formation_sources (id, kind, title, url) VALUES (${SOURCE}, 'registry', 'Synthetic registry guidance', 'https://registry.example.invalid/guide');
+    INSERT INTO formation_jurisdictions (id, version_id, country, registry_name) VALUES (${GB}, ${V}, 'GB', 'Synthetic Registry'), (${US}, ${V}, 'US', NULL);
     INSERT INTO formation_entity_forms (id, version_id, jurisdiction_id, form_key, label, offer_mode, legacy_gate) VALUES
-      (1, 1, 1, 'gb_ltd', 'Private limited company', '${o.offerMode ?? 'orderable'}', NULL),
-      (2, 1, 2, 'us_wy_ccorp', 'Wyoming C corporation', 'orderable', '1'),
-      (3, 1, 2, 'us_de_ccorp', 'Delaware C corporation', 'orderable', '1');
+      (${GB_LTD}, ${V}, ${GB}, 'gb_ltd', 'Private limited company', '${o.offerMode ?? 'orderable'}', NULL),
+      (${WY}, ${V}, ${US}, 'us_wy_ccorp', 'Wyoming C corporation', 'orderable', '1'),
+      (${DE}, ${V}, ${US}, 'us_de_ccorp', 'Delaware C corporation', 'orderable', '1');
     INSERT INTO formation_form_facts (version_id, form_id, fact_key, value, status, blocking, source_id, checked_on) VALUES
-      (1, 1, 'min_directors', '1', '${o.factStatus ?? 'recorded'}', 1, ${o.factSourced === false ? 'NULL' : 1}, '${o.factCheckedOn ?? '2026-10-01'}'),
-      (1, 1, 'share_capital', NULL, 'not_recorded', 0, NULL, NULL);
+      (${V}, ${GB_LTD}, 'min_directors', '1', '${o.factStatus ?? 'recorded'}', 1, ${o.factSourced === false ? 'NULL' : SOURCE}, '${o.factCheckedOn ?? '2026-10-01'}'),
+      (${V}, ${GB_LTD}, 'share_capital', NULL, 'not_recorded', 0, NULL, NULL);
     INSERT INTO formation_fee_lines (version_id, form_id, line_key, label, payee, collected_by, currency, amount_cents, timing) VALUES
-      (1, 1, 'registry_fee', 'Registry fee', 'Synthetic Registry', 'payee', 'GBP', NULL, 'at_formation');
+      (${V}, ${GB_LTD}, 'registry_fee', 'Registry fee', 'Synthetic Registry', 'payee', 'GBP', NULL, 'at_formation');
     INSERT INTO formation_pack_items (version_id, form_id, item_key, phase, kind, acting_party, title, template_key, counsel_required, position) VALUES
-      (1, 1, 'articles', 'before_filing', 'document', 'axal', 'Articles of association', 'gb_articles', 1, 1),
-      (1, 1, 'filing', 'filing', 'filing', 'provider', 'File with the registry', NULL, 1, 2);
+      (${V}, ${GB_LTD}, 'articles', 'before_filing', 'document', 'axal', 'Articles of association', 'gb_articles', 1, 1),
+      (${V}, ${GB_LTD}, 'filing', 'filing', 'filing', 'provider', 'File with the registry', NULL, 1, 2);
     INSERT INTO partners (id, uid, name, email) VALUES (10, 'firm-a', 'Made-up Formations', 'a@example.invalid'), (11, 'firm-b', 'Fictional Filings', 'b@example.invalid');
     INSERT INTO formation_partners (id, partner_id, status, dpa_signed_on) VALUES (1, 10, 'verified', '2026-09-01'), (2, 11, 'verified', '2026-09-01');
     INSERT INTO formation_partner_credentials (formation_partner_id, country, licence_type, licence_number, regulator, valid_until) VALUES
@@ -102,7 +113,7 @@ function fixture(o: Over = {}) {
     INSERT INTO formation_partner_prices (coverage_id, founder_price_minor, cost_minor, currency, cadence, effective_from) VALUES
       (1, 39900, 25000, 'GBP', 'one_time', '2026-01-01'), (2, 34900, 21000, 'GBP', 'one_time', '2026-01-01');
   `);
-  db.exec(`UPDATE formation_catalogue_versions SET status = 'published', is_current = 1, published_by = ${SUPER}, published_at = '2026-11-01T00:00:00Z' WHERE id = 1`);
+  db.exec(`UPDATE formation_catalogue_versions SET status = 'published', is_current = 1, published_by = ${SUPER}, published_at = '2026-11-01T00:00:00Z' WHERE id = ${V}`);
   const tpl = db.prepare(`INSERT INTO legal_templates (slug, title, category, body_md, version, is_active, is_stub) VALUES (?, ?, 'formation', ?, 1, 1, 0)`);
   tpl.run('gb_articles', 'Articles of association', GB_BODY);
   tpl.run('articles_of_incorporation_wy', 'Articles of incorporation (Wyoming)', WY_BODY);
@@ -216,8 +227,11 @@ test('a form not offered as orderable, without a price, or not on a current publ
   const g = fixture();
   review(g, 'gb_articles', GB_BODY, 'GB');
   assert.deepEqual((await formGates(g.env, 'gb_ltd', { ...opts, priceOf: unpriced }))!.gates.filter((x: any) => !x.pass).map((x: any) => x.key), ['price']);
-  const draft = { id: 1, version: 1, status: 'draft', published_at: null };
+  const draft = { id: V, version: VERSION, status: 'draft', published_at: null };
   assert.equal(gate((await formGates(g.env, 'gb_ltd', { ...opts, version: draft }))!, 'published').pass, false, 'a draft version is not orderable');
+  // The seeded version 1 (D6690) is still there and still published; the current one is the fixture's.
+  assert.equal((await versionByNumber(g.env, 1))!.status, 'published');
+  assert.deepEqual(await currentVersion(g.env), { id: V, version: VERSION, status: 'published', published_at: '2026-11-01T00:00:00Z' });
   assert.equal(availabilityOf('orderable', false), 'information_only');
   assert.equal(availabilityOf('guided', true), 'guided');
   assert.equal(availabilityOf('off', true), null);
@@ -258,7 +272,7 @@ test('the signed-in read: availability collapsed, facts with sources and dates, 
   assert.doesNotMatch(text, /"gates"/, 'the gates are HQ\'s');
   const res = await call(f, FOUNDER, 'GET', '/api/formation/catalogue');
   assert.equal(res.status, 200);
-  assert.equal(res.body.version.version, 1);
+  assert.equal(res.body.version.version, VERSION, 'the current version is the fixture\'s, not the seeded one');
   assert.equal((await call(f, null, 'GET', '/api/formation/catalogue')).status, 401);
 });
 

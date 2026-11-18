@@ -10,15 +10,15 @@
 // the fund brief state. So:
 //
 //   - Anything that is ALSO stated by the workspace or the brief is imported
-//     from lib/spinoutFundModel.js (FUND, PROGRAM, THESIS) — one source, no
-//     drift. The three hero proof tiles literally render PROGRAM.
+//     from lib/spinoutFundModel.js (FUND, THESIS) — one source, no drift.
+//   - Outcome figures (graduates, incorporation, alumni capital, discovery,
+//     revenue proof, formation time, graduation to investment) are never fixed
+//     here: they come from GET /api/spinout-lab/fund-metrics or read
+//     "Not recorded" (owner, 2026-11-17, #5513, D5513-p2).
 //   - Everything narrative-only lives HERE, in one auditable place, and is
 //     OPERATOR-MAINTAINED: there is no endpoint behind the stack cards, the
 //     why-now argument, the edge table, or the cohort snapshots. Where a
 //     future endpoint could replace a block, the note on that block says so.
-//   - The page overlays live figures from GET /api/spinout-lab/fund-metrics
-//     where they exist (same merge the LP workspace performs); these statics
-//     are its fallback, never its override.
 //
 // The cohort snapshot section deserves its own warning: the design presents
 // six named live readings ("day 11 of 28", readiness scores, revenue). No
@@ -28,9 +28,9 @@
 // composite in the section caption (`COHORT_SNAPSHOT.provenance`) — the page
 // must render that caption, and the test suite asserts it does.
 
-import { FUND, PROGRAM, THESIS } from './spinoutFundModel';
+import { FUND, THESIS } from './spinoutFundModel';
 
-export { FUND, PROGRAM, THESIS };
+export { FUND, THESIS };
 
 /** Hero copy. Headline is THESIS.headline so the sales page, the workspace
  *  hero and the fund brief can never disagree on the one sentence that
@@ -113,20 +113,19 @@ export const NETWORK = [
 ];
 
 /**
- * Studio-throughput proof tiles (design section 05).
- *
- * The first three (graduates / on-time / alumni raised) come from PROGRAM and
- * are overlaid with live values from /api/spinout-lab/fund-metrics when the
- * program block answers `available` — the page handles that merge. The rest
- * are operator-maintained cohort statistics with no live source yet; each
- * `note` states its basis so a reader can interrogate the number.
+ * Studio-throughput proof tiles (design section 05): what each tile measures,
+ * never its value. The page fills each value from the matching field of
+ * /api/spinout-lab/fund-metrics' program block, or "Not recorded" when the read
+ * has none. These used to carry fixed figures (92%, 89%, 62%, 24 days, 30%, and
+ * "34 of 37" / "11 of 37" graduates) with no recorded source; the owner took
+ * them down with the 37 / 86% / $8.6M track record (2026-11-17, #5513).
  */
-export const PROOF_STUDIO_STATIC = [
-  { key: 'incorporation_rate', k: 'Incorporation rate', v: '92%', tone: 'ink', note: '34 of 37 graduates' },
-  { key: 'verified_discovery', k: 'Verified discovery', v: '89%', tone: 'green', note: '≥5 structured interviews logged' },
-  { key: 'revenue_proof', k: 'Revenue proof at exit', v: '62%', tone: 'violet', note: 'Stripe-synced or document-backed' },
-  { key: 'formation_velocity', k: 'Formation velocity', v: '24 days', tone: 'ink', note: 'Median idea → incorporated' },
-  { key: 'graduation_investment', k: 'Graduation → investment', v: '30%', tone: 'violet', note: '11 of 37 graduates backed' },
+export const PROOF_STUDIO = [
+  { key: 'incorporation_rate', field: 'incorporation_pct', unit: 'pct', k: 'Incorporation rate', tone: 'ink', note: 'Graduates with a registered company' },
+  { key: 'verified_discovery', field: 'verified_discovery_pct', unit: 'pct', k: 'Verified discovery', tone: 'green', note: '≥5 structured interviews logged' },
+  { key: 'revenue_proof', field: 'revenue_proof_pct', unit: 'pct', k: 'Revenue proof at exit', tone: 'violet', note: 'Stripe-synced or document-backed' },
+  { key: 'formation_velocity', field: 'formation_velocity_days', unit: 'days', k: 'Formation velocity', tone: 'ink', note: 'Median idea → incorporation order' },
+  { key: 'graduation_investment', field: 'graduation_to_investment_pct', unit: 'pct', k: 'Graduation → investment', tone: 'violet', note: 'Graduates the fund backed' },
 ];
 
 /**

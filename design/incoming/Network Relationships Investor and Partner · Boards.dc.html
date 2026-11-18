@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Relationships Investor and Partner · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network › Relationships · #7056 · brief 1 of 6 (#7050) · extends #4799 and #6256</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Relationships — investor and operating-partner interactions that always name the tie they write</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Logging a touch and setting a reminder on /network/relationships. The investor boards continue NW12.2 and its Tie Sheet from the approved #6256 canvas: two groups, On Axal (38) and Contacts you keep (142), each counted and paged on its own. Two ties with similar names, [Jonas Berg] of [Elm Studio] (tie 4127) and [Jonas Berger] of [Tidepool Labs] (tie 4172), are traced A → B → A through a late history read, a kept draft, a save in progress, a failed save, Retry, success and an explicit discard; every form, button and announcement names the tie. The operating-partner boards compare Log interaction from a named row with Log interaction from the toolbar, which opens a person picker scoped to the view with no default. States follow D5129 (Unavailable on screen, never 0); one Eadwyn rail (#5130). Trace cards and violet dashed ◇ / amber ⚑ tags are annotations, not product copy. Keys carry the NRI prefix.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main c59a9f2f66 · [Iris Chen] at [Harbor Lane Capital], [Tom Becker] at [Northstar Capital] and every person, company and figure (38 ties, 142 contacts, 64 firm-book contacts, 5 unassigned, 9 going cold) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Relationships Investor and Partner Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW12.2-L1', 'Investor book with the log open on a tie', 'NW12.2 unchanged behind the Tie Sheet for [Jonas Berg] · [Elm Studio] · tie 4127. Log a touch carries “Draft for [Jonas Berg] · [Elm Studio] · tie 4127”; the row carries a Draft chip. Save names the person; the sheet’s Request introduction steps down to secondary while the form is open. One upcoming and one done reminder.', [F('NRI1', false, 1190)]],
+      ['NW12.2-L2', 'A → B → A with a late history read', 'Trace on the left (times, request ids, which tie each read and write is keyed to), sheet on the right. 1: typing on A while its history loads. 3: switching to B keeps A’s draft and opens B empty. ◷: A’s reply lands late and changes nothing on B’s screen. 5: back on A, the draft and history return.', [C('NRI2A', '1 · Typing on A, history loading', 1180, 900), C('NRI2B', '3 · Switch to B while A loads', 1180, 900), C('NRI2C', '◷ · A’s late reply; B intact', 1180, 900), C('NRI2D', '5 · Back on A, restored', 1180, 900)]],
+      ['NW12.2-L3', 'Save, failure, retry, success, discard', 'The save binds tie 4127 when Save is pressed and stays bound if the reader opens B. A 503 keeps the text and moves focus to Retry. Retry succeeds with a dated confirmation and the new touch at the top. Discard is explicit and names the tie.', [C('NRI3A', 'Saving', 1180, 900), C('NRI3B', 'Save failed', 1180, 900), C('NRI3C', 'Retry succeeded', 1180, 900), C('NRI3D', 'Explicit discard', 1180, 900)]],
+      ['NW12.2-L4', 'Reminders on a specific tie', 'Add reminder on [Jonas Berger] · tie 4172 with one upcoming and one done reminder, then Setting, Not set (kept, Retry) and Set.', [C('NRI4A', 'Reminder form', 1180, 900), C('NRI4B', 'Setting · not set · set', 1400, 370)]],
+      ['NW12.2-L5', 'A slow introductions read leaves the book usable', 'Introductions still loading after 12 s: Request introduction waits, the book is drawn and every tie can be opened, logged and reminded. Then introductions Unavailable with their own Retry.', [F('NRI5', 'Introductions loading', 1240), C('NRI5B', 'Introductions unavailable', 1200, 170)]],
+      ['NW12.2-L6', 'States on the log', 'Loading, None (Not recorded last touch, not cold), Unavailable history and reminders (never 0), Offline, Refused (support session, ◇), Conflict (already void) and Too long.', [C('NRI6', false, 1400, 500)]],
+      ['NW2-OP1', 'Operating partner · Log interaction from a row', '[Tom Becker]’s firm book. The row button is named “Log interaction with [Morgan Vale], [Loomcraft]” and opens the date dialog with the person and firm shown. After Log, a dated confirmation and focus back on the same row button.', [F('NRI7', 'Row dialog', 1000), C('NRI7B', 'Confirmation and focus return', 1200, 260)]],
+      ['NW2-OP2', 'Operating partner · Log interaction from the toolbar', 'The toolbar opens a keyboard person picker scoped to the current view with nobody chosen; Continue stays off until a person is picked. Step 2 is the same date dialog with Change person. The confirmation is dated and focus returns to the toolbar button.', [F('NRI8A', 'Person picker', 1000), F('NRI8B', 'Date dialog with person and firm', 1000), F('NRI8C', 'Dated confirmation', 1000)]],
+      ['NW2-OP3', 'Zero matches and a failed firm-book read', 'Going cold with the search “Morgan” matches nobody: the picker offers Clear search, Search all 64 contacts or Cancel, never an off-screen default. A failed GET /book is Unavailable with Retry, not “Your book is empty”, and the toolbar actions are off.', [F('NRI9', 'Zero matches', 1000), F('NRI9B', 'Firm book unavailable', 900)]],
+      ['NW2-OP4', 'Partner dialog states', 'Logging, Not logged (person, date and note kept; Retry names the person) and the picker with nothing chosen.', [C('NRI10', false, 1400, 525)]],
+      ['Tablet 768', 'Tablet 768', 'Investor Tie Sheet as an overlay with the kept draft; the partner picker at tablet width.', [C('NRI11', 'Investor', 768, 1024), C('NRI11B', 'Partner picker', 768, 900)]],
+      ['Phone 390', 'Phone 390', 'Investor: the log with the keyboard up and Save above it, B with A’s kept draft, save failed. Partner: picker with the keyboard, date sheet with person and firm, dated confirmation with cards. 44 px targets.', [P('NRI12A', 'Investor · log, keyboard'), P('NRI12B', 'Investor · B, draft kept'), P('NRI12C', 'Investor · save failed'), P('NRI12D', 'Partner · picker'), P('NRI12E', 'Partner · date'), P('NRI12F', 'Partner · confirmation')]],
+      ['Dark', 'Dark', 'The investor book with the log open, and the partner date dialog after a failed save, on the dark tokens.', [F('NRI13A', 'Investor · dark', 1190), F('NRI13B', 'Partner · dark', 1000)]],
+      ['Prototype', 'Prototype links and accessibility', 'Which frame each action opens, where focus lands, what is announced, keyboard order, phone keyboard and error recovery.', [W('NRI14')]],
+      ['Handoff', 'Handoff', 'Checked on main, preserved, frontend only, backend required (◇), owner picks (⚑) and what is open.', [W('NRIH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

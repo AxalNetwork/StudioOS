@@ -44,6 +44,8 @@ test('the index translates the recorded call states and preserves founder links'
 test('both round-call routes use Deals chrome only for investors', () => {
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /const investorRoundCall = \(Component\) => \(\s*user\?\.role === 'investor' && effectiveRole === 'investor'\s*\? investorWorkspace\('deals', <Component embedded \/>\)/);
-  assert.match(app, /path="\/round-calls"[^\n]+investorRoundCall\(RoundCallIndex\)/);
+  // D6160 (#6160): an investor's list is drawn by InvestorDealsRoutes; a founder's keeps RoundCallIndex.
+  assert.match(app, /const investorRoundCallList = \(\) => \(\s*user\?\.role === 'investor' && effectiveRole === 'investor'\s*\? <InvestorDealsRoutes \/>\s*: <RoundCallIndex \/>/);
+  assert.match(app, /path="\/round-calls"[^\n]+investorRoundCallList\(\)/);
   assert.match(app, /path="\/round-calls\/:uid"[^\n]+investorRoundCall\(RoundCallPage\)/);
 });

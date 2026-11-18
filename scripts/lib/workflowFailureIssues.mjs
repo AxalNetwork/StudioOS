@@ -44,7 +44,7 @@ export function normalizeWorkflowFailure({ run, jobs = [], superseded = false, q
   if (run.status !== 'completed' || !FAILURES.has(run.conclusion)) return null;
   const path = catalog.workflows.find(entry => entry.id === run.workflow_id)?.path;
   const workflow = safeWorkflowPath(path) ? path : null;
-  const productionRelease = workflow === '.github/workflows/cloudflare-worker-deploy.yml';
+  const productionRelease = ['.github/workflows/cloudflare-worker-deploy.yml', '.github/workflows/meeting-bot-deploy.yml'].includes(workflow);
   // Supersession is an explicit trusted result from the admission gate, never inferred from a later commit.
   if (productionRelease && run.conclusion === 'failure' && superseded === true) return null;
   if (workflow === '.github/workflows/ci.yml' && run.conclusion === 'failure' && run.event === 'merge_group' && queueInvalidated === true) return null;

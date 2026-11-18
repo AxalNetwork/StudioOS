@@ -73,11 +73,13 @@ test('the mounted strip: toggle buttons with aria-pressed, Overdue with a word a
 test('Grow names the strip above Company only, and hands it the query', () => {
   const above = fnOf(grow.aboveRecords, 'durable-company-building');
   assert.equal(typeof above, 'function');
-  for (const slug of ['distribution', 'partner-network', 'market-expansion']) assert.equal(fnOf(grow.aboveRecords, slug), null, slug);
+  for (const slug of ['distribution', 'market-expansion']) assert.equal(fnOf(grow.aboveRecords, slug), null, slug);
+  // D6118 (GR-09): Partnerships puts its Mercury-sourced partner proposal above the partner table.
+  assert.equal(typeof fnOf(grow.aboveRecords, 'partner-network'), 'function', 'partner-network');
   const out = html(above({ parts: { due_counts: COUNTS, due_on: '2026-11-14' } }, { projectId: 7, query: {}, onQuery() {}, search: '?project_id=7' }));
   assert.match(out, /data-testid="grow-company-due"/);
   const route = readFileSync(resolve('frontend/src/pages/cycles/CycleRoute.jsx'), 'utf8');
-  assert.match(route, /above\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\)/);
+  assert.match(route, /above\?\.\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\)/);
 });
 
 test('the rows: Repeats, Overdue and Snoozed as words, No owner named, Culture as a kind', () => {

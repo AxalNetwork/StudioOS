@@ -256,7 +256,8 @@ for (const width of [390, 1280]) {
       const remove = page.getByRole('button', { name: 'Remove…' });
       await remove.focus();
       await page.keyboard.press('Enter');
-      const dialog = page.getByRole('dialog', { name: 'Remove this administrator' });
+      // #6937 made every licence write one consequence sheet, titled with the account it acts on.
+      const dialog = page.getByRole('dialog', { name: 'Remove Camille Synthetic' });
       await expect(dialog).toBeVisible();
       const reason = dialog.getByLabel('Why is this administrator being removed? It is recorded in the audit log.');
       await expect(reason).toBeFocused();

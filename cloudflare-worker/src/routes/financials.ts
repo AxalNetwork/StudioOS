@@ -3,13 +3,13 @@ import { holdsLicence } from '../services/accountLicences';
  * T11 — Financial Model Builder (port of backend/app/api/routes/financials.py).
  *
  * Endpoints (mounted at /api/financials in index.ts):
- *   GET    /:projectId               — fetch model (or default scaffold)
+ *   GET    /:projectId               — fetch model (or default scaffold), with the caller's `capabilities` (D5074 part 6)
  *   PUT    /:projectId               — upsert assumptions + recompute
  *   POST   /:projectId/recompute     — recompute from stored assumptions
  *   GET    /:projectId/export.xlsx   — CSV fallback (worker has no XLSX lib)
  *
  * Production authorization (#2460):
- *   admin / founder (own project) — read, save and recompute
+ *   admin / founder (own project) — read, save and recompute (a support session reads only, D5074 part 6)
  *   partner                      — no blanket access (#2460; tie pending #2438)
  *   anyone else                  — 403
  *
@@ -26,6 +26,7 @@ import type { Env } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
 import { logCycleWriteStatement } from '../services/cycleActivity';
+import { isSupportSession } from '../integrations/providers/mercury';
 
 const financials = new Hono<{ Bindings: Env }>();
 
@@ -385,16 +386,27 @@ function ensureCanView(project: Project, user: { role: string; founder_id?: numb
   }
 }
 
-function ensureCanEdit(project: Project, user: { role: string; founder_id?: number | null }) {
-  if (user.role === 'admin') return;
-  if (holdsLicence(user, 'founder')) {
-    if (!canAccessFounderResource(user as any, project.founder_id)) {
-      throw new Error('Forbidden');
-    }
-    return;
-  }
-  throw new Error('Forbidden');
+/** Who may save or recompute the forecast: an admin, or a founder on their own venture. */
+function canEditFinancials(project: Project, user: { role: string; founder_id?: number | null }): boolean {
+  if (user.role === 'admin') return true;
+  return holdsLicence(user, 'founder') && canAccessFounderResource(user as any, project.founder_id);
 }
+
+function ensureCanEdit(project: Project, user: { role: string; founder_id?: number | null }) {
+  if (!canEditFinancials(project, user)) throw new Error('Forbidden');
+}
+
+/**
+ * D5074 part 6 (#5074): the forecast's capabilities, as Use of funds' (D5074 part 5). Use of funds › Runway ›
+ * Forecast draws Edit drivers and Save forecast only when `edit` is true. `edit` is the save's own gate
+ * (`canEditFinancials`) and not a support session: a support session reads the forecast and never changes it, as it
+ * never changes the plan (`support_read_only`). The save and the recompute refuse from the same rule.
+ */
+async function financialsCapabilities(c: Context<{ Bindings: Env }>, project: Project, user: { role: string; founder_id?: number | null }) {
+  return { edit: canEditFinancials(project, user) && !(await isSupportSession(c as any)) };
+}
+
+const SUPPORT_READ_ONLY = { code: 'support_read_only', detail: 'A support session cannot change the forecast.' };
 
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -425,9 +437,11 @@ financials.get('/:projectId', async (c) => {
     console.error('[financials] GET select failed:', (e as Error).message);
   }
 
+  const capabilities = await financialsCapabilities(c, project, user);
   if (!fm || !fm.updated_by) {
 
     return c.json({
+      capabilities,
       exists: false,
       project_id: projectId,
       project_name: project.name,
@@ -438,6 +452,7 @@ financials.get('/:projectId', async (c) => {
     });
   }
   return c.json({
+    capabilities,
     exists: true,
     project_id: projectId,
     project_name: project.name,
@@ -456,6 +471,7 @@ financials.put('/:projectId', async (c) => {
   const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
+  if (await isSupportSession(c as any)) return c.json(SUPPORT_READ_ONLY, 403);
   await ensureFinancialsModelSchema(c.env);
 
   const body = await c.req.json().catch(() => null);
@@ -545,6 +561,7 @@ financials.post('/:projectId/recompute', async (c) => {
   const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
+  if (await isSupportSession(c as any)) return c.json(SUPPORT_READ_ONLY, 403);
   await ensureFinancialsModelSchema(c.env);
 
   let fm: { assumptions_json: string } | null = null;
@@ -596,9 +613,7 @@ financials.get('/:projectId/export.xlsx', async (c) => {
     ).bind(projectId).first<{ assumptions_json: string }>();
   } catch (e) { console.error('[financials] export select:', (e as Error).message); }
   if (!fm) return c.json({ detail: 'No financial model saved yet' }, 404);
-  const a = normalizeAssumptions(
-    fm ? safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}) : null,
-  );
+  const a = normalizeAssumptions(safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}));
   const computed = projectFinancials(a);
   const sens = sensitivity(a);
 

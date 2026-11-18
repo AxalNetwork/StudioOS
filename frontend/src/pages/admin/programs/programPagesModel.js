@@ -30,7 +30,7 @@
 
 import {
   COULD_NOT_READ, FROZEN, NOT_READ_YET, NOT_RECORDED, OPEN_STATUSES, SUSPENDED, TRY_AGAIN, bandCounts, cohortName, dataOf,
-  hoursSince, isFailed, isLoading, isReady, needsMentor, parseStamp, plural, stateOf,
+  ENROLMENTS_NOTE, hoursSince, isFailed, isLoading, isReady, learningFigures, needsMentor, parseStamp, plural, stateOf,
 } from './programsModel.js';
 
 export { NOT_RECORDED };
@@ -732,6 +732,27 @@ export function perkParticipationTiles(read) {
       ? { key: 'participation-claims', label: 'Claims', state: 'ready', value: claims.text, sub: PERK_WEEKS_LINE }
       : { key: 'participation-claims', label: 'Claims', state: claims.state, reason: 'The claims could not be read. That is not the same as none.' },
     { key: 'participation-members', label: 'Members taking part', state: 'placeholder', word: NOT_RECORDED, reason: PERK_MEMBERS_UNRECORDED },
+  ];
+}
+
+/**
+ * D5887 (#5887): Learning's Participation, the generic shell's core section, on the reads Overview already makes.
+ * Active enrolments (R9, published programs) and enrolments in the window (P4) are recorded; the people behind them
+ * are not, since a person in two programs is two enrolments, so that tile reads "Not recorded" with its reason, never 0
+ * and never the enrolments passed off as people. A plain Admin's reads cover the programs assigned to them.
+ */
+export const LEARNING_PEOPLE_UNRECORDED = 'The reads count enrolments, not people, and a person in two programs is two enrolments, so how many people take part is not recorded. It is not the same as nobody.';
+export function learningParticipationTiles(learning, weekly) {
+  const f = learningFigures(learning);
+  const w = enrolmentsFrom(weekly);
+  return [
+    f.state === 'ready'
+      ? { key: 'participation-enrolments', label: 'Active enrolments', state: 'ready', value: nf(f.enrolments), sub: `In published programs. ${ENROLMENTS_NOTE}`, cover: f.capped ? 'Within the first 500 programs by name.' : null }
+      : { key: 'participation-enrolments', label: 'Active enrolments', state: f.state, reason: 'The learning programs could not be read. That is not the same as none.' },
+    w.state === 'ready'
+      ? { key: 'participation-enrolled', label: 'Enrolled this period', state: 'ready', value: nf(w.total), sub: enrolledLine(w.weeks) }
+      : { key: 'participation-enrolled', label: 'Enrolled this period', state: w.state, reason: 'The enrolments could not be read. That is not the same as none.' },
+    { key: 'participation-people', label: 'People taking part', state: 'placeholder', word: NOT_RECORDED, reason: LEARNING_PEOPLE_UNRECORDED },
   ];
 }
 

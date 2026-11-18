@@ -293,3 +293,35 @@ test('D630: closing a syndicate is its creator’s or an admin’s, refuses with
   assert.deepEqual(rows.map((l) => [l.user_id, l.entity_type, l.entity_id]), [[CREATOR, 'syndicate', '1'], [ADMIN, 'syndicate', '2']]);
   assert.equal(JSON.parse(rows[0].details).from_status, 'funded');
 });
+
+test('D6200: deal invitations gate count-only syndicate discovery and pledges', async () => {
+  const db = freshDb();
+  try {
+    await seedSyndicates(db);
+    db.prepare("UPDATE users SET kyc_status = 'approved' WHERE id IN (?, ?)").run(PRO, STRANGER);
+    db.prepare('INSERT INTO deal_invitations (deal_id, investor_user_id) VALUES (?, ?)').run(41, PRO);
+    db.prepare('INSERT INTO syndicate_members (syndicate_id, user_id, commitment_cents) VALUES (2, ?, 100000)').run(FULL);
+    const list = (who: number, dealId = 41) => call(db, who, '/api/networkfx/syndicates?deal_id=' + dealId);
+    const join = (who: number, syndicate = 2, dealId?: number) => call(db, who, '/api/networkfx/syndicates/' + syndicate + '/join', {
+      method: 'POST', body: { commitment_cents: 100000, deal_id: dealId },
+    });
+    assert.deepEqual((await list(STRANGER)).body, []);
+    assert.deepEqual((await list(PRO, 42)).body, []);
+    assert.deepEqual((await list(PRO)).body, [{
+      id: 2, name: 'Alpha second', creator_name: 'Cy Creator', status: 'open', target_cents: null,
+      min_commitment_cents: 100000, members: 1, is_member: 0, is_lead: 0,
+    }]);
+    assert.equal((await join(STRANGER)).status, 404, 'leaving out the deal cannot bypass the invitation');
+    assert.equal((await join(PRO, 3, 41)).status, 404);
+    assert.equal((await join(PRO, 2, 42)).status, 404);
+    assert.equal((await join(PRO, 2, 41)).status, 200);
+    assert.equal((await join(PRO, 2, 41)).status, 409);
+    assert.equal((await list(PRO)).body[0].is_member, 1);
+    const member = (await call(db, PRO, '/api/networkfx/syndicates/2')).body;
+    const lead = (await call(db, CREATOR, '/api/networkfx/syndicates/2')).body;
+    assert.deepEqual(member.members, []);
+    assert.equal(member.member_count, 2);
+    assert.equal(lead.show_member_names, true);
+    assert.deepEqual(lead.members.map((m: { name: string }) => m.name).sort(), ['Fen Full', 'Pia Pro']);
+  } finally { db.close(); }
+});

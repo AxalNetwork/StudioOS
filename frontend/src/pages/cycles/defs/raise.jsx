@@ -12,7 +12,9 @@ import ReadinessHome, { ReadinessBands } from '../ReadinessHome';
 import { coverageLine, nextPriorityAction } from '../readinessModel';
 import RaiseReceiptMatches from '../../../components/RaiseReceiptMatches';
 import EvidencePart from '../evidence/EvidencePart';
-import { narrativeStanding } from '../../raise/narrative/narrativeModel';
+import { LINE as NARRATIVE_LINE } from '../../raise/narrative/narrativeModel';
+// D7103 (#7103, RA-14): Investor narrative's header action, Save version, from the part's capability map.
+import { saveVersionAction } from '../../raise/narrative/narrativeHomeModel';
 import { HOME_PATH, SET_ACTION, forecastHref, tabSearch } from '../../raise/useoffunds/useOfFundsModel';
 import { ADD_ACTION as CAP_REL_ADD, addHref as capRelAddHref } from '../../raise/caprel/capRelModel';
 import { toFnMap } from '../adapters';
@@ -27,7 +29,7 @@ export { useCapRelHome } from '../../raise/caprel/capRelHomeRead.js';
 export { useCapTableHome } from '../../raise/captable/capTableHomeRead.js';
 
 // D4574 (#4574, H5): Raise's step behind its own lazy boundary.
-const NarrativeHome = lazyStep(() => import('../../raise/narrative/NarrativeTool'), 'NarrativeHome');
+const NarrativeOwnedHome = lazyStep(() => import('../../raise/narrative/NarrativeOwnedHome'), 'default');
 
 /** D840 part 2 (#2347): a Raise module's From Mercury, from `parts.mercury`, which only the founder's own read carries. */
 const mercuryPart = (slug, data, ctx) => <MercuryRaiseFeed slug={slug} part={data?.parts?.mercury} projectId={ctx.projectId} reload={ctx.reload} />;
@@ -71,12 +73,9 @@ const raise = {
         <EvidencePart slug={m.slug} projectId={ctx.projectId} />
       </>
     )])),
-    // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
-    // D913: its Objections heard, with no Answer it for an admin.
-    // D5074 part 7: `admin` is the part's narrative map (no `edit`: no Answer it, no reads list); no map draws neither.
+    // D7103 (#7103): Home's tiles, Needs you and footer (D909, D913, D5074 part 7) are now its own page (`homes` below).
     'investor-narrative': (data, ctx) => (
       <>
-        <NarrativeHome data={data} admin={narrativeStanding(data?.parts?.narrative?.capabilities).readOnly} projectId={ctx.projectId} />
         {mercuryPart('investor-narrative', data, ctx)}
         <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
         <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
@@ -129,8 +128,14 @@ const raise = {
       sub: coverageLine(data?.records),
       // D5081 part 5 (RA-12, RA-14): the header's action is the page's own, Fix next priority, or none.
       action: nextPriorityAction(data?.records),
-      body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} />,
+      body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} role={ctx.role} />,
       Bands: ReadinessBands,
+    }),
+    // D7103 (#7103, RA-14, RA-17): Investor narrative owns its Home; its action is Save version, or none, or disabled for a reader.
+    'investor-narrative': (data, ctx) => ({
+      sub: NARRATIVE_LINE,
+      action: saveVersionAction(data, { projectId: ctx.projectId }),
+      body: (p) => <NarrativeOwnedHome {...p} data={data} projectId={ctx.projectId} reload={ctx.reload} />,
     }),
   }),
   fills: {},

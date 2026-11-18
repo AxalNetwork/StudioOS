@@ -1,3 +1,4 @@
+import NetworkTieRequest from './relationships/NetworkTieRequest';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -86,6 +87,8 @@ export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'pa
   const [busy, setBusy] = useState(false);
   const [logging, setLogging] = useState(null);
   const [assigning, setAssigning] = useState(false);
+  const [addingPerson,setAddingPerson]=useState(false);
+  const [tieNotice,setTieNotice]=useState(null);
 
   // THE ROSTER LOADS WITH THE BOOK, not when the picker opens. A row's `Take
   // it` needs the caller's own user id — the write takes an id, never a "me"
@@ -173,6 +176,7 @@ export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'pa
   // performing one act, one of them named after an act it does not perform. It
   // opens the board where ownership is actually changed.
   const handlers = {
+    addPerson:{onClick:()=>setAddingPerson(true),title:'Ask someone you share a deal or data room with to accept a tie.'},
     assignOwner: {
       onClick: () => setAssigning(true),
       disabled: rows.length === 0 || state.owners.length === 0,
@@ -335,6 +339,8 @@ export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'pa
         </p>
       )}
 
+      {tieNotice && <p role="status" className="text-sm text-gray-700 dark:text-gray-300">{tieNotice}</p>}
+      {addingPerson && <NetworkTieRequest onClose={()=>setAddingPerson(false)} onSent={()=>{setAddingPerson(false);setTieNotice('Tie requested. It counts only after the other person accepts.');}} />}
       {logging && <LogModal uid={logging} busy={busy} onClose={() => setLogging(null)} onSave={logInteraction} />}
 
       {assigning && (

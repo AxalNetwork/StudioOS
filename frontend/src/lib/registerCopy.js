@@ -11,7 +11,12 @@ export const LANES = Object.freeze(['partner', 'investor', 'lp', 'founder', 'adv
 export const LANE_COPY = Object.freeze({
   partner: {
     title: 'Create your Partner account',
-    desc: "Get matched with deals before they go public. Creating an account is free — no password to remember, we'll email you a secure link. Your partner membership and profile are reviewed before deals open.",
+    desc: "Creating an account is free — no password to remember, we'll email you a secure link. Your partner membership and profile are reviewed before deals open.",
+  },
+  // #6983 (X1): the investor page's own lane. No claim about deals or evidence.
+  investor: {
+    title: 'Create your investor account',
+    desc: 'Creating an account is free. Your membership is reviewed before your workspace opens.',
   },
   lp: {
     title: 'Open your LP Account',
@@ -22,7 +27,7 @@ export const LANE_COPY = Object.freeze({
     desc: "Creating an account is free — no password to remember, we'll email you a secure link. Your membership and advisor profile are confirmed before you can subscribe.",
   },
   founder: {
-    title: 'Submit your pitch',
+    title: 'Create your founder account',
     // Founder-journey audit — this used to promise a fixed scoring turnaround measured in hours. Nothing enforces any
     // such SLA: a fresh signup holds in the exploring review queue until an admin sends the binding agreement, and
     // scoring is SELF-SERVE (the founder runs it from /scoring / the Lab) once the workspace opens. Promise what the

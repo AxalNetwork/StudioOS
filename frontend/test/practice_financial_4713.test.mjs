@@ -214,7 +214,11 @@ test('Sessions: no rules editor before a successful read, and a save names the r
   const src = read('pages/advisor/practice/SessionsZone.jsx');
   assert.match(src, /useState\('loading'\)/, 'the rules start unread');
   assert.match(src, /setRulesRead\(r != null \? 'read' : 'unreadable'\)/);
-  assert.match(src, /\{loadingRules \? null : read \? \(/, 'no editor while loading or unreadable');
+  // #4832 (D4832): Edit availability may open while the read is in flight, but
+  // the saving form exists only once the rules were read, and the waiting
+  // editor's Save is disabled (mounted in practice_sessions_4832.test.mjs).
+  assert.match(src, /\{read && open && \(/, 'no saving editor while loading or unreadable');
+  assert.match(src, /disabled aria-disabled="true">Save availability</, 'the waiting editor cannot save');
   assert.match(src, /expected_revision: rules\?\.revision \?\? ''/);
   assert.doesNotMatch(src, /\[rulesRead, setRulesRead\] = useState\(true\)/, 'the old always-readable seed is gone');
 });

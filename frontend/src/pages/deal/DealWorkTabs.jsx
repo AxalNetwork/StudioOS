@@ -33,7 +33,7 @@ import { LINK_LINE, composeBody } from '../duediligence/ddCaseModel';
 import { DealDeckCard } from './DealDeck';
 import {
   ASK_MAX, CAP_TABLE_SLOT, LEGAL_SLOT, NOTE_READERS, QUESTIONS_SLOT, ROUTES, ROUTE_NOTE, SYNDICATES_LINE, WITHDRAW_MAX,
-  caseCard, caseDoors, caseForDeal, closedReason, icStep, myCommitment, openFlagRows, sectionProgress, templateChoices, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
+  preferenceLine, termsPreference, caseCard, caseDoors, caseForDeal, closedReason, icStep, myCommitment, openFlagRows, sectionProgress, templateChoices, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
 } from './dealWorkModel';
 
 const FIELD = 'w-full rounded-axal-sm border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink focus:border-axal-violet focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -494,6 +494,10 @@ export function DealDocuments({ deal }) {
 
 export function DealTerms({ deal, investor }) {
   const rows = proposedTerms(deal);
+  // D6195: the investor's own route preference, read from their commitment under the firm selected now.
+  const firmId = useActiveCompany()?.company?.id ?? null;
+  const [mineRead, reloadMine] = useRead(() => (investor ? api.dealCommitments(deal.id) : Promise.resolve([])), [deal.id, firmId, investor]);
+  const pref = termsPreference(myCommitment(mineRead.status === 'ready' ? { status: 'ready', dealId: deal.id, items: Array.isArray(mineRead.data) ? mineRead.data : [] } : mineRead, deal.currency || 'USD', deal.id));
   return (
     <div className="grid gap-3.5 md:grid-cols-2" data-testid="deal-terms">
       <Card title="Proposed terms" testId="deal-terms-proposed">
@@ -516,12 +520,22 @@ export function DealTerms({ deal, investor }) {
         <section className="flex flex-col gap-2.5 md:col-span-2" data-testid="deal-terms-routes">
           <h3 className={H3}>How you invest</h3>
           <div className="grid gap-2.5 md:grid-cols-3">
-            {ROUTES.map((r) => (
-              <div key={r.key} className={`${CARD} flex flex-col gap-1 p-3.5`}>
-                <span className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">{r.title}</span>
-                <span className={SUB}>{r.line}</span>
-              </div>
-            ))}
+            {ROUTES.map((r) => {
+              const chosen = pref.key === r.key;
+              return (
+                <div key={r.key} className={`${CARD} flex flex-col gap-1 p-3.5 ${chosen ? 'border-2 border-axal-violet dark:border-violet-400' : ''}`} data-testid={`deal-terms-route-${r.key}`} data-chosen={chosen ? 'true' : undefined}>
+                  <span className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">{r.title}</span>
+                  <span className={SUB}>{r.line}</span>
+                  {chosen && <span className="text-[11.5px] font-bold uppercase tracking-wide text-axal-violet-deep dark:text-violet-300">✓ Your preference</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-col gap-1" data-testid="deal-terms-preference" data-state={pref.state}>
+            {pref.state === 'loading' && <Reading />}
+            {pref.state === 'ready' && <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">Your preference: {pref.line}</p>}
+            {(pref.state === 'none' || pref.state === 'unreadable') && <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{pref.line}</p>}
+            {pref.state === 'unreadable' && <button type="button" className={`${BTN_S} w-fit`} onClick={() => reloadMine()}>Try again</button>}
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{ROUTE_NOTE}</p>
@@ -580,6 +594,12 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
               <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{c.recorded}</span>
             </div>
             {c.firm && <p className={`m-0 ${SUB}`} data-testid="deal-my-firm">{c.firm}</p>}
+            {/* D6195: the route preference, a preference only; Change amount (while Pending) changes it too. */}
+            <div className="flex flex-col gap-0.5" data-testid="deal-my-route-preference">
+              <span className={EYE}>How you would like to invest</span>
+              <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{preferenceLine(c.preference)}</p>
+              <span className={SUB}>{ROUTE_NOTE}</span>
+            </div>
             <div className="flex flex-col gap-0.5">
               <span className={EYE}>Your note</span>
               <p className="m-0 whitespace-pre-line text-[13px] text-axal-ink dark:text-gray-100">{c.note || 'No note recorded.'}</p>

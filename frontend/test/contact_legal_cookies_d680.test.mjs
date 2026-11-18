@@ -108,6 +108,21 @@ test('?topic=licence adds a fourth intent, Licence, and presses it', () => {
   assert.equal(contact.initialIntent(null), 'lab');
 });
 
+test('#6986: ?topic= presses the pill it names, and an unknown topic keeps the default and three pills', () => {
+  const on = (path) => pills(render(React.createElement(ContactPage), path)).filter((p) => p.on).map((p) => p.label);
+  const shown = (path) => pills(render(React.createElement(ContactPage), path)).map((p) => p.label);
+  assert.deepEqual(on('/contact?topic=advise'), ['Advising']);
+  assert.deepEqual(on('/contact?topic=invest'), ['Investing / LP']);
+  assert.deepEqual(on('/contact?topic=lab'), ['Spin-Out Lab']);
+  assert.deepEqual(on('/contact?topic=licence'), ['Licence']);
+  for (const path of ['/contact?topic=advise', '/contact?topic=invest', '/contact?topic=lab']) {
+    assert.deepEqual(shown(path), ['Spin-Out Lab', 'Investing / LP', 'Advising'], `${path} shows Licence`);
+  }
+  assert.deepEqual(on('/contact?topic=nonsense'), ['Spin-Out Lab']);
+  assert.deepEqual(shown('/contact?topic=nonsense'), ['Spin-Out Lab', 'Investing / LP', 'Advising']);
+  assert.equal(contact.initialIntent('constructor'), 'lab', 'an inherited property name is not a topic');
+});
+
 test('every intent the page can send is one the Worker route accepts, under the same name', () => {
   assert.deepEqual(Object.keys(ROUTE_INTENTS), ['lab', 'invest', 'advise', 'licence']);
   for (const i of contact.intentsFor('licence')) {
@@ -304,7 +319,8 @@ test('the dialog draws the canvas\'s pieces, Essential locked on and every optio
   }));
   assert.match(html, /role="dialog" aria-modal="true"/);
   assert.match(html, />Cookie preferences<\/h2>/);
-  assert.match(html, /We use a minimal set of cookies\. Essential cookies keep the workspaces signed in and cannot be disabled\. Everything else is optional and off by default\./);
+  // #6998: the intro names essential storage and says the options are first-party.
+  assert.match(text(html), /Essential storage keeps you signed in and remembers this choice; it cannot be turned off\. The options below are first-party and off until you turn them on\. Nothing loads from a third party to measure you or show you ads\./);
   const rows = [...html.matchAll(/data-category="(\w+)"[\s\S]*?(<button type="button" role="switch"[^>]*>)/g)]
     .map(([, key, tag]) => ({ key, on: /aria-checked="true"/.test(tag), locked: /disabled=""/.test(tag) }));
   assert.deepEqual(rows, consent.COOKIE_ROWS.map((r) => ({ key: r.key, on: Boolean(r.locked), locked: Boolean(r.locked) })));
@@ -323,8 +339,9 @@ test('the dialog draws the canvas\'s pieces, Essential locked on and every optio
 test('the banner names only the optional purposes the site has, and the footer\'s link opens the dialog', () => {
   localStorage.clear();
   const html = render(React.createElement(CookieConsent));
-  assert.match(text(html), /for analytics and marketing purposes\./);
-  assert.doesNotMatch(html, /functional|advertising/i);
+  // #6998: the banner names the two categories that exist, as what they are.
+  assert.match(text(html), /With “Accept all”, Axal also keeps sign-up measurement and a referral cookie, both first-party\./);
+  assert.doesNotMatch(html, /functional|advertising|marketing purposes/i);
   const src = codeOnly(read('frontend/src/components/CookieConsent.jsx'));
   assert.match(src, /window\.addEventListener\(OPEN_PREFERENCES_EVENT, onOpen\)/);
   assert.match(src, /if \(view === 'prefs'\) \{\s*return \(\s*<CookiePreferencesDialog/);

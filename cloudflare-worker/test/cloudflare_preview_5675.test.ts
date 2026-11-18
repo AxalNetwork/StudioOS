@@ -65,14 +65,43 @@ test('guest callback has no production/redirect fallback and cannot manufacture 
  await assert.rejects(runPreviewCallback({target:origin+'/canary/'+j.id+'/callback',job:j,key},async()=>Response.json({accepted:false})));
 });
 
-test('normal deployment must pass preview before production; failure artifact is sanitized and rollback has no automatic bypass',()=>{
- const w=readFileSync(new URL('../../.github/workflows/meeting-bot-deploy.yml',import.meta.url),'utf8');
- const verify=w.lastIndexOf('run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs');
- assert.ok(w.indexOf('--env preview')<verify);assert.ok(verify<w.indexOf('--env ""'));
- assert.ok(verify<w.indexOf('Recheck the candidate after preview verification'));assert.ok(w.indexOf('Recheck the candidate after preview verification')<w.indexOf('--env \"\"'));assert.match(w,/verify-production-candidate\.mjs \"\$GITHUB_SHA\" --wait/);
- assert.doesNotMatch(w,/continue-on-error|skip.canary|bypass/i);assert.match(w,/MEETING_BOT_PREVIEW_ROUTE_VERIFIED/);
- assert.ok(w.indexOf('verify-meeting-bot-preview.mjs --preflight')<w.indexOf('--env preview'));assert.match(w,/--var \"PREVIEW_CANARY_ENABLED:on\"/);assert.match(w,/--var \"PREVIEW_CANARY_ORIGIN:\$\{MEETING_BOT_PREVIEW_ORIGIN\}\"/);
- const cli=readFileSync(new URL('../../scripts/verify-meeting-bot-preview.mjs',import.meta.url),'utf8');assert.match(cli,/previewPromotionEligible/);assert.doesNotMatch(cli,/hooks.slack|chat.postMessage|meeting_url|attendee/);
+test('deployment checks settings before CI and exposes the signing secret only after candidate verification', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/meeting-bot-deploy.yml', import.meta.url), 'utf8');
+  const steps = workflow.split(/^      - /m);
+  const commands = [
+    'verify-meeting-bot-preview.mjs --check-settings',
+    'verify-production-candidate.mjs "$GITHUB_SHA" --wait',
+    'verify-meeting-bot-preview.mjs --preflight',
+    'npm ci --prefix cloudflare-worker',
+    'build-meeting-bot-image.mjs',
+    'Recheck the candidate before publishing the bot',
+    '--env preview',
+    'Verify deployed preview callback before normal promotion',
+    'Recheck the candidate after preview verification',
+    '--env ""',
+  ];
+  let previous = -1;
+  for (const command of commands) {
+    const current = steps.findIndex(step => step.includes(command));
+    assert.ok(current > previous, `missing or out-of-order step: ${command}`);
+    previous = current;
+  }
+  const earlyCheck = steps.find(step => step.includes('--check-settings'))!;
+  assert.match(earlyCheck, /MEETING_BOT_PREVIEW_SECRET_PRESENT:.*secrets\.MEETING_BOT_PREVIEW_SECRET != ''/);
+  const secretSteps = steps.filter(step => /\$\{\{\s*secrets\.MEETING_BOT_PREVIEW_SECRET\s*\}\}/.test(step));
+  assert.equal(secretSteps.length, 2);
+  assert.match(secretSteps[0], /verify-meeting-bot-preview\.mjs --preflight/);
+  assert.match(secretSteps[1], /verify-meeting-bot-preview\.mjs$/m);
+  for (const step of [earlyCheck, ...secretSteps]) {
+    assert.match(step, /vars\.MEETING_BOT_PREVIEW_ORIGIN/);
+    assert.match(step, /vars\.MEETING_BOT_PREVIEW_ROUTE_VERIFIED/);
+  }
+  assert.doesNotMatch(workflow, /continue-on-error|skip.canary|bypass/i);
+  assert.match(workflow, /--var "PREVIEW_CANARY_ENABLED:on"/);
+  assert.match(workflow, /--var "PREVIEW_CANARY_ORIGIN:\$\{MEETING_BOT_PREVIEW_ORIGIN\}"/);
+  const cli = readFileSync(new URL('../../scripts/verify-meeting-bot-preview.mjs', import.meta.url), 'utf8');
+  assert.match(cli, /previewPromotionEligible/);
+  assert.doesNotMatch(cli, /hooks.slack|chat.postMessage|meeting_url|attendee/);
 });
 
 test('mutations: audience, signature, callback persistence and stop acknowledgement each protect promotion',async()=>{
@@ -99,15 +128,60 @@ test('a new canary ID cannot bypass an unknown stop; acknowledged cleanup permit
 });
 
 
-test('the actual deployment CLI preflight runs without a test loader and refuses incomplete owner configuration before network access',()=>{
- const dir=mkdtempSync(join(tmpdir(),'cf-preview-cli-5675-')),output=join(dir,'receipt.json');
- const script=new URL('../../scripts/verify-meeting-bot-preview.mjs',import.meta.url);
- const config={...process.env,MEETING_BOT_PREVIEW_ORIGIN:origin,MEETING_BOT_PREVIEW_SECRET:root,MEETING_BOT_PREVIEW_ROUTE_VERIFIED:'true',GITHUB_SHA:'a'.repeat(40),PREVIEW_CANARY_RECEIPT:output};
- const run=(change:Record<string,string>)=>spawnSync(process.execPath,['--experimental-strip-types','--no-warnings',script.pathname,'--preflight'],{env:{...config,...change},encoding:'utf8',timeout:5000});
- try{
-  const valid=run({});assert.equal(valid.status,0,valid.stderr);assert.equal(existsSync(output),false);
-  for(const change of [{MEETING_BOT_PREVIEW_ORIGIN:'https://app.axal.vc'},{MEETING_BOT_PREVIEW_SECRET:''},{MEETING_BOT_PREVIEW_ROUTE_VERIFIED:'false'},{GITHUB_SHA:'invalid'}]){
-   const r=run(change);assert.equal(r.status,1,r.stderr);const evidence=JSON.parse(readFileSync(output,'utf8'));assert.equal(evidence.stage,'preflight');assert.equal(evidence.state,'fail');assert.ok(!JSON.stringify(evidence).includes(root));
+test('early settings, signing preflight and deployed probe enforce their own prerequisites', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-preview-cli-5675-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const output = join(dir, 'receipt.json');
+  const script = new URL('../../scripts/verify-meeting-bot-preview.mjs', import.meta.url);
+  const config = {
+    MEETING_BOT_PREVIEW_ORIGIN: origin,
+    MEETING_BOT_PREVIEW_SECRET: root,
+    MEETING_BOT_PREVIEW_SECRET_PRESENT: 'true',
+    MEETING_BOT_PREVIEW_ROUTE_VERIFIED: 'true',
+    GITHUB_SHA: 'a'.repeat(40),
+    PREVIEW_CANARY_RECEIPT: output,
+  };
+  function run(args: string[], changes: Partial<typeof config>) {
+    rmSync(output, { force: true });
+    return spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', script.pathname, ...args], {
+      env: { ...config, ...changes }, encoding: 'utf8', timeout: 5000,
+    });
   }
- }finally{rmSync(dir,{recursive:true,force:true});}
+
+  for (const [mode, changes] of [
+    ['--check-settings', { MEETING_BOT_PREVIEW_SECRET: '' }],
+    ['--preflight', { MEETING_BOT_PREVIEW_SECRET_PRESENT: 'false' }],
+  ] as const) {
+    const result = run([mode], changes);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(existsSync(output), false, 'a settings-only check cannot produce a passing deployment receipt');
+  }
+
+  const invalidOrigin = 'https://private-fixture.example.invalid';
+  const shortSecret = 'short-fixture-secret';
+  const missing = ['MEETING_BOT_PREVIEW_ORIGIN', 'MEETING_BOT_PREVIEW_ROUTE_VERIFIED', 'MEETING_BOT_PREVIEW_SECRET'];
+  const cases: [string[], Partial<typeof config>, string[]][] = [
+    [['--check-settings'], { MEETING_BOT_PREVIEW_SECRET_PRESENT: 'false', MEETING_BOT_PREVIEW_ORIGIN: '', MEETING_BOT_PREVIEW_ROUTE_VERIFIED: '' }, missing],
+    [['--check-settings'], { MEETING_BOT_PREVIEW_ORIGIN: invalidOrigin }, ['MEETING_BOT_PREVIEW_ORIGIN']],
+    [['--check-settings'], { GITHUB_SHA: 'bad-revision' }, ['GITHUB_SHA']],
+    [['--preflight'], { GITHUB_SHA: 'bad-revision' }, ['GITHUB_SHA']],
+    [['--preflight'], { MEETING_BOT_PREVIEW_ORIGIN: invalidOrigin }, ['MEETING_BOT_PREVIEW_ORIGIN']],
+    [['--preflight'], { MEETING_BOT_PREVIEW_ROUTE_VERIFIED: 'false' }, ['MEETING_BOT_PREVIEW_ROUTE_VERIFIED']],
+    [['--preflight'], { MEETING_BOT_PREVIEW_SECRET: shortSecret }, ['MEETING_BOT_PREVIEW_SECRET']],
+    [[], { MEETING_BOT_PREVIEW_SECRET: '' }, ['MEETING_BOT_PREVIEW_SECRET']],
+  ];
+  for (const [args, changes, invalid] of cases) {
+    const result = run(args, changes);
+    assert.equal(result.status, 1, result.stderr);
+    const raw = readFileSync(output, 'utf8');
+    const evidence = JSON.parse(raw);
+    assert.equal(evidence.stage, 'preflight');
+    assert.equal(evidence.state, 'fail');
+    assert.deepEqual(evidence.invalid_settings.sort(), [...invalid].sort());
+    for (const name of invalid) assert.ok(result.stderr.includes(name), `missing guidance for ${name}`);
+    const diagnostics = [raw, result.stdout, result.stderr].join('\n');
+    for (const privateValue of [root, shortSecret, origin, invalidOrigin, 'bad-revision']) {
+      assert.ok(!diagnostics.includes(privateValue), 'diagnostics must omit configured values');
+    }
+  }
 });

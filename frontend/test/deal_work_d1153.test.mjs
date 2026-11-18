@@ -372,13 +372,13 @@ test('D6179: a section reviewer sees no request controls or private answer, even
   } finally { await v.close(); }
 });
 
-test('Terms: proposed terms with their source, the slots, and How you invest says no preference is recorded', async () => {
+test('Terms: proposed terms with their source, the slots, and How you invest says no preference is recorded (D6195)', async () => {
   const v = await mounted('/deals/4/terms', INVESTOR);
   try {
     assert.match(v.textOf('deal-term-valuation-cap'), /Valuation cap[\s\S]*From the deal[\s\S]*\$12,000,000/);
     assert.match(v.textOf('deal-term-board-seat'), /No field on the deal holds it yet\.[\s\S]*Not recorded/);
     assert.ok(v.has('deal-terms-captable'));
-    assert.match(v.textOf('deal-terms-routes'), /No preference is recorded here yet\./);
+    assert.match(v.textOf('deal-terms-routes'), /No preference recorded\. You can record one when you commit\.[\s\S]*This is your preference\. The studio sets the route in the closing room\./);
   } finally { await v.close(); }
 });
 

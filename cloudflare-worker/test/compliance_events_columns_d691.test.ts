@@ -16,7 +16,6 @@ import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const SECRET = 'd691-only-test-jwt-secret-0123456789';
 const OWNER = 691;
 const PROJECT = 691;
@@ -57,7 +56,7 @@ test('1: Grow obligations save and read on a full fresh build with foreign keys 
   const read = () => call('GET', '/modules/durable-company-building?project=' + PROJECT);
   const module = await read();
   assert.deepEqual(module.body.records.rows.find((r: any) => r.id === add.body.id),
-    { id: add.body.id, title: 'Example board', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
+    { id: add.body.id, title: 'Example board', kind: 'governance', due_at: due, owner_name: null, owner: null, owner_user_id: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
   assert.ok(module.body.card.series.calendar.some((event: any) => event.title === 'Example board' && event.due === due));
   const patch = (body: unknown) => call('PATCH', '/obligations/' + add.body.id, body);
   for (const [status, completion] of [['done', 'completed'], ['snoozed', 'snoozed'], ['overdue', 'pending'],
@@ -118,12 +117,37 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
+function obsoleteComplianceColumn(sql: string) {
+  const code = sql.replace(/'(?:''|[^'])*'/g, "''").replace(/"([a-z_]\w*)"/gi, '$1').replace(/\[([a-z_]\w*)\]/gi, '$1');
+  const references = [...code.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO)\s+compliance_events\b(?:\s+(?:AS\s+)?([a-z_]\w*))?/gi)];
+  if (!references.length) return false;
+  const keywords = new Set(['set', 'where', 'join', 'on', 'order', 'group', 'limit', 'left', 'right', 'inner', 'outer', 'cross', 'union', 'returning']);
+  const aliases = new Set(['compliance_events', ...references.map((m) => m[1]?.toLowerCase()).filter((a): a is string => !!a && !keywords.has(a))]);
+  return [...code.matchAll(/(?:(\b[a-z_]\w*)\s*\.\s*)?\b(?:due_at|status)\b/gi)]
+    .some((m) => !m[1] || aliases.has(m[1].toLowerCase()));
+}
+
+test('the obsolete-column guard distinguishes table aliases and SQL data from actual compliance columns', () => {
+  for (const sql of [
+    'SELECT status FROM compliance_events',
+    'SELECT c.due_at FROM compliance_events AS c',
+    'UPDATE compliance_events SET status = ?',
+    'SELECT c.status FROM projects p JOIN compliance_events c ON c.project_id = p.id',
+  ]) assert.equal(obsoleteComplianceColumn(sql), true, sql);
+  for (const sql of [
+    'SELECT c.completion_status, c.due_date FROM compliance_events c',
+    'SELECT p.status FROM google_workspace_proposals p JOIN compliance_events c ON c.project_id = p.project_id',
+    "SELECT status FROM proposals WHERE local_table = 'compliance_events'",
+    "SELECT status FROM proposals WHERE note = 'FROM compliance_events'",
+  ]) assert.equal(obsoleteComplianceColumn(sql), false, sql);
+});
+
 test('2: no compliance_events SQL uses migration 034 due_at or bare status, including aliases', () => {
   const root = resolve(here, '../src');
   const violations: string[] = [];
   for (const path of sourceFiles(root)) {
     for (const { body, line } of sqlStrings(readFileSync(path, 'utf8'))) {
-      if (/\bcompliance_events\b/i.test(body) && /\b(?:due_at|status)\b/i.test(body)) {
+      if (obsoleteComplianceColumn(body)) {
         violations.push(relative(root, path) + ':' + line);
       }
     }

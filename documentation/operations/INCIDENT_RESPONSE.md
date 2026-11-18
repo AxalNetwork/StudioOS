@@ -162,6 +162,12 @@ finish technical mitigation.
 | R2 contracts | R2 versioning on `studioos-files` | Continuous (versioning) | 7 years (previous versions) | dashboard restore |
 | R2 KYC | R2 versioning on `studioos-files` (`kyc/` prefix) | Continuous (versioning) | 7 years (previous versions) | dashboard restore |
 | Worker source | Git (origin/main) | Per-commit | Indefinite | `git revert` + `wrangler deploy` |
+| R2 publications | `studioos-publications` | Recovery schedule not recorded | Not recorded; no locked-copy approval | No verified recovery path recorded; see [R2 inventory](R2_INVENTORY.json) and #6428 handoff |
+| R2 company logos | `studioos-company-logos` | Recovery schedule not recorded | Not recorded | Re-upload an available source asset; no archived restore path recorded; see [R2 inventory](R2_INVENTORY.json) |
+| R2 archive logs | `studioos-logs` | Tail-consumer writes; backup schedule not recorded | 2555 days in source configuration; live lifecycle unverified | No independent restore path recorded; see [R2 inventory](R2_INVENTORY.json) |
+| Preview file objects | `studioos-files-preview` | Not recorded | Not recorded | Synthetic preview data only; no production recovery claim; see [R2 inventory](R2_INVENTORY.json) |
+| Preview publication objects | `studioos-publications-preview` | Not recorded | Not recorded | Synthetic preview data only; see [R2 inventory](R2_INVENTORY.json) |
+| Preview logo objects | `studioos-company-logos-preview` | Not recorded | Not recorded | Re-upload synthetic source assets; see [R2 inventory](R2_INVENTORY.json) |
 
 **Operator one-time setup (NOT in code):**
 

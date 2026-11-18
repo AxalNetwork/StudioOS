@@ -589,6 +589,34 @@ export async function approvalItem(env: Env, src: ApprovalSource, id: number, no
   return row ? itemOf(src, row, now) : null;
 }
 
+/**
+ * D5877 (#5877, part of #4716): how many lanes the board and the count read at
+ * once. The lanes are independent reads, so one after another made the Inbox
+ * wait for the sum of them; all at once would put twenty D1 queries (more on
+ * HQ's inbox) in flight for one page. Four is the middle: the wait drops to
+ * roughly a quarter, and one page never holds more than four reads open.
+ */
+export const LANE_READ_CONCURRENCY = 4;
+
+/**
+ * D5877: `fn` over `list`, at most `limit` calls in flight, the answers in
+ * `list`'s order whatever order they settle in. `fn` is expected to catch its
+ * own failure (every caller here turns one into the lane's `null`); a throw
+ * that escapes still rejects the whole map, as `Promise.all` would.
+ */
+export async function mapBounded<T, R>(list: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(list.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const i = next++;
+      out[i] = await fn(list[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, Math.trunc(limit) || 1), list.length) }, worker));
+  return out;
+}
+
 export type ApprovalBoard = {
   items: ApprovalItem[];
   /** Per lane, so a lane that answered 0 is distinguishable from one that failed. */
@@ -623,19 +651,31 @@ export async function approvalBoard(
   const lanes: ApprovalBoard['lanes'] = [];
   const unreadable: string[] = [];
 
-  for (const src of sources) {
+  // D5877: the lanes are read LANE_READ_CONCURRENCY at a time, then folded in
+  // source order, so the items, lanes and unreadable list come out exactly as
+  // the one-at-a-time loop made them (the sort below is stable, so ties keep
+  // lane order too). A lane's read never throws out of `mapBounded`: its
+  // failure is its own `null`, as before.
+  const reads = await mapBounded(sources, LANE_READ_CONCURRENCY, async (src) => {
     try {
       const rows = await env.DB.prepare(src.rowsSql)
         .bind(...(src.bindings?.(env) || []), Math.max(1, Math.trunc(Number(limit) || 100)))
         .all<LaneRow>();
-      const got = rows.results || [];
-      for (const r of got) items.push(itemOf(src, r, now));
-      lanes.push({ key: src.key, label: src.label, count: got.length });
+      return rows.results || [];
     } catch {
+      return null;
+    }
+  });
+  sources.forEach((src, i) => {
+    const got = reads[i];
+    if (got === null) {
       lanes.push({ key: src.key, label: src.label, count: null });
       unreadable.push(src.label);
+      return;
     }
-  }
+    for (const r of got) items.push(itemOf(src, r, now));
+    lanes.push({ key: src.key, label: src.label, count: got.length });
+  });
 
   // OLDEST FIRST, WHICH IS THE BOARD'S ONE CLAIM. S3's own words: an admin's
   // question "is never 'what is in the LP queue' — it is 'what is oldest and
@@ -757,23 +797,22 @@ export async function laneCounts(env: Env, sources: readonly ApprovalSource[] = 
 export async function countLanes<K extends string>(
   env: Env, sources: readonly (Omit<ApprovalSource, 'key'> & { key: K })[],
 ): Promise<(Omit<LaneCount, 'key'> & { key: K })[]> {
-  const out: (Omit<LaneCount, 'key'> & { key: K })[] = [];
-  for (const s of sources) {
+  // D5877: LANE_READ_CONCURRENCY lanes at a time, answered in source order.
+  return mapBounded(sources, LANE_READ_CONCURRENCY, async (s) => {
     const meta = laneMeta(s as ApprovalSource);
     try {
       const row = await env.DB.prepare(s.countSql).bind(...(s.bindings?.(env) || [])).first<{ n: number; oldest: string | null }>();
       const sub = s.subSql ? await subCounts(env, s.subSql) : await subCount(env, s as ApprovalSource);
-      out.push({
+      return {
         key: s.key,
         label: s.label,
         count: Number(row?.n) || 0,
         oldest_at: row?.oldest ?? null,
         ...meta,
         ...(sub === undefined ? {} : { sub }),
-      });
+      };
     } catch {
-      out.push({ key: s.key, label: s.label, count: null, oldest_at: null, ...meta });
+      return { key: s.key, label: s.label, count: null, oldest_at: null, ...meta };
     }
-  }
-  return out;
+  });
 }

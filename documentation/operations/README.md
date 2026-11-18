@@ -11,6 +11,7 @@ files say how to act on it.
 | `USAGE_RETENTION.md` | Retention tiers for the AI usage, reservation, ledger, run and proposal tables, what blocks moving a row today, and the counsel and owner gates before anything is archived or deleted (D4568). |
 | `D1_BENCHMARK.md` | Measure whether the one D1 database limits mixed agent and financial load: the local benchmark (`npm run bench:d1`), the owner's read-only production baseline, the hosted preview run behind #4566's preflight, and what each result may claim (D4567). |
 | `AGENT_EXECUTION_VALIDATION.md` | Test agent execution outside production: the preview isolation matrix, the fail-closed preflight, synthetic fixtures and their cleanup, the owner-only actions and teardown, and how evidence is classed (D4566). |
+| `STAGING.md` | Provision, rebuild and tear down staging, the isolated `studioos-preview` Worker over synthetic data: the resource inventory, the cost estimate awaiting the owner's approval, the isolation rules and the runbook (D7147). |
 | `AGENT_ENGINE_GO_LIVE.md` | Prepare and stage agent rollout, verify the $100 gateway limit, cohort membership, halt and breaker controls (D4423). |
 | `DEPLOY.md` | Ship the Worker and the SPA to production, and roll a deploy back. |
 | `DATA_RETENTION.md` | Look up how long each deck store keeps its rows and R2 objects, what removes them, and the known gaps (D1508). |
@@ -55,3 +56,4 @@ and a link in `documentation/README.md`.
 | `AGENT_COMPUTE_4557.md` | D4557: local image evidence, immutable scheduling gate, preview acceptance and rollback. |
 | `WORKFLOW_SLACK_6370.md` | D6370: configure the sender, validate a workflow attempt and pause delivery. |
 | `WORKFLOW_FAILURE_ISSUES_6387.md` | D6387: GitHub repair issue activation, evidence and replay. |
+| `R2_INVENTORY.json` | D6650: reviewed source prefix classes, unknown retention bases, explicit copy approvals and dynamic-key provenance. `node scripts/build-r2-inventory.mjs --write` renders it with every current call site beside it as a generated, gitignored Markdown inventory. |

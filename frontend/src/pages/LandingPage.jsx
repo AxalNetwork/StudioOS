@@ -5,7 +5,7 @@ import PublicFooter from '../components/PublicFooter';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { track } from '../lib/funnel';
 import { DOOR_LINKS } from '../lib/siteLinks';
-import { openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
+import { LAB_WEEKS, openCohortCopy, useCohortPlaces } from '../lib/spinoutLab';
 import { numberWordCap } from '../lib/numberWords';
 import { DIMENSIONS } from '../lib/scoringViewModel';
 import { SLIDE_META } from '../lib/pitchDeckViewModel';
@@ -85,16 +85,9 @@ const LANES = [
 
 // Step two is "get matched", not "get verified": people browse on email first.
 const STEPS = [
-  { n: '01', title: 'Join', desc: 'A 30-second intake: who you are, what you are building or bringing, where you are.' },
+  { n: '01', title: 'Join', desc: 'Create an account. Your membership is reviewed after you sign up.' }, // #6988 (X6): what MEMBERSHIP_STEPS says happens
   { n: '02', title: 'Get matched', desc: 'The record routes you to the founders, partners, or advisors your profile actually fits.' },
   { n: '03', title: 'Unlock the network', desc: 'Collaborate from one workspace. Capital reads the same record when the work is ready.' },
-];
-
-const LAB_WEEKS = [
-  { n: 'Week 1', title: 'Idea & Customer', desc: 'Problem definition, ICP, market sizing, ≥5 logged interviews' },
-  { n: 'Week 2', title: 'Solution & Roadmap', desc: 'MVP scope, 90-day OKRs, brand v1, pitch deck v1' },
-  { n: 'Week 3', title: 'Validate & Team', desc: 'Readiness score, advisor cadence, co-founder decision, revenue proof' },
-  { n: 'Week 4', title: 'Incorporate & Capital', desc: 'Entity, founder stock, 83(b), use of funds, investor intros' },
 ];
 
 // The canvas's card copy, corrected where the code says otherwise (D677's
@@ -198,7 +191,8 @@ function Hero({ stats }) {
         </p>
         <div className="ax-row-btns" style={{ marginTop: 34 }}>
           <Link to="/register" className="ax-btn ax-btn-lg ax-btn-primary">Join Axal VC →</Link>
-          <Link to="/directory" className="ax-btn ax-btn-lg ax-btn-quiet">Explore the network</Link>
+          {/* #6988 (X6): not /directory, which may list nobody; the platform page until #7006 (B2). */}
+          <Link to="/platform" className="ax-btn ax-btn-lg ax-btn-quiet">See the platform</Link>
         </div>
         {figures.length > 0 && (
           <ul className="ax-stats" style={{ listStyle: 'none', paddingLeft: 0, paddingRight: 0, marginBottom: 0 }}>
@@ -339,7 +333,7 @@ function LabBand() {
             {LAB_WEEKS.map((w) => (
               <li key={w.n} className="ax-week">
                 <div className="ax-mono ax-week-n">{w.n}</div>
-                <div className="ax-week-t">{w.title}</div>
+                <div className="ax-week-t">{w.name}</div>
                 <div className="ax-week-d">{w.desc}</div>
               </li>
             ))}
@@ -460,7 +454,7 @@ function ClosingCta() {
         <div style={{ position: 'relative', maxWidth: 560 }}>
           <h2 id="ax-close-h">Join the network building what’s next.</h2>
           <p className="ax-close-copy" style={{ margin: 0 }}>
-            Founder, partner, investor, or advisor — start with a 30-second intake and get matched to the right side of the network.
+            Founder, partner, investor or advisor: create an account and choose your role.
           </p>
         </div>
         <div className="ax-row-btns" style={{ position: 'relative' }}>
