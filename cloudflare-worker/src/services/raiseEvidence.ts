@@ -565,6 +565,17 @@ export async function investorEvidenceCoverage(env:Env,projectId:number,investor
   const view=await sharedView(env,projectId,aud,await evidenceNda(env,projectId,investorUserId));
   return {coverage:view.coverage,partial:view.partial};
 }
+/** #6172: Team evidence metadata through the same sharing gates as the Evidence tab.
+ * Caller has already checked deal access and NDA. No item or individual score is disclosed. */
+export async function dealTeamEvidence(env: Env, projectId: number, userId: number, staffOrOwner: boolean) {
+  const audience = staffOrOwner ? STAFF_AUDIENCE(userId) : await evidenceAudience(env, projectId, userId);
+  if (!audience) return { state: 'not_recorded', reason: 'No Team evidence is shared with you on this deal.' };
+  const view = await sharedView(env, projectId, audience, true);
+  if (!('groups' in view.coverage)) return view.coverage;
+  const teamKinds = new Set(EVIDENCE_RULES.filter(rule => rule.backs.includes('team')).map(rule => rule.kind));
+  const groups = view.coverage.groups.filter(group => teamKinds.has(group.kind));
+  return { state: 'recorded', data: { groups, partial: view.partial, source: 'Shared Team evidence' } };
+}
 /** D6167 (#6167, D4631's `staff` audience): an Admin or an Operating Partner on the deal page reads the projection an
  *  investor reads, never the founder's own pack: what the founder shared beyond Private, through every grant's folders,
  *  not as a committed investor. `nda` is the caller's: the admin is exempt, the venture's NDA binds a partner (D4631). */

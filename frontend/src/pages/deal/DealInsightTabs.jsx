@@ -20,8 +20,9 @@ import { reportError } from '../../lib/log';
 import { tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
 import { ScopeRows } from '../../components/scoring/scorecard/Scorecard';
+import { kindWord, sourceWord } from '../cycles/evidence/evidenceModel.js';
 import {
-  ADVISORS_LINE, COVERAGE_NOTE, EVIDENCE_LINK, MASKED, NOT_RECORDED, NOT_REPORTED, SCORECARD_ROWS, TRACTION_CHARTS,
+  COVERAGE_NOTE, EVIDENCE_LINK, MASKED, NOT_RECORDED, NOT_REPORTED, SCORECARD_ROWS, TRACTION_CHARTS,
   askDraft, blockOf, chartSummary, coverageView, dateText, figureText, insightState, marketRow, personView, safeUrl, sizingView, tractionCsv, tractionSources, tractionView,
 } from './dealInsightsModel';
 
@@ -121,7 +122,7 @@ function Person({ p }) {
         <span aria-hidden="true" className="grid h-10 w-10 flex-none place-items-center rounded-full bg-axal-lavender font-mono text-[13px] font-bold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300">{p.initials}</span>
         <div className="min-w-0">
           <p className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{p.name}</p>
-          <p className={`m-0 ${SUB}`}>{p.role} · {p.fullTime ? `Full time since ${p.fullTime}` : `Full time: ${p.fullTimeReason}`}</p>
+          <p className={`m-0 ${SUB}`}>{p.role}</p>
         </div>
       </div>
       <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700">
@@ -133,10 +134,6 @@ function Person({ p }) {
         {p.roles.state === 'recorded' && <ul className="m-0 list-none p-0 text-[12.5px] leading-[1.55] text-axal-ink dark:text-gray-100">{p.roles.rows.map((r) => <li key={r}>{r}</li>)}</ul>}
         {p.roles.state === 'not_published' && <Pill tone="off">Not published</Pill>}
         {p.roles.state === 'unreadable' && <p className="m-0 text-[12px] text-axal-destructive dark:text-red-300" role="alert">Their prior roles could not be read. That is not the same as none.</p>}
-      </div>
-      <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700">
-        <span className={EYE}>Founder-market fit</span>
-        {p.fit ? <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100">{p.fit}</p> : <Missing reason={p.fitReason} />}
       </div>
     </Card>
   );
@@ -179,12 +176,36 @@ export function DealTeam({ deal }) {
             <p role="alert" className="m-0 text-[12px] text-axal-destructive md:col-span-3 dark:text-red-300" data-testid="deal-team-publication">Some members’ publication choices could not be read, so they are not shown. That is not the same as none.</p>
           )}
           <Coverage block={d.coverage} retry={retry} />
+          <Card title="Founder-market fit" testId="deal-team-fit">
+            <Block block={d.founder_market_fit}
+              what="Shared Team evidence" retry={retry} testId="deal-team-fit">
+              {(evidence) => (
+                <>
+                  {evidence.groups.length ? <ul className={`m-0 list-none p-0 ${SUB}`}>
+                    {evidence.groups.map((group) => <li key={`${group.area}-${group.kind}-${group.source_label}`}>
+                      {kindWord(group.kind)} · {group.count} shared · {sourceWord(group.source_label)}{group.newest ? ` · ${dateText(group.newest)}` : ''}
+                    </li>)}
+                  </ul> : <p className={`m-0 ${SUB}`}>No Team evidence is shared with you on this deal.</p>}
+                  {evidence.partial && <p className={`m-0 ${SUB}`}>Some Team evidence could not be read.</p>}
+                </>
+              )}
+            </Block>
+            <Link to={tabHref(deal.id, 'evidence')} className={`${BTN_S} w-fit`}>Open the Evidence tab</Link>
+          </Card>
           <div className="flex flex-col gap-3.5">
             <Card title="Co-founders’ values" testId="deal-team-values">
               {d.values_band?.value ? <Pill tone="done">{d.values_band.value}</Pill> : <Missing reason={d.values_band?.reason} />}
             </Card>
             <Rows dealId={deal.id} view="team" />
-            <Card title="Advisors on this company" testId="deal-team-advisors"><Missing reason={ADVISORS_LINE} /></Card>
+            <Card title="Advisors on this company" testId="deal-team-advisors">
+              <Block block={d.advisors} what="The accepted advisors" retry={retry} testId="deal-team-advisors">
+                {(advisors) => <>
+                  <p className={`m-0 ${SUB}`}>{advisors.count} accepted advisor{advisors.count === 1 ? '' : 's'}</p>
+                  {advisors.roles.map((entry) => <p key={entry.role} className={`m-0 ${SUB}`}>{entry.role} · {entry.count}</p>)}
+                  <p className={`m-0 ${SUB}`}>Source · {advisors.source}</p>
+                </>}
+              </Block>
+            </Card>
           </div>
         </div>
       )}
