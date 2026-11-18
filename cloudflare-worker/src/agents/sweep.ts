@@ -17,7 +17,8 @@
  *      admission, whose queue message was lost or never sent, are sent again
  *      (a redelivery is a no-op);
  *   2. at most `SWEEP_MAX` (60) new runs, from a bounded keyset scan of
- *      genuinely ready work. A per-scope candidate cap means one busy scope
+ *      genuinely ready work (D7074: one task per free lane of an agent, so
+ *      an agent with sub-agents is offered as many as it has lanes free). A per-scope candidate cap means one busy scope
  *      cannot consume every inspection in a rotation. With AGENT_AUTONOMY
  *      `self_start` and the engine `on`, each candidate is offered through
  *      its scope's object. With `manual` (the default) this step admits
@@ -44,6 +45,7 @@
 import type { Env } from '../types';
 import type { AgentRow } from '../services/agents/teams';
 import { scopeOfRow } from './engine';
+import { capacityCeilings, lanesOffered } from './capacity';
 import { autonomy, engineMode, haltedAll, type AgentRuntime } from './runtime';
 import { enqueueAgentRun, recordRepairMetrics, repairExhaustedRun } from './agentQueue';
 import { defaultTokensLeft, sweepDuties, type DutyDeps } from '../services/agents/duties';
@@ -88,39 +90,48 @@ async function saveReadyCursor(env: Env, agentId: number) {
 }
 
 /**
- * One task per agent, already ready by the same dependency rule `isReady`
- * enforces later. This is discovery only: `AgentRuntime.admit` repeats every
- * authorization, halt, scope-cap, financial and single-flight check.
+ * Ready tasks per agent, already ready by the same dependency rule `isReady`
+ * enforces later: one for each lane the agent has free. D7074: an agent holds
+ * `lanes_per_agent` live runs (its scope's setting, never above `lanesCeiling`,
+ * HQ's), so an agent with a run live is still a candidate while a lane is
+ * free. With one lane, which is every scope until HQ offers sub-agents, this is
+ * one task for an agent with no live run, as before. This is discovery only:
+ * `AgentRuntime.admit` repeats every authorization, halt, scope-cap, financial
+ * and single-flight check.
  */
-async function readyAfter(env: Env, afterAgentId: number): Promise<ReadyCandidate[]> {
+async function readyAfter(env: Env, afterAgentId: number, lanesCeiling: number): Promise<ReadyCandidate[]> {
   const rows = await env.DB.prepare(
-    `WITH task_ranked AS (
+    `WITH agent_room AS (
+       SELECT a.*,
+         MIN(IFNULL(s.lanes_per_agent, 1), ?) AS lanes,
+         (SELECT COUNT(*) FROM agent_task_runs r WHERE r.agent_id = a.id AND r.status IN ('admitted', 'running')) AS live
+       FROM team_agents a
+       LEFT JOIN agent_scope_settings s ON s.scope_kind = a.scope_kind
+         AND IFNULL(s.company_id, 0) = IFNULL(a.company_id, 0) AND IFNULL(s.project_id, 0) = IFNULL(a.project_id, 0)
+       WHERE a.status = 'active' AND a.id > ?
+     ), task_ranked AS (
        SELECT a.*, t.id AS task_id, t.created_at AS task_created_at,
          ROW_NUMBER() OVER (PARTITION BY a.id ORDER BY t.priority DESC, t.id) AS task_rank
-       FROM team_agents a
+       FROM agent_room a
        JOIN scope_tasks t ON t.assignee_kind = 'agent' AND t.assignee_agent_id = a.id
-       WHERE a.status = 'active' AND a.id > ?
+       WHERE a.live < a.lanes
          AND t.status = 'open' AND (t.board_column IS NULL OR t.board_column = 'ready')
-         AND NOT EXISTS (
-           SELECT 1 FROM agent_task_runs r
-           WHERE r.agent_id = a.id AND r.status IN ('admitted', 'running')
-         )
          AND NOT EXISTS (
            SELECT 1 FROM scope_task_deps d
            JOIN scope_tasks dep ON dep.id = d.depends_on_task_id
            WHERE d.task_id = t.id AND dep.status <> 'done'
          )
-     ), one_per_agent AS (
-       SELECT * FROM task_ranked WHERE task_rank = 1
+     ), per_lane AS (
+       SELECT * FROM task_ranked WHERE task_rank <= lanes - live
      ), fairly_scoped AS (
        SELECT *, ROW_NUMBER() OVER (
          PARTITION BY scope_kind, IFNULL(company_id, 0), IFNULL(project_id, 0)
-         ORDER BY id
+         ORDER BY id, task_rank
        ) AS scope_rank
-       FROM one_per_agent
+       FROM per_lane
      )
-     SELECT * FROM fairly_scoped WHERE scope_rank <= ? ORDER BY id LIMIT ?`,
-  ).bind(afterAgentId, DISCOVERY_PER_SCOPE_MAX, DISCOVERY_SCAN_MAX).all<ReadyCandidate>();
+     SELECT * FROM fairly_scoped WHERE scope_rank <= ? ORDER BY id, task_rank LIMIT ?`,
+  ).bind(Math.max(1, lanesCeiling), afterAgentId, DISCOVERY_PER_SCOPE_MAX, DISCOVERY_SCAN_MAX).all<ReadyCandidate>();
   return rows.results ?? [];
 }
 
@@ -131,9 +142,12 @@ async function readyAfter(env: Env, afterAgentId: number): Promise<ReadyCandidat
  */
 async function readyCandidates(env: Env): Promise<{ candidates: ReadyCandidate[]; wrapped: boolean }> {
   const cursor = await readyCursor(env);
-  const later = await readyAfter(env, cursor);
+  // D7074: sub-agent lanes exist only under HQ's two ceilings; without them every agent has one lane.
+  const ceilings = await capacityCeilings(env);
+  const lanes = lanesOffered(ceilings) ? Number(ceilings.lanes) : 1;
+  const later = await readyAfter(env, cursor, lanes);
   if (later.length || cursor === 0) return { candidates: later, wrapped: false };
-  return { candidates: await readyAfter(env, 0), wrapped: true };
+  return { candidates: await readyAfter(env, 0, lanes), wrapped: true };
 }
 
 async function recordSweepMetrics(env: Env, now: Date, out: { resent: number; admitted: number; cap_resumed: number }, stats: SweepStats) {

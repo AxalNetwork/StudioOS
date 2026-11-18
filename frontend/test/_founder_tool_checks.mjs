@@ -39,7 +39,7 @@ export const RETURNS = [
   ['/build/marketplace','/validate/customer-research','← Validate › Customer research'],
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
-  ['/comarketing','/grow/partner-network','← Grow › Partner network'],
+  ['/comarketing','/grow/partnerships','← Grow › Partnerships'], // D6118: Partner network's page
   // D1180 (#3107) and D1194 (#3128): /raise/capital, /raise/capital/model and
   // /raise/capital/pipeline only forward, so none has a module return.
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
