@@ -1,10 +1,9 @@
 /**
  * Task #168 — the magic-link probe's own logic, tested without a network.
  *
- * The probe itself can only run in CI against production. That is exactly
- * why its PARSING and VERDICT logic has to be covered here: the one thing
- * worse than an unverified fix is a probe that reports a pass it did not
- * earn, and every way this script could do that lives in these functions.
+ * The production job uses a dedicated inbox. Here the real CLI runs against
+ * an ordered fetch fixture, covering the mail/read boundary, retry behavior
+ * and authenticated identity. Helper cases also cover parsing and verdicts.
  *
  * The three that can lie, and what they would lie about:
  *
@@ -19,7 +18,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -54,10 +53,7 @@ test('the token survives what mail does to a URL', () => {
   assert.equal(extractMagicToken(`<a href='${LINK}'>Sign in</a>`), TOKEN);
   assert.equal(extractMagicToken(`Go to ${LINK}.`), TOKEN, 'a trailing sentence full stop was kept');
   assert.equal(extractMagicToken(`(${LINK})`), TOKEN);
-  // A following query parameter stops the token, entity-encoded or not. This
-  // passes because `&` is outside the token charset, NOT because anything
-  // decodes `&amp;` — the probe deliberately has no such step, and a test
-  // that claimed otherwise would be pinning a line that does not exist.
+  // A following query parameter stops the token, entity-encoded or not.
   assert.equal(extractMagicToken(`${LINK}&next=%2Fdeals`), TOKEN);
   assert.equal(extractMagicToken(`${LINK}&amp;next=%2Fdeals`), TOKEN);
 });
@@ -84,6 +80,8 @@ test('a body with no magic link yields null, not a guess', () => {
   for (const body of [
     '', null, undefined,
     'Your receipt is attached.',
+    'https://other.invalid/api/auth/magic/verify?token=example',
+    'https://axal.vc/api/auth/magic/verify?token=example&token=ambiguous',
     'https://axal.vc/login',                                  // a login link, not a magic one
     'https://axal.vc/api/auth/magic/verify',                  // the path with no token
   ]) {
@@ -207,7 +205,7 @@ test('signedIn must be exactly true — not merely truthy', () => {
 // Reading the verify redirect
 
 test('only the success redirect counts as a sign-in', () => {
-  assert.equal(verifyOutcome({ status: 302, location: 'https://axal.vc/deals?magic=ok' }).ok, true);
+  assert.equal(verifyOutcome({ status: 302, location: 'https://axal.vc/dashboard?magic=ok' }).ok, true);
   assert.equal(verifyOutcome({ status: 302, location: 'https://axal.vc/validate?magic=ok' }).ok, true);
 });
 
@@ -267,17 +265,6 @@ test('missing config is reported, never silently skipped', () => {
   assert.deepEqual(missingConfig({ ...full, GMAIL_REFRESH_TOKEN: '   ' }), ['GMAIL_REFRESH_TOKEN']);
 });
 
-test('the script exits NON-zero when unconfigured', () => {
-  // The whole point of #168: the post-deploy smoke only probed /api/health,
-  // which is RATE_LIMIT_EXEMPT, and stayed green straight through the
-  // outage. A probe that exits 0 when it never ran repeats that mistake.
-  const src = read('scripts/check-magic-link-live.mjs');
-  const block = src.slice(src.indexOf('const missing = missingConfig();'), src.indexOf('const address ='));
-  assert.ok(block.length > 100, 'could not read the config guard');
-  assert.match(block, /process\.exit\(2\)/, 'unconfigured no longer exits non-zero');
-  assert.doesNotMatch(block, /process\.exit\(0\)/, 'unconfigured exits 0 — it would report a pass it never earned');
-});
-
 test('the probe is not wired into test:drift', () => {
   // It needs production and secrets. A check that cannot run in the suite
   // must not be in the suite claiming to have run.
@@ -286,18 +273,136 @@ test('the probe is not wired into test:drift', () => {
     'the live probe is in package.json — test:drift would try to reach production');
 });
 
-test('the probe respects the limits the worker actually enforces', () => {
-  // Read off auth.ts rather than trusted: a probe that trips its own
-  // limiter fails for a reason that has nothing to do with the fix.
-  const auth = read('cloudflare-worker/src/routes/auth.ts');
-  assert.match(auth, /magic-start-email:\$\{email\}`, 3, 900/,
-    'the per-address limit changed — recheck the probe schedule against it');
-  const src = read('scripts/check-magic-link-live.mjs');
-  assert.match(src, /res\.status === 429/, 'the probe no longer notices being rate-limited');
-  assert.match(src, /3 per 900s/, 'the probe stopped naming the limit it must stay under');
+// ---------------------------------------------------------------------------
+// Run the actual CLI in a separate Node process. Every HTTP response comes from
+// an ordered fixture. An unexpected call, extra retry or unconsumed fixture
+// fails the test even when the CLI would catch a fetch error and exit red.
+function installMockFetch(steps) {
+  let failure;
+  let repeatLast;
+  // Only the child process uses this clock. Each response advances its timeline.
+  let now = Date.UTC(2026, 0, 1);
+  Date.now = () => now;
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(input);
+    const step = steps.shift() || repeatLast;
+    if (step?.repeat) repeatLast = step;
+    if (!step || step.route !== url.origin + url.pathname || (init.method || 'GET') !== (step.method || 'GET')) {
+      failure = `Unexpected request: ${init.method || 'GET'} ${url.pathname}`;
+    } else if (step.cookie && new Headers(init.headers).get('cookie') !== step.cookie) {
+      failure = 'The identity request did not carry the issued session cookie';
+    } else if (step.token && url.searchParams.get('token') !== step.token) {
+      failure = 'The verification request did not use the token from the email';
+    }
+    if (failure) throw new Error(failure);
+    now += step.elapsedMs ?? 1;
+    if (step.fresh) step.body.internalDate = String(now);
+    return new Response(step.html ?? JSON.stringify(step.body || {}), {
+      status: step.status || 200,
+      headers: step.headers || { 'content-type': 'application/json' },
+    });
+  };
+  process.on('exit', () => {
+    if (failure || steps.length) {
+      console.error(failure || `Probe stopped before ${steps[0].route}`);
+      process.exitCode = 90;
+    }
+  });
+}
+
+const probeAddress = 'probe@example.invalid';
+const authBase = 'https://axal.vc/api/auth';
+const messages = 'https://gmail.googleapis.com/gmail/v1/users/me/messages';
+const start = { route: authBase + '/magic/start', method: 'POST', status: 202 };
+const oauth = { route: 'https://oauth2.googleapis.com/token', method: 'POST', body: { access_token: 'test-access' } };
+const delivered = [
+  { route: messages, body: { messages: [{ id: 'example' }] } },
+  { route: messages + '/example', fresh: true, body: { payload: { body: { data: b64(LINK) } } } },
+];
+const verify = {
+  route: authBase + '/magic/verify', token: TOKEN, status: 302,
+  headers: { location: 'https://axal.vc/dashboard?magic=ok', 'set-cookie': 'studioos_auth=test-session; Secure; HttpOnly; Path=/' },
+};
+const me = { route: authBase + '/me', cookie: 'studioos_auth=test-session', body: { email: probeAddress, id: 1 } };
+
+function runProbe(t, steps, expected, env = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'magic-cli-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const output = join(dir, 'outputs');
+  writeFileSync(output, '');
+  const mock = `(${installMockFetch.toString()})(${JSON.stringify(steps)})`;
+  const result = spawnSync(process.execPath, [
+    '--import', 'data:text/javascript,' + encodeURIComponent(mock), 'scripts/check-magic-link-live.mjs',
+  ], {
+    encoding: 'utf8', timeout: 5000,
+    env: {
+      GITHUB_OUTPUT: output, GITHUB_ACTIONS: 'true', MAGIC_PROBE_HOST: 'https://axal.vc',
+      MAGIC_PROBE_EMAIL: probeAddress, GMAIL_CLIENT_ID: 'test-client', GMAIL_CLIENT_SECRET: 'test-secret',
+      GMAIL_REFRESH_TOKEN: 'test-refresh', MAGIC_POLL_MS: '2', MAGIC_MAIL_BUDGET_MS: '1500', ...env,
+    },
+  });
+  assert.ifError(result.error);
+  const log = result.stdout + result.stderr;
+  assert.equal(result.status, expected === 'PASS' ? 0 : expected === 'CONFIG_ERROR' ? 2 : 1, log);
+  assert.equal(readFileSync(output, 'utf8').trim(), `classification=${expected}`, log);
+  for (const secret of [TOKEN, 'test-secret', 'test-refresh', 'test-access', 'test-session']) {
+    assert.ok(!log.includes(secret), 'probe exposed fixture credentials in its logs');
+  }
+  return log;
+}
+
+test('missing configuration and refused starts end before any mailbox access', (t) => {
+  runProbe(t, [], 'CONFIG_ERROR', { GMAIL_REFRESH_TOKEN: '' });
+  const challenged = runProbe(t, [{
+    ...start, status: 403, html: '<html>Challenge</html>',
+    headers: { 'content-type': 'text/html', 'cf-ray': 'example', 'cf-mitigated': 'challenge' },
+  }], 'EDGE_CHALLENGED');
+  assert.match(challenged, /outcome: EDGE_CHALLENGED/);
+  const edgeRefusal = runProbe(t, [{
+    ...start, status: 403, html: '<html>Forbidden</html>', headers: { 'content-type': 'text/html', 'cf-ray': 'example' },
+  }], 'EDGE_REFUSED');
+  assert.match(edgeRefusal, /mail_delivered: NOT CHECKED/);
+  const unavailable = runProbe(t, [{
+    ...start, status: 502, html: '<html>Bad gateway</html>', headers: { 'content-type': 'text/html', 'cf-ray': 'example' },
+  }], 'START_FAILURE');
+  assert.doesNotMatch(unavailable, /outcome: EDGE_CHALLENGED/);
+  const throttled = runProbe(t, [{ ...start, status: 429 }], 'START_FAILURE');
+  assert.match(throttled, /outcome: APPLICATION_REFUSED/);
 });
 
-// ---------------------------------------------------------------------------
+test('mailbox authorization and read failures preserve the untested delivery stage', (t) => {
+  const expired = runProbe(t, [start, { ...oauth, status: 400, body: { error: 'invalid_grant' } }], 'GMAIL_AUTH');
+  assert.match(expired, /invalid_grant/);
+  assert.match(expired, /mail_delivered: NOT CHECKED/i);
+  runProbe(t, [start, oauth, { route: messages, status: 403 }], 'GMAIL_READ');
+  runProbe(t, [start, oauth, delivered[0], { ...delivered[1], status: 403 }], 'GMAIL_READ');
+});
+
+test('a readable inbox without a new link gives a delivery timeout', (t) => {
+  runProbe(t, [start, oauth, { route: messages, body: {}, repeat: true, elapsedMs: 100 }], 'DELIVERY_FAILURE', {
+    MAGIC_MAIL_BUDGET_MS: '400', MAGIC_POLL_MS: '20',
+  });
+});
+
+test('temporary Google errors recover within a single sign-in request or give a dependency verdict', (t) => {
+  const unavailable = { ...oauth, status: 503, body: {} };
+  runProbe(t, [start, unavailable, oauth, ...delivered, verify, me], 'PASS');
+  runProbe(t, [start, unavailable, unavailable, unavailable], 'DEPENDENCY_FAILURE');
+});
+
+test('a redirect only verifies sign-in when its session identifies the requested account', (t) => {
+  const requests = [start, oauth, ...delivered];
+  const refused = runProbe(t, [...requests, {
+    ...verify, headers: { location: 'https://axal.vc/login?magic_error=expired' },
+  }], 'VERIFY_FAILURE');
+  assert.match(refused, /magic_error=expired/);
+  runProbe(t, [...requests, { ...verify, headers: { location: verify.headers.location } }], 'VERIFY_FAILURE');
+  runProbe(t, [...requests, { ...verify, headers: { ...verify.headers, location: 'https://other.invalid/?magic=ok' } }], 'VERIFY_FAILURE');
+  runProbe(t, [...requests, verify, { ...me, body: { id: 2, email: 'other@example.invalid' } }], 'VERIFY_FAILURE');
+  const signedIn = runProbe(t, [...requests, verify, me], 'PASS');
+  assert.match(signedIn, /outcome: VERIFIED_END_TO_END/);
+});
+
 // The workflow that runs it — the schedule and, above all, what counts as green
 
 const WORKFLOW = '.github/workflows/magic-link-probe.yml';
@@ -351,6 +456,18 @@ test('the gap calculator is right about the crons in this repo', () => {
   assert.equal(minGapSeconds('0 0,23 * * *'), 3600, 'the gap across midnight was not measured');
 });
 
+test('both workflows serialize requests for the shared probe mailbox', () => {
+  const group = (path) => {
+    const wf = read(path);
+    const block = /^concurrency:\n((?:  .*\n)+)/m.exec(wf)?.[1] || '';
+    assert.match(block, /^  cancel-in-progress: false$/m, path);
+    const name = /^  group: ([a-z0-9-]+)$/m.exec(block)?.[1];
+    assert.ok(name, `Missing fixed mailbox concurrency group in ${path}`);
+    return name;
+  };
+  assert.equal(group(WORKFLOW), group('.github/workflows/magic-link-insert-probe.yml'));
+});
+
 test('the schedule cannot trip the limiter the worker actually enforces', () => {
   // A probe that fails because it rate-limited ITSELF reports a broken
   // sign-in when sign-in is fine — the same false-alarm class the token-
@@ -402,81 +519,39 @@ function runBlockOf(wf, stepName) {
   return body.join('\n');
 }
 
-test('the report block really does exit 0 only for a verified sign-in', () => {
-  // THE ASSERTION THIS WHOLE TASK IS ABOUT, and it is worth running rather
-  // than grepping: `/api/health` was green throughout the original outage, so
-  // a report step that goes green when the probe failed — or when it never
-  // ran — repeats that exactly. Grepping for `exit 1` would be satisfied by an
-  // `exit 1` sitting in an unreachable branch.
+test('the job publishes each classification and requires both proofs to go green', (t) => {
   const script = runBlockOf(read(WORKFLOW), 'Report the outcome');
-  const dir = mkdtempSync(join(tmpdir(), 'magic-probe-'));
-  const sh = join(dir, 'report.sh');
-  writeFileSync(sh, script);
-
-  const run = (code) => {
-    const summary = join(dir, `summary-${code === '' ? 'empty' : code}.md`);
+  const dir = mkdtempSync(join(tmpdir(), 'magic-report-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const summary = join(dir, 'summary.md');
+  const run = (code, classification) => {
     writeFileSync(summary, '');
-    const r = spawnSync('bash', [sh], {
+    const result = spawnSync('bash', ['-e', '-c', script], {
       encoding: 'utf8',
-      env: { ...process.env, PROBE_CODE: code, GITHUB_STEP_SUMMARY: summary },
+      env: { ...process.env, PROBE_CODE: code, PROBE_CLASSIFICATION: classification, GITHUB_STEP_SUMMARY: summary },
     });
-    return { status: r.status, out: `${r.stdout}${r.stderr}`, summary: readFileSync(summary, 'utf8') };
+    assert.ifError(result.error);
+    return { status: result.status, summary: readFileSync(summary, 'utf8'), log: result.stdout + result.stderr };
   };
+  const pass = run('0', 'PASS');
+  assert.equal(pass.status, 0, pass.log);
+  assert.match(pass.log, /::notice/);
 
-  const verified = run('0');
-  assert.equal(verified.status, 0, 'a verified sign-in fails the job');
-  assert.match(verified.out, /::notice/);
-  assert.match(verified.summary, /end to end/);
-
-  const unconfigured = run('2');
-  assert.equal(unconfigured.status, 1, 'NOT CONFIGURED went green — a pass it never earned');
-  assert.match(unconfigured.out, /::error.*NOT CONFIGURED/);
-  // The summary has to name the four secrets, or the red is unactionable.
-  for (const secret of ['MAGIC_PROBE_EMAIL', 'GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN']) {
-    assert.match(unconfigured.summary, new RegExp(secret), `the NOT CONFIGURED summary omits ${secret}`);
+  for (const classification of [
+    'CONFIG_ERROR', 'EDGE_CHALLENGED', 'EDGE_REFUSED', 'START_FAILURE', 'GMAIL_AUTH', 'GMAIL_READ',
+    'DEPENDENCY_FAILURE', 'DELIVERY_FAILURE', 'VERIFY_FAILURE', 'INFRA_FAILURE',
+  ]) {
+    const result = run(classification === 'CONFIG_ERROR' ? '2' : '1', classification);
+    assert.equal(result.status, 1, classification);
+    assert.ok(result.summary.includes(classification), result.summary);
+    assert.match(result.log, /::error/);
   }
-
-  const broken = run('1');
-  assert.equal(broken.status, 1, 'a failed round trip went green');
-  assert.match(broken.out, /::error.*BROKEN/);
-  // All three, not just one: whoever opens a red run needs to know which
-  // verdict to look at and what each one means.
-  for (const key of ['start_latency', 'mail_delivered', 'sign_in_completed']) {
-    assert.match(broken.summary, new RegExp(key), `the failure summary omits ${key}`);
-  }
-  assert.match(broken.summary, /waitUntil/,
-    'the summary stopped naming the failure mode the round trip exists for — a fast endpoint with no mail');
-
-  // And the cases nobody planned for: a step killed before it wrote its
-  // output, or an exit code from something else entirely. Neither is a pass.
-  for (const code of ['', '3', '127', 'null']) {
-    assert.equal(run(code).status, 1, `PROBE_CODE=${JSON.stringify(code)} was treated as a pass`);
+  for (const [code, classification] of [['0', ''], ['0', 'GMAIL_AUTH'], ['1', 'PASS'], ['', 'PASS'], ['127', '']]) {
+    assert.equal(run(code, classification).status, 1, `${code}/${classification} claimed success`);
   }
 });
 
-test('only a real sign-in is green — both failures fail the job', () => {
-  // THE ASSERTION THIS WHOLE TASK IS ABOUT. `/api/health` was green
-  // throughout the original outage; a probe whose job stays green when it
-  // fails, or when it never ran, repeats that exactly.
-  const wf = read(WORKFLOW);
-  const report = wf.slice(wf.indexOf('name: Report the outcome'));
-  assert.ok(report.length > 200, 'could not find the report step');
-
-  // Exit code 2 (never ran) and anything else non-zero both re-fail.
-  const unconfigured = report.slice(report.indexOf('2)'), report.indexOf('*)'));
-  assert.match(unconfigured, /exit 1/, 'NOT CONFIGURED no longer fails the job — a green tick would claim a pass it never earned');
-  assert.match(unconfigured, /::error/, 'NOT CONFIGURED was downgraded to a warning, which is invisible on a green check');
-  const failed = report.slice(report.indexOf('*)'));
-  assert.match(failed, /exit 1/, 'a failed round trip no longer fails the job');
-  assert.match(failed, /::error/, 'a failed round trip was downgraded to a warning');
-
-  // And the success branch must NOT exit non-zero, or the probe can never pass.
-  const success = report.slice(report.indexOf('0)'), report.indexOf('2)'));
-  assert.doesNotMatch(success, /exit 1/, 'a passing probe fails the job');
-  assert.match(success, /::notice/, 'a pass says nothing');
-});
-
-test('the report step can still tell the two failures apart', () => {
+test('the shell report receives the exit code and classification as step outputs', () => {
   // It branches on the exit CODE, so the probe step has to publish it.
   // `continue-on-error` alone yields only success/failure, which would
   // collapse "never ran" into "sign-in is broken" and send someone hunting a
@@ -490,6 +565,7 @@ test('the report step can still tell the two failures apart', () => {
     'the report step no longer reads the code — pass it through env, never interpolated into the shell');
   // Interpolating a ${{ }} expression straight into `run:` is the shell
   // injection shape; this job reads it from the environment instead.
+  assert.match(wf, /PROBE_CLASSIFICATION: \$\{\{ steps\.probe\.outputs\.classification \}\}/);
   const report = wf.slice(wf.indexOf('name: Report the outcome'));
   assert.doesNotMatch(report.slice(report.indexOf('run:')), /\$\{\{/,
     'a workflow expression is interpolated into the report shell');

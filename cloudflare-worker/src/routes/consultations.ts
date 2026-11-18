@@ -79,10 +79,25 @@ function validSlotAt(value: string): boolean {
   return Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === parts[1];
 }
 
+/*
+ * #5885: the board's row. `admin_name` names who first triaged it (the store
+ * keeps `admin_id` only); `decided_at`, `decided_by_id` and `decided_by_name`
+ * are the latest recorded transition, null when none was recorded (decisions
+ * before the history table, 10 November 2026, have none).
+ */
 const ADMIN_BOOKING_SELECT = `SELECT b.id, b.uid, b.user_id, b.admin_id, b.requested_at, b.slot_at, b.status,
   b.topic, b.notes, b.report_id, b.created_at, b.version,
-  u.name AS user_name, u.email AS user_email
-  FROM admin_consultation_bookings b JOIN users u ON u.id = b.user_id`;
+  u.name AS user_name, u.email AS user_email,
+  NULLIF(a.name, '') AS admin_name,
+  le.created_at AS decided_at, le.actor_user_id AS decided_by_id, NULLIF(la.name, '') AS decided_by_name
+  FROM admin_consultation_bookings b JOIN users u ON u.id = b.user_id
+  LEFT JOIN users a ON a.id = b.admin_id
+  LEFT JOIN admin_consultation_booking_events le ON le.id = (
+    SELECT e.id FROM admin_consultation_booking_events e WHERE e.booking_id = b.id ORDER BY e.version DESC LIMIT 1)
+  LEFT JOIN users la ON la.id = le.actor_user_id`;
+
+/** #5885: when the history table began (migration 202611101118); earlier decisions were not recorded. */
+export const CONSULTATION_HISTORY_SINCE = '2026-11-10';
 
 const consultations = new Hono<{ Bindings: Env }>();
 
@@ -161,6 +176,37 @@ adminConsultations.get('/', async (c) => {
       message: 'Best-Fit consultations could not be read. This is not a claim that nobody is waiting.',
     }, 503);
   }
+});
+
+// GET /api/admin/consultations/:id — #5885: one booking and its recorded
+// history, oldest first, for the Best-Fit board's drawer. History began on
+// `CONSULTATION_HISTORY_SINCE`; a booking decided before then has no events,
+// which the board reads as Not recorded. A failed read is 503, never a 404.
+adminConsultations.get('/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return c.json({ code: 'bad_id', message: 'A consultation id is a positive whole number.' }, 400);
+  await ensureAxalFitSchema(c.env);
+  let booking: Record<string, unknown> | null;
+  try {
+    booking = await c.env.DB.prepare(`${ADMIN_BOOKING_SELECT} WHERE b.id = ?`).bind(id).first<Record<string, unknown>>();
+  } catch (e) {
+    console.error('[consultations] admin item read failed:', (e as Error).message);
+    return c.json({ code: 'consultation_unreadable', message: 'This consultation could not be read. That is not the same as it not existing.' }, 503);
+  }
+  if (!booking) return c.json({ code: 'not_found', message: 'That consultation does not exist.' }, 404);
+  let history: { available: true; since: string; items: Record<string, unknown>[] } | { available: false; since: string; reason: string };
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT e.id, e.from_status, e.to_status, e.version, e.actor_user_id, NULLIF(u.name, '') AS actor_name, e.created_at
+         FROM admin_consultation_booking_events e LEFT JOIN users u ON u.id = e.actor_user_id
+        WHERE e.booking_id = ? ORDER BY e.version ASC`,
+    ).bind(id).all<Record<string, unknown>>();
+    history = { available: true, since: CONSULTATION_HISTORY_SINCE, items: res.results || [] };
+  } catch (e) {
+    console.error('[consultations] admin history read failed:', (e as Error).message);
+    history = { available: false, since: CONSULTATION_HISTORY_SINCE, reason: 'The history of this consultation could not be read.' };
+  }
+  return c.json({ booking, history });
 });
 
 // POST /api/admin/consultations/:id/status — update status; assign the acting

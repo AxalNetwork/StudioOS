@@ -7,7 +7,7 @@ import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, s
 import { verdictInterviewLine } from './validatePhone.js';
 import { phoneStateRow } from './BuildStates.jsx';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
-import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
+import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
 import { ExportButton, Sources } from './CycleModulePage.jsx';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 import { asksCountLabel } from './buildEadwyn.js';
@@ -129,7 +129,9 @@ export default function PhoneModulePage({
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
   const bar = header === undefined ? (
-    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : card?.caption || undefined}
+    // D5081 part 4 (#5081): a tool that owns its page says its own line, as the desktop header does, never the
+    // caption of the generic card it no longer draws.
+    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : owned ? owned.sub : card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
@@ -157,7 +159,7 @@ export default function PhoneModulePage({
   const rStatus = recordsStatus || (recs ? 'ready' : status);
   // D5076: the same stages as the desktop table (progressiveList.js).
   const progressive = progressiveFor(meta.key, slug);
-  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? listStage(recs, query) : 'many';
+  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? moduleStage(recs, query, progressive) : 'many';
   const zero = stage === 'zero';
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
   const hasChildren = Children.toArray(children).length > 0;
