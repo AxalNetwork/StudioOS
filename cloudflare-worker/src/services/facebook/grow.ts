@@ -19,6 +19,7 @@
  * D5860 adds the channel-link proposal, its resumable acceptance through the route's channel writer and final dismissal.
  */
 import type { Env } from '../../types';
+import { projectEnabled } from '../../integrations/companyScope';
 import { addDays, WINDOW_DAYS, type FacebookReads, type InsightKind } from './insights';
 
 export type FacebookSlug = 'distribution' | 'revenue-and-traction';
@@ -310,7 +311,8 @@ async function facebookProposal(env: Env, projectId: number, link: FacebookLink,
   return {
     id: proposal.id, kind: 'channel_link' as const, state: pending ? 'pending' as const : 'accepted' as const,
     sentence: pending ? SENTENCES.channel_link : null,
-    can_decide: pending && link.active && viewer.writer && !viewer.support && link.owner_id === viewer.userId,
+    can_decide: pending && link.active && viewer.writer && !viewer.support && link.owner_id === viewer.userId
+      && await projectEnabled(env, link.integration_id, projectId),
     channel,
   };
 }

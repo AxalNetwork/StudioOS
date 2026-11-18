@@ -130,6 +130,7 @@ test('only the connection-owning venture writer decides; support, observers, oth
   assert.equal((await call(w, 'dismiss', old, COFOUNDER)).status, 404);
   const current = (await part(w, COFOUNDER) as any).proposal.id;
   w.db.prepare('UPDATE integration_companies SET enabled = 0 WHERE integration_id = ?').run(FB);
+  assert.equal((await part(w, COFOUNDER) as any).proposal.can_decide, false);
   assert.equal((await call(w, 'accept', current, COFOUNDER)).status, 403);
   w.db.prepare('UPDATE integration_companies SET enabled = 1 WHERE integration_id = ?').run(FB);
   assert.equal((await call(w, 'accept', current, COFOUNDER)).status, 200);
