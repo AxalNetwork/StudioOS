@@ -97,7 +97,9 @@ test('unmonitored inventory does not claim an outage, but its incidents still re
   assert.equal(overallStatus([op, { ...inventory, status: 'down' }]), 'down');
   assert.equal(overallStatus([op, { status: 'unknown' }]), 'degraded', 'an existing monitored unknown is still visible');
   const page = read('frontend/src/pages/StatusPage.jsx');
-  assert.match(page, /All monitored services operational/);
+  // #7002: /status and /trust draw the headline from one place, lib/statusSummary.js.
+  assert.match(page, /OVERALL_WORDS\[overall\]/);
+  assert.match(read('frontend/src/lib/statusSummary.js'), /operational: 'All monitored services operational'/);
   assert.match(read('frontend/src/pages/docs/DocsLayout.jsx'), /All monitored services operational/);
   assert.match(page, /label: s\.availability \|\| 'Not monitored'/);
   // D1076: an unmonitored row says it keeps no history; the words are statusHistory.js's.

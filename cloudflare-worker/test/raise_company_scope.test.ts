@@ -79,7 +79,7 @@ function freshDb() {
     CREATE TABLE users (
       id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER,
       is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER,
-      spinout_lab_active INTEGER, subscription_tier TEXT
+      spinout_lab_active INTEGER, subscription_tier TEXT, name TEXT -- D6790: the owner join reads users.name
     );
     CREATE TABLE projects (
       id INTEGER PRIMARY KEY, name TEXT NOT NULL, founder_id INTEGER,
@@ -106,6 +106,7 @@ function freshDb() {
       due_date TEXT NOT NULL, completion_status TEXT NOT NULL DEFAULT 'pending',
       completed_at TEXT, completed_by_user_id INTEGER, recurrence TEXT DEFAULT 'none',
       source TEXT DEFAULT 'manual', reminders_sent_json TEXT DEFAULT '[]',
+      owner_name TEXT, owner_user_id INTEGER, -- migration 443; D6790's reads join the owner
       created_by_user_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))

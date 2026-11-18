@@ -55,7 +55,7 @@ import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib
 import { usePhoneWidth, useTabletWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
-import { cellView, cycleOf, linkEvidenceAction, queryFromSearch } from './cycleModel';
+import { cellView, cycleOf, linkEvidenceAction, pickOwnerAction, queryFromSearch } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -1020,6 +1020,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
           ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
             () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
+          // D6790 (GR-23): an obligation with no owner offers Pick owner: the same Edit, focused on the owner listbox.
+          ...pickOwnerAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
+            () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'owner_user_id' } })),
         }) : !narrativeAdmin && !edit && projectId && defRowAction ? (row) => defRowAction(row, defCtx) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}

@@ -104,9 +104,10 @@ const COPY = {
   'durable-company-building': {
     title: 'Add obligation', cta: 'Add obligation', sub: 'Governance, compliance or risk, with an owner and a date.', foot: 'Appears on the compliance calendar.',
     labels: ['Obligation', 'Kind', 'Due', 'Owner', 'Repeats', 'Remind'],
-    chips: { kind: [['Governance', 'Compliance', 'Risk', 'Culture'], 'governance'], repeats: [['Once', 'Monthly', 'Quarterly', 'Yearly'], 'quarterly'] },
+    // D6790: the owner is a listbox of the company team (No one yet until form-options answers).
+    chips: { kind: [['Governance', 'Compliance', 'Risk', 'Culture'], 'governance'], owner_user_id: [['No one yet'], ''], repeats: [['Once', 'Monthly', 'Quarterly', 'Yearly'], 'quarterly'] },
     checks: { remind: [['14 days before', true], ['The day before', true]] },
-    placeholders: ['Board meeting, filing, review…', 'Name'],
+    placeholders: ['Board meeting, filing, review…'],
   },
 };
 const strings = (f) => {
@@ -269,7 +270,7 @@ async function assertFields(m) {
     assert.equal(ob.calls.length, 0); assert.ok(ob.text().includes('Due is required.'));
     await ob.input('due_at', '2026-12-12'); await ob.choose('kind', 'culture');
     await ob.submit();
-    assert.deepEqual(ob.calls[0][2], { title: 'Board meeting', kind: 'culture', due_at: '2026-12-12', owner_name: null, repeats: 'quarterly', remind_days: [14, 1] });
+    assert.deepEqual(ob.calls[0][2], { title: 'Board meeting', kind: 'culture', due_at: '2026-12-12', owner_user_id: null, repeats: 'quarterly', remind_days: [14, 1] });
   } finally { await ob.unmount(); }
 
   // No body carries a bare `currency`, and Add market's no size.

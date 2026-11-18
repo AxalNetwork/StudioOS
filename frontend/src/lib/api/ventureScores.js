@@ -18,7 +18,8 @@ export const ventureScoresApi = {
   // HQ: the latest quarterly fairness check.
   fairness: () => request('/venture-scores/fairness'),
   // An investor's read through a deal: locked, masked before the NDA, inputs after.
-  deal: (dealId) => request(`/venture-scores/deal/${enc(dealId)}`),
+  // #6173: after the NDA each scope carries `change` since the last visit; `since` is What's new's watermark (optional).
+  deal: (dealId, { since } = {}) => request(`/venture-scores/deal/${enc(dealId)}${since ? `?since=${enc(since)}` : ''}`),
   // The founder's, staff's or a shared advisor's read.
   venture: (projectId) => request(`/venture-scores/${enc(projectId)}`),
   recompute: (projectId) => request(`/venture-scores/${enc(projectId)}/recompute`, { method: 'POST' }),

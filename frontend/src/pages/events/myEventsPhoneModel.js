@@ -7,13 +7,16 @@
  *     holds today unless moved, each day with its going and hosting counts;
  *   - MEV18b: the ticket full screen, with the brightness line under the code;
  *   - MEV18c: on the event's day, Hosting's Check in opens the camera sheet,
- *     which says how many of the seats taken are checked in.
+ *     which says how many of the seats taken are checked in;
+ *   - ME11a (#5869, D3724 §gaps 16): Upcoming's "Recommended for you" as a
+ *     sideways row, from the same read and actions as the desktop row.
  *
  * A count nobody read is never 0: it says so.
  */
 import { NOT_RECORDED } from '../../lib/absence.js';
 import { eventTime } from './eventTime';
 import { dayKey } from './myEventsTabsModel';
+import { NOT_ON, rowState } from './recommendationsModel';
 
 /** Below 1024px the page's root carries this class, and `myEventsPhone.css` makes each control a 44 × 44px target. */
 export const PHONE_ROOT = 'my-events-phone';
@@ -83,4 +86,25 @@ export function checkInLine(event, added = 0) {
 export function checkInResult(reply) {
   const who = String(reply?.registration?.name || '').trim();
   return `${reply?.already_checked_in ? 'Already checked in' : 'Checked in'}${who ? `: ${who}` : '.'}`;
+}
+
+/**
+ * ME11a's words where the desktop row would point at the Suggested card below
+ * it. The phone draws no Suggested card, so its line says only what is true.
+ */
+export const PHONE_NOT_ON = 'Recommendations aren’t available right now.';
+
+/**
+ * ME10 on a phone (#5869): the desktop row's states (`rowState`), but with no
+ * Suggested card to fall back on. Off in Tune draws no row at all (`hidden`);
+ * "not available" in the desktop's words names a card the phone does not have,
+ * so it keeps the Worker's own sentence and otherwise says only that the
+ * picks are not available. Loading, Unreadable (with Retry), too few signals,
+ * empty and ready are the desktop's own.
+ */
+export function phoneRowState(read) {
+  const state = rowState(read);
+  if (state.kind === 'off') return { ...state, hidden: true };
+  if (state.kind === 'not_on' && state.line === NOT_ON) return { ...state, line: PHONE_NOT_ON };
+  return state;
 }

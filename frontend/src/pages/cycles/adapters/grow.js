@@ -112,6 +112,14 @@ function distribution(s) {
   if (first !== -1) out.push({ kind: 'funnel', steps: steps.slice(first).map(({ label, value }) => ({ label, value })) });
   const rows = [...apart.map((x) => ({ label: x.label, value: sourcedText(x) })),
     ...before.map((x) => ({ label: x.label, value: typeof x.reason === 'string' && x.reason ? x.reason : 'Not recorded' }))];
+  // D5867: the month's TikTok reach, one line with its source and date. The Worker sends null when no video posted
+  // this month has a view count, and then there is no line: never 0. It is never a funnel step (a view is not a visit).
+  const t = obj(d.tiktok);
+  if (t && num(t.views) && num(t.posts) && t.posts > 0) {
+    const day = typeof t.as_of === 'string' && /^\d{4}-\d{2}-\d{2}/.test(t.as_of) ? t.as_of.slice(0, 10) : null;
+    const reach = `${Math.round(t.views).toLocaleString('en-US')} views across ${t.posts} post${t.posts === 1 ? '' : 's'}`;
+    rows.push({ label: 'TikTok reach this month', value: day ? `${reach} · From TikTok, as of ${day}` : `${reach} · From TikTok` });
+  }
   if (rows.length) out.push({ kind: 'rows', items: rows });
   return out;
 }
@@ -433,11 +441,13 @@ export const RECORDS = {
       obligation: r.title ?? null,
       kind: word(OBLIGATION_KIND, r.kind),
       due: typeof r.due_at === 'string' ? r.due_at.slice(0, 10) : null,
-      owner: r.owner_name ?? { text: 'No owner named', tone: 'warn' },
+      // D6790: the picked team member, else a name typed before #6790 (`owner`, the Worker's one rule).
+      owner: r.owner ?? r.owner_name ?? { text: 'No owner named', tone: 'warn' },
       state: pill(OBLIGATION_STATE, r.status),
       // A repeat the store does not hold is Not recorded, never "Once".
       repeats: word(REPEATS, r.repeats),
-    }, edit: editOf(num(r.id) ? { id: r.id } : null, r, ['title', 'status', 'owner_name', 'due_at']) }),  // #4046: the title, which its Edit now draws
+    }, keys: { owner: (r.owner ?? r.owner_name) ? 'set' : 'none' },  // D6790: an ownerless row offers Pick owner
+    edit: editOf(num(r.id) ? { id: r.id } : null, r, ['title', 'status', 'owner_user_id', 'owner', 'owner_name', 'due_at']) }),  // #4046: the title, which its Edit now draws
     filters: [{ key: 'status', label: 'State', options: options(OBLIGATION_STATE) }],
     sorts: [{ key: 'due_at', label: 'Due soonest' }, { key: '-due_at', label: 'Due latest' }],
   },
