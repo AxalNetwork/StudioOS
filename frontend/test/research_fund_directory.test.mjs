@@ -53,9 +53,11 @@ test('the directory is read from the Worker, and its rows are added to the priva
   assert.match(page, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\}/);
   // D4613: the directory uid travels with the add, so a repeat of it is one row.
   assert.match(page, /fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null, catalogue_uid: fund\.uid \}\)/);
-  // D593: the canvas's F0 names the button "Add to my funds".
-  assert.match(directory, /'Add to my funds'/);
+  // D7166 (RFD-00): the add is named "Save to shortlist" (D593's "Add to my funds").
+  assert.match(directory, /'Save to shortlist'/);
+  assert.doesNotMatch(directory, /'Add to my funds'/);
   // D1317: the fund's details open as the shared right-side Sheet; on a phone, a bottom sheet as before.
-  assert.match(directory, /<Sheet label=\{item\.name\} eyebrow="Fund details" title=\{item\.name\} onClose=\{onClose\} width=\{480\} phone="sheet" testId="fd-drawer-sheet">/);
+  // D7166: titled with the vehicle, its manager as the eyebrow.
+  assert.match(directory, /<Sheet label=\{v\.vehicle\} eyebrow=\{v\.manager !== v\.vehicle \? v\.manager : 'Fund details'\} title=\{v\.vehicle\} onClose=\{onClose\} width=\{480\} phone="sheet" testId="fd-drawer-sheet">/);
   assert.doesNotMatch(directory, /<aside id="fd-drawer"/);
 });

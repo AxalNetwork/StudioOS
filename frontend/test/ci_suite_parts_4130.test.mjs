@@ -69,16 +69,125 @@ test('unsafe commands and missing plan fail closed', () => {
 test('both workflow matrices consume only generated names and the gate requires a successful plan', () => {
   const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
   const alerts = readFileSync('.github/workflows/github-alerts.yml', 'utf8');
-  for (const wf of [ci, alerts]) assert.doesNotMatch(wf, /(?:frontend|worker)-\d+-of-\d+/);
-  assert.match(ci, /part: \$\{\{ fromJSON\(needs\.plan\.outputs\.parts\) \}\}/);
+  assert.doesNotMatch(alerts, /(?:frontend|worker)-\d+-of-\d+/);
+  // D7108 part 2: ci.yml carries exactly one literal part list, the queue's,
+  // inside the merge_group-guarded matrix expression, and it is partsOf's
+  // names in order. Off the queue the matrix is still `plan`'s output.
+  const literal = JSON.stringify(partsOf(pkg.scripts).map((p) => p.name));
+  const matrix = `        part: \${{ fromJSON(github.event_name == 'merge_group' && '${literal}' || needs.plan.outputs.parts) }}\n`;
+  assert.equal(ci.split(matrix).length, 2, 'the queue matrix lists partsOf(package.json) names, in order, once');
+  const sharded = plan.parts.filter((p) => p.script).length;
+  assert.equal((ci.match(/(?:frontend|worker)-\d+-of-\d+/g) || []).length, sharded, 'no part name outside that one list');
+  assert.equal(new Set(JSON.parse(literal)).size, plan.parts.length, 'the literal list has no repeated part');
   assert.match(ci, /needs: \[verified, plan, suite\]/);
-  assert.match(ci, /if \[ "\$PLAN" = "success" \] && \[ "\$SUITE" = "success" \]/);
+  assert.match(ci, /if \{ \{ \[ "\$PLAN" = "success" \] && \[ "\$EVENT" != "merge_group" \]; \} \|\| \{ \[ "\$PLAN" = "skipped" \] && \[ "\$EVENT" = "merge_group" \]; \}; \} && \[ "\$SUITE" = "success" \]; then/);
+  assert.match(ci, /  plan:\n    name: suite plan\n    needs: verified\n    if: \$\{\{ !cancelled\(\) && needs\.verified\.outputs\.run == '' && github\.event_name != 'merge_group' \}\}\n/);
   assert.match(ci, /--plan-file suite-plan\.json/);
   assert.match(alerts, /part: \$\{\{ fromJSON\(needs\.future-clock-plan\.outputs\.parts\) \}\}/);
   assert.match(alerts, /--plan test-timings\.json --without-rest/);
   assert.ok(Buffer.byteLength(JSON.stringify(plan.parts.map((p) => p.name)), 'utf16le') < 1024, 'names alone are far below the 1 MB job-output limit');
 });
 
+/** The run block of the suite step named `name` in ci.yml, unindented. */
+const suiteStep = (ci, name) => {
+  const at = ci.indexOf(`      - name: ${name}\n`);
+  assert.ok(at > 0, name);
+  const step = ci.slice(at).split(/\n(?= {6}(?:- |# ))/)[0];
+  return { step, run: step.match(/ {8}run: \|\n((?: {10}[^\n]*\n?)+)/)[1].replace(/^ {10}/gm, '') };
+};
+
+test('D7108 part 2: in the queue each suite part writes the plan itself, after setup-node and before any install, and off the queue downloads it', () => {
+  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+  const suite = ci.slice(ci.indexOf('\n  suite:\n'), ci.indexOf('\n  test-deps:\n'));
+  const { step } = suiteStep(suite, 'Exact-once plan from this commit (merge queue)');
+  assert.match(step, /\n {8}if: github\.event_name == 'merge_group'\n/);
+  assert.match(step, /\n {10}PART: \$\{\{ matrix\.part \}\}\n {10}TOTAL: \$\{\{ strategy\.job-total \}\}\n/);
+  assert.match(step, /names=\$\(node scripts\/test-drift-parts\.mjs --plan --equal-weights\)/);
+  assert.match(suite, /uses: actions\/download-artifact@[^\n]+\n {8}if: github\.event_name != 'merge_group'\n {8}with:\n {10}name: suite-plan\n/);
+  const order = ['actions/setup-node', 'actions/download-artifact', 'Exact-once plan from this commit', 'Install frontend deps', '--plan-file suite-plan.json'].map((s) => suite.indexOf(s));
+  assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), JSON.stringify(order));
+});
+
+test('D7108 part 2: the queue plan step fails a part, never drops one, when the matrix and the plan differ', () => {
+  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+  const names = plan.parts.map((p) => p.name);
+  const { run } = suiteStep(ci, 'Exact-once plan from this commit (merge queue)');
+  const code = run.replace('node scripts/test-drift-parts.mjs --plan --equal-weights', `printf '%s' '${JSON.stringify(names)}'`);
+  assert.notEqual(code, run);
+  const exec = (PART, TOTAL) => spawnSync('bash', ['-e', '-c', code], { encoding: 'utf8', env: { ...process.env, PART, TOTAL: String(TOTAL) } });
+  for (const part of names) {
+    const ok = exec(part, names.length);
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.match(ok.stdout, new RegExp(`this part is ${part}\\.`));
+  }
+  for (const [part, total] of [[names[0], names.length - 1], [names[0], names.length + 1], ['worker-7-of-6', names.length], ['', names.length]]) {
+    const bad = exec(part, total);
+    assert.equal(bad.status, 1, `${part}/${total}`);
+    assert.match(bad.stderr, /::error::The queue matrix/);
+  }
+});
+
+test('D7108 part 2: two shards planning independently with --equal-weights write identical bytes that cover every file once', () => {
+  // Two checkouts of one commit, as two queue shards have. Each holds a file
+  // named --equal-weights with broken JSON and a skewed test-timings.json:
+  // the pinned input reads neither.
+  const fixture = () => {
+    const root = mkdtempSync(join(tmpdir(), 'queue-shard-'));
+    mkdirSync(join(root, 'scripts', 'lib'), { recursive: true });
+    for (const path of ['scripts/test-drift-parts.mjs', 'scripts/build-generated.mjs', 'scripts/lib/shardPlan.mjs', 'scripts/lib/flakyTests.mjs']) {
+      writeFileSync(join(root, path), readFileSync(path));
+    }
+    for (const dir of ['f', 'w']) mkdirSync(join(root, dir));
+    for (let i = 0; i < 5; i++) writeFileSync(join(root, 'f', `t${i}.test.mjs`), '');
+    for (let i = 0; i < 13; i++) writeFileSync(join(root, 'w', `t${i}.test.ts`), '');
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: {
+      'test:frontend': "node --test 'f/*.test.mjs'",
+      'test:worker': "node --test 'w/*.test.ts'",
+      'test:drift': 'npm run test:frontend && npm run test:worker && node scripts/check-x.mjs',
+    } }));
+    writeFileSync(join(root, '--equal-weights'), '{not json');
+    writeFileSync(join(root, 'test-timings.json'), JSON.stringify({ 'w/t0.test.ts': 900000, 'f/t1.test.mjs': 900000 }));
+    return root;
+  };
+  const roots = [fixture(), fixture()];
+  try {
+    const outputs = roots.map((root) => {
+      const r = spawnSync(process.execPath, [join(root, 'scripts/test-drift-parts.mjs'), '--plan', '--equal-weights'], { cwd: root, encoding: 'utf8' });
+      assert.equal(r.status, 0, r.stderr);
+      return { names: JSON.parse(r.stdout), bytes: readFileSync(join(root, 'suite-plan.json'), 'utf8') };
+    });
+    assert.equal(outputs[0].bytes, outputs[1].bytes);
+    assert.deepEqual(outputs[0].names, outputs[1].names);
+    const scripts = JSON.parse(readFileSync(join(roots[0], 'package.json'), 'utf8')).scripts;
+    assert.equal(outputs[0].bytes, `${JSON.stringify(buildPlan(scripts, {}, roots[0]), null, 2)}\n`);
+    const skewed = timingsOf(JSON.parse(readFileSync(join(roots[0], 'test-timings.json'), 'utf8')));
+    assert.notEqual(outputs[0].bytes, `${JSON.stringify(buildPlan(scripts, skewed, roots[0]), null, 2)}\n`, 'the timings file would have changed the packing');
+    const written = JSON.parse(outputs[0].bytes);
+    assert.deepEqual(outputs[0].names, partsOf(scripts).map((p) => p.name));
+    assert.equal(validatePlan(written, scripts, roots[1]).length, written.parts.length);
+    for (const script of Object.keys(SHARDS)) assertExactOnce(written.parts.filter((p) => p.script === script), suiteFiles(scripts[script], roots[1]));
+    assert.deepEqual(written.parts.find((p) => p.name === REST).commands, ['node scripts/check-x.mjs']);
+    // Equal weights: each suite's parts differ in size by at most one file.
+    for (const script of Object.keys(SHARDS)) {
+      const sizes = written.parts.filter((p) => p.script === script).map((p) => p.files.length);
+      assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1, `${script}: ${sizes}`);
+    }
+  } finally {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('D7108 part 2: on the real tree the equal-weight plan is a pure function of the commit and runs every test:drift file and step once', () => {
+  const a = buildPlan(pkg.scripts, {});
+  const b = buildPlan(structuredClone(pkg.scripts), {});
+  assert.equal(JSON.stringify(a), JSON.stringify(b));
+  assert.deepEqual(a.parts.map((p) => p.name), partsOf(pkg.scripts).map((p) => p.name));
+  for (const script of Object.keys(SHARDS)) assertExactOnce(a.parts.filter((p) => p.script === script), suiteFiles(pkg.scripts[script]));
+  assert.equal(validatePlan(a, pkg.scripts).length, a.parts.length);
+  const steps = pkg.scripts['test:drift'].split(' && ');
+  const covered = [...a.parts.find((p) => p.name === REST).commands, ...Object.keys(SHARDS).map((k) => `npm run ${k}`)];
+  assert.deepEqual(covered.sort(), [...steps].sort());
+});
 
 test('D5608 timing metadata is unpacked before duration planning', () => {
   assert.deepEqual(timingsOf({ sha: 'abc', node: 'v22', tests: { 'a.test.mjs': { wallMs: 120, exitCode: 0 }, 'b.test.ts': { wallMs: 400, exitCode: 1 } }, untraced: [] }), { 'a.test.mjs': 120, 'b.test.ts': 400 });

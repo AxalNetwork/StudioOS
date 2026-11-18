@@ -22,7 +22,7 @@ const sections = [
   'Import contacts',
   'Your referrals',
   'Reward logic',
-  'Referral partner program',
+  'Strategic referral access',
   'Policy &amp; FAQ',
   'Submit a referral',
 ];
@@ -76,6 +76,11 @@ test('wires canvas-only features to live APIs', () => {
   assert.match(page, /api\.referralStrategicAccess/);
   assert.match(page, /QRCode\.toCanvas/);
   assert.match(page, /QRCode\.toDataURL/);
+});
+
+test('the strategic-access request makes no referral-partner membership or reward promise', () => {
+  assert.match(page, /formal Referral Partners roster/);
+  assert.doesNotMatch(page, /Become a referral partner|Apply for the referral partner program|Partner program request submitted|priority review/i);
 });
 
 test('does not reintroduce Stripe Connect payouts UI', () => {

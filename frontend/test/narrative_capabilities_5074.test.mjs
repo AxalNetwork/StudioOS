@@ -64,11 +64,11 @@ const narrativeHandler = (url) => {
 };
 
 /** The narrative's replies, with the versions read carrying `caps` (or no map when `caps` is undefined). */
-const as = (caps) => (url, options) => {
+const as = (caps) => (url) => {
   if (url.includes('/form-options')) return response(caps === undefined ? OPTIONS : { ...OPTIONS, capabilities: caps });
   if (url.includes('/modules/investor-narrative')) return response({ parts: { narrative: { state: 'ok', versions: [4, 3].map((v) => ({ version: v, audience: `v${v}`, based_on: 'Blank', saved: '2026-10-24', by: 'Fay Founder', read_by: null })) } } });
   if (url.includes('/narrative/compare')) return response({ pairs: [] });
-  return narrativeHandler(url, options);
+  return narrativeHandler(url);
 };
 
 test('the standing: each map reads as it says; no map, or a non-true value, allows nothing', () => {

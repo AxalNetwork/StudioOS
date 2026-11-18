@@ -153,16 +153,19 @@ test('where companies are based: totals from the API, unmapped said, failed read
 });
 
 test('latest signals: illustrative seed signals say so; a failed read is not empty', () => {
-  assert.match(text(h(LatestSignals, { sigs: unreadable })), /could not be read/);
-  assert.match(text(h(LatestSignals, { sigs: ready({ signals: [], total: 0 }) })), /No signals are recorded yet/);
+  assert.match(text(h(LatestSignals, { sigs: unreadable })), /Could not load signals/);
+  assert.doesNotMatch(text(h(LatestSignals, { sigs: unreadable })), /No ranked signals|Illustrative/);
+  // D7173: a live store that worked and holds none says so, and shows no examples.
+  assert.match(text(h(LatestSignals, { sigs: ready({ signals: [], total: 0, data_state: 'live' }) })), /No ranked signals in the live store/);
   const seed = text(h(LatestSignals, { sigs: ready({ total: 10, data_state: 'illustrative', signals: [
-    { id: 'a', title: 'Payments rails', sector: 'Financial Services', region: 'Europe', confidence_score: 0.62, updated_at: '2026-10-01T00:00:00Z' },
+    { id: 'a', title: 'Payments rails', sector: 'Financial Services', region: 'Europe', confidence_score: 62, updated_at: '2026-10-01T00:00:00Z' },
   ] }) }));
   assert.match(seed, /Illustrative/);
-  assert.match(seed, /Payments rails Financial Services · Europe · confidence 62% · updated 2026-10-01/);
-  assert.match(seed, /1 of 10/);
+  // D7173: the Worker sends 0–100, so 62 reads 62% (it once fed 0.62 here, which hid 8200%).
+  assert.match(seed, /Payments rails Financial Services · Europe Example set dated 1 Oct 2026 62% confidence/);
+  assert.match(seed, /1 example/);
   assert.match(seed, /Top-ranked signals/);
-  assert.match(seed, /Ordered by the signals engine’s rank, not by date/);
+  assert.match(seed, /Ordered by rank\. Confidence is a separate 0–100% score/);
   assert.doesNotMatch(seed, /Latest signals/, 'the card is ranked, not by recency');
   const live = text(h(LatestSignals, { sigs: ready({ total: 1, data_state: 'live', signals: [{ id: 'a', title: 'T', sector: 'S', region: 'R' }] }) }));
   assert.doesNotMatch(live, /Illustrative/);

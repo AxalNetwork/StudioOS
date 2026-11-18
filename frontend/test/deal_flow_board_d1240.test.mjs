@@ -444,7 +444,8 @@ test('mounted phone (DLS18): the board one stage at a time with Move to, and the
     assert.deepEqual(s.calls.filter((c) => c[0] === 'update').at(-1), ['update', '1', { stage: 'commit' }]);
     await act(async () => t.root.render(page('/deals?view=table')));
     await t.settle();
-    assert.match(t.text(t.byId('dealflow-phone-row-1')), /Acme Robotics.*Diligence · Raising.*Team.*Strong/s);
+    // D5902 (DX3, DE03a): a row on the member's deals is the Deals v2 card, its stage and round as status tags.
+    assert.match(t.text(t.byId('dealflow-phone-row-1')), /Acme Robotics.*Diligence.*Raising.*Team.*Strong.*Fit to my thesis.*in stage.*Open.*Move to….*Compare/s);
   } finally { s.restore(); await t.close(); }
 });
 

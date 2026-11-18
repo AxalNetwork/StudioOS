@@ -18,7 +18,10 @@ test('queue CI checks liveness after checkout, and the suite checks again before
     assert.equal(matches.length, name === 'suite' ? 2 : 1, name);
     assert.ok(matches[0].index > job.indexOf('actions/checkout'), name);
     assert.ok(matches[0].index < job.indexOf('actions/setup-node'), name);
-    if (name === 'suite') assert.ok(matches[1].index < job.indexOf('node scripts/test-drift-parts.mjs'));
+    // D7108 part 2: the queue's own plan step also calls test-drift-parts.mjs
+    // (before the installs); the second check comes before the TEST run line.
+    if (name === 'suite') assert.ok(matches[1].index < job.indexOf('node scripts/test-drift-parts.mjs ${{ matrix.part }}'));
+    if (name === 'suite') assert.ok(job.indexOf('node scripts/test-drift-parts.mjs ${{ matrix.part }}') > 0);
   }
 });
 

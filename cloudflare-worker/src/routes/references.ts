@@ -13,6 +13,7 @@
  * audio: no recording upload or URL and no transcription, so those routes do
  * not exist (the 501 stubs are gone).
  */
+import { DEFAULT_REFERENCE_CONSENT } from '../../../frontend/src/lib/referenceConsent.js';
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -25,12 +26,6 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { railFor, refuseRun } from '../util/railContext';
 
 const r = new Hono<{ Bindings: Env }>();
-
-const DEFAULT_CONSENT_TEXT =
-  'I consent to this reference call being recorded, transcribed, and ' +
-  'shared in summarised form with the Axal investment team for the ' +
-  'purpose of evaluating this opportunity. I understand the recording ' +
-  'will be retained securely and may be deleted on request.';
 
 type Row = {
   id: number; uid: string; deal_id: number;
@@ -121,7 +116,7 @@ r.post('/', async (c) => {
            body.reference_email || null, body.reference_role || null, body.relationship || null,
            body.scheduled_at || null,
            consent ? 1 : 0, consent ? nowIso() : null,
-           consent ? (body.consent_text || DEFAULT_CONSENT_TEXT) : null,
+           consent ? (body.consent_text || DEFAULT_REFERENCE_CONSENT) : null,
            consent ? user.id : null,
            body.notes || null, user.id, nowIso(), nowIso(), companyId).run();
     const row = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?')
@@ -207,7 +202,7 @@ r.post('/:id/consent', async (c) => {
     if (give) {
       await c.env.DB.prepare(
         `UPDATE reference_checks SET consent_given=1, consent_given_at=?, consent_text=?, consent_captured_by=?, updated_at=? WHERE id = ?`
-      ).bind(nowIso(), body.consent_text || DEFAULT_CONSENT_TEXT, user.id, nowIso(), id).run();
+      ).bind(nowIso(), body.consent_text || DEFAULT_REFERENCE_CONSENT, user.id, nowIso(), id).run();
     } else {
       // Withdraw consent → wipe transcript/summary metadata. Worker has no R2
       // file deletion here (recording upload is unavailable in the worker

@@ -29,7 +29,6 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
 const scratch = mkdtempSync(join(tmpdir(), 'pitch-d895-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
@@ -76,7 +75,7 @@ for(const who of [1,4,5,6,7,8,9]) test(`D895: principal ${who} cannot write a fo
   for(const [method,path,body]of writes){const r=await call(f,who,method,path,body);assert.ok([403,404].includes(r.status),`${method} ${path}: ${r.status} ${JSON.stringify(r.body)}`)}
   assert.deepEqual(f.db.prepare('SELECT * FROM pitch_decks').all(),before);
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE entity_type='raise.pitch-deck'").get()!.n,0);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: admin reads remain; advisors and advisor-members cannot read deck data or engagement',async()=>{
  const f=await fixture();try{
@@ -85,13 +84,13 @@ test('D895: admin reads remain; advisors and advisor-members cannot read deck da
    for(const who of [4,5,9])assert.equal((await call(f,who,'GET',path)).status,403,`${who} ${path}`);
    assert.equal((await call(f,3,'GET',path)).status,200,'accepted cofounder retains reads');
   }
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: fixed single-segment reads reach methods and brand instead of the deck-id handler',async()=>{
  const f=await fixture();try{
   const methods=await call(f,2,'GET','/api/decks/methods');assert.equal(methods.status,200);assert.equal(methods.body.methods.length,13);
   assert.equal((await call(f,2,'GET','/api/decks/brand')).status,200);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 for(const [method,path,body,action] of [
  ['PUT','/api/decks/10',{slides:SLIDES},'deck_saved'],['POST','/api/decks/10/restore',undefined,'deck_restored'],
@@ -106,7 +105,7 @@ for(const [method,path,body,action] of [
   const r=await call(f,2,method,path,body);assert.equal(r.status,path==='/api/decks/generate'?201:200,JSON.stringify(r.body));
   const rows=f.db.prepare("SELECT project_id,user_id,action,details FROM activity_logs WHERE entity_type='raise.pitch-deck'").all() as any[];
   assert.equal(rows.length,1);assert.equal(rows[0].project_id,1);assert.equal(rows[0].user_id,2);assert.equal(rows[0].action,action);assert.doesNotMatch(rows[0].details,/Recorded problem|\$|runway|revenue/i);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: measured runway comes from the model or Mercury, never funding size',async()=>{
  const f=await fixture();try{
@@ -123,13 +122,13 @@ test('D895: measured runway comes from the model or Mercury, never funding size'
   f.db.prepare("INSERT INTO mercury_raise_facts(integration_id,project_id,kind,fact_key,value,as_of) VALUES(99,1,'runway','runway',4,'2026-10-20')").run();
   assert.equal(await recordedDeckRunway(f.env,1,2),4);
   f.db.exec("UPDATE financial_models SET computed_json='{\"runway_months\":0}'");assert.equal(await recordedDeckRunway(f.env,1,2),0);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: missing review output supplies neither a fabricated score nor a fabricated first fix',async()=>{
  const f=await fixture();try{
   const review=await generateReview(f.env,2,DECK_SECTIONS.map(s=>({...s,content:'Synthetic recorded text'})));
   assert.equal(review.overall_score,null);assert.equal(review.fix_first,'');
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: founder slide fields cannot expose a persisted internal score',()=>{
  const slides=[{title:'Team',fields:[{key:'vr_headline',kind:'paragraph',value:'Axal score: 91/100'},{key:'vr_breakdown',kind:'metric_grid',value:[{label:'Market',value:'20'}]},{key:'team_founder1_name',kind:'paragraph',value:'Synthetic Founder'}]}];
@@ -141,14 +140,14 @@ test('D895: export brand follows the venture owner and plan',async()=>{
   const exported=await call(f,3,'POST','/api/decks/10/export',{format:'pptx'});assert.equal(exported.status,200);assert.match(new TextDecoder().decode(exported.bytes),/Built with Axal VC/);
   f.db.exec("UPDATE users SET subscription_tier='studio' WHERE id=2");assert.equal((await deckOwnerBrand(f.env,1)).show_footer,false);
   f.db.exec("UPDATE users SET subscription_tier='free' WHERE id=3");const paid=await call(f,3,'POST','/api/decks/10/export',{format:'pptx'});assert.equal(paid.status,200);assert.doesNotMatch(new TextDecoder().decode(paid.bytes),/Built with Axal VC/);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: deck-link permissions narrow only the pitch module',async()=>{
  const f=await fixture();try{
   const project={id:1,founder_id:100};const admin={id:1,role:'admin'}as any;
   assert.equal(canWrite(project,admin),true);assert.equal(canWritePitchDeck(project,admin),false);assert.equal(canWritePitchDeck(project,{id:2,role:'founder',founder_id:100}as any),true);
   for(const method of ['POST','PATCH'])assert.equal((await call(f,1,method,'/api/cycles/raise/deck-links'+(method==='PATCH'?'/1':'')+'?project=1',{deck_id:10,expires_days:7})).status,403);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 test('D895: the current brand kit is the newest live page, with voice and dark logo',async()=>{
@@ -162,7 +161,7 @@ test('D895: the current brand kit is the newest live page, with voice and dark l
   assert.equal(fields.find((x:any)=>x.key==='brandkit_logo_dark_url').value,'https://example.invalid/dark.svg');
   assert.equal(fields.find((x:any)=>x.key==='brandkit_voice_json').value,'["Direct"]');
   const response=await call(f,2,'GET','/api/brand/landing/by-project/1');assert.equal(response.status,200);assert.equal(response.body.name,'Current');assert.deepEqual(response.body.voice_tags,['Direct']);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: founder template generation withholds internal scores while the Lab assembler keeps them',async()=>{
  const f=await fixture();try{
@@ -177,7 +176,7 @@ test('D895: founder template generation withholds internal scores while the Lab 
   const link=await createShareLink(f.env,{deckId:applied.body.deck.id,deckVersion:applied.body.deck.version,userId:2,actorEmail:null,ttlSeconds:null,projectId:1});
   const shared=await call(f,null,'GET','/api/decks/share/'+link.token);assert.equal(shared.status,200,JSON.stringify(shared.body));
   assert.doesNotMatch(JSON.stringify(shared.body.spinout_fields),/87\/100|Axal score/);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: no recorded runway says Not recorded in the generated Ask',async()=>{
  const f=await fixture();try{
@@ -191,7 +190,7 @@ test('D895: no recorded runway says Not recorded in the generated Ask',async()=>
   assert.ok(card.blocks.every((b:any)=>b.binding?.source_key!=='grow.runway'||b.value==null));
   assert.match(card.blocks.find((b:any)=>b.id==='n').text,/Not recorded on StudioOS yet: .*Runway/);
   assert.doesNotMatch(JSON.stringify(response.body.proposal.slides),/18-24|24\+|9000000.*months|9,000,000 months/);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: an accepted deck NDA becomes the founder-viewer pairwise NDA, never a body-supplied identity',async()=>{
  const f=await fixture();try{
@@ -201,7 +200,7 @@ test('D895: an accepted deck NDA becomes the founder-viewer pairwise NDA, never 
   const rows=f.db.prepare('SELECT party_a_user_id,party_b_user_id,status,valid_until FROM pairwise_ndas').all()as any[];
   assert.equal(rows.length,1);assert.equal(rows[0].party_a_user_id,2);assert.equal(rows[0].party_b_user_id,6);assert.equal(rows[0].status,'active');assert.ok(Date.parse(rows[0].valid_until)>Date.now());
   assert.equal(f.db.prepare('SELECT count(*) AS n FROM data_room_grants').get()!.n,0,'an NDA is not an access grant');
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 test('D895: unknown counts stay null; measured zero and finite exhausted links remain distinct',()=>{
@@ -217,7 +216,7 @@ test('D895: engagement reports an unlimited cap honestly and conversion outages 
   f.db.exec('DROP TABLE deck_share_conversions');
   // The bootstrap was already used above, so this simulates a later store outage.
   const unreadable=await call(f,2,'GET','/api/decks/10/engagement');assert.equal(unreadable.status,200);assert.equal(unreadable.body.conversions.signups,null);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: editor withdrawal logs one link activity; repeating the withdrawal preserves its first state',async()=>{
  const f=await fixture();try{
@@ -227,7 +226,7 @@ test('D895: editor withdrawal logs one link activity; repeating the withdrawal p
   assert.equal((await call(f,2,'DELETE',`/api/decks/10/shares/${link.id}`)).status,200);
   assert.deepEqual(f.db.prepare('SELECT revoked_at,expires_at FROM pitch_deck_share_tokens WHERE id=?').get(link.id!),before);
   const logs=f.db.prepare("SELECT user_id,action FROM activity_logs WHERE entity_type='raise.pitch-deck'").all() as any[];assert.equal(logs.length,1);assert.equal(logs[0].action,'deck_link_revoked');assert.equal(logs[0].user_id,2);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 for(const format of ['pdf','pptx'])test(`D895: successful browser ${format} export logs once; failed rendering logs no completed export`,async()=>{
  const f=await fixture();try{
@@ -239,7 +238,7 @@ for(const format of ['pdf','pptx'])test(`D895: successful browser ${format} expo
   // D1574 (#3821): the PowerPoint is the editable file, which needs no picture of a slide, so a failing browser does not stop it.
   assert.equal((await call(f,2,'POST','/api/decks/10/export',{format})).status,format==='pdf'?502:200);
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE entity_type='raise.pitch-deck' AND action='deck_exported'").get()!.n,format==='pdf'?1:2);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: admin deck-link records are read-only, including their action metadata and form options',async()=>{
  const f=await fixture();try{
@@ -250,7 +249,7 @@ test('D895: admin deck-link records are read-only, including their action metada
   assert.equal((await call(f,1,'GET','/api/cycles/raise/modules/pitch-deck/form-options?project=1')).status,403);
   assert.equal((await call(f,1,'POST',path+'/actions/revoke?project=1',{})).status,403);
   assert.equal(f.db.prepare('SELECT revoked_at FROM pitch_deck_share_tokens WHERE id=?').get(link.id!)!.revoked_at,null);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: review normalization distinguishes an absent score from returned zero and retains only returned first fixes',()=>{
  const sections=DECK_SECTIONS.map(s=>({...s,content:'Synthetic text'}));
@@ -268,7 +267,7 @@ test('D895: reading a legacy deck removes saved internal score fields',async()=>
  const f=await fixture();try{
   f.db.prepare('UPDATE pitch_decks SET slides=? WHERE id=10').run(JSON.stringify([{title:'Readiness',fields:[{key:'vr_headline',kind:'paragraph',value:'Axal score: 91/100'},{key:'vr_breakdown',kind:'metric_grid',value:[{label:'Market',value:'20'}]}]}]));
   const read=await call(f,2,'GET','/api/decks/10');assert.equal(read.status,200);assert.doesNotMatch(JSON.stringify(read.body),/91\/100|Axal score/);assert.deepEqual(read.body.slides[0].fields[1].value,[]);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 test('D895: template Ask runway cells use records, including Mercury, rather than the amount raised',async()=>{
@@ -290,7 +289,7 @@ test('D895: template Ask runway cells use records, including Mercury, rather tha
   assert.deepEqual(await deckRunwayRead(f.env,1,2),{months:7,source:'Modelled'});
   f.db.exec('DELETE FROM financial_models');
   assert.deepEqual(await deckRunwayRead(f.env,1,2),{months:0,source:'Connector'},'Mercury\'s fact is a Connector reading');
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 
@@ -303,7 +302,7 @@ test('D895: fractional recorded runway has consistent whole-month display withou
   // D897: New deck reads runway from its Mercury slot only; the model's 13.85 never prints, rounded or not.
   aiOff(f,2);
   const generated=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(generated.status,201);assert.doesNotMatch(JSON.stringify(generated.body.proposal.slides),/13\.8/);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 for(const failing of ['upsert','activate'])test(`D895: failed pairwise ${failing} leaves no unfinished acceptance or conversion; retry completes one NDA`,async()=>{
  const f=await fixture();try{
@@ -318,7 +317,7 @@ for(const failing of ['upsert','activate'])test(`D895: failed pairwise ${failing
   f.env.DB=original;const retry=await call(f,6,'POST',path,{signed_by:'Synthetic'});assert.equal(retry.status,200,JSON.stringify(retry.body));
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM documents WHERE doc_type='nda_acceptance'").get()!.n,1);
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM pairwise_ndas WHERE status='active'").get()!.n,1);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 test('D895: failure to replace an existing NDA preserves the previous active agreement',async()=>{
@@ -331,7 +330,7 @@ test('D895: failure to replace an existing NDA preserves the previous active agr
   assert.deepEqual(f.db.prepare('SELECT * FROM pairwise_ndas').all(),before);
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM documents WHERE doc_type='nda_acceptance'").get()!.n,1);
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM deck_share_conversions WHERE type='nda_signed'").get()!.n,0);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 test('D895: malformed or non-array readiness cards cannot hide unrelated public fields',()=>{
@@ -362,7 +361,7 @@ test('D895: only the owning founder outside support can copy their active Mercur
   }
   f.db.exec("UPDATE integrations SET user_id=8 WHERE id=99");assert.equal(await recordedDeckRunway(f.env,1,2),null);assert.equal(await recordedDeckRunway(f.env,1,8),null);
   f.db.exec("UPDATE integrations SET user_id=2,status='disconnected' WHERE id=99");assert.equal(await recordedDeckRunway(f.env,1,2),null);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 test('D895: canonical NDA linkage also works when the viewer id is lower than the founder id',async()=>{
@@ -372,7 +371,7 @@ test('D895: canonical NDA linkage also works when the viewer id is lower than th
   const accepted=await call(f,1,'POST','/api/deck-share/share/'+link.token+'/nda',{signed_by:'Synthetic'});assert.equal(accepted.status,200,JSON.stringify(accepted.body));
   const pair=f.db.prepare('SELECT party_a_user_id,party_b_user_id,status FROM pairwise_ndas').get();assert.deepEqual({...pair},{party_a_user_id:2,party_b_user_id:1,status:'active'});
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM deck_share_conversions WHERE type='nda_signed'").get()!.n,1);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 
@@ -383,7 +382,7 @@ test('D895: brand save/read alignment changes the newest live page and leaves ot
   const saved=await call(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Edited current',voice_tags:['Direct'],logo_dark_url:'https://example.invalid/dark.svg'});assert.equal(saved.status,200,JSON.stringify(saved.body));assert.equal(saved.body.id,102);
   const read=await call(f,2,'GET','/api/brand/landing/by-project/1');assert.equal(read.body.id,102);assert.equal(read.body.name,'Edited current');assert.deepEqual(read.body.voice_tags,['Direct']);assert.equal(read.body.logo_dark_url,'https://example.invalid/dark.svg');
   assert.equal(f.db.prepare('SELECT name FROM landing_pages WHERE id=101').get()!.name,'Old');assert.equal(f.db.prepare('SELECT name FROM landing_pages WHERE id=103').get()!.name,'Archived');
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 test('D895: saving with only an archived home creates a fresh live page and preserves the archived page',async()=>{
@@ -394,14 +393,14 @@ test('D895: saving with only an archived home creates a fresh live page and pres
   const read=await call(f,2,'GET','/api/brand/landing/by-project/1');assert.equal(read.body.id,saved.body.id);assert.equal(read.body.name,'Fresh home');
   assert.deepEqual({...f.db.prepare('SELECT name,archived_at FROM landing_pages WHERE id=101').get()},{name:'Archived home',archived_at:'2026-10-01'});
   const edited=await call(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Edited fresh home'});assert.equal(edited.status,200);assert.equal(edited.body.id,saved.body.id);assert.equal(f.db.prepare('SELECT count(*) AS n FROM landing_pages WHERE project_id=1').get()!.n,2);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 test('D895: an all-archived site still respects the existing five-page limit on a legacy brand save',async()=>{
  const f=await fixture();try{
   const insert=f.db.prepare("INSERT INTO landing_pages(project_id,slug,page_slug,name,archived_at) VALUES(1,?,?,?,'2026-10-01')");for(let i=0;i<5;i++)insert.run('archived-'+i,i===0?'home':'archived-'+i,'Archived '+i);
   const saved=await call(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Another home'});assert.equal(saved.status,409);assert.equal(saved.body.code,'page_limit_reached');
   assert.equal(f.db.prepare('SELECT count(*) AS n FROM landing_pages WHERE project_id=1').get()!.n,5);assert.equal((await call(f,2,'GET','/api/brand/landing/by-project/1')).body,null);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });
 
 
@@ -415,7 +414,7 @@ test('D895: legacy publish and preview target the page shown by the current bran
    assert.equal(f.db.prepare('SELECT published FROM landing_pages WHERE id=102').get()!.published,1);
    assert.equal(f.db.prepare('SELECT published FROM landing_pages WHERE id=101').get()!.published,0);assert.equal(f.db.prepare('SELECT published FROM landing_pages WHERE id=103').get()!.published,0);
    const preview=await call(f,2,'GET','/api/brand/landing/by-project/1/preview-url');assert.equal(preview.status,200);assert.equal(preview.body.url,'/landing/preview/synthetic-current-preview');
-  }finally{f.db.close()}
+  }finally{f.db.close();}
  }
 });
 
@@ -427,5 +426,5 @@ test('D895: legacy publish and preview report no live page instead of claiming a
   const published=await call(f,2,'POST','/api/brand/landing/by-project/1/publish',{published:true});assert.equal(published.status,409);assert.equal(published.body.error,'page_archived');
   assert.equal((await call(f,2,'GET','/api/brand/landing/by-project/1/preview-url')).status,404);
   assert.equal(f.db.prepare('SELECT published FROM landing_pages WHERE project_id=1').get()!.published,0);
- }finally{f.db.close()}
+ }finally{f.db.close();}
 });

@@ -35,6 +35,8 @@ import { LIST_PAGE_DEFAULT, decodeCursor, encodeCursor, listLimit, trimPage } fr
 import { logCycleWrite } from '../services/cycleActivity';
 import { exemptionInput, unpublishRoundLinks, unpublishes } from '../services/decks/roundExemption';
 import { roundExemptionOf } from '../services/decks/publish';
+import { refuse } from '../util/refusal';
+import { INVITE_ROLE_REASON, PROSPECT_INVITE_GAP_HOURS, canInviteProspect, inviteCutoff, prospectInviteStates } from '../services/prospectInvites';
 import { CapitalAccessError, capitalInvestor, capitalMemberProjectIds, capitalOwner, capitalPage, capitalRequestPath, capitalStaff, capitalStudioSummary } from '../services/capRelAccess';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -300,7 +302,7 @@ async function ensureSchema(env: Env): Promise<void> {
     // D663 (migration 442): the next step, when it is due, and the warm path.
     // D691 (migration 463): the Research directory fund a prospect is.
     // D1190 (migration 607): the amount in cents and its currency.
-    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT'], ['next_step', 'TEXT'], ['next_step_due', 'TEXT'], ['warm_path', 'TEXT'], ['research_fund_uid', 'TEXT'], ['amount_cents', 'INTEGER'], ['currency', "TEXT NOT NULL DEFAULT 'USD'"]] as const) {
+    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT'], ['next_step', 'TEXT'], ['next_step_due', 'TEXT'], ['warm_path', 'TEXT'], ['research_fund_uid', 'TEXT'], ['amount_cents', 'INTEGER'], ['currency', "TEXT NOT NULL DEFAULT 'USD'"], ['round_call_uid', 'TEXT']] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE raise_prospects ADD COLUMN ${col} ${decl}`).run(); }
         catch (e) { console.warn('[contacts] ALTER raise_prospects column failed (likely already applied)', col, e); }
@@ -811,6 +813,8 @@ r.post('/invite', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
+    // D6052 (#6052): a raise prospect is invited through this same path.
+    if (body.prospect_id != null) return await invitePipelineProspect(c, user, body);
     if (await capitalRestricted(c, user) && body.audience === 'investor') return c.json({ detail: 'Staff cannot change the investor pipeline.', code: 'admin_read_only' }, 403);
     const projectId = Number(body.project_id);
     const email = String(body.email || '').trim().toLowerCase();
@@ -849,6 +853,105 @@ r.post('/invite', async (c) => {
       await c.env.DB.prepare('UPDATE contacts SET last_activity_at=?, updated_at=? WHERE id=?').bind(nowIso(), nowIso(), row.id).run();
     }
     return c.json({ ...row, email_sent: emailSent, ...(emailError ? { email_error: emailError } : {}) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D6052 (#6052): invite a raise prospect who has no Axal account. The venture's founder only (D1191 keeps
+ * staff and support sessions out of the investor pipeline). The address is the prospect's own; one typed here
+ * fills a prospect that has none and never replaces one it has. Each attempt writes one
+ * `raise_prospect_invites` row (who invited whom) and one `activity_logs` row in a single batch. A sent
+ * invitation blocks another for the same prospect for PROSPECT_INVITE_GAP_HOURS; the `contact_invite_send`
+ * bucket (middleware/rateLimit.ts) caps the route per founder. Nobody joins a call's audience here.
+ */
+async function invitePipelineProspect(c: Context<{ Bindings: Env }>, user: User, body: any): Promise<Response> {
+  if (await capitalRestricted(c, user)) return refuse(c, 403, { code: 'admin_read_only', message: 'Staff cannot change the investor pipeline.' });
+  const projectId = Number(body.project_id), prospectId = Number(body.prospect_id);
+  if (!Number.isSafeInteger(projectId) || projectId <= 0 || !Number.isSafeInteger(prospectId) || prospectId <= 0) {
+    return refuse(c, 400, { code: 'invalid_prospect', message: 'Choose a venture and an investor from its pipeline.' });
+  }
+  const scope = await ownedProjectScope(c, user);
+  const project = await c.env.DB.prepare('SELECT id, name, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(projectId).first<{ id: number; name: string | null; founder_id: number | null }>();
+  if (!project || (scope !== 'all' && !scope.includes(projectId))) return refuse(c, 404, { code: 'project_not_found', message: 'That venture is not yours.' });
+  if (!canInviteProspect(user, project)) return refuse(c, 403, { code: 'invite_role_refused', message: INVITE_ROLE_REASON });
+  const prospect = await c.env.DB.prepare('SELECT id, name, email, contact_id FROM raise_prospects WHERE id = ? AND project_id = ?')
+    .bind(prospectId, projectId).first<{ id: number; name: string | null; email: string | null; contact_id: number | null }>();
+  if (!prospect) return refuse(c, 404, { code: 'prospect_not_found', message: 'That investor is not in this venture’s pipeline.' });
+  const recorded = String(prospect.email || '').trim().toLowerCase();
+  const typed = String(body.email || '').trim().toLowerCase();
+  if (recorded && typed && typed !== recorded) {
+    return refuse(c, 409, { code: 'prospect_email_differs', message: 'The pipeline holds another address for this investor. Change it there first.' });
+  }
+  const email = recorded || typed;
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return refuse(c, 400, { code: 'email_required', message: 'Type the investor’s email address.' });
+  const verified = await c.env.DB.prepare("SELECT 1 FROM users WHERE LOWER(email) = ? AND role = 'investor' AND is_active = 1 AND kyc_status = 'approved' LIMIT 1").bind(email).first();
+  if (verified) return refuse(c, 409, { code: 'already_on_axal', message: 'This investor is already verified on Axal. Choose them from your pipeline.' });
+  const at = nowIso();
+  const recent = await c.env.DB.prepare('SELECT invited_at FROM raise_prospect_invites WHERE prospect_id = ? AND email_sent = 1 AND datetime(invited_at) > datetime(?) ORDER BY invited_at DESC LIMIT 1')
+    .bind(prospectId, inviteCutoff(at)).first<{ invited_at: string }>();
+  if (recent) {
+    return refuse(c, 429, { code: 'invite_recent', message: `This investor was invited in the last ${PROSPECT_INVITE_GAP_HOURS} hours. Try again later.`, extra: { invited_at: recent.invited_at } });
+  }
+
+  if (!recorded) await c.env.DB.prepare("UPDATE raise_prospects SET email = ?, updated_at = ? WHERE id = ? AND project_id = ? AND (email IS NULL OR TRIM(email) = '')").bind(email, at, prospectId, projectId).run();
+  let contact = prospect.contact_id == null ? null
+    : await c.env.DB.prepare('SELECT * FROM contacts WHERE id = ? AND project_id = ?').bind(prospect.contact_id, projectId).first<ContactRow>();
+  if (contact) {
+    if (contact.status === 'new') await c.env.DB.prepare("UPDATE contacts SET status = 'invited', updated_at = ? WHERE id = ?").bind(at, contact.id).run();
+  } else {
+    const created = prepareContactInsert(c.env, { projectId, email, name: prospect.name, audience: 'investor', cta: 'invite', source: 'invite', status: 'invited' });
+    await created.statement.run();
+    contact = await c.env.DB.prepare('SELECT * FROM contacts WHERE uid = ?').bind(created.uid).first<ContactRow>();
+    if (contact) await c.env.DB.prepare('UPDATE raise_prospects SET contact_id = ? WHERE id = ? AND contact_id IS NULL').bind(contact.id, prospectId).run();
+  }
+
+  const message = body.message ? String(body.message).slice(0, 2000) : '';
+  const link = c.env.APP_URL || c.env.PUBLIC_BASE_URL || 'https://axal.vc';
+  let emailSent = false;
+  let emailError: string | null = null;
+  try {
+    emailSent = await sendContactInviteEmail(c.env, email, prospect.name || '', user.name || 'Axal StudioOS', user.email || '', project.name || '', link, message);
+    if (!emailSent) emailError = 'Email provider is not configured or rejected the message';
+  } catch (e: any) {
+    emailError = e?.message || 'Unknown error sending invite email';
+  }
+  const uid = newUid();
+  const statements = [
+    c.env.DB.prepare('INSERT INTO raise_prospect_invites (uid, project_id, prospect_id, contact_id, email, invited_by, invited_at, email_sent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(uid, projectId, prospectId, contact?.id ?? null, email, user.id, at, emailSent ? 1 : 0),
+    c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id, project_id, entity_type, entity_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind('raise_prospect_invited', JSON.stringify({ invite_uid: uid, prospect_id: prospectId, email_sent: emailSent }), await hashEmail(user.email || ''), user.id, projectId, 'raise_prospect', String(prospectId)),
+  ];
+  if (emailSent && contact) {
+    statements.push(
+      c.env.DB.prepare('INSERT INTO contact_replies (contact_id, direction, body, created_by, created_at) VALUES (?, ?, ?, ?, ?)')
+        .bind(contact.id, 'outbound', message ? `Invitation email sent:\n${message}` : 'Invitation email sent.', user.id, at),
+      c.env.DB.prepare('UPDATE contacts SET last_activity_at = ?, updated_at = ? WHERE id = ?').bind(at, at, contact.id),
+    );
+  }
+  await c.env.DB.batch(statements);
+  return c.json({ ...(contact || {}), email_sent: emailSent, ...(emailError ? { email_error: emailError } : {}),
+    invite: { uid, prospect_id: prospectId, invited_at: emailSent ? at : null, email_sent: emailSent } }, 201);
+}
+
+// GET /api/contacts/raise-prospects/invites?project_id= — D6052 (#6052): each prospect's invitation state
+// for the Call for Capital's audience step, and whether this viewer may invite. Registered before
+// /raise-prospects/:id so the static segment wins. Returns no address.
+r.get('/raise-prospects/invites', async (c) => {
+  try {
+    const user = await requireRaiseUser(c);
+    await ensureSchema(c.env);
+    const raw = c.req.query('project_id') || '';
+    if (!/^[1-9][0-9]{0,9}$/.test(raw)) return refuse(c, 400, { code: 'invalid_project', message: 'Choose a venture.' });
+    const projectId = Number(raw);
+    const scope = await ownedProjectScope(c, user);
+    if (scope !== 'all' && !scope.includes(projectId)) return refuse(c, 404, { code: 'project_not_found', message: 'That venture is not yours.' });
+    const project = await c.env.DB.prepare('SELECT founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ founder_id: number | null }>();
+    if (!project) return refuse(c, 404, { code: 'project_not_found', message: 'That venture is not yours.' });
+    const allowed = canInviteProspect(user, project) && !(await capitalRestricted(c, user));
+    return c.json({ can_invite: allowed, reason: allowed ? null : INVITE_ROLE_REASON, gap_hours: PROSPECT_INVITE_GAP_HOURS,
+      items: await prospectInviteStates(c.env, projectId, nowIso()) });
   } catch (e) { return mapError(c, e); }
 });
 

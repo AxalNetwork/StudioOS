@@ -248,9 +248,13 @@ test('the competitor analysis runs on the press and writes only its own analysis
   const OWN = ['competitor_analyses', 'competitor_analysis_outputs', 'competitor_candidates', 'competitor_signals', 'competitor_sources'];
   for (const [method, path] of [['post', '/analyze'], ['post', '/:id/rerun'], ['post', '/:id/refresh']]) {
     const body = route(src, 'competitors', method, path);
-    for (const t of writes(body)) assert.ok(OWN.includes(t), `${path} writes ${t}`);
-    assert.match(body, /await persistResult\(c\.env, id, result\);/);
+    for (const t of writes(body)) assert.ok([...OWN, 'competitor_rerun_proposals'].includes(t), `${path} writes ${t}`);
   }
+  // D7176: only a new analysis is written whole. A rerun keeps its proposal and
+  // writes nothing else; refresh moves source rows only.
+  assert.match(route(src, 'competitors', 'post', '/analyze'), /await persistResult\(c\.env, id, result\);/);
+  assert.deepEqual(writes(route(src, 'competitors', 'post', '/:id/rerun')), ['competitor_rerun_proposals']);
+  assert.deepEqual(writes(route(src, 'competitors', 'post', '/:id/refresh')), ['competitor_sources']);
   // persistResult writes the analysis's own rows, every one keyed by the analysis.
   const persist = src.slice(src.indexOf('export async function persistResult'), src.indexOf('async function loadAnalysis'));
   for (const t of writes(persist)) assert.ok(OWN.includes(t), `persistResult writes ${t}`);

@@ -16,7 +16,7 @@ import { BUILD_SUBPAGES, SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { SidebarSubpagesContext, subpageRoots, subpageRootsKey, visibleSubpageRoots } from '../src/lib/sidebarSubpages.js';
 import { SubpageList, subpageActive } from '../src/ui/SidebarNav.jsx';
 import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
-import { BUILD_MODULE_OUTCOMES, moduleSubtitle } from '../src/pages/cycles/cycleModel.js';
+import { BUILD_MODULE_OUTCOMES, moduleSubtitle, cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import { MODULES } from '../src/pages/cycles/modules.js';
 
 const buildRow = () => SIDEBAR_GROUPS.founder.flatMap((g) => g.items).find((i) => i.to === '/build');
@@ -91,4 +91,14 @@ test('each Build module\'s subtitle is its founder outcome (BD23); no Build modu
   assert.equal(moduleSubtitle('raise', 'pitch-deck', 'Your deck.'), `Your deck. ${OLD}`, 'other cycles keep theirs');
   // A tool page that owns the module (D5081 `owned`) keeps its own subtitle; every other module reads moduleSubtitle.
   assert.match(readFileSync('frontend/src/pages/cycles/CycleModulePage.jsx', 'utf8'), /sub=\{sub !== undefined \? sub : owned \? owned\.sub : moduleSubtitle\(meta\.key, slug, card\?\.caption\)\}/);
+});
+
+test('Plan and Progress remain in the phone picker with the venture query', () => {
+  const cards = MODULES.build.map((m) => ({ slug: m.slug, name: m.name }));
+  const tabs = cycleTabs('build', cards, 'progress', '?project_id=7');
+  assert.deepEqual(tabs.slice(0, 4).map((t) => [t.name, t.href]), [
+    ['Overview', '/build?project_id=7'], ['Plan', '/build/plan?project_id=7'],
+    ['Progress', '/build/plan/progress?project_id=7'], ['Tools', '/build/operating-systems?project_id=7#tools'],
+  ]);
+  assert.equal(tabs.find((t) => t.key === 'progress').active, true);
 });

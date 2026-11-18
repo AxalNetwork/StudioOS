@@ -73,39 +73,45 @@ test('home renders task areas, four previews, surface labels and single-role bad
   assert.deepEqual(helpAreas(visible).map((a) => a.badge), [null, 'FOUNDER', 'FOUNDER', null, 'FOUNDER', 'INVESTOR', null, null, null, null, null]);
   const output = html(BrowseByTask, { sections: visible });
   assert.deepEqual([...output.matchAll(/<h3[^>]*>(.*?)<\/h3>/gs)].map((m) => renderedText(m[1])), labels.slice(0, -1));
+  // D6861 (HC1): a single-role area says "Applies to: Founder" once; a mixed
+  // area tags each guide written for one role; "All N" opens the directory.
   const lab = output.slice(output.indexOf('The Spin-Out Lab'), output.indexOf('Building your startup'));
-  assert.match(renderedText(lab), /FOUNDER/);
+  assert.match(renderedText(lab), /Applies to: Founder/);
   assert.match(renderedText(lab), /All 6 →/);
+  assert.match(lab, /href="\/help\?view=all#area-spin-out-lab"/);
   assert.equal((lab.match(/href="\/help\/spin-out-lab\//g) || []).length, 4);
   const start = output.slice(output.indexOf('Getting started'), output.indexOf('The Spin-Out Lab'));
-  assert.doesNotMatch(renderedText(start), /FOUNDER|INVESTOR|PARTNER|ADVISOR/);
-  assert.match(renderedText(output), /Startup board/);
+  assert.doesNotMatch(start, /rounded-full/, "no role chip in an area written for every account");
+  const data = output.slice(output.indexOf('Data rooms &amp; due diligence'), output.indexOf('Advisors &amp; office hours'));
+  assert.match(renderedText(data), /Due DiligenceInvestor/);
   assert.match(renderedText(html(BrowseByTask, { sections: SECTIONS })), /Running the platform/);
 });
 
 test('an area with two different single-role audiences has no badge', () => {
   const account = SECTIONS.find((section) => section.id === 'account');
   const mixed = [{ ...account, subsections: account.subsections.filter((guide) => ['tiers', 'investor-billing'].includes(guide.id)) }];
-  assert.doesNotMatch(renderedText(html(BrowseByTask, { sections: mixed })), /FOUNDER|INVESTOR/);
+  assert.doesNotMatch(renderedText(html(BrowseByTask, { sections: mixed })), /Applies to: (Founder|Investor)/);
 });
 
 for (const [role, allowed] of [['investor', true], ['admin', true], ['founder', false], ['partner', false], ['advisor', false]]) {
   test(`fund guide: ${role} sees metadata and ${allowed ? 'can' : 'cannot'} open the surface`, () => {
     const output = html(HelpArticle, { sections: visible, area: 'capital', guide: 'funds', user: { role } });
     assert.equal(renderedText(output.match(/<nav aria-label="Breadcrumb"[^>]*>(.*?)<\/nav>/s)[1]).trim(), 'Help/Funds & portfolio/Funds and Waterfall');
-    assert.equal(renderedText(output.match(/<span class="rounded-full[^>]*>(.*?)<\/span>/s)[1]).trim(), 'Funds & portfolio');
-    assert.match(renderedText(output), /Where this livesFunds/);
-    assert.match(renderedText(output), /Applies toInvestor/);
+    // D6861 (HC5): Applies to beside the reading time, Go to as the one
+    // primary action only when this viewer can open the page, and owner and
+    // review beside On this page.
+    assert.match(renderedText(output), /Applies to: Investor/);
     assert.equal(output.includes('href="/funds"'), allowed);
-    assert.match(renderedText(output), /In Funds &amp; portfolio|In Funds & portfolio/);
+    assert.equal(renderedText(output).includes('Go to Funds'), allowed);
+    assert.match(renderedText(output), /OwnerUnassignedReviewVerification pending/);
   });
 }
 
 test('general guide has no surface jump and says Every account', () => {
   const output = html(HelpArticle, { sections: visible, area: 'getting-started', guide: 'what-is-studioos', user: { role: 'founder' } });
-  assert.match(renderedText(output), /Where this livesNo single screen/);
-  assert.match(renderedText(output), /Applies toEvery account/);
-  assert.doesNotMatch(renderedText(output), /Open the surface/);
+  assert.match(renderedText(output), /Every account/);
+  assert.doesNotMatch(output, /data-testid="help-guide-go"/);
+  assert.doesNotMatch(renderedText(output), /Go to /);
 });
 
 test('active Lab membership admits the actual role while inactive or anonymous viewers cannot jump', () => {
@@ -129,12 +135,12 @@ test("admin view-as links follow active role, with the router's Lab preview exce
 
 test('search, related-area rail, popular cards and admin answers name the task area', () => {
   const anchor = 'build/pitch-deck';
-  const result = html(SearchResults, { sections: visible, query: 'Pitch', results: [{ anchor, subsectionTitle: 'Pitch Deck', sectionTitle: 'Core', text: 'Pitch deck' }] });
+  const result = html(SearchResults, { query: 'Pitch', search: { capped: false, results: [{ anchor, sectionId: 'core', subsectionTitle: 'Pitch Deck', sectionTitle: 'Core', text: 'Pitch deck' }] } });
   assert.match(renderedText(result), /Raising & cap table/);
   assert.doesNotMatch(renderedText(result), /Core/);
   const article = html(HelpArticle, { sections: visible, area: 'build', guide: 'pitch-deck', user: { role: 'founder' } });
-  const rail = article.match(/<nav aria-label="Guides in Raising &amp; cap table"[^>]*>(.*?)<\/nav>/s)[1];
-  assert.deepEqual([...rail.matchAll(/href="([^\"]+)"/g)].map((m) => m[1]).sort(), ['/help/build/deck-share-viewer', '/help/build/pitch-deck', '/help/capital/cap-table', '/help/capital/fundraise', '/help/capital/investors']);
+  const crumb = article.match(/<nav aria-label="Breadcrumb"[^>]*>(.*?)<\/nav>/s)[1];
+  assert.match(crumb, /href="\/help\?view=all#area-raising"[^>]*>Raising &amp; cap table</);
   assert.deepEqual(popularGuides({ guides: [{ anchor, views: 2 }] }, visible), [{ anchor, title: 'Pitch Deck', area: 'Raising & cap table', views: 2 }]);
   const view = adminFeedbackView({ guides: [{ anchor, yes: 1, no: 2 }], missing: [] }, SECTIONS);
   assert.match(renderedText(html(GuideAnswersAdminView, { read: { status: 'ok', view }, onRetry() {} })), /Raising & cap table/);
@@ -156,6 +162,6 @@ test('D4439: Help opens canonical founder co-marketing, partner Offers, and no i
     for (const path of ['/comarketing', '/grow/partner-network/co-marketing']) {
       assert.equal(output.includes(`href="${path}"`), path === target, `${user.role}/${session?.viewMode || user.role}: ${path}`);
     }
-    assert.equal(renderedText(output).includes('Open the surface'), target !== null);
+    assert.equal(renderedText(output).includes('Go to Co-marketing'), target !== null);
   }
 });
