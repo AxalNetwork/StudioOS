@@ -363,7 +363,7 @@ function ListedTable({ items, info, open, onToggle }) {
         </div>
       ) : null}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-[12.5px]">
+        <table className="w-full text-left text-[12.5px]">
           <caption className="sr-only">Listed companies, rows {info.from} to {info.to} of {info.total}</caption>
           <thead>
             <tr className="border-b border-axal-hairline text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-faint dark:border-gray-800 dark:text-gray-500">
