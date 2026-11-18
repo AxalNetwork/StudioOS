@@ -343,4 +343,9 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
 | `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory and classification/provenance guard; `--write` renders the generated, gitignored Markdown inventory beside the policy JSON. |
 
+| `file-recovery.py` | D6428: approved-class-only, lock-verified R2 snapshots and suppression-required restore primitive; live activation waits for counsel/#6650/#6654. |
+| `file-recovery-drill.py` | D6428: synthetic-only archive/source-loss/restore/suppression drill, with no provider access. |
+| `file_recovery_6428_test.py` | D6428: synthetic registry, lock duration, archive immutability, corruption, copy failure and suppression regressions. |
 | `report-incorporation-state.mjs` | #6684: read-only incorporation state by jurisdiction id (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals, ids outside the six, multi-paid projects, a US beneficial-ownership step); counts and yes/no only. |
+
+| `local-files.mjs` | D7255: descriptor-bound regular file reads/edits and private, no-follow operator-state files; rejects symlinks and hard links before truncation. |

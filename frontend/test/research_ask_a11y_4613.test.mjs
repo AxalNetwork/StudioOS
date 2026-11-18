@@ -182,7 +182,7 @@ async function mountCatalog(createImpl) {
   return { ...m, sent, async close() { await m.unmount(); api.research = original.research; researchFundsApi.get = original.get; researchMyFundsApi.list = original.mine; } };
 }
 
-test('Add to my funds: two presses in one frame send one request, carrying the catalogue uid', async () => {
+test('Save to shortlist: two presses in one frame send one request, carrying the catalogue uid', async () => {
   let release;
   const m = await mountCatalog(() => new Promise((r) => { release = () => r({ uid: 'f-1', name: FUND.name, existing: false }); }));
   try {
@@ -191,6 +191,8 @@ test('Add to my funds: two presses in one frame send one request, carrying the c
     const onClick = m.props(button).onClick;
     // Both presses read the same render, which is the race a state flag alone loses.
     await act(async () => { onClick(); onClick(); });
+    // D7167: the save re-reads the fund first, so let that read answer.
+    for (let i = 0; i < 3; i += 1) await m.flush();
     // Mutation checked: drop the ref latch → two requests.
     assert.equal(m.sent.length, 1);
     assert.equal(m.sent[0].catalogue_uid, 'northwind2');
@@ -199,11 +201,11 @@ test('Add to my funds: two presses in one frame send one request, carrying the c
     await act(async () => { release(); });
     for (let i = 0; i < 3; i += 1) await m.flush();
     const notice = byTid(m, 'fund-catalog-notice');
-    assert.deepEqual([m.props(notice).role, textOf(notice)], ['status', 'Saved to your shortlist.']);
+    assert.deepEqual([m.props(notice).role, textOf(notice)], ['status', 'Saved to your shortlist. Your private dossier for Northwind Ventures II is ready.']);
   } finally { await m.close(); }
 });
 
-test('Add to my funds answered by an earlier add says it is already there; a failure is an alert', async () => {
+test('Save to shortlist answered by an earlier save says it is already there; a failure is an alert', async () => {
   const again = await mountCatalog(async () => ({ uid: 'f-1', name: FUND.name, existing: true }));
   try {
     await act(async () => { await again.props(byTid(again, 'fund-catalog-add')).onClick(); });
@@ -215,7 +217,7 @@ test('Add to my funds answered by an earlier add says it is already there; a fai
     await act(async () => { await failed.props(byTid(failed, 'fund-catalog-add')).onClick(); });
     for (let i = 0; i < 3; i += 1) await failed.flush();
     const notice = byTid(failed, 'fund-catalog-notice');
-    assert.deepEqual([failed.props(notice).role, textOf(notice)], ['alert', 'That fund did not save.']);
+    assert.deepEqual([failed.props(notice).role, textOf(notice)], ['alert', 'That fund did not save. Nothing changed.']);
     // The latch is released: the add can be tried again.
     assert.equal(failed.props(byTid(failed, 'fund-catalog-add')).disabled, false);
   } finally { await failed.close(); }

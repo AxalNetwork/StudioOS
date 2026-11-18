@@ -15,8 +15,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckConsistency.schema.json', import.meta.url), 'utf8'));
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -113,8 +111,6 @@ test('speaker notes and image text are never read; slides that are not a list ar
 
 // ------------------------------------------------------------------ the routes
 
-const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-d1555-consistency-0123456789-abcdef';
 const OWNER = 1, ADMIN = 4, OTHER = 5, PID = 7;
 const INCONSISTENT = [card('Ask', 'Raising $2.0M seed.'), card('Use of funds', 'Engineering $1.0M', 'Sales $0.5M', 'Operations $0.3M')];

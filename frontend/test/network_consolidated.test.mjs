@@ -14,11 +14,11 @@ const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
 test('D2319 retires the /advisor/network aliases and preserves the working surface', () => {
   const app = read('frontend/src/App.jsx');
-  for (const [from, to] of [
-    ['/advisor/network', '/network'],
-    ['/advisor/network/introductions', '/network?tab=introductions'],
-    ['/advisor/network/relationships', '/network?tab=relationships'],
-    ['/advisor/network/organizations', '/network'],
+  for (const from of [
+    '/advisor/network',
+    '/advisor/network/introductions',
+    '/advisor/network/relationships',
+    '/advisor/network/organizations',
   ]) {
     assert.equal(app.includes(`path="${from}"`), false, `${from} retired by D2319`);
   }

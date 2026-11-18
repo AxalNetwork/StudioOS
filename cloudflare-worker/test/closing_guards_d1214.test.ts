@@ -50,7 +50,11 @@ test('D1214: private syndicate list/detail; even admins never receive member ema
  const f=fixture();try {
   f.db.exec("INSERT INTO syndicates(id,name,target_cents,min_commitment_cents,created_by) VALUES(1,'Synthetic',10000,100,2); INSERT INTO syndicate_members(syndicate_id,user_id,commitment_cents) VALUES(1,1,10000)");
   for(const id of [1,2,4]) {
-   const r=await call(f,id,'/api/networkfx/syndicates/1',undefined,'GET');assert.equal(r.status,200);assert.equal(r.body.members.length,1);assert.equal(r.body.members[0].commitment_cents,10000);assert.equal('email' in r.body.members[0],false);
+   const r=await call(f,id,'/api/networkfx/syndicates/1',undefined,'GET');
+   assert.equal(r.status,200);
+   assert.equal(r.body.member_count,1);
+   assert.equal(r.body.members.length,id===2?1:0);
+   if(id===2) {assert.equal(r.body.members[0].commitment_cents,10000);assert.equal('email' in r.body.members[0],false);}
    assert.equal(JSON.stringify(r.body).includes('@'),false);
   }
   assert.equal((await call(f,5,'/api/networkfx/syndicates/1',undefined,'GET')).status,403);

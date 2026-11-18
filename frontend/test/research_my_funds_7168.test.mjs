@@ -227,6 +227,6 @@ test('My funds reads a page from the Worker by keys the Directory does not own, 
   assert.doesNotMatch(zone, /api\.research\.funds\(\)/, 'the newest-500 read is back');
   assert.match(zone, /data-testid="my-funds-count-scope"/);
   const profile = read('frontend/src/pages/research/FundCatalogProfile.jsx');
-  assert.match(profile, /researchMyFundsApi\.list\(\{ catalogue_uid: catalogueUid, limit: 1 \}\)/);
+  assert.match(profile, /researchMyFundsApi\.list\(\{ catalogue_uid: uid, limit: 1 \}\)/);
   assert.doesNotMatch(profile, /normalize\(x\.name\)/, 'the catalog page matches your entry by name again');
 });

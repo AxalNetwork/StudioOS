@@ -18,6 +18,14 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 
+// #7247: the catalogue handler awaits `route.fetch()`. When a test ends while that request is still in flight,
+// the await throws "route.fetch: Test ended" and Playwright reports a passed journey as failed. Unrouting here
+// waits for handlers already running and drops the error of one the test's end cut off, as Playwright advises.
+test.afterEach(async ({ page }) => {
+  // A test that closed its own tab has no routes left to wait for.
+  if (!page.isClosed()) await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const PAID = {
   'founder:growth': { month: 5000, year: 48000 },
   'founder:studio': { month: 10000, year: 96000 },

@@ -16,6 +16,7 @@ import { updatedAgo } from './fundDossierRead';
 import { Money } from './ResearchOverviewPanel';
 import { researchMyFundsApi } from '../../lib/api/researchMyFunds.js';
 import { MY_FUNDS_PAGE, countScopeLine, dossierMap, identityChip, offsetOf, pageLine } from './myFundsRead';
+import SheetsSyncCard from './SheetsSyncCard';
 
 export { dossierMap };
 
@@ -47,13 +48,12 @@ export { dossierMap };
  * rather than as 0 — which would say no fund writes cheques your size.
  *
  * GOOGLE SHEETS IS A COPY, NOT THE STORE, AND ONLY THE SUPER ADMIN MAY MAKE
- * ONE. The Worker writes to a spreadsheet the Super Admin names and reads it
- * back into POST/PATCH of that same owner's rows. Founders keep a shortlist
- * on Axal; they do not get Connect / Pull / Push. Sheets never talks to D1,
- * pull overwrites the sheet's data rows, and push never deletes a fund — a
- * pass is a state, and a row that left the sheet is not a delete. The card
- * lives in this body rather than as a fourth canvas op, because the
- * zone-action row is three slots.
+ * ONE. The Worker writes to a tab the Super Admin chose and reads it back
+ * into that same owner's rows. Founders keep a shortlist on Axal; they never
+ * see the card. Sheets never talks to D1, and Import from Sheets never
+ * deletes a fund — a pass is a state, and a row that left the sheet is not a
+ * delete. The card (`SheetsSyncCard.jsx`, D7170) lives in this body rather
+ * than as a fourth canvas op, because the zone-action row is three slots.
  *
  * THE DIRECTORY IS THE SERVER'S (D535 steps 4–5). It filtered a bundled
  * `fundDirectory.json` in the browser, 48 rows at a time; `FundDirectory` now
@@ -721,174 +721,6 @@ export function FundStat({ label, value, note, phase = 'ok' }) {
         {figure}
       </div>
       <div className="mt-1 text-[10px] leading-relaxed text-gray-600 dark:text-gray-300">{note}</div>
-    </Card>
-  );
-}
-
-/**
- * Connect / Pull / Push for Google Sheets. Super-admin only — the zone
- * mounts this card behind `isSuperAdminUser`, and every worker route behind
- * `requireSuperAdmin`. Lives in the zone body rather than as a fourth canvas
- * op — the toolbar is three slots and adding one here would fail the
- * profile_zone_actions canvas check.
- *
- * HONEST EMPTY. If the Worker has no Sheets OAuth client, this card says so
- * instead of offering Connect. Pull needs a connected Google account AND a
- * spreadsheet URL; Push never deletes a fund in Axal.
- */
-function SheetsSyncCard() {
-  const [status, setStatus] = useState({ loading: true, error: null, data: null });
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState(null);
-  const [note, setNote] = useState(null);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await api.research.fundSheetStatus();
-      setStatus({ loading: false, error: null, data });
-      setUrl((current) => {
-        if (current) return current;
-        if (!data?.spreadsheet_id) return current;
-        const gid = data.sheet_gid == null ? '' : `#gid=${data.sheet_gid}`;
-        return `https://docs.google.com/spreadsheets/d/${data.spreadsheet_id}/edit${gid}`;
-      });
-    } catch (e) {
-      setStatus({
-        loading: false,
-        error: e?.detail || e?.message || 'Sheets status did not load.',
-        data: null,
-      });
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const flash = params.get('sheets');
-    if (!flash) return;
-    if (flash === 'connected') setNote({ ok: true, text: 'Google Sheets connected.' });
-    else {
-      const reason = params.get('reason') || 'callback_failed';
-      setNote({ ok: false, text: `Google Sheets did not connect (${reason}).` });
-    }
-    params.delete('sheets');
-    params.delete('reason');
-    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash || ''}`;
-    window.history.replaceState({}, '', next);
-    load();
-  }, [load]);
-
-  const data = status.data;
-  const run = async (key, fn, okText) => {
-    setBusy(key);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: okText });
-      await load();
-    } catch (e) {
-      const code = e?.data?.code;
-      if (code === 'oauth_config_missing') {
-        setNote({ ok: false, text: 'Google Sheets is not configured on this server yet.' });
-      } else {
-        setNote({ ok: false, text: e?.detail || e?.message || 'That did not work.' });
-      }
-    } finally { setBusy(null); }
-  };
-
-  const connect = () => run('connect', async () => {
-    const r = await api.research.fundSheetConnect();
-    const href = r?.redirect_url || r?.auth_url;
-    if (!href) throw new Error('Google did not return a consent URL.');
-    window.location.assign(href);
-  }, 'Opening Google…');
-
-  const saveLink = () => run('link', () => api.research.fundSheetLink(url), 'Spreadsheet saved.');
-  const pull = () => run('pull', () => api.research.fundSheetPull(), 'Wrote your funds onto the sheet.');
-  const push = () => run('push', () => api.research.fundSheetPush(), 'Updated Axal from the sheet. Nothing was deleted.');
-  const disconnect = () => run('disconnect', () => api.research.fundSheetDisconnect(), 'Google Sheets disconnected.');
-
-  return (
-    <Card padding="lg">
-      <h3 className="text-sm font-extrabold tracking-tight">Google Sheets</h3>
-      <p className="mt-1 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
-        A copy of this list on a spreadsheet you name. Pull writes Axal onto the
-        sheet. Push creates or updates funds from the sheet — it never deletes one.
-        Cheque amounts on the sheet are US dollars; blank is not zero.
-      </p>
-
-      {status.loading ? (
-        <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-300">Checking connection…</p>
-      ) : status.error ? (
-        <p className="mt-3 text-[12px] text-red-700 dark:text-red-300">{status.error}</p>
-      ) : data && data.configured === false ? (
-        <p className="mt-3 text-[12.5px] text-gray-600 dark:text-gray-300">
-          Google Sheets is not configured on this server yet. You can still add
-          funds here, or export a CSV from the toolbar.
-        </p>
-      ) : (
-        <div className="mt-3 space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {data?.connected ? (
-              <>
-                <Pill tone="ok">{data.google_email ? `Connected as ${data.google_email}` : 'Connected'}</Pill>
-                <button type="button" className={ghostButtonClass} disabled={!!busy} onClick={disconnect}>
-                  {busy === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
-                </button>
-              </>
-            ) : (
-              <button type="button" className={buttonClass} disabled={!!busy} onClick={connect}>
-                {busy === 'connect' ? 'Opening Google…' : 'Connect Google Sheets'}
-              </button>
-            )}
-            {data?.last_pulled_at && (
-              <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                Last pull {data.last_pulled_at.slice(0, 10)}
-              </span>
-            )}
-            {data?.last_pushed_at && (
-              <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                Last push {data.last_pushed_at.slice(0, 10)}
-              </span>
-            )}
-          </div>
-          {data?.last_error && (
-            <p className="text-[12px] text-red-700 dark:text-red-300">{data.last_error}</p>
-          )}
-          <Field label="Spreadsheet URL" hint="The tab is the gid in the URL. Pull overwrites that tab's data rows.">
-            <input
-              className={inputClass}
-              value={url}
-              placeholder={data?.suggested_url || ''}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-          </Field>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={ghostButtonClass} disabled={!!busy || !url.trim()} onClick={saveLink}>
-              {busy === 'link' ? 'Saving…' : 'Save spreadsheet'}
-            </button>
-            <button
-              type="button"
-              className={buttonClass}
-              disabled={!!busy || !data?.connected || !data?.spreadsheet_id}
-              onClick={pull}
-            >
-              {busy === 'pull' ? 'Writing…' : 'Pull from Axal'}
-            </button>
-            <button
-              type="button"
-              className={ghostButtonClass}
-              disabled={!!busy || !data?.connected || !data?.spreadsheet_id}
-              onClick={push}
-            >
-              {busy === 'push' ? 'Reading…' : 'Push to Axal'}
-            </button>
-          </div>
-        </div>
-      )}
-      <SaveNote note={note} />
     </Card>
   );
 }
