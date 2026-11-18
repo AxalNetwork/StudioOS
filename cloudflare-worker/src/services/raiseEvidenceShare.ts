@@ -17,6 +17,9 @@
  *   score reads "Not scored yet", never 0; Team reads "Team is assessed by a person". There is no overall score and
  *   no Product-market fit row. An optional one-sentence covering line from the founder sits above it.
  *
+ * - **PDF copies (RA-28 C, RA-30 B, D6897 part 2).** The same content, drawn as an A4 page in the browser. A copy has
+ *   no token and cannot be stopped or counted; `raise_share_pdf_copies` records that it left, for Shared links.
+ *
  * Nothing here sends anything: making a link only returns its address to the founder.
  */
 import type { Env } from '../types';
@@ -113,10 +116,8 @@ function parseSelection(v: unknown): Set<string> | null {
   return new Set(v as string[]);
 }
 
-/** RA-27 C: make the pack and its link. Nothing is sent; the founder copies the address. */
-export async function createPackLink(ctx: RaiseEvidenceContext, data: Record<string, unknown>) {
-  founderOnly(ctx);
-  const allowed = ['label', 'reader', 'nda_confirmed', 'nda_signed_on', 'expires_in_days', 'view_limit', 'items'];
+/** The pack a founder chose: label, reader (with the NDA confirmed outside Axal) and items. Shared by the link and the PDF. */
+function packChoice(data: Record<string, unknown>, allowed: readonly string[]) {
   if (!data || typeof data !== 'object' || Object.keys(data).some(k => !allowed.includes(k))) throw new EvidenceShareError('invalid', 400);
   const label = typeof data.label === 'string' ? data.label.trim() : '';
   if (!label || label.length > LINK_BOUNDS.label) throw new EvidenceShareError('invalid', 400);
@@ -128,10 +129,16 @@ export async function createPackLink(ctx: RaiseEvidenceContext, data: Record<str
     if (data.nda_signed_on > todayUtc()) throw new EvidenceShareError('nda_unconfirmed', 400);
     ndaOn = data.nda_signed_on;
   } else if (data.nda_confirmed !== undefined || data.nda_signed_on !== undefined) throw new EvidenceShareError('invalid', 400);
+  return { label, reader, ndaOn, only: parseSelection(data.items) };
+}
+
+/** RA-27 C: make the pack and its link. Nothing is sent; the founder copies the address. */
+export async function createPackLink(ctx: RaiseEvidenceContext, data: Record<string, unknown>) {
+  founderOnly(ctx);
+  const { label, reader, ndaOn, only } = packChoice(data, ['label', 'reader', 'nda_confirmed', 'nda_signed_on', 'expires_in_days', 'view_limit', 'items']);
   const days = data.expires_in_days ?? LINK_DEFAULTS.expires_in_days;
   const limit = data.view_limit ?? LINK_DEFAULTS.view_limit;
   if (!intIn(days, LINK_BOUNDS.expires_in_days) || !intIn(limit, LINK_BOUNDS.view_limit)) throw new EvidenceShareError('invalid', 400);
-  const only = parseSelection(data.items);
 
   let pack: Awaited<ReturnType<typeof packBody>>;
   try { pack = await packBody(ctx.env, ctx.projectId, reader, only); }
@@ -167,6 +174,7 @@ export function linkState(row: Pick<LinkRow, 'revoked_at' | 'expires_at' | 'view
   return 'live';
 }
 
+type CopyRow = { uid: string; output: string; label: string; reader: Reader; nda_signed_on: string | null; item_count: number; created_at: string };
 /** RA-29: every link the founder made, newest first; expired, used-up and revoked rows stay, in grey on the page. */
 export async function listPackLinks(ctx: RaiseEvidenceContext) {
   founderOnly(ctx);
@@ -194,7 +202,12 @@ export async function listPackLinks(ctx: RaiseEvidenceContext) {
       created_at: row.created_at, expires_at: row.expires_at, view_limit: row.view_limit, view_count: row.view_count, last_viewed_at: row.last_viewed_at,
       revoked_at: row.revoked_at, state, changed_since_sent: changed });
   }
-  return { state: 'recorded' as const, links, capped: (res.results || []).length > LIST_MAX, defaults: LINK_DEFAULTS, bounds: LINK_BOUNDS };
+  // D6897 part 2 (RA-29): the PDF copies, listed apart. A copy has no state: it cannot be stopped or counted.
+  const pdf = await ctx.env.DB.prepare(`SELECT uid,output,label,reader,nda_signed_on,item_count,created_at
+      FROM raise_share_pdf_copies WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`).bind(ctx.projectId, LIST_MAX + 1).all<CopyRow>();
+  const copies = (pdf.results || []).slice(0, LIST_MAX).map((r) => ({ ...r, kind: 'pdf' as const }));
+  return { state: 'recorded' as const, links, capped: (res.results || []).length > LIST_MAX, copies, copies_capped: (pdf.results || []).length > LIST_MAX,
+    defaults: LINK_DEFAULTS, bounds: LINK_BOUNDS };
 }
 
 /** RA-29 B: stop a link. Anyone opening it afterwards sees "This link was stopped by the founder". The row stays. */
@@ -328,6 +341,63 @@ export async function createReadinessLink(ctx: RaiseEvidenceContext, data: Recor
   } catch { throw new EvidenceShareError('failed', 503); }
   return { uid, output: 'readiness' as const, path: '/share/readiness/' + token, label, covering_line: line, item_count: made.body.areas.length,
     created_at: madeAt, expires_at: expiresAt, view_limit: limit, view_count: 0, state: 'live' as const, sent: false };
+}
+
+// ---------------------------------------------------------------------------
+// D6897 part 2 (#6897, RA-28 C, RA-30 B): the same content as a PDF the founder downloads
+// ---------------------------------------------------------------------------
+
+/**
+ * A downloaded PDF is a copy: nobody can stop it and its opens are not counted. The Worker builds exactly what a
+ * link would freeze, records that a copy left (label, reader, how many items, hash, who, when) and returns the
+ * content; the browser draws the A4 page and saves it. Nothing is sent, and no token is made.
+ */
+async function recordCopy(ctx: RaiseEvidenceContext, row: { output: 'pack' | 'readiness'; label: string; reader: Reader; ndaOn: string | null;
+  itemCount: number; hash: string; madeAt: string; action: string; summary: string }) {
+  const uid = newUid();
+  try {
+    await ctx.env.DB.batch([
+      ctx.env.DB.prepare(`INSERT INTO raise_share_pdf_copies(uid,project_id,output,label,reader,nda_signed_on,item_count,content_hash,created_by,created_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?)`)
+        .bind(uid, ctx.projectId, row.output, row.label, row.reader, row.ndaOn, row.itemCount, row.hash, ctx.user.id, row.madeAt),
+      logCycleWriteStatement(ctx.env, { projectId: ctx.projectId, userId: ctx.user.id, cycle: 'raise', module: 'fundraising-readiness', entityId: uid,
+        action: row.action, summary: row.summary }),
+    ]);
+  } catch { throw new EvidenceShareError('failed', 503); }
+  return uid;
+}
+
+/** RA-28 C: the evidence pack as a PDF copy. The same pack a link would carry; no expiry, no view limit. */
+export async function createPackPdf(ctx: RaiseEvidenceContext, data: Record<string, unknown>) {
+  founderOnly(ctx);
+  const { label, reader, ndaOn, only } = packChoice(data, ['label', 'reader', 'nda_confirmed', 'nda_signed_on', 'items']);
+  let pack: Awaited<ReturnType<typeof packBody>>;
+  try { pack = await packBody(ctx.env, ctx.projectId, reader, only); }
+  catch (e) { if (e instanceof EvidenceShareError) throw e; throw new EvidenceShareError('unreadable', 503); }
+  if (pack.itemCount === 0) throw new EvidenceShareError('empty', 409);
+  const madeAt = new Date().toISOString();
+  const snapshot = { ...pack.body, venture: await ventureName(ctx.env, ctx.projectId), made_at: madeAt, nda_signed_on: ndaOn };
+  const uid = await recordCopy(ctx, { output: 'pack', label, reader, ndaOn, itemCount: pack.itemCount, hash: pack.hash, madeAt,
+    action: 'evidence_pack_pdf_copied', summary: reader === 'after_nda' ? 'An evidence pack PDF was downloaded for a reader after an NDA.' : 'An evidence pack PDF was downloaded for a reader before an NDA.' });
+  return { uid, kind: 'pdf' as const, output: 'pack' as const, label, reader, nda_signed_on: ndaOn, item_count: pack.itemCount, created_at: madeAt, pack: snapshot };
+}
+
+/** RA-30 B: the readiness snapshot as a PDF copy, with the founder's optional covering line. */
+export async function createReadinessPdf(ctx: RaiseEvidenceContext, data: Record<string, unknown>) {
+  founderOnly(ctx);
+  if (!data || typeof data !== 'object' || Object.keys(data).some(k => !['label', 'covering_line'].includes(k))) throw new EvidenceShareError('invalid', 400);
+  const label = typeof data.label === 'string' ? data.label.trim() : '';
+  if (!label || label.length > LINK_BOUNDS.label) throw new EvidenceShareError('invalid', 400);
+  const line = coveringLine(data.covering_line);
+  if (line === 'bad') throw new EvidenceShareError('invalid', 400);
+  let made: Awaited<ReturnType<typeof readinessBody>>;
+  try { made = await readinessBody(ctx.env, ctx.projectId); }
+  catch { throw new EvidenceShareError('unreadable', 503); }
+  const madeAt = new Date().toISOString();
+  const snapshot = { kind: 'readiness', ...made.body, covering_line: line, venture: await ventureName(ctx.env, ctx.projectId), made_at: madeAt };
+  const uid = await recordCopy(ctx, { output: 'readiness', label, reader: 'before_nda', ndaOn: null, itemCount: made.body.areas.length, hash: made.hash, madeAt,
+    action: 'readiness_snapshot_pdf_copied', summary: 'A readiness snapshot PDF was downloaded.' });
+  return { uid, kind: 'pdf' as const, output: 'readiness' as const, label, covering_line: line, item_count: made.body.areas.length, created_at: madeAt, snapshot };
 }
 
 /** RA-32: evidence the founder adds by hand. Typed: stated by you · Anecdote · Private. A claim it backs stays Founder's figure. */

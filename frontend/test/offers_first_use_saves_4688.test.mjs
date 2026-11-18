@@ -29,7 +29,7 @@ const ZONES = {
   visibility: {
     file: 'VisibilityZone.jsx',
     empty: 'No surface is recorded yet',
-    emptyAction: 'Add a surface', headerAction: 'Add a surface',
+    emptyAction: 'Add a surface', headerAction: '+ Add surface', // #4843: OF-05's primary action
     editorId: 'surface-editor', submit: 'Add surface',
     fill: { Name: 'Axal directory' }, shown: 'Axal directory',
     createApi: 'createPartnerSurface', updateApi: 'updatePartnerSurface',

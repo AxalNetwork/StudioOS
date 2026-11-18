@@ -110,7 +110,8 @@ test('the wiring: the three routes, the deal tab, the deal flow column, HQ’s s
   assert.ok(app.includes(`<Route path="/raise/scorecard" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage />)} />`));
   assert.ok(app.indexOf('path="/raise/scorecard"') < app.indexOf('path="/raise/:slug"'), 'the static path is declared before the module route');
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
-  assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}"), 'D1257: the tab reads its deal');
+  // D6168 (#6168): the tab's drawer is addressed (`?scope=`), so Team, Market and Traction can open it.
+  assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} addressed />}"), 'D1257: the tab reads its deal');
   assert.ok(!deal.includes("['scorecard', 'evidence'"), 'the scorecard tab is no longer a wait card');
   // D1240 (#3253): the live table's Scorecard column draws the strip from SCORING's batch.
   assert.ok(read('frontend/src/pages/investor/dealflow/FlowTable.jsx').includes('<ScopeStrip scopes={stripScopes(row.scores)} />'));

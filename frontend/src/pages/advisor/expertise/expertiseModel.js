@@ -4,9 +4,9 @@
  * `ProofZone.jsx` and `ThinkingZone.jsx` draw it.
  *
  * THREE RULES THIS FILE HOLDS:
- *   · a service is the advisor's own record. It is not on the public profile
- *     and it cannot be booked: founders book session types and booking links
- *     (`GET /api/advisors/:uid` returns those two and nothing else);
+ *   · a service cannot be booked: founders book session types and booking
+ *     links. It is on the public profile only once its owner publishes it
+ *     (D5315 part 3, D4824); a Draft or Hidden service is the advisor's alone;
  *   · no proof is published. `is_public` is stored, but no page shows a proof
  *     item to anyone else, and publishing waits on the attestation rules (P1);
  *   · an article's state says who can read it and what the writer does next,
@@ -20,9 +20,12 @@ export const SERVICE_STATES = Object.freeze([
   { id: false, label: 'Inactive', hint: 'Kept in your records as no longer offered.' },
 ]);
 export const serviceStateLabel = (row) => (row?.is_active ? 'Active' : 'Inactive');
-export const SERVICE_NOT_PUBLIC = 'A service is your own record. It is not on your public profile, and nobody can book it.';
+// D4824 (EX-06): only a Published service is on the public profile (D5315 part 3);
+// nobody books a service, a founder books a session type (D4681, #4832).
+export const SERVICE_NOT_PUBLIC = 'Only a Published service is on your public profile. A Draft or Hidden service is yours alone, and nobody can book a service.';
 export const SERVICE_BOOKABLE = 'What a founder can book is a session type, and a public booking link to it. Those are set in Practice › Sessions.';
 import { centsToInput } from '../../../lib/moneyInput';
+import { formatMinorOrCount, plainAmount } from '../../../lib/money';
 
 export const SESSIONS_PATH = '/practice/sessions';
 export const CURRENCY_RE = /^[A-Za-z]{3}$/;
@@ -57,11 +60,53 @@ export function serviceEditBody(row, draft, cents) {
   return { body };
 }
 
+/**
+ * D4824 (#4824, EX-06) — a service's publication state, as `advisor_services.publication_state`
+ * stores it (D5315 part 3). It is not derived from Active / Inactive: a row the Worker sent
+ * without the column (an older read) is a Draft, the column's own default.
+ */
+export const SERVICE_PUBLICATION = Object.freeze({
+  draft: { label: 'Draft', tone: 'neutral', hint: 'Only you see it. It is not on your public profile.' },
+  published: { label: 'Published', tone: 'ok', hint: 'On your public profile. Founders book through a session type, not the service.' },
+  hidden: { label: 'Hidden', tone: 'warn', hint: 'Taken off your public profile. Publish it again at any time.' },
+});
+export const publicationOf = (row) => (Object.hasOwn(SERVICE_PUBLICATION, row?.publication_state) ? row.publication_state : 'draft');
+
+/** The one publication action a card offers, from the state it is in now. */
+export function servicePublicationAction(row) {
+  const now = publicationOf(row);
+  if (now === 'published') return { to: 'hidden', label: 'Hide', done: 'hidden from your public profile' };
+  return { to: 'published', label: now === 'hidden' ? 'Publish again' : 'Publish', done: 'published on your public profile' };
+}
+
+/**
+ * The price with its currency written out, never a bare symbol: "CHF 12,000.00", "USD 450.50".
+ * The amount keeps the currency's own decimals; null (no price) is the caller's "No price set".
+ */
+export function servicePrice(cents, currency) {
+  if (cents == null) return null;
+  const code = String(currency || '').trim().toUpperCase();
+  const amount = plainAmount(cents, code);
+  return amount == null ? formatMinorOrCount(cents, code) : `${code} ${amount}`;
+}
+
+/** Whole-list counts per publication state, from `publication_counts`, else the rows on screen. */
+export function publicationCounts(res, rows) {
+  const c = res?.publication_counts;
+  if (c && ['draft', 'published', 'hidden'].every((k) => Number.isFinite(Number(c[k])))) {
+    return { draft: Number(c.draft), published: Number(c.published), hidden: Number(c.hidden) };
+  }
+  const out = { draft: 0, published: 0, hidden: 0 };
+  for (const r of rows || []) out[publicationOf(r)] += 1;
+  return out;
+}
+
 /** D4711: what a failed service write says. Fixed sentences; never the error's own text. */
 export const SERVICE_FAILED = Object.freeze({
   add: 'The service could not be saved. Nothing was added.',
   edit: 'The change could not be saved. The service is as it was.',
   state: 'That could not be changed. The service is as it was.',
+  publish: 'That could not be changed. The service is as it was on your public profile.',
   remove: 'Nothing was removed. The service is as it was.',
 });
 
@@ -69,6 +114,7 @@ export const SERVICE_FAILED = Object.freeze({
 export function serviceRemoveLines(row) {
   return [
     'It is your own record: no session type, booking link or booking points to it, so nothing else changes.',
+    ...(publicationOf(row) === 'published' ? ['It comes off your public profile.'] : []),
     row?.price_cents == null ? 'It has no price recorded.' : 'Its price goes with it. Only the current price is stored, so none is kept.',
     'It cannot be undone. Add it again to bring it back.',
   ];

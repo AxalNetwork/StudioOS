@@ -89,7 +89,6 @@ export const RUNS_ON_DRAFTS = {
 /** Jobs that run on drafts inside a workflow that otherwise skips them, each with why. */
 export const JOB_RUNS_ON_DRAFTS = {
   'claude-review.yml': { review: 'the reviewer decides on drafts itself (CLAUDE_REVIEW_DRAFTS), and is off until enabled' },
-  'pr-preview.yml': { delete: 'it runs only when the pull request closes, to remove its preview (a draft never deploys one)' },
 };
 const REQUIRED = [['gitleaks.yml', 'scan'], ['migration-immutability.yml', 'applied migrations unchanged']];
 

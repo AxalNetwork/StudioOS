@@ -24,7 +24,7 @@ import { loadSchema, SCHEMA_OPTIONS } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import packages, { mount } from '../src/routes/admin_licence_packages.ts';
-import { PROGRAM_KEYS } from '../src/services/programRegistry.ts';
+import { insertProgramStatements } from '../src/services/programRegistry.ts';
 
 const SECRET = ['d5022', 'packages', 'fixture', 'signing', 'secret'].join('-');
 const SUPER = 1, SUPER_PW = 2, ADMIN = 3;
@@ -81,8 +81,12 @@ function fixture() {
   return { db, env, call, all };
 }
 
-test('the seed holds exactly the four v1 packages with their commercial figures and composition', async () => {
-  const { call } = fixture();
+test('the four v1 packages keep their commercial figures and composition when HQ adds a catalogue program', async () => {
+  const { env, call } = fixture();
+  await env.DB.batch(insertProgramStatements(env, {
+    key: 'fixture-workshop', grp: 'Learning', name: 'Fixture Workshop', purpose: null, who: null,
+    join_method: null, licence_uid: null, sections: [],
+  }, SUPER));
   const list = await call(SUPER, 'GET', P);
   assert.equal(list.status, 200, JSON.stringify(list.body));
   assert.deepEqual(
@@ -108,9 +112,8 @@ test('the seed holds exactly the four v1 packages with their commercial figures 
   const full = (await call(SUPER, 'GET', `${P}/full_axal_vc`)).body.package;
   assert.equal(full.base_annual_fee_cents, 5250000);
   assert.deepEqual([full.guidance_min_cents, full.guidance_max_cents], [4500000, 6000000]);
-  // Pinned, not a dynamic "every program" read: the exact ten PROGRAM_KEYS, as of this migration.
+  // This published version keeps its original item keys as the registry grows.
   assert.deepEqual(full.items.map((i: any) => i.program_key), FULL_AXAL_VC);
-  assert.deepEqual([...PROGRAM_KEYS].sort(), [...FULL_AXAL_VC].sort(), 'the registry has not grown since this fixture was written');
 
   assert.equal((await call(SUPER, 'GET', `${P}/not_a_real_key`)).status, 404);
 });

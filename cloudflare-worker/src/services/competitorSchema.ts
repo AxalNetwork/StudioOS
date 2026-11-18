@@ -11,6 +11,8 @@
  *  - competitor_signals           traction / hiring / funding / content signals
  *  - competitor_analysis_outputs  the generated (and editable) structured report
  *  - competitor_cached_fetches    normalized text cache for the crawl pipeline
+ *  - competitor_analysis_versions superseded saved versions (D7176)
+ *  - competitor_rerun_proposals   the pending rerun proposal per analysis (D7176)
  */
 import type { Env } from '../types';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -33,7 +35,7 @@ export async function ensureCompetitorSchema(env: Env): Promise<void> {
       "CREATE INDEX IF NOT EXISTS idx_competitor_candidates_analysis ON competitor_candidates (analysis_id, position)",
     );
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS competitor_sources (id TEXT PRIMARY KEY, analysis_id TEXT NOT NULL REFERENCES competitor_analyses(id) ON DELETE CASCADE, candidate_id TEXT, url TEXT NOT NULL, kind TEXT, title TEXT, status INTEGER, fetched_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS competitor_sources (id TEXT PRIMARY KEY, analysis_id TEXT NOT NULL REFERENCES competitor_analyses(id) ON DELETE CASCADE, candidate_id TEXT, url TEXT NOT NULL, kind TEXT, title TEXT, status INTEGER, fetched_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), origin TEXT NOT NULL DEFAULT 'fetched')",
     );
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_competitor_sources_analysis ON competitor_sources (analysis_id)",
@@ -45,7 +47,14 @@ export async function ensureCompetitorSchema(env: Env): Promise<void> {
       "CREATE INDEX IF NOT EXISTS idx_competitor_signals_analysis ON competitor_signals (analysis_id)",
     );
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS competitor_analysis_outputs (analysis_id TEXT PRIMARY KEY REFERENCES competitor_analyses(id) ON DELETE CASCADE, output_json TEXT NOT NULL DEFAULT '{}', edited INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS competitor_analysis_outputs (analysis_id TEXT PRIMARY KEY REFERENCES competitor_analyses(id) ON DELETE CASCADE, output_json TEXT NOT NULL DEFAULT '{}', edited INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')), version INTEGER NOT NULL DEFAULT 1, sections_edited_json TEXT NOT NULL DEFAULT '{}')",
+    );
+    // D7176: saved versions and the pending rerun proposal (migration 202611180053_7176).
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS competitor_analysis_versions (analysis_id TEXT NOT NULL REFERENCES competitor_analyses(id) ON DELETE CASCADE, version INTEGER NOT NULL, snapshot_json TEXT NOT NULL, saved_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (analysis_id, version))",
+    );
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS competitor_rerun_proposals (analysis_id TEXT PRIMARY KEY REFERENCES competitor_analyses(id) ON DELETE CASCADE, proposal_id TEXT NOT NULL, user_id INTEGER NOT NULL, base_version INTEGER NOT NULL, inputs_json TEXT NOT NULL DEFAULT '{}', result_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS competitor_cached_fetches (url_hash TEXT PRIMARY KEY, url TEXT NOT NULL, status INTEGER, title TEXT, description TEXT, text TEXT, headings_json TEXT, pricing_json TEXT, fetched_at TEXT, expires_at TEXT)",

@@ -209,7 +209,14 @@ async function roadmapItems(env: Env, projectId: number): Promise<Array<{ value:
 export const addToRoadmapHref = (projectId: number, theme: string) =>
   `/build/product-roadmap/new?project_id=${projectId}&feedback_theme=${encodeURIComponent(theme)}`;
 
-const FEEDBACK_EDIT = ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship'] as const;
+const FEEDBACK_EDIT = ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship', 'contact_uid'] as const;
+
+const capital = (v: unknown) => { const t = String(v ?? '').replace(/_/g, ' '); return t ? t[0].toUpperCase() + t.slice(1) : t; };
+
+/** D6865: the feedback origins (migration 202611161128) as the canvas words them. */
+const ORIGIN_LABEL: Record<string, string> = {
+  inbox_reply: 'Inbox reply', interview: 'Interview', notion: 'Notion', posthog_survey: 'PostHog survey', typed: 'Typed',
+};
 
 const productImprovement = spec('product_feedback', 'product-improvement', GROW_OLD_ROWS['product-improvement'], async (rc, id) => {
   const f = await rc.env.DB.prepare('SELECT * FROM product_feedback WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
@@ -232,6 +239,8 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
       fact('Theme', f.theme, 'No theme yet'),
       fact('Roadmap item', f.roadmap_item_label, 'Not linked to a roadmap item'),
       fact('Status', label(f.status), ''),
+      // D6865 (#6865): where it came from; a row older than the column reads Not recorded.
+      fact('Origin', f.origin ? ORIGIN_LABEL[String(f.origin)] ?? String(f.origin) : null, 'Not recorded'),
     ],
     createdBy: f.created_by, createdAt: f.created_at,
   }, { f, byStatus });
@@ -260,6 +269,14 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
     const rows: Row[] = [];
     const who = joined(f.from_name, f.from_company);
     rows.push(who ? { a: who, b: 'Customers →', href: `/grow/customers?project_id=${rc.projectId}` } : notRecorded('Customer', 'No customer named on this feedback'));
+    // D6865 (#6865): the linked customer or prospect record (GR-22); a typed name with none reads Not linked.
+    const rec = f.contact_uid
+      ? await rc.env.DB.prepare('SELECT name, audience, status FROM contacts WHERE uid = ? AND project_id = ?').bind(f.contact_uid, rc.projectId)
+        .first<{ name: string | null; audience: string; status: string }>()
+      : null;
+    rows.push(rec
+      ? { a: 'Record', b: joined(rec.name, `${capital(rec.audience)} · ${capital(rec.status)}`) ?? 'Linked', tone: 'ok' }
+      : { a: 'Record', b: 'Not linked', c: 'Link to a customer or prospect with Edit', tone: 'grey' });
     if (!f.from_company) rows.push(notRecorded('Plan', 'No company named on this feedback'));
     else {
       const since = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
@@ -275,6 +292,11 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
   const uid = id;
   const themes = await feedbackThemes(rc.env, rc.projectId);
   const items = await roadmapItems(rc.env, rc.projectId);
+  // D6865 (#6865): Link to a customer or prospect, from the venture's own contacts (newest first, at most 200).
+  const people = ((await rc.env.DB.prepare(
+    'SELECT uid, name, email, audience FROM contacts WHERE project_id = ? ORDER BY COALESCE(last_activity_at, created_at) DESC, id DESC LIMIT 200',
+  ).bind(rc.projectId).all<{ uid: string; name: string | null; email: string; audience: string }>()).results || [])
+    .map((p) => ({ value: String(p.uid), label: [p.name || p.email, p.name ? p.email : null, capital(p.audience)].filter(Boolean).join(' · ') }));
   const actions: RecordAction[] = [{
     key: 'change-theme', label: 'Change theme', kind: 'form',
     form: { title: 'Change theme', cta: 'Save', foot: 'A theme groups feedback that asks for the same thing.', fields: [
@@ -307,6 +329,8 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
       { key: 'from_name', label: 'From', kind: 'T', value: f.from_name ?? '', placeholder: '[Name]' },
       { key: 'from_email', label: 'Email', kind: 'T', input: 'email', value: f.from_email ?? '' },
       { key: 'from_company', label: 'Company', kind: 'T', value: f.from_company ?? '' },
+      { key: 'contact_uid', label: 'Customer or prospect record', kind: 'CH', value: f.contact_uid ?? '',
+        options: [{ value: '', label: 'Not linked' }, ...people] },
       { key: 'theme', label: 'Theme', kind: 'T', value: f.theme ?? '' },
       { key: 'roadmap_item_ref', label: 'Roadmap item', kind: 'CH', value: f.roadmap_item_ref ?? '', options: [{ value: '', label: 'None yet' }, ...items] },
       { key: 'status', label: 'Status', kind: 'CH', value: f.status, options: opts(FEEDBACK_STATUS, LABEL) },

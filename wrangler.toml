@@ -190,7 +190,18 @@ AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
 # D1536 (#3785): the deck generation runtime. "do" (the default): each deck's DeckGenRoom drives its runs and the Queue fallback takes a run of more than 18 variant steps; "queue": JOB_QUEUE drives every run.
 DECK_GEN_RUNTIME = "do"
-# D1528: AGENT_AI_GATEWAY (the `agents` AI Gateway id) stays unset until the owner creates the gateway.
+# D1528, D7073 (#7073): the `agents` AI Gateway, created by the owner. Engine-started runs go through it, on the
+# model accounts its stored keys hold (D7073-p2); its spend limit is the platform's one $100 cap.
+AGENT_AI_GATEWAY = "agents"
+# D7073-p2 (#7073): the model accounts on the `agents` gateway, in order. The keys are stored there by
+# agent-gateway-keys.yml under these aliases; the Worker holds none. No Run token (secret
+# AGENT_AI_GATEWAY_TOKEN), no account run. OPENAI_MODEL is used only once AGENT_OPENAI_RATES prices it.
+AGENT_CLAUDE_ALIAS_1 = "claude-primary"
+AGENT_CLAUDE_ALIAS_2 = "claude-2"
+AGENT_CLAUDE_ALIAS_3 = "claude-3"
+AGENT_OPENAI_ALIAS = "openai-codex"
+AGENT_CLAUDE_MODEL = "anthropic/claude-sonnet-5-5"
+OPENAI_MODEL = "gpt-5.3-codex"
 # D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
 MEETING_BOT = "canary"
 # D1451 (#5297): Teams joins stay off until the bot's Teams page driver is measured; only "on" lets the bot take a Teams link.
@@ -745,6 +756,17 @@ AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
 # D1528 (#3847): mirrored from [vars].
 AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
+# D7073 (#7073): mirrored from [vars].
+AGENT_AI_GATEWAY = "agents"
+# D7073-p2 (#7073): the model accounts on the `agents` gateway, in order. The keys are stored there by
+# agent-gateway-keys.yml under these aliases; the Worker holds none. No Run token (secret
+# AGENT_AI_GATEWAY_TOKEN), no account run. OPENAI_MODEL is used only once AGENT_OPENAI_RATES prices it.
+AGENT_CLAUDE_ALIAS_1 = "claude-primary"
+AGENT_CLAUDE_ALIAS_2 = "claude-2"
+AGENT_CLAUDE_ALIAS_3 = "claude-3"
+AGENT_OPENAI_ALIAS = "openai-codex"
+AGENT_CLAUDE_MODEL = "anthropic/claude-sonnet-5-5"
+OPENAI_MODEL = "gpt-5.3-codex"
 # D1536 (#3785): the deck generation runtime. "do" (the default): each deck's DeckGenRoom drives its runs and the Queue fallback takes a run of more than 18 variant steps; "queue": JOB_QUEUE drives every run.
 DECK_GEN_RUNTIME = "do"
 # D886 B9: vars do not inherit into named environments.
@@ -1082,10 +1104,19 @@ crons = [
 # one implements two. Pull-request previews are therefore a separate
 # Worker per PR with no bindings — documentation/architecture/DECISIONS.md
 # D36.
+#
+# #7147 (D7147): this environment is staging (owner decision B1). Its route
+# table is empty on purpose: an environment with no `routes` inherits the
+# top-level ones, and those are the axal.vc and app.axal.vc custom domains,
+# so `wrangler deploy --env preview` would have moved both hosts off
+# production. `routes = []` keeps staging on its workers.dev host only;
+# preview_isolation_4566 resolves the config the way Wrangler does and fails
+# if any route comes back.
 # ===========================================================================
 [env.preview]
 name = "studioos-preview"
 workers_dev = true
+routes = []
 
 [env.preview.vars]
 # D886: preview needs its own explicit enablement.
@@ -1098,6 +1129,17 @@ AGENT_ENGINE = "off"
 AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
 AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
+# D7073 (#7073): mirrored from [vars]. Stage A's stub reaches no account and needs none.
+AGENT_AI_GATEWAY = "agents"
+# D7073-p2 (#7073): the model accounts on the `agents` gateway, in order. The keys are stored there by
+# agent-gateway-keys.yml under these aliases; the Worker holds none. No Run token (secret
+# AGENT_AI_GATEWAY_TOKEN), no account run. OPENAI_MODEL is used only once AGENT_OPENAI_RATES prices it.
+AGENT_CLAUDE_ALIAS_1 = "claude-primary"
+AGENT_CLAUDE_ALIAS_2 = "claude-2"
+AGENT_CLAUDE_ALIAS_3 = "claude-3"
+AGENT_OPENAI_ALIAS = "openai-codex"
+AGENT_CLAUDE_MODEL = "anthropic/claude-sonnet-5-5"
+OPENAI_MODEL = "gpt-5.3-codex"
 # D1536 (#3785): the deck generation runtime. "do" (the default): each deck's DeckGenRoom drives its runs and the Queue fallback takes a run of more than 18 variant steps; "queue": JOB_QUEUE drives every run.
 DECK_GEN_RUNTIME = "do"
 # D867: private captures require explicit enablement in each environment.
@@ -1193,12 +1235,6 @@ queue              = "studioos-agent-queue-preview-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
-
-# D886: independent private bot host.
-[[env.preview.durable_objects.bindings]]
-name = "MEETING_BOT_CONTAINER"
-class_name = "MeetingBotContainer"
-script_name = "studioos-meeting-bot-preview"
 
 [[env.preview.durable_objects.bindings]]
 name       = "PIPELINE_ROOM"
