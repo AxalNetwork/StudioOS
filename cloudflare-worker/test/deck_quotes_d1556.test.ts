@@ -35,7 +35,6 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-d1556-deck-quotes-0123456789-abcdef';
 const OWNER = 1, OTHER = 5;
 const PID = 7, OTHER_PID = 8;

@@ -1,0 +1,120 @@
+name: Landing bot branch keeper
+
+# #6474: merge main into conflicted pull-request branches on a runner, so
+# README-only conflicts (GitHub ignores `README.md merge=union`) clear without
+# a session, and real conflicts are labelled. No model; no PR code runs; never
+# main, never a force push, never a merge, approval or queue entry.
+# scripts/landing-bot/README.md has the rules and the variables.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '7-59/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The one conflicted pull request to merge main into
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: studioos-landing-bot-keeper
+  cancel-in-progress: false
+
+jobs:
+  keep:
+    name: Merge main into conflicted branches
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      (vars.LANDING_BOT_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' && vars.LANDING_BOT_ENABLED == 'dispatch'))
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    outputs:
+      dispatch: ${{ steps.apply.outputs.dispatch }}
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_KEEPER_PER_SWEEP: ${{ vars.LANDING_BOT_KEEPER_PER_SWEEP }}
+      LANDING_BOT_DAILY_PUSHES: ${{ vars.LANDING_BOT_DAILY_PUSHES }}
+      LANDING_BOT_QUIET_MIN: ${{ vars.LANDING_BOT_QUIET_MIN }}
+      KEEPER_PR: ${{ inputs.pr }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Get the landing bot's installation token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - name: Plan the sweep
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+        run: node scripts/landing-bot/keeper.mjs plan
+      - name: Reserve today's pushes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.reservation }}
+          path: ${{ runner.temp }}/keeper-plan.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Merge and push
+        id: apply
+        if: steps.plan.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEPER_APP_TOKEN: ${{ steps.app.outputs.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+        run: node scripts/landing-bot/keeper.mjs apply
+
+  resolver:
+    name: Ask the conflict resolver
+    needs: keep
+    if: needs.keep.outputs.dispatch != '' && needs.keep.outputs.dispatch != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: .github/workflows
+      - name: Dispatch landing-bot-conflict.yml once per PR, when it exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRS: ${{ needs.keep.outputs.dispatch }}
+        run: |
+          set -euo pipefail
+          if [ ! -f .github/workflows/landing-bot-conflict.yml ]; then
+            echo "The conflict resolver (#6475) is not on main yet; the PRs stay labelled conflict." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for pr in $(node -e 'for (const n of JSON.parse(process.env.PRS)) if (Number.isSafeInteger(n) && n > 0) console.log(n)'); do
+            gh workflow run landing-bot-conflict.yml --repo "$GITHUB_REPOSITORY" --ref main -f pr="$pr"
+          done

@@ -6,7 +6,7 @@ and taxonomy lists.
 | File | What it is |
 | --- | --- |
 | `pricing.js` | Plan tiers as displayed on `/pricing`. |
-| `network.js` | Directory categories, programme catalogue, audience/format taxonomies. |
+| `network.js` | Circle and directory taxonomies, and the format filters used by public Events. |
 | `productPages.js` | Product-page copy blocks. |
 
 ## This is not a fixtures folder

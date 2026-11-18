@@ -49,7 +49,7 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
   const heartbeat=async()=>{
     if(finished||control.signal.aborted)return;
     try{renew(await transport.heartbeat());}catch(error){
-      if(error instanceof TransportError&&[401,402,403,409].includes(error.status))end(error.status===402?'tokens':'stopped');
+      if((error instanceof TransportError)&&[401,402,403,409].includes(error.status))end(error.status===402?'tokens':'stopped');
       logLine(log,'heartbeat_unsent');
     }
     if(!finished&&!control.signal.aborted)heartbeatCancel=clock.setTimeout(()=>{void heartbeat();},HEARTBEAT_MS);

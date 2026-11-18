@@ -40,7 +40,6 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { forgetArticleStorage } from '../src/services/storageUsage.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
 const scratch = mkdtempSync(join(tmpdir(), 'article-assist-d1409-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });

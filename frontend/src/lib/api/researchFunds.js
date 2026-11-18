@@ -9,6 +9,8 @@
 // D597 (#1232): every item carries `source` (its list's name, publisher, link
 // and terms verdict), the list answer adds `removed_sources`, and `get` answers
 // 410 { detail, reason, removed } for a fund whose list was taken down.
+// D7167 (#7167): `get`'s item also carries `provenance` and `proposed`, the
+// answer a vehicle-labelled `history`, and its 410 names `error: 'source_withdrawn'`.
 // Read by pages/research/FundDirectory.jsx and FundCatalogProfile.jsx.
 import { request } from '../api.js';
 

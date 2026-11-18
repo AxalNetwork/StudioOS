@@ -38,7 +38,8 @@ test('public Help does not mount authenticated tickets, feedback, chat or popula
   assert.match(app, /<Route path="\/help\/admin\/\*" element=\{<AdminDocsPathGuard \/>\}/);
   assert.match(layout, /const helpRole = user \? role : 'public'/);
   assert.match(layout, /user && <GuideFeedback/);
-  assert.match(layout, /user && <YourTicketsCard/);
+  // Inside the signed-in browsing block: `{!trimmedQuery && user && ( … <YourTicketsCard … )}`.
+  assert.match(layout, /\{!trimmedQuery && user && \(\s*<div[^>]*>\s*<section[^>]*>\s*<PopularGuides[^>]*\/>\s*<\/section>\s*<YourTicketsCard/);
   assert.match(layout, /usePopularGuides\(visibleSections, !!user\)/);
   assert.match(signals, /if \(!enabled\) \{/);
   assert.match(layout, /user && <CustomerChatWidget/);

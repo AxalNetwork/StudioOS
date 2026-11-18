@@ -22,8 +22,6 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -32,14 +30,9 @@ import build from '../src/routes/cycle_build.ts';
 import cycleRecords from '../src/routes/cycle_records.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const ROOT = process.cwd();
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const FOUNDER = 10, TEAMMATE = 11, PARTNER = 12, ADMIN = 13, OUTSIDER = 14;
 const P = 1, P_OTHER = 2, COMPANY = 5, ENTITY = 7;
 /** Every person-shaped string seeded below: no summary may hold one. */

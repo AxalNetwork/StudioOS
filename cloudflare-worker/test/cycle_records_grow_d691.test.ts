@@ -20,9 +20,9 @@
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -38,13 +38,8 @@ import { fillKind } from '../src/services/fills/registry.ts';
 import { markFeedbackTold, updateFeedback } from '../src/services/growWriters.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const ROOT = process.cwd();
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 // Assembled at run time, as cycle_activity_d690 does, so no literal reads as a credential.
 const JWT_SECRET = ['fixture', 'key', 'for', 'd691', 'grow', 'records'].join('-');
 
@@ -169,13 +164,13 @@ const actionKeys = (r: any) => r.body.actions.map((a: any) => a.key);
 
 /** CO:382-388: each record's facts, and its main and side section titles. */
 const CANVAS: Array<[string, string, string[], string[], string[]]> = [
-  ['product-improvement', 'fba1', ['Source', 'Theme', 'Roadmap item', 'Status'], ['Theme', 'Closing the loop'], ['Customer']],
+  ['product-improvement', 'fba1', ['Source', 'Theme', 'Roadmap item', 'Status', 'Origin'], ['Theme', 'Closing the loop'], ['Customer']],
   ['distribution', 'cha1', ['Spend · 30 d', 'Customers', 'CAC', 'Bar'], ['Funnel', 'Experiments'], ['Customers acquired']],
   ['revenue-and-traction', 'mrr', ['Value', 'Change · 30 d', 'Source', 'As of'], ['History', 'Split'], ['Alerts', 'Shared']],
   ['team-expansion', '31', ['Team', 'Applicants', 'In interview', 'Target start'], ['Pipeline', 'Shortlist'], ['Compensation', 'Posted on']],
   ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Revenue by month', 'Terms'], ['Contact', 'Introductions']],
   ['market-expansion', 'mka1', ['Demand evidence', 'Regulation', 'Partners', 'Cost to enter'], ['Entry plan', 'Localisation'], ['Attached', 'Sizing']],
-  ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings'], ['Reminders', 'Documents']],
+  ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings', 'Resolutions'], ['Reminders', 'Documents']],
 ];
 
 test('6: each of the seven reads is in the canvas shape', async () => {
@@ -194,7 +189,7 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   assert.equal(fb.body.title, '"Exports are slow"');
   assert.equal(fb.body.sub, 'Customer · Rui Tomas · 1 Sep');
   assert.deepEqual(sectionOf(fb, 'theme').rows[0], { a: 'Speed', b: '2 items', c: 'Planned', tone: 'vio', action: 'add-to-roadmap' });
-  assert.deepEqual(sectionOf(fb, 'customer').rows.map((r: any) => [r.a, r.b]), [['Rui Tomas · Harbour Mill', 'Customers →'], ['Plan', 'Paid']]);
+  assert.deepEqual(sectionOf(fb, 'customer').rows.map((r: any) => [r.a, r.b]), [['Rui Tomas · Harbour Mill', 'Customers →'], ['Record', 'Not linked'], ['Plan', 'Paid']]); // D6865: the linked record, or Not linked
   assert.equal(sectionOf(fb, 'closing-the-loop').rows[0].c, 'Due');
   const partner = await rec(db, 'partner-network', 'pta1');
   assert.equal(partner.body.facts[2].value, 'Rev-share 20%');
@@ -206,7 +201,7 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   const ob = await rec(db, 'durable-company-building', 51);
   assert.deepEqual(ob.body.pills.map((p: any) => p.text), ['Scheduled', 'Quarterly']);
   assert.deepEqual(sectionOf(ob, 'reminders').rows[0], { a: '14 days before', c: 'Sent', tone: 'grey' });
-  assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null], ['Resolutions', 'Not recorded']]);
+  assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null]]);
   // D6113 follow-up: Open minutes and Tick a localisation check run from their rows only (row_only), never as header buttons.
   assert.equal(ob.body.actions.find((a: any) => a.key === 'open-minutes').row_only, true);
   assert.equal(market.body.actions.find((a: any) => a.key === 'localisation-check').row_only, true);
@@ -307,7 +302,7 @@ test('6: Edit carries the PATCH\'s fields with their current values', async () =
   const db = fixture();
   const edit = (r: any) => Object.fromEntries(r.body.actions.find((a: any) => a.key === 'edit').form.fields.map((f: any) => [f.key, f.value]));
   const fb = edit(await rec(db, 'product-improvement', 'fba1'));
-  assert.deepEqual(Object.keys(fb), ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship']);
+  assert.deepEqual(Object.keys(fb), ['body', 'source', 'from_name', 'from_email', 'from_company', 'contact_uid', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship']);
   assert.equal(fb.body, 'Exports are slow'); assert.equal(fb.theme, 'Speed'); assert.deepEqual(fb.notify_on_ship, ['1']);
   const ch = edit(await rec(db, 'distribution', 'cha1'));
   assert.equal(ch.name, 'Newsletter'); assert.equal(ch.cac_bar_cents, 20000); assert.equal(ch.spend_cents, 50000);

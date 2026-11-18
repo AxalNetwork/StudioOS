@@ -12,6 +12,11 @@
       "channel": "#axalvc-actions-agent-compute-preview"
     },
     {
+      "id": null,
+      "path": ".github/workflows/agent-gateway-keys.yml",
+      "channel": "#axalvc-actions-agent-gateway-keys"
+    },
+    {
       "id": 417193959,
       "path": ".github/workflows/agent-stage-a.yml",
       "channel": "#axalvc-actions-agent-stage-a"
@@ -112,6 +117,11 @@
       "channel": "#axalvc-actions-dr-drill"
     },
     {
+      "id": null,
+      "path": ".github/workflows/file-recovery.yml",
+      "channel": "#axalvc-actions-file-recovery"
+    },
+    {
       "id": 385718276,
       "path": ".github/workflows/form-lightbox-contracts.yml",
       "channel": "#axalvc-actions-form-lightbox-contracts"
@@ -135,6 +145,31 @@
       "id": 374048125,
       "path": ".github/workflows/labels-sync.yml",
       "channel": "#axalvc-actions-labels-sync"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-conflict.yml",
+      "channel": "#axalvc-actions-landing-bot-conflict"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-ejection.yml",
+      "channel": "#axalvc-actions-landing-bot-ejection"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-keeper.yml",
+      "channel": "#axalvc-actions-landing-bot-keeper"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-model-round.yml",
+      "channel": "#axalvc-actions-landing-bot-model-round"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-model.yml",
+      "channel": "#axalvc-actions-landing-bot-model"
     },
     {
       "id": null,
@@ -207,6 +242,11 @@
       "channel": "#axalvc-actions-pr-preview"
     },
     {
+      "id": null,
+      "path": ".github/workflows/pr-preview-deploy.yml",
+      "channel": "#axalvc-actions-pr-preview-deploy"
+    },
+    {
       "id": 404322234,
       "path": ".github/workflows/prompt-eval-gate.yml",
       "channel": "#axalvc-actions-prompt-eval-gate"
@@ -250,6 +290,11 @@
       "id": 416139951,
       "path": ".github/workflows/runner-benchmark.yml",
       "channel": "#axalvc-actions-runner-benchmark"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/scan-remediation.yml",
+      "channel": "#axalvc-actions-scan-remediation"
     },
     {
       "id": 412401690,

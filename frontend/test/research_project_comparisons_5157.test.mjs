@@ -75,7 +75,7 @@ test('a cell names its source and date; Not recorded keeps its reason; a removed
   // Mutation checked: read a removed member's values → its cells are not 'absent'.
   assert.deepEqual(row('country')[1], { state: 'absent', text: null, reason: 'No longer in the directory, so nothing is shown for it.' });
   assert.equal(cellView('country', null, { state: 'listed', values: {} }).state, 'unreadable');
-  assert.equal(cellView('country', null, { state: 'unreadable', values: null }).reason, 'Unreadable: the directory could not be read just now.');
+  assert.equal(cellView('country', null, { state: 'unreadable', values: null }).reason, 'Unavailable: the directory could not be read just now.');
   assert.equal(cellView('size', { status: 'recorded', value: 5000000000, currency: 'EUR', source: { name: 'List', url: null }, as_of: null }, { state: 'listed', values: {} }).text, '€50M');
   assert.equal(cellView('size', { status: 'recorded', value: 5000000000, currency: 'EUR', source: { name: 'List', url: null }, as_of: null }, { state: 'listed', values: {} }).source, 'List · date not recorded');
   // The candidates for a new column are the project's own of the same kind, not already in it.

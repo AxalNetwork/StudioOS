@@ -10,13 +10,14 @@ const bad = new Set(['failure', 'timed_out', 'action_required', 'startup_failure
 const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const owner = 'guillaumelauzier';
 const rules = {
-  'magic-link-probe': { job: 'magic-link round trip', step: 'Report the outcome', events: ['schedule', 'workflow_dispatch'],
+  'magic-link-probe': { job: 'magic-link round trip', steps: ['Report the outcome'], events: ['schedule', 'workflow_dispatch'],
     annotation: ['StudioOS auth probe', 'edge-refused'], issue: 1008 },
-  'magic-link-insert-probe': { job: 'magic-link insert', step: 'Report the outcome', events: ['schedule', 'workflow_dispatch'],
+  'magic-link-insert-probe': { job: 'magic-link insert', steps: ['Report the outcome'], events: ['schedule', 'workflow_dispatch'],
     annotation: ['StudioOS auth probe', 'edge-refused'], issue: 1008 },
-  'claude-code': { job: 'claude', step: 'Verify ANTHROPIC_API_KEY is configured', issue: 5530,
+  'claude-code': { job: 'claude', steps: ['Verify ANTHROPIC_API_KEY is configured'], issue: 5530,
     events: ['issue_comment', 'issues', 'workflow_dispatch'] },
-  'meeting-bot-deploy': { job: 'deploy', step: 'Validate owner-approved preview configuration before deployment',
+  'meeting-bot-deploy': { job: 'deploy',
+    steps: ['Validate owner-approved preview configuration before deployment', 'Validate preview signing secret before image build'],
     issue: 5675, events: ['push', 'workflow_dispatch'] },
 };
 const titles = {
@@ -29,12 +30,26 @@ const boundJob = (job, run) => positive(job?.id) && job.run_id === run.id && job
 const validIssue = issue => issue?.state === 'open' && !issue.pull_request && positive(issue.number)
   && [owner, 'github-actions[bot]'].includes(issue.user?.login);
 
-const releaseChecks = new Map([
-  ['initial', ['Verify the exact main candidate', 'Wait for all six required checks']],
-  ['production-lock', ['build and deploy studioos Worker', 'Recheck candidate under the production lock']],
-  ['production-ownership', ['build and deploy studioos Worker', 'Confirm the candidate still owns the production release']],
-  ['branch-rollout-lock', ['redeploy every provisioned branch', 'Recheck the candidate under the branch rollout lock']],
-]);
+const releaseChecks = {
+  'cloudflare-worker-deploy': [
+    ['initial', 'Verify the exact main candidate', 'Wait for all six required checks'],
+    ['production-lock', 'build and deploy studioos Worker', 'Recheck candidate under the production lock'],
+    ['production-ownership', 'build and deploy studioos Worker', 'Confirm the candidate still owns the production release'],
+    ['branch-rollout-lock', 'redeploy every provisioned branch', 'Recheck the candidate under the branch rollout lock'],
+  ],
+  'meeting-bot-deploy': [
+    ['bot-initial', 'deploy', 'Verify the exact main candidate'],
+    ['bot-before-preview', 'deploy', 'Recheck the candidate before publishing the bot'],
+    ['bot-after-preview', 'deploy', 'Recheck the candidate after preview verification'],
+  ],
+};
+
+// The reconciler needs job metadata on green runs only for this trusted workflow.
+export function isSuccessfulProductionRun(run) {
+  return run.conclusion === 'success' && run.path === '.github/workflows/cloudflare-worker-deploy.yml' &&
+    files.get(run.workflow_id) === run.path && run.head_branch === 'main' && ['push', 'workflow_dispatch'].includes(run.event) &&
+    [run.repository, run.head_repository].every(repo => repo?.full_name === catalog.repository);
+}
 
 async function notices(api, root, job) {
   if (job.check_run_url !== 'https://api.github.com' + root + '/check-runs/' + job.id) return [];
@@ -48,14 +63,7 @@ function onlyFailedStep(job, name) {
   return failed.length === 1 && failed[0].name === name && failed[0].conclusion === 'failure';
 }
 
-async function releaseSupersession(api, root, run, jobs) {
-  if (run.head_branch !== 'main' || !['push', 'workflow_dispatch'].includes(run.event) || run.conclusion !== 'failure') return {};
-  const failed = jobs.filter(job => bad.has(job.conclusion));
-  if (failed.length !== 1) return {};
-  const [job] = failed;
-  const match = [...releaseChecks].find(([, [name, step]]) => job.name === name && onlyFailedStep(job, step));
-  if (!match) return {};
-  const [stage] = match;
+async function releaseNotice(api, root, run, job, stage) {
   const prefix = ['superseded', stage, run.id, run.run_attempt, run.head_sha, ''].join(' ');
   const messages = new Set((await notices(api, root, job))
     .filter(row => row.title === 'StudioOS release outcome v1').map(row => row.message));
@@ -64,6 +72,31 @@ async function releaseSupersession(api, root, run, jobs) {
   if (typeof message !== 'string' || !message.startsWith(prefix)) return {};
   const replacement = message.slice(prefix.length);
   return sha(replacement) && replacement !== run.head_sha ? { superseded: true, supersededStage: stage } : {};
+}
+
+async function releaseSupersession(api, root, run, jobs, filename) {
+  if (isSuccessfulProductionRun(run)) {
+    const [, jobName, stepName] = releaseChecks[filename][0];
+    const [, deployName] = releaseChecks[filename][1];
+    const executed = jobs.filter(job => job.conclusion !== 'skipped');
+    const [admission] = executed;
+    if (executed.length !== 1 || admission.name !== jobName || admission.conclusion !== 'success' ||
+        jobs.filter(job => job.name === deployName && job.conclusion === 'skipped').length !== 1 ||
+        !Array.isArray(admission.steps) || !admission.steps.every(step => ['success', 'skipped'].includes(step.conclusion))) return {};
+    const checks = admission.steps.filter(step => step.name === stepName);
+    if (checks.length !== 1 || checks[0].conclusion !== 'success') return {};
+    return releaseNotice(api, root, run, admission, 'initial');
+  }
+  if (run.head_branch !== 'main' || !['push', 'workflow_dispatch'].includes(run.event) || run.conclusion !== 'failure') return {};
+  const failed = jobs.filter(job => bad.has(job.conclusion));
+  if (failed.length !== 1) return {};
+  const [job] = failed;
+  const match = releaseChecks[filename].find(([, name, step]) => job.name === name && onlyFailedStep(job, step));
+  if (!match) return {};
+  // A post-preview supersession can follow a successful preview publish. Confirm promotion was skipped.
+  if (filename === 'meeting-bot-deploy' && !job.steps.some(step =>
+    step.name === 'Promote verified revision to production' && step.conclusion === 'skipped')) return {};
+  return releaseNotice(api, root, run, job, match[0]);
 }
 
 const queueProducer = /^(?:frontend \(build\)|worker \(typecheck\)|api ↔ worker drift|suite \((?:frontend-[12]-of-2|worker-[1-6]-of-6|rest)\))$/;
@@ -105,7 +138,7 @@ async function confirmedOccurrence(api, root, run, jobs, rule) {
   if (failed.length !== 1 || failed[0].name !== rule.job || failed[0].conclusion !== 'failure') return {};
   const job = failed[0];
   const steps = (job.steps || []).filter(step => bad.has(step.conclusion));
-  if (steps.length !== 1 || steps[0].name !== rule.step || steps[0].conclusion !== 'failure') return {};
+  if (steps.length !== 1 || !rule.steps.includes(steps[0].name) || steps[0].conclusion !== 'failure') return {};
   if (rule.annotation) {
     const annotations = await notices(api, root, job);
     const [title, message] = rule.annotation;
@@ -189,6 +222,9 @@ export async function workflowFailureHints({ api, repository, run, jobs }) {
     const invalidation = await queueInvalidation(read, root, run, jobs);
     return invalidation.queueInvalidated ? invalidation : inheritedFailure(read, root, run, jobs);
   }
-  if (filename === 'cloudflare-worker-deploy') return releaseSupersession(read, root, run, jobs);
+  if (Object.hasOwn(releaseChecks, filename)) {
+    const outcome = await releaseSupersession(read, root, run, jobs, filename);
+    if (outcome.superseded) return outcome;
+  }
   return Object.hasOwn(rules, filename) ? confirmedOccurrence(read, root, run, jobs, rules[filename]) : {};
 }

@@ -52,12 +52,41 @@
  *                 link and terms verdict. A list with no review row is still
  *                 served, and says its terms were not reviewed.
  *   removed_sources  the lists taken down, with why and how many funds are withheld.
+ *
+ * D7166 (#7166) — sizes in each list's own currency, and one row per vehicle:
+ *   LIST_CURRENCY  the currency each list records sizes in: EuroTech in euros,
+ *                 the Shai Goldman list in US dollars (migration 429, its 1A
+ *                 note). A list not named there records no size in a known
+ *                 currency. Sizes are never compared, banded or sorted across
+ *                 currencies: `size_currency` (EUR by default, or USD) picks
+ *                 the one currency size_min/max, size_band, the size sort and
+ *                 the size facet work in, and every other match is left out
+ *                 of them and counted (`size_not_comparable`).
+ *   moves         migration 202611180052 keyed the EuroTech list by manager
+ *                 plus fund number; each old manager uid that no longer names a
+ *                 row is recorded in `research_fund_directory_uid_moves`, and
+ *                 `getFund` follows it, so an old link opens the same vehicle.
  */
 import type { Env } from '../types';
 import { loadOverrides, mapFundFocus, mapFundHq } from './researchTaxonomy';
+import { fundProfile } from './researchFundProfile';
 
 /** The source whose sizes are euros (`fund_size_cents` = euro cents). */
 export const EUR_SOURCE = 'EuroTech VC Funds (public spreadsheet)';
+/** D7166: the source whose sizes are US dollars (`fund_size_cents` = US cents, migration 429). */
+export const USD_SOURCE = 'Shai Goldman — new VC funds at/below $200M';
+
+/** D7166: the currencies a size can be compared in, one list each. */
+export const SIZE_CURRENCIES = ['EUR', 'USD'] as const;
+export type SizeCurrency = typeof SIZE_CURRENCIES[number];
+
+/** D7166: each list's size currency. A list not named here records none in a known currency. */
+export const LIST_CURRENCY: Readonly<Record<string, SizeCurrency>> = { [EUR_SOURCE]: 'EUR', [USD_SOURCE]: 'USD' };
+
+/** The one list whose sizes are in `currency`. */
+export function currencySource(currency: SizeCurrency): string {
+  return currency === 'USD' ? USD_SOURCE : EUR_SOURCE;
+}
 
 /** The three terms verdicts migration 406's CHECK allows, and no other. */
 export const FUND_SOURCE_VERDICTS = ['republish allowed', 'cite only', 'not allowed'] as const;
@@ -114,13 +143,20 @@ export const SORTS: Readonly<Record<string, string>> = {
   '-name': 'name COLLATE NOCASE DESC, uid ASC',
   'vintage': 'fund_year IS NULL, fund_year ASC, name COLLATE NOCASE, uid',
   '-vintage': 'fund_year IS NULL, fund_year DESC, name COLLATE NOCASE, uid',
-  'size': `(source_name = '${EUR_SOURCE}' AND fund_size_cents IS NOT NULL) DESC, fund_size_cents ASC, name COLLATE NOCASE, uid`,
-  '-size': `(source_name = '${EUR_SOURCE}' AND fund_size_cents IS NOT NULL) DESC, fund_size_cents DESC, name COLLATE NOCASE, uid`,
+  // D7166: `?` is the list of the asked `size_currency` (`currencySource`), bound by `orderBy`.
+  'size': `(source_name = ? AND fund_size_cents IS NOT NULL) DESC, fund_size_cents ASC, name COLLATE NOCASE, uid`,
+  '-size': `(source_name = ? AND fund_size_cents IS NOT NULL) DESC, fund_size_cents DESC, name COLLATE NOCASE, uid`,
 };
 
+/** The binds `SORTS[q.sort]` takes: a size sort puts the asked currency's sized rows first. */
+export function orderBy(q: Pick<DirectoryQuery, 'sort' | 'size_currency'>): { binds: unknown[] } {
+  return { binds: SORTS[q.sort].includes('?') ? [currencySource(q.size_currency ?? 'EUR')] : [] };
+}
+
 /**
- * Euro bands for `size_band`, half-open [min, max) in euro cents, so a fund of
- * exactly €25M is in one band, never two. Euro rows only (EUR_SOURCE).
+ * Bands for `size_band`, half-open [min, max) in cents of the asked
+ * `size_currency`, so a fund of exactly 25M is in one band, never two. The
+ * labels are in euros; `sizeBands` names them in the asked currency (D7166).
  */
 export const SIZE_BANDS: ReadonlyArray<{ value: string; label: string; min: number | null; max: number | null }> = [
   { value: 'lt25', label: 'Under €25M', min: null, max: 25_000_000_00 },
@@ -130,6 +166,13 @@ export const SIZE_BANDS: ReadonlyArray<{ value: string; label: string; min: numb
   { value: '250-500', label: '€250–500M', min: 250_000_000_00, max: 500_000_000_00 },
   { value: '500+', label: '€500M and over', min: 500_000_000_00, max: null },
 ];
+
+const CURRENCY_MARK: Readonly<Record<SizeCurrency, string>> = { EUR: '€', USD: 'US$' };
+
+/** D7166: SIZE_BANDS labelled in `currency`. */
+export function sizeBands(currency: SizeCurrency) {
+  return SIZE_BANDS.map((b) => ({ ...b, label: b.label.replaceAll('€', CURRENCY_MARK[currency]) }));
+}
 
 /** A bad query value. `reason` is a sentence this file wrote, safe for a refusal body (D278). */
 export class DirectoryQueryError extends Error {
@@ -151,6 +194,8 @@ export interface DirectoryQuery {
   eif: 0 | 1 | null;
   eifo: 0 | 1 | null;
   sort: string;
+  /** D7166: the one currency sizes are filtered, banded and sorted in. */
+  size_currency: SizeCurrency;
   limit: number;
   offset: number;
   /**
@@ -195,6 +240,10 @@ export function parseDirectoryQuery(get: (k: string) => string | undefined): Dir
   if (band && !SIZE_BANDS.some((b) => b.value === band)) {
     throw new DirectoryQueryError('size_band', `size_band must be one of ${SIZE_BANDS.map((b) => b.value).join(', ')}`);
   }
+  const ccy = (get('size_currency') ?? '').trim().toUpperCase() || 'EUR';
+  if (!(SIZE_CURRENCIES as readonly string[]).includes(ccy)) {
+    throw new DirectoryQueryError('size_currency', `size_currency must be one of ${SIZE_CURRENCIES.join(', ')}`);
+  }
   const vRaw = (get('vintage') ?? '').trim().toLowerCase();
   const vintage = vRaw === 'none' ? 'none' as const : int('vintage', vRaw, 1900, 2100);
   const q = {
@@ -210,6 +259,7 @@ export function parseDirectoryQuery(get: (k: string) => string | undefined): Dir
     eif: flag('eif', get('eif')),
     eifo: flag('eifo', get('eifo')),
     sort,
+    size_currency: ccy as SizeCurrency,
     limit: int('limit', get('limit'), 1, 100) ?? 25,
     offset: int('offset', get('offset'), 0, 1_000_000) ?? 0,
   };
@@ -280,15 +330,16 @@ export interface DirectoryRow {
  * none; EIF and EIFO as true, false, or null when unknown.
  */
 export function presentFund(r: DirectoryRow) {
-  const eur = r.source_name === EUR_SOURCE;
+  // D7166: each list's own currency (LIST_CURRENCY), not euros only.
+  const currency = LIST_CURRENCY[r.source_name] ?? null;
   const lpsKnown = typeof r.notable_lps === 'string' && r.notable_lps.trim() !== '';
   const backing = (f: number) => (f ? true : lpsKnown ? false : null);
   return {
     ...r,
-    fund_size_cents: eur ? r.fund_size_cents : null,
-    size_currency: eur && r.fund_size_cents != null ? 'EUR' : null,
-    ...(eur && r.fund_size_cents != null ? {} : {
-      size_reason: eur ? 'Not recorded' : 'Not recorded: this list records no size in a known currency',
+    fund_size_cents: currency ? r.fund_size_cents : null,
+    size_currency: currency && r.fund_size_cents != null ? currency : null,
+    ...(currency && r.fund_size_cents != null ? {} : {
+      size_reason: currency ? 'Not recorded' : 'Not recorded: this list records no size in a known currency',
     }),
     eif: backing(r.eif_flag),
     eifo: backing(r.eifo_flag),
@@ -321,8 +372,9 @@ function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null
   const lo = band ? band.min : (q.size_min != null ? q.size_min * 100 : null);
   const hi = band ? band.max : (q.size_max != null ? q.size_max * 100 : null);
   if ((band || q.size_min != null || q.size_max != null) && omit !== 'size') {
+    // D7166: whole units and bands of the asked currency, on that currency's list only.
     where.push(`source_name = ? AND fund_size_cents IS NOT NULL`);
-    binds.push(EUR_SOURCE);
+    binds.push(currencySource(q.size_currency ?? 'EUR'));
     if (lo != null) { where.push(`fund_size_cents >= ?`); binds.push(lo); }
     // A band is half-open; size_max (whole euros) stays inclusive, as in steps 2–3.
     if (hi != null) { where.push(band ? `fund_size_cents < ?` : `fund_size_cents <= ?`); binds.push(hi); }
@@ -390,9 +442,9 @@ async function vintageFacet(env: Env, q: DirectoryQuery, r: Resolved) {
 }
 
 /**
- * Size bands count euro rows only (EUR_SOURCE). Every other match — no size,
- * or a size in a currency that is not recorded — is `not_comparable`, and is
- * never put into a band.
+ * Size bands count the asked currency's rows only (`currencySource`, D7166).
+ * Every other match — no size, a size in the other currency, or one in a
+ * currency that is not recorded — is `not_comparable`, never put into a band.
  */
 async function sizeFacet(env: Env, q: DirectoryQuery, r: Resolved) {
   const { where, binds } = conditions(q, r, 'size');
@@ -401,8 +453,8 @@ async function sizeFacet(env: Env, q: DirectoryQuery, r: Resolved) {
   const rows = await env.DB.prepare(
     `SELECT CASE WHEN source_name = ? THEN fund_size_cents END AS c, COUNT(*) AS n
        FROM ${SERVED_FUNDS} AS f ${clause} GROUP BY c`,
-  ).bind(EUR_SOURCE, ...binds).all<{ c: number | null; n: number }>();
-  const bands = SIZE_BANDS.map((b) => ({ value: b.value, label: b.label, count: 0 }));
+  ).bind(currencySource(q.size_currency ?? 'EUR'), ...binds).all<{ c: number | null; n: number }>();
+  const bands = sizeBands(q.size_currency ?? 'EUR').map((b) => ({ value: b.value, label: b.label, count: 0 }));
   let notComparable = 0;
   for (const row of rows.results || []) {
     const n = Number(row.n);
@@ -440,7 +492,8 @@ async function coverageAndSources(env: Env, reviews: Map<string, FundSourceRow>)
     env.DB.prepare(
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN source_name = ? AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_eur,
-              SUM(CASE WHEN source_name <> ? AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_unknown_currency,
+              SUM(CASE WHEN source_name = ? AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_usd,
+              SUM(CASE WHEN source_name NOT IN (?, ?) AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_unknown_currency,
               SUM(CASE WHEN TRIM(COALESCE(hq, '')) <> '' THEN 1 ELSE 0 END) AS hq,
               SUM(CASE WHEN TRIM(COALESCE(website, '')) <> '' THEN 1 ELSE 0 END) AS website,
               SUM(CASE WHEN TRIM(COALESCE(linkedin, '')) <> '' THEN 1 ELSE 0 END) AS linkedin,
@@ -450,7 +503,7 @@ async function coverageAndSources(env: Env, reviews: Map<string, FundSourceRow>)
               SUM(CASE WHEN TRIM(COALESCE(fund_number, '')) <> '' THEN 1 ELSE 0 END) AS fund_number,
               MAX(as_of) AS as_of
          FROM ${SERVED_FUNDS} AS f`,
-    ).bind(EUR_SOURCE, EUR_SOURCE).first<Record<string, number | string | null>>(),
+    ).bind(EUR_SOURCE, USD_SOURCE, EUR_SOURCE, USD_SOURCE).first<Record<string, number | string | null>>(),
     env.DB.prepare(
       `SELECT source_name AS name, MAX(source_url) AS url, COUNT(*) AS n, MAX(as_of) AS as_of
          FROM ${SERVED_FUNDS} AS f GROUP BY source_name ORDER BY COUNT(*) DESC, source_name`,
@@ -469,6 +522,7 @@ async function coverageAndSources(env: Env, reviews: Map<string, FundSourceRow>)
       as_of: (cov?.as_of as string | null) ?? null,
       fields: {
         size_eur: n('size_eur'),
+        size_usd: n('size_usd'),
         size_unknown_currency: n('size_unknown_currency'),
         hq: n('hq'), website: n('website'), linkedin: n('linkedin'), sector_focus: n('sector_focus'),
         fund_year: n('fund_year'), notable_lps: n('notable_lps'), fund_number: n('fund_number'),
@@ -478,7 +532,7 @@ async function coverageAndSources(env: Env, reviews: Map<string, FundSourceRow>)
       const cite = citeSource(s.name, s.url, reviews.get(s.name));
       return {
         name: s.name, url: s.url, rows: Number(s.n), as_of: s.as_of,
-        size_currency: s.name === EUR_SOURCE ? 'EUR' : null,
+        size_currency: LIST_CURRENCY[s.name] ?? null,
         title: cite.title, publisher: cite.publisher, published_url: cite.url, verdict: cite.verdict,
         terms_status: cite.terms_status, terms_quote: cite.terms_quote, evidence_url: cite.evidence_url,
         reviewed_on: cite.reviewed_on, reason: cite.reason,
@@ -509,6 +563,12 @@ async function facetLabels(env: Env) {
   return { countries: toMap(countries), markets: toMap(markets) };
 }
 
+/** D7166: what a size comparison covers, per asked currency. */
+export const SIZE_BASIS: Readonly<Record<SizeCurrency, string>> = {
+  EUR: 'Sizes are compared and sorted in euros, on the EuroTech list only; the US dollar list is compared on its own, and other lists record no size in a known currency.',
+  USD: 'Sizes are compared and sorted in US dollars, on the Shai Goldman list only; the euro list is compared on its own, and other lists record no size in a known currency.',
+};
+
 export async function listDirectory(env: Env, q: DirectoryQuery) {
   const [overrides, reviews] = await Promise.all([loadOverrides(env), loadFundSources(env)]);
   const [hqRaw, focusRaw] = await Promise.all([
@@ -519,10 +579,11 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
   const { where, binds } = conditions(q, r);
   const clause = whereClause(where);
   // `clause` is built from literals of `conditions`; every value is in `binds`.
+  const order = orderBy(q);
   const [count, page, whole, labels] = await Promise.all([
     env.DB.prepare(`SELECT COUNT(*) AS n FROM ${SERVED_FUNDS} AS f ${clause}`).bind(...binds).first<{ n: number }>(),
     env.DB.prepare(`SELECT ${COLUMNS} FROM ${SERVED_FUNDS} AS f ${clause} ORDER BY ${SORTS[q.sort]} LIMIT ? OFFSET ?`)
-      .bind(...binds, q.limit, q.offset).all<DirectoryRow>(),
+      .bind(...binds, ...order.binds, q.limit, q.offset).all<DirectoryRow>(),
     coverageAndSources(env, reviews),
     facetLabels(env),
   ]);
@@ -540,7 +601,8 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
     limit: q.limit,
     offset: q.offset,
     sort: q.sort,
-    size_basis: 'Sizes are compared and sorted in euros, on the EuroTech list only; other lists record no size in a known currency.',
+    size_currency: q.size_currency,
+    size_basis: SIZE_BASIS[q.size_currency],
     coverage: whole.coverage,
     sources: whole.sources,
     removed_sources: whole.removed_sources,
@@ -558,6 +620,20 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
   };
 }
 
+/** `getFund`'s answer: `removed` alone for a list taken down, else the fund. */
+interface FundAnswer {
+  removed?: ReturnType<typeof citeSource>;
+  /** D7167: the item carries its dated provenance and the four proposed fields. */
+  item?: ReturnType<typeof presentCited> & Pick<Awaited<ReturnType<typeof fundProfile>>, 'provenance' | 'proposed'>;
+  /** D7167: the vehicle-labelled history (services/researchFundProfile.ts). */
+  history?: Awaited<ReturnType<typeof fundProfile>>['history'];
+  reports?: Record<string, unknown>[];
+  reports_status?: 'ok' | 'unreadable';
+  reports_reason?: string;
+  /** D7166: the retired uid that was asked, when it moved to this vehicle. */
+  moved_from?: string | null;
+}
+
 /**
  * One fund and its reports. A failed reports read is reported on its own
  * (`reports_status: 'unreadable'`), never passed off as a fund with no reports.
@@ -565,8 +641,11 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
  *
  * A fund of a list taken down (D597) answers `{ removed }`: the list, its
  * publisher and why — never the fund's own fields.
+ *
+ * D7167: the item also carries its dated `provenance` and the four `proposed`
+ * fields, and the answer a vehicle-labelled `history` (services/researchFundProfile.ts).
  */
-export async function getFund(env: Env, uid: string) {
+export async function getFund(env: Env, uid: string, movedFrom: string | null = null): Promise<FundAnswer | null> {
   const [row, reviews] = await Promise.all([
     env.DB.prepare(`SELECT ${COLUMNS} FROM ${SERVED_FUNDS} AS f WHERE uid = ?`).bind(uid).first<DirectoryRow>(),
     loadFundSources(env),
@@ -574,6 +653,12 @@ export async function getFund(env: Env, uid: string) {
   if (!row) {
     const held = await env.DB.prepare(`SELECT source_name FROM research_fund_directory WHERE uid = ?`)
       .bind(uid).first<{ source_name: string }>();
+    if (!held && movedFrom == null) {
+      // D7166: a uid the vehicle re-import retired opens the vehicle it moved to (one hop).
+      const move = await env.DB.prepare(`SELECT new_uid FROM research_fund_directory_uid_moves WHERE old_uid = ?`)
+        .bind(uid).first<{ new_uid: string }>().catch(() => null);
+      return move?.new_uid ? getFund(env, move.new_uid, uid) : null;
+    }
     const review = held ? reviews.get(held.source_name) : undefined;
     if (review?.verdict !== 'not allowed') return null;
     return { removed: citeSource(review.source_name, review.published_url, review) };
@@ -584,14 +669,16 @@ export async function getFund(env: Env, uid: string) {
          FROM research_fund_directory_reports WHERE fund_uid = ? ORDER BY period ASC`,
     ).bind(uid).all();
     // A report's size is shown only in a known currency, like the fund's own.
-    const eur = row.source_name === EUR_SOURCE;
+    const currency = LIST_CURRENCY[row.source_name] ?? null;
     const reports = (r.results || []).map((x: Record<string, unknown>) => ({
       ...x,
-      fund_size_cents: eur ? x.fund_size_cents : null,
-      size_currency: eur && x.fund_size_cents != null ? 'EUR' : null,
+      fund_size_cents: currency ? x.fund_size_cents : null,
+      size_currency: currency && x.fund_size_cents != null ? currency : null,
     }));
-    return { item: presentCited(row, reviews), reports, reports_status: 'ok' as const };
+    const profile = await fundProfile(env, row, reviews);
+    return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports, reports_status: 'ok' as const, moved_from: movedFrom };
   } catch {
-    return { item: presentCited(row, reviews), reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable' };
+    const profile = await fundProfile(env, row, reviews);
+    return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable', moved_from: movedFrom };
   }
 }

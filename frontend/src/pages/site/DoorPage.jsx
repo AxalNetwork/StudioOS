@@ -62,6 +62,8 @@ export function resolvePlans(door, catalogue = CATALOGUE) {
     const tier = tierFor(door, p.tier, catalogue);
     if (!tier) return [];
     // D1050: the plan is called what /pricing calls it, the catalogue tier's name.
+    // #6983 (X1): a plan priced by agreement says so, and never prints "Price not read".
+    if (p.custom) return [{ ...p, name: tier.name || p.name, price: 'Custom', period: p.custom.note, cta: p.custom.cta, to: p.custom.to, features: tier.features.slice() }];
     return [{ ...p, name: tier.name || p.name, price: formatPrice(tier, catalogue.reading), period: '/ month', features: tier.features.slice() }];
   });
 }
@@ -133,7 +135,7 @@ function PlanCard({ p, to }) {
       <ul className="ax-door-plan-feats">
         {p.features.map((f) => <li key={f}><span className="ax-door-tick" aria-hidden="true">✓</span>{f}</li>)}
       </ul>
-      <Link to={to} className="ax-btn ax-door-plan-cta">{p.cta}</Link>
+      <Link to={p.to || to} className="ax-btn ax-door-plan-cta">{p.cta}</Link>
     </div>
   );
 }
@@ -188,6 +190,11 @@ export default function DoorPage({ door: key }) {
               <h1 id="ax-door-h" className="ax-h1">{door.h1}</h1>
               <p className="ax-door-who">{door.who}</p>
               <div className="ax-row-btns">{ctas}</div>
+              {door.lpSignIn && (
+                <p className="ax-door-who ax-door-lp-signin">
+                  {door.lpSignIn.lead} <Link to={door.lpSignIn.to}>{door.lpSignIn.t}</Link>
+                </p>
+              )}
             </div>
           </div>
         </section>

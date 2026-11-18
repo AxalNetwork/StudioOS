@@ -5,8 +5,10 @@
  *
  * THE OBJECT NEVER CALLS A MODEL. It is the scope's single writer:
  *   - admission, one at a time (`blockConcurrencyWhile`): one live run per
- *     agent, at most `max_parallel_runs` per scope, at most 5 proposals
- *     waiting; the checks and the row are `engine.ts`'s `admitInScope`;
+ *     agent and lane, at most the scope's parallel limit, at most its review
+ *     backlog of proposals waiting (D7074, `capacity.ts`: one lane, 2 and 5
+ *     unless the team set more under HQ's ceilings); the checks and the row
+ *     are `engine.ts`'s `admitInScope`;
  *   - schedule timers on alarms (the `MeetingBotRun` pattern): a duty's next
  *     firing is a storage key, the alarm is the earliest one, and a timer is
  *     deleted before it fires, so it fires once and survives eviction;
