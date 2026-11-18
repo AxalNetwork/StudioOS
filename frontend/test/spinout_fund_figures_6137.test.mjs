@@ -86,9 +86,15 @@ test('a committed LP\'s read draws its own figures', () => {
   assert.equal(usdM(0), '$0M');
 });
 
-test('the program figures fall back with their caption, as before', () => {
-  assert.equal(programFigures({ program: { available: true, graduates: 4, on_time_pct: null, alumni_raised: null } }).onTime, '—');
-  assert.equal(programFigures(null).live, false);
+test('#5513: the program figures come from the read only; there is no fixed track record', () => {
+  const some = programFigures({ program: { available: true, graduates: 4, on_time_pct: null, alumni_raised: null } });
+  assert.deepEqual([some.live, some.graduates, some.onTime, some.alumni], [true, '4', NOT_RECORDED, NOT_RECORDED]);
+  const none = programFigures({ program: { available: false } });
+  assert.deepEqual([none.live, none.graduates, none.onTime, none.alumni], [false, NOT_RECORDED, NOT_RECORDED, NOT_RECORDED]);
+  const failed = programFigures(null);
+  assert.deepEqual([failed.live, failed.graduates, failed.onTime, failed.alumni], [false, UNREADABLE, UNREADABLE, UNREADABLE]);
+  // The owner took 37 graduates, 86% on time and $8.6M raised down (2026-11-17): no source records them.
+  assert.ok(![none, failed].some((p) => /\b37\b|86%|8\.6M/.test(`${p.graduates} ${p.onTime} ${p.alumni}`)));
 });
 
 test('the workspace draws every fund figure from the read, none from the design model', () => {

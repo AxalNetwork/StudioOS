@@ -16,7 +16,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/cycle_records_raise_d691.test.ts
  */
-import { test } from 'node:test';
+import { test, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -40,6 +40,13 @@ const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
 const FOUNDER = 10, ADMIN = 30;
 const P = 1, P_OTHER = 2;
+
+// The fixtures are dated around October 2026 and the code under test reads the
+// clock in JS (`tierAdmits`, the Expired / overdue reads), so the clock is
+// pinned: file 12's access runs until 2026-11-30 and must read as live on any day.
+const NOW = new Date('2026-11-15T09:00:00.000Z');
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
+afterEach(() => mock.timers.reset());
 
 /** The baseline, then every post-cutoff migration in order, as cycle_records_build_d690.test.ts builds one. */
 const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
