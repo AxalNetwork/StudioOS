@@ -221,7 +221,7 @@ test('a write keeps every row read so far, and a failed re-read keeps them and s
     await click(f, 'advisor-service-state-1');
     await f.flush();
     assert.ok(f.by('advisor-service-edit-3'), 'still there after the write');
-    assert.match(textOf(f.by('advisor-services-note')), /is now inactive/);
+    assert.match(textOf(f.by('advisor-service-undo')), /published on your public profile/);
     failReads = true;
     await click(f, 'advisor-service-state-2');
     await f.flush();
