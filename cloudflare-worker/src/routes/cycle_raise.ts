@@ -1705,7 +1705,7 @@ cycleRaise.delete('/google/facts/:id', async (c) => {
 });
 
 // D1263: the evidence paths use scope(), then active-company and founder-only decision gates.
-async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
+export async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
   c.header('Cache-Control', 'no-store');
   const s = await scope(c);
   if (s instanceof Response) return s;
@@ -1716,7 +1716,7 @@ async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceConte
   if (write && !ctx.founder) throw new RaiseEvidenceError('forbidden', 403);
   return ctx;
 }
-function evidenceFailure(c: any, error: unknown) {
+export function evidenceFailure(c: any, error: unknown) {
   if (error instanceof RaiseEvidenceError) return c.json({ error: error.code, message: error.sentence }, error.status);
   return c.json({ error: 'evidence_unreadable', message: 'Evidence could not be read or saved. Try again.' }, 503);
 }
