@@ -47,6 +47,7 @@ The inventory includes the application-only `WORKGRAPH_INGEST_TOKEN`, because th
 | `cloudflare-worker-deploy.yml` | `branches` | main push, manual | `production` |
 | `d1-migrate.yml` | `migrate` | manual | `production` |
 | `dr-drill.yml` | `drill` | schedule, manual | `production-ops` |
+| `file-recovery.yml` | `snapshot` | schedule, manual | `production-ops` |
 | `gateway-live-check.yml` | `live-check` | manual | `production-ops` |
 | `magic-link-insert-probe.yml` | `probe` | schedule, manual | `production-ops` |
 | `meeting-bot-deploy.yml` | `deploy` | main push, manual | `production` |
@@ -65,6 +66,7 @@ Cloudflare account-owned tokens support granular Worker roles. Use individual-Wo
 | `production / CLOUDFLARE_API_TOKEN` | `Editor` on the existing `studioos` Worker, `Workers Routes Write` for its zone, `D1 Write` for migrations and schema access, and `Queues Read` for the queue preflight |
 | `production-ops / AGENT_GATEWAY_ADMIN_TOKEN` | Dedicated identity for the approved `agents` gateway provider configuration and Secrets Store secret create/update and metadata checks; provision and verify before applying. Do not widen the D1/R2 operations token. |
 | `production-ops / CLOUDFLARE_API_TOKEN` | `D1 Write` for export, rehearsal/restore creation, import and cleanup, plus `Workers R2 Storage Write` for Wrangler's REST object operations |
+| `production-ops / FILE_RECOVERY_SOURCE_*`, `FILE_RECOVERY_DESTINATION_*` | Bucket-scoped R2 S3 credentials: read on the approved source prefixes, write and read-back on the archive destination prefix. The job's `CLOUDFLARE_API_TOKEN` only reads the `studioos-backups` bucket lock. |
 | `production / MEETING_BOT_CLOUDFLARE_API_TOKEN` | `Editor` on the existing `studioos-meeting-bot-preview` and `studioos-meeting-bot`, plus `Containers Write` for their container |
 | `production / ARCHIVE_OBSERVER_CLOUDFLARE_API_TOKEN` | `Editor` on the existing target declared in `cloudflare-archive-observer/wrangler.jsonc` |
 | `production / MERGE_CONTROL_CLOUDFLARE_API_TOKEN` | `Editor` on the existing `studioos-merge-control`, with successful attachment of its configured consumer verified |
@@ -96,7 +98,7 @@ The production preflight reads the fixed `/repos/AxalNetwork/StudioOS/environmen
 
 Create separate account-owned tokens for release and operations according to the permission table. Enter their values directly into each environment's `CLOUDFLARE_API_TOKEN` secret. Place the three dedicated deployment tokens in `production`.
 
-Move `BRANCH_SECRET_BUNDLE`, `HQ_RPC_SECRET`, `DR_COPY_ACCESS_KEY_ID`, `DR_COPY_SECRET_ACCESS_KEY` and `WORKGRAPH_INGEST_TOKEN` to `production-ops` under their existing names. Preserve the independent-copy destination's D4558 access and retention requirements. Provision its credential only when that feature is configured. See [D1 recovery §7](D1_RECOVERY.md#7-the-independent-encrypted-copy-d4558).
+Move `BRANCH_SECRET_BUNDLE`, `HQ_RPC_SECRET`, `DR_COPY_ACCESS_KEY_ID`, `DR_COPY_SECRET_ACCESS_KEY`, the four `FILE_RECOVERY_*` keys (only once `FILE_RECOVERY_ENABLED` is set) and `WORKGRAPH_INGEST_TOKEN` to `production-ops` under their existing names. Preserve the independent-copy destination's D4558 access and retention requirements. Provision its credential only when that feature is configured. See [D1 recovery §7](D1_RECOVERY.md#7-the-independent-encrypted-copy-d4558).
 
 Use the inventory to verify every environment secret's name and purpose. Preserve the matching account ID for each token. Confirm the preview-only token exists in `agent-compute-preview`. Resolve the publishing-path decisions at the beginning of this runbook before cutting over their callers.
 

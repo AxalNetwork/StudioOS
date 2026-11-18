@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   snapshot:
+    environment: production-ops
     # #6650/counsel approval and destination-prefix lock precede activation.
     if: vars.FILE_RECOVERY_ENABLED == 'true'
     runs-on: ubuntu-latest
