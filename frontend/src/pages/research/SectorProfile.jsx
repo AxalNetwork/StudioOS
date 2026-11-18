@@ -7,6 +7,7 @@ import { researchMarketsApi } from '../../lib/api/researchMarkets';
 import { researchSectorsApi } from '../../lib/api/researchSectors';
 import { sizeOf, backingOf } from './fundDirectoryRead';
 import { useResearchLinks } from './researchLinks.js';
+import MarketsBack from './MarketsBack.jsx';
 
 const DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'];
 const READS = { demand: 'Demand for the work', supply: 'What is being built', capital: 'Capital activity', talent: 'Talent activity', research: 'Research activity', sentiment: 'Public discussion' };
@@ -149,10 +150,13 @@ export default function SectorProfile({ slug, role, LegacyPage }) {
     return () => { alive = false; };
   }, [slug, retry]);
   const state = result.slug === slug ? result : { loading: true };
-  if (state.kind === 'redirect') return <Navigate replace to={state.to} />;
+  // D7171: the directory's view rides along, so Back from the sector returns to it.
+  const from = new URLSearchParams(location.search).get('from');
+  if (state.kind === 'redirect') return <Navigate replace to={from ? state.to.replace('#', `&from=${encodeURIComponent(from)}#`) : state.to} />;
   // #1077: the legacy page draws the market the resolver already read.
   if (state.kind === 'legacy') return <LegacyPage role={role} market={state.market} />;
   return <WorkspaceShell role={role} title={state.data?.name || 'Sector'} activeSlug="markets">
+    <MarketsBack className="mb-3" />
     <SectorProfileView links={links} loading={state.loading} error={state.error} data={state.data}
       highlightedMarket={new URLSearchParams(location.search).get('market') || ''} onRetry={() => setRetry((n) => n + 1)} />
   </WorkspaceShell>;

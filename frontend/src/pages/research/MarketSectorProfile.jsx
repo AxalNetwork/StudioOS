@@ -1,10 +1,11 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ShieldCheck, Building2 } from 'lucide-react';
+import { ShieldCheck, Building2 } from 'lucide-react';
 import { Card } from '../../ui';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import SectorProfile from './SectorProfile';
 import { useResearchLinks } from './researchLinks.js';
+import MarketsBack from './MarketsBack.jsx';
 
 const missing = (v) => v === null || v === undefined || v === '';
 const fact = (v) => (missing(v) ? 'Not recorded' : v);
@@ -45,7 +46,7 @@ export function LegacyMarketView({ market, links = { companies: true, funds: tru
   const labels = market?.sub_markets?.company_sectors || [];
   const reason = market?.index?.reason || 'This market has no market-intelligence sector yet';
   return <div data-testid="market-sector-profile" className="space-y-4">
-    <Link to="/research/markets" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300"><ArrowLeft size={13} /> Markets</Link>
+    <MarketsBack />
     <div><div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-axal-faint">Market</div>
       <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.name}</h1>
       <p className="mt-1 text-[12.5px] text-axal-muted">Directory companies, funds and signals mapped to this market through the taxonomy crosswalk.</p></div>

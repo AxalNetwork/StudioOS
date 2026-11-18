@@ -436,7 +436,7 @@ export interface MarketFilters {
 }
 type Facet = 'country' | 'fresh' | 'src';
 interface Filterable {
-  name: string; mi_sector: string | null;
+  name: string; mi_sector: string | null; supplied_count?: number;
   countries: Coverage['countries']; newest_source_at: Coverage['newest_source_at']; sources_by_kind: Coverage['sources_by_kind'];
 }
 
@@ -511,12 +511,15 @@ export function coverageSummary(set: Filterable[], miBySector: Map<string, Marke
     sectors.set(m.mi_sector, s);
   }
   countries.distinct = seen.size;
+  const supplied_total = set.reduce((n, m) => n + (Number(m.supplied_count) || 0), 0);
   const by_sector = [...sectors.entries()].map(([sector, s]) => {
     const k = kindSummary(miBySector.get(sector) ?? []);
     return { sector, markets: s.markets, sector_sources: k.count, newest_sector_source: k.newest, named_markets: s.named_markets };
   }).sort((a, b) => b.markets - a.markets || a.sector.localeCompare(b.sector));
   return {
     markets: set.length,
+    // The taxonomy's own company counts, summed: labelled apart, never a market size.
+    supplied_total,
     fresh,
     countries,
     tracked: { mapped: set.length - unmapped, unmapped },

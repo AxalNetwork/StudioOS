@@ -786,6 +786,7 @@ test('D7171: the coverage summary counts the filtered markets, keeps both countr
     const r = await get(db, '/markets?limit=1');
     assert.deepEqual(r.body.summary, {
       markets: 4,
+      supplied_total: 1260,
       fresh: { 30: 1, 90: 2, older: 0, none: 1 },
       countries: { recorded: 2, no_company: 2, no_placeable_country: 0, distinct: 3 },
       tracked: { mapped: 2, unmapped: 2 },

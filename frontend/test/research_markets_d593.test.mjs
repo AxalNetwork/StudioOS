@@ -81,68 +81,29 @@ const SECTORS = {
 const MD = MARKETS.items;
 
 // ---- M1: the markets index ---------------------------------------------------
+//
+// D7171 (#7171, canvas D7036, owner answer Q2 A) replaced the grouped list
+// with a flat, paged table, grouping kept as the `group=1` toggle: its tests
+// are `research_markets_directory_7171.test.mjs`. What M1 still holds here: a
+// market opens its tracked sector's page, an unmapped one its own, and the
+// zone never writes a tracked sector's name itself.
 
-test('M1: a sector group opens /research/markets/sector/<slug>; the unmapped group opens nothing', () => {
-  const markup = html(h(directory.PrivatePanel, { markets: ready(MARKETS) }));
-  assert.deepEqual(opens(markup), ['/research/markets/sector/fintech-defi']);
-  assert.match(markup, /Open sector<span class="sr-only"> Fintech \/ DeFi<\/span> →/,
-    'each link names its sector to a screen reader');
-  // The note that the link waited on #1139 is gone with the wait.
+test('M1: a mapped market opens its tracked sector; an unmapped one opens its own page, "Not mapped yet"', async () => {
+  const { DirectoryBody } = await import('../src/pages/research/MarketDirectory.jsx');
+  const { readMarketQuery } = await import('../src/pages/research/marketDirectoryQuery.js');
+  const view = readMarketQuery(new URLSearchParams('view=cards'));
+  const markup = html(h(DirectoryBody, { markets: ready({ ...MARKETS, directory_total: 3, offset: 0 }), view, onPatch: () => {} }));
+  assert.match(markup, /href="\/research\/markets\/sector\/fintech-defi\?market=fintech&amp;from=view%3Dcards%26open%3Dfintech"/);
+  assert.match(markup, /href="\/research\/markets\/sector\/fashion\?from=view%3Dcards%26open%3Dfashion"/);
+  assert.match(words(markup), /Fashion Not mapped yet · no tracked sector/);
   assert.doesNotMatch(read('frontend/src/pages/research/MarketDirectoryZone.jsx'), /the link lands with it/);
 });
 
-test('M1: every tracked sector the Worker names is a group; one with no market says so and still opens', () => {
-  const markup = html(h(directory.PrivatePanel, { markets: ready(MARKETS), sectors: ready(SECTORS) }));
-  const t = words(markup);
-  assert.match(t, /Fintech \/ DeFi 2 markets · 910 companies/);
-  assert.match(t, /Agentic B2B No market is mapped to this sector yet Open sector Agentic B2B →/);
-  assert.match(t, /Quantum Infrastructure No market is mapped to this sector yet Open sector Quantum Infrastructure →/);
-  assert.deepEqual(opens(markup), [
-    '/research/markets/sector/fintech-defi',
-    '/research/markets/sector/agentic-b2b',
-    '/research/markets/sector/quantum-infrastructure',
-  ]);
-  // Sectors with markets, then sectors without, then the unmapped markets.
-  assert.ok(t.indexOf('Fintech / DeFi 2 markets') < t.indexOf('Agentic B2B No market'));
-  assert.ok(t.indexOf('Quantum Infrastructure No market') < t.indexOf('Not mapped yet'));
-});
-
-test('M1: "no market is mapped" is said only over the whole list, and a failed sector read says so', () => {
-  assert.deepEqual(directory.groupMarkets(MD, SECTORS.items).map((g) => [g.name, g.slug, g.markets.length]), [
-    ['Fintech / DeFi', 'fintech-defi', 2],
-    ['Agentic B2B', 'agentic-b2b', 0],
-    ['Quantum Infrastructure', 'quantum-infrastructure', 0],
-    ['Not mapped yet', null, 1],
-  ]);
-  // A read that held fewer markets than it counted cannot say a sector has none.
-  const partial = words(html(h(directory.PrivatePanel, { markets: ready({ ...MARKETS, total: 90 }), sectors: ready(SECTORS) })));
-  assert.doesNotMatch(partial, /No market is mapped/);
-  assert.match(partial, /Fintech \/ DeFi 2 markets/);
-  // A failed read of the sectors is not "no market", and it leaves the groups the markets name.
-  const failed = words(html(h(directory.PrivatePanel, { markets: ready(MARKETS), sectors: unreadable })));
-  assert.match(failed, /The tracked sectors could not be read\. The groups below are only the sectors a market maps to/);
-  assert.doesNotMatch(failed, /No market is mapped/);
-  assert.match(failed, /Fintech \/ DeFi 2 markets · 910 companies/);
-  // A 404 on the list route has not said there are no sectors either.
-  assert.match(words(html(h(directory.PrivatePanel, { markets: ready(MARKETS), sectors: { status: 'not_found', data: null } }))),
-    /The tracked sectors could not be read/);
-  assert.match(words(html(h(directory.PrivatePanel, { markets: ready(MARKETS), sectors: loading }))), /Loading the tracked sectors/);
-});
-
-test('M1: the tracked sectors are the Worker\'s list, read by the mounted page, never written in it', () => {
+test('M1: the zone never writes a tracked sector\'s name itself', () => {
   const src = codeOnly(read('frontend/src/pages/research/MarketDirectoryZone.jsx'));
-  assert.match(src, /useRead\(\(\) => researchSectorsApi\.list\(\)\)/);
-  assert.match(src, /<PrivatePanel markets=\{\{ \.\.\.markets, reload: reloadMarkets \}\} sectors=\{\{ \.\.\.sectors, reload: reloadSectors \}\} \/>/);
   for (const name of ['AI Infrastructure', 'Agentic B2B', 'Quantum Infrastructure', 'Vertical SaaS', 'Climate Intelligence']) {
     assert.ok(!src.includes(name), `the page writes the sector "${name}" itself`);
   }
-});
-
-test('M1: the markets no sector claims are "Not mapped yet"', () => {
-  assert.equal(directory.UNMAPPED_LABEL, 'Not mapped yet');
-  const t = words(html(h(directory.PrivatePanel, { markets: ready(MARKETS) })));
-  assert.match(t, /Not mapped yet 1 markets · no index applies/);
-  assert.doesNotMatch(t, /Not mapped to a tracked sector/);
 });
 
 // ---- M2, M3: the detail pages sit in the Research shell ---------------------

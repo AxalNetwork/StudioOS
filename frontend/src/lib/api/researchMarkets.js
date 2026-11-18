@@ -25,6 +25,15 @@ export const researchMarketsApi = {
    * Each is `{ status: 'not_recorded', value: null, reason }` when no source
    * holds it — print "Not recorded", never 0. `sources` lists at most 20 of them
    * (`{ kind, key, rows, newest }`, newest first). No market size or growth.
+   *
+   * D7171 (#7171): `q` matches the market name or its tracked sector (each
+   * item says which in `matched_on`); `country` (codes, comma-joined),
+   * `fresh` (30 | 90 | older | none), `src` (named | sector | none) and
+   * `sector` (tracked sectors) filter the whole directory before paging, and
+   * `sort` also takes `newest_source`. The answer adds `directory_total`,
+   * `facets` (counts per option over what the other filters leave),
+   * `summary` (the coverage of the filtered markets), `read_at`, and per item
+   * `sources_by_kind`. An unreadable filter is a 400 with a code.
    */
   list: (params) => request(`/research/markets${qs(params)}`),
   get: (slug) => request(`/research/markets/${encodeURIComponent(slug)}`),

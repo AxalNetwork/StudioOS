@@ -1,50 +1,61 @@
 /**
- * D3701 (Research v2, #3701), part 5 — Markets (RS-03): the search, the sort
- * and the grouping are kept in the URL, and an empty search says so with a
- * Clear search (RS-11 "Empty search").
+ * D3701 (Research v2, #3701), part 5 — Markets (RS-03): the view is kept in
+ * the URL, and an empty result says so with a way out (RS-11 "Empty search").
+ *
+ * D7171 (#7171) widened the URL to the whole directory view (tab, filters,
+ * view, page, open row, thesis) and made grouping the `group=1` toggle (owner
+ * answer Q2 A); `research_markets_directory_7171.test.mjs` holds the rest.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/research_v2_markets_3701.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
-import { MARKET_SORTS, PrivatePanel, readMarketQuery, writeMarketQuery } from '../src/pages/research/MarketDirectoryZone.jsx';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+import { MARKET_SORTS, readMarketQuery, writeMarketQuery } from '../src/pages/research/MarketDirectoryZone.jsx';
+import { DirectoryBody } from '../src/pages/research/MarketDirectory.jsx';
 import { mountContracts } from './_contracts_dom.mjs';
 
 const h = React.createElement;
-const byTid = (ui, id) => ui.nodes().find((n) => ui.props(n)?.['data-testid'] === id) || null;
-const MARKETS = {
-  status: 'ready',
-  data: { total: 2, items: [
-    { name: 'FinTech', slug: 'fintech', supplied_count: 40, mi_sector: null },
-    { name: 'Robotics', slug: 'robotics', supplied_count: 12, mi_sector: null },
-  ] },
-};
 
 test('the view reads from the URL; an unknown sort falls back; defaults stay out of it', () => {
   const p = (s) => new URLSearchParams(s);
-  assert.deepEqual(readMarketQuery(p('')), { q: '', sort: MARKET_SORTS[0].value, grouped: true });
-  assert.deepEqual(readMarketQuery(p('q=robot&sort=name:asc&group=0')), { q: 'robot', sort: 'name:asc', grouped: false });
-  // Mutation checked: accept any sort → 'drop table' reaches the comparator.
+  const plain = readMarketQuery(p(''));
+  assert.equal(plain.sort, MARKET_SORTS[0].value);
+  assert.equal(plain.grouped, false, 'Q2 A: flat by default');
+  const v = readMarketQuery(p('q=robot&sort=name:asc&group=1'));
+  assert.deepEqual([v.q, v.sort, v.grouped], ['robot', 'name:asc', true]);
+  // Mutation checked: accept any sort → 'drop table' reaches the request.
   assert.equal(readMarketQuery(p('sort=drop%20table')).sort, MARKET_SORTS[0].value);
   assert.equal(readMarketQuery(p(`q=${'x'.repeat(500)}`)).q.length, 120);
-  assert.equal(writeMarketQuery(p('tab=x'), { q: '', sort: MARKET_SORTS[0].value, grouped: true }).toString(), 'tab=x');
-  assert.equal(writeMarketQuery(p(''), { q: 'robot', sort: 'name:asc', grouped: false }).toString(), 'q=robot&sort=name%3Aasc&group=0');
+  assert.equal(writeMarketQuery(p('other=x'), plain).toString(), 'other=x');
+  assert.equal(writeMarketQuery(p(''), v).toString(), 'q=robot&sort=name%3Aasc&group=1');
 });
 
-test('a search from the URL that matches nothing says so, and Clear search brings the list back', async () => {
-  const m = await mountContracts(h(PrivatePanel, { markets: MARKETS }), '/research/markets?q=quantum&group=0');
+test('a search that matches nothing says so, and Clear filters is wired', async () => {
+  const view = readMarketQuery(new URLSearchParams('q=quantum'));
+  let cleared = 0;
+  const markup = renderToStaticMarkup(h(MemoryRouter, null, h(DirectoryBody, {
+    markets: { status: 'ready', data: { total: 0, directory_total: 82, items: [] } }, view, onPatch: () => {}, onClear: () => { cleared += 1; },
+  })));
+  assert.match(markup, /data-testid="markets-no-match"/);
+  assert.match(markup, /No market matches “quantum”\./);
+  assert.match(markup, /Clear filters/);
+  // A successful empty directory is a different state from a search with no match.
+  const empty = renderToStaticMarkup(h(MemoryRouter, null, h(DirectoryBody, {
+    markets: { status: 'ready', data: { total: 0, directory_total: 0, items: [] } }, view, onPatch: () => {},
+  })));
+  assert.match(empty, /No markets are in the directory yet/);
+  assert.doesNotMatch(empty, /No market matches/);
+
+  // Mutation checked: Clear filters wired to nothing → no call.
+  const m = await mountContracts(h(DirectoryBody, {
+    markets: { status: 'ready', data: { total: 0, directory_total: 82, items: [] } }, view, onPatch: () => {}, onClear: () => { cleared += 1; },
+  }), '/research/markets?q=quantum');
   try {
-    // Mutation checked: `useState('')` for the query again → the URL's search is ignored and both markets show.
-    const none = byTid(m, 'markets-no-match');
-    assert.ok(none, 'the empty search is its own state');
-    assert.match(m.text(), /No market matches “quantum”\./);
-    assert.doesNotMatch(m.text(), /Robotics/);
-    await act(async () => { m.props(byTid(m, 'markets-clear-search')).onClick(); });
-    await m.flush();
-    // Mutation checked: Clear search wired to nothing → the empty state stays.
-    assert.equal(byTid(m, 'markets-no-match'), null);
-    assert.match(m.text(), /FinTech/);
-    assert.match(m.text(), /Robotics/);
+    const btn = m.nodes().find((n) => m.props(n)?.['data-testid'] === 'markets-clear-filters');
+    await act(async () => { m.props(btn).onClick(); });
+    assert.equal(cleared, 1);
   } finally { await m.unmount(); }
 });
