@@ -300,7 +300,7 @@ async function ensureSchema(env: Env): Promise<void> {
     // D663 (migration 442): the next step, when it is due, and the warm path.
     // D691 (migration 463): the Research directory fund a prospect is.
     // D1190 (migration 607): the amount in cents and its currency.
-    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT'], ['next_step', 'TEXT'], ['next_step_due', 'TEXT'], ['warm_path', 'TEXT'], ['research_fund_uid', 'TEXT'], ['amount_cents', 'INTEGER'], ['currency', "TEXT NOT NULL DEFAULT 'USD'"]] as const) {
+    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT'], ['next_step', 'TEXT'], ['next_step_due', 'TEXT'], ['warm_path', 'TEXT'], ['research_fund_uid', 'TEXT'], ['amount_cents', 'INTEGER'], ['currency', "TEXT NOT NULL DEFAULT 'USD'"], ['round_call_uid', 'TEXT']] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE raise_prospects ADD COLUMN ${col} ${decl}`).run(); }
         catch (e) { console.warn('[contacts] ALTER raise_prospects column failed (likely already applied)', col, e); }
