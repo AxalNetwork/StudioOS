@@ -79,21 +79,23 @@ test('the helpers: "1–25 of N", the page list, and the query sent', () => {
   assert.deepEqual(pageList(1, 105), [1, 2, '…', 105]);
   assert.deepEqual(pageList(50, 105), [1, '…', 49, 50, 51, '…', 105]);
   assert.deepEqual(toParams({ ...EMPTY_QUERY, hq_country: 'none', eif: true, eifo: false }),
-    { q: undefined, hq_country: 'none', focus: undefined, size_band: undefined, vintage: undefined, eif: 1, eifo: undefined, sort: 'name', limit: 25, offset: 0 });
+    { q: undefined, hq_country: 'none', focus: undefined, size_band: undefined, size_min: undefined, size_max: undefined,
+      size_currency: undefined, vintage: undefined, eif: 1, eifo: undefined, sort: 'name', limit: 25, offset: 0 });
 });
 
 test('a size is printed only in a known currency; EIF/EIFO unknown is not "no"', () => {
-  assert.deepEqual(sizeOf(ALPHA), { text: '€50M', reason: null });
+  assert.deepEqual(sizeOf(ALPHA), { text: '€50M', currency: 'EUR', reason: null });
   // Even if a number arrived for a list whose currency is not recorded, it is not printed.
-  assert.deepEqual(sizeOf({ ...ZETA, fund_size_cents: 999_000_000_00 }), { text: null, reason: UNKNOWN_CCY });
+  assert.deepEqual(sizeOf({ ...ZETA, fund_size_cents: 999_000_000_00 }), { text: null, currency: null, reason: UNKNOWN_CCY });
   assert.deepEqual(backingOf(ALPHA), { kind: 'named', named: ['EIF'] });
   assert.equal(backingOf(BETA).kind, 'neither');
   assert.equal(backingOf(ZETA).kind, 'unknown');
 });
 
-test('populated: the API\'s total, "1–25 of N", and its source list are printed', () => {
+test('populated: the API\'s total, "N fund vehicles match", and its source list are printed', () => {
   const { text } = populated();
-  assert.match(text, /1–25 of 2,616 funds/);
+  // D7166 (RFD-02): the filtered count beside the unfiltered total.
+  assert.match(text, /2,616 fund vehicles matchof 2,616 in the directory, unfiltered/);
   assert.match(text, /2,616 funds from 2 public fund lists/);
   assert.match(text, /Sources \(2\)/);
   assert.match(text, /EuroTech VC Funds \(public spreadsheet\) · 1,076 funds · as of 2026-10-04 · sizes in EUR/);
@@ -122,18 +124,20 @@ test('populated: coverage from the API, and stage "Not recorded" with its reason
   const { text } = populated();
   assert.match(text, /What the fund lists record/);
   assert.match(text, /Funds with each field filled, of 2,616/);
-  assert.match(text, /Size in euros1,001 \/ 2,616/);
+  assert.match(text, /Size in a known currency1,001 \/ 2,616/);
   assert.match(text, /3 more funds hold a size from a list whose currency is not recorded/);
   assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
 });
 
 test('populated: the filters, with counts and "not recorded" options', () => {
   const { html } = populated();
-  for (const label of ['HQ country', 'Stated focus', 'Fund size, in euros', 'Vintage']) assert.match(html, new RegExp(`>${label}<`));
+  for (const label of ['Manager HQ', 'Stated focus', 'Size · EUR only', 'Vintage']) assert.match(html, new RegExp(`>${label}<`));
   assert.match(html, /<option value="none">HQ not recorded \(29\)<\/option>/);
   assert.match(html, /<option value="none">Focus not recorded \(996\)<\/option>/);
   assert.match(html, /<option value="none">Vintage not recorded \(1,059\)<\/option>/);
-  assert.match(html, /<option value="lt25">Under €25M \(120\)<\/option>/);
+  // D7166: the size filter is from/to in one currency, on the existing size_min and size_max.
+  assert.match(html, /aria-label="Size from, in millions of EUR"/);
+  assert.match(html, /<option value="USD" title="US dollars \(USD\)">USD<\/option>/);
   assert.match(html, /EIF \(European Investment Fund\)/);
   assert.match(html, /EIFO \(Denmark’s Export and Investment Fund\)/);
 });
@@ -158,10 +162,10 @@ test('error: "Unreadable", never zero funds', () => {
 test('empty: names the search and the filters, and offers to clear them', () => {
   const data = { ...DATA, items: [], total: 0 };
   const { text } = directory({ query: { ...EMPTY_QUERY, q: 'zzz', eif: true, vintage: 'none' }, result: { loading: false, error: null, data } });
-  assert.match(text, /No fund matches “zzz” with these filters\./);
-  assert.match(text, /Vintage: not recorded×Remove filter/);
-  assert.match(text, /EIF×Remove filter/);
-  assert.match(text, /Clear all filters/);
+  assert.match(text, /No fund vehicle matches “zzz” with these 2 filters\./);
+  assert.match(text, /Vintage: not recorded×/);
+  assert.match(text, /EIF×/);
+  assert.match(text, /Clear all/);
   assert.doesNotMatch(text, /1–/);
   assert.match(text, /2,616 funds from 2 public fund lists/, 'the directory\'s own total stays printed');
 });
@@ -172,11 +176,11 @@ test('drawer: the fund\'s facts, stage and size "Not recorded" with reasons, rep
     drawer: { loading: false, error: null, data: { item: ZETA, reports: [], reports_status: 'unreadable' } },
   });
   assert.match(text, /Fund details/);
-  assert.match(text, /SizeNot recordedNot recorded: this list records no size in a known currency/);
+  assert.match(text, /Reported sizeNot recordedNot recorded: this list records no size in a known currency/);
   assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
   assert.match(text, /EIF \/ EIFONot recordedWith no LPs listed, EIF and EIFO backing is unknown, not absent\./);
   assert.match(text, /Unreadable The reports could not be read\. This is not a fund with no reports\./);
-  assert.match(text, /Add to my funds/, 'D593: the button is "Add to my funds"');
+  assert.match(text, /Save to shortlist/, 'D7166: the button is "Save to shortlist"');
   assert.match(text, /Open full profile/);
   // D1317: the drawer is the shared right-side Sheet at 480px, a bottom sheet on a phone.
   const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(FundDirectoryView, {
@@ -211,13 +215,13 @@ test('catalog profile: populated, with "Not recorded" sizes and stage, and an un
   const fund = { loading: false, error: null, status: 200, data: { item: ZETA, reports: [], reports_status: 'ok', source_boundary: 'Reported fund-size snapshots only.' } };
   const text = catalog({ fund, list: { loading: false, error: 'Unreadable', existing: null } });
   assert.match(text, /Zeta Deep Tech/);
-  assert.match(text, /SizeNot recordedNot recorded: this list records no size in a known currency/);
+  assert.match(text, /Reported sizeNot recordedNot recorded: this list records no size in a known currency/);
   assert.ok(text.includes(`StageNot recorded${STAGE_REASON}`), 'Stage reads Not recorded with its reason');
   assert.match(text, /Your list could not be read/);
-  assert.doesNotMatch(text, /Add to my funds/, 'no add while the list is unreadable: it might duplicate a row');
+  assert.doesNotMatch(text, /Save to shortlist/, 'no add while the list is unreadable: it might duplicate a row');
   const ok = catalog({ fund: { ...fund, data: { ...fund.data, item: ALPHA } }, list: { loading: false, error: null, existing: null } });
   assert.match(ok, /€50M/);
-  assert.match(ok, /Add to my funds/);
+  assert.match(ok, /Save to shortlist/);
 });
 
 test('catalog profile sits inside WorkspaceShell and reads only the Worker', () => {
