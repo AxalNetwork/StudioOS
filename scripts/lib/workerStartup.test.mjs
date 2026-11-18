@@ -1,10 +1,33 @@
 /** D5532: startup diagnostics and release gate with synthetic artifacts. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { bundleIdentity, classifyStartup, collectStartupProfiles, maxActiveMs, measureProfile } from '../check-worker-startup.mjs';
 
 const candidate = 'a'.repeat(40);
+
+test('release evidence keeps a Wrangler rejection profile from the config root when present', t => {
+  const source = readFileSync(new URL('../../.github/workflows/cloudflare-worker-deploy.yml', import.meta.url), 'utf8');
+  const step = source.split('      - name: Record release phase outcomes\n')[1].split('\n      - name:')[0];
+  const shell = step.split('        run: |\n')[1];
+  const dir = mkdtempSync(join(tmpdir(), 'release-startup-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const env = { ...process.env, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: join(dir, 'summary'), GITHUB_SHA: candidate };
+  const collect = () => execFileSync('bash', ['-e', '-c', shell], { cwd: dir, env });
+  const retained = join(dir, 'release-evidence/publish-startup.cpuprofile');
+
+  collect();
+  assert.equal(existsSync(retained), false);
+  const profileDir = join(dir, '.wrangler/tmp/startup-profile-QYG17v');
+  mkdirSync(profileDir, { recursive: true });
+  writeFileSync(join(profileDir, 'worker.cpuprofile'), 'fixture profile');
+  collect();
+  assert.equal(readFileSync(retained, 'utf8'), 'fixture profile');
+});
 
 test('the Wrangler artifact is identified by its embedded candidate and exact digest', async () => {
   const form = new FormData();

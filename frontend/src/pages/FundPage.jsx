@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { readableFund, useFundReport } from '../hooks/useFundReport';
 import { fundDraftsApi } from '../lib/api/fundDrafts.js';
 import FundDraftBand from './FundDraftBand';
+import { EditTermsCard } from './investor/FundTermsForm';
 import { fundFactsEditHref } from './admin/fundAdmin/fundAdminModel';
 import './fundPage.css';
 
@@ -28,7 +29,8 @@ export function periodIssue(period) {
  * a manager (can_manage, so `requireFundGp` passed: the GP of record on the institutional tier, or an admin)
  * gets the fund's working zones, each opened on this fund with `?fund=`; an LP gets their own commitment and
  * statements; everyone who can read the fund gets its performance (#6245, owner answer C: LPs and GPs both).
- * Editing fund facts is the admin console's dialog; a GP who is not an admin has no edit page, so it says so.
+ * An admin edits fund facts in the admin console's dialog; a GP of record who is not an admin edits the terms
+ * here (#6235), with Edit terms.
  */
 export function fundHandoffs(page, role) {
   const id = page.fund.id;
@@ -42,7 +44,7 @@ export function fundHandoffs(page, role) {
   links.push({ to: '/funds/performance', label: 'Fund performance', testid: 'link-fund-performance' });
   const edit = !page.can_manage ? null : role === 'admin'
     ? { to: fundFactsEditHref(id), label: 'Edit fund facts', testid: 'link-fund-edit-facts' }
-    : { unavailable: 'Edit fund facts: Not available. Fund facts are edited in Fund administration, which is for Axal admins.' };
+    : { action: 'Edit terms', testid: 'button-fund-edit-terms' };
   return { links, edit };
 }
 export function FundReadState({ reading }) {
@@ -56,6 +58,9 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
   const reading = supplied || resource;
   const page = !reading.loading && !reading.error && readableFund(reading.data) ? reading.data : null;
   const [download, setDownload] = useState({ busy: false, error: null });
+  // #6235: Edit terms is open, and the line after a save (the page read again).
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
   // #6252 (D6252, Q1 answer A): the newest kept brief, read for whoever can manage the fund.
   const [note, setNote] = useState({ loading: false, note: null, error: null });
   const manageId = page?.can_manage ? page.fund.id : null;
@@ -110,7 +115,10 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
         writes="Accept writes a note. It changes no fund record."
         onRun={() => fundDraftsApi.brief(page.fund.id)} onAccept={keepBrief} />}
       {page.can_manage && <FundNote reading={note} />}
-      <FundHandoffs page={page} role={role} />
+      {editing && <EditTermsCard fundId={page.fund.id} onClose={() => setEditing(false)}
+        onSaved={() => { setEditing(false); setSaved(true); reading.reload?.(); }} />}
+      {saved && !editing && <p className="fd-saved" role="status" data-testid="text-fund-terms-saved">Terms saved. The page shows them as recorded.</p>}
+      <FundHandoffs page={page} role={role} onEdit={() => { setSaved(false); setEditing(true); }} editing={editing} />
     </>}
   </WorkspaceShell></div>;
 }
@@ -125,12 +133,12 @@ function FundNote({ reading }) {
     {Array.isArray(n.sources) ? n.sources.length > 0 && <><h3>Drawn from</h3><ol className="fd-draft-sources">{n.sources.map((s) => <li key={s.n} value={s.n}>{s.label}{s.date ? ` · ${s.date}` : ''}</li>)}</ol></> : <p><b>Not recorded</b><small>The note's sources could not be read.</small></p>}
   </article>;
 }
-function FundHandoffs({ page, role }) {
+function FundHandoffs({ page, role, onEdit, editing = false }) {
   const { links, edit } = fundHandoffs(page, role);
   return <nav className="fd-actions" aria-label="Next steps for this fund">
     {links.map(link => <Link key={link.testid} to={link.to} data-testid={link.testid}>{link.label}</Link>)}
     {edit?.to && <Link to={edit.to} data-testid={edit.testid}>{edit.label}</Link>}
-    {edit?.unavailable && <span className="fd-unavailable" data-testid="text-fund-edit-unavailable">{edit.unavailable}</span>}
+    {edit?.action && <button type="button" onClick={onEdit} disabled={editing} data-testid={edit.testid}>{edit.action}</button>}
   </nav>;
 }
 // #6247: the status is drawn as a pill, as the canvas draws it (fd-page, ops-data.js); a missing one stays Not recorded.

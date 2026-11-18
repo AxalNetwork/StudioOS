@@ -97,7 +97,9 @@ test('4. the route mounts both on Prototype / MVP only, from Build\'s def; the w
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const above = moduleStatus === 'ready' && projectId && !narrativeAdmin \? fnOf\(def\.aboveRecords, slug\) : null;/);
   // D6122 (#6122): the ctx also carries the table's query, so Company's due strip can filter it.
-  assert.match(route, /: above \? above\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\) : null\}/);
+  // #6746: the module's own line is computed once (`aboveRecords`) and drawn on its own, or above the partner ranking.
+  assert.match(route, /const aboveRecords = above\?\.\(module, \{ projectId, reload: \(\) => setReload\(\(n\) => n \+ 1\), query, onQuery: setQuery, search: q \}\);/);
+  assert.match(route, /<\/> : aboveRecords\}/);
   assert.match(route, /const phoneRowOf = phone \? fnOf\(def\.phoneRows, slug\) : null;/);
   assert.match(route, /\.\.\.\(phoneRowOf \? \{ phoneRow: phoneRowOf \} : \{\}\)/);
   assert.doesNotMatch(route, /MvpSummary|mvpTable/, 'CycleRoute.jsx is a frozen hub (D5615): the imports live in defs/build.jsx');

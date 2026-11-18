@@ -61,6 +61,11 @@ const day = (v) => {
  */
 export function tickLine(item) {
   if (!item || typeof item !== 'object') return null;
+  // D6789 (#6789): an item marked Not applicable says who marked it and when.
+  if (item.not_applicable) {
+    const by = typeof item.not_applicable_by === 'string' && item.not_applicable_by.trim() ? `by ${item.not_applicable_by.trim()}` : null;
+    return ['Not applicable', by, day(item.not_applicable_at)].filter(Boolean).join(' · ');
+  }
   if (item.done) {
     const src = item.source;
     if (typeof src === 'string' && src.startsWith('From Mercury')) return src;

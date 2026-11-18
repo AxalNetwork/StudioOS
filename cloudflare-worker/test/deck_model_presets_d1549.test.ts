@@ -122,7 +122,6 @@ test('the deck preset sits below the deck\'s own picks and above my default; a p
 
 // ─────────────────────────────────────────────────────────── the routes
 
-const root = new URL('../sql/', import.meta.url);
 const scratch = mkdtempSync(join(tmpdir(), 'deck-model-presets-d1549-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
