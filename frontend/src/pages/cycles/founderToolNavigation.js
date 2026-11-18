@@ -43,6 +43,14 @@ export function moduleToolLinks(cycle, slug, user, search = '') {
     .map((tool) => ({ label: tool.label, href: doorHref(tool, search) }));
 }
 
+/**
+ * D6118 (#6118, GR-09): Partner network's module page is Partnerships, at /grow/partnerships;
+ * /grow/partner-network only forwards there. A link back to the module names the page itself.
+ */
+export const MODULE_PAGES = Object.freeze({
+  'grow/partner-network': { href: '/grow/partnerships', name: 'Partnerships' },
+});
+
 export function editorModuleLink(pathname, search = '', user) {
   if (!['admin', 'founder'].includes(user?.role)) return null;
   const tool = FOUNDER_TOOLS.filter((item) => [item.path, ...(item.aliases || [])]
@@ -50,6 +58,8 @@ export function editorModuleLink(pathname, search = '', user) {
     .sort((a, b) => b.path.length - a.path.length)[0];
   if (!tool) return null;
   const module = MODULES[tool.cycle].find((item) => item.slug === tool.module);
-  return { href: '/' + tool.cycle + '/' + tool.module + projectSearch(search),
-    label: '← ' + cycleOf(tool.cycle).name + ' › ' + module.name };
+  // D6118: a module whose page lives at another address names that page, not a forward.
+  const page = MODULE_PAGES[tool.cycle + '/' + tool.module];
+  return { href: (page?.href || '/' + tool.cycle + '/' + tool.module) + projectSearch(search),
+    label: '← ' + cycleOf(tool.cycle).name + ' › ' + (page?.name || module.name) };
 }
