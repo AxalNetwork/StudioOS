@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Introductions Curated Match Consent · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.nwi-cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.nwi-cv.nwi-dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.nwi-cv *{box-sizing:border-box}
+.nwi-cv a{color:var(--vt);text-decoration:none}
+.nwi-cv button{font-family:var(--sg);cursor:pointer}
+.nwi-cv :focus-visible,.nwi-cv .nwi-fv{outline:2px solid var(--vi);outline-offset:2px}
+.nwi-cv h1,.nwi-cv h2,.nwi-cv h3,.nwi-cv p,.nwi-cv ol,.nwi-cv ul,.nwi-cv dl,.nwi-cv dd,.nwi-cv dt{margin:0;padding:0}
+.nwi-cv ol,.nwi-cv ul{list-style:none}
+.nwi-mo{font-family:var(--mo)}
+.nwi-mu{color:var(--mu)}
+.nwi-eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.nwi-sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.nwi-sd .nwi-lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.nwi-logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.nwi-sd .nwi-grp{padding:6px 20px 4px}
+.nwi-sd nav{display:flex;flex-direction:column;gap:2px}
+.nwi-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.nwi-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.nwi-sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.nwi-mn{min-width:0;display:flex;flex-direction:column}
+.nwi-tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.nwi-srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.nwi-bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.nwi-ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.nwi-av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.nwi-sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.nwi-sp .nwi-e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.nwi-sp .nwi-vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.nwi-hdr{display:flex;flex-direction:column;gap:6px}
+.nwi-hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.nwi-hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.nwi-hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.nwi-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nwi-ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.nwi-ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nwi-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.nwi-ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.nwi-kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nwi-k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.nwi-k.nwi-att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.nwi-kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.nwi-kv.nwi-un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.nwi-ks{font-size:12px;color:var(--mu);line-height:1.45}
+.nwi-g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.nwi-c3{grid-column:span 3}
+.nwi-c4{grid-column:span 4}
+.nwi-c5{grid-column:span 5}
+.nwi-c6{grid-column:span 6}
+.nwi-c7{grid-column:span 7}
+.nwi-c8{grid-column:span 8}
+.nwi-c9{grid-column:span 9}
+.nwi-c12{grid-column:span 12}
+.nwi-cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.nwi-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nwi-ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.nwi-ch .nwi-sm{font:500 12px var(--mo);color:var(--mu)}
+.nwi-sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.nwi-cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.nwi-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.nwi-btn.nwi-p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.nwi-btn.nwi-t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.nwi-btn.nwi-ask .nwi-em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.nwi-btn[aria-disabled=true]{opacity:.6;cursor:default}
+.nwi-lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.nwi-foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.nwi-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.nwi-pl.nwi-a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nwi-pl.nwi-g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.nwi-pl.nwi-v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nwi-pl.nwi-r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nwi-nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nwi-nt.nwi-r{background:var(--negBg);border-color:var(--negE)}
+.nwi-nt.nwi-a{background:var(--amBg);border-color:var(--amE)}
+.nwi-nt.nwi-g{background:var(--posBg);border-color:var(--posE)}
+.nwi-ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nwi-nt.nwi-r .nwi-ic{background:var(--neg)}
+.nwi-nt.nwi-a .nwi-ic{background:var(--amT)}
+.nwi-nt.nwi-g .nwi-ic{background:var(--pos)}
+.nwi-nt .nwi-bt{margin-left:auto;flex:none}
+.nwi-sk{display:block;border-radius:6px;background:var(--skel)}
+.nwi-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.nwi-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.nwi-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.nwi-tbl .nwi-n{text-align:right;font-family:var(--mo)}
+.nwi-tbl td.nwi-na{color:var(--mu);font-weight:500}
+.nwi-tbl td b{font-weight:700}
+.nwi-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.nwi-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nwi-inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.nwi-dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.nwi-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.nwi-pg .nwi-pb{display:flex;gap:5px;align-items:center}
+.nwi-pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.nwi-pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.nwi-st{display:grid;gap:14px 18px}
+.nwi-st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.nwi-st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nwi-dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.nwi-sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.nwi-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.nwi-dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.nwi-dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.nwi-df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.nwi-stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.nwi-stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.nwi-stp span:first-child{border-radius:999px 0 0 999px}
+.nwi-stp span:last-child{border-radius:0 999px 999px 0}
+.nwi-stp span+span{border-left:0}
+.nwi-stp span.nwi-on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.nwi-stp span.nwi-nx{border-style:dashed}
+.nwi-tl{display:flex;flex-direction:column}
+.nwi-tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.nwi-tl li:first-child{border-top:0}
+.nwi-tl .nwi-mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.nwi-tl .nwi-mk.nwi-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.nwi-tl .nwi-mk.nwi-cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.nwi-tl .nwi-mk.nwi-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.nwi-tl .nwi-mk.nwi-no{border-style:dashed}
+.nwi-tl .nwi-w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.nwi-pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.nwi-pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.nwi-pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.nwi-ph .nwi-hrow h1{font-size:22px}
+.nwi-ph .nwi-kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.nwi-ph .nwi-k{padding:12px 13px}
+.nwi-ph .nwi-kv{font-size:22px}
+.nwi-ph .nwi-btn{min-height:44px}
+.nwi-ph .nwi-lk{min-height:44px}
+.nwi-msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.nwi-lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.nwi-lst li:first-child{border-top:0}
+.nwi-lst b{font-size:13.5px}
+.nwi-lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.nwi-bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.nwi-bar i{display:block;height:100%;background:var(--vi)}
+.nwi-toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.nwi-toast a{color:#c4b5fd!important}
+.nwi-pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.nwi-pr:first-of-type{border-top:0}
+.nwi-pr b{font-size:13px}
+.nwi-pr small{display:block;font-size:12px;color:var(--mu)}
+.nwi-grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grp:first-of-type{border-top:0}
+.nwi-step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.nwi-ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.nwi-tbl tr.nwi-cur td{background:var(--lav)}
+.nwi-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.nwi-sec h3{font-size:13.5px;font-weight:800}
+.nwi-ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.nwi-ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.nwi-ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.nwi-k.nwi-bad{border-color:var(--negE)}
+.nwi-tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+.nwi-lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+/* ---- NWI addendum (#6256): additions to the approved Network workspace look ---- */
+.nwi-cv{text-align:left}
+.nwi-cv table{border-spacing:0}
+.nwi-st.nwi-tx dd{font:700 14px var(--sg);letter-spacing:0;line-height:1.3}
+.nwi-sh.nwi-ro{grid-template-columns:196px minmax(0,1fr) 360px}
+.nwi-sd .nwi-sep{height:1px;background:var(--hair);margin:8px 16px}
+.nwi-bk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-ow{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.nwi-s.nwi-ur{color:var(--neg)}
+.nwi-s.nwi-rf{color:var(--ink)}
+.nwi-s b{font:800 12px var(--mo)}
+.nwi-cold{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nwi-vd{text-decoration:line-through;color:var(--mu)}
+.nwi-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.nwi-rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.nwi-rh b{display:flex;align-items:center;gap:8px;font-size:14px}
+.nwi-rh .nwi-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.nwi-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.nwi-q{align-self:flex-end;max-width:88%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.nwi-an{padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.nwi-src{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.nwi-src span::before{content:"↳ ";color:var(--vt)}
+.nwi-draft{border:1.5px dashed var(--lavE);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.nwi-draft p.nwi-tx{font-size:12.5px;line-height:1.55;white-space:normal}
+.nwi-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 11.5px var(--mo);color:var(--mu)}
+.nwi-ent{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:600 12.5px var(--sg);color:var(--ink)}
+.nwi-ent[aria-disabled=true]{color:var(--mu);border-style:dashed}
+.nwi-rin{margin-top:auto;padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px}
+.nwi-rin span{flex:1;display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px}
+.nwi-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px;flex-wrap:wrap}
+.nwi-line b.nwi-mo{font-size:14px}
+.nwi-grh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grh:first-child{border-top:0;padding-top:0}
+.nwi-grh h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.nwi-mc{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.nwi-mc .nwi-mh{display:flex;gap:10px;align-items:center}
+.nwi-mc .nwi-mh>div{flex:1;min-width:0}
+.nwi-mc small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rs{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink)}
+.nwi-rs span::before{content:"· ";color:var(--mu)}
+.nwi-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.nwi-strip{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);flex-wrap:wrap}
+.nwi-strip .nwi-it{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font-size:12.5px}
+.nwi-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.nwi-f{display:flex;flex-direction:column;gap:5px}
+.nwi-f label,.nwi-f .nwi-lb{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-in{display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink)}
+.nwi-in.nwi-hint{color:var(--mu)}
+.nwi-ta{min-height:76px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.nwi-cnt{align-self:flex-end;font:500 11px var(--mo);color:var(--mu)}
+.nwi-panel{background:var(--card);border:1px solid var(--hair);border-radius:14px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.nwi-panel .nwi-dh{padding:16px 20px 12px}
+.nwi-panel .nwi-dc{padding:14px 20px}
+.nwi-panel .nwi-df{padding:12px 20px}
+.nwi-pick{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.nwi-pick.nwi-on{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi);background:var(--lav)}
+.nwi-pick small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px}
+.nwi-rv dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-bn{display:flex;align-items:center;gap:10px;padding:10px 30px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.nwi-bn.nwi-ro{background:#334155;color:#fff}
+.nwi-bn.nwi-sup{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.nwi-bn b{font-weight:800}
+.nwi-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px;align-self:flex-start}
+.nwi-cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.nwi-cmp dl{display:grid;grid-template-columns:80px minmax(0,1fr);gap:4px 10px}
+.nwi-cmp dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-src2{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.nwi-tile b{font:700 22px var(--mo)}
+.nwi-ph.nwi-fx{height:844px;overflow:hidden}
+.nwi-ph .nwi-pbd{flex:1;min-height:0}
+.nwi-stk{flex:none;display:flex;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.nwi-stk .nwi-btn{flex:1;min-height:44px;font-size:14px}
+.nwi-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.nwi-pc .nwi-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nwi-pc small{font-size:12px;color:var(--mu)}
+.nwi-tab{width:768px;display:flex;flex-direction:column;min-height:1024px;position:relative}
+.nwi-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.nwi-doc h2{font-size:17px;font-weight:800}
+.nwi-doc h3{font-size:13.5px;font-weight:800;margin-bottom:6px}
+.nwi-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.nwi-doc .nwi-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.nwi-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.nwi-crop{padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:16px}
+.nwi-sheetc{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:640px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.nwi-lst small{display:block}
+.nwi-lst li>div{min-width:0}
+.nwi-cv td,.nwi-cv th,.nwi-cv dd,.nwi-cv li,.nwi-cv p,.nwi-cv h1,.nwi-cv h2,.nwi-cv h3{color:inherit}
+.nwi-tbl td{color:var(--ink)}
+.nwi-tbl td.nwi-mo{white-space:nowrap}
+.nwi-crop,.nwi-doc{box-sizing:border-box}
+/* ---- NIC (#7064) curated match consent, credits and private terms: additions to the NWI look ---- */
+.nwi-cv code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px;border:1px solid var(--hair)}
+.nic-ann{display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:0;border:1px dashed #a78bfa;border-radius:10px;background:var(--lav);font-size:12px;line-height:1.45;color:var(--ink)}
+.nic-ann>div{padding:8px 12px;border-left:1px dashed var(--lavE);min-width:0}
+.nic-ann>div:first-child{border-left:0}
+.nic-ann span{display:block;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);margin-bottom:2px}
+.nic-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.nic-ps{font-size:11.5px;align-self:flex-start}
+.nic-ps.nic-cl{border-style:dashed}
+.nic-ps.nic-made{background:var(--pos);color:#fff;border-color:var(--pos)}
+.nwi-dk .nic-ps.nic-made{color:#0b1220}
+.nwi-cv .nic-cr{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;padding:8px 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font-size:12.5px}
+.nic-cr dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nic-sd{display:inline-flex;align-items:center;gap:5px;font:600 12.5px var(--sg);color:var(--mu)}
+.nic-sd.nwi-ok{color:var(--pos)}
+.nic-sd.nwi-no{color:var(--neg)}
+.nic-sd.nwi-nr{color:var(--mu);font-style:italic}
+.nic-sd .nwi-mo{font-weight:500;font-size:12px}
+.nic-mc{background:var(--card)}
+.nic-mc.nic-cur{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi)}
+.nic-mc .nwi-cf{flex-wrap:wrap}
+.nic-acc{border-color:var(--vi)!important;color:var(--vt)!important}
+.nic-acc[aria-disabled=true]{border-color:var(--hair)!important;color:var(--mu)!important}
+.nic-pref{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.45}
+.nic-pref>span:nth-child(2){flex:1;min-width:0}
+.nic-on{color:var(--pos);font-size:14px}
+.nic-off{color:var(--mu);font-size:14px}
+.nic-st{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.7}
+.nic-cost{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:10px 12px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav)}
+.nic-cost>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.nic-cost b{font-size:13.5px}
+.nic-cost small{font-size:12px;color:var(--mu)}
+.nic-rcpt{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--posE);border-radius:10px;background:var(--posBg)}
+.nic-rcpt b{font-size:13.5px}
+.nic-rcpt small{font-size:12px;color:var(--mu)}
+.nwi-cv .nic-why{display:flex;flex-direction:column;gap:3px;font-size:12.5px}
+.nic-why li::before{content:"· ";color:var(--mu)}
+.nic-sheet .nwi-dc{gap:12px}
+.nic-sheet .nwi-sec{gap:6px}
+.nic-mh2{display:flex;gap:10px;align-items:center}
+.nic-mh2 small{display:block;font-size:12px;color:var(--mu)}
+.nic-fold{padding:12px 18px}
+.nic-cl2{background:var(--card)}
+.nic-kb{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#18181b;color:#fff;font:800 10.5px var(--mo);margin:0 4px;flex:none;vertical-align:middle}
+.nic-fv{outline:2px solid var(--vi);outline-offset:2px}
+.nic-ul{list-style:disc!important;padding-left:18px!important;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.nwi-crop .nwi-g>.nwi-cd{align-self:stretch}
+.nic-sheet .nwi-df .nwi-acts{flex-wrap:nowrap;flex:none}
+.nwi-cv .nwi-tbl th{color:var(--mu)}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "NIC01", "options": ["NIC01", "NIC02", "NIC03", "NIC04", "NIC05", "NIC06", "NIC07", "NIC08", "NIC09", "NIC10", "NIC11", "NIC12A", "NIC12B", "NIC12C", "NIC12D", "NIC13", "NIC13B", "NIC14", "NICH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'NIC01';
+    /* NW10 dark boards (NIC13*) draw on the dark tokens; everything else is light. */
+    const dark = B.indexOf('NIC13') === 0;
+    const CV = 'cv' + (dark ? ' dk' : '');
+    const J = (a) => a.join('');
+    const mo = (s) => `<span class="mo">${s}</span>`;
+
+    /* ---------- annotations (not product copy) ---------- */
+    const TB = (t) => `<span class="bk" title="Needs backend work">◇ ${t}</span>`;
+    const TO = (t) => `<span class="ow" title="Owner decision">⚑ ${t}</span>`;
+    const LBL = (t) => `<span class="lbl">${t}</span>`;
+    /* role · entry point · next action · data dependency, per frame */
+    const ANN = (r, e, n, d) => `<div class="nic-ann" role="note" aria-label="Board annotation"><div><span>Role</span>${r}</div><div><span>Entry point</span>${e}</div><div><span>Next action</span>${n}</div><div><span>Data</span>${d}</div></div>`;
+
+    /* ---------- NW5 / D5129 state words: glyph + word, never colour alone ---------- */
+    const NR = (t) => `<span class="s">— Not recorded${t ? ' · ' + t : ''}</span>`;
+    const UR = (t) => `<span class="s ur">? Unavailable${t ? ' · ' + t : ''}</span>`;
+    const RF = (t) => `<span class="s rf">⊘ Refused${t ? ' · ' + t : ''}</span>`;
+    const E = `<span class="em" aria-hidden="true">E</span>`;
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- sample data: fictional; every figure agrees on every board ----------
+       Now Mon 16 Nov 2026 13:52; matches and credits read 13:48. Viewer [Morgan Vale], partner at [Harbor Lane Capital] (investor licence, free tier: 3 credits a month).
+       Credit ledger: +1 referral 2026-10-14 · −1 allowance 2026-10-28 ([Priya Nair], October) · +3 monthly grant 2026-11-01 · +1 referral 2026-11-02
+       · −1 allowance 2026-11-10 ([Hugo Brandt]) · −1 allowance 2026-11-13 ([Rhea Moss]).  Balance 3 = 1 of November's 3 + 2 earned by referral.
+       Accepting [Ari Lane] spends the allowance credit first: balance 2 = 0 of 3 + 2.
+       Eight curated matches: 4 awaiting your decision ([Ari Lane], [Jules Avery], [Ada Okafor], [Tom Becker]), 1 waiting on them ([Hugo Brandt]),
+       2 agreed or made ([Rhea Moss] both agreed, [Priya Nair] made 2026-11-11), 1 closed ([Lena Sato] declined 2026-11-08). Matches last 14 days. */
+    const CRED = `<b class="mo">3</b> credits available: <b class="mo">1</b> of this month’s <b class="mo">3</b> (November 2026) + <b class="mo">2</b> earned by referral`;
+    const CRED2 = `<b class="mo">2</b> credits available: <b class="mo">0</b> of this month’s <b class="mo">3</b> (November 2026) + <b class="mo">2</b> earned by referral`;
+    const CRED0 = `<b class="mo">0</b> credits available: <b class="mo">0</b> of this month’s <b class="mo">3</b> (November 2026) + <b class="mo">0</b> earned by referral`;
+    const M = {
+      ari: { k: 'ari', i: 'AL', n: '[Ari Lane]', s: '[Ari]', w: 'Founder, [Tidepool Labs] · Lisbon · on Axal', st: 'theirs', me: ['wait'], th: ['ok', '2026-11-12'], ex: '2026-11-23', nx: 'You act next', open: 1, why: ['Climate hardware at pre-seed: two of your thesis filters', 'Raising $400k–$600k, inside your cheque range', 'You both follow [Ada Okafor]'] },
+      jul: { k: 'jul', i: 'JA', n: '[Jules Avery]', s: '[Jules]', w: 'Founder, [Loomcraft] · Porto · on Axal', st: 'none', me: ['wait'], th: ['wait'], ex: '2026-11-27', nx: 'Either of you can answer first', open: 1 },
+      ada: { k: 'ada', i: 'AO', n: '[Ada Okafor]', s: '[Ada]', w: 'Advisor · on Axal · curated by Axal', st: 'nr', me: ['wait'], th: ['nr'], ex: '2026-11-25', nx: 'You act next · [Ada] has not been asked', open: 1 },
+      tom: { k: 'tom', i: 'TB', n: '[Tom Becker]', s: '[Tom]', w: 'Operating partner, [Northstar Capital] · on Axal', st: 'none', me: ['wait'], th: ['wait'], ex: '2026-11-16 14:00', exl: '◷ expires today 14:00', nx: 'Either of you can answer first', open: 1 },
+      hug: { k: 'hug', i: 'HB', n: '[Hugo Brandt]', s: '[Hugo]', w: 'Investor, [Northstar Capital] · on Axal', st: 'mine', me: ['ok', '2026-11-10'], th: ['wait'], ex: '2026-11-24', nx: 'Waiting on [Hugo] · nothing for you to do' },
+      rhe: { k: 'rhe', i: 'RM', n: '[Rhea Moss]', s: '[Rhea]', w: 'Founder, [Elm Studio] · on Axal', st: 'both', me: ['ok', '2026-11-13'], th: ['ok', '2026-11-14'], nx: 'Made: Not recorded · record it once you have met' },
+      pri: { k: 'pri', i: 'PN', n: '[Priya Nair]', s: '[Priya]', w: 'Head of partnerships, [Kelp Bio] · on Axal', st: 'made', me: ['ok', '2026-10-28'], th: ['ok', '2026-11-05'], nx: 'Outcome: Not recorded' },
+      len: { k: 'len', i: 'LS', n: '[Lena Sato]', s: '[Lena]', w: 'Founder, [Quill Analytics] · on Axal', st: 'closed', me: ['closed'], th: ['no', '2026-11-08'], nx: 'Closed · nobody acts' }
+    };
+
+    /* pair state: one glyph + word per state */
+    const PS = (st, m) => ({
+      none: `<span class="pl a nic-ps">○ Neither has answered</span>`,
+      theirs: `<span class="pl a nic-ps">! ${m ? m.s : 'They'} agreed · your decision</span>`,
+      mine: `<span class="pl v nic-ps">◷ You agreed · waiting on ${m ? m.s : 'them'}</span>`,
+      both: `<span class="pl g nic-ps">✓✓ Both agreed</span>`,
+      made: `<span class="pl g nic-ps nic-made">● Made ${mo('2026-11-11')}</span>`,
+      closed: `<span class="pl nic-ps nic-cl">✕ Closed · declined</span>`,
+      expired: `<span class="pl nic-ps nic-cl">⌛ Expired</span>`,
+      nr: `<span class="pl a nic-ps">◌ Your decision · other side not asked</span>`
+    })[st];
+    /* one side's recorded answer */
+    const SIDE = (a) => ({
+      ok: `<span class="nic-sd ok">✓ Agreed ${a[1] ? mo(a[1]) : ''}</span>`,
+      wait: `<span class="nic-sd">○ Not answered</span>`,
+      no: `<span class="nic-sd no">✕ Declined ${a[1] ? mo(a[1]) : ''}</span>`,
+      exp: `<span class="nic-sd">⌛ Expired, no answer</span>`,
+      nr: `<span class="nic-sd nr">— Not recorded · not asked</span>`,
+      closed: `<span class="nic-sd">○ Not answered · closed</span>`
+    })[a[0]];
+    const CR = (m, me) => `<dl class="nic-cr"><dt>${me || 'You'}</dt><dd>${SIDE(m.me)}</dd><dt>${m.s}</dt><dd>${SIDE(m.th)}</dd></dl>`;
+    const ACC = (dis) => `<button type="button" class="btn nic-acc"${dis ? ' aria-disabled="true"' : ''}>Accept · 1 credit</button>`;
+    const DEC = `<button type="button" class="btn">Decline · free</button>`;
+
+    const mcard = (m, o) => {
+      o = o || {};
+      const acts = m.open ? `${DEC}${ACC(o.noacc)}` : `<button type="button" class="btn t">Open</button>`;
+      return `<article class="mc nic-mc${o.cur ? ' nic-cur' : ''}" aria-labelledby="m-${m.k}"><div class="mh"><span class="av">${m.i}</span><div><b id="m-${m.k}">${m.n}</b><small>${m.w}</small></div></div>
+      <div class="nic-row">${PS(m.st, m)}${m.ex ? `<span class="foot mo">${m.exl || 'expires ' + m.ex}</span>` : ''}</div>${CR(m)}
+      <div class="cf" style="padding-top:8px"><span class="foot"><b>${m.nx}</b></span><div class="acts">${o.acts !== undefined ? o.acts : acts}</div></div></article>`;
+    };
+
+    /* ---------- shell: company/project switcher top-left, sidebar = held licences, Account menu holds Portfolio, Companies, Licences ---------- */
+    const NAVS = {
+      i: ['Home', 'Deals', 'Portfolio', 'Axal VC Fund', 'Network', 'Research', '|', 'Trust', 'Firm Settings'],
+      f: ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', '|', 'Trust', 'Company Settings'],
+      a: ['Home', 'Network', 'Research', '|', 'Admin console']
+    };
+    const SW = { i: '[Harbor Lane Capital]', f: '[Tidepool Labs]', a: '[Axal HQ]' };
+    const GRP = { i: 'Investor', f: 'Founder', a: 'HQ' };
+    const INI = { i: 'MV', f: 'AL', a: 'HQ' };
+    const side = (r) => `<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company or project: ${SW[r]}">${SW[r]} <span aria-hidden="true">▾</span></button><span class="eye grp">${GRP[r]}</span><nav aria-label="${GRP[r]}">${J(NAVS[r].map((t) => t === '|' ? '<div class="sep"></div>' : `<a href="#"${t === 'Network' ? ' aria-current="page"' : ''}>${t}</a>`))}</nav></aside>`;
+    const top = (r) => `<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">${bell}</button><button type="button" class="av" style="border:0" aria-label="Account menu: Portfolio, Companies, Licences">${INI[r]}</button></div></div>`;
+    const RAILC = (t) => `<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">${t || 'Ask about introductions'}</span></aside>`;
+    const railOpen = (c, ph) => `<aside class="rail" aria-label="Eadwyn"><div class="rh"><b><span class="e" aria-hidden="true">E</span>Eadwyn</b><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">→</button></div><div class="rb">${c}</div><div class="rin"><span>${ph || 'Ask about your network…'}</span><button type="button" class="btn">Ask</button></div></aside>`;
+    const shell = (r, body, o) => {
+      o = o || {};
+      const h = o.h || 900;
+      return `<div class="${CV}" style="width:1440px;min-height:${h}px">${o.banner || ''}<div class="sh${o.rail ? ' ro' : ''}" style="min-height:${h}px">${side(r)}<div class="mn">${top(r)}<main class="bd">${body}</main></div>${o.rail ? railOpen(o.rail, o.railPh) : RAILC(o.railT)}</div>${o.overlay ? '<div class="dim" aria-hidden="true"></div>' + o.overlay : ''}</div>`;
+    };
+    const TABS = (cur) => `<nav class="ptabs" aria-label="Network">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<a href="#"${t === cur ? ' aria-current="page"' : ''}>${t}</a>`))}</nav>`;
+    const HEAD = (o) => `${o.crumb ? `<nav aria-label="Breadcrumb" class="foot">${o.crumb}</nav>` : ''}<header class="hdr"><span class="eye">${o.eye || 'Network · Relationship intelligence'}</span><div class="hrow"><div><h1>${o.h1 || 'Your network'}</h1><p>${o.sub || 'Which ties need a touch, which reminders are due, and which introductions are moving.'}</p></div><div class="acts">${o.acts !== undefined ? o.acts : `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn p">Request introduction</button>`}</div></div></header>${o.tab === false ? '' : TABS(o.tab || 'Overview')}`;
+    const crop = (w, body) => `<div class="${CV} crop" style="width:${w}px">${body}</div>`;
+    const stcard = (tag, h, body, cls) => `<section class="cd${cls ? ' ' + cls : ''}"><span class="tag">${tag}</span><div class="ch"><h2>${h}</h2></div>${body}</section>`;
+    const phTop = (t, back) => `<div class="pt"><button type="button" class="pi" aria-label="${back ? 'Back' : 'Open menu'}">${back ? '‹' : '☰'}</button><b style="font-size:15px">${t}</b><div style="display:flex"><button type="button" class="pi" aria-label="Ask Eadwyn"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)">E</span></button><button type="button" class="pi" aria-label="Notifications">${bell}</button></div></div>`;
+    const phone = (t, body, stk, o) => `<div class="${CV} ph${stk ? ' fx' : ''}" style="width:390px;min-height:${(o && o.h) || 844}px">${phTop(t, o && o.back)}<main class="pbd" style="overflow:hidden">${body}</main>${stk ? `<div class="stk">${stk}</div>` : ''}</div>`;
+    const MSEL = (cur) => `<label class="eye" for="ms">Section</label><select id="ms" class="msel" aria-label="Network section">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<option${t === cur ? ' selected="selected"' : ''}>${t}</option>`))}</select>`;
+
+    /* ---------- shared pieces of the curated-match section ---------- */
+    const CREDLINE = (o) => {
+      o = o || {};
+      return `<div class="line nic-cl2"><span>${o.c || CRED}</span><span class="acts"><span class="foot">${o.at || 'read 13:48'}</span><button type="button" class="btn t">↻ Refresh credits</button></span></div>`;
+    };
+    const PREFLINE = `<div class="nic-pref"><span class="nic-on" aria-hidden="true">●</span><span><b>Your matching preference: On.</b> Axal may propose you to members who also have it on. It is not agreement to any one introduction.</span><a href="#" class="btn t">Change in Settings →</a></div>`;
+    const SEG = (cur) => `<div class="seg" role="radiogroup" aria-label="Curated matches">${J([['Awaiting your decision · 4', 'a'], ['Waiting on them · 1', 'w'], ['Agreed or made · 2', 'm'], ['Closed · 1', 'c'], ['All · 8', 'all']].map((s) => `<button type="button" role="radio" aria-checked="${s[1] === (cur || 'a')}">${s[0]}</button>`))}</div>`;
+    const PIPE = (ms) => `<table class="tbl"><thead><tr><th scope="col">Match</th><th scope="col">Where it stands</th><th scope="col">You</th><th scope="col">Them</th><th scope="col">Made · outcome</th><th scope="col"><span class="sr">Open</span></th></tr></thead><tbody>
+      ${J(ms.map((m) => `<tr><td><b>${m.n}</b><small>${m.w}</small></td><td>${PS(m.st, m)}</td><td>${SIDE(m.me)}</td><td>${SIDE(m.th)}</td><td>${m.st === 'made' ? `Made ${mo('2026-11-11')}<small>Outcome: — Not recorded</small>` : m.st === 'both' ? '<span class="s">— Not recorded</span><small>Both agreed is not Made</small>' : '<span class="s">○ Not applicable</span>'}</td><td><a class="btn t" href="#">Open</a></td></tr>`))}</tbody></table>`;
+    const MATCHSEC = (o) => {
+      o = o || {};
+      return `<section class="cd" aria-labelledby="cm"><div class="ch"><h2 id="cm">Curated matches</h2><span class="sm">8 matches · 4 awaiting your decision</span></div>
+      ${CREDLINE()}${PREFLINE}
+      <div class="tools">${SEG()}<span style="margin-left:auto" class="acts"><button type="button" class="btn">Find new matches</button>${TO('Q2 · A, a separate search')}</span></div>
+      <div class="g2">${mcard(M.ari, { cur: o.cur })}${mcard(M.jul)}${mcard(M.ada)}${mcard(M.tom)}</div>
+      <div class="grh"><h3>Everything else · 4</h3><span class="foot">waiting, agreed, made and closed: no paid action</span></div>
+      ${PIPE([M.hug, M.rhe, M.pri, M.len])}
+      <div class="cf"><span class="foot">Accept uses 1 credit · Decline is free and sends nothing · opening this page, reading the balance or retrying a read creates no matches and no notifications ${TB('mutation-free list read · #7064')}</span></div></section>`;
+    };
+    const OTHERS = `<section class="cd nic-fold" aria-labelledby="ot"><div class="ch"><h2 id="ot">From your team · 5 &nbsp;·&nbsp; Your asks · 1</h2><span class="sm">unchanged · see NW3 on the approved investor canvas</span></div></section>`;
+    const INTRO = (o) => `${HEAD({ tab: 'Introductions', h1: 'Introductions', sub: 'Requests between teammates, matches Axal curates for you, and the asks your tier allows. Three sources, never one count.' })}${OTHERS}${MATCHSEC(o)}`;
+
+    /* ---------- the decision Sheet ---------- */
+    const SHEET = (o) => {
+      o = o || {};
+      const m = o.m || M.ari;
+      const ph = o.ph;
+      const why = m.why ? `<ul class="nic-why">${J(m.why.map((w) => `<li>${w}</li>`))}</ul>` : `<p class="sub">${NR('the engine gave no reasons')}</p>`;
+      const body = `${o.top || ''}<div class="nic-row">${o.ps || PS(m.st, m)}<span class="foot mo">${o.exl || 'expires ' + m.ex + ' · 7 days'}</span></div>
+        <div class="sec"><h3>Who acts next</h3><p class="sub">${o.next || `<b>You.</b> [Ari] agreed on ${mo('2026-11-12')}. If you accept, you have both agreed.`}</p></div>
+        <div class="sec"><h3>Recorded answers</h3>${CR(m)}<p class="foot">Each side’s own answer to this match, and when. Nothing about [Ari]’s scores or reasons is shown.</p></div>
+        ${o.nowhy ? '' : `<div class="sec"><h3>Why Axal proposed this</h3>${why}</div>`}
+        <div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Being in matching is not agreeing to this introduction.</b> Your matching preference lets Axal propose you. Accept is your agreement to meet ${m.s}, and ${m.s}’s is recorded separately.</div></div>
+        ${o.cost !== undefined ? o.cost : `<div class="nic-cost"><div><span class="eye">Cost</span><b>Accept uses <span class="mo">1</span> credit</b><small>You have <span class="mo">3</span> (1 of this month’s 3 + 2 by referral). After: <span class="mo">2</span>.</small></div><div><span class="eye">Decline</span><b>Free</b><small>${m.s} is not notified.</small></div></div>`}
+        ${o.extra || ''}`;
+      const foot = o.foot !== undefined ? o.foot : `<span class="foot">Esc closes · focus returns to the card</span><div class="acts"><button type="button" class="btn">Decline · free</button><button type="button" class="btn p">Accept · 1 credit</button></div>`;
+      if (ph) return body;
+      return `<aside class="sheet-r nic-sheet" role="dialog" aria-modal="true" aria-labelledby="sh-${m.k}"><div class="dh"><div style="display:flex;gap:12px;align-items:center"><span class="av" style="width:40px;height:40px;font-size:12px">${m.i}</span><div><span class="eye">Curated match</span><h2 id="sh-${m.k}">${m.n}</h2><p class="sub">${m.w}</p></div></div><button type="button" class="ib" aria-label="Close match">✕</button></div>
+      <div class="dc" style="overflow:hidden">${body}</div><div class="df">${foot}</div></aside>`;
+    };
+    /* a sheet-shaped panel for state grids */
+    const spanel = (tag, m, body, foot, w) => `<div class="panel" role="dialog" aria-labelledby="sp-${tag.length}-${m.k}" style="width:${w || 440}px"><div class="dh"><div style="display:flex;gap:10px;align-items:center"><span class="av">${m.i}</span><div><span class="eye">${tag}</span><h2 id="sp-${tag.length}-${m.k}">${m.n}</h2></div></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="dc">${body}</div><div class="df">${foot}</div></div>`;
+
+    /* Eadwyn: a first-message draft once both agreed, cost quoted first */
+    const RAIL_DRAFT = `<span class="eye">Suggested · both agreed</span>
+      <div class="an"><b>[Rhea Moss] and you have both agreed.</b><span>Both answers are recorded (yours ${mo('2026-11-13')}, hers ${mo('2026-11-14')}). Made is not recorded yet.</span>
+      <div class="cost"><span>Cost, quoted before drafting</span><b>[800] tokens</b></div>
+      <div class="acts"><button type="button" class="btn">Draft a first message</button><button type="button" class="btn t">Not now</button></div>
+      <span class="foot">Nothing is drafted until you choose.</span></div>
+      <p class="foot">Eadwyn never accepts, declines, spends a credit, records Made or sends.</p>`;
+
+    let html = '';
+
+    /* ===== NW3-intro-match / eligible · page ===== */
+    if (B === 'NIC01') html = shell('i', INTRO({}), { h: 1320, railT: 'Ask about introductions' });
+
+    /* ===== NW3-intro-match / eligible · decision Sheet ===== */
+    else if (B === 'NIC02') html = shell('i', INTRO({ cur: 1 }), { h: 1320, overlay: SHEET({}) });
+
+    /* ===== NW3-intro-match / waiting · the seven consent states ===== */
+    else if (B === 'NIC03') {
+      const cell = (tag, m, nx, acts, extra) => `<section class="cd c3"><span class="tag">${tag}</span><div class="mh nic-mh2"><span class="av">${m.i}</span><div><b>${m.n}</b><small>${m.w}</small></div></div>${PS(m.st, m)}${CR(m)}<p class="sub"><b>Next:</b> ${nx}</p>${extra || ''}<div class="acts">${acts}</div></section>`;
+      html = crop(1400, `${ANN('Investor [Morgan Vale]; the same words on every licence (NIC10)', 'Introductions › Curated matches, a card or its Sheet', 'Accept · 1 credit or Decline · free while it is open; otherwise Open', '<code>GET /api/introductions/propositions</code>: status, responded_at, counterpart_status, counterpart_responded_at, expires_at')}<div class="g">
+      ${cell('Unanswered', M.jul, 'either of you can answer first.', `${DEC}${ACC()}`)}
+      ${cell('Your agreement only', M.hug, 'waiting on [Hugo]. You have spent 1 credit; nothing else to do.', '<button type="button" class="btn t">Open</button>', `<p class="foot">Expires ${mo('2026-11-24')} if [Hugo] does not answer. ${TO('Q3 · A, the credit is not returned')}</p>`)}
+      ${cell('Other agreement only', M.ari, 'you. Accepting makes it Both agreed.', `${DEC}${ACC()}`)}
+      ${cell('Both agreed', M.rhe, 'both responses were received. Made is not recorded yet.', '<button type="button" class="btn">Record as made…</button>')}
+      ${cell('Counterpart answer not recorded', M.ada, 'you. Axal curated this by hand, so no request was put to [Ada]: her answer is Not recorded, not “not answered”.', `${DEC}${ACC()}`)}
+      ${cell('Closed after decline', M.len, 'nobody. A declined pair is not asked again, and no credit can be spent on it.', '<button type="button" class="btn t">Open</button>', `<p class="foot">Your own row on main is still pending: Accept would charge. ${TB('closed-pair check at charge time · #7064')}</p>`)}
+      ${cell('Expired while the Sheet was open', { ...M.tom, st: 'expired', me: ['exp'], th: ['exp'] }, 'nobody. Accept is gone; the attempt at 14:03 used 0 credits (NIC04).', '<button type="button" class="btn t">Close</button>')}
+      ${cell('Made, outcome separate', M.pri, 'record an outcome when there is one.', '<button type="button" class="btn">Add outcome…</button>', `<p class="foot">Made ${mo('2026-11-11')} was recorded by you. Outcome: ${NR()}</p>`)}</div>
+      <p class="foot">${LBL('State words')} ○ Neither has answered · ! They agreed, your decision · ◷ You agreed, waiting · ✓✓ Both agreed · ● Made · ✕ Closed · ⌛ Expired · — Not recorded. Shape and word carry the state; colour only repeats it. Both agreed means both responses were received; only a separately recorded completion shows Made.</p>`);
+    }
+
+    /* ===== NW3-intro-match / closed · terminal pair and the stale attempt ===== */
+    else if (B === 'NIC04') {
+      const tomX = { ...M.tom, st: 'expired', me: ['exp'], th: ['exp'] };
+      html = crop(1400, `${ANN('Investor [Morgan Vale]', 'The Sheet left open past 14:00, or opened from an old notification', 'Close; or Find new matches (a separate search)', 'accept answer (409 <code>already_responded</code> + status) and <code>GET /api/introductions/credits/history</code> for the spend check')}<div style="display:flex;gap:20px;align-items:flex-start">
+      ${spanel('Expired while open · 14:03', tomX, `${PS('expired')}<div class="nt a" role="alert"><span class="ic" aria-hidden="true">⌛</span><div><b>Not accepted: this match expired at 14:00</b> while the Sheet was open. Accept is gone.</div></div>
+        <div class="nic-rcpt"><span class="eye">Your credits</span><b><span class="mo">0</span> credits used by this attempt</b><small>Confirmed 14:03 from your credit history: no spend recorded for this match. Balance still <span class="mo">3</span>.</small></div>${CR(tomX)}`, `<span class="foot">Focus moved to the message</span><button type="button" class="btn p">Close</button>`)}
+      ${spanel('Closed · the other side declined', M.len, `${PS('closed')}<div class="nt"><span class="ic" aria-hidden="true">✕</span><div><b>Closed.</b> [Lena] declined on ${mo('2026-11-08')}. A declined pair is not asked again, so there is nothing to accept.</div></div>${CR(M.len)}<p class="sub">Paid acceptance is hidden on a closed pair. Decline is not needed either.</p><p class="foot">${TB('refuse a charge when the pair is closed · #7064')}</p>`, `<span></span><button type="button" class="btn p">Close</button>`)}
+      ${spanel('Stale attempt · checking', tomX, `${PS('expired')}<div class="nt"><span class="ic" aria-hidden="true">◷</span><div role="status"><b>Checking whether a credit was used…</b> Accept was refused because the match had closed. We are reading your credit history before saying anything about the balance.</div></div><span class="sk" style="width:70%;height:10px" aria-hidden="true"></span><p class="sub">Until the check finishes the balance reads <b>Provisional</b>, never a guessed number.</p>`, `<span></span><button type="button" class="btn" aria-disabled="true">Close</button>`)}</div>
+      <p class="foot">${LBL('On main')} <code>POST …/accept</code> spends only while your own row is <code>pending</code>; a terminal row answers 409 <code>already_responded</code> with its status and spends nothing. It does not check <code>expires_at</code> (expiry is applied only by a list read) or the other side’s answer. ${TB('charge-time eligibility: own row, expiry, other side, both opt-ins · #7064')}</p>`);
+    }
+
+    /* ===== NW7 · balance recovery ===== */
+    else if (B === 'NIC05') html = crop(1400, `${ANN('Any licence holding curated matches', 'Curated matches header; Sheet cost box', 'Refresh credits (a balance read only)', '<code>GET /api/introductions/credits</code>: allowance_remaining, referral_remaining, balance')}<div class="g">
+      ${stcard('Value · read 13:48', 'Introduction credits', `${CREDLINE()}<p class="sub">Accept · 1 credit is on. The allowance is spent first, then referral credits.</p>`, 'c4')}
+      ${stcard('Refreshing', 'Introduction credits', `<div class="line"><span><b class="mo">3</b> as of 13:48 <span class="nic-st">◷ Stale · 4 min</span></span><span class="foot" role="status">Reading your balance…</span></div><p class="sub">Accept waits for the new balance. Decline stays free and available.</p><div class="acts">${DEC}${ACC(1)}</div>`, 'c4')}
+      ${stcard('Zero · read just now', 'Introduction credits', `<div class="line"><span>${CRED0}</span></div><p class="sub">No credits are available. December’s <b class="mo">3</b> arrive ${mo('2026-12-01')}; more come by referral.</p><div class="acts">${DEC}${ACC(1)}<a class="btn t" href="#">Referrals →</a></div><p class="foot">0 is a measured value here, read at 13:58.</p>`, 'c4')}
+      ${stcard('Unknown · Not recorded', 'Introduction credits', `<div class="line"><span>Introduction credits</span>${NR('the reply had no balance')}</div><p class="sub">The read answered without a balance, so no number is drawn and Accept is off. Decline still works.</p><div class="acts">${DEC}${ACC(1)}<button type="button" class="btn t">↻ Refresh credits</button></div>`, 'c4')}
+      ${stcard('Unavailable · the read failed', 'Introduction credits', `<div class="line" style="border-color:var(--negE);background:var(--negBg)"><span>Introduction credits</span>${UR()}</div><p class="sub">Your balance could not be read. This is not zero. Accept is off; Decline still works.</p><div class="acts">${DEC}${ACC(1)}<button type="button" class="btn">Retry</button></div>`, 'c4 bad')}
+      ${stcard('After Accept · 1 credit', 'Introduction credits', `${CREDLINE({ c: CRED2, at: 'read 13:55' })}<p class="sub" role="status">You accepted [Ari Lane]. <b class="mo">1</b> credit used (this month’s allowance). You have both agreed.</p>`, 'c4')}</div>
+      <p class="foot">${LBL('On main')} <code>GET /credits</code> exists and the investor page has a “Refresh credits” button, but it reloads <code>/propositions?refresh=1</code>, which can create matches. Frontend: call <code>api.introCredits()</code> instead. A deliberate search is “Find new matches” (NIC08).</p>`);
+
+    /* ===== NW7 · lost response and safe retry ===== */
+    else if (B === 'NIC06') html = crop(1400, `${ANN('Investor [Morgan Vale]', 'Accept · 1 credit in the Sheet', 'Check status: reads the match and the credit history, then offers the same action', '<code>POST …/accept</code> (spend key <code>intro:&lt;uid&gt;</code>), <code>GET …/credits/history</code>, a side-effect-free match read ◇')}<div class="g">
+      ${stcard('1 · Sending', '[Ari Lane]', `<p class="sub" role="status">◷ Accepting… Do not close the Sheet.</p><span class="sk" style="width:70%;height:10px" aria-hidden="true"></span><div class="acts"><button type="button" class="btn" aria-disabled="true">Decline · free</button><button type="button" class="btn p" aria-disabled="true">Accepting…</button></div>`, 'c3')}
+      ${stcard('2 · Response lost', '[Ari Lane]', `<div class="nt a" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>We could not confirm your answer.</b> The connection dropped. Your Accept may or may not have reached Axal. Check status never spends twice.</div></div><div class="line"><span>Credits</span><span class="nic-st">≈ Provisional · 3 before Accept</span></div><div class="acts"><button type="button" class="btn p">Check status</button></div>`, 'c3')}
+      ${stcard('3a · It arrived', '[Ari Lane]', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>You accepted at 13:55.</b> <span class="mo">1</span> credit was used, once. You have both agreed.</div></div>${CREDLINE({ c: CRED2, at: 'read 13:56' })}<p class="foot">History shows one spend for this match.</p>`, 'c3')}
+      ${stcard('3b · It did not arrive', '[Ari Lane]', `<div class="nt" role="status"><span class="ic" aria-hidden="true">○</span><div><b>Your answer did not arrive.</b> Nothing was spent; you still have <span class="mo">3</span>. The match is still open.</div></div><div class="acts">${DEC}<button type="button" class="btn p">Accept · 1 credit</button></div><p class="foot">The same action again. A repeat is refused by the server’s spend key, never charged twice.</p>`, 'c3')}
+      ${stcard('Credits changed at the same moment', '[Ari Lane]', `<div class="nt a" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Your credits changed at the same moment.</b> Nothing was spent. Try again.</div></div><div class="acts"><button type="button" class="btn p">Try again</button></div><p class="foot">409 <code>credit_conflict</code>, <code>retryable: true</code>, <code>Retry-After: 1</code>.</p>`, 'c4')}
+      ${stcard('Already answered elsewhere', '[Ari Lane]', `<div class="nt" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>You already accepted this match</b> (on your phone, 13:55). Nothing more was spent.</div></div>${PS('both')}<p class="foot">409 <code>already_responded</code>, status <code>accepted</code>: shown as the recorded answer, not an error.</p>`, 'c4')}
+      ${stcard('Out of credits at send time', '[Ari Lane]', `<div class="nt a" role="alert"><span class="ic" aria-hidden="true">0</span><div><b>No credits were available when you accepted.</b> Nothing was spent. Declining remains available.</div></div><div class="line"><span>${CRED0}</span></div><div class="acts">${DEC}<a class="btn t" href="#">Referrals →</a></div>`, 'c4')}</div>
+      <p class="foot">${LBL('Safe retry')} On main the spend row is written only while your row is pending and only if no spend with key <code>intro:&lt;uid&gt;</code> exists, so a repeat cannot charge twice. Check status needs a match read with no side effects: today the list read can expire rows and create matches. ${TB('mutation-free match read · #7064')}</p>`);
+
+    /* ===== NW5 · reads on the curated section ===== */
+    else if (B === 'NIC07') html = crop(1400, `${ANN('Any licence', 'Introductions › Curated matches', 'Retry the read; Decline stays available on loaded matches', '<code>GET /api/introductions/propositions</code>; preference from <code>GET /api/settings/privacy</code>')}<div class="g">
+      ${stcard('Loading', 'Curated matches', '<span class="sk" style="width:100%;height:12px" aria-hidden="true"></span><span class="sk" style="width:80%;height:12px" aria-hidden="true"></span><span class="sk" style="width:60%;height:12px" aria-hidden="true"></span><p class="foot" role="status">Loading matches…</p><p class="sub">No count is shown while loading.</p>', 'c3')}
+      ${stcard('Verified empty', 'Curated matches', `<p class="sub"><b>No curated matches right now.</b> Read 13:48; your matching preference is On.</p><div class="acts"><button type="button" class="btn">Find new matches</button></div><p class="foot">Matches last 14 days and are proposed when someone else in matching fits.</p>`, 'c3')}
+      ${stcard('Missing optional fields', '[Jules Avery]', `<dl class="rv"><dt>Headline</dt><dd>${NR()}</dd><dt>Country</dt><dd>${NR()}</dd><dt>Reasons</dt><dd>${NR()}</dd><dt>Private terms</dt><dd>${NR()}</dd></dl><p class="foot">The match still opens and can be answered.</p>`, 'c3')}
+      ${stcard('Unavailable · records kept', 'Curated matches', `<div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>Matches could not be refreshed.</b> Showing 4 as of 13:48 <span class="nic-st">◷ Stale · 6 min</span></div></div><p class="sub">Decline is free and still works. Accept waits until matches and balance reload.</p><div class="acts">${DEC}${ACC(1)}<button type="button" class="btn">Retry</button></div>`, 'c3 bad')}
+      ${stcard('Search for matches failed', 'Find new matches', `<div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>We could not search for new matches just now.</b> This does not mean nobody fits. Your current matches are unchanged.</div></div><div class="acts"><button type="button" class="btn">Retry the search</button></div>`, 'c3 bad')}
+      ${stcard('Eligibility not confirmed', 'Curated matches', `<div class="nt" role="status"><span class="ic" aria-hidden="true">?</span><div><b>Curated matches are unavailable right now.</b> We could not confirm whether matching can run for you. Your saved preference is unchanged.</div></div><div class="acts"><button type="button" class="btn">Retry</button></div><p class="foot">Generic on purpose: it never says why another member is or is not shown. ${TB('eligibility read · #7064')}</p>`, 'c3')}
+      ${stcard('Access refused', 'A match from an old link', `<p>${RF()}</p><p class="sub">This introduction is not available to you. Nothing about it, or whether it exists, is shown.</p><div class="acts"><a class="btn t" href="#">Back to curated matches</a></div><p class="foot">On main: 404 <code>not_found</code> for another member’s match.</p>`, 'c3')}
+      ${stcard('Unavailable · nothing loaded yet', 'Curated matches', `<div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>Matches could not be read.</b> Not zero, and not “none”. From your team and Your asks still show.</div></div><div class="acts"><button type="button" class="btn">Retry</button></div>`, 'c3 bad')}</div>`);
+
+    /* ===== NW3-intro-match / preference and Find new matches ===== */
+    else if (B === 'NIC08') html = crop(1400, `${ANN('Any licence; only the viewer’s own preference', 'Curated matches header → Settings › Sign-in and security', 'Change the preference in its existing setting; or Find new matches', '<code>user_settings.matching_opt_in</code> via <code>GET/PUT /api/settings/privacy</code> (default off, 60% profile to turn on)')}<div class="g">
+      ${stcard('On', 'Your matching preference', `${PREFLINE}<p class="foot">Only your own preference is shown. Nobody else’s preference is ever displayed.</p>`, 'c4')}
+      ${stcard('Off · the default', 'Your matching preference', `<div class="nic-pref"><span class="nic-off" aria-hidden="true">○</span><span><b>Your matching preference: Off.</b> Axal proposes no new matches to you or of you. Matches already open stay until answered or expired.</span><a href="#" class="btn t">Turn on in Settings →</a></div><p class="foot">Turning it on needs a profile at least 60% complete (yours: <span class="mo">48%</span>).</p>`, 'c4')}
+      ${stcard('Preference unavailable', 'Your matching preference', `<div class="line" style="border-color:var(--negE);background:var(--negBg)"><span>Matching preference</span>${UR()}</div><p class="sub">It was not read, so it is not shown as Off. <a href="#">Open Settings →</a></p><div class="acts"><button type="button" class="btn">Retry</button></div>`, 'c4 bad')}
+      <section class="cd c6"><span class="tag">Find new matches · confirm</span><div class="ch"><h2>Search for new curated matches?</h2></div><p class="sub">Axal looks for members who, like you, have matching on and fit your profile. Up to <b class="mo">5</b> new matches. It uses <b>no credit</b>.</p>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Each person found gets a card and a notification</b> with you as their match. That is why this is its own action: opening the page or refreshing credits never does it.</div></div>
+      <div class="cf"><span class="foot">${TO('Q2 · A, member-started, up to 5')} ${TB('search endpoint · #7064')}</span><div class="acts"><button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Search for matches</button></div></div></section>
+      <section class="cd c6"><span class="tag">Find new matches · results</span><div class="ch"><h2>After the search</h2></div>
+      <div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>2 new matches found</b> at 13:58. They are first in Awaiting your decision.</div></div>
+      <div class="nt" role="status"><span class="ic" aria-hidden="true">○</span><div><b>No one new fits right now.</b> Searched 13:58 among members with matching on. Your open matches are unchanged.</div></div>
+      <p class="foot">A reciprocal card needs both people’s current opt-in. On main the search checks only the other person’s. ${TB('mutual opt-in · #7064')}</p></section></div>`);
+
+    /* ===== NW3-intro-match / terms · Made, outcome and private terms ===== */
+    else if (B === 'NIC09') html = crop(1400, `${ANN('Partner and advisor record terms (as today); every role records Made and outcome ⚑', 'Sheet of a Both agreed or Made match', 'Record as made → Add outcome; Save terms', '<code>PUT /api/introductions/propositions/:uid/terms</code> → <code>intro_terms</code> (owner_user_id, kind, fee_bps, made_at, outcome)')}<div class="g">
+      <section class="cd c4"><span class="tag">Both agreed · Made not recorded</span><div class="mh nic-mh2"><span class="av">RM</span><div><b>[Rhea Moss]</b><small>Founder, [Elm Studio]</small></div></div>${PS('both')}${CR(M.rhe)}
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>Both responses were received. That means the introduction <b>may</b> happen; it is Made only when someone records it.</div></div>
+      <div class="f"><label for="md">Made on</label><span id="md" class="in hint">YYYY-MM-DD</span></div><div class="cf"><span class="foot">${TO('Q1 · A, every role records Made')}</span><button type="button" class="btn p">Record as made</button></div></section>
+      <section class="cd c4"><span class="tag">Made · outcome separate</span><div class="mh nic-mh2"><span class="av">PN</span><div><b>[Priya Nair]</b><small>Head of partnerships, [Kelp Bio]</small></div></div>${PS('made')}
+      <dl class="rv"><dt>Made</dt><dd>${mo('2026-11-11')} · recorded by you</dd><dt>Outcome</dt><dd>${NR()}</dd><dt>Kind</dt><dd>Favour · no economics</dd></dl>
+      <div class="f"><label for="oc">Outcome (optional)</label><span id="oc" class="in ta hint">What came of it…</span><span class="cnt">0 / 2,000</span></div><div class="cf"><span class="foot">Only you can read this.</span><button type="button" class="btn">Save outcome</button></div></section>
+      <section class="cd c4"><span class="tag">Eadwyn · after both agreed</span><div class="draft"><div class="cost"><span>Cost, quoted before drafting</span><b>[800] tokens · used</b></div><p class="tx">Hi Rhea, glad we both said yes. I’d like to hear how [Elm Studio] is thinking about its first studio partners. Would 30 minutes next week work?</p><div class="acts"><button type="button" class="btn">Accept into composer</button><button type="button" class="btn">Edit</button><button type="button" class="btn t">Discard</button></div><span class="foot">You review and send it yourself. Sending does not record Made.</span></div></section>
+      <section class="cd c6"><span class="tag">Private terms · partner [Tom Becker]</span><div class="ch"><h2>Terms for [Tom Becker] ↔ [Jules Avery]</h2><span class="sm">only you can read these</span></div>
+      <div class="seg" role="radiogroup" aria-label="Kind"><button type="button" role="radio" aria-checked="false">Favour</button><button type="button" role="radio" aria-checked="true">Referral fee</button></div>
+      <div class="g2"><div class="f"><label for="fb">Fee (basis points)</label><span id="fb" class="in">250</span><span class="foot">= 2.5%</span></div><div class="f"><label for="ma">Made on</label><span id="ma" class="in">2026-11-12</span></div></div>
+      <div class="f"><label for="ou">Outcome</label><span id="ou" class="in ta">Pilot scoping call booked for 2026-11-20.</span></div>
+      <div class="cf"><span class="foot">[Jules] never sees your fee or outcome; theirs never shows here.</span><button type="button" class="btn p">Save terms</button></div></section>
+      <section class="cd c6 bad"><span class="tag">Save failed · text kept</span><div class="ch"><h2>Terms for [Tom Becker] ↔ [Jules Avery]</h2></div>
+      <div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Your terms were not saved.</b> Everything you entered is still here.</div></div>
+      <div class="f"><label for="ou2">Outcome</label><span id="ou2" class="in ta">Pilot scoping call booked for 2026-11-20.</span></div><div class="f"><label for="fb2">Fee (basis points)</label><span id="fb2" class="in">250</span></div>
+      <div class="cf"><span class="foot">Referral needs a fee between 1 and 10,000 bps.</span><button type="button" class="btn p">Save again</button></div></section></div>
+      <p class="foot">${LBL('Not this record')} These are curated-match facts. A teammate introduction’s email delivery has its own evidence (NW3.5 on the approved canvas) and is never shown as Made here.</p>`);
+
+    /* ===== NW3-intro-match / roles · one record, four licences ===== */
+    else if (B === 'NIC10') {
+      const col = (role, who, sw, m, me, st, nx, acts, extra) => `<section class="cd c3"><span class="tag">${role}</span><div class="ch"><h2>${who}</h2><span class="sm">${sw}</span></div><div class="mh nic-mh2"><span class="av">${m.i}</span><div><b>${m.n}</b><small>${m.w}</small></div></div>${st}${CR(m, me)}<p class="sub"><b>Next:</b> ${nx}</p>${extra || ''}<div class="acts">${acts}</div></section>`;
+      const ariSide = { k: 'mv', i: 'MV', n: '[Morgan Vale]', s: '[Morgan]', w: 'Partner, [Harbor Lane Capital]', me: ['ok', '2026-11-12'], th: ['wait'] };
+      const adaM = { k: 'jv', i: 'JA', n: '[Jules Avery]', s: '[Jules]', w: 'Founder, [Loomcraft]', me: ['ok', '2026-11-06'], th: ['ok', '2026-11-09'] };
+      const tomM = { k: 'jv2', i: 'JA', n: '[Jules Avery]', s: '[Jules]', w: 'Founder, [Loomcraft]', me: ['ok', '2026-11-03'], th: ['ok', '2026-11-04'] };
+      html = crop(1400, `${ANN('Founder, investor, advisor, partner', 'Each licence’s Network › Introductions', 'The action each state allows; terms only where the licence records them today', 'one route, one record per side; <code>stateOf</code> and <code>consentRecord</code> shared on main')}<div class="g">
+      ${col('Founder', '[Ari Lane]', '[Tidepool Labs]', ariSide, 'You', `<span class="pl v nic-ps">◷ You agreed · waiting on [Morgan]</span>`, 'waiting on [Morgan]. You used 1 credit on 2026-11-12.', '<button type="button" class="btn t">Open</button>', '<p class="foot">No terms panel today on the founder desk.</p>')}
+      ${col('Investor', '[Morgan Vale]', '[Harbor Lane Capital]', M.ari, 'You', PS('theirs', M.ari), 'you: Accept · 1 credit or Decline · free.', `${DEC}${ACC()}`, `<p class="foot">Made and outcome ${TO('Q1 · A')}</p>`)}
+      ${col('Advisor', '[Ada Okafor]', 'Advisor', adaM, 'You', PS('both'), 'record it as made once you have met.', '<button type="button" class="btn">Record as made…</button>', '<p class="foot">Advisors answer matches; they cannot request one.</p>')}
+      ${col('Partner', '[Tom Becker]', '[Northstar Capital]', tomM, 'You', `<span class="pl g nic-ps nic-made">● Made ${mo('2026-11-12')}</span>`, 'add the outcome when there is one.', '<button type="button" class="btn">Edit terms</button>', `<p class="foot">Referral fee · 2.5% · outcome “Pilot scoping call booked”. Private to [Tom].</p>`)}</div>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>The founder and investor columns are the two sides of one pair: [Ari]’s “You agreed” is [Morgan]’s “[Ari] agreed”. The other side reads the same answer, never the other side’s terms, scores or reasons.</div></div>`);
+    }
+
+    /* ===== NW9 · tablet 768 ===== */
+    else if (B === 'NIC11') html = `<div class="${CV} tab">${phTop('Network').replace('class="pt"', 'class="pt" style="padding:0 12px"')}<main class="bd" style="padding:20px 24px">${HEAD({ tab: 'Introductions', h1: 'Introductions', sub: 'Team requests, curated matches and your asks, counted apart.' })}
+      <section class="cd"><div class="ch"><h2>Curated matches</h2><span class="sm">4 awaiting</span></div>${CREDLINE()}${SEG()}${mcard(M.ari, { cur: 1 })}${mcard(M.jul)}</section></main>
+      <div class="dim" aria-hidden="true"></div>${SHEET({}).replace('class="sheet-r nic-sheet"', 'class="sheet-r nic-sheet" style="width:460px"')}</div>`;
+
+    /* ===== NW8.1 · phone 390 ===== */
+    else if (B === 'NIC12A') html = phone('Introductions', `${MSEL('Introductions')}<div class="ch"><h2>Curated matches</h2><span class="sm">4 awaiting</span></div><div class="line"><span><b class="mo">3</b> credits · 1 of 3 + 2 referral</span><button type="button" class="btn t" style="min-height:44px">↻ Refresh</button></div>
+      <div class="seg" role="radiogroup" aria-label="Curated matches" style="align-self:flex-start"><button type="button" role="radio" aria-checked="true">Awaiting · 4</button><button type="button" role="radio" aria-checked="false">Waiting · 1</button><button type="button" role="radio" aria-checked="false">All · 8</button></div>
+      ${J([M.ari, M.jul, M.ada].map((m) => `<div class="pc"><div class="r1"><div><b>${m.n}</b><br><small>${m.w}</small></div><button type="button" class="pi" aria-label="Open ${m.n}">›</button></div>${PS(m.st, m)}<small>You: ${m.me[0] === 'ok' ? 'agreed' : 'not answered'} · ${m.s}: ${m.th[0] === 'ok' ? 'agreed ' + m.th[1] : m.th[0] === 'nr' ? 'not asked' : 'not answered'} · expires ${m.ex}</small></div>`))}`, '<button type="button" class="btn">Find new matches</button>');
+    else if (B === 'NIC12B') html = phone('[Ari Lane]', `<span class="eye">Curated match</span><h1 style="font-size:20px;font-weight:800">[Ari Lane]</h1><p class="sub">Founder, [Tidepool Labs] · Lisbon</p>${SHEET({ ph: 1, nowhy: 1, cost: `<div class="nic-cost"><div><span class="eye">Cost</span><b>Accept uses <span class="mo">1</span> credit</b><small>You have <span class="mo">3</span>. After: <span class="mo">2</span>.</small></div></div>` })}`, '<button type="button" class="btn">Decline · free</button><button type="button" class="btn p">Accept · 1 credit</button>', { back: 1 });
+    else if (B === 'NIC12C') html = phone('[Ari Lane]', `<span class="eye">Curated match</span><h1 style="font-size:20px;font-weight:800">[Ari Lane]</h1>
+      <div class="nt a" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>We could not confirm your answer.</b> Your Accept may or may not have reached Axal. Check status never spends twice.</div></div>
+      <div class="line"><span>Credits</span><span class="nic-st">≈ Provisional · 3 before Accept</span></div>${CR(M.ari)}<p class="foot">Your note and place are kept while you check.</p>`, '<button type="button" class="btn p">Check status</button>', { back: 1 });
+    else if (B === 'NIC12D') html = phone('[Tom Becker]', `<span class="eye">Curated match</span><h1 style="font-size:20px;font-weight:800">[Tom Becker]</h1>${PS('expired')}
+      <div class="nt a" role="alert"><span class="ic" aria-hidden="true">⌛</span><div><b>Not accepted: this match expired at 14:00.</b></div></div>
+      <div class="nic-rcpt"><span class="eye">Your credits</span><b><span class="mo">0</span> credits used by this attempt</b><small>Confirmed 14:03. Balance still <span class="mo">3</span>.</small></div>
+      <div class="sec"><h3>Zero balance, on another match</h3><div class="line"><span><b class="mo">0</b> credits · read 13:58</span></div><p class="sub">Accept is off with this reason shown; Decline · free stays.</p></div>`, '<button type="button" class="btn p">Back to matches</button>', { back: 1 });
+
+    /* ===== NW10 · dark ===== */
+    else if (B === 'NIC13') html = shell('i', INTRO({}), { h: 1320, railT: 'Ask about introductions' });
+    else if (B === 'NIC13B') html = shell('i', `${HEAD({ tab: 'Introductions', h1: 'Introductions', sub: 'Requests between teammates, matches Axal curates for you, and the asks your tier allows. Three sources, never one count.' })}${MATCHSEC({})}`, { h: 1480, rail: RAIL_DRAFT });
+
+    /* ===== Accessibility ===== */
+    else if (B === 'NIC14') {
+      const kb = (n) => `<span class="nic-kb" aria-hidden="true">${n}</span>`;
+      html = crop(1400, `<div class="g"><div class="c6" style="display:flex;flex-direction:column;gap:12px"><span class="tag">Keyboard order in the Sheet</span>
+      <div class="panel" style="width:100%"><div class="dh"><div style="display:flex;gap:10px;align-items:center"><span class="av">AL</span><div><span class="eye">Curated match</span><h2>${kb(1)}[Ari Lane]</h2></div></div><button type="button" class="ib nic-fv" aria-label="Close match">✕</button>${kb(2)}</div>
+      <div class="dc">${PS('theirs', M.ari)}${CR(M.ari)}<p class="sub">${kb(3)}<a href="#">Why Axal proposed this</a></p><p class="sub">${kb(4)}<a href="#">Change your matching preference in Settings →</a></p></div>
+      <div class="df"><span class="foot">Esc closes</span><div class="acts">${kb(5)}<button type="button" class="btn">Decline · free</button>${kb(6)}<button type="button" class="btn p nic-fv">Accept · 1 credit</button></div></div></div>
+      <p class="foot">Focus lands on the heading when the Sheet opens; Tab moves 1 → 6 and stays inside; Esc or ✕ returns focus to the card’s Open control. Visible focus: 2px violet ring, 2px offset, on both themes.</p></div>
+      <div class="c6" style="display:flex;flex-direction:column;gap:12px"><span class="tag">Announced results (polite unless marked)</span>
+      <table class="tbl"><thead><tr><th scope="col">After</th><th scope="col">Announcement</th></tr></thead><tbody>
+      <tr><td>Accept</td><td>“Accepted [Ari Lane]. 1 credit used. You have both agreed. 2 credits left.”</td></tr>
+      <tr><td>Decline</td><td>“Declined [Jules Avery]. No credit used. [Jules] is not notified.”</td></tr>
+      <tr><td>Refresh credits</td><td>“3 credits available, read 13:48.” · or “Balance unavailable. Accept is off.”</td></tr>
+      <tr><td>Lost response</td><td>Assertive: “We could not confirm your answer. Check status.”</td></tr>
+      <tr><td>Check status</td><td>“You accepted at 13:55. 1 credit used once.” · or “Your answer did not arrive. Nothing was spent.”</td></tr>
+      <tr><td>Expired while open</td><td>Assertive: “Not accepted. This match expired at 14:00. No credit used.”</td></tr>
+      <tr><td>Find new matches</td><td>“2 new matches found.” · or “No one new fits right now.”</td></tr>
+      <tr><td>Save terms failed</td><td>Assertive: “Your terms were not saved. Your entries are kept.”</td></tr></tbody></table>
+      <ul class="nic-ul"><li>Phone targets 44 px; the paid and free actions sit in the sticky footer, Decline first.</li><li>Every state has a glyph and a word; “Accept · 1 credit” names its cost in the accessible name.</li><li>A disabled Accept keeps a visible reason next to it (zero, Unavailable, Not recorded, Stale).</li><li>Tables become cards on phone; the section select replaces the four links.</li></ul></div></div>`);
+    }
+
+    /* ===== Handoff ===== */
+    else if (B === 'NICH') html = `<div class="${CV} doc"><div><span class="eye">Network · Introductions · #7064 · NW3-intro-match · handoff</span><h2 style="font-size:22px;margin-top:4px">Curated match consent, credits and private terms: what exists, what is frontend, what needs the Worker</h2></div>
+      <div class="cols">
+      <div><h3>Checked on main (c59a9f2f66)</h3><ul>
+      <li><code>routes/introductions.ts</code>: <code>GET /propositions</code> returns your <code>status</code>, <code>responded_at</code>, <code>expires_at</code>, the other side’s <code>counterpart_status</code> and date (null when there is no mirror row: not asked), and your own <code>terms</code> only. The same read <b>expires rows and, under 3 pending or with <code>?refresh=1</code>, generates up to 5 matches</b>.</li>
+      <li><code>POST …/accept</code>: 402 <code>no_credits</code>, 409 <code>already_responded</code> (+ status), 409 <code>credit_conflict</code> (retryable, nothing spent). Spend key <code>intro:&lt;uid&gt;</code> makes a repeat safe. It checks only your own row is <code>pending</code>.</li>
+      <li><code>POST …/decline</code>: free, no notification. <code>PUT …/terms</code>: your own row only (404 otherwise); favour or referral with <code>fee_bps</code> 1–10,000; <code>made_at</code>; outcome cut at 2,000.</li>
+      <li><code>GET /credits</code> and <code>/credits/history</code> exist (history carries <code>source_ref</code>). Allowance spent first, then referral; investor free tier 3 a month; packs retired (D755).</li>
+      <li><code>services/introductions.ts</code>: candidate read <code>LIMIT 500</code> with no order, then the other person’s opt-in filter, 14-day expiry, a reciprocal mirror row and a notification to the other person.</li>
+      <li><code>services/matchingConsent.ts</code>: <code>matching_opt_in</code> defaults off and fails closed. <code>settings.ts</code> <code>GET/PUT /privacy</code>, 60% profile to turn on.</li>
+      <li>Frontend: <code>IntroductionsPanel.jsx</code> (<code>stateOf</code>, <code>consentRecord</code>, TermsModal, partner), <code>advisor/network/IntroductionsZone.jsx</code> (MadeForm), <code>FounderNetworkDesk.jsx</code>, <code>InvestorNetworkWorkspace.jsx</code> (“Refresh credits” calls <code>/propositions?refresh=1</code>).</li></ul>
+      <h3 style="margin-top:12px">Preserved</h3><ul><li>Shell, “Your network” header, four links, Sheet, NW5 state words, Eadwyn rail (#5130) from #4799 and #6256. NW3, NW7, NW8.1, NW9 and NW10 ids carry the NW3-intro-match variants.</li></ul>
+      <h3 style="margin-top:12px">Frame index · role · entry · next · data</h3><ul>
+      <li>NIC01/02 eligible: investor · Introductions › card · Accept · 1 credit / Decline · propositions + credits.</li><li>NIC03 waiting: all · card · per state · propositions. NIC04 closed: investor · open Sheet · Close · accept 409 + history.</li><li>NIC05/06 balance recovery: all · header, Sheet · Refresh credits, Check status · credits, history.</li><li>NIC07 reads, NIC08 preference: all · section · Retry, Settings, Find new matches · propositions, privacy.</li><li>NIC09 terms, NIC10 roles: partner, advisor, every role ⚑ · Sheet · Record as made, Save terms · terms PUT.</li><li>NIC11 tablet, NIC12 phone, NIC13 dark, NIC14 accessibility.</li></ul></div>
+      <div><h3>Backend required (◇ #7064)</h3><ul>
+      <li><b>Mutation-free reads.</b> A list read, a balance read and a retry create no matches, mirrors or notifications; expiry is computed, not written by the read.</li>
+      <li><b>Mutual opt-in.</b> A reciprocal card needs both people’s current <code>matching_opt_in</code>; today only the other person’s is checked.</li>
+      <li><b>Closed-pair eligibility at charge time.</b> Accept refuses with nothing spent when the match is past <code>expires_at</code>, the other side declined or expired, or either opt-in is off.</li>
+      <li><b>Safe retries.</b> Keep the spend key; return <code>spent: 0|1</code> on 409 so the stale-attempt receipt need not read history.</li>
+      <li><b>A separate search action</b> (today <code>?refresh=1</code> on the list read).</li>
+      <li><b>Eligible results in a synthetic pool.</b> Fixtures of 101 and 500 candidates: with 101, every opted-in person is scored; with 500+ users the unordered <code>LIMIT 500</code> runs before the opt-in filter, so eligible people past row 500 are never considered. Assert the same eligible set either way.</li>
+      <li>A generic eligibility read for “matching cannot run for you”.</li></ul>
+      <h3 style="margin-top:12px">Owner picks drawn (⚑)</h3><ul><li>Q1 A: every role may record Made and an outcome; fee fields stay with partners and advisors, as today.</li><li>Q2 A: Find new matches is member-started, up to 5 per search, never on page open.</li><li>Q3 A: a credit spent on a match that later expires unanswered is not returned.</li></ul>
+      <h3 style="margin-top:12px">Frontend only</h3><ul><li>Match card and decision Sheet with the cost beside Accept; the consent record; Refresh credits through <code>api.introCredits()</code>; balance Value / zero / Not recorded / Unavailable / Stale; Check status reading <code>/credits/history</code>; the stale-attempt receipt; hidden Accept on terminal pairs; roles over shared <code>stateOf</code>; tablet, phone, dark; focus return and announcements.</li></ul>
+      <h3 style="margin-top:12px">Open</h3><ul><li>Whether a declined pair should show the other side’s “Declined” or a neutral “Closed” (drawn: “Closed · declined”, as main returns it).</li><li>Teammate email delivery stays on NW3.5; nothing here reads it.</li></ul></div></div></div>`;
+
+    html = html.replace(/class="([^"]*)"/g, (m, c) => 'class="' + c.split(/\s+/).filter(Boolean).map((x) => x.indexOf('nic-') === 0 ? x : 'nwi-' + x).join(' ') + '"');
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>
