@@ -21,6 +21,7 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
 import { roundCallsApi } from '../src/lib/api/roundCalls.js';
+import { prospectInvitesApi } from '../src/lib/api/prospectInvites.js';
 import RoundCallSheet, { acceptPlainTerms, counselState, plainTerms, seedChips, sendResult, canSend } from '../src/pages/founder/RoundCallSheet.jsx';
 import RaiseCallPage from '../src/pages/founder/RaiseCallPage.jsx';
 import { callHref, LIST_PATH } from '../src/pages/raise/calls/callsModel.js';
@@ -47,6 +48,9 @@ const refusal = (status, code) => Object.assign(new Error('The Worker refused it
 async function mountSheet(answers, props = {}) {
   const calls = [];
   const saved = { ...roundCallsApi };
+  // D6052: the invitations read (call_invite_6052.test.mjs tests it); here the viewer cannot invite.
+  const savedInvites = { ...prospectInvitesApi };
+  prospectInvitesApi.states = async () => ({ can_invite: false, reason: 'Only the venture’s founder can invite an investor to Axal.', items: [] });
   for (const key of Object.keys(saved)) {
     const answer = Object.hasOwn(answers, key) ? answers[key] : {};
     const queue = Array.isArray(answer) ? [...answer] : null;
@@ -72,7 +76,7 @@ async function mountSheet(answers, props = {}) {
     async tick(label) { const n = view.nodes().find((x) => view.props(x)?.['aria-label'] === label || (x.tagName === 'LABEL' && x.textContent === label)); const box = n?.tagName === 'INPUT' ? n : n?.childNodes?.find((c) => c.tagName === 'INPUT'); assert.ok(box, `no ${label}`); view.props(box).onChange(); await settle(); },
     async press(label) { const n = view.nodes().find((x) => x.tagName === 'BUTTON' && view.props(x)?.['aria-label'] === label); assert.ok(n, `no ${label}`); view.props(n).onClick(); await settle(); },
     disabled: (label) => view.props(view.nodes().find((x) => x.tagName === 'BUTTON' && x.textContent.trim() === label))?.disabled === true,
-    async done() { await view.unmount(); Object.assign(roundCallsApi, saved); },
+    async done() { await view.unmount(); Object.assign(roundCallsApi, saved); Object.assign(prospectInvitesApi, savedInvites); },
   };
 }
 
@@ -137,7 +141,7 @@ test('3. every step\'s refusal keeps the entry: the round, the audience and Send
     assert.match(s.text(), /Lumen VenturesNot on Axal/);
     const greyed = s.view.nodes().find((n) => s.view.props(n)?.['aria-label'] === 'Lumen Ventures is not on Axal');
     assert.equal(s.view.props(greyed).disabled, true, 'an investor not on Axal cannot be chosen');
-    assert.ok(s.disabled('Invite to Axal'), 'inviting waits on a route');
+    assert.ok(s.disabled('Invite to Axal'), 'a viewer who cannot invite sees the button disabled (D6052)');
     assert.match(s.text(), /18 matching investors · stage Seed · sector Robotics · cheque range \$25k–\$500k/);
     await s.tick('Choose Bluefern Capital');
     await s.press('Also invite investors whose published focus fits');
