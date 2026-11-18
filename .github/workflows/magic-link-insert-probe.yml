@@ -57,23 +57,15 @@ name: magic-link insert probe
 on:
   workflow_dispatch:
   schedule:
-    # THE OFFSET FROM magic-link-probe.yml (`30 */4 * * *`) IS A CORRECTNESS
-    # REQUIREMENT, NOT TIDINESS. Both probes request a link for the same address,
-    # and the mailbox probe accepts any message whose `internalDate` post-dates
-    # its own request. If this probe fired inside that polling window, the
-    # mailbox probe would take THIS probe's email as its own, follow a perfectly
-    # valid link, and pass without ever proving its own mail arrived — a false
-    # pass on the one check whose entire value is being believed.
-    #
-    # Thirty minutes beats the sum of this probe's own budgets (15s for the token
-    # row, 180s for the send) with minutes to spare, so the overlap is
-    # impossible. `frontend/test/magic_link_insert_probe.test.mjs` asserts the gap
-    # by parsing both crons and every budget out of source, so none can drift
-    # alone.
-    #
-    # The union of both schedules is also two requests per 4h for one address,
-    # far inside `magic-start-email`'s 3 per 900s.
+    # Stagger the nominal starts. The shared concurrency group also covers
+    # manual runs and runner delays for this mailbox.
     - cron: '0 */4 * * *'
+
+# Both probes send a single-use link to the same test mailbox.
+concurrency:
+  group: production-magic-link-mailbox
+  cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read

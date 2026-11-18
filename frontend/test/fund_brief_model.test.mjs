@@ -15,7 +15,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  fundModel, FUND, PROGRAM, THESIS, fundTerms, TIERS, TIER_RIGHTS,
+  fundModel, FUND, THESIS, fundTerms, TIERS, TIER_RIGHTS,
   COHORT_4, PROCESS_STEPS, SERVICE_PROVIDERS,
 } from '../src/lib/spinoutFundModel.js';
 import { fundBriefModel, fundBriefFilename, briefDate } from '../src/lib/fundBriefViewModel.js';
@@ -172,10 +172,15 @@ test('D6137: the first close keeps "date passed; outcome not recorded"', () => {
   assert.equal(byKey(before.raise, 'First close').note, 'Scheduled');
 });
 
-test('D6137: a brief from a read without a program block uses the same fallback as the page', () => {
+test('#5513: a brief from a read without a program block prints Not recorded, as the page does', () => {
   const vm = brief(visitorRead);
-  assert.equal(byKey(vm.record, 'Graduates to date').v, String(PROGRAM.graduates));
+  for (const k of ['Graduates to date', 'Incorporated on time', 'Raised by alumni']) {
+    assert.equal(byKey(vm.record, k).v, 'Not recorded', k);
+  }
   assert.equal(byKey(vm.record, 'Graduates to date').v, programFigures(visitorRead).graduates);
+  // A live program block prints its own figures.
+  const live = brief({ ...visitorRead, program: { available: true, graduates: 5, on_time_pct: 80, alumni_raised: 1200000 } });
+  assert.deepEqual(['Graduates to date', 'Incorporated on time', 'Raised by alumni'].map((k) => byKey(live.record, k).v), ['5', '80%', '$1.2M']);
 });
 
 /* ------------------------------------------------ derived: terms and tiers */

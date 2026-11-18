@@ -507,7 +507,6 @@ const RoundCallIndex = lazy(() => import('./pages/founder/RoundCallPage').then(m
 const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
 const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent'));
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
-const FounderGrowPartnerships = lazy(() => import('./pages/founder/FounderGrowPartnerships'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
@@ -3725,7 +3724,11 @@ function AppInner() {
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
-      <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <FounderGrowPartnerships />)} />
+      {/* D6118 (#6118, GR-09): one Partnerships page. It is the partner-network module (partners by stage,
+          revenue and terms, Rank by fit, the Mercury proposal) with co-marketing as one of its parts. The
+          module's own address forwards here; its records, /new and /co-marketing keep their addresses. */}
+      <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="partner-network" />)} />
+      <Route path="/grow/partner-network" element={guard(['admin', 'founder'], <ParamRedirect to="/grow/partnerships" />)} />
       {/* D1194 (#3128): Investor match is Capital relationships › Match; /grow/capital-match goes straight there too. */}
       {/* #2343: one brand page. Grow's read of pages and leads moved into the
           builder (`BrandPagesSection`); the old address forwards there. */}

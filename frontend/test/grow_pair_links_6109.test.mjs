@@ -1,11 +1,11 @@
 /**
- * #6109 — the two Grow pairs link to each other, with the venture kept, and
- * each page says which half it is.
+ * #6109 — the Talent pair links both ways, with the venture kept, and each
+ * page says which half it is. D6118 (#6118) made Partnerships one page, so it
+ * is no longer a pair: /grow/partnerships is Partner network's module page.
  *
  *   · Talent → Team expansion ("Roles and hiring plan"), and Team expansion → Talent;
- *   · Partnerships → Partner network ("Partner records"), and Partner network → Partnerships;
  *   · Team expansion's door to /build/team ("Open team roster and hiring plan");
- *   · the module pages' headings are "Talent · Roles" and "Partnerships · Partners";
+ *   · the module pages' headings are "Talent · Roles" and "Partnerships";
  *   · each with a canonical `?project_id=`, a legacy `?project=` and no project;
  *   · no route, slug or deep link changes (D4862);
  *   · Bulk reject names the gap that is left: no bulk form of the stage writer.
@@ -23,7 +23,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import FounderGrowTalent from '../src/pages/founder/FounderGrowTalent.jsx';
-import FounderGrowPartnerships from '../src/pages/founder/FounderGrowPartnerships.jsx';
 import grow from '../src/pages/cycles/defs/grow.jsx';
 import { moduleToolLinks, projectSearch } from '../src/pages/cycles/founderToolNavigation.js';
 import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
@@ -79,18 +78,8 @@ test('Talent links to Team expansion with the venture kept: canonical, legacy an
   }
 });
 
-// Mutation checked: the Partnerships link dropped (fails); pointed at co-marketing (fails).
-test('Partnerships links to Partner network\'s records with the venture kept: canonical, legacy and absent', async () => {
-  for (const [name, q, expected] of QUERIES) {
-    const v = await mountPage(FounderGrowPartnerships, '/grow/partnerships' + q);
-    try {
-      assert.equal(v.href('link-grow-partnerships-records'), '/grow/partner-network' + expected, name);
-    } finally { await v.close(); }
-  }
-});
-
 // Mutation checked: the Partner network tool removed (fails); Team expansion's tool removed (fails); the /build/team door removed (fails).
-test('Team expansion and Partner network link back to their desks; Team expansion opens the roster and plan', () => {
+test('Team expansion links back to its desk and opens the roster and plan; Partnerships has no other half (D6118)', () => {
   for (const [name, search, expected] of [
     ['canonical', '?project_id=19', '?project_id=19'],
     ['legacy', '?project=19', '?project_id=19'],
@@ -98,7 +87,7 @@ test('Team expansion and Partner network link back to their desks; Team expansio
   ]) {
     const q = projectSearch(search);
     assert.deepEqual(grow.tools.get('team-expansion')(q), { label: 'Open Talent: roles and applicants', href: '/grow/talent' + expected }, name);
-    assert.deepEqual(grow.tools.get('partner-network')(q), { label: 'Open Partnerships: pitches and attributions', href: '/grow/partnerships' + expected }, name);
+    assert.equal(grow.tools.get('partner-network'), undefined, `${name}: Partnerships is one page, with no pair link`);
     const doors = moduleToolLinks('grow', 'team-expansion', founder, search);
     assert.ok(doors.some((d) => d.label === 'Open team roster and hiring plan' && d.href === '/build/team' + expected), `${name}: ${JSON.stringify(doors)}`);
   }
@@ -111,12 +100,12 @@ test('Team expansion and Partner network link back to their desks; Team expansio
 // Mutation checked: the heading reverted to the area name (fails); the record back-link name reverted (fails).
 test('the two module pages\' headings say which half they are; the tab still lights the desk', () => {
   assert.equal(growModuleTitle('team-expansion'), 'Talent · Roles');
-  assert.equal(growModuleTitle('partner-network'), 'Partnerships · Partners');
+  assert.equal(growModuleTitle('partner-network'), 'Partnerships');
   assert.equal(growModuleTitle('talent'), 'Talent', 'the desk keeps its own name');
   assert.equal(growModuleTitle('distribution'), 'Distribution');
   assert.equal(grow.moduleName('team-expansion'), 'Talent · Roles');
-  assert.equal(grow.moduleName('partner-network'), 'Partnerships · Partners');
-  for (const [slug, title, tab] of [['team-expansion', 'Talent · Roles', 'Talent'], ['partner-network', 'Partnerships · Partners', 'Partnerships']]) {
+  assert.equal(grow.moduleName('partner-network'), 'Partnerships');
+  for (const [slug, title, tab] of [['team-expansion', 'Talent · Roles', 'Talent'], ['partner-network', 'Partnerships', 'Partnerships']]) {
     const html = renderToStaticMarkup(h(MemoryRouter, null, h(CycleHeader, { cycle: 'grow', cards: [], active: slug, title: 'ignored', search: '?project_id=19' })));
     assert.match(html, new RegExp(`<h1[^>]*>${title}</h1>`), slug);
     assert.equal(growArea(slug).name, tab, `${slug} still lights ${tab}`);
