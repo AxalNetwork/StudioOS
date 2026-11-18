@@ -74,6 +74,8 @@ function freshDb() {
     -- A transfer recorded before the verifier column existed.
     INSERT INTO deal_transfers (uid, deal_id, amount_cents, phone_verified, recorded_by, recorded_at) VALUES ('tr-old', 41, 500, 1, 1, '2026-10-01T00:00:00Z');
   `);
+  // The current closing read also returns D6195's recorded route preference.
+  db.exec(MIG('202611161505_6195_commitment_route_preference.sql'));
   db.exec(MIG('612_closings.sql'));
   db.exec(MIG('202611151545_6198_closing_sender_declarations.sql'));
   db.exec(MIG(VERIFIER_MIGRATION));
