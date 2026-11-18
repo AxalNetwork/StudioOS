@@ -22,6 +22,7 @@ import type { Env } from '../types';
 import { tierAdmits, investorCommitted, grantFolderScope } from './dataRoomAccess';
 import { hasActiveVentureNda } from './dealAccess';
 import { deleteChunkedEntity } from './vectorize';
+import { liveFiles } from './dataRoomTrash';
 import { Jobs } from '../models/jobs';
 
 export const LOST_REASONS = ['revoked', 'expired', 'nda_lapsed', 'removed', 'moved', 'library_off'] as const;
@@ -56,8 +57,9 @@ export async function roomFileLapse(
   if (Number(grant.past) === 1) return { reason: 'expired' };
   const file = await env.DB.prepare(
     `SELECT id, name, r2_key, content_type, visibility, access_tier, access_expires_at, folder_id
-       FROM data_room_files WHERE id = ? AND project_id = ?`,
+       FROM data_room_files WHERE id = ? AND project_id = ?${await liveFiles(env.DB)}`,
   ).bind(a.fileId, a.projectId).first<any>();
+  // D6073: a file in Trash is gone from the room for investors, so its reference lapses as removed.
   if (!file) return { reason: 'removed' };
   if (!tierAdmits(file, await investorCommitted(env, a.projectId, a.userId), Date.now(), await grantFolderScope(env, grant.id))) {
     return { reason: 'moved' };

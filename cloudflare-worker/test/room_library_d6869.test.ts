@@ -123,6 +123,9 @@ test('the room’s gate decides an add: no grant, a hidden file, an admin, and t
   // mutation: the tier check dropped → 201 here.
   assert.equal((await call(db, HOLDER, 'POST', '/api/room-library/items', { project_uid: 'p-room', file_uid: 'f-hidden' })).body.error, 'file_not_found', 'a file the tier hides answers as not there');
   assert.equal((await call(db, ADMIN, 'POST', '/api/room-library/items', { project_uid: 'p-room', file_uid: 'f-open' })).body.error, 'investor_only');
+  // D6073: a file in Trash answers as not there. mutation: liveFiles dropped from the add's lookup → 201 here.
+  const binned = fixture(); switchOn(binned); binned.exec(`UPDATE data_room_files SET removed_at = '2026-11-16 09:00:00' WHERE id = 11`);
+  assert.equal((await call(binned, HOLDER, 'POST', '/api/room-library/items', { project_uid: 'p-room', file_uid: 'f-open' })).body.error, 'file_not_found', 'a file in Trash');
   assert.equal((await quiet(() => call(db, HOLDER, 'POST', '/api/room-library/items', { project_uid: 'p-room', file_uid: 'f-nda' }))).status, 201, 'behind a live NDA');
   const db2 = fixture(); switchOn(db2); db2.exec(`UPDATE pairwise_ndas SET status = 'expired'`);
   const nda = await quiet(() => call(db2, HOLDER, 'POST', '/api/room-library/items', { project_uid: 'p-room', file_uid: 'f-nda' }));
@@ -135,6 +138,8 @@ test('each lapse reads its own reason; the row stays, its index state is source_
     ['revoked', (db) => db.exec(`UPDATE data_room_grants SET status = 'revoked'`), 'f-open'],
     ['expired', (db) => db.exec(`UPDATE data_room_grants SET expires_at = '2020-01-01T00:00:00Z'`), 'f-open'],
     ['removed', (db) => db.exec(`DELETE FROM data_room_files WHERE id = 11`), 'f-open'],
+    // D6073: a file the founder moved to Trash is gone for investors too. mutation: liveFiles dropped from refAccess → no lapse.
+    ['removed', (db) => db.exec(`UPDATE data_room_files SET removed_at = '2026-11-16 09:00:00' WHERE id = 11`), 'f-open'],
     ['moved', (db) => db.exec(`UPDATE data_room_files SET access_tier = 'nobody' WHERE id = 11`), 'f-open'],
     ['nda_lapsed', (db) => db.exec(`UPDATE pairwise_ndas SET status = 'expired'`), 'f-nda'],
     ['library_off', (db) => db.exec(`UPDATE data_room_library_settings SET allow_library = 0`), 'f-open'],

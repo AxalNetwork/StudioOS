@@ -29,6 +29,7 @@ import { activeGrant, logAccess, projectNdaActive, roomProject } from './data_ro
 import { tierAdmits, investorCommitted, grantFolderScope } from '../services/dataRoomAccess';
 import { libraryAllowed, lapseRoom, reconcileRoomRefs, roomFileStillThere } from '../services/roomLibrary';
 import { deleteChunkedEntity } from '../services/vectorize';
+import { liveFiles } from '../services/dataRoomTrash';
 import { Jobs } from '../models/jobs';
 import { isSupportSession } from '../services/fundAdminAccess';
 
@@ -65,7 +66,7 @@ r.get('/rooms/:projectUid', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT f.uid AS file_uid, d.uid AS document_uid, r.added_at
          FROM research_room_refs r JOIN research_documents d ON d.id = r.document_id JOIN data_room_files f ON f.id = r.file_id
-        WHERE r.owner_user_id = ? AND r.project_id = ? AND r.lost_at IS NULL ORDER BY r.added_at DESC`,
+        WHERE r.owner_user_id = ? AND r.project_id = ? AND r.lost_at IS NULL${await liveFiles(c.env.DB, 'f')} ORDER BY r.added_at DESC`,
     ).bind(user.id, room.project.id).all<any>();
     return c.json({ allowed: await libraryAllowed(c.env, room.project.id), items: rows.results || [] });
   } catch (e) { return mapError(c, e); }
@@ -85,7 +86,7 @@ r.post('/items', async (c) => {
     }
     const file = await c.env.DB.prepare(
       `SELECT id, uid, name, r2_key, content_type, visibility, access_tier, access_expires_at, folder_id
-         FROM data_room_files WHERE uid = ? AND project_id = ?`,
+         FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)}`,
     ).bind(String(body?.file_uid ?? ''), room.project.id).first<any>();
     // The room's own rule, re-checked here: a file its tier, expiry or folders hide answers as one that is not there.
     if (!file || !tierAdmits(file, await investorCommitted(c.env, room.project.id, user.id), Date.now(), await grantFolderScope(c.env, room.grant.id))) {
