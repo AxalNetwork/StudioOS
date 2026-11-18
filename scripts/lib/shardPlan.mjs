@@ -1,3 +1,9 @@
+// D5609: deterministic duration packing and exact-once coverage for
+// `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`.
+//
+// D5609: longest-first duration packing, suite p90 for unknown tests, and
+// exact-once coverage validation; tested in `shardPlan.test.mjs`.
+//
 // D5609: deterministic longest-first packing and exact-once coverage of test files.
 const order = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 

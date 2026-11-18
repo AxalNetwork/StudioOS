@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# #5526: audits the pinned Python requirements, retries transient PyPI advisory
+# lookup failures, and preserves strict scan findings.
 """Run the pinned Python requirements audit with bounded PyPI lookup retries."""
 
 import os

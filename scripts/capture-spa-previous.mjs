@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-/** Keep build identities outside Vite's emptied docs/, without gating rollout. */
+/**
+ * Captures the restored previous deploy's lazy entry before a build, or
+ * generation 1 of the deployed cache for scheduled smoke. Writes an entry-path
+ * manifest outside `docs/`; `check-spa-live.mjs` uses it to check both
+ * generations on both hosts (#3590).
+ *
+ * Keep build identities outside Vite's emptied docs/, without gating rollout.
+ */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { entriesFromLedger, entryRefsFromHtml } from './lib/spaChunks.mjs';

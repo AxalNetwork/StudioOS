@@ -1,3 +1,5 @@
+// D5663: trusted same-attempt producer evidence verification.
+//
 // D5663: trusted reporter loads bounded producer artifacts and checks same-attempt Actions execution.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';

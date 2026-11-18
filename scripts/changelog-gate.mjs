@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * A task PR that edits `CHANGELOG.md`. It compares the PR event's head with its
+ * merge base with the event's base commit and rejects an edit unless
+ * `CHANGELOG_LABEL=true`. With complete local history it makes no fetch.
+ * Incomplete history gets one bounded fetch for the exact event commits, and an
+ * inconclusive comparison exits 2. CI-only, in `changelog-gate.yml` with
+ * `fetch-depth: 0`.
+ *
  * Only Session 1's labelled PRs may edit CHANGELOG.md (AGENTS.md).
  * Compare the event's PR head with its merge base with the event's base.
  * Exit 0 if allowed, 1 for an unlabelled edit, or 2 if the check is inconclusive.

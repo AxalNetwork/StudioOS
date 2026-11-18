@@ -1,3 +1,10 @@
+/**
+ * D5603: pure daily CI metrics over Actions jobs and PR queue timelines. D5973:
+ * one row per merge-group head SHA (request, first runner start, last required
+ * check's wait and runtime, queue entry and removal, recorded reason)
+ * classified as `deadline-expired`, `failed-check`, `cancelled-or-superseded`,
+ * `merged` or `missing-evidence`, and the scorecard's request budget.
+ */
 import * as ci from './ciClassify.mjs';
 import { REQUIRED } from './requiredChecks.mjs';
 

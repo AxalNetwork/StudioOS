@@ -1,4 +1,10 @@
-/** D5602: scan admission and opaque, unsuppressed finding state; no network or issue writes. */
+/**
+ * D5602: PR scan policy, opaque finding snapshots, outstanding-new state and
+ * redacted shared incident format.
+ *
+ * D5602: scan admission and opaque, unsuppressed finding state; no network or
+ * issue writes.
+ */
 import { createHash } from 'node:crypto';
 
 export const SCAN_FILE_CAP = 3000;

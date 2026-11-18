@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# D6428: synthetic-only archive/source-loss/restore/suppression drill, with no
+# provider access.
 """D6428: synthetic-only recovery drill; no credential, provider or production file is read."""
 import importlib.util
 import json

@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * The manual public-edge check requests a production magic link and reads D1.
+ * Reports `start_latency`, `endpoint_accepted`, `token_row_written`, and
+ * `mail_send_recorded`. A refusal skips the downstream checks. A `sent` row in
+ * `email_send_log` records provider acceptance. The scheduled Actions check
+ * reads the private HQ Worker run separately. Inbox arrival and sign-in require
+ * the round-trip probe.
+ *
  * Task #168 — does `/magic/start` still reach its INSERT, and does the mail
  * actually get sent?
  *

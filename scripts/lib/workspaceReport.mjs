@@ -1,4 +1,9 @@
 /**
+ * D5573: the validation report (evidence class, sample size, config, commit,
+ * p50/p95, success %, retry amplification, PR and Git counts) as JSON and
+ * Markdown; a mock is only ever `local_mocked` and its cost is "not measured",
+ * never 0. Tests in `workspaceReport.test.mjs`.
+ *
  * D5573 (#5573): the workspace validation result report — evidence class, sample size, config, commit, latency
  * percentiles, success %, retry amplification, PR and Git-operation counts and the six invariant verdicts — as JSON
  * and Markdown. An in-process mock run is always `local_mocked`; this module refuses to label it anything else, and

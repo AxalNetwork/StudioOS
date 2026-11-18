@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * Inserts the ONE account a new branch starts with (D.3). The API refuses to
+ * mint an admin, so the licence principal is direct SQL; `INSERT OR IGNORE`
+ * keeps provisioning resumable, and no password is written — the principal
+ * signs in the way everyone else does, so the workflow log is never a
+ * credential. A missing `PRINCIPAL_EMAIL` warns rather than failing a run that
+ * has already created every resource.
+ *
  * Insert the one account a freshly provisioned branch starts with (D.3).
  *
  * WHY THIS IS SQL AND NOT AN API CALL. `admin.ts` refuses to mint an admin —

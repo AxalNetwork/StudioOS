@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 /**
+ * #4532 (D4532): the skill library's CI gate. Every definition and golden case
+ * in `cloudflare-worker/src/services/agents/skills/` is checked on the
+ * runtime's own validators (`checkLibrary`, `checkDraft`, `checkCase`),
+ * together with pairing, the reads a case may feed, the radar area, and the
+ * generated module (D5612: a deterministic generator, an untracked output, and
+ * the module it imports equal to the generator's `render()`). It is never
+ * written. One line per finding names the file, slug, field, rule and remedy;
+ * any error exits 1. `--json <path>` writes the summary (model evaluation
+ * always `not_run`). `--persisted <path>` reconciles with a store manifest.
+ * Runs in `test:guards` with the Worker's TypeScript loader; its rules have
+ * fixture tests in `cloudflare-worker/test/skill_library_ci_4532.test.ts`.
+ *
  * #4532 — the skill library's CI gate. Fails (exit 1) on any error, with one
  * line per finding: file, slug, field or case, the rule and what to do.
  *

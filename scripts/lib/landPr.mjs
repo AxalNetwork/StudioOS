@@ -1,4 +1,8 @@
 /**
+ * #6326: the landing gates of AGENTS.md step 5 as pure functions (`decide`,
+ * `agentsMayQueue`, `requiredChecks`, `landingReport`) plus parsers for the
+ * `landing policy` job log and step summary; tests in `lib/landPr.test.mjs`.
+ *
  * #6326: the `land-pr` skill's rules, the pure half of `../land-pr.mjs`.
  *
  * It decides whether an agent may put a pull request in the merge queue

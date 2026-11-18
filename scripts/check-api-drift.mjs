@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * The SPA calling an endpoint the worker does not serve — resolved against the
+ * mounted routers (index.ts and the self-mounting modules in
+ * `cloudflare-worker/src/routes/_registry.ts`, #4105), including a local
+ * factory’s returned Hono instance (D696). Unmounted alternate factories do not
+ * count.
+ *
  * API ↔ Worker drift check.
  *
  * Statically analyses `frontend/src/lib/api.js` and every domain module under

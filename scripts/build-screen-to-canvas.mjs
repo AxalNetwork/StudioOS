@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * #6326: the build checklist for a landed canvas, for the
+ * `build-screen-to-canvas` skill: one row per board with its frames, widths,
+ * phone and dark, then the route-map row, decision files and frontend files
+ * that already name it; `--departures` prints the PR's departures table. Reads
+ * local files only and never runs the canvas.
+ *
  * #6326: the build checklist for a landed canvas, for the `build-screen-to-canvas` skill.
  *
  *   node scripts/build-screen-to-canvas.mjs --canvas "Build v2"

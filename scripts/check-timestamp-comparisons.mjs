@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 /**
+ * A timestamp compared as a bare column. SQLite compares timestamps as TEXT and
+ * `'T'` (0x54) beats `' '` (0x20) at position 10, so an ISO-written value is
+ * always greater than `datetime('now')` while the dates match — a 15-minute
+ * sign-in link redeemed for a day, a paid feature stayed granted past its term,
+ * and a meeting that had finished was listed as upcoming. Wrapping only the
+ * right-hand side is the plausible fix and changes nothing; the stored column
+ * is what must be normalised. No baseline, deliberately: four already-correct
+ * sites were converted so the rule needs no ledger of exceptions. It cannot see
+ * a column compared against a **bound parameter** (`created_at >= ?`), which is
+ * the same defect with its format at the bind site (D124, D125).
+ *
  * A timestamp is never compared as a bare column (D124, D125).
  *
  * THE BUG THIS EXISTS FOR. SQLite has no date type. A timestamp is TEXT and a

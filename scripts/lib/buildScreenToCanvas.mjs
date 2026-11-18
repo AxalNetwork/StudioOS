@@ -1,4 +1,11 @@
 /**
+ * #6326: reads a `· Boards.dc.html` file's board list as text (the `const
+ * boards`, `groups: [G(...)]` and literal `<dc-import>` shapes): each board's
+ * frames and widths, desktop, tablet or 390 phone, dark, what the canvas does
+ * not draw, the checklist and departures tables, and which route-map row is the
+ * canvas's. Owned by `../build-screen-to-canvas.mjs`; tested in
+ * `buildScreenToCanvas.test.mjs`.
+ *
  * #6326: the build checklist for a landed canvas, for the `build-screen-to-canvas`
  * skill. Decides, from a `· Boards.dc.html` file's `renderVals` list alone,
  * which boards a build owes and at what size: every board's id, title and

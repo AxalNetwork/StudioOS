@@ -1,4 +1,11 @@
 /**
+ * #6326: the slot protocol's rules apart from GitHub: the ready queue (slot
+ * plus `state:ready`, oldest first, never a PR), the STATUS block, the label
+ * change for each STATUS state (one `state:*`, `needs-decision` only with
+ * BLOCKED and dropped on an answer), which comments are the owner's answer, and
+ * what a slot does with each claim ref. Owned by `../task-lifecycle.mjs`;
+ * tested in `taskLifecycle.test.mjs`.
+ *
  * #6326: the slot protocol's decisions, apart from GitHub, for the
  * `task-lifecycle` skill (AGENTS.md § Task protocol, § STATUS, § Owner answers).
  * Which issue a slot pulls next, what a STATUS block says, which labels go with

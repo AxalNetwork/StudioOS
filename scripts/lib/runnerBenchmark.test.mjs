@@ -1,3 +1,5 @@
+// D5611: measurement fixtures, unavailable evidence and lane-gate regressions.
+//
 // D5611: hand-computed measurements and unavailable evidence; no live Actions runs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
