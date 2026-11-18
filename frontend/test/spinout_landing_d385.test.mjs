@@ -89,7 +89,7 @@ test('the hero names the cohort the server names, and every date it holds', () =
   assert.equal(cell(html, 'ends'), 'November 29, 2026');
   assert.equal(cell(html, 'applications-close'), 'October 25, 2026');
   assert.match(renderedText(html), /Apply to the November 2026 cohort →/);
-  assert.match(renderedText(html), /Read from the cohort record\./);
+  assert.match(renderedText(html), /Dates come from the cohort record\./, '#6990: no engineering note');
 });
 
 test('still reading, a failed read and an absent value are three different sentences', () => {
@@ -108,11 +108,12 @@ test('the hero draws no seat count', () => {
   assert.doesNotMatch(heroSrc, /places/, 'the hero reads the place count');
 });
 
-test('the apply band names the cohort and the track, and the deadline it read', () => {
+test('the apply band names the cohort and the deadline it read, and no track until one is stored (#6990)', () => {
   const out = renderedText(band(OK, 'fit'));
-  assert.match(out, /Apply to the November 2026 cohort on the Find fit track\./);
+  assert.match(out, /Apply to the November 2026 cohort\./);
+  assert.doesNotMatch(out, /track/i, 'the application stores no track yet (#6989)');
   assert.match(out, /Applications close October 25, 2026 — seven days/);
-  assert.match(renderedText(band(FAILED)), /Apply on the Form track\./);
+  assert.match(renderedText(band(FAILED)), /Apply to the Spin-Out Lab\./);
   assert.equal(applyLabelFor(OK), 'Apply to the November 2026 cohort');
 });
 

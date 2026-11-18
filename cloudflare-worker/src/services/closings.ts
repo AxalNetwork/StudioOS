@@ -192,13 +192,16 @@ export async function listClosings(env: Env, user: User) {
 export async function readClosing(env: Env, user: User, closingUid: string) {
   const { closing, reach } = await readable(env, user, closingUid);
   // An investor's own lines only: `investor_user_id` matched to the caller, or every line (-1 matches none).
+  // D6195: each line carries its commitment's route preference (null for a prospect line or none
+  // recorded), beside the route the studio sets; the preference never sets `route`.
   const lines = await env.DB.prepare(
     `SELECT l.id, l.uid, l.commitment_id, l.prospect_id, l.investor_user_id, l.route, l.amount_cents, l.currency, l.envelope_id,
             l.safe_issuance_uid, l.vehicle_ref, l.status, l.created_at, l.updated_at,
-            COALESCE(u.name, rp.name) AS investor_name
+            COALESCE(u.name, rp.name) AS investor_name, cm.route_preference AS route_preference
        FROM closing_lines l
        LEFT JOIN users u ON u.id = l.investor_user_id
        LEFT JOIN raise_prospects rp ON rp.id = l.prospect_id
+       LEFT JOIN commitments cm ON cm.id = l.commitment_id
       WHERE l.closing_id = ? AND (? = 0 OR l.investor_user_id = ?)
       ORDER BY l.id`,
   ).bind(closing.id, reach === 'own' ? 1 : 0, reach === 'own' ? Number(user.id) : -1).all<any>();
