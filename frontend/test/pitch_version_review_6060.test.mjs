@@ -279,3 +279,31 @@ test('6060 no saved version: the page says so and checks nothing', async () => {
     assert.deepEqual(m.calls.filter((c) => ['figures', 'check', 'refresh', 'approval'].includes(c[0])), []);
   } finally { await m.unmount(); }
 });
+
+test('6060 freshness: a moved or vanished bound figure is Stale on its card, an unknown one is Couldn’t check, and a stale claim is Stale', () => {
+  // Mutations checked: read a stale claim as Passed; drop the unknown-freshness row; let a later "stale" row hide an earlier "gone" on the same card.
+  const deck = deckOf(CLEAN);
+  const reads = cleanReads([0, 1, 2]);
+  reads.check.data.claims[0] = { ...backed(1), state: 'stale', display_state: 'stale' };
+  reads.refresh = ok({ rows: [{ slide: 1, state: 'gone' }, { slide: 1, state: 'stale' }, { slide: 2, state: 'stale' }, { slide: 0, state: 'unknown' }] });
+  const rows = rowsOf(reviewOf({ deck, ...reads, pf: pfOf(deck) }));
+  const stale = rows.filter((r) => r.status === 'stale').map((r) => `${r.card}: ${r.title}`);
+  assert.deepEqual(stale, [
+    '0: Card 1 · Synthetic cover: ARR · €410k',
+    '1: Card 2 · Synthetic traction: a bound figure is no longer in its store',
+    '2: Card 3 · Synthetic market: a bound figure has changed in its store',
+  ]);
+  const unknown = rows.filter((r) => r.id === 'fresh:unknown');
+  assert.equal(unknown.length, 1);
+  assert.equal(unknown[0].status, 'unchecked');
+  assert.equal(rows.some((r) => r.title === 'Every bound figure is current'), false, 'nothing moved is not claimed when something did');
+});
+
+test('6060 Done: "Every card is Done" is said only on a deck whose cards carry a status', () => {
+  // Mutations checked: claim every card Done on a deck nobody tracks.
+  const untracked = rowsOf(reviewOf({ deck: deckOf(CLEAN), ...cleanReads([0, 1, 2]), pf: pfOf(deckOf(CLEAN)) }));
+  assert.equal(untracked.some((r) => r.id === 'done'), false);
+  const tracked = CLEAN.map((s) => ({ ...s, status: 'done' }));
+  const rows = rowsOf(reviewOf({ deck: deckOf(tracked), ...cleanReads([0, 1, 2]), pf: pfOf(deckOf(tracked)) }));
+  assert.equal(rows.find((r) => r.id === 'done')?.status, 'passed');
+});
