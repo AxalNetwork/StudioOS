@@ -161,11 +161,52 @@ export function loginRedirectFor(location) {
   const here = `${pathname}${location?.search || ''}${location?.hash || ''}`;
   const kept = RETURN_AFTER_LOGIN_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   let safe = kept ? sanitizeNextPath(here) : null;
+  const directory = new URLSearchParams(location?.search || '').get('view') === 'directory';
   if (!safe && kept && pathname === FUNDS_PREFIX && here.length > 200) {
-    const directory = new URLSearchParams(location?.search || '').get('view') === 'directory';
     safe = sanitizeNextPath(`${FUNDS_PREFIX}?${directory ? 'view=directory&' : ''}${FUNDS_FILTERS_DROPPED}=1`);
   }
+  if (safe && pathname === FUNDS_PREFIX && directory) rememberFundsReturn(safe);
   return safe ? `/login?next=${encodeURIComponent(safe)}` : '/login';
+}
+
+// ---------------------------------------------------------------------------
+// D7166 part 2 (#7166, RFD-04B, RFD-06): "Signed in. This is the search you opened."
+// ---------------------------------------------------------------------------
+
+const FUNDS_RETURN_KEY = 'gvpn:funds-return';
+
+/** The path and query of a kept destination, without its fragment: what the Directory compares on arrival. */
+const withoutHash = (p) => String(p || '').split('#')[0];
+
+/**
+ * The guard sent a signed-out visitor away from a Directory link and kept it as `next`. Remember that link, for as
+ * long as a kept destination lives (24 hours, the verification email's life), so the Directory can say once, on
+ * arriving at that same link signed in, that it is the search they opened. The marker is only ever a same-origin
+ * path that passed `sanitizeNextPath`; it names nothing but the link.
+ */
+export function rememberFundsReturn(path) {
+  const p = sanitizeNextPath(path);
+  if (!p || pathOf(p) !== FUNDS_PREFIX) return;
+  safeWriteJSON(FUNDS_RETURN_KEY, { path: withoutHash(p), ts: Date.now() });
+}
+
+/**
+ * True once, when the Directory opens at the link the guard kept: the marker is fresh and names this same path and
+ * query. A match, a stale marker or a bad one is cleared; a fresh marker for another link is left for that link. The
+ * Directory is signed in by the time it renders (App.jsx's guard), so a match means the visitor signed in to get here.
+ */
+export function consumeFundsReturn(here) {
+  const v = safeReadJSON(FUNDS_RETURN_KEY, null);
+  if (!v || typeof v !== 'object') return false;
+  const p = sanitizeNextPath(v.path);
+  const fresh = Number.isFinite(v.ts) && Date.now() - v.ts <= TTL_MS && Date.now() >= v.ts;
+  if (!p || !fresh) {
+    safeRemove(FUNDS_RETURN_KEY);
+    return false;
+  }
+  if (p !== withoutHash(here)) return false;
+  safeRemove(FUNDS_RETURN_KEY);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
