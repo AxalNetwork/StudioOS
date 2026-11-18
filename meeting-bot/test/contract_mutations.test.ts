@@ -13,7 +13,7 @@ const run=(loader?:string)=>spawnSync(process.execPath,['--experimental-strip-ty
 const cases=[
   ['notice payload not required','runtime.ts',"typeof command.notice!=='string'||command.notice!==approved",'false'],
   ['completion counts omitted','callback.ts',"...(report.chunks===undefined?{}:{chunks:report.chunks}),",''],
-  ['explicit budget refusal ignored','lifecycle.ts',"if(error instanceof TransportError&&[401,402,403,409].includes(error.status))end(error.status===402?'tokens':'stopped');",''],
+  ['explicit budget refusal ignored','lifecycle.ts',"if((error instanceof TransportError)&&[401,402,403,409].includes(error.status))end(error.status===402?'tokens':'stopped');",''],
   ['in-flight chunk omitted from failure count','uploader.ts','this.queue.length + (this.inFlight ? 1 : 0)','this.queue.length'],
   ['signature omits route','callback.ts','`v1:${ts}:POST:${path}:${body}`','`v1:${ts}:POST:${body}`'],
   ['wire sequence reused','callback.ts','seq:++seq','seq:seq'],

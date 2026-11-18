@@ -154,7 +154,7 @@ export default function DealRoomPage() {
   if (deal.plan_limited) return <DealFreePlan deal={deal} onRetry={loadDeal} />;
   const track = isInvestor ? trackOf(stage) : null;
   // D6191: Commit only when it can succeed; Change amount on a Pending one; nothing on a Confirmed one.
-  const headerCommit = isInvestor && deal ? commitAction(deal, myCommitment(mine, deal.currency || 'USD', deal.id)) : { kind: null, reason: null };
+  const headerCommit = isInvestor ? commitAction(deal, myCommitment(mine, deal.currency || 'USD', deal.id)) : { kind: null, reason: null };
 
   const head = headerOf(deal);
   const next = track && (track.state === 'ready' || track.state === 'none') ? track.next : null;

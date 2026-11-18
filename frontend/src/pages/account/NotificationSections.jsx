@@ -377,7 +377,7 @@ export function DigestQuietHoursCard({ flash }) {
           <Field label="Digest frequency"
             hint="Send a daily digest at 9 AM (your time) — non-critical updates collected into a single email instead of arriving one-by-one.">
             <select value={row.digest_frequency || 'weekly'}
-              onChange={e => save({ digest_frequency: e.target.value }, 'digest_frequency')} disabled={busy} className={inputCls}>
+              onChange={e => save({ digest_frequency: e.target.value })} disabled={busy} className={inputCls}>
               <option value="off">Off</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
@@ -425,7 +425,7 @@ export function DigestQuietHoursCard({ flash }) {
           <Field label="Start (HH:MM)">
             <input type="time" value={row.quiet_hours_start || ''}
               onChange={e => setRow({ ...row, quiet_hours_start: e.target.value })}
-              onBlur={() => save({ quiet_hours_start: row.quiet_hours_start || null }, 'quiet_hours_start')}
+              onBlur={() => save({ quiet_hours_start: row.quiet_hours_start || null })}
               className={inputCls} />
             {fieldErrors.quiet_hours_start && (
               <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.quiet_hours_start}</p>
@@ -434,7 +434,7 @@ export function DigestQuietHoursCard({ flash }) {
           <Field label="End (HH:MM)">
             <input type="time" value={row.quiet_hours_end || ''}
               onChange={e => setRow({ ...row, quiet_hours_end: e.target.value })}
-              onBlur={() => save({ quiet_hours_end: row.quiet_hours_end || null }, 'quiet_hours_end')}
+              onBlur={() => save({ quiet_hours_end: row.quiet_hours_end || null })}
               className={inputCls} />
             {fieldErrors.quiet_hours_end && (
               <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.quiet_hours_end}</p>
@@ -442,7 +442,7 @@ export function DigestQuietHoursCard({ flash }) {
           </Field>
           <Field label="Timezone">
             <select value={row.quiet_hours_tz || ''}
-              onChange={e => save({ quiet_hours_tz: e.target.value || null }, 'quiet_hours_tz')}
+              onChange={e => save({ quiet_hours_tz: e.target.value || null })}
               disabled={busy} className={inputCls}>
               <option value="">UTC (default)</option>
               {tzList.map(tz => (

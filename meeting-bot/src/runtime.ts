@@ -95,7 +95,7 @@ export class RuntimeHost {
       }catch(e){
         logLine(this.options.log??(()=>{}),'runtime_failed');
         // D1381: a refusal the adapter named (the Zoom credentials' reason) is reported as itself.
-        const named=e instanceof AdapterFailure&&e.detail?{code:e.code,detail:e.detail}:{code:'platform_blocked' as const,detail:'runtime_start'};
+        const named=(e instanceof AdapterFailure)&&e.detail?{code:e.code,detail:e.detail}:{code:'platform_blocked' as const,detail:'runtime_start'};
         try{await transport.status({state:'failed',...named});}catch{/* no raw exception */}
       }finally{
         if(adapter){let timer:ReturnType<typeof setTimeout>|undefined;await Promise.race([adapter.leave().catch(()=>{}),new Promise<void>(resolve=>{timer=setTimeout(resolve,5000);})]);if(timer)clearTimeout(timer);}

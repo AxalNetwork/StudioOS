@@ -150,7 +150,7 @@ function founderItem(row:RaiseEvidenceItem,found:EvidenceCandidate|undefined,fai
 }
 async function decisionItem(ctx:RaiseEvidenceContext,row:RaiseEvidenceItem){
   try{return founderItem(row,await live(ctx,row));}
-  catch(error){return founderItem(row,undefined,error instanceof RaiseEvidenceError&&error.code==='unreadable');}
+  catch(error){return founderItem(row,undefined,(error instanceof RaiseEvidenceError)&&error.code==='unreadable');}
 }
 async function live(ctx:RaiseEvidenceContext,ref:Pick<EvidenceCandidate,'kind'|'area'|'source_table'|'source_ref'>,collected?:CollectedEvidence){
   // D6864: typed evidence is its own source, so the stored row is the current one.

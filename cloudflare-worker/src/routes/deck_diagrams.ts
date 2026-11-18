@@ -51,7 +51,7 @@ deckDiagrams.post('/:id{[0-9]+}/diagrams/check', async (c) => {
   if (!grid) return refuse(c, 400, { code: 'invalid_grid', message: 'Name the area the diagram sits in: its columns and rows on the Grid.' });
   const card = Number.isSafeInteger(body?.card) && body.card >= 0 ? Number(body.card) : 0;
   let aspect = aspectOf('16:9');
-  try { aspect = aspectOf(themeOfRow(await getDeckRow(c.env, deck.deckId))?.aspect); } catch { aspect = aspectOf('16:9'); }
+  try { aspect = aspectOf(themeOfRow(await getDeckRow(c.env, deck.deckId))?.aspect); } catch { /* unreadable deck: keep 16:9 */ }
   const diagram = sanitizeDiagram(body?.diagram);
   if (!diagram) {
     const why = diagramProblem(body?.diagram) ?? 'this is not a diagram.';
