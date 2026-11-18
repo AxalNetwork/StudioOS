@@ -10,18 +10,19 @@ import {
 import { WriteNote, writeFailureText } from './useGuardedWrite';
 import ProgrammeForm from '../../testing/ProgrammeForm';
 import ProgrammeApplicants from '../../testing/ProgrammeApplicants';
-import {
-  byStatus, datesLine, isEditable, isSubmittable, placesLine, refusalText, statusLabel, statusTone,
-} from '../../testing/programmeModel';
+import { datesLine, isEditable, placesLine, refusalText, statusLabel } from '../../testing/programmeModel';
+import ProgrammeLogo from '../../admin/productTesting/ProgrammeLogo';
+import { lifecycleCells, nextStep, programmeOrder, stageLabel } from './testingLifecycle';
 
 /**
- * Offers · Product testing — `/offers/testing` (D815 board D4, #2261).
+ * Offers · Product testing — `/offers/testing` (D815 board D4, #2261), redrawn to Offers v2 board
+ * OF-06 and its phone layout OF-09c by #4843 part 2 (D4843-p2).
  *
- * The firm's testing programmes, by status: Draft, Waiting for HQ, Open,
- * Testing and Closed, and Sent back with HQ's note. "New programme" writes a
- * draft; "Submit for HQ approval" sends it. HQ opens it once approved. One
- * programme open shows its applicants with Pick and Decline (the shared
- * `ProgrammeApplicants`).
+ * Each programme is one card: its logo, name, places and dates, the five-step lifecycle
+ * (Draft → HQ review → Recruiting → Testing → Complete, `testingLifecycle.js`) and the one next
+ * action its state calls for: Submit for approval, Edit and resubmit, Waiting for HQ, Review
+ * applicants, Continue testing or View testers. "+ New programme" writes a draft. One programme's
+ * applicants open with Pick and Decline (the shared `ProgrammeApplicants`).
  *
  * The data is D812's partner routes (`partnerTestingApi`): the Worker scopes
  * every read and write to this firm, and holds picks to the places.
@@ -158,23 +159,29 @@ export default function TestingZone({ api = partnerTestingApi }) {
 
   const unlinked = isNoPartnerProfile(state.error);
   const items = state.items || [];
-  const visible = items.filter((p) => inView(view, p));
-  const groups = byStatus(visible);
+  const visible = programmeOrder(items.filter((p) => inView(view, p)));
   const openNew = () => { setNote(null); setPanel({ mode: 'new', programme: null }); };
   const rowActions = testingActions('offers/testing', {
     handlers: { newProgramme: openNew },
     view: {
-      header: ['Product', 'Status', 'Places', 'Applicants', 'Dates'],
+      header: ['Product', 'Stage', 'Status', 'Places', 'Applicants', 'Dates'],
       rows: visible,
-      cells: (p) => [p.product_name, statusLabel(p.status), placesLine(p), p.applicant_count, datesLine(p)],
+      cells: (p) => [p.product_name, stageLabel(p.status), statusLabel(p.status), placesLine(p), p.applicant_count, datesLine(p)],
     },
   });
   const newButton = (
     <button ref={newButtonRef} type="button" className={buttonClass} onClick={openNew}
       data-testid="testing-new-programme">
-      New programme
+      + New programme
     </button>
   );
+  const act = (p, step) => {
+    if (step.action === 'submit') return submit(p);
+    if (step.action === 'edit') return setPanel({ mode: 'edit', programme: p });
+    return setPanel({ mode: 'open', programme: p });
+  };
+  const actionId = (step, uid) => (step.action === 'submit' ? `testing-submit-${uid}`
+    : step.action === 'edit' ? `testing-edit-${uid}` : `testing-open-${uid}`);
 
   return (
     <>
@@ -203,61 +210,75 @@ export default function TestingZone({ api = partnerTestingApi }) {
         isEmpty={unlinked || items.length === 0}
         empty={(
           <NothingYet
-            title="No testing programmes yet"
-            body="Recruit Axal members to test your product before it launches. A programme opens once HQ approves it."
-            action={newButton}
+            title="Validate an offer before launch"
+            body="Recruit Axal members to test your product and give feedback. A programme opens once HQ approves it."
+            action={(
+              <button ref={newButtonRef} type="button" className={buttonClass} onClick={openNew} data-testid="testing-new-programme">
+                Create a testing programme
+              </button>
+            )}
           />
         )}
       >
-        <div className="space-y-6" data-testid="testing-zone">
+        <div className="space-y-4" data-testid="testing-zone">
           <ZoneHeading
-            title="Testing programmes"
-            blurb="Members apply from their dashboard; you pick the testers. A programme opens once HQ approves it."
+            title="Product testing"
+            blurb="Recruit Axal members to test your product before launch."
             action={newButton}
           />
           {note && <p className="text-[12.5px] font-semibold" role="status" data-testid="testing-note">{note}</p>}
-          {groups.length === 0 && (
+          {visible.length === 0 && (
             <p className="text-[12.5px] text-axal-muted" data-testid="testing-view-empty">No programme is in this view.</p>
           )}
-          {groups.map((g) => (
-            <section key={g.status} data-testid={`testing-group-${g.status}`}>
-              <h3 className="mb-2 text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{g.label} · {(g.items || []).length}</h3>
-              <ul className="space-y-2">
-                {(g.items || []).map((p) => (
-                  <li key={p.uid} ref={(node) => { if (node) programmeNodes.current.set(p.uid, node); else programmeNodes.current.delete(p.uid); }} tabIndex={-1} className="rounded-xl border border-axal-hairline p-3 dark:border-gray-800" data-testid={`testing-programme-${p.uid}`}>
-                    <div className="flex flex-wrap items-start justify-between gap-2">
+          <ul className="space-y-3" data-testid="testing-programmes">
+            {visible.map((p) => {
+              const step = nextStep(p);
+              return (
+                <li key={p.uid} ref={(node) => { if (node) programmeNodes.current.set(p.uid, node); else programmeNodes.current.delete(p.uid); }} tabIndex={-1}
+                  className="space-y-3 rounded-xl border border-axal-hairline p-4 dark:border-gray-800" data-testid={`testing-programme-${p.uid}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <ProgrammeLogo p={p} size={34} />
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[13.5px] font-bold">{p.product_name}</span>
-                          <Pill tone={statusTone(p.status)}>{statusLabel(p.status)}</Pill>
-                        </div>
-                        <p className="mt-1 text-[12px] text-axal-muted">
-                          {placesLine(p)} · {p.applicant_count} {p.applicant_count === 1 ? 'applicant' : 'applicants'} · {datesLine(p)}
-                        </p>
-                        {p.status === 'rejected' && p.review_note && (
-                          <p className="mt-1 text-[12px] text-red-700 dark:text-red-300" data-testid={`testing-review-note-${p.uid}`}>
-                            HQ: {p.review_note}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {isEditable(p) && (
-                          <button type="button" className={ghostButtonClass} onClick={() => setPanel({ mode: 'edit', programme: p })}
-                            data-testid={`testing-edit-${p.uid}`}>Edit</button>
-                        )}
-                        {isSubmittable(p) && (
-                          <button type="button" disabled={busy === p.uid} className={buttonClass} onClick={() => submit(p)}
-                            data-testid={`testing-submit-${p.uid}`}>Submit for HQ approval</button>
-                        )}
-                        <button type="button" className={ghostButtonClass} onClick={() => setPanel({ mode: 'open', programme: p })}
-                          data-testid={`testing-open-${p.uid}`}>Applicants</button>
+                        <h3 className="text-[14.5px] font-bold">{p.product_name}</h3>
+                        <p className="text-[12px] text-axal-muted" data-testid={`testing-meta-${p.uid}`}>{placesLine(p)} · {datesLine(p)}</p>
                       </div>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+                    <span className="sm:hidden" data-testid={`testing-stage-${p.uid}`}><Pill tone={p.status === 'rejected' ? 'danger' : 'neutral'}>{stageLabel(p.status)}</Pill></span>
+                    <ol className="hidden flex-wrap gap-1 sm:flex" aria-label={`Lifecycle: ${stageLabel(p.status)}`} data-testid={`testing-life-${p.uid}`}>
+                      {lifecycleCells(p.status).map((c) => (
+                        <li key={c.label} aria-current={c.state === 'current' ? 'step' : undefined}
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.state === 'current' ? 'bg-axal-violet-deep text-white dark:bg-violet-500' : c.state === 'done' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300' : 'border border-axal-hairline text-axal-faint dark:border-gray-700'}`}>
+                          {c.state === 'done' ? `✓ ${c.label}` : c.label}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 ${step.primary ? 'border-violet-200 bg-violet-50/60 dark:border-violet-500/30 dark:bg-violet-500/10' : 'border-axal-hairline bg-gray-50 dark:border-gray-800 dark:bg-gray-900/40'}`}
+                    data-testid={`testing-next-${p.uid}`}>
+                    <div className="min-w-0 text-[12.5px]">
+                      <b className="block">{step.title}</b>
+                      <span className={p.status === 'rejected' ? 'text-red-700 dark:text-red-300' : 'text-axal-muted'}
+                        data-testid={p.status === 'rejected' ? `testing-review-note-${p.uid}` : undefined}>{step.line}</span>
+                    </div>
+                    <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                      {p.status === 'draft' && isEditable(p) && (
+                        <button type="button" className={`${ghostButtonClass} min-h-[44px] sm:min-h-0`} onClick={() => setPanel({ mode: 'edit', programme: p })}
+                          data-testid={`testing-edit-${p.uid}`}>Edit</button>
+                      )}
+                      {step.action && (
+                        <button type="button" disabled={busy === p.uid}
+                          className={`${step.primary ? buttonClass : ghostButtonClass} min-h-[48px] w-full sm:min-h-0 sm:w-auto`}
+                          onClick={() => act(p, step)} data-testid={actionId(step, p.uid)}>
+                          {step.label}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       </ZoneBody>
       </div>
