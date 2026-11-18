@@ -105,6 +105,7 @@ export const SNAPSHOT_SHOWS = 'Seven areas, each with its score out of 10, its e
 /** What a Shared links row shares: a readiness snapshot, or an evidence pack for its reader. */
 export function whatItShares(link) {
   if (link?.output === 'readiness') return 'Readiness snapshot';
+  if (link?.output === 'status') return 'Raise status';
   return readerWord(link?.reader) + (link?.nda_signed_on ? ` · NDA ${String(link.nda_signed_on).slice(0, 10)}` : '');
 }
 /** The snapshot composer's checks, the same ones the Worker makes. */
@@ -137,3 +138,19 @@ export const OUTPUTS = Object.freeze([
   { key: 'pdf', word: 'PDF', line: 'An A4 page you download and send yourself. A copy cannot be stopped or counted.' },
 ]);
 export const PDF_DOWNLOADED = 'Downloaded. Nothing was sent: send the file yourself.';
+
+// ---------------------------------------------------------------------------
+// D6897 part 4 (#6897, RA-31): a Raise status page on Shared links
+// ---------------------------------------------------------------------------
+/** What a row counts: a snapshot's areas, a status page's materials, a pack's items. */
+export function countWord(link) {
+  if (link?.output === 'readiness') return 'areas';
+  if (link?.output === 'status') return 'materials';
+  return link?.item_count === 1 ? 'item' : 'items';
+}
+/** Where "Make a new …" goes for a snapshot or a status page (a pack opens the composer in place). */
+export function remakeOf(link) {
+  if (link?.output === 'readiness') return { to: '/raise/fundraising-readiness', word: 'Make a new snapshot' };
+  if (link?.output === 'status') return { to: '/raise', word: 'Make a new status page' };
+  return null;
+}

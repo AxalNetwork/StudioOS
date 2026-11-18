@@ -20,6 +20,7 @@ import { ADD_ACTION as CAP_REL_ADD, addHref as capRelAddHref } from '../../raise
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
+import { ShareStatusButton } from '../evidence/ShareStatus';
 // D5081 (#5081, RA-14): Use of funds' Home read, which CycleRoute holds for the header's action and Home (HUBS.md: a cycle's
 // new part comes in through its defs file, so the frozen route gains no import).
 export { useUseOfFundsHome } from '../../raise/useoffunds/useOfFundsRead.js';
@@ -120,6 +121,8 @@ const raise = {
     // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
   }),
   add: toFnMap({}),
+  // D6897 part 4 (#6897, RA-31): the Overview header's Share outside Axal, the Raise status page; founders only.
+  overviewMore: ({ projectId, role }) => (role === 'founder' ? <ShareStatusButton projectId={projectId} /> : null),
   // D6049 (#6049, Raise v2 RA-16): a module that owns its page. `(data, ctx)` → `{ sub, body, Bands, action }`: the
   // header's coverage and freshness line, the page drawn in place of the generic chart and records table
   // (handed the card, records, Add and record links), and the collapsed AI gap analysis the bands draw in.

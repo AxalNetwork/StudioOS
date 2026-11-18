@@ -950,6 +950,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
           // D1466 (RO00): Raise's header Ask, beside Build your deck.
           ask={cycle === 'raise' && projectId ? <RaiseAsk /> : null}
+          // D6897 part 4 (#6897, RA-31): a cycle's own header controls beside the action (Raise: Share outside Axal).
+          more={projectId ? def?.overviewMore?.({ projectId, role: user?.role ?? null }) ?? null : null}
         />
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
