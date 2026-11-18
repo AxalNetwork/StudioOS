@@ -129,6 +129,12 @@ export function makeCycleWrites(request) {
       acceptMercuryPartner: (projectId, id, body = {}) => request(`/cycles/grow/mercury/partner-proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       dismissMercuryPartner: (projectId, id) => request(`/cycles/grow/mercury/partner-proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
       deleteMercuryFact: (projectId, id) => request(`/cycles/grow/mercury/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
+      // D5866 (#5866): the founder's own TikTok (D5863 sync and delete, D5864 the channel proposal). `kind` is
+      // `account` (an audience snapshot) or `video` (a video's figures), as the Worker's delete reads it.
+      syncTiktok: (projectId) => request('/cycles/grow/tiktok/sync', { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      deleteTiktokFact: (projectId, id, kind) => request(`/cycles/grow/tiktok/facts/${seg(id)}?${new URLSearchParams({ project: String(projectId), kind: kind === 'account' ? 'account' : 'video' })}`, { method: 'DELETE' }),
+      acceptTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      dismissTiktokProposal: (projectId, id) => request(`/cycles/grow/tiktok/proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
     },
     // D696 (#1658): a record's own action, as `cyclesApi.recordAction` sends it; a
     // FormData body (Upload proof) goes as it is.

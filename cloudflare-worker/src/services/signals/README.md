@@ -56,10 +56,17 @@ public companies". `signal_ingest_runs` is the background-refresh audit trail.
 
 ### DB-first, seed fallback
 
-The engine reads from D1 first and **transparently falls back to the in-code
-seed corpus** (`seed.ts`) when the tables are missing or empty. This keeps the
-reads working before any ingestion has run, and means no code
-change is needed once the tables fill — seed and live rows share one shape.
+The engine reads from D1 first and falls back to the in-code seed corpus
+(`seed.ts`), labelled `data_state: "illustrative"`, only when the tables are
+missing or no ingestion has ever written a signal. This keeps the reads working
+before any ingestion has run, and means no code change is needed once the
+tables fill — seed and live rows share one shape.
+
+D7173: any other read failure throws `SignalsUnreadableError`, which
+`GET /api/signals` answers with 503 `signals_unreadable` and which is never
+cached or served as examples. An ingested store with no active signal is
+`live` with none. Evidence that cannot be read marks each signal
+`evidence_state: "unavailable"` with `confidence_score: null`.
 
 ## Source layer (swappable adapters)
 

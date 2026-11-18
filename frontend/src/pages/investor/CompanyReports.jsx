@@ -10,6 +10,7 @@ import {
 } from './portfolioReportsModel';
 import Sheet from '../../ui/Sheet.jsx';
 import ReportPrintButton from '../cycles/reporting/printing/ReportPrintButton.jsx';
+import { figuresCsv, figuresCsvName } from './portfolioReportsModel';
 
 /**
  * D1061 (#2931) — the company page's blocks (RPT10, RPT11, RPT13): Figures as
@@ -91,6 +92,33 @@ function SmallChart({ s }) {
   );
 }
 
+/**
+ * D6224 (#6224): "Download figures (CSV)" — the reports already on the page,
+ * as a file built in the browser (no read). A failure says so and leaves the
+ * page as it was.
+ */
+function FiguresDownload({ reports }) {
+  const [failed, setFailed] = useState(false);
+  const download = () => {
+    setFailed(false);
+    try {
+      const blob = new Blob(['\uFEFF', figuresCsv(reports)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = figuresCsvName();
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { setFailed(true); }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="company-figures-download">
+      <button type="button" className={BTN} onClick={download} data-testid="button-download-figures">Download figures (CSV)</button>
+      <span className={MUTED}>Every figure as reported, with its source. A gap reads “Not recorded” with its reason.</span>
+      {failed ? <p role="alert" className="m-0 w-full text-[12px] text-amber-800 dark:text-amber-300" data-testid="company-figures-download-failed">The figures could not be downloaded. Nothing on this page changed. Try again.</p> : null}
+    </div>
+  );
+}
+
 function FigureCard({ s }) {
   const [table, setTable] = useState(false);
   return (
@@ -160,6 +188,7 @@ export function FiguresTab({ uid, periods, onSaveNote = null }) {
           <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block w-4 border-t border-dashed border-gray-400 dark:border-gray-500" />No figure in a report (dashed)</li>
           <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full border-2 border-violet-600 dark:border-violet-400" />Corrected (ring)</li>
         </ul>
+        <FiguresDownload reports={state.reports} />
       </section>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="company-figure-grid">{FIGURE_KEYS.map((k) => <FigureCard key={k} s={seriesOf(state.reports, k)} />)}</div>
       <section className={CARD} data-testid="company-what-changed">

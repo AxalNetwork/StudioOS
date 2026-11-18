@@ -245,3 +245,51 @@ export async function consentedTopics(env: Env, userId: number, prefs: Preferenc
   }
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, TOPIC_LIMIT).map(([t]) => t);
 }
+
+// ---------------------------------------------------------------------------
+// D7120 — group sessions as suggestions
+// ---------------------------------------------------------------------------
+
+export type SessionCandidate = {
+  kind: 'session'; uid: string; title: string; language: string;
+  support_type: { key: string; label: string }; state: string; seats_left: number;
+  [k: string]: unknown;
+};
+
+/**
+ * Upcoming group sessions that fit the member's choices, by the same rules as
+ * experts: a kind they chose or a consented topic may suggest, their language,
+ * group in their formats (or no format chosen), not dismissed. A full session
+ * is kept, marked unavailable, so "no seats" is said rather than hidden.
+ */
+export function recommendSessions(sessions: SessionCandidate[], prefs: Preferences, topics: string[], dismissed: Set<string>) {
+  if (!prefs.suggestions) return { items: [], excluded: { dismissed: 0, language: 0, format: 0 } };
+  const topicUse = usableTopics(topics, prefs.support_types);
+  const topicTypes = new Set(topicUse.used.map((t) => typeOfCategory(t)!));
+  const wanted = new Set<string>([...prefs.support_types, ...topicTypes]);
+  const excluded = { dismissed: 0, language: 0, format: 0 };
+  const wantsGroup = !prefs.formats.length || prefs.formats.includes('group');
+  const langs = lower(prefs.languages);
+  const items: Array<SessionCandidate & { available: boolean; why: { used: Reason[]; not_used: string[] } }> = [];
+  for (const s of sessions) {
+    if (!wanted.has(s.support_type.key)) continue;
+    if (!wantsGroup) { excluded.format += 1; continue; }
+    if (dismissed.has(`session:${s.uid}`)) { excluded.dismissed += 1; continue; }
+    if (langs.length && !langs.includes(s.language.toLowerCase())) { excluded.language += 1; continue; }
+    const type = s.support_type.key as SupportType;
+    const used: Reason[] = [];
+    if (prefs.support_types.includes(type)) used.push({ kind: 'interest', label: `You chose ${SUPPORT_TYPES[type].label}` });
+    for (const t of topicUse.used) {
+      if (typeOfCategory(t) === type && !prefs.support_types.includes(type)) {
+        used.push({ kind: 'topic', label: `You chose the topic “${categoryLabel(t)}” on a reflection` });
+      }
+    }
+    if (langs.length) used.push({ kind: 'language', label: `Held in ${s.language}` });
+    if (prefs.formats.includes('group')) used.push({ kind: 'format', label: 'You asked for group sessions' });
+    items.push({
+      ...s, available: s.state === 'open',
+      why: { used, not_used: [...NOT_USED, ...(prefs.topic_consent ? [] : ['Topics on your reflections (you have not allowed this)'])] },
+    });
+  }
+  return { items, excluded };
+}

@@ -25,7 +25,7 @@ import './writeFlow.css';
  * shows the Worker's own sentence; a 400 that names a field returns to that
  * field. Closing a draft that holds anything asks first.
  */
-export default function WriteFlow({ kind, detail, today = '', save, reread, onSaved, onClose, closeAsked = false, onCloseAnswered }) {
+export default function WriteFlow({ kind, detail, today = '', save, reread, onSaved, onClose, closeAsked = false, onCloseAnswered, context = null, receiptNote = null }) {
   const def = WRITES[kind];
   const initial = useMemo(() => draftOf(kind, today), [kind, today]);
   const [values, setValues] = useState(initial);
@@ -118,6 +118,7 @@ export default function WriteFlow({ kind, detail, today = '', save, reread, onSa
           Company · <b>{base.name || NOT_RECORDED}</b>
           {' · '}{base.rounds ? `${base.rounds} round${base.rounds === 1 ? '' : 's'} · invested ${money(base.invested) ?? NOT_RECORDED}` : 'No round recorded'}
         </p>
+        {context ? <p className="pfw-alert" role="note" data-testid="write-flow-context">{context}</p> : null}
         {step !== 'conflict' && (
           <ol className="pfw-steps" aria-label={`Step ${index} of 4`}>
             {STEPS.map((s, i) => (
@@ -272,6 +273,7 @@ export default function WriteFlow({ kind, detail, today = '', save, reread, onSa
             {receiptOf(kind, record).map((r) => (<React.Fragment key={r.key}><dt>{r.label}</dt><dd data-testid={`receipt-${r.key}`}>{r.value}</dd></React.Fragment>))}
             <dt>Audit</dt><dd>Admin audit log · <code>{def.audit}</code></dd>
           </dl>
+          {receiptNote ? <p className="pfw-alert" role="status" data-testid="write-flow-receipt-note">{receiptNote}</p> : null}
           <div className="pfw-actions">
             <button type="button" className="pfw-btn is-primary" onClick={() => onClose?.()} data-testid="write-flow-done">Back to {base.name || 'the company'}</button>
           </div>
