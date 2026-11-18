@@ -1,0 +1,126 @@
+/* D6129 (#6129) — Investor Studio home v2's module bodies (canvas D6126 SM17 to SM27). Every
+   colour is a Studio `--sm-*` token (studioModules.css), so the dark boards (SM27) follow the
+   frame's own dark tokens. Every state is a glyph plus a word; red is only the small icon. */
+.ihs-rows { list-style: none; margin: 0; padding: 0; }
+.ihs-sub { margin: 0; font-size: 12px; line-height: 1.45; color: var(--sm-mut); }
+.ihs-body { margin: 0; font-size: 12.5px; color: var(--sm-body); }
+.ihs-strong { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--sm-body); }
+.ihs-mu { color: var(--sm-mut); }
+.ihs-mono { font-family: var(--font-mono); }
+.ihs-nrec { font-size: 12.5px; font-weight: 600; color: var(--sm-mut); }
+.ihs-needs, .ihs-funds, .ihs-returns, .ihs-fit, .ihs-arrivals { display: flex; flex-direction: column; gap: 10px; min-width: 0; container-type: inline-size; }
+.ihs-unr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--sm-body); }
+.ihs-unr svg { color: var(--sm-neg); flex: none; }
+.ihs-gl { width: 30px; height: 30px; flex: none; border-radius: 9px; background: var(--sm-chip); border: 1px solid var(--sm-line); display: grid; place-items: center; color: var(--sm-body); }
+
+/* Needs you (SM17) */
+.ihs-nr { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--sm-line); }
+.ihs-nr:first-child { border-top: 0; padding-top: 0; }
+.ihs-nr:first-child .ihs-gl { background: var(--sm-lav); border-color: var(--sm-lavE); color: var(--sm-vtx); }
+.ihs-ns { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ihs-ns b { font-size: 13.5px; font-weight: 700; line-height: 1.35; color: var(--sm-ink); overflow-wrap: anywhere; }
+.ihs-ns span { font-size: 12px; color: var(--sm-mut); line-height: 1.4; overflow-wrap: anywhere; }
+.ihs-nd { font: 500 12px var(--font-mono, ui-monospace, monospace); color: var(--sm-body); white-space: nowrap; text-align: right; }
+.ihs-od { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--sm-ink); white-space: nowrap; }
+.ihs-od svg { color: var(--sm-neg); }
+.ihs-act { display: inline-flex; justify-content: flex-end; }
+.ihs-narrow-only { display: none; }
+@container (max-width: 560px) {
+  .ihs-nr { grid-template-columns: 30px minmax(0, 1fr) auto; }
+  .ihs-nr > .ihs-nd, .ihs-nr > .ihs-od, .ihs-nr > .ihs-nrec, .ihs-nr > span:empty { grid-column: 2; grid-row: 2; text-align: left; }
+  .ihs-nr .ihs-act { grid-column: 3; grid-row: 1 / span 2; }
+}
+@media (max-width: 1023px) {
+  .ihs-wide-only { display: none; }
+  .ihs-narrow-only { display: inline-flex; }
+}
+.ihs-t44 { min-height: 44px; min-width: 44px; }
+@media (max-width: 639px) { .ihs-t44m { min-height: 44px; display: inline-flex; align-items: center; } }
+.ihs-block { display: flex; width: 100%; }
+.ihs-sheet { display: flex; flex-direction: column; gap: 12px; padding-bottom: 4px; }
+
+/* key-value rows */
+.ihs-kv { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--sm-line); font-size: 13px; color: var(--sm-body); }
+.ihs-kv span:last-child { font: 600 12.5px var(--font-mono, ui-monospace, monospace); color: var(--sm-ink); text-align: right; }
+
+/* state words (D5129): glyph + word, never colour alone */
+.ihs-st { display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 1px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 600; white-space: nowrap; border: 1px solid var(--sm-line2); background: var(--sm-card); color: var(--sm-body); font-family: inherit; }
+button.ihs-st { cursor: pointer; }
+.ihs-st.ihs-match { background: var(--sm-posT); color: var(--sm-pos); }
+.ihs-st.ihs-outside, .ihs-st.ihs-out { border-color: var(--sm-ink); color: var(--sm-ink); }
+.ihs-st.ihs-not_set { border-style: dashed; color: var(--sm-mut); background: transparent; }
+.ihs-st.ihs-not_recorded { border-style: dotted; color: var(--sm-mut); background: var(--sm-chip); }
+.ihs-st.ihs-un { color: var(--sm-ink); background: var(--sm-raised); }
+.ihs-sq-x { width: 10px; height: 10px; border: 1.5px solid currentColor; border-radius: 2px; background: linear-gradient(to top right, transparent 45%, currentColor 45%, currentColor 55%, transparent 55%); }
+@media (max-width: 639px) { button.ihs-st { min-height: 44px; } }
+
+/* Funds (SM18): a table, and one card per fund below 760px of module width (SM25, SM26) */
+.ihs-tb { width: 100%; border-collapse: collapse; font-size: 13px; color: var(--sm-ink); }
+.ihs-tb th, .ihs-tb td { padding: 10px 8px; text-align: right; white-space: nowrap; vertical-align: middle; border-top: 1px solid var(--sm-line); font: 500 12.5px var(--font-mono, ui-monospace, monospace); }
+.ihs-tb thead th { border-top: 0; padding-top: 0; font: 700 10.5px var(--font-mono, ui-monospace, monospace); letter-spacing: .07em; text-transform: uppercase; color: var(--sm-mut); }
+.ihs-tb tbody th, .ihs-tb tfoot th, .ihs-tb thead th:first-child { text-align: left; padding-left: 0; }
+.ihs-tb tbody th, .ihs-tb tfoot th { font: 700 13.5px var(--font-app, inherit); }
+.ihs-tb tfoot td, .ihs-tb tfoot th { font-weight: 700; border-top: 1.5px solid var(--sm-line2); }
+.ihs-tb .ihs-l { text-align: left; }
+.ihs-tb .ihs-c { text-align: center; }
+.ihs-bar { position: relative; display: block; height: 8px; min-width: 110px; border-radius: 999px; background: var(--sm-chip); border: 1px solid var(--sm-line2); overflow: hidden; }
+.ihs-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--sm-lavE); border-right: 2px solid var(--sm-vio); }
+.ihs-bar b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--sm-vio); }
+.ihs-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: var(--sm-mut); }
+.ihs-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ihs-legend i { width: 12px; height: 8px; border-radius: 2px; display: inline-block; }
+.ihs-lg-r { background: var(--sm-vio); }
+.ihs-lg-c { background: var(--sm-lavE); border-right: 2px solid var(--sm-vio); }
+.ihs-lg-u { background: var(--sm-chip); border: 1px solid var(--sm-line2); }
+.ihs-funds-table { overflow-x: auto; }
+.ihs-funds-cards { display: none; flex-direction: column; gap: 10px; }
+.ihs-fcard { border: 1px solid var(--sm-line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; background: var(--sm-card); }
+.ihs-fcard-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; color: var(--sm-ink); }
+.ihs-fcard-h .ihs-mu { font: 500 11px var(--font-mono, ui-monospace, monospace); }
+.ihs-fcard .ihs-kv { border-top: 0; padding: 3px 0; }
+.ihs-fratio { margin: 0; display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--sm-body); }
+@container (max-width: 759px) {
+  .ihs-funds-table { display: none; }
+  .ihs-funds-cards { display: flex; }
+}
+
+/* Returns (SM19) */
+.ihs-figs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@container (max-width: 440px) { .ihs-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ihs-fig { padding: 10px 12px; border-radius: 10px; background: var(--sm-card); border: 1px solid var(--sm-line); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ihs-fig .ihs-l { font-size: 11.5px; color: var(--sm-mut); }
+.ihs-fig .ihs-v { font: 600 20px var(--font-mono, ui-monospace, monospace); line-height: 28px; color: var(--sm-ink); }
+.ihs-fig .ihs-r { font-size: 12px; font-weight: 600; color: var(--sm-mut); line-height: 1.35; }
+.ihs-fig .ihs-nc { display: flex; align-items: center; gap: 5px; font-size: 13px; line-height: 28px; }
+.ihs-fig .ihs-st { align-self: flex-start; }
+
+/* Thesis fit (SM20) */
+.ihs-fr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--sm-line); }
+.ihs-fr:first-child { border-top: 0; padding-top: 0; }
+.ihs-co { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ihs-co b { font-size: 13.5px; color: var(--sm-ink); }
+.ihs-co a { color: var(--sm-ink); }
+.ihs-ask { font: 500 12.5px var(--font-mono, ui-monospace, monospace); align-self: center; color: var(--sm-body); }
+.ihs-fa { display: inline-flex; align-items: center; gap: 8px; }
+.ihs-fchips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; }
+.ihs-reason { grid-column: 1 / -1; }
+
+/* Arrivals (SM21) */
+.ihs-ar { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--sm-line); }
+.ihs-rows > .ihs-ar:first-child { border-top: 0; padding-top: 0; }
+.ihs-ar .ihs-ns .ihs-mono { font-size: 11.5px; }
+
+/* Thesis band (SM16): chips, a struck-through Excludes group, and +n more on a phone (SM25A) */
+.ihs-crow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 7px; }
+.ihs-cg { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.ihs-cgl { font: 600 10.5px var(--font-mono, ui-monospace, monospace); text-transform: uppercase; letter-spacing: .06em; color: var(--sm-mut); margin-right: 2px; }
+.ihs-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 1px 8px; border-radius: 999px; background: var(--sm-card); border: 1px solid var(--sm-line2); font-size: 11.5px; font-weight: 600; color: var(--sm-body); white-space: nowrap; }
+.ihs-chip.ihs-x { text-decoration: line-through; color: var(--sm-mut); background: transparent; border-style: dashed; }
+.ihs-more { display: none; }
+@media (max-width: 639px) {
+  .ihs-crow .ihs-cgl { display: none; }
+  .ihs-chip-extra { display: none; }
+  .ihs-more { display: inline-flex; align-items: center; min-height: 22px; font-size: 12px; font-weight: 600; color: var(--sm-vtx); background: none; border: 0; padding: 0; cursor: pointer; }
+  .ihs-crow[data-open="true"] .ihs-chip-extra { display: inline-flex; }
+  .ihs-crow[data-open="true"] .ihs-more { display: none; }
+}

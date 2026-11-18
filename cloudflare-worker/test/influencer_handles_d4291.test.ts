@@ -148,10 +148,14 @@ test('HQ takes a handle down: no redirect, unclaimable for 12 months, and the in
   const r = await patch({ handle_takedown: true, reason: 'Impersonates a portfolio founder.' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual([r.body.events, r.body.membership.handle], [['handle_taken_down'], null]);
-  assert.deepEqual((await publicHandle(env(db), 'kimwrites', null, null, NOW)).body, { state: 'unknown' });
-  await assert.rejects(setHandle(env(db), JANE, { handle: 'kimwrites' }, NOW), (x: any) => x.code === 'handle_taken');
-  assert.equal((await setHandle(env(db), KIM, { handle: 'kimnew' }, NOW)).handle, 'kimnew', 'no 30-day wait after a takedown');
-  assert.deepEqual((await publicHandle(env(db), 'kimwrites', null, null, NOW)).body, { state: 'unknown' }, 'a taken-down handle never redirects to the new one');
+  // The route stamped the takedown on the wall clock, so what follows is read at that moment (TAKEN), not at a
+  // fixed date: the 12 months and the 30 days are measured from the takedown itself, whatever day this runs.
+  const TAKEN = Date.parse(`${row(db, "SELECT retired_at FROM slug_history WHERE kind = 'handle' AND slug = 'kimwrites'").retired_at.replace(' ', 'T')}Z`);
+  db.prepare('UPDATE influencers SET handle_changed_at = ? WHERE id = 2').run(new Date(TAKEN - DAY).toISOString().replace('T', ' ').slice(0, 19));
+  assert.deepEqual((await publicHandle(env(db), 'kimwrites', null, null, TAKEN)).body, { state: 'unknown' });
+  await assert.rejects(setHandle(env(db), JANE, { handle: 'kimwrites' }, TAKEN), (x: any) => x.code === 'handle_taken');
+  assert.equal((await setHandle(env(db), KIM, { handle: 'kimnew' }, TAKEN)).handle, 'kimnew', 'no 30-day wait after a takedown');
+  assert.deepEqual((await publicHandle(env(db), 'kimwrites', null, null, TAKEN)).body, { state: 'unknown' }, 'a taken-down handle never redirects to the new one');
   assert.equal(row(db, "SELECT action FROM admin_audit_log WHERE action = ?", INFLUENCER_ACTIONS.takedown).action, INFLUENCER_ACTIONS.takedown);
   assert.deepEqual([(await call(db, ADMIN, 'PATCH', '/api/admin/influencers/inf_jane', { handle_takedown: true, reason: 'Nothing to take down here.' })).body.error], ['no_handle']);
 });
@@ -241,22 +245,23 @@ test('fraud: the same account or company domain and a loop are refused; past the
   db.prepare("UPDATE influencers SET handle = 'jane' WHERE id = 1").run();
   assert.deepEqual(await attachHandleReferral(env(db), JANE, { handle: 'jane', channel: null }), { attached: false, reason: 'self_account' });
   assert.deepEqual(await attachHandleReferral(env(db), ACME, { handle: 'jane', channel: null }), { attached: false, reason: 'self_email_domain' });
-  assert.equal((await attachHandleReferral(env(db), NEW2, { handle: 'kimwrites', channel: null })).attached, true, 'gmail.com is shared, not a company');
+  // Both sign-ups through Kim are on NOW: "the second of the day" must not depend on the run not crossing midnight.
+  assert.equal((await attachHandleReferral(env(db), NEW2, { handle: 'kimwrites', channel: null }, { signup: true, now: NOW })).attached, true, 'gmail.com is shared, not a company');
   // Loop: Kim was referred by Jane, so Jane cannot be referred by Kim.
   db.prepare("INSERT INTO referrals (referrer_id, referred_id, referral_code, status) VALUES (?, ?, 'X', 'pending')").run(JANE, KIM);
   assert.deepEqual(await attachHandleReferral(env(db), JANE, { handle: 'kimwrites', channel: null }), { attached: false, reason: 'loop' });
   // The velocity cap: the second sign-up of the day through one handle is held.
   const capped = env(db, { INFLUENCER_HANDLE_DAILY_CAP: '1' });
-  assert.deepEqual(await attachHandleReferral(capped, NEW3, { handle: 'kimwrites', channel: null }), { attached: true, status: 'flagged' });
+  assert.deepEqual(await attachHandleReferral(capped, NEW3, { handle: 'kimwrites', channel: null }, { signup: true, now: NOW }), { attached: true, status: 'flagged' });
   assert.deepEqual(rows(db, 'SELECT reason, outcome FROM influencer_referral_flags ORDER BY id').map((f) => [f.reason, f.outcome]),
     [['self_email_domain', 'refused'], ['loop', 'refused'], ['velocity', 'held']]);
   // A held attribution stamps nothing at checkout until HQ clears it.
-  assert.equal(await activeAttribution(env(db), NEW3), null);
+  assert.equal(await activeAttribution(env(db), NEW3, NOW), null);
   const flag = row(db, "SELECT uid FROM influencer_referral_flags WHERE reason = 'velocity'").uid;
   assert.deepEqual([(await call(db, ADMIN, 'POST', `/api/admin/influencers/flags/${flag}/decision`, { decision: 'clear' })).body.error], ['reason_required']);
   const cleared = await call(db, ADMIN, 'POST', `/api/admin/influencers/flags/${flag}/decision`, { decision: 'clear', reason: 'Spike from a newsletter we know.' });
   assert.deepEqual([cleared.status, cleared.body.flag.outcome], [200, 'cleared']);
-  assert.equal((await activeAttribution(env(db), NEW3))?.referrer_user_id, KIM);
+  assert.equal((await activeAttribution(env(db), NEW3, NOW))?.referrer_user_id, KIM);
   assert.deepEqual([(await call(db, ADMIN, 'POST', `/api/admin/influencers/flags/${flag}/decision`, { decision: 'uphold', reason: 'Second look at the spike.' })).body.error], ['flag_decided']);
   const q = await call(db, ADMIN, 'GET', '/api/admin/influencers/flags?outcome=all');
   assert.equal(q.body.flags.length, 3);
@@ -266,8 +271,9 @@ test('fraud: the same account or company domain and a loop are refused; past the
 test('checkout: the locked referral rides on the subscription; a saved card that is the referrer\'s own refuses it', async () => {
   // Mutation checked: compare against the buyer's own cards → the self-card case passes.
   const db = fixture();
-  await attachHandleReferral(env(db), NEW1, { handle: 'kimwrites', channel: null });
-  const a = (await activeAttribution(env(db), NEW1))!;
+  // The attach and every read are on NOW, not the wall clock: the 90 days are measured from the fixture's own date.
+  await attachHandleReferral(env(db), NEW1, { handle: 'kimwrites', channel: null }, { signup: true, now: NOW });
+  const a = (await activeAttribution(env(db), NEW1, NOW))!;
   assert.deepEqual(referralMetadata(a), { 'metadata[referrer_user_id]': String(KIM), 'metadata[referral_source]': 'handle', 'metadata[handle]': 'kimwrites' });
   assert.deepEqual(referralMetadata(null), {});
   assert.equal(await activeAttribution(env(db), NEW1, NOW + 120 * DAY), null, 'past the 90 days');
@@ -277,7 +283,7 @@ test('checkout: the locked referral rides on the subscription; a saved card that
   assert.equal(await selfCardRefusal(env(db), NEW1, a, 'fp_kim', async () => { throw new Error('stripe down'); }), false, 'a read that fails blocks nothing');
   assert.equal(await selfCardRefusal(env(db), NEW1, a, 'fp_kim', stripe), true);
   assert.deepEqual({ ...row(db, 'SELECT status, refused_reason FROM referral_attributions WHERE user_id = ?', NEW1) }, { status: 'refused', refused_reason: 'self_card' });
-  assert.equal(await activeAttribution(env(db), NEW1), null);
+  assert.equal(await activeAttribution(env(db), NEW1, NOW), null);
   assert.equal(row(db, "SELECT reason FROM influencer_referral_flags WHERE reason = 'self_card'").reason, 'self_card');
   // The checkout route stamps it, and marks a new card for P3's check on payment.
   const src = readFileSync('cloudflare-worker/src/routes/billing_checkout.ts', 'utf8');

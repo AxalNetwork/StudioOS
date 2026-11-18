@@ -19,6 +19,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { Refused, removeObligation } from '../services/growWriters';
+import { EVENTS_WITH_OWNER, ownerShown } from '../services/obligationOwner';
 
 const compliance = new Hono<{ Bindings: Env }>();
 
@@ -212,6 +213,8 @@ type EventRow = {
   completed_by_user_id: number | null;
   recurrence: string; source: string;
   reminders_sent_json: string;
+  // D6790: the name typed before #6790, and the picked team member's name (`EVENTS_WITH_OWNER`).
+  owner_name?: string | null; owner_user_name?: string | null;
   created_by_user_id: number | null;
   kind?: string | null;
   created_at: string; updated_at: string;
@@ -298,6 +301,8 @@ function serialize(e: EventRow): any {
     completed_at: e.completed_at,
     recurrence: e.recurrence,
     source: e.source,
+    // D6790: the same owner Grow and Calendar → Compliance show.
+    owner: ownerShown(e.owner_user_name, e.owner_name),
     reminders_sent: (() => {
       try { return JSON.parse(e.reminders_sent_json || '[]'); } catch { return []; }
     })(),
@@ -345,7 +350,7 @@ compliance.get('/events', async (c) => {
     params.push(status);
   }
   const rows = await c.env.DB.prepare(
-    `SELECT * FROM compliance_events WHERE ${where} ORDER BY due_date ASC`,
+    `SELECT * FROM ${EVENTS_WITH_OWNER} WHERE ${where} ORDER BY due_date ASC`,
   ).bind(...params).all<EventRow>();
   const events = (rows.results || []) as EventRow[];
 
@@ -407,7 +412,7 @@ compliance.post('/events', async (c) => {
     // Duplicate — fall through to read existing.
   }
   const row = await c.env.DB.prepare(
-    `SELECT * FROM compliance_events
+    `SELECT * FROM ${EVENTS_WITH_OWNER}
       WHERE project_id = ? AND event_type = ? AND due_date = ?`,
   ).bind(projectId, eventType, due).first<EventRow>();
   if (!row) return c.json({ detail: 'Insert failed' }, 500);
@@ -418,7 +423,7 @@ compliance.patch('/events/:id', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'invalid id' }, 400);
-  const event = await c.env.DB.prepare('SELECT * FROM compliance_events WHERE id = ?')
+  const event = await c.env.DB.prepare(`SELECT * FROM ${EVENTS_WITH_OWNER} WHERE id = ?`)
     .bind(id).first<EventRow>();
   if (!event) return c.json({ detail: 'Event not found' }, 404);
   const proj = await loadProject(c, event.project_id, user);
@@ -494,7 +499,7 @@ compliance.patch('/events/:id', async (c) => {
     }
   }
 
-  const fresh = await c.env.DB.prepare('SELECT * FROM compliance_events WHERE id = ?')
+  const fresh = await c.env.DB.prepare(`SELECT * FROM ${EVENTS_WITH_OWNER} WHERE id = ?`)
     .bind(id).first<EventRow>();
   return c.json(serialize(fresh as EventRow));
 });
