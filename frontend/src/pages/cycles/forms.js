@@ -1552,7 +1552,7 @@ const SIGNAL_STATUS = [{ value: 'confirmed', label: 'Confirmed' }, { value: 'to_
 const signalFields = [
   { kind: 'CH', name: 'kind', k: 'Kind', opts: SIGNAL_KIND, def: 2, required: true },
   { kind: 'T', name: 'who', k: 'Who', ph: 'Customer, lead or interviewee', max: 200 },
-  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '1,200 · amount in selected currency', note: 'For an unlisted currency, enter a count followed by minor units.', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'amount', k: 'Amount', ph: '1,200 · amount in selected currency', note: 'For an unlisted currency, enter a count followed by minor units.', when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'T', name: 'currency', k: 'Currency', ph: 'EUR', def: 'usd', max: 3, when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'CH', name: 'period', k: 'Period', opts: [{ value: '', label: 'Not recorded' }, { value: 'once', label: 'Once' }, { value: 'month', label: 'Monthly' }, { value: 'year', label: 'Yearly' }], def: '', when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'T', name: 'signal_date', k: 'Date', input: 'date', ph: '12 Oct' },

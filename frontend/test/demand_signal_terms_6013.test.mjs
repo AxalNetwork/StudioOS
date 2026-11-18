@@ -40,6 +40,6 @@ test('editing old records retains missing and unrecorded terms without inventing
 test('an unlisted stored currency retains an explicit count of minor units', () => {
   const current = edit.valuesOf({ edit: { kind: 'loi', amount_cents: 4321, currency: 'zzz', period: 'year' } });
   assert.equal(current.amount, '4321 minor units');
-  assert.deepEqual(edit.check(current), {});
+  assert.deepEqual(validate(edit, current), {});
   assert.deepEqual([edit.toBody(current).amount_cents, edit.toBody(current).currency], [4321, 'zzz']);
 });
