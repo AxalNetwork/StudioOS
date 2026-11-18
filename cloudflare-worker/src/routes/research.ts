@@ -78,9 +78,11 @@ import { deliverableReadsSince, readStateFor, readTrackingFor } from './_partner
 import {
   googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
   makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
-  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink, upsertSheetLink,
-  parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
-  SUGGESTED_SHEET_URL,
+  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink,
+  parseSpreadsheetRef, fundsAppBase, SUGGESTED_SHEET_URL,
+  SheetSyncError, readSyncFields, readResolutions, readIdempotencyKey,
+  listWorkbookTabs, saveSheetDestination, checkLinkedTab, latestRuns, openImportRun,
+  previewExport, previewImport, exportFundsToSheet, importFundsFromSheet, reconcileImportRun,
 } from '../services/fundSheets';
 import { refuse, refusalBody } from '../util/refusal';
 import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldError } from '../services/researchFundReports';
@@ -4230,9 +4232,25 @@ research.post('/funds', async (c) => {
 // Dedicated Sheets OAuth (not calendar's token table, not calendar's scopes).
 // SUPER ADMIN ONLY — a founder's shortlist stays on Axal; they do not get a
 // Google copy of it. Sheet routes are registered BEFORE `/funds/:uid` so
-// "sheet" is never captured as a uid. Push never deletes. Pull overwrites
-// the sheet's data rows.
+// "sheet" is never captured as a uid. `pull` is Export (Axal → the tab) and
+// `push` is Import (the tab → Axal); import never deletes. D7170: each has a
+// preview that writes nothing, a run record with an idempotency key, and an
+// import whose identifiers are not confirmed is reconciled before another.
 // ---------------------------------------------------------------------------
+
+/**
+ * One answer for every sheet failure: a precondition refusal keeps its own
+ * status and code; anything Google or the Worker threw is a 502 with our
+ * sentence, and the provider text travels only on `upstream`.
+ */
+function sheetRefusal(c: any, e: unknown, fallback: { code: string; message: string }) {
+  if (e instanceof SheetSyncError) {
+    return refuse(c, e.status, { code: e.code, message: e.sentence, extra: e.extra });
+  }
+  return refuse(c, 502, { ...fallback, raw: e, audience: 'owner' });
+}
+
+const SHEETS_UNCONFIGURED = { code: 'sheets_unconfigured', message: 'Google Sheets is not configured on this server yet.' };
 
 research.get('/funds/sheet/status', async (c) => {
   const user = await requireSuperAdmin(c);
@@ -4240,6 +4258,11 @@ research.get('/funds/sheet/status', async (c) => {
   const missing = preflightSheetsOAuthSecrets(c.env);
   const tok = configured ? await loadSheetsToken(c.env, user.id) : null;
   const link = await loadSheetLink(c.env, user.id);
+  // The tab is checked by gid on every status read, so a deleted tab blocks
+  // both directions on the card before anyone opens a review.
+  const tab = configured && tok && link ? await checkLinkedTab(c.env, user.id, link) : null;
+  const runs = await latestRuns(c.env, user.id);
+  const open = await openImportRun(c.env, user.id);
   return c.json({
     configured,
     missing: configured ? [] : missing,
@@ -4247,10 +4270,15 @@ research.get('/funds/sheet/status', async (c) => {
     google_email: tok?.google_email || null,
     spreadsheet_id: link?.spreadsheet_id || null,
     sheet_gid: link ? Number(link.sheet_gid) : null,
-    sheet_title: link?.sheet_title || null,
+    sheet_title: tab?.title || link?.sheet_title || null,
+    workbook_title: tab?.workbook_title || null,
+    tab_state: tab?.state || null,
+    tab_checked_at: tab?.checked_at || null,
     last_pulled_at: link?.last_pulled_at || null,
     last_pushed_at: link?.last_pushed_at || null,
     last_error: link?.last_error || null,
+    last_runs: runs,
+    open_run: open,
     suggested_url: SUGGESTED_SHEET_URL,
   });
 });
@@ -4330,52 +4358,111 @@ research.post('/funds/sheet/disconnect', async (c) => {
   return c.json({ ok: true });
 });
 
+research.get('/funds/sheet/tabs', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const raw = String(c.req.query('url') || '').trim();
+  let spreadsheetId: string | undefined;
+  if (raw) {
+    const parsed = parseSpreadsheetRef(raw);
+    if ('error' in parsed) return refuse(c, 400, { code: 'spreadsheet_url_invalid', message: parsed.error });
+    spreadsheetId = parsed.spreadsheet_id;
+  }
+  try {
+    return c.json(await listWorkbookTabs(c.env, user, spreadsheetId));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the workbook. Check that the connected Google account can open it and try again.' });
+  }
+});
+
 research.patch('/funds/sheet/link', async (c) => {
   const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
   const body = await c.req.json<any>().catch(() => ({}));
   const raw = String(body.url || body.spreadsheet_url || body.spreadsheet_id || '').trim();
   const parsed = parseSpreadsheetRef(raw);
-  if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
-  const existing = await loadSheetLink(c.env, user.id);
-  const gid = parsed.sheet_gid != null
-    ? parsed.sheet_gid
-    : (body.sheet_gid != null && Number.isFinite(Number(body.sheet_gid))
-      ? Math.trunc(Number(body.sheet_gid))
-      : (existing ? Number(existing.sheet_gid) : 0));
-  const link = await upsertSheetLink(c.env, user, parsed.spreadsheet_id, gid);
-  return c.json({
-    spreadsheet_id: link.spreadsheet_id,
-    sheet_gid: Number(link.sheet_gid),
-  });
+  if ('error' in parsed) return refuse(c, 400, { code: 'spreadsheet_url_invalid', message: parsed.error });
+  // The tab is an explicit choice. A gid in the pasted URL is not one, and
+  // neither is being the first tab: no gid and no new tab is `tab_required`.
+  const gid = body.sheet_gid != null && body.sheet_gid !== '' && Number.isFinite(Number(body.sheet_gid))
+    ? Math.trunc(Number(body.sheet_gid))
+    : null;
+  const createTab = typeof body.create_tab === 'string' && body.create_tab.trim() ? body.create_tab.trim() : null;
+  try {
+    const link = await saveSheetDestination(c.env, user, { spreadsheetId: parsed.spreadsheet_id, sheetGid: gid, createTab });
+    return c.json({
+      spreadsheet_id: link.spreadsheet_id,
+      sheet_gid: Number(link.sheet_gid),
+      sheet_title: link.sheet_title,
+    });
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the workbook. Check that the connected Google account can open it and try again.' });
+  }
 });
 
+research.post('/funds/sheet/export/preview', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json(await previewExport(c.env, user, readSyncFields(body.fields)));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the tab. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+research.post('/funds/sheet/import/preview', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json(await previewImport(c.env, user, readSyncFields(body.fields), readResolutions(body.resolutions)));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the tab. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+// Export Axal funds to Sheets. Answers the run; a run Google refused before
+// any write is `failed` in the body, not a 502, because it was recorded.
 research.post('/funds/sheet/pull', async (c) => {
   const user = await requireSuperAdmin(c);
-  if (!googleSheetsOAuthAvailable(c.env)) {
-    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
-  }
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
   try {
-    return c.json(await pullFundsToSheet(c.env, user));
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
-    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
-    return refuse(c, 502, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.', raw: msg, audience: 'owner' });
+    const key = readIdempotencyKey(body.idempotency_key);
+    return c.json(await exportFundsToSheet(c.env, user, { fields: readSyncFields(body.fields), idempotencyKey: key }));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.' });
   }
 });
 
+// Import from Sheets. Never deletes. A run whose identifiers did not reach
+// the sheet answers 200 with status `uncertain`, not a 502 a retry would
+// repeat; the next import is refused with `reconcile_required` until then.
 research.post('/funds/sheet/push', async (c) => {
   const user = await requireSuperAdmin(c);
-  if (!googleSheetsOAuthAvailable(c.env)) {
-    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
-  }
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
   try {
-    return c.json(await pushFundsFromSheet(c.env, user));
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
-    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
-    return refuse(c, 502, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.', raw: msg, audience: 'owner' });
+    const key = readIdempotencyKey(body.idempotency_key);
+    return c.json(await importFundsFromSheet(c.env, user, {
+      fields: readSyncFields(body.fields),
+      resolutions: readResolutions(body.resolutions),
+      idempotencyKey: key,
+    }));
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.' });
+  }
+});
+
+research.post('/funds/sheet/runs/:runUid/reconcile', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) return refuse(c, 503, SHEETS_UNCONFIGURED);
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json({ run: await reconcileImportRun(c.env, user, c.req.param('runUid'), { write: body.write === true }) });
+  } catch (e) {
+    return sheetRefusal(c, e, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.' });
   }
 });
 
