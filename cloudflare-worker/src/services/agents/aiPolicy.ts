@@ -38,6 +38,10 @@ export type Policy = {
   default_team_cap_microusd: number | null;
   max_team_cap_microusd: number | null;
   per_run_ceiling_microusd: number | null;
+  /** D7074 (#7074): the most parallel runs an elastic team may have; null = elastic capacity is not offered. */
+  elastic_runs_ceiling: number | null;
+  /** D7074: the most live runs one agent may hold (itself and its sub-agents); null = sub-agents are not offered. */
+  lanes_ceiling: number | null;
   area_models: AreaModels;
   read_tools: string[];
   locks: Array<{ model: string; reason: string; locked_at: string; locked_by: { id: number; name: string | null } }>;
@@ -61,6 +65,8 @@ export async function readPolicy(env: Env): Promise<Policy | null> {
       default_team_cap_microusd: r?.default_team_cap_microusd ?? null,
       max_team_cap_microusd: r?.max_team_cap_microusd ?? null,
       per_run_ceiling_microusd: r?.per_run_ceiling_microusd ?? null,
+      elastic_runs_ceiling: r?.elastic_runs_ceiling ?? null,
+      lanes_ceiling: r?.lanes_ceiling ?? null,
       area_models: parse<AreaModels>(r?.area_models_json, {}),
       read_tools: parse<string[]>(r?.read_tools_json, []),
       locks: (locks.results ?? []).map((l) => ({ model: l.model, reason: l.reason, locked_at: l.locked_at, locked_by: { id: Number(l.locked_by), name: l.locked_by_name ?? null } })),
@@ -76,6 +82,7 @@ export async function readPolicy(env: Env): Promise<Policy | null> {
 
 export const emptyPolicy = (): Policy => ({
   platform_budget_microusd: null, default_team_cap_microusd: null, max_team_cap_microusd: null, per_run_ceiling_microusd: null,
+  elastic_runs_ceiling: null, lanes_ceiling: null,
   area_models: {}, read_tools: [], locks: [], paused: { on: false },
 });
 
@@ -139,6 +146,32 @@ export function capsOf(body: any, current: Caps): { ok: true; value: Caps } | { 
   }
   if (next.default_team_cap_microusd != null && next.max_team_cap_microusd != null && next.default_team_cap_microusd > next.max_team_cap_microusd) {
     return { ok: false, problem: { code: 'default_over_max', message: 'The default team cap cannot be above the maximum team cap.' } };
+  }
+  return { ok: true, value: next };
+}
+
+export type CapacityCeilings = Pick<Policy, 'elastic_runs_ceiling' | 'lanes_ceiling'>;
+/** D7074: the schema's own bounds for the two ceilings (migration 202611170130). */
+export const ELASTIC_RUNS_CEILING_MAX = 500;
+export const LANES_CEILING_MAX = 50;
+
+/**
+ * D7074: the capacity ceilings a body sets: each a whole number in its range, or null to stop offering it.
+ * Sub-agents need a per-run ceiling (`perRun`, the value in force after this same write): without one, a run's
+ * cost has no bound, so a sub-agent could never be shown to fit under its agent's cap.
+ */
+export function capacityCeilingsOf(body: any, current: CapacityCeilings, perRun: number | null): { ok: true; value: CapacityCeilings } | { ok: false; problem: Problem } {
+  const next: CapacityCeilings = { ...current };
+  for (const [k, max] of [['elastic_runs_ceiling', ELASTIC_RUNS_CEILING_MAX], ['lanes_ceiling', LANES_CEILING_MAX]] as const) {
+    if (!(k in (body ?? {}))) continue;
+    const v = body[k];
+    if (v !== null && !(Number.isSafeInteger(v) && v >= 1 && v <= max)) {
+      return { ok: false, problem: { code: 'invalid_ceiling', message: `${k} is a whole number from 1 to ${max}, or null to stop offering it.` } };
+    }
+    next[k] = v;
+  }
+  if (next.lanes_ceiling != null && next.lanes_ceiling > 1 && perRun == null) {
+    return { ok: false, problem: { code: 'lanes_need_run_ceiling', status: 409, message: 'Set the per-run ceiling first. Sub-agents share their agent\'s monthly cap, and without a per-run ceiling one run\'s cost has no bound.' } };
   }
   return { ok: true, value: next };
 }

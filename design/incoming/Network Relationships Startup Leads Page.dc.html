@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Relationships Startup Leads · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.nwi-cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.nwi-cv.nwi-dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.nwi-cv *{box-sizing:border-box}
+.nwi-cv a{color:var(--vt);text-decoration:none}
+.nwi-cv button{font-family:var(--sg);cursor:pointer}
+.nwi-cv :focus-visible,.nwi-cv .nwi-fv{outline:2px solid var(--vi);outline-offset:2px}
+.nwi-cv h1,.nwi-cv h2,.nwi-cv h3,.nwi-cv p,.nwi-cv ol,.nwi-cv ul,.nwi-cv dl,.nwi-cv dd,.nwi-cv dt{margin:0;padding:0}
+.nwi-cv ol,.nwi-cv ul{list-style:none}
+.nwi-mo{font-family:var(--mo)}
+.nwi-mu{color:var(--mu)}
+.nwi-eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.nwi-sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.nwi-sd .nwi-lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.nwi-logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.nwi-sd .nwi-grp{padding:6px 20px 4px}
+.nwi-sd nav{display:flex;flex-direction:column;gap:2px}
+.nwi-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.nwi-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.nwi-sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.nwi-mn{min-width:0;display:flex;flex-direction:column}
+.nwi-tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.nwi-srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.nwi-bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.nwi-ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.nwi-av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.nwi-sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.nwi-sp .nwi-e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.nwi-sp .nwi-vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.nwi-hdr{display:flex;flex-direction:column;gap:6px}
+.nwi-hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.nwi-hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.nwi-hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.nwi-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nwi-ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.nwi-ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nwi-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.nwi-ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.nwi-kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nwi-k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.nwi-k.nwi-att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.nwi-kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.nwi-kv.nwi-un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.nwi-ks{font-size:12px;color:var(--mu);line-height:1.45}
+.nwi-g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.nwi-c3{grid-column:span 3}
+.nwi-c4{grid-column:span 4}
+.nwi-c5{grid-column:span 5}
+.nwi-c6{grid-column:span 6}
+.nwi-c7{grid-column:span 7}
+.nwi-c8{grid-column:span 8}
+.nwi-c9{grid-column:span 9}
+.nwi-c12{grid-column:span 12}
+.nwi-cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.nwi-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nwi-ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.nwi-ch .nwi-sm{font:500 12px var(--mo);color:var(--mu)}
+.nwi-sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.nwi-cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.nwi-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.nwi-btn.nwi-p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.nwi-btn.nwi-t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.nwi-btn.nwi-ask .nwi-em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.nwi-btn[aria-disabled=true]{opacity:.6;cursor:default}
+.nwi-lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.nwi-foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.nwi-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.nwi-pl.nwi-a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nwi-pl.nwi-g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.nwi-pl.nwi-v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nwi-pl.nwi-r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nwi-nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nwi-nt.nwi-r{background:var(--negBg);border-color:var(--negE)}
+.nwi-nt.nwi-a{background:var(--amBg);border-color:var(--amE)}
+.nwi-nt.nwi-g{background:var(--posBg);border-color:var(--posE)}
+.nwi-ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nwi-nt.nwi-r .nwi-ic{background:var(--neg)}
+.nwi-nt.nwi-a .nwi-ic{background:var(--amT)}
+.nwi-nt.nwi-g .nwi-ic{background:var(--pos)}
+.nwi-nt .nwi-bt{margin-left:auto;flex:none}
+.nwi-sk{display:block;border-radius:6px;background:var(--skel)}
+.nwi-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.nwi-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.nwi-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.nwi-tbl .nwi-n{text-align:right;font-family:var(--mo)}
+.nwi-tbl td.nwi-na{color:var(--mu);font-weight:500}
+.nwi-tbl td b{font-weight:700}
+.nwi-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.nwi-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nwi-inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.nwi-dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.nwi-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.nwi-pg .nwi-pb{display:flex;gap:5px;align-items:center}
+.nwi-pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.nwi-pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.nwi-st{display:grid;gap:14px 18px}
+.nwi-st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.nwi-st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nwi-dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.nwi-sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.nwi-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.nwi-dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.nwi-dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.nwi-df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.nwi-stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.nwi-stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.nwi-stp span:first-child{border-radius:999px 0 0 999px}
+.nwi-stp span:last-child{border-radius:0 999px 999px 0}
+.nwi-stp span+span{border-left:0}
+.nwi-stp span.nwi-on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.nwi-stp span.nwi-nx{border-style:dashed}
+.nwi-tl{display:flex;flex-direction:column}
+.nwi-tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.nwi-tl li:first-child{border-top:0}
+.nwi-tl .nwi-mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.nwi-tl .nwi-mk.nwi-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.nwi-tl .nwi-mk.nwi-cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.nwi-tl .nwi-mk.nwi-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.nwi-tl .nwi-mk.nwi-no{border-style:dashed}
+.nwi-tl .nwi-w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.nwi-pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.nwi-pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.nwi-pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.nwi-ph .nwi-hrow h1{font-size:22px}
+.nwi-ph .nwi-kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.nwi-ph .nwi-k{padding:12px 13px}
+.nwi-ph .nwi-kv{font-size:22px}
+.nwi-ph .nwi-btn{min-height:44px}
+.nwi-ph .nwi-lk{min-height:44px}
+.nwi-msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.nwi-lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.nwi-lst li:first-child{border-top:0}
+.nwi-lst b{font-size:13.5px}
+.nwi-lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.nwi-bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.nwi-bar i{display:block;height:100%;background:var(--vi)}
+.nwi-toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.nwi-toast a{color:#c4b5fd!important}
+.nwi-pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.nwi-pr:first-of-type{border-top:0}
+.nwi-pr b{font-size:13px}
+.nwi-pr small{display:block;font-size:12px;color:var(--mu)}
+.nwi-grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grp:first-of-type{border-top:0}
+.nwi-step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.nwi-ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.nwi-tbl tr.nwi-cur td{background:var(--lav)}
+.nwi-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.nwi-sec h3{font-size:13.5px;font-weight:800}
+.nwi-ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.nwi-ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.nwi-ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.nwi-k.nwi-bad{border-color:var(--negE)}
+.nwi-tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+.nwi-lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+/* ---- NWI addendum (#6256): additions to the approved Network workspace look ---- */
+.nwi-cv{text-align:left}
+.nwi-cv table{border-spacing:0}
+.nwi-st.nwi-tx dd{font:700 14px var(--sg);letter-spacing:0;line-height:1.3}
+.nwi-sh.nwi-ro{grid-template-columns:196px minmax(0,1fr) 360px}
+.nwi-sd .nwi-sep{height:1px;background:var(--hair);margin:8px 16px}
+.nwi-bk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-ow{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.nwi-s.nwi-ur{color:var(--neg)}
+.nwi-s.nwi-rf{color:var(--ink)}
+.nwi-s b{font:800 12px var(--mo)}
+.nwi-cold{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nwi-vd{text-decoration:line-through;color:var(--mu)}
+.nwi-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.nwi-rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.nwi-rh b{display:flex;align-items:center;gap:8px;font-size:14px}
+.nwi-rh .nwi-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.nwi-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.nwi-q{align-self:flex-end;max-width:88%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.nwi-an{padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.nwi-src{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.nwi-src span::before{content:"↳ ";color:var(--vt)}
+.nwi-draft{border:1.5px dashed var(--lavE);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.nwi-draft p.nwi-tx{font-size:12.5px;line-height:1.55;white-space:normal}
+.nwi-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 11.5px var(--mo);color:var(--mu)}
+.nwi-ent{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:600 12.5px var(--sg);color:var(--ink)}
+.nwi-ent[aria-disabled=true]{color:var(--mu);border-style:dashed}
+.nwi-rin{margin-top:auto;padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px}
+.nwi-rin span{flex:1;display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px}
+.nwi-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px;flex-wrap:wrap}
+.nwi-line b.nwi-mo{font-size:14px}
+.nwi-grh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grh:first-child{border-top:0;padding-top:0}
+.nwi-grh h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.nwi-mc{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.nwi-mc .nwi-mh{display:flex;gap:10px;align-items:center}
+.nwi-mc .nwi-mh>div{flex:1;min-width:0}
+.nwi-mc small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rs{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink)}
+.nwi-rs span::before{content:"· ";color:var(--mu)}
+.nwi-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.nwi-strip{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);flex-wrap:wrap}
+.nwi-strip .nwi-it{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font-size:12.5px}
+.nwi-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.nwi-f{display:flex;flex-direction:column;gap:5px}
+.nwi-f label,.nwi-f .nwi-lb{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-in{display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink)}
+.nwi-in.nwi-hint{color:var(--mu)}
+.nwi-ta{min-height:76px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.nwi-cnt{align-self:flex-end;font:500 11px var(--mo);color:var(--mu)}
+.nwi-panel{background:var(--card);border:1px solid var(--hair);border-radius:14px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.nwi-panel .nwi-dh{padding:16px 20px 12px}
+.nwi-panel .nwi-dc{padding:14px 20px}
+.nwi-panel .nwi-df{padding:12px 20px}
+.nwi-pick{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.nwi-pick.nwi-on{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi);background:var(--lav)}
+.nwi-pick small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px}
+.nwi-rv dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-bn{display:flex;align-items:center;gap:10px;padding:10px 30px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.nwi-bn.nwi-ro{background:#334155;color:#fff}
+.nwi-bn.nwi-sup{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.nwi-bn b{font-weight:800}
+.nwi-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px;align-self:flex-start}
+.nwi-cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.nwi-cmp dl{display:grid;grid-template-columns:80px minmax(0,1fr);gap:4px 10px}
+.nwi-cmp dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-src2{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.nwi-tile b{font:700 22px var(--mo)}
+.nwi-ph.nwi-fx{height:844px;overflow:hidden}
+.nwi-ph .nwi-pbd{flex:1;min-height:0}
+.nwi-stk{flex:none;display:flex;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.nwi-stk .nwi-btn{flex:1;min-height:44px;font-size:14px}
+.nwi-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.nwi-pc .nwi-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nwi-pc small{font-size:12px;color:var(--mu)}
+.nwi-tab{width:768px;display:flex;flex-direction:column;min-height:1024px;position:relative}
+.nwi-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.nwi-doc h2{font-size:17px;font-weight:800}
+.nwi-doc h3{font-size:13.5px;font-weight:800;margin-bottom:6px}
+.nwi-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.nwi-doc .nwi-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.nwi-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.nwi-crop{padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:16px}
+.nwi-sheetc{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:640px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.nwi-lst small{display:block}
+.nwi-lst li>div{min-width:0}
+.nwi-cv td,.nwi-cv th,.nwi-cv dd,.nwi-cv li,.nwi-cv p,.nwi-cv h1,.nwi-cv h2,.nwi-cv h3{color:inherit}
+.nwi-tbl td{color:var(--ink)}
+.nwi-tbl td.nwi-mo{white-space:nowrap}
+.nwi-crop,.nwi-doc{box-sizing:border-box}
+/* ---- NRL (#7061): Relationships · two lists, startup leads and activity. Builds on nwi_extra.css ---- */
+.nwi-cd.nwi-bad{border-color:var(--negE)}
+.nrl-sec .nwi-ch>div{display:flex;flex-direction:column;gap:3px;min-width:0;max-width:760px}
+.nrl-scope{display:flex;flex-wrap:wrap;gap:6px 26px;margin:0;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav)}
+.nrl-scope>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.nrl-scope dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nrl-scope dd{margin:0;font-size:12.5px;color:var(--ink);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.nrl-scope.nrl-ph1{flex-direction:column;gap:8px}
+.nrl-sw{display:inline-flex;padding:0 7px;border-radius:999px;border:1px solid var(--lavE);background:var(--card);font:600 10.5px var(--mo);color:var(--vt)}
+.nrl-chips{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.nrl-fc{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.nrl-fc[aria-pressed=true]{border-color:var(--vi);background:var(--lav);color:var(--vt);box-shadow:inset 0 0 0 1px var(--vi)}
+.nrl-stale{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nrl-part{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px solid var(--hair2);background:var(--raised);color:var(--ink);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nrl-part b{font-family:var(--mo)}
+.nrl-task{display:block;color:var(--mu);font-size:11.5px;margin-top:2px}
+.nrl-task::before{content:"· "}
+.nrl-cl{overflow-wrap:anywhere}
+.nrl-nm b,.nrl-nm2{overflow-wrap:anywhere}
+.nrl-skel{display:flex;flex-direction:column;gap:12px;padding:6px 0}
+.nrl-skel>div{display:flex;gap:16px;align-items:center}
+.nrl-skel>div.nwi-pc{flex-direction:column;align-items:flex-start;gap:8px}
+.nrl-live{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px dashed var(--lavE);border-radius:10px;font-size:12.5px;color:var(--ink);background:var(--card)}
+.nrl-why{border:1px solid var(--hair2);border-radius:10px;padding:11px 13px;background:var(--card);box-shadow:0 10px 30px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+.nrl-why dl{display:grid;grid-template-columns:120px minmax(0,1fr);gap:5px 10px;margin:0}
+.nrl-why dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nrl-why dd{margin:0}
+.nrl-stepc .nwi-ch{justify-content:flex-start}
+.nrl-stepn{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--lav);color:var(--vt);font:800 13px var(--mo);flex:none}
+.nrl-mini{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--raised)}
+.nrl-ml{display:flex;flex-direction:column}
+.nrl-ml li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.nrl-ml li:first-child{border-top:0}
+.nrl-ml li span{color:var(--mu);font:500 11.5px var(--mo)}
+.nrl-mf{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.nrl-drop{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:999px;border:1px dashed var(--hair2);font:600 11.5px var(--mo);color:var(--mu);text-decoration:line-through}
+.nrl-half{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.nrl-half.nwi-bad{border-color:var(--negE);background:var(--negBg)}
+.nrl-an{display:flex;gap:10px;align-items:flex-start;font-size:12px;color:var(--mu);line-height:1.5}
+.nrl-n{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1.5px dashed #a78bfa;color:var(--vt);font:800 10.5px var(--mo);flex:none}
+.nrl-fixed{table-layout:fixed}
+.nrl-fixed td{vertical-align:top}
+.nrl-tl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mu);padding-top:4px;border-top:1px solid var(--hair)}
+.nrl-tl li::before{content:"· "}
+.nrl-kb{flex:none;height:260px;display:grid;place-items:center;background:var(--raised);border-top:1px solid var(--hair);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nrl-focus{outline:2px solid var(--vi);outline-offset:2px}
+.nrl-caret{display:inline-block;width:1.5px;height:16px;background:var(--vi);margin-left:1px}
+.nwi-cv dl.nrl-scope{padding:10px 14px}
+.nwi-cv .nrl-why dl{padding:0}
+.nwi-pg .nwi-btn{font:700 12.5px var(--sg);height:auto;min-height:32px;padding:0 13px;min-width:0}
+.nrl-fixed th{white-space:normal;vertical-align:bottom}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "NRL1", "options": ["NRL1", "NRL1B", "NRL2", "NRL2B", "NRL2C", "NRL3", "NRL4A", "NRL4B", "NRL5", "NRL5B", "NRL5C", "NRL6", "NRL7A", "NRL7B", "NRL7C", "NRL7D", "NRL7E", "NRL8", "NRL9", "NRL9B", "NRL10", "NRLH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'NRL1';
+    /* NRL9 boards draw on the dark tokens; everything else is light. */
+    const dark = B.indexOf('NRL9') === 0;
+    const CV = 'cv' + (dark ? ' dk' : '');
+    const J = (a) => a.join('');
+    const mo = (s) => `<span class="mo">${s}</span>`;
+
+    /* ---------- annotations (not product copy) ---------- */
+    const TB = (t) => `<span class="bk" title="Needs backend work">◇ ${t}</span>`;
+    const TO = (t) => `<span class="ow" title="Owner decision">⚑ ${t}</span>`;
+    const LBL = (t) => `<span class="lbl">${t}</span>`;
+    const AN = (n, t) => `<div class="nrl-an"><span class="nrl-n" aria-hidden="true">${n}</span><div>${t}</div></div>`;
+
+    /* ---------- NW5 state words (copied from nwi.js): each has a glyph and a word ---------- */
+    const NR = (t) => `<span class="s">— Not recorded${t ? ' · ' + t : ''}</span>`;
+    const NONE = `<span class="s">○ None</span>`;
+    const COLD = `<span class="cold">▽ Going cold</span>`;
+    const NEED = `<span class="pl a">◷ Needs attention</span>`;
+    const NOI = `<span class="s">— No interaction recorded</span>`;
+    const STALE = (t) => `<span class="nrl-stale">↺ Stale · ${t}</span>`;
+    const PART = (t) => `<span class="nrl-part">½ Partial · ${t}</span>`;
+    const E = `<span class="em" aria-hidden="true">E</span>`;
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- sample data: fictional; every figure agrees on every board ----------
+       Today Sat 14 Nov 2026, 14:02. Founder [Lena Sato] runs [Kelp Bio] (A) and [Quill Analytics] (B).
+       My relationships: 142 people, private to Lena, not tied to a startup (pages of 25).
+       Leads [Kelp Bio]: 214 by the server (customer 141 + talent 38 + investor 21 + advisor 14), one page of 200 loaded,
+         14 not loaded; over the 200 loaded: 9 going cold, 6 need attention, 117 with no interaction recorded.
+       Leads [Quill Analytics]: 37 by the server (customer 29 + investor 5 + talent 3), all 37 loaded;
+         2 going cold, 1 needs attention, 21 with no interaction recorded. */
+    const A = { n: '[Kelp Bio]', tot: 214, got: 200, left: 14, cold: 9, att: 6, noi: 117, src: '3 pages (/pilot, /careers, /pricing) and invites', aud: [['Customers', 141], ['Talent', 38], ['Investors', 21], ['Advisors', 14]] };
+    const Bq = { n: '[Quill Analytics]', tot: 37, got: 37, left: 0, cold: 2, att: 1, noi: 21, src: '2 pages (/beta, /demo)', aud: [['Customers', 29], ['Investors', 5], ['Talent', 3]] };
+    const BOOK_N = 142;
+
+    const BOOK = [
+      { n: '[Ada Okafor]', o: '[Harbor Seed]', r: 'Advisor', s: 'LinkedIn import', e: '2026-10-30', la: ['2026-11-02', 'private note'], f: ['o', '1 overdue', 'Send Q3 update · due 2026-11-10'] },
+      { n: '[Tom Becker]', o: '[Northstar Capital]', r: 'Operating partner', s: 'Added by you', e: '2026-06-12', la: ['2026-10-12', 'follow-up done'], f: ['n', '1 · due 2026-11-20', 'Share pilot results'] },
+      { n: '[Iris Chen]', o: '[Harbor Lane Capital]', r: 'Partner', s: 'LinkedIn import', e: '2026-10-30', la: ['2026-10-30', 'imported'], f: ['o', '2 overdue · 3 open', 'Send deck · due 2026-11-03', 'Book diligence call · due 2026-11-09', 'Intro to [Tom Becker] · no due date'] },
+      { n: '[Priya Nair]', o: '[Tidepool Labs]', r: 'Head of Partnerships', s: 'Added by you', e: '2026-08-04', la: ['2026-11-11', 'private note'], f: ['n', '1 · due 2026-11-18', 'Lab tour'] },
+      { n: '[Morgan Vale]', o: '[Elm Studio]', r: 'Design lead', s: 'CSV import', e: '2026-09-21', la: ['2026-09-21', 'imported'], f: ['x'] },
+      { n: '[Hugo Brandt]', o: null, r: null, s: 'LinkedIn import', e: '2026-10-30', la: ['2026-10-30', 'imported'], f: ['x'] }
+    ];
+    const LEADS_A = [
+      { n: '[Kai Holm]', o: null, p: '/pilot page', ty: 'Customer', su: '2026-08-21', sd: 85, li: null, st: ['', '○ New'], f: ['x'], str: null },
+      { n: '[Jun Park]', o: '[Brightwell Health]', p: '/pilot page', ty: 'Customer', su: '2026-07-30', sd: 107, li: '2026-09-02', ld: 73, cold: 1, st: ['a', '◷ Replied'], f: ['x'], str: 'Warm' },
+      { n: '[Gus Demo]', o: '[Loomcraft]', p: '/careers page', ty: 'Talent', su: '2026-10-19', sd: 26, li: '2026-11-04', ld: 10, st: ['v', '● Contacted'], f: ['o', '1 overdue · 2 open', 'Call about the role · due 2026-11-10', 'Send offer pack · due 2026-11-20'], str: 'Strong' },
+      { n: '[Hana Ito]', o: null, p: '/pricing page', ty: 'Customer', su: '2026-11-06', sd: 8, li: null, st: ['', '○ New'], f: ['x'], str: null },
+      { n: '[Ivo Petrak]', o: '[Fieldline]', p: 'Invite · sent by you', ty: 'Advisor', su: '2026-10-28', sd: 17, li: '2026-11-02', ld: 12, st: ['g', '✓ Qualified'], f: ['n', '1 · due 2026-11-18', 'Advisor agreement draft'], str: 'Cool' }
+    ];
+    const LEADS_B = [
+      { n: '[Jules Avery]', o: '[Elm Studio]', p: '/beta page', ty: 'Customer', su: '2026-10-02', sd: 43, li: '2026-10-20', ld: 25, st: ['v', '● Contacted'], f: ['o', '1 overdue', 'Send beta invite · due 2026-11-12'], str: 'Warm' },
+      { n: '[Ari Lane]', o: '[Harbor Seed]', p: '/demo page', ty: 'Investor', su: '2026-09-01', sd: 74, li: null, st: ['', '○ New'], f: ['x'], str: null },
+      { n: '[Nina Brook]', o: null, p: '/beta page', ty: 'Customer', su: '2026-08-14', sd: 92, li: '2026-09-10', ld: 65, cold: 1, st: ['a', '◷ Replied'], f: ['x'], str: null },
+      { n: '[Omar Sayed]', o: '[Tidepool Labs]', p: '/demo page', ty: 'Talent', su: '2026-11-09', sd: 5, li: null, st: ['', '○ New'], f: ['x'], str: null }
+    ];
+    const LONG = { n: '[Wilhelmina Castellanos-Okonkwo]', o: '[Harbor Lane Capital Partners International Opportunities Fund II]', p: '/pricing page', ty: 'Investor', su: '2026-09-29', sd: 46, li: '2026-10-08', ld: 37, st: ['v', '● Contacted'], f: ['o', '1 overdue · 3 open', 'Send the data-room link and the Q3 pilot summary · due 2026-11-12', 'Book a call with [Tom Becker] about the lab tour · due 2026-11-19', 'Follow up on the Lisbon pilot terms · no due date'], str: 'Warm' };
+
+    /* ---------- shell (copied from nwi.js): company/project switcher top-left, sidebar = held licences, Account menu ---------- */
+    const NAVF = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', '|', 'Trust', 'Company Settings'];
+    const side = (sw) => `<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch startup: ${sw}">${sw} <span aria-hidden="true">▾</span></button><span class="eye grp">Founder</span><nav aria-label="Founder">${J(NAVF.map((t) => t === '|' ? '<div class="sep"></div>' : `<a href="#"${t === 'Network' ? ' aria-current="page"' : ''}>${t}</a>`))}</nav></aside>`;
+    const top = () => `<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">${bell}</button><button type="button" class="av" style="border:0" aria-label="Account menu: Portfolio, Companies, Licences">LS</button></div></div>`;
+    const RAILC = (t) => `<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">${t || 'Ask about your network'}</span></aside>`;
+    const shell = (body, o) => {
+      o = o || {};
+      const h = o.h || 900;
+      return `<div class="${CV}" style="width:1440px;min-height:${h}px">${o.banner || ''}<div class="sh" style="min-height:${h}px">${side(o.sw || A.n)}<div class="mn">${top()}<main class="bd">${body}</main></div>${RAILC(o.railT)}</div>${o.overlay || ''}</div>`;
+    };
+    const TABS = (cur) => `<nav class="ptabs" aria-label="Network">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<a href="#"${t === cur ? ' aria-current="page"' : ''}>${t}</a>`))}</nav>`;
+    const HEAD = (o) => `<header class="hdr"><span class="eye">Network · Relationship intelligence</span><div class="hrow"><div><h1>Relationships</h1><p>${o && o.sub ? o.sub : 'Two lists, counted apart: the people you keep, and the leads your startup’s pages collected.'}</p></div><div class="acts"><button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn p">Request introduction</button></div></div></header>${TABS('Relationships')}`;
+
+    /* ---------- shared pieces ---------- */
+    const pager = (a, b, tot, pages) => `<div class="pg"><span>${a}–${b} of ${tot} people</span><div class="pb"><button type="button" aria-label="Previous page" aria-disabled="true">‹</button><button type="button" aria-current="page">1</button><button type="button">2</button><span>…</span><button type="button">${pages}</button><button type="button" aria-label="Next page">›</button></div></div>`;
+    const fuCell = (f, full) => f[0] === 'x' ? NONE : f[0] === 'o' ? `${NEED}<small>${f[1]}</small>${full ? J(f.slice(2).map((t) => `<small class="nrl-task">${t}</small>`)) : `<small class="nrl-task">${f[2]}${f.length > 3 ? ` <span class="mu">+${f.length - 3} more</span>` : ''}</small>`}` : `${f[1]}<small class="nrl-task">${f[2]}</small>`;
+
+    /* My relationships: the member's own book (GET /api/contacts/book) */
+    const BOOKHEAD = `<tr><th scope="col">Person</th><th scope="col">Organization · role</th><th scope="col">How they entered</th><th scope="col">Last recorded activity</th><th scope="col">Follow-ups</th></tr>`;
+    const bookRow = (b, full) => `<tr><td><a href="#" class="nrl-nm"><b>${b.n}</b></a></td><td${b.o ? '' : ' class="na"'}>${b.o ? `<span class="nrl-cl">${b.o}</span>` : '— Not recorded'}<small>${b.r || 'Role: Not recorded'}</small></td><td>${b.s}<small class="mo">${b.e}</small></td><td class="mo">${b.la[0]}<small>${b.la[1]}</small></td><td>${fuCell(b.f, full)}</td></tr>`;
+    const BOOKSEC = (o) => {
+      o = o || {};
+      const rows = o.rows || BOOK;
+      return `<section class="cd nrl-sec" aria-labelledby="mr"><div class="ch"><div><h2 id="mr">My relationships</h2><p class="sub">The people you keep. Private to you and not tied to a startup: switching startup does not change this list.</p></div><span class="sm">${BOOK_N} people · private to you</span></div>
+      <div class="tools"><label for="bq" class="sr">Search your relationships</label><input id="bq" class="inp" style="color:var(--ink);font-family:var(--sg)" placeholder="Search by name or organization"><button type="button" class="dd" aria-haspopup="listbox">Source: All ▾</button><label class="dd"><input type="checkbox" style="accent-color:#7c3aed;margin:0"> Has open follow-up</label>
+      <span style="margin-left:auto" class="acts">${o.stale ? STALE('read 13:38, 24 min ago') : '<span class="foot mo">read 14:02</span>'}<button type="button" class="ib" aria-label="Read your relationships again">↻</button><button type="button" class="btn">Import contacts</button><button type="button" class="btn">Add person</button></span></div>
+      <table class="tbl"><thead>${BOOKHEAD}</thead><tbody>${J(rows.map((b) => bookRow(b, o.full)))}</tbody></table>${pager(1, 25, BOOK_N, 6)}
+      <div class="cf"><span class="foot">Last recorded activity is a private note, a follow-up you finished, or the day they entered your book. None of these is an exchange with the person, so this list shows no Going cold. ${TB('an exchange log on book contacts · #7061')}</span></div></section>`;
+    };
+
+    /* Leads from your pages: the selected startup's project-linked contacts (GET /api/contacts?project_id=) */
+    const SCOPE = (S, o) => {
+      o = o || {};
+      const cnt = o.reading ? `<span class="s">◌ Reading the count…</span>` : o.bad ? `<span class="s ur">? Count could not be read</span>` : `<b class="mo">${S.tot}</b> leads <span class="mu">· whole startup, counted by the server</span>`;
+      const ld = o.reading || o.bad ? '' : S.left ? `<div><dt>Loaded</dt><dd>${PART(`<b class="mo">${S.got}</b> of <b class="mo">${S.tot}</b> loaded`)}</dd></div>` : `<div><dt>Loaded</dt><dd>All <b class="mo">${S.tot}</b> loaded</dd></div>`;
+      return `<dl class="nrl-scope" aria-label="What this list holds"><div><dt>Startup</dt><dd><b>${S.n}</b>${o.reading ? ' <span class="nrl-sw">switched 14:03:02</span>' : ''}</dd></div><div><dt>Source</dt><dd>${S.src}</dd></div><div><dt>Count</dt><dd>${cnt}</dd></div>${ld}</dl>`;
+    };
+    const leadHead = `<tr><th scope="col">Person</th><th scope="col">Source page · type</th><th scope="col">Signed up or added</th><th scope="col">Last interaction</th><th scope="col">Follow-ups</th><th scope="col">Strength · set by you</th><th scope="col">Status</th></tr>`;
+    const liCell = (l) => l.li ? `<span class="mo">${l.li}</span><small>reply logged · ${l.ld} days ago</small>${l.cold ? `<div style="margin-top:3px">${COLD}</div>` : ''}` : `${NOI}<small>no reply logged since signing up</small>`;
+    const leadRow = (l, full) => `<tr><td><a href="#" class="nrl-nm"><b>${l.n}</b></a><small${l.o ? '' : ' class="mu"'}>${l.o ? `<span class="nrl-cl">${l.o}</span>` : 'Organization: Not recorded'}</small></td><td>${l.p}<small>${l.ty}</small></td><td class="mo">${l.su}<small>${l.sd} days ago</small></td><td>${liCell(l)}</td><td>${fuCell(l.f, full)}</td><td${l.str ? '' : ' class="na"'}>${l.str || '— Not set'}</td><td><span class="pl ${l.st[0]}">${l.st[1]}</span></td></tr>`;
+    const CHIPS = (S, o) => {
+      o = o || {};
+      const dis = o.reading ? ' aria-disabled="true" style="opacity:.5"' : '';
+      const part = S.left ? ` of ${S.got} loaded` : '';
+      return `<div class="nrl-chips" role="group" aria-label="Filter leads"><span class="eye">Server filter · whole startup</span><div class="seg" role="radiogroup" aria-label="Lead type"><button type="button" role="radio" aria-checked="${o.aud ? 'false' : 'true'}"${dis}>Everyone${o.reading ? '' : ' · ' + S.tot}</button>${J(S.aud.slice(0, 3).map((a) => `<button type="button" role="radio" aria-checked="${o.aud === a[0] ? 'true' : 'false'}"${dis}>${a[0]}${o.reading ? '' : ' · ' + a[1]}</button>`))}</div>
+      <span class="eye" style="margin-left:6px">${S.left ? 'Over the loaded page' : 'Over all loaded'}</span><button type="button" class="nrl-fc" aria-pressed="${o.cold ? 'true' : 'false'}"${dis}>▽ Going cold${o.reading ? '' : ` · ${S.cold}${part}`}</button><button type="button" class="nrl-fc" aria-pressed="false"${dis}>◷ Needs attention${o.reading ? '' : ` · ${S.att}${part}`}</button><button type="button" class="nrl-fc" aria-pressed="false"${dis}>— No interaction recorded${o.reading ? '' : ` · ${S.noi}${part}`}</button></div>`;
+    };
+    const LEADSEC = (S, rows, o) => {
+      o = o || {};
+      let body;
+      if (o.reading) body = `<div class="nrl-skel" role="status" aria-live="polite"><span class="sr">Reading leads for ${S.n}</span>${J([0, 1, 2, 3, 4].map(() => '<div><span class="sk" style="width:22%;height:10px"></span><span class="sk" style="width:14%;height:10px"></span><span class="sk" style="width:12%;height:10px"></span><span class="sk" style="width:18%;height:10px"></span><span class="sk" style="width:16%;height:10px"></span></div>'))}<p class="foot">Reading leads for <b>${S.n}</b>… Nothing from the startup shown before is kept here.</p></div>`;
+      else if (o.bad) body = `<div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>Leads for ${S.n} could not be read.</b> This is a failed read, not a startup with no leads, so no count is shown. My relationships above is unaffected.<div class="acts" style="margin-top:8px"><button type="button" class="btn">Try again</button><span class="foot">Last tried 14:02</span></div></div></div>`;
+      else body = `<table class="tbl"><thead>${leadHead}</thead><tbody>${J(rows.map((l) => leadRow(l, o.full)))}</tbody></table>`;
+      const more = o.reading || o.bad ? '' : S.left ? `<div class="pg"><span>${S.got} of ${S.tot} leads loaded · ${S.left} not loaded yet</span><div class="acts">${o.moreBusy ? `<button type="button" class="btn" aria-disabled="true" aria-busy="true">◌ Reading the next ${S.left}…</button>` : `<button type="button" class="btn">Load the remaining ${S.left}</button>`}</div></div>` : `<div class="pg"><span>All ${S.tot} of ${S.tot} loaded</span></div>`;
+      const exp = o.reading ? `<button type="button" class="btn" aria-disabled="true">Export</button><span class="foot">Export waits until ${S.n}’s leads are read.</span>` : o.bad ? `<button type="button" class="btn" aria-disabled="true">Export</button><span class="foot">Nothing to export while the read failed.</span>` : `<button type="button" class="btn">Export ${S.left ? '…' : S.tot + ' leads'}</button><span class="foot">${S.left ? `Choose the ${S.got} loaded or all ${S.tot}` : `CSV of every lead on ${S.n}`}</span>`;
+      return `<section class="cd nrl-sec" aria-labelledby="lp"${o.reading ? ' aria-busy="true"' : ''}><div class="ch"><div><h2 id="lp">Leads from your pages</h2><p class="sub">People who left their details on one of the selected startup’s pages, or that you invited. Not in My relationships, and never added to its count.</p></div><span class="acts">${o.stale ? STALE('read 13:38, 24 min ago') : ''}<button type="button" class="ib" aria-label="Read leads again">↻</button>${exp}</span></div>
+      ${SCOPE(S, o)}${o.bad ? '' : CHIPS(S, o)}${body}${more}
+      <div class="cf"><span class="foot">Last interaction is the latest reply logged on a lead. Signing up, an import or an edit is not an interaction. Going cold needs a logged reply more than 60 days old; Needs attention is an overdue follow-up and nothing else.</span></div></section>`;
+    };
+    const RELPAGE = (S, rows, o) => `${HEAD()}${o && o.banner ? o.banner : ''}${BOOKSEC(o && o.book)}${LEADSEC(S, rows, o)}`;
+
+    /* activity-label explanations */
+    const WHY = (title, rows, foot) => `<div class="nrl-why" role="dialog" aria-label="${title}"><b>${title}</b><dl>${J(rows.map((r) => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`))}</dl>${foot ? `<p class="foot">${foot}</p>` : ''}</div>`;
+
+    /* phone helpers (copied from nwi.js) */
+    const phTop = (t, back) => `<div class="pt"><button type="button" class="pi" aria-label="${back ? 'Back' : 'Open menu'}">${back ? '‹' : '☰'}</button><b style="font-size:15px">${t}</b><div style="display:flex"><button type="button" class="pi" aria-label="Ask Eadwyn"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)">E</span></button><button type="button" class="pi" aria-label="Notifications">${bell}</button></div></div>`;
+    const phone = (t, body, stk, o) => `<div class="${CV} ph${stk ? ' fx' : ''}" style="width:390px;min-height:${(o && o.h) || 844}px">${phTop(t, o && o.back)}<main class="pbd" style="overflow:hidden">${body}</main>${o && o.kb ? o.kb : ''}${stk ? `<div class="stk">${stk}</div>` : ''}</div>`;
+    const MSEL = `<label class="eye" for="ms">Section</label><select id="ms" class="msel" aria-label="Network section">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<option${t === 'Relationships' ? ' selected="selected"' : ''}>${t}</option>`))}</select>`;
+    const LSEG = (cur) => `<div class="seg" role="tablist" aria-label="List" style="width:100%"><button type="button" role="tab" aria-selected="${cur === 'b'}" aria-checked="${cur === 'b'}" style="flex:1;min-height:44px">My relationships · ${BOOK_N}</button><button type="button" role="tab" aria-selected="${cur === 'l'}" aria-checked="${cur === 'l'}" style="flex:1;min-height:44px">Leads</button></div>`;
+    const pcBook = (b) => `<div class="pc"><div class="r1"><div style="min-width:0"><b>${b.n}</b><br><small>${b.o || 'Organization: Not recorded'} · ${b.r || 'role not recorded'}</small></div><button type="button" class="pi" aria-label="Open ${b.n}">›</button></div><small>${b.s} · <span class="mo">${b.e}</span></small><small>Last recorded activity <span class="mo">${b.la[0]}</span> · ${b.la[1]}</small><div class="acts">${b.f[0] === 'o' ? NEED + `<small>${b.f[1]}</small>` : b.f[0] === 'n' ? `<small>Follow-up ${b.f[1]}</small>` : '<small>No follow-up</small>'}</div></div>`;
+    const pcLead = (l, full) => `<div class="pc"><div class="r1"><div style="min-width:0"><b>${l.n}</b><br><small>${l.o || 'Organization: Not recorded'}</small></div><button type="button" class="pi" aria-label="Open ${l.n}">›</button></div><small>${l.p} · ${l.ty} · signed up <span class="mo">${l.su}</span></small><small>${l.li ? `Last interaction <span class="mo">${l.li}</span> · reply logged · ${l.ld} days ago` : '— No interaction recorded since signing up'}</small><div class="acts">${l.cold ? COLD : ''}${l.f[0] === 'o' ? NEED : ''}<span class="pl ${l.st[0]}">${l.st[1]}</span></div>${full && l.f[0] !== 'x' ? `<ul class="nrl-tl">${J(l.f.slice(2).map((t) => `<li>${t}</li>`))}</ul>` : ''}</div>`;
+    const KB = `<div class="nrl-kb" aria-hidden="true"><span>On-screen keyboard</span></div>`;
+
+    /* crop wrapper for state grids */
+    const crop = (w, body) => `<div class="${CV} crop" style="width:${w}px">${body}</div>`;
+    const stcard = (tag, h, body, cls) => `<section class="cd${cls ? ' ' + cls : ''}"><span class="tag">${tag}</span><div class="ch"><h2>${h}</h2></div>${body}</section>`;
+
+    let html = '';
+
+    /* ===== NRL1 · the two lists, desktop ===== */
+    if (B === 'NRL1') html = shell(RELPAGE(A, LEADS_A), { h: 1640 });
+
+    /* ===== NRL1B · source-explained activity labels ===== */
+    else if (B === 'NRL1B') html = crop(1400, `<div class="g3">
+      ${stcard('Never contacted · signed up 85 days ago', '[Kai Holm] · ' + A.n, `<p class="sub">Row shows: ${NOI}</p>${WHY('Why no interaction is shown', [['Signed up', '2026-08-21 through the /pilot page'], ['Replies logged', '<b class="mo">0</b>'], ['Going cold', 'No. Signing up is not an exchange, so there is nothing to go cold.']], 'On main this lead reads “going cold”: the old rule reads last_activity_at, which is stamped when the signup arrives.')}`)}
+      ${stcard('A dated exchange 73 days ago', '[Jun Park] · ' + A.n, `<p class="sub">Row shows: <span class="mo">2026-09-02</span> · reply logged ${COLD}</p>${WHY('Why Going cold', [['Last interaction', '2026-09-02 · a reply logged on this lead'], ['Since', '<b class="mo">73</b> days, over the 60-day window'], ['Source', 'Contact replies (last_reply_at)'], ['Direction · who logged', `Not recorded ${TB('direction on the list · #7061')}`]], 'Logging a new reply clears it. Editing strength or status does not.')}`)}
+      ${stcard('Overdue follow-up', '[Gus Demo] · ' + A.n, `<p class="sub">Row shows: ${NEED} 1 overdue · 2 open</p>${WHY('Why Needs attention', [['Overdue', 'Call about the role · due 2026-11-10 (4 days ago)'], ['Open', 'Send offer pack · due 2026-11-20'], ['Last interaction', '2026-11-04 · not cold']], 'Needs attention means an overdue follow-up. It never means old, quiet or weak.')}`)}</div>
+      <section class="cd"><div class="ch"><h2>Four facts, four columns, never one score</h2><span class="tag">Legend shown under the table, and as each column header’s tooltip</span></div>
+      <table class="tbl"><thead><tr><th scope="col">Column</th><th scope="col">What it means</th><th scope="col">Where it comes from</th><th scope="col">When it has nothing</th></tr></thead><tbody>
+      <tr><td><b>Signed up or added</b></td><td>The day the lead arrived: a page signup, an invite, or added by you</td><td>created_at, source page</td><td>Always present</td></tr>
+      <tr><td><b>Last interaction</b> · ${COLD}</td><td>The latest reply someone logged with this person. Going cold: that reply is more than 60 days old</td><td>Contact replies (last_reply_at)</td><td>${NOI} · never Going cold</td></tr>
+      <tr><td><b>Follow-ups</b> · ${NEED}</td><td>Open follow-ups; Needs attention when one is past its due date</td><td>Contact tasks (next_task_due, open_tasks)</td><td>${NONE}</td></tr>
+      <tr><td><b>Strength · set by you</b></td><td>Your own Strong, Warm or Cool. Nothing computes it</td><td>contacts.strength</td><td><span class="s">— Not set</span></td></tr></tbody></table>
+      <p class="foot">There is no relationship-strength score. last_activity_at is not shown: a strength or status edit stamps it, so it cannot tell a conversation from an edit.</p></section>`);
+
+    /* ===== NRL2 · switching startup while a page is loading ===== */
+    else if (B === 'NRL2') html = shell(RELPAGE(Bq, [], { reading: 1, banner: `<div class="nrl-live" role="status">${LBL('Announced')} “Showing leads for [Quill Analytics]. Reading.”</div>` }), { h: 1180, sw: Bq.n });
+    else if (B === 'NRL2B') {
+      const step = (n, t, cap, inner) => `<section class="cd nrl-stepc"><div class="ch"><span class="nrl-stepn">${n}</span><h2 style="flex:1">${t}</h2></div><p class="sub">${cap}</p>${inner}</section>`;
+      const mini = (S, rows, o) => `<div class="nrl-mini">${SCOPE(S, o)}${o.reading ? '<div class="nrl-skel"><div><span class="sk" style="width:30%;height:9px"></span><span class="sk" style="width:20%;height:9px"></span><span class="sk" style="width:24%;height:9px"></span></div><div><span class="sk" style="width:26%;height:9px"></span><span class="sk" style="width:22%;height:9px"></span><span class="sk" style="width:18%;height:9px"></span></div></div>' : `<ul class="nrl-ml">${J(rows.map((l) => `<li><b>${l.n}</b><span>${l.li ? 'reply ' + l.li : '— No interaction recorded'}</span></li>`))}</ul>`}<div class="nrl-mf">${o.foot}</div></div>`;
+      html = crop(1400, `<div class="g2">
+      ${step(1, 'On [Kelp Bio], the next page is being read', 'Lena pressed Load the remaining 14 at 14:03:01. The request is for [Kelp Bio].', mini(A, LEADS_A.slice(0, 3), { foot: `<button type="button" class="btn" aria-busy="true" aria-disabled="true">◌ Reading the next 14…</button><button type="button" class="btn">Export…</button>` }))}
+      ${step(2, 'She switches to [Quill Analytics] before it answers', 'The switcher changes at 14:03:02. The leads section empties at once and names the new startup; nothing reads 0. Filters, Load more and Export wait. My relationships does not move.', mini(Bq, [], { reading: 1, foot: `<button type="button" class="btn" aria-disabled="true">Export</button><span class="foot">Export waits until [Quill Analytics]’s leads are read.</span>` }))}
+      ${step(3, '[Kelp Bio]’s late page arrives and is dropped', 'Its answer lands at 14:03:04. It was asked for [Kelp Bio], which is no longer selected, so its 14 rows are not appended and its total is not shown. Nothing is announced.', mini(Bq, [], { reading: 1, foot: `<span class="nrl-drop">✕ Dropped · answer for [Kelp Bio] · 14 rows · 14:03:04</span>${LBL('Annotation, not product copy')}` }))}
+      ${step(4, '[Quill Analytics] is read', 'At 14:03:05 the list, counts and export all describe [Quill Analytics]: 37 leads, all loaded. Announced: “37 leads for [Quill Analytics].”', mini(Bq, LEADS_B.slice(0, 3), { foot: `<button type="button" class="btn">Export 37 leads</button><span class="foot mo">quill-analytics-leads-2026-11-14.csv</span>` }))}</div>
+      <section class="cd"><div class="ch"><h2>What each part shows during the switch</h2></div><table class="tbl"><thead><tr><th scope="col">Part</th><th scope="col">Before (1)</th><th scope="col">Switching (2, 3)</th><th scope="col">After (4)</th></tr></thead><tbody>
+      <tr><td><b>Startup label</b></td><td>[Kelp Bio]</td><td>[Quill Analytics] · switched 14:03:02</td><td>[Quill Analytics]</td></tr>
+      <tr><td><b>List</b></td><td>200 of [Kelp Bio]’s rows</td><td>Skeleton. No [Kelp Bio] row under the [Quill Analytics] label</td><td>37 [Quill Analytics] rows</td></tr>
+      <tr><td><b>Total</b></td><td>214 · whole startup</td><td>◌ Reading the count… (not 0, not 214)</td><td>37 · all loaded</td></tr>
+      <tr><td><b>Next page</b></td><td>Reading the next 14…</td><td>Hidden; the [Kelp Bio] answer is dropped</td><td>None: all loaded</td></tr>
+      <tr><td><b>Filters and counts on chips</b></td><td>Over the 200 loaded</td><td>Disabled, no numbers</td><td>Over all 37</td></tr>
+      <tr><td><b>Export</b></td><td>Choose 200 loaded or all 214</td><td>Disabled with the reason</td><td>Export 37 leads</td></tr>
+      <tr><td><b>My relationships</b></td><td>142 · private to you</td><td>Unchanged</td><td>Unchanged</td></tr></tbody></table>
+      <p class="foot">${TO('Q1 · A, show the new startup at once and read; B would keep the old rows dimmed until the new read lands')} Frontend: each read carries the startup it was asked for, and an answer for another startup is ignored (FounderRelationshipBook already does this with a serial; FounderNetworkRelationships does not).</p></section>`);
+    }
+    else if (B === 'NRL2C') html = crop(1400, `<div class="g2">${stcard('Switch, then the new read fails', 'Leads from your pages', `${SCOPE(Bq, { bad: 1 })}<div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>Leads for [Quill Analytics] could not be read.</b> No count is shown, and [Kelp Bio]’s list is not brought back under this label.<div class="acts" style="margin-top:8px"><button type="button" class="btn">Try again</button><button type="button" class="btn t">Switch back to [Kelp Bio]</button></div></div></div>`)}
+      ${stcard('Switch back before anything answers', 'Leads from your pages', `${SCOPE(A, { reading: 1 })}<p class="sub">[Kelp Bio] is read again from the start. Its earlier page of 200 is not reused, because the list may have changed: one read, one startup, one answer.</p><p class="foot">The two requests for [Quill Analytics] still answer later; both are dropped.</p>`)}</div>`);
+
+    /* ===== NRL3 · one page of leads: what filters, counts and export cover ===== */
+    else if (B === 'NRL3') html = crop(1400, `<div class="g"><div class="c8" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd nrl-sec" aria-labelledby="l3"><div class="ch"><h2 id="l3">Leads from your pages</h2><span class="acts"><button type="button" class="btn" aria-expanded="true" aria-haspopup="dialog">Export…</button></span></div>${SCOPE(A)}${CHIPS(A, { cold: 1 })}
+      <div class="nt a"><span class="ic" aria-hidden="true">½</span><div><b>Going cold covers the 200 loaded, not all 214.</b> 9 of the 200 loaded match. The 14 not loaded have not been checked. <button type="button" class="btn t">Load the remaining 14 and check them</button></div></div>
+      <table class="tbl"><thead>${leadHead}</thead><tbody>${leadRow(LEADS_A[1])}${leadRow({ n: '[Paula Reyes]', o: '[Arden Bio]', p: '/pricing page', ty: 'Investor', su: '2026-07-14', sd: 123, li: '2026-08-28', ld: 78, cold: 1, st: ['a', '◷ Replied'], f: ['x'], str: 'Cool' })}</tbody></table>
+      <div class="pg"><span>Showing 2 of 9 matches in the 200 loaded · ${A.tot} on ${A.n}</span><button type="button" class="btn">Load the remaining 14</button></div></section>
+      <section class="cd"><div class="ch"><h2>Every figure says what it counts</h2></div><table class="tbl"><thead><tr><th scope="col">Figure</th><th scope="col">Unit shown</th><th scope="col">Counted by</th></tr></thead><tbody>
+      <tr><td>214 leads</td><td>whole startup</td><td>Server total, before paging</td></tr><tr><td>Customers 141 · Talent 38 · Investors 21 · Advisors 14</td><td>whole startup</td><td>Server counts by type; choosing one asks the server again</td></tr>
+      <tr><td>Going cold 9 · Needs attention 6 · No interaction 117</td><td>“of 200 loaded”</td><td>The page in the browser ${TB('server counts for these · #7061')}</td></tr><tr><td>200 of 214 loaded</td><td>rows in the browser</td><td>Page of 200 plus has_more</td></tr></tbody></table></section></div>
+      <div class="c4"><div class="panel" role="dialog" aria-labelledby="ex1"><div class="dh"><div><span class="eye">Export · ${A.n}</span><h2 id="ex1">Which leads go in the file?</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="dc">
+      <label class="pick on"><input type="radio" name="ex" checked="checked" style="accent-color:#7c3aed"><div><b>All 214 leads</b><small>Reads the remaining 14 first, then writes the file. Filters are not applied.</small></div><span></span></label>
+      <label class="pick"><input type="radio" name="ex" style="accent-color:#7c3aed"><div><b>The 9 shown · Going cold</b><small>Of the 200 loaded only. The 14 not loaded are not checked.</small></div><span></span></label>
+      <label class="pick"><input type="radio" name="ex" style="accent-color:#7c3aed"><div><b>The 200 loaded</b><small>The page in the browser, without filters.</small></div><span></span></label>
+      <dl class="rv"><dt>File</dt><dd class="mo">kelp-bio-leads-2026-11-14.csv</dd><dt>Columns</dt><dd>Person, organization, source page, type, signed up, last interaction, follow-ups, strength, status</dd><dt>Includes</dt><dd>The scope above is written as the file’s first line</dd></dl></div>
+      <div class="df"><button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Export 214 leads</button></div></div>
+      <p class="foot" style="margin-top:10px">${LBL('On main')} Export writes the rows on screen with the startup name only; it never says they are one page of a larger set.</p></div></div>`);
+
+    /* ===== NRL4A · loading, first use, filtered-empty ===== */
+    else if (B === 'NRL4A') html = crop(1400, `<div class="g3">
+      ${stcard('Loading · each section on its own', 'My relationships', `<div class="nrl-skel" role="status"><div><span class="sk" style="width:30%;height:10px"></span><span class="sk" style="width:22%;height:10px"></span><span class="sk" style="width:18%;height:10px"></span></div><div><span class="sk" style="width:26%;height:10px"></span><span class="sk" style="width:24%;height:10px"></span><span class="sk" style="width:16%;height:10px"></span></div><div><span class="sk" style="width:28%;height:10px"></span><span class="sk" style="width:20%;height:10px"></span><span class="sk" style="width:20%;height:10px"></span></div></div><p class="foot">Reading your relationships… No count until the read lands.</p>`)}
+      ${stcard('Loading · each section on its own', 'Leads from your pages', `${SCOPE(A, { reading: 1 })}<div class="nrl-skel"><div><span class="sk" style="width:30%;height:10px"></span><span class="sk" style="width:22%;height:10px"></span></div><div><span class="sk" style="width:26%;height:10px"></span><span class="sk" style="width:24%;height:10px"></span></div></div><p class="foot">Whichever section answers first is shown first.</p>`)}
+      ${stcard('First use · read, and empty', 'My relationships', `<p class="sub"><b>Your book is empty.</b> Import your LinkedIn connections or a spreadsheet. Nobody is contacted.</p><div class="acts"><button type="button" class="btn">Import contacts</button><button type="button" class="btn">Add person</button></div><p class="foot">0 people · read 14:02</p>`)}
+      ${stcard('First use · startup with no signups yet', 'Leads from your pages', `<dl class="nrl-scope"><div><dt>Startup</dt><dd><b>${Bq.n}</b></dd></div><div><dt>Count</dt><dd><b class="mo">0</b> leads · read 14:02</dd></div></dl><p class="sub"><b>No one has signed up through ${Bq.n}’s pages yet,</b> and you have not invited anyone. Leads appear here when someone does.</p><a class="btn t" href="#" style="align-self:flex-start">Open Brand &amp; Pages →</a>`)}
+      ${stcard('Filtered-empty · in the loaded page', 'Leads from your pages', `${CHIPS(A, { aud: 'Investors', cold: 1 })}<div class="nt a"><span class="ic" aria-hidden="true">½</span><div><b>No investor in the 200 loaded is going cold.</b> 14 leads are not loaded and have not been checked.</div></div><div class="acts"><button type="button" class="btn">Load the remaining 14</button><button type="button" class="btn t">Clear filters</button></div>`)}
+      ${stcard('Filtered-empty · whole book', 'My relationships', `<p class="sub"><b>No one in your book matches “zeta” with Has open follow-up.</b> The search and the filter ran on all 142.</p><button type="button" class="btn t" style="align-self:flex-start">Clear search and filter</button>`)}</div>`);
+
+    /* ===== NRL4B · partial failure, stale, retry ===== */
+    else if (B === 'NRL4B') html = crop(1400, `<div class="g3">
+      ${stcard('Partial read failure · next page', 'Leads from your pages', `${SCOPE(A)}<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The remaining 14 could not be read.</b> The 200 already loaded are unchanged, and the counts still say “of 200 loaded”.</div></div><button type="button" class="btn" style="align-self:flex-start">Try again</button>`, 'bad')}
+      ${stcard('Stale · read a while ago', 'Leads from your pages', `<div class="ch">${STALE('read 13:38, 24 min ago')}<button type="button" class="btn">Read again</button></div><p class="sub">Rows, counts and export stay as read at 13:38 and say so. Read again replaces them only when the new read lands.</p><p class="foot">Stale after 15 minutes on screen, or when the tab returns from the background.</p>`)}
+      ${stcard('Refreshing · rows kept', 'Leads from your pages', `<div class="ch"><span class="s">◌ Reading again… <span class="mo">since 14:02:10</span></span><button type="button" class="btn" aria-disabled="true" aria-busy="true">Read again</button></div><p class="sub">The 200 rows read at 13:38 stay usable, marked Stale. Export stays on and names 13:38 in the file.</p>`)}
+      ${stcard('Retry · 1 of 3', 'Leads from your pages', `<div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>Leads for ${A.n} could not be read.</b> Not an empty list: no count is shown.</div></div><button type="button" class="btn">Try again</button><p class="foot">Focus lands on Try again. My relationships stays usable above.</p>`, 'bad')}
+      ${stcard('Retry · 2 of 3', 'Leads from your pages', `<div class="ch"><span class="s">◌ Trying again…</span></div><button type="button" class="btn" aria-disabled="true" aria-busy="true">◌ Trying again</button><p class="foot">The button keeps focus and says it is busy. A second press does nothing.</p>`)}
+      ${stcard('Retry · 3 of 3', 'Leads from your pages', `${SCOPE(A)}<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Leads read at 14:02.</b> 214 on ${A.n}, 200 loaded.</div></div><p class="foot">Announced once. Focus moves to the section heading.</p>`)}</div>`);
+
+    /* ===== NRL5 · sibling failure keeps the other usable ===== */
+    else if (B === 'NRL5') html = shell(RELPAGE(A, [], { bad: 1, book: { stale: 0 } }), { h: 1180 });
+    else if (B === 'NRL5B') html = crop(1400, `<div class="g">
+      <section class="c6 cd"><span class="tag">Person sheet · notes failed, follow-ups read</span><div class="ch"><div><span class="eye">Relationship</span><h2>[Iris Chen]</h2><p class="sub">Partner · [Harbor Lane Capital] · LinkedIn import 2026-10-30</p></div></div>
+      <div class="sec"><h3>Follow-ups <span class="foot">· 3 open, 2 overdue · read 14:02</span></h3>
+      <label class="ck"><input type="checkbox"> Send deck ${NEED}<small>due 2026-11-03</small></label><label class="ck"><input type="checkbox"> Book diligence call ${NEED}<small>due 2026-11-09</small></label><label class="ck"><input type="checkbox"> Intro to [Tom Becker]<small>no due date</small></label><button type="button" class="btn" style="align-self:flex-start">Add follow-up</button></div>
+      <div class="sec"><h3>Private notes</h3><div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>The notes could not be read.</b> Not “no notes”. Follow-ups above still work. <button type="button" class="btn t">Try again</button></div></div><p class="foot">Add note is off until the notes are read, so a new note cannot hide older ones.</p></div>
+      <div class="sec"><h3>History</h3><p class="sub"><span class="s">½ Partial</span> Follow-ups done and the import date are listed; notes are missing until they are read.</p></div></section>
+      <section class="c6 cd"><span class="tag">Your contacts (other licences) · same rule</span><div class="ch"><h2>[Morgan Vale] · notes and follow-ups</h2></div>
+      <div class="g2"><div class="nrl-half"><span class="eye">Notes · read</span><p class="sub">Met at the [Elm Studio] launch. Wants the pilot deck.</p><button type="button" class="btn t">Add note</button></div><div class="nrl-half bad"><span class="eye">Follow-ups · could not be read</span><p class="sub">? Not “no follow-ups”.</p><button type="button" class="btn">Try again</button></div></div>
+      <p class="foot">${LBL('On main')} NetworkContacts reads notes and follow-ups together, so one failure hides both. Read them apart, as FounderRelationshipBook does.</p></section></div>`);
+    else if (B === 'NRL5C') {
+      const fRow = (r) => `<tr><td><b>${r[0]}</b><small>${r[1]}</small></td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`;
+      html = crop(1400, `<div class="g">
+      <section class="c6 cd"><span class="tag">Partner · firm book read, roster failed</span><div class="ch"><h2>Firm relationship book</h2><span class="sm">48 contacts · 12 organizations</span></div>
+      <div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>The firm roster could not be read,</b> so owners cannot be changed here. The book itself is read and usable. <button type="button" class="btn t">Try again</button></div></div>
+      <table class="tbl"><thead><tr><th scope="col">Contact</th><th scope="col">Activity · source</th><th scope="col">Owner</th><th scope="col">Next</th></tr></thead><tbody>
+      ${fRow(['[Rui Costa]', '[Harbor Seed]', '<span class="mo">2026-10-02</span><small>12 interactions logged · last 43 days ago</small>', '[Theo Grant]', '<button type="button" class="btn" aria-disabled="true">Change owner</button>'])}
+      ${fRow(['[Paula Reyes]', '[Arden Bio]', `<span class="mo">2026-08-28</span><small>3 interactions logged · last 78 days ago</small><div style="margin-top:3px">${COLD}</div>`, '<span class="s">○ Unassigned</span>', '<button type="button" class="btn" aria-disabled="true">Take it</button>'])}
+      ${fRow(['[Wen Li]', '[Loomcraft]', `${NOI}<small>0 interactions logged</small>`, '<span class="s">○ Unassigned</span>', '<button type="button" class="btn" aria-disabled="true">Take it</button>'])}</tbody></table>
+      <p class="foot">Activity replaces Strong · Working · Thin. Those were computed from a count and an age and read as a judgement; the count and the date are what was recorded.</p></section>
+      <section class="c6 cd bad"><span class="tag">Partner · firm book failed</span><div class="ch"><h2>Firm relationship book</h2></div>
+      <div class="g3">${J(['Contacts', 'Unassigned', 'Platform-sourced'].map((t) => `<div class="tile"><span class="eye">${t}</span><span class="s ur">? Could not be read</span></div>`))}</div>
+      <div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>Your firm’s book could not be read.</b> No figure is shown: a 0 here would be a count nobody read. <button type="button" class="btn">Try again</button></div></div>
+      <p class="foot">${LBL('On main')} RelationshipsPage shows the error above tiles reading 0, 0 and 0.</p><p class="foot">The roster read on its own: owners are listed in the picker when the book is back.</p></section></div>`);
+    }
+
+    /* ===== NRL6 · tablet 768 ===== */
+    else if (B === 'NRL6') {
+      const tRow = (l) => `<tr><td><b class="nrl-nm2">${l.n}</b><small class="nrl-cl">${l.o || 'Organization: Not recorded'}</small><small>${l.p} · ${l.ty}</small></td><td>${l.li ? `<span class="mo">${l.li}</span><small>reply · ${l.ld} days</small>${l.cold ? '<div>' + COLD + '</div>' : ''}` : NOI}</td><td>${fuCell(l.f, 1)}</td></tr>`;
+      html = `<div class="${CV} tab">${phTop('Network').replace('class="pt"', 'class="pt" style="padding:0 12px"')}<main class="bd" style="padding:20px 24px">${HEAD({ sub: 'The people you keep, and your startup’s leads, counted apart.' })}
+      <section class="cd"><div class="ch"><h2>My relationships</h2><span class="sm">${BOOK_N} people · private to you</span></div><div class="tools"><input class="inp" style="min-width:0;flex:1" placeholder="Search by name or organization" aria-label="Search your relationships"><button type="button" class="dd">Filters ▾</button></div>
+      <table class="tbl"><thead><tr><th scope="col">Person · organization</th><th scope="col">Last recorded activity</th><th scope="col">Follow-ups</th></tr></thead><tbody>${J(BOOK.slice(0, 3).map((b) => `<tr><td><b>${b.n}</b><small>${b.o || 'Not recorded'} · ${b.r || 'role not recorded'}</small></td><td class="mo">${b.la[0]}<small>${b.la[1]}</small></td><td>${fuCell(b.f, 1)}</td></tr>`))}</tbody></table>${pager(1, 25, BOOK_N, 6)}</section>
+      <section class="cd"><div class="ch"><h2>Leads from your pages</h2><button type="button" class="btn">Export…</button></div>${SCOPE(A)}<div class="tools"><button type="button" class="dd">Type: Everyone · 214 ▾</button><button type="button" class="dd">▽ Going cold · 9 of 200 loaded</button></div>
+      <table class="tbl"><thead><tr><th scope="col">Person · source</th><th scope="col">Last interaction</th><th scope="col">Follow-ups</th></tr></thead><tbody>${tRow(LONG)}${tRow(LEADS_A[0])}${tRow(LEADS_A[1])}</tbody></table>
+      <div class="pg"><span>200 of 214 loaded</span><button type="button" class="btn">Load the remaining 14</button></div></section></main></div>`;
+    }
+
+    /* ===== NRL7 · phone 390 ===== */
+    else if (B === 'NRL7A') html = phone('Relationships', `${MSEL}${LSEG('b')}<p class="foot">${BOOK_N} people · private to you · not tied to a startup</p><label for="p1" class="sr">Search your relationships</label><input id="p1" class="inp" style="min-height:44px;min-width:0;width:100%" placeholder="Search by name or organization">${pcBook(BOOK[2])}${pcBook(BOOK[0])}${pcBook(BOOK[5])}<p class="foot">1–25 of ${BOOK_N} people · <a href="#">Next 25</a></p>`, '<button type="button" class="btn">Import</button><button type="button" class="btn p">Request introduction</button>', {});
+    else if (B === 'NRL7B') html = phone('Relationships', `${LSEG('l')}<dl class="nrl-scope nrl-ph1"><div><dt>Startup</dt><dd><b>${A.n}</b></dd></div><div><dt>Count</dt><dd><b class="mo">${A.tot}</b> leads · whole startup</dd></div><div><dt>Loaded</dt><dd>${PART(`<b class="mo">${A.got}</b> of <b class="mo">${A.tot}</b>`)}</dd></div></dl><div class="seg" style="align-self:flex-start"><button type="button" role="radio" aria-checked="true">Everyone</button><button type="button" role="radio" aria-checked="false">▽ Cold · 9 of 200</button></div>${pcLead(LONG)}${pcLead(LEADS_A[0])}${pcLead(LEADS_A[1])}`, '<button type="button" class="btn">Load the remaining 14</button><button type="button" class="btn">Export…</button>', {});
+    else if (B === 'NRL7C') html = phone('Relationships', `${LSEG('l')}<div class="nrl-live" role="status">${LBL('Announced')} “Showing leads for [Quill Analytics]. Reading.”</div><dl class="nrl-scope nrl-ph1"><div><dt>Startup</dt><dd><b>${Bq.n}</b> <span class="nrl-sw">switched 14:03:02</span></dd></div><div><dt>Count</dt><dd><span class="s">◌ Reading the count…</span></dd></div></dl><div class="nrl-skel">${J([0, 1, 2].map(() => '<div class="pc"><span class="sk" style="width:60%;height:11px"></span><span class="sk" style="width:80%;height:9px"></span><span class="sk" style="width:40%;height:9px"></span></div>'))}</div><p class="foot">Reading leads for ${Bq.n}… Nothing from [Kelp Bio] is kept here. My relationships is unchanged.</p>`, '<button type="button" class="btn" aria-disabled="true">Export · waits for the read</button>', {});
+    else if (B === 'NRL7D') html = phone('Lead', `<span class="eye">Lead · ${A.n}</span><h1 style="font-size:20px;font-weight:800;overflow-wrap:anywhere">${LONG.n}</h1><p class="sub" style="overflow-wrap:anywhere">${LONG.o}</p>
+      <div class="pc"><span class="eye">Signed up</span><span><span class="mo">${LONG.su}</span> · /pricing page · Investor</span><span class="eye" style="margin-top:6px">Last interaction</span><span><span class="mo">${LONG.li}</span> · reply logged · ${LONG.ld} days ago</span><span class="eye" style="margin-top:6px">Strength · set by you</span><span>${LONG.str}</span></div>
+      <div class="sec"><h3>Follow-ups · 3 open, 1 overdue</h3><ul class="lst">${J(LONG.f.slice(2).map((t, i) => `<li><div><b style="font-size:13px">${t.split(' · ')[0]}</b><small>${i === 0 ? '◷ Overdue · ' : ''}${t.split(' · ')[1]}</small></div><button type="button" class="btn">Done</button></li>`))}</ul></div>`, '<button type="button" class="btn">Log a reply</button><button type="button" class="btn p">Add follow-up</button>', { back: 1 });
+    else if (B === 'NRL7E') html = phone('Relationships', `${LSEG('b')}<label for="p5" class="sr">Search your relationships</label><div class="inp nrl-focus" style="min-height:44px;min-width:0;width:100%;color:var(--ink)">iris<span class="nrl-caret" aria-hidden="true"></span></div><p class="foot" role="status">1 person matches “iris” in all ${BOOK_N}.</p>${pcBook(BOOK[2])}<div class="nt r" role="alert"><span class="ic" aria-hidden="true">?</span><div><b>Leads could not be read.</b> Your relationships still work. <button type="button" class="btn t">Try again</button></div></div>`, null, { kb: KB });
+
+    /* ===== NRL8 · desktop table with long content ===== */
+    else if (B === 'NRL8') html = crop(1400, `<section class="cd nrl-sec"><span class="tag">Desktop · long names, long organizations, several follow-ups</span><div class="ch"><h2>Leads from your pages</h2><span class="sm">${A.tot} leads · ${A.got} loaded</span></div>
+      <table class="tbl nrl-fixed"><colgroup><col style="width:22%"><col style="width:13%"><col style="width:10%"><col style="width:15%"><col style="width:22%"><col style="width:9%"><col style="width:9%"></colgroup><thead>${leadHead}</thead><tbody>${leadRow(LONG, 1)}${leadRow(LEADS_A[2], 1)}${leadRow(LEADS_A[0], 1)}</tbody></table>
+      <div class="g3">${AN(1, 'Names and organizations wrap to two lines and never truncate mid-word; the full text is the link’s accessible name and is shown in full on the sheet.')}${AN(2, 'Up to three follow-ups are listed in the cell, overdue first; more reads “+N more” and opens the sheet.')}${AN(3, 'Below 1180 px the Strength and Status columns move under Person; below 768 rows become cards.')}</div></section>`);
+
+    /* ===== NRL9 · dark ===== */
+    else if (B === 'NRL9') html = shell(RELPAGE(A, LEADS_A), { h: 1640 });
+    else if (B === 'NRL9B') html = shell(RELPAGE(Bq, [], { reading: 1, banner: `<div class="nrl-live" role="status">${LBL('Announced')} “Showing leads for [Quill Analytics]. Reading.”</div>` }), { h: 1180, sw: Bq.n });
+
+    /* ===== NRL10 · accessibility and interaction notes ===== */
+    else if (B === 'NRL10') html = `<div class="${CV} doc"><div><span class="eye">Network › Relationships · #7061 · accessibility and interaction</span><h2 style="font-size:22px;margin-top:4px">Keyboard, announcements, mobile keyboard and recovery</h2></div>
+      <div class="cols">
+      <div><h3>Keyboard order</h3><ul><li>Switcher → Ask → Request introduction → the four links → My relationships (search, Source, Has open follow-up, ↻, Import, Add person, rows, pager) → Leads (↻, Export, scope, type filter, chips, rows, Load the remaining) → Eadwyn.</li><li>Each section heading is a landmark with its own count; screen-reader users jump between the two lists with the region list.</li><li>Chips are toggle buttons (aria-pressed); the type filter is a radio group. Disabled controls stay focusable with aria-disabled and say why.</li></ul>
+      <h3 style="margin-top:12px">Focus return</h3><ul><li>Closing the Person sheet or the Export dialog returns focus to the row or button that opened it.</li><li>After a switch, focus stays on the switcher. After Try again succeeds, focus moves to the section heading.</li></ul>
+      <h3 style="margin-top:12px">Announcements (polite live region per section)</h3><ul><li>Switch: “Showing leads for [Quill Analytics]. Reading.” then “37 leads for [Quill Analytics].”</li><li>A dropped answer for another startup announces nothing.</li><li>Load more: “14 more leads loaded. All 214 loaded.”</li><li>Failure (assertive): “Leads for [Kelp Bio] could not be read. Try again.” The book’s region is not interrupted.</li><li>Filter: “9 of the 200 loaded are going cold.”</li></ul></div>
+      <div><h3>Mobile keyboard</h3><ul><li>Search inputs are type=search with enterkeyhint=search; the sticky action bar hides while the keyboard is open so no target sits under it.</li><li>Results announce as the count changes, after the 250 ms pause.</li><li>The page scrolls the focused input above the keyboard; 44 px targets throughout.</li></ul>
+      <h3 style="margin-top:12px">Error recovery</h3><ul><li>Every failure names the section and keeps the other section usable; no failure draws 0 or an empty list.</li><li>Try again is busy while it runs; a second press does nothing.</li><li>A failed next page keeps the loaded rows and their “of 200 loaded” units.</li><li>A failed save keeps the typed text and says what was kept.</li></ul>
+      <h3 style="margin-top:12px">Clickable path</h3><ul><li>NRL1 → Jun Park’s Going cold → NRL1B; Export… → NRL3; switcher → NRL2 → NRL2B steps → NRL2C; ↻ on a failed section → NRL4B retry; tablet NRL6; phone NRL7A to NRL7E.</li></ul>
+      <h3 style="margin-top:12px">Colour</h3><ul><li>Going cold (▽, dashed), Needs attention (◷), No interaction recorded (—), Stale (↺), Partial (½) and Could not be read (?) each have a glyph and a word; dark mode keeps them.</li></ul></div></div></div>`;
+
+    /* ===== Handoff ===== */
+    else if (B === 'NRLH') html = `<div class="${CV} doc"><div><span class="eye">Network › Relationships · #7061 · brief 6 of 6 · handoff</span><h2 style="font-size:22px;margin-top:4px">What was checked, what ships as frontend, and what needs the backend</h2></div>
+      <div class="cols">
+      <div><h3>Checked on main (c59a9f2f66)</h3><ul>
+      <li><code>workspaces/NetworkWorkspace.jsx</code>: a founder’s Relationships draws <code>FounderRelationshipBook</code> (“My relationships”) and then <code>FounderNetworkRelationships</code> (the startup’s project-linked contacts) on one page.</li>
+      <li><code>FounderNetworkRelationships.jsx</code>: <code>load()</code> and <code>loadMore()</code> keep no request token; a page asked for startup A can land after a switch to B and is appended or shown. Chips, “Going cold” and “Strong” are over loaded rows; Export writes the loaded <code>visible</code> rows.</li>
+      <li><code>lib/networkBook.js</code>: <code>isCold</code> reads <code>last_activity_at</code>, which is stamped at creation, so a never-contacted signup is cold on day 61.</li>
+      <li><code>routes/contacts.ts</code> <code>GET /</code>: <code>project_id</code>, <code>audience</code>, <code>status</code> filters; <code>total</code> and <code>counts</code> over the whole scope; pages of 200 with <code>has_more</code>/<code>next_cursor</code>; <code>last_reply_at</code> from contact replies; <code>next_task_due</code>, <code>open_tasks</code>. <code>PUT /:uid</code> also stamps <code>last_activity_at</code>.</li>
+      <li><code>FounderRelationshipBook.jsx</code> + <code>relationshipBookModel.js</code>: <code>GET /api/contacts/book</code>, serial guard on reads, notes and follow-ups read apart. Last activity = note, follow-up done or entry.</li>
+      <li><code>NetworkContacts.jsx</code>: notes and tasks in one <code>Promise.all</code>.</li>
+      <li><code>RelationshipsPage.jsx</code>: book and roster via <code>allSettled</code>; a failed book sets <code>items: []</code> under the error, so tiles read 0; <code>strengthOf</code> is Strong/Working/Thin from count and age.</li></ul>
+      <h3 style="margin-top:12px">Preserved</h3><ul><li>NW2’s two sections, “My relationships · 142 people · private to you” and “Leads from your pages”; NWI header, links, state words and shell. Leads (NW2.2) is extended, not redrawn.</li></ul></div>
+      <div><h3>Frontend only</h3><ul><li>Reject answers for a startup that is no longer selected (load and loadMore); empty the section and disable Export, filters and Load more while reading.</li><li>Scope strip; server-counted type filter via <code>audience</code>; “of 200 loaded” units; Export dialog that can read every page first.</li><li>Going cold from <code>last_reply_at</code>; No interaction recorded when there is none; Needs attention only for overdue follow-ups; Strength labelled “set by you”.</li><li>Partner tiles show Could not be read on a failed book; activity count and date in place of Strong/Working/Thin.</li><li>NetworkContacts reads notes and follow-ups apart. All states, tablet, phone and dark.</li></ul>
+      <h3 style="margin-top:12px">Backend required (◇ #7061)</h3><ul><li>Server counts for Going cold, Needs attention and No interaction recorded (today they are over the loaded page).</li><li>Direction and author of the last reply on the list.</li><li>An exchange log on book contacts, so My relationships can show Going cold.</li><li>Cross-store: leads (contacts) and the book (contact_imports) are separate stores; nothing links one person across them.</li></ul>
+      <h3 style="margin-top:12px">Owner pick drawn (⚑)</h3><ul><li>Q1 A: on a switch, show the new startup at once and read; B keeps old rows dimmed until the new read lands.</li></ul>
+      <h3 style="margin-top:12px">Open</h3><ul><li>Whether a logged reply alone is the right “interaction”, or meetings should count once recorded.</li></ul></div></div></div>`;
+
+    html = html.replace(/class="([^"]*)"/g, (m, c) => 'class="' + c.split(/\s+/).filter(Boolean).map((x) => x.indexOf('nrl-') === 0 ? x : 'nwi-' + x).join(' ') + '"');
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

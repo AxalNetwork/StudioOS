@@ -54,6 +54,7 @@ async function mount(Component, o = {}, props = {}) {
   const p = (n) => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const by = (id) => walk(container).find((n) => p(n)['data-testid'] === id);
   return { calls, text: () => text(container), has: (id) => !!by(id), props: (id) => p(by(id)),
+    href: (label) => p(walk(container).find((n) => n.tagName === 'A' && text(n) === label)).href,
     of: (id) => { assert.ok(by(id), id); return text(by(id)); },
     async click(id) { const props = p(by(id)); assert.ok(props.onClick, id); assert.ok(!props.disabled, `${id} disabled`); await act(async () => props.onClick({ preventDefault() {}, stopPropagation() {} })); await flush(); },
     async submit(id) { assert.ok(by(id), id); await act(async () => p(by(id)).onSubmit({ preventDefault() {} })); await flush(); },
@@ -80,6 +81,10 @@ test('Admin reads the published playbook, missing sections with a reason, the ch
     assert.match(m.text(), /Published purpose/); assert.match(m.text(), /HQ writes the playbook/);
     assert.match(m.text(), /Not recorded — HQ has not written this section/);
     assert.match(m.text(), /What you do each month/); assert.match(m.text(), /Admin tools/);
+    assert.equal(m.href('Review host applications'), '/admin/programs/spinout-lab/hosts');
+    assert.equal(m.href('view bookable hosts'), '/spinout-lab/office-hours');
+    assert.equal(m.href('Co-founder Match'), '/spinout-lab/cofounder-match');
+    assert.equal(m.href('published events'), '/events');
     assert.doesNotMatch(m.text(), /HQ draft/); assert.equal(m.has('lab-playbook-view'), false);
   } finally { await m.close(); }
 });
