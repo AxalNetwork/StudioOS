@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Introductions Curated Match Consent · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Introductions · #7064 · NW3-intro-match · continues #4799 and #6256 (combined tracker #7062)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Introductions — curated match consent, credits and private terms</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A curated match card and decision Sheet at /network/introductions that answer “Can I still act, what will it cost, and who acts next?”. It continues the approved Network workspace (#4799) and the investor addendum (#6256): the header with one primary and Ask, the four links, the shared Sheet, the NW5 state words and one Eadwyn rail (#5130). Frames carry NW3-intro-match variant names beside the original NW3, NW7, NW5, NW8.1, NW9 and NW10 ids; keys carry the NIC prefix. Accept names its cost (“Accept · 1 credit”) beside the spendable balance; Decline is free. Permission to be matched is the viewer’s own setting and is never agreement to one introduction. Both agreed means both responses were received; Made needs its own record and the outcome reads Not recorded until written. Opening the page, reading a balance or retrying a read creates no cards or notifications. Violet dashed ◇ tags mark Worker work; amber ⚑ tags mark owner picks drawn as option A. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 13:52 · checked against main c59a9f2f66 · [Morgan Vale], [Ari Lane], [Harbor Lane Capital], [Tidepool Labs] and every person, company and figure (8 matches, 4 awaiting, 3 credits = 1 of 3 + 2 by referral) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Introductions Curated Match Consent Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW3-intro-match / eligible', 'Introductions page · curated matches', 'Investor [Morgan Vale] opens Introductions. The credit line with Refresh credits (a balance read), the viewer’s own matching preference with its Settings path, Find new matches as a separate action, four open matches with Decline · free beside Accept · 1 credit, and the other four in a pipeline table. Next: open a match. Data: propositions + credits.', [F('NIC01', false, 1320)]],
+      ['NW3-intro-match / eligible · Sheet', 'Decision Sheet · [Ari Lane]', 'Entry: a card. Who acts next, both recorded answers, why Axal proposed it, permission-to-be-matched versus agreeing, and the cost box (3 → 2 after). Next: Accept · 1 credit, the Sheet’s one primary, or Decline · free.', [F('NIC02', false, 1320)]],
+      ['NW3-intro-match / waiting', 'The consent states', 'Unanswered, your agreement only, other agreement only, both agreed, counterpart answer not recorded (not asked), closed after decline, expired while the Sheet was open, and Made with the outcome separate. Each with the next action it allows.', [C('NIC03', false, 1400, 860)]],
+      ['NW3-intro-match / closed', 'Terminal pair and the stale attempt', 'Expired while open: Accept is gone and the attempt used 0 credits, confirmed from the credit history. Closed after the other side declined: paid acceptance hidden. The check in progress reads Provisional, never a guessed balance.', [C('NIC04', false, 1400, 600)]],
+      ['NW7 · NW3-intro-match / balance recovery', 'Spendable credits', 'Value with Refresh credits, refreshing (stale value kept, Accept paused), zero as a measured value, unknown (Not recorded), Unavailable with Retry, and the balance after Accept. Decline stays free in every state.', [C('NIC05', false, 1400, 740)]],
+      ['NW7 · NW3-intro-match / balance recovery · retry', 'Lost response and safe retry', 'Sending, the response lost, Check status reconciling the same action (it arrived: 1 credit once; it did not: nothing spent, Accept again), credits changed at the same moment, already answered elsewhere, and out of credits at send time.', [C('NIC06', false, 1400, 780)]],
+      ['NW5 · NW3-intro-match / reads', 'Reads on the curated section', 'Loading, verified empty, missing optional fields, Unavailable with previous records kept as stale and Decline still free, a failed search that does not imply nobody fits, eligibility not confirmed (generic), access refused without disclosure, and Unavailable with nothing loaded.', [C('NIC07', false, 1400, 760)]],
+      ['NW3-intro-match / preference', 'Matching preference and Find new matches', 'Only the viewer’s own preference: On, Off (default, 60% profile to turn on), Unavailable. Find new matches confirm and results; a reciprocal card needs both people’s current opt-in (◇).', [C('NIC08', false, 1400, 650)]],
+      ['NW3-intro-match / terms', 'Made, outcome and private terms', 'Both agreed with Record as made, Made with the outcome separate (Not recorded), an Eadwyn first-message draft with its cost quoted first, the partner’s private referral terms, and Save failed with the entered text kept. Teammate delivery stays on NW3.5.', [C('NIC09', false, 1400, 960)]],
+      ['NW3-intro-match / roles', 'One record, four licences', 'Founder [Ari Lane], investor [Morgan Vale], advisor [Ada Okafor] and partner [Tom Becker] reading the same state words. The founder and investor columns are the two sides of one pair.', [C('NIC10', false, 1400, 540)]],
+      ['NW9', 'Tablet 768', 'The curated section with the decision Sheet as an overlay; the rail collapses to the E in the top bar.', [C('NIC11', false, 768, 1024)]],
+      ['NW8.1 · NW3-intro-match', 'Phone 390', 'The match list as cards with the section select, the decision with Decline · free and Accept · 1 credit in the sticky footer, a lost response with Check status, and expired-while-open with its 0-credit receipt. 44 px targets.', [P('NIC12A', 'Matches'), P('NIC12B', 'Decision'), P('NIC12C', 'Lost response'), P('NIC12D', 'Expired · zero')]],
+      ['NW10', 'Dark', 'The Introductions page, and the curated section with the Eadwyn rail open, on the dark tokens. States keep their words and shapes.', [F('NIC13', 'Page · dark', 1320), F('NIC13B', 'With Eadwyn · dark', 1480)]],
+      ['Accessibility', 'Keyboard order, focus and announcements', 'Focus order in the Sheet, focus return to the card, visible focus on both themes, and the announcement after each action (assertive for a lost response, an expiry and a failed save).', [C('NIC14', false, 1400, 520)]],
+      ['Handoff', 'Handoff', 'Checked on main, preserved, the frame index (role, entry point, next action, data), Worker work (◇), owner picks (⚑), frontend-only work and what is open.', [W('NICH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

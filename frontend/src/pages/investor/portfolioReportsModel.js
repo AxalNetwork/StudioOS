@@ -269,6 +269,56 @@ export function seriesLine(s) {
 }
 
 /**
+ * D6224 (#6224): the reported figures as a CSV the investor takes away, built
+ * from the same `seriesOf` rows the tables draw — one row per figure per
+ * report received, oldest first, in the canvas's figure order. A gap is
+ * "Not recorded" with its reason, never 0 and never blank. Pure: no read.
+ */
+export const FIGURES_CSV_HEADER = Object.freeze(['Period', 'Figure', 'Value', 'Unit', 'Source', 'Corrected', 'Why not recorded']);
+const UNIT_WORDS = { usd: 'USD', pct: 'percent', months: 'months', multiple: 'multiple', count: 'count' };
+
+/**
+ * One CSV field (RFC 4180): quoted when it holds a quote, comma or line
+ * break, with quotes doubled. Text that a spreadsheet would run as a formula
+ * (a leading = + - @, tab or carriage return) is prefixed with a single
+ * quote. A finite number is written as itself, so a negative burn stays a number.
+ */
+export function csvCell(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** The CSV rows (header first) for the reports received; each a list of fields. */
+export function figuresCsvRows(reports) {
+  const rows = [[...FIGURES_CSV_HEADER]];
+  for (const key of FIGURE_KEYS) {
+    const s = seriesOf(reports, key);
+    for (const p of s.points) {
+      const unit = p.unit || s.unit;
+      rows.push([
+        p.label, s.label,
+        p.value == null ? 'Not recorded' : p.value,
+        unit ? UNIT_WORDS[unit] || unit : 'Not recorded',
+        p.source || 'Not recorded',
+        p.corrected ? 'Yes' : 'No',
+        p.value == null ? p.reason || 'Not recorded' : '',
+      ]);
+    }
+  }
+  return rows;
+}
+
+/** The whole file: CRLF line ends, as RFC 4180 has them. */
+export function figuresCsv(reports) {
+  return figuresCsvRows(reports).map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
+/** The file's name, dated by the day it was taken. */
+export const figuresCsvName = (now = new Date()) => `reported-figures-${todayOf(now)}.csv`;
+
+/**
  * Eadwyn's "What changed since the last report", from frozen figures only:
  * each figure the last two reports both carried, then each period that is
  * late or missing. It never fills in a figure.
@@ -292,6 +342,24 @@ export function whatChanged(reports, periods = []) {
     out.push({ key: `late-${p.uid}`, text: `The ${periodWord(p.label)} report has not arrived`, sub: [`Due ${dayOf(p.due_on)}`, p.expected_on ? `expected ${dayOf(p.expected_on)}` : null].filter(Boolean).join(' · ') });
   }
   return out;
+}
+
+/**
+ * D6222 (#6222): the two reports What changed compared, as a saved note's
+ * source, or null when fewer than two reports arrived (a note saved then
+ * carries no source). Same order as `whatChanged`: the earlier, then the last.
+ */
+export function whatChangedSource(reports) {
+  const list = (Array.isArray(reports) ? reports : []).slice().sort((a, b) => String(a?.period?.start).localeCompare(String(b?.period?.start)));
+  if (list.length < 2) return null;
+  const [prev, last] = list.slice(-2);
+  if (!prev?.uid || !last?.uid) return null;
+  return { source: 'what_changed', from_report_uid: String(prev.uid), to_report_uid: String(last.uid) };
+}
+
+/** D6222: What changed as the text of a note, one line per change, each with its source and periods. */
+export function whatChangedText(changes) {
+  return (Array.isArray(changes) ? changes : []).map((c) => (c.sub ? `${c.text} (${c.sub})` : c.text)).join('\n');
 }
 
 // ───────────────────────────────────────────────────────────── RPT10r: the Reports timeline

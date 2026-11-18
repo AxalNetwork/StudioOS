@@ -1,10 +1,11 @@
 /**
  * D1154 (#3059, part 6 of #2421) — the reading tabs: Team (DL4), Market (DL5)
- * and Traction (DL6), on D1151's reads, with the slots from sibling canvases
- * (DL24) where their reads have not landed. The words and the rules come from
+ * and Traction (DL6), on D1151's reads. D6168 (#6168): each tab draws its
+ * scopes' scorecard rows (`ScopeRows`, one scorecard read per tab), and Market
+ * and Traction point to the Evidence tab. The words and the rules come from
  * `dealInsightsModel.js`; this file only draws them.
  *
- * Each tab reads once. A viewer with no NDA on file sees the company's basics
+ * Each tab reads its section once, and its scorecard rows once. A viewer with no NDA on file sees the company's basics
  * and the way to the NDA; a read that fails says Unreadable with Try again;
  * one block that fails leaves the rest of the tab standing. Nothing here
  * changes anything, so nothing opens a dialog.
@@ -18,10 +19,10 @@ import { dealInsightsApi } from '../../lib/api/dealInsights';
 import { reportError } from '../../lib/log';
 import { tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
-import { Slot } from './DealOverview';
+import { ScopeRows } from '../../components/scoring/scorecard/Scorecard';
 import {
-  ADVISORS_LINE, COVERAGE_NOTE, MASKED, NOT_RECORDED, NOT_REPORTED, SLOTS, TRACTION_CHARTS,
-  askDraft, blockOf, chartSummary, coverageView, dateText, figureText, insightState, marketRow, personView, safeUrl, sizingView, slotOf, tractionCsv, tractionSources, tractionView,
+  ADVISORS_LINE, COVERAGE_NOTE, EVIDENCE_LINK, MASKED, NOT_RECORDED, NOT_REPORTED, SCORECARD_ROWS, TRACTION_CHARTS,
+  askDraft, blockOf, chartSummary, coverageView, dateText, figureText, insightState, marketRow, personView, safeUrl, sizingView, tractionCsv, tractionSources, tractionView,
 } from './dealInsightsModel';
 
 const TONE = {
@@ -98,12 +99,17 @@ function Block({ block, what, retry, testId, children }) {
   return children(b.data);
 }
 
-/** A sibling canvas's slot (DL24), with its own state. */
-function SlotFrame({ slot, testId, retry }) {
-  if (slot.state === 'unreadable') {
-    return <section className={`${CARD} p-4`} data-testid={testId}><span className={EYE}>{slot.eye}</span><Unreadable what={slot.title} claim="That is not the same as none." onRetry={retry} /></section>;
-  }
-  return <Slot slot={slot} testId={testId} />;
+/** D6168: the tab's scopes as the Scorecard tab draws them, each opening its drawer there. */
+const Rows = ({ dealId, view }) => <ScopeRows dealId={dealId} keys={SCORECARD_ROWS[view]} ndaHref={tabHref(dealId, 'documents')} testId={`deal-${view}-scorecard`} />;
+
+/** D6168: what the founder shared is on the Evidence tab, one link away; nothing is read or counted here. */
+function EvidenceLink({ dealId, testId }) {
+  return (
+    <Card eye="Evidence" title={EVIDENCE_LINK.title} testId={testId}>
+      <p className={`m-0 ${SUB}`}>{EVIDENCE_LINK.line}</p>
+      <Link to={tabHref(dealId, 'evidence')} className={`${BTN_S} w-fit`} data-testid={`${testId}-link`}>{EVIDENCE_LINK.act}</Link>
+    </Card>
+  );
 }
 
 // ---------------------------------------------------------------- DL4 Team
@@ -177,7 +183,7 @@ export function DealTeam({ deal }) {
             <Card title="Co-founders’ values" testId="deal-team-values">
               {d.values_band?.value ? <Pill tone="done">{d.values_band.value}</Pill> : <Missing reason={d.values_band?.reason} />}
             </Card>
-            <SlotFrame slot={slotOf(SLOTS.teamRow)} testId="deal-slot-team-row" />
+            <Rows dealId={deal.id} view="team" />
             <Card title="Advisors on this company" testId="deal-team-advisors"><Missing reason={ADVISORS_LINE} /></Card>
           </div>
         </div>
@@ -261,8 +267,8 @@ export function DealMarket({ deal }) {
                   : <p className={`m-0 ${SUB}`}>The founder tracks no competitors.</p>)}
               </Block>
             </Card>
-            <SlotFrame slot={slotOf(SLOTS.evidence, d.evidence)} testId="deal-slot-market-evidence" retry={retry} />
-            <div className="md:col-span-2"><SlotFrame slot={slotOf(SLOTS.marketRows)} testId="deal-slot-market-rows" /></div>
+            <EvidenceLink dealId={deal.id} testId="deal-market-evidence" />
+            <div className="min-w-0 md:col-span-2"><Rows dealId={deal.id} view="market" /></div>
           </div>
         );
       }}
@@ -446,8 +452,8 @@ export function DealTraction({ deal, userId }) {
               ))}
               {TRACTION_CHARTS.map((c) => <Chart key={c.key} chart={c} points={v.series[c.key]} />)}
             </>)}
-            <SlotFrame slot={slotOf(SLOTS.evidence, d.evidence)} testId="deal-slot-traction-evidence" retry={retry} />
-            <div className="md:col-span-3"><SlotFrame slot={slotOf(SLOTS.tractionRows)} testId="deal-slot-traction-rows" /></div>
+            <EvidenceLink dealId={deal.id} testId="deal-traction-evidence" />
+            <div className="min-w-0 md:col-span-3"><Rows dealId={deal.id} view="traction" /></div>
           </div>
         );
       }}

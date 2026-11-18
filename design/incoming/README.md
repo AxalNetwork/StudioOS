@@ -2741,7 +2741,39 @@ Four board sets from the owner's Claude Design canvas "Axal VC – platform desi
 
 None is built yet. Companies, founders, partners, countries' details and amounts are sample content; government fees read Not recorded and legal and tax wording waits on counsel. Open owner questions on #6681 and #6682 are drawn as option A and marked ⚑.
 
+## Landed 2026-11-16 — Sign in v2 (#6956)
 
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the copy-paste prompt on #6956, as a page plus its boards:
+- **`Sign In v2 Page.dc.html`**, **`Sign In v2 · Boards.dc.html`**: SGN-00 to SGN-14, 40 frames (D6956). The component loads the production artwork from `frontend/public/auth/login-background.webp`. A clickable prototype is linked from #6956.
+
+Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
+
+
+## Landed 2026-11-16 — Network: Organizations, Relationships and Introductions (#7051–#7066)
+
+Fourteen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the Network briefs, each as a page plus its boards. They extend the approved Network workspace (`network-workspace/`, #4799) and the investor addendum (`Network v2 Investor Page.dc.html`, #6256), and keep their shell, four links, Person Sheet and state words. Section labels carry the NW board ids the briefs ask for; frame keys carry each canvas's prefix.
+
+Organizations:
+- **`Network Organizations Founder Page.dc.html`**, **`Network Organizations Founder · Boards.dc.html`**: 20 frames, keys NOF01 to NOFH (D7051).
+- **`Network Organizations Partner Page.dc.html`**, **`Network Organizations Partner · Boards.dc.html`**: 25 frames, keys NOP1 to NOPH (D7052).
+- **`Network Organizations Advisor Page.dc.html`**, **`Network Organizations Advisor · Boards.dc.html`**: 20 frames, keys NOA4 to NOAH (D7053).
+- **`Network Organizations Investor Page.dc.html`**, **`Network Organizations Investor · Boards.dc.html`**: 17 frames, keys NOI4 to NOIH (D7054).
+
+Relationships (#7050):
+- **`Network Relationships Investor and Partner Page.dc.html`**, **`Network Relationships Investor and Partner · Boards.dc.html`**: 34 frames, keys NRI1 to NRIH (D7056).
+- **`Network Relationships HQ and Advisor Page.dc.html`**, **`Network Relationships HQ and Advisor · Boards.dc.html`**: 27 frames, keys NRH11_1 to NRHH (D7057).
+- **`Network Relationships Founder Add Person Page.dc.html`**, **`Network Relationships Founder Add Person · Boards.dc.html`**: 20 frames, keys NRF01 to NRFH (D7058).
+- **`Network Relationships Founder Follow-ups Page.dc.html`**, **`Network Relationships Founder Follow-ups · Boards.dc.html`**: 25 frames, keys NRU01 to NRUH (D7059).
+- **`Network Relationships Team Warm Paths Page.dc.html`**, **`Network Relationships Team Warm Paths · Boards.dc.html`**: 19 frames, keys NRT01 to NRTH (D7060).
+- **`Network Relationships Startup Leads Page.dc.html`**, **`Network Relationships Startup Leads · Boards.dc.html`**: 22 frames, keys NRL1 to NRLH (D7061).
+
+Introductions (#7062):
+- **`Network Introductions Workspace and Inbox Page.dc.html`**, **`Network Introductions Workspace and Inbox · Boards.dc.html`**: 22 frames, keys NID01 to NIDH (D7063).
+- **`Network Introductions Curated Match Consent Page.dc.html`**, **`Network Introductions Curated Match Consent · Boards.dc.html`**: 19 frames, keys NIC01 to NICH (D7064).
+- **`Network Introductions Quarterly Ask Page.dc.html`**, **`Network Introductions Quarterly Ask · Boards.dc.html`**: 26 frames, keys NIQ01 to NIQH (D7065).
+- **`Network Introductions Teammate Decision Page.dc.html`**, **`Network Introductions Teammate Decision · Boards.dc.html`**: 29 frames, keys NIT01 to NITH (D7066).
+
+None is built yet. People, companies, credits and dates are sample content. Owner questions on each issue are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.
 ## Landed 2026-11-16 — Research v2: Companies, Markets and Funds (#7031–#7046)
 
 Fifteen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the Research briefs, each as a page plus its boards. They extend Research v2 (`Research v2 Page.dc.html`) and the Platform States vocabulary (D5129).

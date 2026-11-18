@@ -144,6 +144,13 @@ function freshDb(opts: { beforeMigration?: (db: InstanceType<typeof DatabaseSync
     );
     CREATE TABLE ic_votes (id INTEGER PRIMARY KEY AUTOINCREMENT, ic_decision_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL, vote TEXT NOT NULL, rationale TEXT, created_at TEXT);
+    -- D6143: the voting roster (migration 202611180056_6143); empty, so every decision here has none.
+    CREATE TABLE ic_decision_voters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, ic_decision_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL, added_by INTEGER NOT NULL,
+      added_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(ic_decision_id, user_id)
+    );
     CREATE TABLE ic_meetings (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
       title TEXT NOT NULL, agenda TEXT, start_at TEXT NOT NULL, deal_id INTEGER,
       organizer_user_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled');

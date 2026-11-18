@@ -1,0 +1,14 @@
+{
+  "name": "studioos-landing-bot-model",
+  "private": true,
+  "description": "The landing bot's model runner (#6473). Its own package so the edit job installs only the pinned SDKs, never the repository's dependencies. Same versions as scripts/claude-review.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0",
+    "@google/genai": "2.31.0",
+    "openai": "7.50.0"
+  }
+}

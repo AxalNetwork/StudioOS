@@ -226,10 +226,8 @@ export const INVESTOR_ZONE_ACTIONS = {
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
-    // D497 (#1023): built up to the owner's line. A tie is a request the other
-    // person accepts (D493), and finding that person without opening a user
-    // directory is question 7 on #1023.
-    { label: 'Add person', unbuilt: 'a tie is a request the other person accepts, and who you may find to send one to, without opening a directory of every account, is the owner’s decision, asked on #1023', hover: 'Adding a person is not decided yet: it needs a way to find someone without a user directory.' },
+    // D6636 / D6263 Q7: select an existing shared-resource person; D493 consent still applies.
+    { label: 'Add person', kind: 'handler', handler: 'addPerson' },
     // LIVE WITH D465 (migration 338): `partner_reminders` is the store, and a
     // reminder surfaces on the desk when it is due — no notification fan-out.
     { label: 'Set reminders', kind: 'handler', handler: 'setReminders' },
@@ -240,9 +238,8 @@ export const INVESTOR_ZONE_ACTIONS = {
     // called `introductionsRequest`. The AI Matching Engine was removed, the
     // button with it, and nothing else asks for an intro.
     { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    // D497 (#1023): question 8 on #1023 asks whether this reuses the
-    // `intro_propositions` flow between two of your accepted ties.
-    { label: 'Offer one', unbuilt: 'offering an introduction between two of your accepted ties is not built, and whether it reuses the existing introduction-proposal flow is the owner’s decision, asked on #1023', hover: 'Offering an introduction is not decided yet.' },
+    // D6637 / D6263 Q8: offer between two accepted ties through existing propositions.
+    { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },
   ],
   // D6258: the list is derived from the relationship book, and since D572

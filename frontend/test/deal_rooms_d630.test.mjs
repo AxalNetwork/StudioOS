@@ -34,6 +34,7 @@ import { TransfersView } from '../src/components/deals/DealTransfersTab.jsx';
 import DealReferencesTab, { ReferencesView, editableStatuses, canSummarise, referencePills } from '../src/components/deals/DealReferencesTab.jsx';
 import { SyndicateDrawer } from '../src/components/deals/DealSyndicates.jsx';
 import { dealTabsFor } from '../src/pages/dealPageModel.js';
+import { DEFAULT_REFERENCE_CONSENT } from '../src/lib/referenceConsent.js';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { api } from '../src/lib/api.js';
@@ -341,6 +342,7 @@ for (const [kind, method, open, row, line] of [
       assert.deepEqual(calls, [], 'opening the dialog writes nothing');
       assert.ok(by(v, dialog));
       assert.match(v.text(), line);
+      assert.equal(v.text().includes(DEFAULT_REFERENCE_CONSENT), kind === 'consent');
       // Cancel.
       await press(v, `dr-reference-${kind}-back`);
       assert.deepEqual(calls, []); assert.equal(changed, 0); assert.equal(by(v, dialog), undefined);
