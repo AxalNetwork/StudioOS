@@ -283,8 +283,8 @@ test('the selection: legacy by default; SDK only at the pinned version with its 
   assert.deepEqual([chosen.runtime.kind, chosen.fallback], ['cloudflare_sdk', null]);
   const real = CLOUDFLARE_SKILLS_SDK;
   const cases: Array<[string, unknown, string]> = [
-    // Mutation checked: the version check in sdkUnusable dropped → 0.33.0 is used and this fails.
-    ['unsupported version', { ...real, version: '0.33.0' }, 'sdk_version_unsupported'],
+    // Mutation checked: the version check in sdkUnusable dropped → 0.31.0 is used and this fails.
+    ['unsupported version', { ...real, version: '0.31.0' }, 'sdk_version_unsupported'],
     // Mutation checked: the surface check dropped → the missing function throws and the code is sdk_error.
     ['missing export', { version: SDK_PINNED_VERSION, manifest: real.manifest }, 'sdk_surface_changed'],
     ['not an object', null, 'sdk_surface_changed'],

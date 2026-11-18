@@ -284,7 +284,7 @@ test('rollback: switch off is today\'s text byte for byte with no manifest read;
   const real = CLOUDFLARE_SKILLS_SDK;
   const broken: Array<[unknown, string]> = [
     // Mutation checked: skillTextForRun ignoring choice.runtime.kind (using the legacy runtime's framed activation) → the text differs and this fails.
-    [{ ...real, version: '0.33.0' }, 'sdk_version_unsupported'],
+    [{ ...real, version: '0.31.0' }, 'sdk_version_unsupported'],
     [{ version: SDK_PINNED_VERSION, manifest: real.manifest }, 'sdk_surface_changed'],
     [{ ...real, loadSkillCatalog: async () => { throw new Error('synthetic SDK failure'); } }, 'sdk_error'],
     [{ ...real, loadSkillCatalog: (s: any) => real.loadSkillCatalog([...s, real.manifest({ id: 'stray', skills: [{ name: 'stray-skill', description: 'Stray.', body: 'x' }] })]) }, 'sdk_catalog_mismatch'],
@@ -400,7 +400,7 @@ test('#5340 switch off: the quote reads no skill and is unchanged; the D4121 est
   assert.ok(on![0] >= estTokens(`\n\n${sent.text}`), `estimate ${on![0]} covers the sent ${estTokens(`\n\n${sent.text}`)}`);
   // An unusable SDK: a run would send today's text, so the estimate counts that.
   const s = w.db.prepare('SELECT id, uid, scope, company_id, slug FROM agent_skills WHERE id = ?').get(HQ_BRIEF) as any;
-  assert.equal(await sdkEstimateText([{ skill: s, version: v1 }], 0, { ...CLOUDFLARE_SKILLS_SDK, version: '0.33.0' }), null);
+  assert.equal(await sdkEstimateText([{ skill: s, version: v1 }], 0, { ...CLOUDFLARE_SKILLS_SDK, version: '0.31.0' }), null);
   const est = await sdkEstimateText([{ skill: s, version: v1 }], 0);
   assert.ok(est!.endsWith(NO_INVENTED_FIGURE_RULE) && est!.includes('Synthetic SKILL.md of synthetic-hq-brief v1'));
 });
