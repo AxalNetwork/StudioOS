@@ -69,6 +69,7 @@
  */
 import type { Env } from '../types';
 import { loadOverrides, mapFundFocus, mapFundHq } from './researchTaxonomy';
+import { fundProfile } from './researchFundProfile';
 
 /** The source whose sizes are euros (`fund_size_cents` = euro cents). */
 export const EUR_SOURCE = 'EuroTech VC Funds (public spreadsheet)';
@@ -622,7 +623,10 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
 /** `getFund`'s answer: `removed` alone for a list taken down, else the fund. */
 interface FundAnswer {
   removed?: ReturnType<typeof citeSource>;
-  item?: ReturnType<typeof presentCited>;
+  /** D7167: the item carries its dated provenance and the four proposed fields. */
+  item?: ReturnType<typeof presentCited> & Pick<Awaited<ReturnType<typeof fundProfile>>, 'provenance' | 'proposed'>;
+  /** D7167: the vehicle-labelled history (services/researchFundProfile.ts). */
+  history?: Awaited<ReturnType<typeof fundProfile>>['history'];
   reports?: Record<string, unknown>[];
   reports_status?: 'ok' | 'unreadable';
   reports_reason?: string;
@@ -637,6 +641,9 @@ interface FundAnswer {
  *
  * A fund of a list taken down (D597) answers `{ removed }`: the list, its
  * publisher and why — never the fund's own fields.
+ *
+ * D7167: the item also carries its dated `provenance` and the four `proposed`
+ * fields, and the answer a vehicle-labelled `history` (services/researchFundProfile.ts).
  */
 export async function getFund(env: Env, uid: string, movedFrom: string | null = null): Promise<FundAnswer | null> {
   const [row, reviews] = await Promise.all([
@@ -668,8 +675,10 @@ export async function getFund(env: Env, uid: string, movedFrom: string | null = 
       fund_size_cents: currency ? x.fund_size_cents : null,
       size_currency: currency && x.fund_size_cents != null ? currency : null,
     }));
-    return { item: presentCited(row, reviews), reports, reports_status: 'ok' as const, moved_from: movedFrom };
+    const profile = await fundProfile(env, row, reviews);
+    return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports, reports_status: 'ok' as const, moved_from: movedFrom };
   } catch {
-    return { item: presentCited(row, reviews), reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable', moved_from: movedFrom };
+    const profile = await fundProfile(env, row, reviews);
+    return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable', moved_from: movedFrom };
   }
 }
