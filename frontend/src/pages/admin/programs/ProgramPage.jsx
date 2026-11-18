@@ -35,7 +35,7 @@ import { SUB, Tile } from './parts';
 import { STATUS_WORD } from './catalogueModel';
 import { totalOf } from './programPagesModel';
 import { useLearningReads, usePerksReads } from './useProgramReads';
-import { AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RUNNING_YET, isReady, routeFor } from './programsModel';
+import { AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RECORDED, NOT_RUNNING_YET, READING, isReady, routeFor } from './programsModel';
 
 /**
  * D5313 (#5313): Perks runs in the generic program shell (PG03a), the first of the nine built-in programs to move.
@@ -155,7 +155,7 @@ function InvestorCohorts({ tab, superAdmin }) {
   const detail = useProgramDetail('investor-cohorts');
   const desk = useDesk();
   const reads = useInvestorReads(desk.tick);
-  const status = registryStatus(detail);
+  const status = registryStatus(detail) || (detail.read.status === 'loading' ? READING : detail.read.status === 'error' ? 'Unavailable' : NOT_RECORDED);
   const open = { reload: desk.reload, dialog: desk.setDialog, banner: BANNER };
   const d = desk.dialog;
   return (

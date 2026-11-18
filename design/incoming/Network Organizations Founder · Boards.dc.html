@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Organizations Founder · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Organizations · founder · #7051 · part of #4799 Network workspace</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Organizations for founders — the people you know at each company, counted over the whole startup</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The founder view of /network/organizations. It groups the selected startup’s contacts by the organization typed on each contact, exactly as entered, and never by email domain or similar names. It extends the Founder Network canvas’s Organizations board (FN3) in the approved Network workspace look (#4799, #6256): the header with one primary and Ask beside it, the four links, the Person Sheet look and the NW5 state words. Keys carry the NOF prefix (NOF02 = FN3.2). The startup comes from the project switcher, top left. The figures above the table always count the whole startup; the table shows a page of it; Export names its scope. Counts read Counting or Could not be read until every contact page is read, never 0. Last record activity moves on any edit, so it is not called Last interaction. Violet dashed ◇ tags mark backend work. No owner pick is open.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main c59a9f2f66 · [Lena Sato], [Kelp Bio], [Quill Analytics] and every person, company and figure (214 contacts on 2 pages, 187 with an organization + 27 without, 41 organizations, “harbor” = 2 organizations and 10 people) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Organizations Founder Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FN3.1', 'Organizations · All view', '[Kelp Bio] selected. Scope strip: 41 organizations, 187 people with an organization of 214 contacts, 27 with none (link to the relationship book), and the source. Labelled search, a working All view, Export…, then organization, people, strongest recorded tie and Last record activity. Range 1–10 of 41 is the page; the figures count all 41. Beside it: Inspect when two people share the strongest rating.', [F('NOF01', false, 1180), C('NOF01B', 'Strongest tie shared · Inspect', 1100, 440)]],
+      ['FN3.2', 'Search a company and open its people', '“harbor” matches 2 of 41 organizations and 10 people. [Harbor Seed] opens in place: 4 people, one of them from contacts page 2.', [F('NOF02', false, 1080)]],
+      ['FN3.3', 'One contact', 'The contact sheet over the list (GET /api/contacts/:uid): Last record activity and Last interaction apart, organization and strength editable at their source, follow-ups, replies logged. ✕ or Esc returns.', [F('NOF03', false, 1080)]],
+      ['FN3.4', 'Back, with everything restored', 'Same startup, search, open company and scroll; focus on the Open button that opened the sheet; the return is announced.', [F('NOF04', false, 1080)]],
+      ['FN3.5', 'Export with an explicit scope', 'The search result across every page (2 organizations, 10 people) or all of [Kelp Bio] (41, 187), plus the 27 without an organization as an option. The count it is based on is named.', [F('NOF05', false, 1080)]],
+      ['FN3.6', 'Selecting a startup', 'The project switcher, top left, lists both startups. Switching keeps the search and goes to page 1.', [F('NOF06', false, 1160)]],
+      ['FN3.7', 'States', 'Loading, switching with a pending read (late answer dropped), counting page 2 of 2, no startup, an empty project read, contacts without an organization, no search match with Clear filters, and a failed read with Try again and no zeros. Below: spelling variants kept as two rows, and a failed page 2.', [C('NOF07', false, 1400, 910)]],
+      ['FN3.8', 'Fix a missing organization at its source', 'The relationship book opened from Organizations on No organization · 27 (◇ filter), with the existing inline strength and organization editor. Back to Organizations restores the list.', [F('NOF08', false, 900)]],
+      ['FN3.9', 'Phone 390 · the task flow', 'Labelled cards with people, strongest tie, Last record activity and source; no horizontal scroll; 44px targets. Search and open a company, open a contact, come back to the same card with focus restored, export, and a failed read.', [C('NOF09A', 'Organizations', 390, 2570), C('NOF09B', 'Search · people open', 390, 965), P('NOF09C', 'Contact'), C('NOF09D', 'Back · focus restored', 390, 940), P('NOF09E', 'Export scope'), P('NOF09F', 'Could not be read')]],
+      ['FN3.10', 'Tablet 768', 'Figures in three cells, search, and the cards two across.', [C('NOF10', false, 768, 1024)]],
+      ['FN3.11', 'Dark', 'The search with a company open on desktop and on phone; strength and states keep their words and shapes.', [F('NOF11', 'Desktop · dark', 1000), C('NOF11B', 'Phone · dark', 390, 965)]],
+      ['FN3.12', 'Prototype, keyboard and focus', 'Each step, the frame it lands on, where focus goes and what is announced; what the URL keeps; keyboard order.', [W('NOF12')]],
+      ['Handoff', 'Handoff', 'Checked on main, what each count means, frontend-only work, backend required (◇ #7051), the three tests the brief asks for, and what is preserved.', [W('NOFH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
