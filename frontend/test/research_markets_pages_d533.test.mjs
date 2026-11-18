@@ -17,9 +17,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import {
-  PrivatePanel, PublicPanel, GovernmentPanel, WhereBased, LatestSignals, Readings,
-  groupMarkets, sectorSlug,
+  PublicPanel, WhereBased, LatestSignals, Readings, sectorSlug,
 } from '../src/pages/research/MarketDirectoryZone.jsx';
+import { CoverageNote, DirectoryBody } from '../src/pages/research/MarketDirectory.jsx';
+import { readMarketQuery } from '../src/pages/research/marketDirectoryQuery.js';
 import { GeographiesList } from '../src/pages/research/GeographiesZone.jsx';
 import { GeographyBody, GeographyState, euroMillions, backingLabel } from '../src/pages/research/GeographyProfile.jsx';
 import { researchMarketsApi } from '../src/lib/api/researchMarkets.js';
@@ -44,35 +45,25 @@ const MARKETS = {
 
 // ---- Markets ---------------------------------------------------------------
 
-test('markets group by tracked sector, the unmapped last and said so; counts are summed per group', () => {
-  const g = groupMarkets(MARKETS.items);
-  // D593 — the unmapped group takes the canvas M1 wording.
-  assert.deepEqual(g.map((x) => [x.name, x.markets.length, x.companies, x.mapped]), [
-    ['Fintech / DeFi', 2, 910, true],
-    ['Not mapped yet', 1, 50, false],
-  ]);
-  assert.equal(g[0].slug, 'fintech-defi');
-  assert.equal(g[1].slug, null, 'an unmapped group has no sector page to open');
+test('the sector slug is the tracked sector\'s own name, slugged', () => {
   assert.equal(sectorSlug('Data / Analytics'), 'data-analytics');
+  assert.equal(sectorSlug('Fintech / DeFi'), 'fintech-defi');
 });
 
-test('the private tab: each state, and the totals the API sends', () => {
-  assert.match(text(h(PrivatePanel, { markets: loading })), /Loading the markets/);
-  const bad = text(h(PrivatePanel, { markets: unreadable }));
+// D7171 (#7171) replaced the private tab's grouped list with the paged
+// directory; its states are drawn by `DirectoryBody`, from the Worker's totals.
+test('the market directory: each state, and the totals the API sends', () => {
+  const view = readMarketQuery(new URLSearchParams(''));
+  const body = (markets) => text(h(DirectoryBody, { markets, view, onPatch: () => {} }));
+  assert.match(body(loading), /Reading the markets/);
+  const bad = body(unreadable);
   assert.match(bad, /could not be read/);
   assert.doesNotMatch(bad, /No markets/, 'a failed read is not "none"');
-  assert.match(text(h(PrivatePanel, { markets: ready({ total: 0, items: [] }) })), /No markets are in the directory yet/);
-  const ok = text(h(PrivatePanel, { markets: ready(MARKETS) }));
-  assert.match(ok, /3 markets holding 960 companies, as the taxonomy source counts them/);
-  assert.match(ok, /not independently verified/);
-  assert.match(ok, /Not mapped yet 1 markets · no index applies/);
-  assert.match(ok, /Fintech \/ DeFi 2 markets · 910 companies/);
-  const markup = html(h(PrivatePanel, { markets: ready(MARKETS) }));
-  // D593 — #1139's per-sector page landed (D547), so a sector group opens it.
-  // The unmapped group has no sector page, and no link.
-  assert.match(markup, /href="\/research\/markets\/sector\/fintech-defi"/, 'a sector group opens its own page');
-  assert.equal((markup.match(/Open sector/g) || []).length, 1, 'one link, on the one sector group');
-  assert.match(markup, /href="\/research\/markets\/sector\/payments"/, 'a market opens its own page');
+  assert.match(body(ready({ total: 0, directory_total: 0, items: [] })), /No markets are in the directory yet/);
+  const ok = body(ready({ ...MARKETS, directory_total: 3, offset: 0 }));
+  assert.match(ok, /FinTech Tracked sector Fintech \/ DeFi 900/);
+  assert.match(ok, /Fashion Not mapped yet · no tracked sector 50/);
+  assert.match(ok, /not market size/);
 });
 
 test('the public tab: listed companies with bands as sent, unknown values Not recorded; failed read is not empty', () => {
@@ -125,14 +116,14 @@ test('D595: the public tab labels each row by source, prints the API\'s counts a
   assert.doesNotMatch(first, /Previous|Next/, 'one page needs no pager');
 
   const src = read('frontend/src/pages/research/MarketDirectoryZone.jsx');
-  assert.match(src, /listedCompanies\(\{ limit: LISTED_PAGE, offset: listedOffset \|\| undefined \}\), listedOffset\)/, 'the page asks the Worker for one page at a time');
+  assert.match(src, /listedCompanies\(\{\s*limit: LISTED_PAGE, offset: listedOffset \|\| undefined,/, 'the page asks the Worker for one page at a time');
   assert.doesNotMatch(src, /10,?2\d\d|10213/, 'no count is written into the page');
 });
 
-test('the government tab reads Not recorded with the reason, never a figure', () => {
-  const gov = text(h(GovernmentPanel));
+test('government ownership is a coverage note: Not recorded with the reason, never a figure or a tab', () => {
+  const gov = text(h(CoverageNote, {}));
   assert.match(gov, /Not recorded/);
-  assert.match(gov, /No source lists government-owned companies/);
+  assert.match(gov, /Government ownership is not available: no source we hold records who owns a company/);
   assert.doesNotMatch(gov, /\d/);
 });
 

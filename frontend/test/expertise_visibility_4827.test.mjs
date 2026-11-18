@@ -56,11 +56,12 @@ test('#4827 the four tiles say what each counts; Talk reach and Profile views ar
 // nothing this test can see; it stays as a guard for a merged later page.
 test('#4827 a failed read says "could not be read · Try again", never 0 and never Not recorded', () => {
   const html = text(routed(h(VisibilityView, { data: data({ writing: null, surfaces: null, requests: null }), onRetry() {} })));
-  assert.match(html, /Article opens Your writing could not be read · Try again/);
-  assert.match(html, /Booking requests Your booking links could not be read · Try again/);
+  // D4828: #5129's Unavailable chip leads, so the failure is a word and a shape, not a colour.
+  assert.match(html, /Article opens Unavailable Your writing could not be read · Try again/);
+  assert.match(html, /Booking requests Unavailable Your booking links could not be read · Try again/);
   assert.doesNotMatch(html, /Article opens 0|Booking requests 0/);
   const types = text(routed(h(VisibilityView, { data: data({ unlinked_services: null }), onRetry() {} })));
-  assert.match(types, /Your session types could not be read · Try again/);
+  assert.match(types, /Unavailable Your session types could not be read · Try again/);
   assert.doesNotMatch(types, /No booking link yet/);
 });
 

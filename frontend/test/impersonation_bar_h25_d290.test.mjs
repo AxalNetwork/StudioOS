@@ -149,10 +149,13 @@ test('a null reason reads "Not recorded" — never an invented one', () => {
   }
 });
 
-test('the worker echoes the reason it stored, or null, and the dialog passes it on', () => {
+test('the worker echoes the reason it stored, refuses a session it could not record, and the dialog passes it on', () => {
   const handler = between(ADMIN_TS, "admin.post('/impersonate/:userId'", "admin.post('/impersonate-sessions/:id/extend'", 'the impersonate handler');
-  assert.match(handler, /reason: impersonationSessionId === null \? null : reason,/,
-    'the response does not echo the stored reason as null when the audit write failed');
+  // #7257: a failed audit write is refused before any token is minted, so the echo is always the stored reason.
+  const refusal = handler.indexOf("code: 'support_session_unrecorded'");
+  assert.ok(refusal > 0 && refusal < handler.indexOf('createJWT('), 'an unrecorded session must be refused before a token exists');
+  assert.match(handler, /if \(impersonationSessionId === null\) \{/, 'the handler no longer checks that the session was recorded');
+  assert.match(handler, /\n\s+reason,\n/, 'the response does not echo the stored reason');
   // The dialog passes the echo, not the text it collected.
   assert.match(ADMIN_PAGE, /onImpersonate\(res\.token, res\.user, null, res\.reason \?\? null\);/,
     'beginSupportSession does not pass the echoed reason on');

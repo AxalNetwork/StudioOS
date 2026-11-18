@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import { MoreRows, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from './kit';
+import { StateChip } from '../../../ui';
 import { usePagedList } from './pages';
 
 /**
@@ -53,11 +54,15 @@ export function statusLine(byStatus) {
   return parts.length ? parts.join(' · ') : null;
 }
 
+// D4828 (#4828, EX-14): one block that did not answer is #5129's Unavailable,
+// said by word with its own Try again, in that block's place. Never a 0 and
+// never Not recorded: the store may hold a value nobody could read.
 function BlockUnreadable({ what, onRetry, testid }) {
   return (
-    <p role="status" className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid={testid}>
-      {what} could not be read ·{' '}
-      <button type="button" className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300" onClick={onRetry}>Try again</button>
+    <p className="m-0 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] text-axal-muted dark:text-gray-400" data-platform-state="unavailable" data-testid={testid}>
+      <StateChip kind="unavailable" />
+      <span>{what} could not be read ·</span>
+      <button type="button" className="inline-flex min-h-[44px] items-center font-semibold text-emerald-700 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 dark:text-emerald-300 lg:min-h-0" onClick={onRetry}>Try again</button>
     </p>
   );
 }
@@ -267,7 +272,7 @@ export default function VisibilityZone() {
               <button
                 key={d} type="button" role="radio" aria-checked={days === d} onClick={() => setDays(d)}
                 data-testid={`advisor-visibility-window-${d}`}
-                className={`min-h-[32px] rounded-full border px-3 text-[12px] font-semibold ${days === d
+                className={`min-h-[44px] rounded-full border px-3 text-[12px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 lg:min-h-[32px] ${days === d
                   ? 'border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200'
                   : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-300'}`}
               >
@@ -277,7 +282,7 @@ export default function VisibilityZone() {
           </div>
         )}
       />
-      <ZoneBody loading={state.loading} error={state.error} onRetry={load} isEmpty={false}>
+      <ZoneBody loading={state.loading} error={state.error} onRetry={load} isEmpty={false} what="Your visibility">
         <VisibilityView data={data} onRetry={load} more={list} />
         <StatedLimit title="Nothing is added up">
           Opens and booking requests come from different records, so they are never one reach figure,

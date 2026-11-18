@@ -117,6 +117,11 @@
       "channel": "#axalvc-actions-dr-drill"
     },
     {
+      "id": null,
+      "path": ".github/workflows/file-recovery.yml",
+      "channel": "#axalvc-actions-file-recovery"
+    },
+    {
       "id": 385718276,
       "path": ".github/workflows/form-lightbox-contracts.yml",
       "channel": "#axalvc-actions-form-lightbox-contracts"
@@ -235,6 +240,11 @@
       "id": 349437953,
       "path": ".github/workflows/pr-preview.yml",
       "channel": "#axalvc-actions-pr-preview"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/pr-preview-deploy.yml",
+      "channel": "#axalvc-actions-pr-preview-deploy"
     },
     {
       "id": 404322234,

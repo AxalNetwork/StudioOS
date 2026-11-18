@@ -29,7 +29,6 @@ import { INDIC_TRANSLATION_MODEL } from '../src/services/ai/shapes.ts';
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ME = 2, FOUNDER = 9, PROJECT = 7, IV = 101, SESSION = 5;
 const MID = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const SMALL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 

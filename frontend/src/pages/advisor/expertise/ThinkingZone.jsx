@@ -116,6 +116,7 @@ export default function ThinkingZone() {
         loading={state.loading}
         error={state.error}
         onRetry={load}
+        what="Your writing"
         isEmpty={!state.loading && !state.error && items.length === 0}
         empty={(
           <NothingYet
