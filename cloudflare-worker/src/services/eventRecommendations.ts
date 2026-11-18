@@ -124,7 +124,7 @@ export async function recommendedEvents(env: Env, u: Omit<User, 'role'> & { role
   for (const {event,registration} of eligible) {
     const rule = rulesFor(event,own.signals,prefs,affinityOf(own.track));
     const vector = member ? await cachedVector(env,false,event.id,[event.title,event.summary,event.description,...eventTopics(event.topics_json)].filter(Boolean).join(' ').slice(0,4000),budget) : null;
-    scored.push({ score: rule.score + (member && vector ? cosine(member,vector)*5 : 0), event: { ...shapeEvent(event), source: 'axal', saved: event.verdict === 'saved', registration_eligible: registration, reasons: rule.reasons.slice(0,4) } });
+    scored.push({ score: rule.score + (member && vector ? cosine(member,vector)*5 : 0), event: { ...shapeEvent(event), saved: event.verdict === 'saved', registration_eligible: registration, reasons: rule.reasons.slice(0,4) } });
   }
   scored.sort((a,b)=>b.score-a.score || String(a.event.starts_at).localeCompare(String(b.event.starts_at)) || Number(a.event.id)-Number(b.event.id));
   return { enabled: true, profile: u.role, signals: own.states, events: scored.slice(0,limit).map(s=>s.event) };

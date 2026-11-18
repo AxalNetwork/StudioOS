@@ -47,15 +47,15 @@ test('loading and unreadable are their own states; unreadable offers Retry and n
 test('no request: the panel names the company and offers Request…; opened, the form names it, takes a kind and a reason', () => {
   const none = panel({});
   assert.equal(state(none.html), 'none');
-  assert.match(none.text, /No request sent for Venture Seven/);
+  assert.match(none.text, /You have not asked HQ for a mark for Venture Seven/); // D6909 PRM21 empty-state words
   assert.match(none.html, /button-open-mark-request/);
   const draft = panel({ startOpen: true });
   assert.equal(state(draft.html), 'drafting');
   assert.match(draft.text, /Ask HQ about Venture Seven/);
   for (const k of REQUEST_KINDS) assert.match(draft.text, new RegExp(k.label));
   assert.match(draft.html, /input-mark-request-reason/);
-  // An empty reason cannot be sent.
-  assert.match(draft.html, /<button type="submit"[^>]*disabled=""[^>]*data-testid="button-send-mark-request"/);
+  // An empty reason cannot go to Review (D6909: Prepare → Review → Confirm → Receipt).
+  assert.match(draft.html, /<button type="submit"[^>]*disabled=""[^>]*data-testid="button-review-mark-request"/);
 });
 
 test('an open request reads Requested with its date, kind and reason, and offers no second one', () => {
@@ -69,7 +69,7 @@ test('an open request reads Requested with its date, kind and reason, and offers
 test('an answered request reads Resolved or Declined with its date and HQ’s note, and a new request may follow', () => {
   const r = panel({ request: RESOLVED });
   assert.equal(state(r.html), 'resolved');
-  assert.match(r.text, /Resolved · 15 Nov 2026/);
+  assert.match(r.text, /Answered · mark recorded · 15 Nov 2026/); // D6909 PRM21: Answered, linked to the mark
   assert.match(r.text, /HQ: Re-marked at the Series A\./);
   assert.match(r.text, /the mark recorded is in the history above/);
   assert.match(r.text, /Send another request/);
@@ -110,7 +110,7 @@ test('model: the open request wins over an older answered one; status, default k
 test('the page wires the request: its own read, the chip beside Stale, the panel in the Sheet; Add follow-on is gone', () => {
   const src = readFileSync(new URL('../src/pages/investor/InvestorPortfolioPositions.jsx', import.meta.url), 'utf8');
   assert.match(src, /markRequestsApi\.list\(\)/);
-  assert.match(src, /markRequestsApi\.create\(\{ projectUid: row\.uid, kind: draft\.kind, reason: draft\.reason \}\)/);
+  assert.match(src, /markRequestsApi\.create\(\{\s*projectUid: row\.uid, kind: draft\.kind, reason: draft\.reason, evidenceUrl: draft\.evidenceUrl, evidenceFile: draft\.evidenceFile,\s*\}\)/);
   assert.match(src, /requests\.state === 'ok' && \(r\.stale \|\| r\.mark\.kind !== 'marked'\)/, 'the chip shows only once the requests are read');
   assert.match(src, /<MarkRequestPanel /);
   assert.match(src, /onOpen\(r, \{ request: true \}\)/, 'Request… opens the Sheet on the form');

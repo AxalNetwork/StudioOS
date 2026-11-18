@@ -141,7 +141,8 @@ async function openBilling(state = 'billed', refusal = null, missingFee = false)
     return worker()(c);
   });
   try {
-    await m.press(m.button('Change', m.by('billing-pr4-35')));
+    // #4832 (D4832): the price record is in the session card's Open.
+    await m.press(m.button('Open', m.by('session-card-35')));
     return m;
   } catch (error) { await m.close(); throw error; }
 }
@@ -252,7 +253,7 @@ test('a hand-entered date-only range still blocks whole UTC days', async () => {
   __resetEadwynPanelForTest();
   const m = await mount(h(Both, { closed: [], options: OPTIONS }), worker());
   try {
-    await m.press(m.button('Block a date range'));
+    await m.press(m.button('Block time'));
     await m.change('advisor-block-from', '2026-11-12');
     await m.change('advisor-block-until', '2026-11-14');
     assert.equal(m.props(m.by('advisor-block-start-time')).value, '');
@@ -297,7 +298,7 @@ test('a partial time range is refused locally instead of being widened to whole 
   __resetEadwynPanelForTest();
   const m = await mount(h(Both, { closed: [], options: OPTIONS }), worker());
   try {
-    await m.press(m.button('Block a date range'));
+    await m.press(m.button('Block time'));
     await m.change('advisor-block-from', '2026-11-12');
     await m.change('advisor-block-until', '2026-11-12');
     await m.change('advisor-block-start-time', '12:00');
