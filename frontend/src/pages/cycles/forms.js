@@ -291,7 +291,7 @@ const PARTNER_STAGE = opts([['talking', 'Talking'], ['terms', 'Terms'], ['signed
 const TERMS_KIND = opts([['rev_share', 'Rev-share'], ['services_fee', 'Services fee'], ['referral_fee', 'Referral fee'], ['none', 'None yet']]);
 const termsFields = [
   { kind: 'CH', name: 'terms_kind', k: 'Terms', opts: TERMS_KIND, def: 3 },
-  { kind: 'T', name: 'amount', k: 'Amount', ph: '20% or $4,000 / month', when: (v) => Boolean(v.terms_kind) && v.terms_kind !== 'none' },
+  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '20% or $4,000 / month', when: (v) => Boolean(v.terms_kind) && v.terms_kind !== 'none' },
   { name: 'contact', k: 'Contact', parts: [
     { kind: 'T', name: 'contact_name', k: 'Name', ph: 'Name', max: 200 },
     { kind: 'T', name: 'contact_email', k: 'Email', ph: 'email', input: 'email', max: 200 },
@@ -647,7 +647,7 @@ const HOLDER_VESTING = opts([['none', 'None'], ['4y-1y', '4 years, 1-year cliff'
 const inGroup = (group) => ({ name: 'group', value: group });
 const vests = (v) => v.group === FOUNDERS && Boolean(v.vesting) && v.vesting !== 'none';
 const holderMoney = [
-  { kind: 'T', name: 'amount', k: 'Amount', ph: '$500k' },
+  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '$500k' },
   { kind: 'T', name: 'cap', k: 'Cap', ph: '$8M cap' },
 ];
 const NO_PROSPECT = { value: NONE, label: 'None' };
@@ -1552,7 +1552,7 @@ const SIGNAL_STATUS = [{ value: 'confirmed', label: 'Confirmed' }, { value: 'to_
 const signalFields = [
   { kind: 'CH', name: 'kind', k: 'Kind', opts: SIGNAL_KIND, def: 2, required: true },
   { kind: 'T', name: 'who', k: 'Who', ph: 'Customer, lead or interviewee', max: 200 },
-  { kind: 'T', name: 'amount', k: 'Amount', ph: '1,200 · amount in selected currency', note: 'For an unlisted currency, enter a count followed by minor units.', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '1,200 · amount in selected currency', note: 'For an unlisted currency, enter a count followed by minor units.', when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'T', name: 'currency', k: 'Currency', ph: 'EUR', def: 'usd', max: 3, when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'CH', name: 'period', k: 'Period', opts: [{ value: '', label: 'Not recorded' }, { value: 'once', label: 'Once' }, { value: 'month', label: 'Monthly' }, { value: 'year', label: 'Yearly' }], def: '', when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'T', name: 'signal_date', k: 'Date', input: 'date', ph: '12 Oct' },
@@ -1560,11 +1560,13 @@ const signalFields = [
 ];
 // Unknown historical codes retain an explicit minor-unit count.
 const signalAmount = (v) => {
-  const code = String(v.currency || 'usd').toUpperCase();
+  const code = String(str(v.currency) || 'usd').toUpperCase();
   const text = String(v.amount || '').trim();
-  if (!currencyCode(code) && /^[A-Z]{3}$/.test(code) && /^\d+ minor units$/.test(text)) {
-    const minor = Number(text.split(' ')[0]);
+  if (!currencyCode(code) && /^[A-Z]{3}$/.test(code)) {
+    const count = /^(\d+)\s+minor units?$/i.exec(text);
+    const minor = count ? Number(count[1]) : Number.NaN;
     if (Number.isSafeInteger(minor) && minor > 0) return { ok: true, minor };
+    return { ok: false, message: 'For this currency, enter a positive count such as 4321 minor units.' };
   }
   const typed = code === 'USD' ? text.replace(/^\$/, '') : text;
   return parseMinor(typed, code);
@@ -1572,13 +1574,13 @@ const signalAmount = (v) => {
 // A hidden Amount is not submitted, so a kind that takes none sends null.
 const signalBody = (v) => {
   const amount = AMOUNT_KINDS.includes(v.kind) && str(v.amount) ? signalAmount(v).minor ?? Number.NaN : null;
-  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : String(v.currency || 'usd').toLowerCase(), period: amount == null ? null : str(v.period), signal_date: str(v.signal_date), status: v.status || null };
+  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : String(str(v.currency) || 'usd').toLowerCase(), period: amount == null ? null : str(v.period), signal_date: str(v.signal_date), status: v.status || null };
 };
 const signalCheck = (v) => {
   if (!AMOUNT_KINDS.includes(v.kind) || !str(v.amount)) return {};
   const parsed = signalAmount(v);
   if (!parsed.ok) return { amount: parsed.message };
-  return parsed.minor > 0 ? {} : { amount: 'Enter an amount greater than zero, or leave it empty.' };
+  return parsed.minor > 0 ? { amount: null } : { amount: 'Enter an amount greater than zero, or leave it empty.' };
 };
 const signal = {
   key: 'signal', cta: 'Record signal', button: 'Record signal',
@@ -1792,7 +1794,7 @@ const editSignal = {
   toBody: (v) => {
     const body = onlyShown(v, signalBody(v), { amount_cents: 'amount' });
     if (!Object.hasOwn(v, 'amount')) {
-      if (Object.hasOwn(v, 'currency')) body.currency = str(v.currency)?.toLowerCase() ?? null;
+      delete body.currency;
       if (Object.hasOwn(v, 'period')) body.period = str(v.period);
     }
     if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null, period: null });
@@ -2326,5 +2328,6 @@ export function validate(form, values) {
     const kept = typeof f.keep === 'function' ? f.keep(values || {}) : null;
     if (kind === 'CH' && text && !choicesOf(f).some((o) => o.value === text) && String(kept?.value ?? '') !== text) errors[f.name] = `Pick one of the choices for ${String(label).toLowerCase()}.`;
   }
-  return { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
+  const checked = { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
+  return Object.fromEntries(Object.entries(checked).filter(([, message]) => message));
 }

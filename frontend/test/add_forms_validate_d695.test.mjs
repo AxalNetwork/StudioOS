@@ -325,7 +325,7 @@ test('each Add sends the body its route on main takes, and Add competitor names 
   await mutationCheck(source, path, assertBodies, [
     [": str(v.directory_uid) ? { directory_uid: str(v.directory_uid) } : { name: str(v.company) };", ": { name: str(v.company) };"],
     ['watch: watchBody(v), why: str(v.why) };\n  },\n  search:', 'watch: v.watch, why: str(v.why) };\n  },\n  search:'],
-    ["currency: amount == null ? null : String(v.currency || 'usd').toLowerCase()", 'currency: null'],
+    ["currency: amount == null ? null : String(str(v.currency) || 'usd').toLowerCase()", 'currency: null'],
     ['return at > 0 && id != null && s.slice(at + 1)', 'return id != null'],
     ["w.validate.hypothesis(projectId, hypothesis.toBody(v))", "w.validate.theme(projectId, hypothesis.toBody(v))"],
   ]);
