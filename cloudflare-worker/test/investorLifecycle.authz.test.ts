@@ -300,6 +300,13 @@ CREATE TABLE ic_votes (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(ic_decision_id, user_id)
 );
+-- D6143 — the decision detail read carries its voting roster (empty here).
+CREATE TABLE ic_decision_voters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ic_decision_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL, added_by INTEGER NOT NULL,
+  added_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(ic_decision_id, user_id)
+);
 -- Migration 334 — the decision detail read joins its conditions.
 CREATE TABLE ic_conditions (
   id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
