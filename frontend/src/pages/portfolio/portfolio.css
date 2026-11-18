@@ -262,5 +262,26 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
   .pf-obligations td.pf-row-actions .pf-btn+.pf-btn{margin-left:0}
   .pf-obligations td[data-label="Due"]{max-width:none}
 }
+/* D6909 part 2 (PRM20–PRM23): Request a mark's steps, facts, evidence and the request list */
+.pf-steps{display:flex;gap:6px;flex-wrap:wrap;list-style:none;margin:0 0 10px;padding:0;font-size:11.5px;font-weight:700}
+.pf-steps li{padding:3px 9px;border-radius:999px;border:1px solid var(--pf-hair2,#d3d0dc);color:var(--pf-mu,#5f5a6b)}
+.pf-steps li.is-done{color:var(--pf-pos,#047857);border-color:var(--pf-posE,#a7f3d0)}
+.pf-steps li.is-current{color:var(--pf-vt,#6d28d9);border-color:var(--pf-vi,#7c3aed);background:var(--pf-lav,#f3effe)}
+.pf-facts{display:grid;gap:6px;margin:8px 0}
+.pf-facts>div{display:grid;grid-template-columns:minmax(120px,38%) 1fr;gap:8px;font-size:12.5px}
+.pf-facts dt{color:var(--pf-mu,#5f5a6b);font-weight:600}
+.pf-facts dd{margin:0;overflow-wrap:anywhere}
+.pf-request-form{display:flex;flex-direction:column;gap:6px}
+.pf-request-form textarea,.pf-request-form select,.pf-evidence input[type=url]{width:100%;min-height:36px;border:1px solid var(--pf-hair2,#d3d0dc);border-radius:8px;padding:6px 8px;background:var(--pf-card,#fff);color:var(--pf-ink,#18181b);font:inherit}
+.pf-evidence{border:1px dashed var(--pf-hair2,#d3d0dc);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.pf-evidence legend{font-size:12px;font-weight:700;padding:0 4px}
+.pf-radio{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;min-height:32px}
+.pf-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.pf-ok{color:var(--pf-pos,#047857);font-weight:700;margin:6px 0}
+.pf-request-list{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.pf-request-item{border:1px solid var(--pf-hair,#e7e5ee);border-radius:8px;padding:8px 10px;font-size:12.5px}
+@media (max-width:640px){
+  .pf-actions .pf-btn,.pf-radio{min-height:44px}
+}
 /* D6204: an obligation past its due date, by the Worker's date. */
 .pf-late-text{color:var(--pf-neg);font-weight:700;display:block}
