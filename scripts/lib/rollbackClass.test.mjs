@@ -224,7 +224,7 @@ test('the live version: only names, types, tag and commit survive; the deploymen
   const v = reduceVersion({ id: 'v1', metadata: { author_email: 'someone@example.com' }, resources: {
     script_runtime: { migration_tag: 'v8' }, bindings: [{ name: 'WORKER_DEPLOY_VERSION', type: 'plain_text', text: sha }, { name: 'K', type: 'kv_namespace', namespace_id: 'n' }] } });
   assert.deepEqual(v, { id: 'v1', bindings: [{ name: 'WORKER_DEPLOY_VERSION', type: 'plain_text' }, { name: 'K', type: 'kv_namespace' }], migrationTag: 'v8', commit: sha });
-  assert.doesNotMatch(JSON.stringify(v), /example\.com/);
+  assert.ok(!JSON.stringify(v).includes('someone@example.com'), 'the version author\'s email survived');
   assert.equal(reduceVersion({ resources: {} }), null);
   assert.equal(reduceVersion({ resources: { bindings: [{ name: 'WORKER_DEPLOY_VERSION', type: 'plain_text', text: 'not-a-sha' }] } }).commit, null);
   const list = [
@@ -295,4 +295,12 @@ test('a fault inside the release step is recorded as manual and still exits 0', 
   });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /Rollback class: `manual`[\s\S]*`classifier-error`/);
+});
+
+test('the summary escapes backslashes before pipes, so a file name cannot break or forge a table cell', () => {
+  const md = renderSummary({ class: 'manual', previousVersionId: null, pendingMigrations: [], removedBindings: [],
+    reasons: [{ rule: 'drop', file: 'a\\|b', line: 1, detail: 'x\ny' }] });
+  const row = md.split('\n').find((l) => l.includes('`drop`'));
+  assert.ok(row.includes('a\\\\\\|b'), row);
+  assert.ok(!row.includes('x\ny'));
 });

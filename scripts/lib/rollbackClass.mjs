@@ -416,7 +416,7 @@ export function classifyRelease({ plan, migrations = [], candidate, deployed, de
   };
 }
 
-const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+const cell = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 
 /** The job-summary section for a result. */
 export function renderSummary(r) {
