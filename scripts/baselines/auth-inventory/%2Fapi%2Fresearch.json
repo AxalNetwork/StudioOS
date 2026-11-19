@@ -81,6 +81,11 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "GET /api/research/market-data/countries/:code": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
   "GET /api/research/market-directory/:slug": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
