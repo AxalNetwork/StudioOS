@@ -16,6 +16,8 @@ import { NOT_RECORDED } from '../../lib/absence';
 import { FLAG_STATE_WORD, icState, openFlags, sectionWork } from '../duediligence/ddCaseModel.js';
 import { DEPTH_WORD, SEVERITY_WORD } from '../duediligence/ddListModel.js';
 import { verdictWord } from '../duediligence/ddReviewModel.js';
+import { STEPS, STUDIO_PASSED, YOU_PASSED } from './dealFrameModel.js';
+import { tabHref } from '../dealPageModel.js';
 
 export { NOT_RECORDED };
 const DAY = 86400000;
@@ -546,3 +548,75 @@ export function withdrawError(reason) {
 }
 
 export const SYNDICATES_LINE = 'The syndicates you lead or belong to on this company. A syndicate you are not in is not listed: today’s read shows only your own.';
+
+// ---------------------------------------------------------------- D5906 DX9 the Investment tab (DE09)
+
+/**
+ * D5906 (#5906, board DE09): Change amount… and Withdraw…, offered exactly
+ * where the Worker takes them. `POST /api/deals/:id/commitments` changes a
+ * Pending commitment on an active deal and refuses a Confirmed one (409);
+ * `POST …/commitments/:uid/withdrawal` withdraws a Pending or Confirmed one on
+ * any deal. A commitment still loading, unreadable or absent offers neither.
+ */
+export function commitmentActions(deal, mine) {
+  if (!mine || mine.state !== 'ready') return { change: false, withdraw: false };
+  return { change: !mine.confirmed && deal?.status === 'active', withdraw: true };
+}
+
+/** D5906: the Note row of Your commitment, and who reads it, said whether or not a note is recorded. */
+export function noteRow(mine) {
+  if (mine?.note) return { text: mine.note, readers: NOTE_READERS, recorded: true };
+  return { text: 'No note recorded.', readers: 'A note is yours alone: the founder and the studio see your amount and status, never a note.', recorded: false };
+}
+
+/**
+ * D5906: the Investment route card. The three routes, with the investor's
+ * stored preference (D6195) marked; none recorded marks none, never Direct.
+ * A preference that could not be read draws no route at all, so an unread
+ * preference is never drawn as none.
+ */
+export function routeCard(mine) {
+  const pref = termsPreference(mine);
+  const known = pref.state === 'ready' || pref.state === 'none';
+  return {
+    state: pref.state,
+    options: known ? ROUTES.map((r) => ({ key: r.key, title: r.title, line: r.line, chosen: pref.key === r.key })) : [],
+    line: pref.state === 'ready'
+      ? (pref.key ? `Your preference: ${preferenceLine(pref.key)}.` : `${ROUTE_NONE}. No route is selected.`)
+      : pref.line,
+    note: ROUTE_NOTE,
+  };
+}
+
+const CLOSING_STEP = {
+  Terms: { word: 'Terms ready', tone: 'now', next: 'Next: review the terms. Your line and signing are in the closing room.', action: { label: 'Review terms', tab: 'terms' } },
+  Committed: { word: 'Committed', tone: 'wait', next: 'Next: sign in the closing room once the paper is sent to you.', action: { label: 'Review signing', tab: 'closing' } },
+  Signed: { word: 'Signed', tone: 'wait', next: 'Next: pay by the instructions in the closing room.', action: { label: 'Review funding', tab: 'closing' } },
+  Funded: { word: 'Funded', tone: 'done', next: 'Your money was received. The company now reports to you.', action: { label: 'View company reports', href: '/portfolio/updates' } },
+};
+const TERMS_STEP = STEPS.indexOf('Terms');
+
+/**
+ * D5906: the Closing status card, from the stage read (`GET
+ * /api/deals/:id/stage`, D1150) the header reads too. Its one primary action
+ * follows the step: Review terms at Terms, the closing room at Committed and
+ * Signed, the company's reports once Funded. Before Terms closing has not
+ * started and nothing is offered; a pass offers nothing. A stage read that
+ * failed is unreadable, never "not started".
+ */
+export function closingStatus(read, dealId) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status === 'unreadable') return { state: 'unreadable' };
+  const stage = read.data?.my_stage ?? null;
+  const closingHref = tabHref(dealId, 'closing');
+  if (stage === YOU_PASSED) return { state: 'ready', word: 'Passed', tone: 'off', next: 'You passed on this deal. Nothing is left to close.', action: null, closingHref };
+  if (stage === STUDIO_PASSED) return { state: 'ready', word: 'Closed by the studio', tone: 'off', next: 'The studio closed this deal. Nothing is left to close.', action: null, closingHref };
+  const step = CLOSING_STEP[stage];
+  if (step) {
+    const href = step.action.href || tabHref(dealId, step.action.tab);
+    return { state: 'ready', word: step.word, tone: step.tone, next: step.next, action: { label: step.action.label, href, closing: href === closingHref }, closingHref };
+  }
+  const at = STEPS.indexOf(stage);
+  const where = at >= 0 && at < TERMS_STEP ? ` Your step now: ${stage}.` : ' No step on this deal is recorded for you yet.';
+  return { state: 'ready', word: 'Not started', tone: 'off', next: `Closing starts once the terms are ready.${where}`, action: null, closingHref };
+}
