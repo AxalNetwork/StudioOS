@@ -216,6 +216,8 @@ test('an external image is copied in through the safe fetcher; private hosts and
 test('the export browser loads only the page\'s own origin, the font hosts, data: and blob:', async () => {
   // Mutation checked: renderUrl without allowRequestPattern lets the export load any origin.
   const patterns = exportAllowPatterns('https://axal.vc/deck/print-export/t');
+  // These are the allow patterns production hands Browser Run; compiling them is what this test checks.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
   const res = patterns.map((p) => new RegExp(p.slice(1, -1)));
   const allowed = (u: string) => res.some((r) => r.test(u));
   assert.ok(allowed('https://axal.vc/api/decks/images/u/file'));

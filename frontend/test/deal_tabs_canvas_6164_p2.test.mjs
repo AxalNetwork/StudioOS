@@ -108,7 +108,7 @@ test('DE25: the months newest first; a month not reported is a gap, never 0; a r
 async function mounted(Tab, section, body) {
   const restore = installDocument();
   const previous = globalThis.fetch;
-  globalThis.fetch = async (u) => (new RegExp(`/api/deals/4/${section}$`).test(String(u)) ? response(body) : response({}));
+  globalThis.fetch = async (u) => (String(u).endsWith(`/api/deals/4/${section}`) ? response(body) : response({}));
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   const settle = async () => { await act(async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setImmediate(r)); }); };
