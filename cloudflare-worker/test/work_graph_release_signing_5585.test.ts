@@ -148,10 +148,10 @@ test('2. a lost answer is reconciled by lookup; a failed mail is voided and sent
 
   // Gmail refused the mail: that envelope is voided, and the next attempt sends a fresh one.
   w = signingWorld();
-  s = await shipped(w);
+  await shipped(w);
   x = live(w);
   x.gmail.failNext = true;
-  r = await drain(x.env);
+  await drain(x.env);
   assert.deepEqual(effectRows(w).map((e) => [e.state, e.last_error_code]), [['pending', 'provider_unavailable']]);
   assert.deepEqual(envelopes(w).map((e) => e.status), ['void']);
   assert.deepEqual(recipients(w).map((e) => e.status), ['void'], 'the unmailed link cannot be used');
