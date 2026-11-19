@@ -42,6 +42,7 @@ function failingRead(db: DatabaseSync, table: string, failure: string) {
         async all() {
           if (failure === 'throw') throw new Error('injected read failure');
           if (failure === 'unsuccessful') return { success: false, results: [] };
+          if (failure === 'missing') return undefined;
           return { success: true };
         },
       };
@@ -72,7 +73,7 @@ for (const [path, table, reason] of [
   ['/positions/kpi-compliance', 'portfolio_kpi_definitions', 'Required KPIs could not be read.'],
   ['/positions/kpi-compliance', 'portfolio_updates', 'Submitted portfolio updates could not be read.'],
 ]) {
-  for (const failure of ['throw', 'unsuccessful', 'malformed']) {
+  for (const failure of ['throw', 'unsuccessful', 'malformed', 'missing']) {
     test(`${table}: ${failure} is unavailable, never fabricated successful figures or a chase population`, async () => {
       const db = fixture();
       try {

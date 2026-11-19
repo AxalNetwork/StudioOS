@@ -381,7 +381,7 @@ r.get('/marks', async (c) => {
 
 // D6201: D1 may reject or resolve an unsuccessful/malformed read. Neither is an empty set.
 function hasQueryResults<T>(reply: { success?: boolean; results?: T[] } | null): reply is { success?: boolean; results: T[] } {
-  return reply !== null && reply.success !== false && Array.isArray(reply.results);
+  return reply != null && reply.success !== false && Array.isArray(reply.results);
 }
 
 r.get('/analytics', async (c) => {
