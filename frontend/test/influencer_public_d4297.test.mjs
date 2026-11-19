@@ -238,21 +238,22 @@ test('the handle page\'s states: unknown, paused (no name, no offer), failed', a
 test('/influencers signed out: the tiers from the read, the earn line from the rates, and Apply registers for the program', async () => {
   const view = await mounted('/influencers', worker());
   try {
-    assert.match(view.textOf('influencers-tier-verified_influencer'), /Verified Influencer.*25%.*12 invoices.*An audience HQ has checked/);
-    assert.match(view.textOf('influencers-tier-strategic_partner'), /Set per agreement.*Set per agreement/);
-    assert.equal(view.textOf('influencers-earn'), '20–30% of each subscription, for 12 invoices per member.');
+    // D6975: the tier table is section 3 of the presentation, one row per tier, every value the read's.
+    assert.match(view.text(), /Verified Influencer25% · 12 invoices · An audience HQ has checked/);
+    assert.match(view.text(), /Strategic PartnerSet per agreement · Set per agreement/);
+    assert.equal(view.textOf('influencers-rate-line'), '20–30% of each subscription, for 12 invoices per member.');
     assert.equal(view.props('influencers-apply').href, REGISTER_TO_APPLY);
-    assert.match(view.textOf('influencers-bonuses'), /10, 25, 50 and 100 paid members\. Your terms set each amount\./);
+    assert.match(view.text(), /A one-time bonus at 10, 25, 50 and 100 paid members, only where your terms set an amount\./);
     assert.ok(!view.requests.some((r) => r.url.startsWith('/api/influencer/me')), 'no member read while signed out');
   } finally { await view.close(); }
   const other = await mounted('/influencers', worker({ tiers: { tiers: [{ tier: 'affiliate_creator', label: 'Affiliate Creator', percentage_bps: 1500, duration_invoices: 6 }] } }));
   try {
-    assert.equal(other.textOf('influencers-earn'), '15% of each subscription, for 6 invoices per member.', 'the rates follow the read');
+    assert.equal(other.textOf('influencers-rate-line'), '15% of each subscription, for 6 invoices per member.', 'the rates follow the read');
   } finally { await other.close(); }
   const down = await mounted('/influencers', worker({ tiers: () => response({ error: 'tiers_unreadable' }, 503) }));
   try {
-    assert.match(down.textOf('influencers-tiers-unread'), /could not be read.*not the same as having none/);
-    assert.equal(down.textOf('influencers-earn'), 'Rates unavailable. See the tiers below.', 'no rate is guessed (D6993)');
+    assert.match(down.text(), /could not be read.*not the same as having none/);
+    assert.equal(down.textOf('influencers-rate-line'), 'Rates unavailable. See the tiers below.', 'no rate is guessed (D6993)');
   } finally { await down.close(); }
 });
 
