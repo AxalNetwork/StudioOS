@@ -111,15 +111,18 @@ export async function finishRecordWrite(result, { open, onError, reread }) {
 export function recordFormFor(action, record, edit) {
   if (action?.kind !== 'form') return null;
   const fields = (action.form?.fields ?? []).map(field => ({ ...field, name: field.key ?? field.name }));
-  const current = Object.fromEntries(fields.filter(field => Object.hasOwn(field, 'value')).map(field => [field.name, field.value]));
+  const starting = new Map(fields.filter(field => Object.hasOwn(field, 'value')).map(field => [field.name, field.value]));
   // #6110 (D6110): a row's action arrives with its row's body. A field the body names starts on that value (as a
   // string, the way a choice holds it), so a row's Move to… opens on its own applicant and Update an experiment on
   // its own experiment. The body still travels with the values (`recordActionBody`).
   for (const field of fields) {
-    if (action.body && Object.hasOwn(action.body, field.name) && action.body[field.name] != null) current[field.name] = String(action.body[field.name]);
+    const fromBody = action.body && Object.hasOwn(action.body, field.name) ? action.body[field.name] : null;
+    if (fromBody != null) starting.set(field.name, String(fromBody));
   }
   // D6113 (#6113): a row's own values, for the fields the form declares only.
-  for (const field of fields) if (action.values && Object.hasOwn(action.values, field.name)) current[field.name] = action.values[field.name];
+  for (const field of fields) if (action.values && Object.hasOwn(action.values, field.name)) starting.set(field.name, action.values[field.name]);
+  // Built once from the Map: Object.fromEntries defines own data properties, so no field name reaches a prototype.
+  const current = Object.fromEntries(starting);
   if (action.key === 'edit') {
     const row = { id: record.id, edit: { id: record.id, uid: record.uid ?? record.id } };
     const id = edit?.idOf(row);
