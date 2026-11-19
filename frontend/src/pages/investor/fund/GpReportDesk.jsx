@@ -62,7 +62,7 @@ export default function GpReportDesk() {
     setBusy(true); setErr(''); setNote('');
     try {
       const payload = await api.fundsLpReport(fundId, lpId);
-      const { exportQuarterlyReportPdf } = await import('../lib/quarterlyReportPdf');
+      const { exportQuarterlyReportPdf } = await import('../../../lib/quarterlyReportPdf');
       const issued = selected.status === 'issued';
       // D712: an issued period prints its recorded issue date and, when the
       // reporting queue issued it, the LP's frozen statement and the period's
