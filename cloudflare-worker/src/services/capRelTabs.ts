@@ -615,12 +615,13 @@ export async function overviewRead(environment: Env, projectId: number, part?: s
     history: async () => {
       const rows = await env.DB.prepare(`SELECT id, entity_id, details, created_at FROM activity_logs
         WHERE project_id = ? AND entity_type = ? AND action = 'prospect_updated'
-          AND julianday(created_at) >= julianday(?) ORDER BY created_at DESC, id DESC`)
+          AND julianday(created_at) >= julianday(?) ORDER BY created_at DESC, id DESC LIMIT 201`)
         .bind(projectId, MODULE_TYPE, since).all<any>();
       // Stage prose is evidence of individual moves, not a completeness ledger. Neither
       // pre-D1193 changes nor deleted prospects have a trustworthy baseline snapshot.
-      const moves = rows.results.filter((r: any) => /Investor edited:.*stage [^,\n]+ → [^,\n]+/.test(String(r.details)));
+      const moves = rows.results.slice(0, 200).filter((r: any) => /Investor edited:.*stage [^,\n]+ → [^,\n]+/.test(String(r.details)));
       return { state: 'not_recorded', as_of: since.slice(0, 10), observed_moves: moves.length,
+        observed_moves_truncated: rows.results.length > 200,
         reason: 'A complete stage snapshot 30 days ago is not recorded. The available stage-change records do not establish coverage of earlier changes or deleted investors.' };
     },
   };

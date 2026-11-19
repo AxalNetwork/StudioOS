@@ -104,3 +104,31 @@ test('D6079 upcoming venture meetings use the calendar source, and one failed so
     assert.equal(logFailure.data.fit.state, 'ok');
   } finally { f.db.close(); }
 });
+
+test('D6079 history inspects a bounded recent sample and identifies its move count as truncated', async () => {
+  const f = fixture();
+  try {
+    let sourceRows = 0;
+    const observe = (statement: any): any => new Proxy(statement, { get(target, key) {
+      if (key === 'bind') return (...args: any[]) => observe(target.bind(...args));
+      if (key === 'all') return async () => { const result = await target.all(); sourceRows = result.results.length; return result; };
+      const value = target[key];
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    f.env.DB = new Proxy(f.env.DB, { get(target, key) {
+      if (key === 'prepare') return (sql: string) => sql.includes("action = 'prospect_updated'") ? observe(target.prepare(sql)) : target.prepare(sql);
+      const value = target[key];
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const add = f.db.prepare(`INSERT INTO activity_logs (project_id, entity_type, entity_id, action, details, created_at)
+      VALUES (101, 'raise.capital-relationships', '1', 'prospect_updated', 'Investor edited: stage meeting → negotiating', '2026-11-18T10:00:00Z')`);
+    for (let i = 0; i < 300; i += 1) add.run();
+    const result = await f.request('/capital-relationships/overview?part=history', OWNER);
+    assert.equal(result.status, 200);
+    assert.equal(result.data.history.state, 'not_recorded', 'a bounded audit sample never becomes a complete stage snapshot');
+    assert.equal(result.data.history.observed_moves, 200);
+    assert.equal(result.data.history.observed_moves_truncated, true);
+    assert.ok(sourceRows > 0 && sourceRows <= 201, 'the database read itself is bounded before JavaScript filters it');
+    assert.match(result.data.history.reason, /complete stage snapshot/);
+  } finally { f.db.close(); }
+});
