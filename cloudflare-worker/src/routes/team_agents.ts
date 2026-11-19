@@ -61,6 +61,7 @@ import { refuse } from '../util/refusal';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
 import { FIRST_TEN_SLUGS, inputMatrix, preflight } from '../services/agents/skillInputs';
+import { selectedDocument } from '../services/agents/reads';
 import { ATTACH_STATUS, checkSkillList, linkStatement, logSkillsChanged } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
@@ -389,9 +390,13 @@ router.get('/agents/:uid/skills/:slug/readiness', async (c) => {
       if (!p) return say(c, 404, 'project_not_in_company', 'The project is not this company\'s.');
       projectId = p.id;
     }
+    // D4667-p3: the one data-room document a run would work on (`data_room_file:<uid>`), as its record selects it.
+    const docAsked = c.req.query('document') || null;
+    const document = docAsked === null ? null : selectedDocument(docAsked);
+    if (docAsked !== null && !document) return say(c, 400, 'invalid_document', 'The document is a data room file reference such as data_room_file:<uid>.');
     // D4667-p2: through the keys the agent's rule book reads, as a run of it is checked; any other is `not_granted`.
     const { rules } = await effectiveBook(c.env, s, a.role_key);
-    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to } }, undefined, undefined, undefined, undefined, { granted: rules.reads });
+    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to }, document }, undefined, undefined, undefined, undefined, { granted: rules.reads });
     return c.json({ readiness: r });
   } catch (e) { return mapError(c, e); }
 });

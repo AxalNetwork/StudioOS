@@ -86,9 +86,13 @@ export type InputStatus = 'available' | 'empty' | 'missing' | 'absent_optional' 
 /**
  * `wrong_shape`: the reader answers, but not what the skill needs (summaries where it needs typed fields).
  * `not_bound` (D4667-p2): the rule book reads it, but the run's context left it out for length, so the run does not carry it.
+ * D4667-p3, a document's text: `not_selected` (the run names no document), `not_found` (not in this room, or in Trash),
+ * `not_read` (its text was never read), `not_current` (replaced since its text was read, so the text on record is an
+ * earlier version's), `no_text` (it holds none the reader can read), `failed` (reading it to text failed).
  */
+export type InputReason = 'wrong_shape' | 'manual' | 'supplied_invalid' | 'not_bound' | 'not_selected' | 'not_found' | 'not_read' | 'not_current' | 'no_text' | 'failed';
 export type InputReport = {
-  field: string; read: string; required: boolean; status: InputStatus; note: string | null; reason?: 'wrong_shape' | 'manual' | 'supplied_invalid' | 'not_bound';
+  field: string; read: string; required: boolean; status: InputStatus; note: string | null; reason?: InputReason;
   /** Where the evidence came from: a native reader, or a person (`manual`, with its reference). */
   source?: 'native' | 'manual'; ref?: string;
 };
@@ -171,6 +175,7 @@ async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<R
   if (provides[n.read] !== n.expects) {
     return { ...base, status: 'partial', reason: 'wrong_shape', note: `This reader gives ${(provides[n.read] ?? 'another shape').replace('_', ' ')}, not ${n.expects.replace('_', ' ')}.` };
   }
+  if (n.expects === 'document_text') return documentReport(base, absent, data, out.truncated === true);
   // A typed reader names the fields its source does not record; the skill gets the rest, and the brief says so.
   const nothing = data?.coverage && Array.isArray(data.records) && data.coverage.total === 0;
   if (!nothing && Array.isArray(data?.missing_fields) && data.missing_fields.length) {
@@ -188,6 +193,29 @@ async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<R
   // Records whose words the source holds back (an interview without recording consent) leave the input partial.
   const held = Array.isArray(data?.records) ? data.records.filter((r: any) => r && r.words_withheld).length : 0;
   if (held) return { ...base, status: 'partial', note: `${held} record(s) carried without their words: ${data.records.find((r: any) => r.words_withheld).words_withheld}` };
+  return { ...base, status: 'available', note: null };
+}
+
+/**
+ * D4667-p3 — one selected document's text (`data_room.index`). Only its current version's text counts: none
+ * selected, not found, never read or replaced since it was read leave nothing to supply (`missing`); a document the
+ * reader cannot turn into text is `unreadable`; some of its passages is `partial`, and says how many.
+ */
+function documentReport(base: Pick<InputReport, 'field' | 'read' | 'required'>, absent: 'missing' | 'absent_optional', data: any, truncated: boolean): InputReport {
+  const st = data?.document_status;
+  if (st === 'not_selected') return { ...base, status: absent, reason: 'not_selected', note: 'No document is selected for this run.' };
+  if (st === 'not_found') return { ...base, status: absent, reason: 'not_found', note: 'The selected document is not in this data room.' };
+  if (st === 'not_read') return { ...base, status: absent, reason: 'not_read', note: 'The selected document\'s text has not been read yet.' };
+  if (st === 'not_current') return { ...base, status: absent, reason: 'not_current', note: 'The selected document was replaced after its text was read, so no text of its current version is on record.' };
+  if (st === 'no_text') return { ...base, status: 'unreadable', reason: 'no_text', note: 'The selected document holds no text the reader can read.' };
+  if (st === 'failed') return { ...base, status: 'unreadable', reason: 'failed', note: 'The selected document could not be read to text.' };
+  const doc = data?.document;
+  const cov = doc?.coverage;
+  if (st !== 'read' || !doc?.file_uid || !doc?.version_digest || !Array.isArray(doc?.passages) || !cov) {
+    return { ...base, status: 'partial', reason: 'wrong_shape', note: 'This reader does not give a document\'s versioned text.' };
+  }
+  if (truncated) return { ...base, status: 'partial', note: 'Part of the document was left out for length.' };
+  if (!cov.complete) return { ...base, status: 'partial', note: `${cov.returned} of ${cov.total} passages of the document supplied; ${cov.total - cov.returned} left out.` };
   return { ...base, status: 'available', note: null };
 }
 

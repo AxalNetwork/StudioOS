@@ -43,6 +43,11 @@ export type EvidenceInput = {
   agent: AgentRow; scope: Scope; rules: Pick<Rules, 'reads'>; slug: string | null; projectId: number | null;
   /** The scheduled path only: the read keys whose blocks the task's context holds. */
   bound?: readonly string[] | null;
+  /**
+   * D4667-p3: the one data-room document the run selected (`data_room_file:<uid>`): the manual run's `record`, a
+   * scheduled session's document target. None selected, a skill that needs a document's text is `not_ready`.
+   */
+  document?: string | null;
   readers?: Partial<Record<string, Reader>>;
   now?: number;
 };
@@ -51,7 +56,7 @@ export type EvidenceInput = {
 export async function skillEvidenceForRun(env: Env, o: EvidenceInput): Promise<EvidenceCheck> {
   if (!o.slug || !FIRST_TEN_SLUGS.includes(o.slug)) return { ok: true, evidence: null };
   const capture = new Map<string, ReadResult>();
-  const p = await preflight(env, o.slug, { scope: o.scope, agent: o.agent, projectId: o.projectId }, o.readers ?? READERS, o.now ?? Date.now(),
+  const p = await preflight(env, o.slug, { scope: o.scope, agent: o.agent, projectId: o.projectId, document: o.document ?? null }, o.readers ?? READERS, o.now ?? Date.now(),
     undefined, {}, { granted: o.rules.reads, ...(o.bound ? { bound: o.bound } : {}), capture });
   if (!p) return { ok: true, evidence: null };
   if (p.state === 'not_ready') {
@@ -71,6 +76,12 @@ export async function skillEvidenceForRun(env: Env, o: EvidenceInput): Promise<E
 function statusWords(i: InputReport): string {
   if (i.reason === 'wrong_shape') return 'its reader gives another kind of record';
   if (i.reason === 'not_bound') return 'left out of the run\'s context for length';
+  if (i.reason === 'not_selected') return 'no document is selected for the run';
+  if (i.reason === 'not_found') return 'the selected document is not in the data room';
+  if (i.reason === 'not_read') return 'the selected document\'s text has not been read yet';
+  if (i.reason === 'not_current') return 'the selected document was replaced after its text was read';
+  if (i.reason === 'no_text') return 'the selected document holds no readable text';
+  if (i.reason === 'failed') return 'the selected document could not be read to text';
   switch (i.status) {
     case 'not_granted': return `the agent's rule book does not read ${i.read}`;
     case 'withheld': return 'the sponsor may not read it';
@@ -80,6 +91,10 @@ function statusWords(i: InputReport): string {
     default: return 'not recorded';
   }
 }
+
+/** D4667-p3: the document a manual run's `record` selects, when it names one (`data_room_file:<uid>`); else null. */
+export const documentOfRecord = (record: unknown): string | null =>
+  typeof record === 'string' && /^data_room_file:[a-f0-9]{32}$/.test(record.trim()) ? record.trim() : null;
 
 /** A conditional run's system prompt states what its evidence lacks; null when nothing does. */
 export function limitsPrompt(e: Pick<RunEvidence, 'limits'> | null): string | null {

@@ -16,8 +16,9 @@
  * Built: the project and company summaries, the team roster, the four
  * cycles' records (their activity lines, D690) and the typed records
  * (Mercury balances, Stripe revenue, the cap table, board metrics, burn, the
- * raise pipeline, transcripts and diligence). The data room, research, network,
- * compliance, GitHub and Vercel are not built yet and refuse `read_unavailable`.
+ * raise pipeline, transcripts and diligence) and the data room's document text
+ * (D4667-p3). Research, network, compliance, GitHub and Vercel are not built yet
+ * and refuse `read_unavailable`.
  *
  * D4667 (#4667) — EVIDENCE, NOT JUST DATA. A read says what it covers. A collection
  * carries `returned`, `total` and `omitted` (counted, not guessed: `total` is
@@ -36,6 +37,8 @@ import { atLeast, resolveAccess } from '../captableAccess';
 import { readRecord } from '../capTableRecord';
 import { heldLicences } from '../accountLicences';
 import { canWrite } from '../../routes/_founder_validate_helpers';
+import { liveFiles } from '../dataRoomTrash';
+import { projectOwnerScope } from '../tenancyScope';
 
 export const READ_MAX = 8 * 1024;
 /**
@@ -44,7 +47,11 @@ export const READ_MAX = 8 * 1024;
  * default context passes none and reads the latest page, as before.
  */
 export type ReadPage = { after?: string | null; from?: string | null; to?: string | null };
-export type ReadContext = { scope: Scope; agent: AgentRow; projectId: number | null; page?: ReadPage };
+/**
+ * `document` (D4667-p3): the one data-room file a run explicitly selected, as `data_room_file:<uid>` or its bare uid.
+ * Only `data_room.index` reads it; with none, that read answers the room's index and no text.
+ */
+export type ReadContext = { scope: Scope; agent: AgentRow; projectId: number | null; page?: ReadPage; document?: string | null };
 export type ReadResult = { untrusted: true; data: unknown; truncated?: true; incomplete?: true; reason?: 'too_large' };
 
 /** What one collection in a read covers. `total` is null when it could not be counted. */
@@ -125,7 +132,10 @@ const withheld = (reason: string): Withheld => ({ withheld: true, reason });
 export const isWithheld = (v: unknown): v is Withheld => !!v && typeof v === 'object' && (v as Withheld).withheld === true;
 
 async function sponsorOf(env: Env, c: ReadContext) {
-  const id = Number((c.agent as AgentRow | undefined)?.sponsor_user_id);
+  return userAsCaller(env, Number((c.agent as AgentRow | undefined)?.sponsor_user_id));
+}
+
+async function userAsCaller(env: Env, id: number) {
   if (!Number.isSafeInteger(id) || id <= 0) return null;
   // As auth hydrates a caller: the row and the licences it holds, so a source's own rule sees the same person.
   const u = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(id).first<any>();
@@ -379,9 +389,140 @@ const TYPED_MORE: Partial<Record<string, Reader>> = {
   },
 };
 
+// ── The data room's document text (D4667-p3) ────────────────────────────────
+
+const FILE_UID = /^[a-f0-9]{32}$/;
+const PASSAGE_REF = /^data_room_passage:([a-f0-9]{32}):(\d{1,4})$/;
+/** The index lists at most this many files; one read of a document carries at most this many characters of text. */
+export const ROOM_FILE_LIMIT = 40;
+export const DOCUMENT_TEXT_BUDGET = 4_800;
+
+/** The file uid a run selected, from `data_room_file:<uid>` or a bare uid; null for anything else. */
+export function selectedDocument(v: unknown): string | null {
+  const s = typeof v === 'string' ? v.trim().replace(/^data_room_file:/, '') : '';
+  return FILE_UID.test(s) ? s : null;
+}
+
+/**
+ * The room's own rule for reading it whole (`routes/data_room.ts` `roomProject`): the venture's owner, through the
+ * tenancy scope, or an accepted co-founder. An admin reads a room only through an audited support read, and an
+ * investor through a grant's tier, folder and NDA gates, so neither reads it as an agent's sponsor.
+ */
+export async function roomReaderRole(env: Env, userId: number, projectId: number): Promise<'owner' | 'cofounder' | null> {
+  const who = await userAsCaller(env, userId);
+  if (!who || String(who.role).toLowerCase() === 'admin') return null;
+  const owner = projectOwnerScope(who, 'p');
+  const own = await env.DB.prepare(`SELECT p.id FROM projects p WHERE p.id = ? AND ${owner.sql}`).bind(projectId, ...owner.binds).first();
+  if (own) return 'owner';
+  const co = await env.DB.prepare(
+    `SELECT p.id FROM projects p
+       JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.status = 'accepted' AND pm.role = 'cofounder'
+      WHERE p.id = ? AND p.deleted_at IS NULL`,
+  ).bind(who.id, projectId).first().catch(() => null);
+  return co ? 'cofounder' : null;
+}
+
+/**
+ * Whether a file's text on record is its current version's. `read`: indexed after its last replacement. `not_read`:
+ * never indexed. `not_current`: replaced after it was indexed, so the text on record is an earlier version's.
+ * `no_text`: it holds no text the reader can read. `failed`: reading it to text failed. Both queries below spell it out
+ * (the `CASE`), and the current version's number: the versions kept on replacement are 1..n, so the current one is n + 1.
+ */
+export type TextState = 'read' | 'not_read' | 'not_current' | 'no_text' | 'failed';
+
+
+async function sha256Hex(text: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * `data_room.index` — the venture's data room, as its owner or a co-founder reads it (`roomReaderRole`).
+ *
+ * With no document selected it answers the room's index: each live file's reference, name, current version and
+ * whether its current version's text is on record, and no text at all (`document_status: 'not_selected'`).
+ *
+ * With one selected (`ReadContext.document`) it answers that one document only: its file uid, current version, a
+ * digest of that version's object and whole text on record, and its passages (D1478's, migration 765) in order,
+ * each with a stable reference, up to `DOCUMENT_TEXT_BUDGET` characters a read. `coverage` counts them all, and
+ * `page.next` continues after the last one returned (`page.after`). A passage is never cut. Text that is not the
+ * current version's is never supplied: such a document answers its state (`not_current`, `not_read`, `no_text`,
+ * `failed`) with no passages. A file outside this room, or in Trash, is `not_found`.
+ */
+async function dataRoomIndex(env: Env, c: ReadContext) {
+  if (!c.projectId) return null;
+  const who = await sponsorOf(env, c);
+  if (!who || !(await roomReaderRole(env, Number(who.id), c.projectId))) {
+    return withheld('Only the venture\'s founder and co-founders read its data room.');
+  }
+  const live = await liveFiles(env.DB, 'f');
+  if (c.document == null) {
+    const rows = (await env.DB.prepare(
+      `SELECT f.uid, f.name, f.updated_at, (SELECT COALESCE(MAX(v.version), 0) + 1 FROM data_room_file_versions v WHERE v.file_id = f.id) AS version,
+              CASE WHEN s.file_id IS NULL THEN 'not_read'
+                WHEN datetime(f.updated_at) > datetime(s.indexed_at) THEN 'not_current'
+                WHEN s.status = 'indexed' THEN 'read' ELSE s.status END AS text
+         FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
+        WHERE f.project_id = ?${live} ORDER BY f.updated_at DESC, f.id DESC LIMIT ?`,
+    ).bind(c.projectId, ROOM_FILE_LIMIT).all<{ uid: string; name: string; updated_at: string; version: number; text: TextState }>()).results ?? [];
+    const n = await env.DB.prepare(`SELECT COUNT(*) AS n FROM data_room_files f WHERE f.project_id = ?${live}`)
+      .bind(c.projectId).first<{ n: number }>().catch(() => null);
+    return {
+      document_status: 'not_selected', document: null,
+      files: rows.map((r) => ({ ref: `data_room_file:${r.uid}`, name: cut(r.name, 160), version: Number(r.version), text: r.text, updated_at: r.updated_at })),
+      coverage: coverageOf(rows.length, n && Number.isFinite(Number(n.n)) ? Number(n.n) : null), source: 'data_room_files',
+    };
+  }
+  const uid = selectedDocument(c.document);
+  if (!uid) throw new ReadPageError('invalid_page');
+  const f = await env.DB.prepare(
+    `SELECT f.id, f.uid, f.name, f.r2_key, f.content_type, f.updated_at, s.indexed_at, (SELECT COALESCE(MAX(v.version), 0) + 1 FROM data_room_file_versions v WHERE v.file_id = f.id) AS version,
+            CASE WHEN s.file_id IS NULL THEN 'not_read'
+              WHEN datetime(f.updated_at) > datetime(s.indexed_at) THEN 'not_current'
+              WHEN s.status = 'indexed' THEN 'read' ELSE s.status END AS text
+       FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
+      WHERE f.uid = ? AND f.project_id = ?${live}`,
+  ).bind(uid, c.projectId).first<{ id: number; uid: string; name: string; r2_key: string; content_type: string | null; updated_at: string; indexed_at: string | null; version: number; text: TextState }>();
+  if (!f) return { document_status: 'not_found', document: null, source: 'data_room_files' };
+  const identity = { ref: `data_room_file:${f.uid}`, file_uid: f.uid, name: cut(f.name, 160), content_type: f.content_type ?? null, version: Number(f.version), updated_at: f.updated_at };
+  if (f.text !== 'read') return { document_status: f.text, document: { ...identity, passages: null }, source: 'data_room_files' };
+  // Every passage of the current version, in order: the digest covers the whole text, a page only part of it.
+  const all = (await env.DB.prepare('SELECT seq, text FROM data_room_passages WHERE file_id = ? AND project_id = ? ORDER BY seq')
+    .bind(f.id, c.projectId).all<{ seq: number; text: string }>()).results ?? [];
+  if (!all.length) return { document_status: 'not_read', document: { ...identity, passages: null }, source: 'data_room_files' };
+  let from = 0;
+  if (c.page?.after != null) {
+    const m = PASSAGE_REF.exec(String(c.page.after));
+    if (!m) throw new ReadPageError('invalid_page');
+    const at = all.findIndex((p) => Number(p.seq) === Number(m[2]));
+    if (m[1] !== f.uid || at < 0) throw new ReadPageError('unknown_cursor');
+    from = at + 1;
+  }
+  const passages: Array<{ ref: string; seq: number; text: string }> = [];
+  let used = 0;
+  for (const p of all.slice(from)) {
+    if (passages.length && used + p.text.length > DOCUMENT_TEXT_BUDGET) break;
+    passages.push({ ref: `data_room_passage:${f.uid}:${Number(p.seq)}`, seq: Number(p.seq), text: p.text });
+    used += p.text.length;
+  }
+  const digest = `sha256:${await sha256Hex([f.uid, f.r2_key, ...all.map((p) => p.text)].join('\n\u0000\n'))}`;
+  const more = from + passages.length < all.length;
+  return {
+    document_status: 'read',
+    document: {
+      ...identity, text_indexed_at: f.indexed_at, version_digest: digest, passages,
+      // The whole document's count: complete only when this read holds every passage from the first.
+      coverage: { ...coverageOf(passages.length, all.length), complete: from === 0 && !more, first: from },
+      page: { after: c.page?.after ?? null, next: more ? passages[passages.length - 1].ref : null },
+    },
+    source: 'data_room_passages',
+  };
+}
+
 export const READERS: Partial<Record<string, Reader>> = {
   ...TYPED,
   ...TYPED_MORE,
+  'data_room.index': dataRoomIndex,
   'project.summary': async (env, c) => {
     if (!c.projectId) return null;
     const p = await env.DB.prepare(
@@ -423,11 +564,11 @@ export const readAvailable = (key: string) => typeof READERS[key] === 'function'
  * What each built reader PROVIDES, so a skill that needs more is told so. The cycle readers answer the
  * latest activity summaries: not a typed ledger, a contract's text or a cohort's rows (#4667).
  */
-export const READER_PROVIDES: Readonly<Record<string, 'project_profile' | 'company_profile' | 'roster' | 'activity_summaries' | 'typed_record'>> = Object.freeze({
+export const READER_PROVIDES: Readonly<Record<string, 'project_profile' | 'company_profile' | 'roster' | 'activity_summaries' | 'typed_record' | 'document_text'>> = Object.freeze({
   'project.summary': 'project_profile', 'company.profile': 'company_profile', 'team.roster': 'roster',
   'mercury.balances': 'typed_record', 'stripe.revenue': 'typed_record', 'cap_table.read': 'typed_record',
   'grow.burn': 'typed_record', 'raise.pipeline': 'typed_record', 'validate.transcripts': 'typed_record', 'raise.diligence': 'typed_record',
-  'grow.board_metrics': 'typed_record',
+  'grow.board_metrics': 'typed_record', 'data_room.index': 'document_text',
   'validate.records': 'activity_summaries', 'build.records': 'activity_summaries', 'raise.records': 'activity_summaries', 'grow.records': 'activity_summaries',
 });
 
