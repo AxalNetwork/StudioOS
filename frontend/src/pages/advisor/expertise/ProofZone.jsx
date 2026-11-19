@@ -95,7 +95,7 @@ function ConsentLink({ token, onCancel, cancelling, testid }) {
   const url = `${window.location.origin}/attest/${token}`;
   return (
     <Card variant="accent" padding="md" className="mt-3">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">
         Send this link yourself
       </div>
       <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
@@ -175,20 +175,20 @@ function AskForm({ item, onDone, onClose, onCancel }) {
         {ASK_STEPS.map((s, i) => (
           <li key={s} aria-current={i === step ? 'step' : undefined}
             className={`rounded-full border px-2 py-0.5 ${i < step ? 'border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300'
-              : i === step ? 'border-axal-violet bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-faint dark:border-gray-700'}`}>
+              : i === step ? 'border-axal-violet bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700'}`}>
             {i < step ? '✓ ' : ''}{s}
           </li>
         ))}
       </ol>
       <div className="mt-3">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">They will be shown exactly this</div>
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">They will be shown exactly this</div>
         <div className="mt-1 rounded-lg border border-axal-hairline bg-axal-ground p-2.5 dark:border-gray-700 dark:bg-gray-900" data-testid={`advisor-proof-ask-claim-${item.id}`}>
-          <p className="text-[11px] font-semibold text-axal-faint">{proofKindLabel(item.kind)}</p>
+          <p className="text-[11px] font-semibold text-axal-muted">{proofKindLabel(item.kind)}</p>
           <p className="text-[13px] font-extrabold">{item.title}</p>
           {where && <p className="text-[12px] text-axal-muted">{where}</p>}
           {item.detail && <p className="mt-1 text-[12px] leading-relaxed">{item.detail}</p>}
         </div>
-        <p className="mt-1 text-[11px] text-axal-faint">Pinned when you send. If you change the claim later, any confirmation needs to be given again.</p>
+        <p className="mt-1 text-[11px] text-axal-muted">Pinned when you send. If you change the claim later, any confirmation needs to be given again.</p>
       </div>
       {!created && (
         <>
@@ -454,9 +454,9 @@ export default function ProofZone() {
             { label: 'Not confirmed', value: String(counts?.self_stated ?? selfStated.length), note: 'no current confirmation' },
           ].map((s) => (
             <Card key={s.label} padding="md">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{s.label}</div>
               <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value === null ? <Unrecorded /> : s.value}</div>
-              <div className="mt-0.5 text-[10px] text-axal-faint">{s.note}</div>
+              <div className="mt-0.5 text-[10px] text-axal-muted">{s.note}</div>
             </Card>
           ))}
         </div>
@@ -493,7 +493,7 @@ export default function ProofZone() {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="text-[13.5px] font-extrabold">{row.title}</h3>
-                      <div className="mt-0.5 text-[11.5px] text-axal-faint">
+                      <div className="mt-0.5 text-[11.5px] text-axal-muted">
                         {[KINDS.find(([k]) => k === row.kind)?.[1] || row.kind, row.organization, row.period_note].filter(Boolean).join(' · ')}
                       </div>
                     </div>
@@ -511,8 +511,8 @@ export default function ProofZone() {
                       {who.lead} <b>{who.who}</b>
                     </p>
                   )}
-                  <p className="mt-1 text-[11.5px] text-axal-faint" data-testid={`advisor-proof-when-${row.id}`}>{proofWhenLine(card)}</p>
-                  <p className="mt-0.5 text-[11.5px] text-axal-faint" data-testid={`advisor-proof-public-${row.id}`}>{proofPublicLine(row)}</p>
+                  <p className="mt-1 text-[11.5px] text-axal-muted" data-testid={`advisor-proof-when-${row.id}`}>{proofWhenLine(card)}</p>
+                  <p className="mt-0.5 text-[11.5px] text-axal-muted" data-testid={`advisor-proof-public-${row.id}`}>{proofPublicLine(row)}</p>
                   {row.detail && (
                     <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">{row.detail}</p>
                   )}
@@ -522,7 +522,7 @@ export default function ProofZone() {
                       <p className="text-[12px] leading-relaxed text-axal-muted">
                         {c.statement || 'Confirmed, with no statement added.'}
                       </p>
-                      <footer className="mt-1 text-[11px] text-axal-faint">
+                      <footer className="mt-1 text-[11px] text-axal-muted">
                         {c.attester_name}{c.attester_role ? `, ${c.attester_role}` : ''}
                         {c.relationship ? ` · ${c.relationship}` : ''}
                       </footer>
@@ -544,13 +544,13 @@ export default function ProofZone() {
                     </p>
                   )}
                   {(card.state === 'declined' || card.state === 'withdrawn') && (
-                    <p className="mt-2 text-[11.5px] text-axal-faint">
+                    <p className="mt-2 text-[11.5px] text-axal-muted">
                       The record is kept rather than deleted, because an attestation that can vanish is
                       not evidence of anything.
                     </p>
                   )}
                   {cancelled.length > 0 && (
-                    <p className="mt-2 text-[11.5px] text-axal-faint">
+                    <p className="mt-2 text-[11.5px] text-axal-muted">
                       {cancelled.map((c) => `${c.attester_name}: ${CONSENT_STATES.cancelled}${proofDate(c.cancelled_at) ? ` ${proofDate(c.cancelled_at)}` : ''}`).join(' · ')}
                     </p>
                   )}
