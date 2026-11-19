@@ -9,15 +9,19 @@
  * THE FAKE BINDING. No model is called. Each call takes a latency drawn,
  * from a fixed seed, from 1.5 s to 6 s, skewed to its low end (median about
  * 2.6 s), the range a short text run on the routed models answers in. The
- * run's own work (D1, the claims, the usage rows) is counted at `SCALE`
- * simulated milliseconds per millisecond of CPU, so the figures read high,
- * never low.
+ * run's own work (D1, the claims, the usage rows) is charged `STATEMENT_MS`
+ * simulated milliseconds per SQL statement it prepares, so the figures read
+ * high, never low.
  *
  * THE CLOCK (#7579, #7583). The figures are read on a simulated clock, not the
  * wall clock: each call waits its drawn latency there, and the runtime's own
- * work is charged from this process's CPU time at `SCALE`. On the wall clock a
- * busy runner put both into the result (a second of starvation was 20
- * simulated seconds), which failed the gate on two PRs that touch no deck code.
+ * work is charged a fixed cost per SQL statement. On the wall clock a busy
+ * runner put both into the result (a second of starvation was 20 simulated
+ * seconds), which failed the gate on two PRs that touch no deck code. #7590
+ * moved it to this process's CPU time × 20, which still moved with the runner:
+ * the same code read p50 24.8 s, 41.0 s and 59.8 s on three CI runs and failed
+ * the merge queue for PRs that touch no deck code. A statement count does not
+ * depend on the machine, so the gate now reads the same on every run.
  * What this measures is the runtime: the fan-out, the order of drafts before
  * second passes, and one hold per run. The AiGovernor's pacing has its own
  * tests and is stubbed open here. The capped staging run with real models
@@ -37,8 +41,8 @@ import { DRIVERS } from '../src/durable-objects/deck-gen-room.ts';
 
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const FOUNDERS = 5, CARDS = 12;
-/** Simulated milliseconds per real millisecond. */
-const SCALE = 20;
+/** Simulated milliseconds charged per SQL statement the run prepares (D1 work on a fixed scale, not the runner's CPU). */
+const STATEMENT_MS = 4;
 const P50_S = 45, P95_S = 90;
 
 const M716 = readFileSync('cloudflare-worker/sql/migrations/716_deck_area_batches.sql', 'utf8');
@@ -75,15 +79,16 @@ function planCtx(founder: number, cards: any[]): PlanCtx {
 
 /**
  * A simulated clock in milliseconds. `sleep` waits on it; once the event loop has
- * nothing else to run, it charges the CPU time used since the last advance (times
- * `SCALE`) and moves to the next wake-up. The runtime's work between calls is
- * synchronous D1 and promises, so every driver is asleep when it advances; a
- * driver that is not yet asleep only wakes later, so the clock never reads low.
+ * nothing else to run, it charges the SQL statements run since the last advance
+ * (`work()`, times `STATEMENT_MS`) and moves to the next wake-up. The runtime's
+ * work between calls is synchronous D1 and promises, so every driver is asleep
+ * when it advances; a driver that is not yet asleep only wakes later, so the
+ * clock never reads low.
  */
-function simClock() {
-  let now = 0, cpu = process.cpuUsage(), armed = false;
+function simClock(work: () => number) {
+  let now = 0, seen = work(), armed = false;
   const sleepers: Array<{ at: number; wake: () => void }> = [];
-  const charge = () => { const d = process.cpuUsage(cpu); cpu = process.cpuUsage(); now += ((d.user + d.system) / 1000) * SCALE; };
+  const charge = () => { const n = work(); now += (n - seen) * STATEMENT_MS; seen = n; };
   const advance = () => {
     armed = false;
     if (!sleepers.length) return;
@@ -110,7 +115,11 @@ test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first f
   setFixtureAllowance(f.db, 0);
   try {
     const draw = rng(3798);
-    const clock = simClock();
+    // Every statement the D1 shim (and this test's usage rows) prepares is one unit of work.
+    let statements = 0;
+    const prepare = f.db.prepare.bind(f.db);
+    (f.db as any).prepare = (sql: string) => { statements++; return prepare(sql); };
+    const clock = simClock(() => statements);
     const firstDraftAt = new Map<string, number>(); // run uid → when its last draft landed (simulated ms)
     const draftsLeft = new Map<string, number>();
     const run = async (_env: any, o: any) => {
