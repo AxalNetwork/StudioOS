@@ -113,7 +113,7 @@ test('duplicate publish: the same key or the same task reuses its PR and never p
   d = refused(await planAgentPublish(intent({ idempotency_key: 'publish:task-101:2' }, { attempt: 2 }), obs({ existing_prs: [mine] })), 'duplicate_publish');
   assert.equal(d.reuse?.number, 21);
   // Even when the PR row lost its task id, its branch names the task.
-  d = refused(await planAgentPublish(intent({ idempotency_key: 'publish:task-101:3' }, { attempt: 3 }),
+  refused(await planAgentPublish(intent({ idempotency_key: 'publish:task-101:3' }, { attempt: 3 }),
     obs({ existing_prs: [{ ...mine, task_id: null, idempotency_key: null }] })), 'duplicate_publish');
   // The same key with different content is a conflict, not a reuse.
   refused(await planAgentPublish(intent({ summary: 'something else' }), obs({ existing_prs: [mine] })), 'idempotency_conflict');
