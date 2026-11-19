@@ -126,7 +126,7 @@ export function percentToBps(text) {
 /** Basis points as the text step 3's percentage field shows ("1250" → "12.5"), through the one bps helper. */
 export function bpsToPercentText(bps) {
   const p = bpsPercent(bps);
-  return p === null ? '' : p.replace('%', '');
+  return p === null ? '' : p.replaceAll('%', '');
 }
 
 /** Step 3's form: seats per type, then the money terms with the shares in percent. */

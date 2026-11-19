@@ -8,9 +8,16 @@
  *
  * THE FAKE BINDING. No model is called. Each call takes a latency drawn,
  * from a fixed seed, from 1.5 s to 6 s, skewed to its low end (median about
- * 2.6 s), the range a short text run on the routed models answers in. Time is
- * scaled down by `SCALE`, and the run's own work (D1, the claims, the usage
- * rows) is counted at the same scale, so the figures read high, never low.
+ * 2.6 s), the range a short text run on the routed models answers in. The
+ * run's own work (D1, the claims, the usage rows) is counted at `SCALE`
+ * simulated milliseconds per millisecond of CPU, so the figures read high,
+ * never low.
+ *
+ * THE CLOCK (#7579, #7583). The figures are read on a simulated clock, not the
+ * wall clock: each call waits its drawn latency there, and the runtime's own
+ * work is charged from this process's CPU time at `SCALE`. On the wall clock a
+ * busy runner put both into the result (a second of starvation was 20
+ * simulated seconds), which failed the gate on two PRs that touch no deck code.
  * What this measures is the runtime: the fan-out, the order of drafts before
  * second passes, and one hold per run. The AiGovernor's pacing has its own
  * tests and is stubbed open here. The capped staging run with real models
@@ -66,6 +73,33 @@ function planCtx(founder: number, cards: any[]): PlanCtx {
   } as any;
 }
 
+/**
+ * A simulated clock in milliseconds. `sleep` waits on it; once the event loop has
+ * nothing else to run, it charges the CPU time used since the last advance (times
+ * `SCALE`) and moves to the next wake-up. The runtime's work between calls is
+ * synchronous D1 and promises, so every driver is asleep when it advances; a
+ * driver that is not yet asleep only wakes later, so the clock never reads low.
+ */
+function simClock() {
+  let now = 0, cpu = process.cpuUsage(), armed = false;
+  const sleepers: Array<{ at: number; wake: () => void }> = [];
+  const charge = () => { const d = process.cpuUsage(cpu); cpu = process.cpuUsage(); now += ((d.user + d.system) / 1000) * SCALE; };
+  const advance = () => {
+    armed = false;
+    if (!sleepers.length) return;
+    charge();
+    sleepers.sort((a, b) => a.at - b.at);
+    now = Math.max(now, sleepers[0].at);
+    while (sleepers.length && sleepers[0].at <= now) sleepers.shift()!.wake();
+    arm();
+  };
+  const arm = () => { if (!armed && sleepers.length) { armed = true; setImmediate(advance); } };
+  return {
+    now: () => { charge(); return now; },
+    sleep: (ms: number) => new Promise<void>((wake) => { sleepers.push({ at: now + ms, wake }); arm(); }),
+  };
+}
+
 const pct = (xs: number[], p: number) => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)]; };
 
 test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first full draft at p50 ≤ ${P50_S} s and p95 ≤ ${P95_S} s`, async () => {
@@ -76,10 +110,11 @@ test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first f
   setFixtureAllowance(f.db, 0);
   try {
     const draw = rng(3798);
-    const firstDraftAt = new Map<string, number>(); // run uid → when its last draft landed (real ms)
+    const clock = simClock();
+    const firstDraftAt = new Map<string, number>(); // run uid → when its last draft landed (simulated ms)
     const draftsLeft = new Map<string, number>();
     const run = async (_env: any, o: any) => {
-      await new Promise((r) => setTimeout(r, latencyMs(draw) / SCALE));
+      await clock.sleep(latencyMs(draw));
       const ref = String(o.rail?.record ?? '');
       const row = f.db.prepare('INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd, reservation_uid, record_ref) VALUES (?, ?, ?, ?, ?, ?)')
         .run(o.userId, o.task, o.model ?? MODEL, 400, o.parentHold?.uid ?? null, ref);
@@ -88,7 +123,7 @@ test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first f
         const uid = ref.split(':')[1];
         const left = (draftsLeft.get(uid) ?? 0) - 1;
         draftsLeft.set(uid, left);
-        if (left === 0) firstDraftAt.set(uid, Date.now());
+        if (left === 0) firstDraftAt.set(uid, clock.now());
       }
       return { ok: true, output: refining ? 'Kestrel flags what matters in hours.' : 'Kestrel reads the ledger.', usage: { model: o.model ?? MODEL }, usageLogId: Number(row.lastInsertRowid), attempts: [] };
     };
@@ -120,13 +155,13 @@ test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first f
       runs.push({ uid: a.uid, quote: a.quote_microusd, drafts });
     }
 
-    const t0 = Date.now();
+    const t0 = clock.now();
     await Promise.all(runs.map((r) => Promise.all(Array.from({ length: DRIVERS }, () => runtime.startBatch(r.uid)))));
 
     const seconds = runs.map((r) => {
       const at = firstDraftAt.get(r.uid);
       assert.ok(at, `run ${r.uid} drafted every area`);
-      return ((at! - t0) * SCALE) / 1000;
+      return (at! - t0) / 1000;
     });
     const p50 = pct(seconds, 50), p95 = pct(seconds, 95);
     console.log(`first full draft, simulated: ${seconds.map((s) => s.toFixed(1)).join(' s, ')} s; p50 ${p50.toFixed(1)} s, p95 ${p95.toFixed(1)} s`);

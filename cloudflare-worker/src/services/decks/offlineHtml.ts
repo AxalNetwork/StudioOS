@@ -264,7 +264,8 @@ function cardBody(s: any, images: OfflineDeck['images']): string {
   }
   const parts: string[] = [];
   if (String(s?.subtitle ?? '').trim()) parts.push(`<p class="sub">${text(s.subtitle)}</p>`);
-  if (String(s?.body ?? '').trim()) parts.push(`<p>${text(s.body)}</p>`);
+  const bodyText = s?.body;
+  if (String(bodyText ?? '').trim()) parts.push(`<p>${text(bodyText)}</p>`);
   const bullets = Array.isArray(s?.bullets) ? s.bullets.filter((b: unknown) => String(b ?? '').trim()) : [];
   if (bullets.length) parts.push(`<ul>${bullets.map((b: unknown) => `<li>${text(b)}</li>`).join('')}</ul>`);
   if (s?.image_url) parts.push(image(s.image_url, images, title));

@@ -9,6 +9,9 @@
 // reason and can record a commitment and start a new call. With calls switched
 // off none of it is drawn (RAC27). Every count is the Worker's; a failed read
 // says Unavailable, never zero. Eadwyn proposes nothing here yet.
+//
+// D7513 (#7513, RAC22C): a recorded commitment opens Capital relationships ›
+// Commitments on the moved line (`?recorded=<prospect>`), not its Overview.
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundCallFollowThroughApi } from '../../lib/api/roundCallFollowThrough';
@@ -16,7 +19,7 @@ import { Unreadable } from '../../ui/Honesty.jsx';
 import { useCallRead } from './roundCallParts';
 import { longDay, shortDay } from './raiseCallModel';
 import {
-  DEFAULT_FILTER, FT_FILTERS, INDICATED_HEADER, NOT_RECORDED, OWNER_ONLY_FT, blockGlyph, blockLine, chipCount, exportRow, lastRemindedLabel,
+  DEFAULT_FILTER, FT_FILTERS, INDICATED_HEADER, NOT_RECORDED, OWNER_ONLY_FT, blockGlyph, blockLine, chipCount, commitmentsHref, exportRow, lastRemindedLabel,
   lineConflict, lineLabel, nothingToRemind, originLabel, recipientLabel, remindResult, selectable, startNewState, toggleFilter, usd, visibleRecipients,
 } from './callFollowThroughModel';
 import { ExportSheet, NewCallSheet, RecordSheet, RemindSheet } from './CallFollowThroughSheets';
@@ -268,7 +271,7 @@ export default function CallFollowThrough({ uid, call, onOpenDraft }) {
       {saved ? (
         <p role="status" className="m-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" data-testid="ft-recorded">
           <span aria-hidden="true">✓ </span>{`Recorded as ${saved.status === 'wired' ? 'Wired' : 'Signed'} · ${usd(saved.amount_cents)} · ${saved.name}. `}
-          <Link className="font-semibold underline" to={`/raise/capital-relationships?project_id=${d.call.project_id}`}>Open in Capital relationships →</Link>
+          <Link className="font-semibold underline" to={commitmentsHref(d.call.project_id, saved.prospect_id)} data-testid="ft-recorded-open">Open in Capital relationships →</Link>
         </p>
       ) : null}
       <FollowThroughView d={d} result={result} on={on} />

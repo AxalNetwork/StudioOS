@@ -34,6 +34,7 @@ import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
   NOT_RECORDED, UNREADABLE, analysisHref, indexRows, latestOnly, relatedSignals,
 } from '../../lib/companyDirectoryView.js';
+import { backToResults, sessionStore } from './companyDirectoryState.js';
 import { useResearchLinks } from './researchLinks.js';
 import { directoryHref } from './fundDirectoryRead';
 import { formatMinorOrCount } from '../../lib/money';
@@ -268,11 +269,19 @@ export default function CompanyProfile({ role }) {
   }, []);
   const closeInspect = useCallback(() => setInspect(null), []);
 
-  const back = <Link to="/research/companies" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300"><ArrowLeft size={13} /> Companies</Link>;
+  // D7179 (RS-17 B): Back and the breadcrumb return to this tab's last results
+  // (page, filters, sort and selection), named on the link; else the directory.
+  const results = backToResults(sessionStore());
+  const back = (
+    <Link to={results.href} data-testid="link-back-to-results" className="inline-flex min-h-[44px] flex-wrap items-center gap-x-1.5 text-[12px] font-semibold text-axal-violet underline lg:min-h-0 dark:text-violet-300">
+      <ArrowLeft size={13} aria-hidden="true" /> {results.label}
+      {results.summary ? <span className="font-normal text-axal-muted no-underline dark:text-gray-400">{results.summary}</span> : null}
+    </Link>
+  );
   if (company.loading) return <div data-testid="company-profile" className="space-y-4">{back}<Card><Loading what="the company" /></Card></div>;
   if (company.error?.status === 404) {
     // D7178 (RCL10): admitted, but the record is gone. A way back, not a dead end.
-    return <div data-testid="company-profile" className="space-y-4">{back}<Card variant="dashed"><h1 className="text-sm font-extrabold">Company not found</h1><p className="mt-1 text-[12px] text-axal-muted">No directory company has this id. It may have been removed or merged.</p><Link to="/research/companies" className="mt-3 inline-flex min-h-[44px] items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep">Back to Companies</Link></Card></div>;
+    return <div data-testid="company-profile" className="space-y-4">{back}<Card variant="dashed"><h1 className="text-sm font-extrabold">Company not found</h1><p className="mt-1 text-[12px] text-axal-muted">No directory company has this id. It may have been removed or merged.</p><Link to={results.href} className="mt-3 inline-flex min-h-[44px] items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep">Back to Companies</Link></Card></div>;
   }
   // D7178: the Worker refuses an account Companies is not open to (403). A refusal is an answer, not a failed read.
   if (company.error?.status === 403) {
@@ -287,7 +296,8 @@ export default function CompanyProfile({ role }) {
   return (
     <div data-testid="company-profile" className="space-y-6">
       <RestoredStatus path={`${pathname}${search}`} />
-      <nav aria-label="Breadcrumb" className="text-[12px] text-axal-muted"><Link to="/research/companies" className="underline">Companies</Link> / <span className="text-axal-ink dark:text-gray-100">{d.item.name}</span></nav>
+      <nav aria-label="Breadcrumb" className="text-[12px] text-axal-muted"><Link to={results.href} state={{ via: 'breadcrumb' }} className="underline">Companies</Link> / <span className="text-axal-ink dark:text-gray-100">{d.item.name}</span></nav>
+      {back}
       <CompanyHeader item={d.item} tracked={tracked}
         research={canAddToResearch(role) ? <ResearchActions kind="company" item={{ uid: d.item.uid || uid, name: d.item.name }} /> : null} />
       <nav aria-label="Sections" className="flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-800">

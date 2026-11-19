@@ -76,6 +76,7 @@ import { refuse } from '../util/refusal';
 import { PUBLIC_PROFILE_FIELD_KEYS, effectiveFlags } from './public';
 import { effectiveCategoryDefaults, mergeCategoryPatch } from '../services/notificationPolicy';
 import { jsonWithEtag } from '../util/httpCache';
+import { appleConfig } from '../services/appleIdToken';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -2116,8 +2117,13 @@ settings.get('/connected-accounts', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT google_sub FROM user_google_links WHERE user_id = ${user.id}` as any[];
+  // D6957: the Apple ID linked for Sign in with Apple. The table arrives with
+  // migration 202611161900; before it has, nothing is linked.
+  const appleRows = await sql`SELECT apple_sub, private_email FROM user_apple_links WHERE user_id = ${user.id}`
+    .catch(() => []) as any[];
   await sql.end();
   const row = rows[0] || {};
+  const appleRow = appleRows[0] || {};
   const factors = await getUserFactors(c.env, user.id);
   const totpConfigured = await hasTotpConfigured(c.env, user.id);
   const smsRow = await loadSms(c.env, user.id);
@@ -2139,9 +2145,19 @@ settings.get('/connected-accounts', async (c) => {
           ? 'last_sign_in_path'
           : null,
       },
+      {
+        provider: 'apple',
+        connected: !!appleRow.apple_sub,
+        private_email: !!appleRow.private_email,
+        unlinkable: !!appleRow.apple_sub && otherSignInPathRemaining,
+        unlink_blocked_reason: appleRow.apple_sub && !otherSignInPathRemaining
+          ? 'last_sign_in_path'
+          : null,
+      },
     ],
     available: {
       configured: !!(c.env.GOOGLE_AUTH_CLIENT_ID && c.env.GOOGLE_AUTH_CLIENT_SECRET),
+      apple_configured: !!appleConfig(c.env),
     },
     factors,
   });
@@ -2176,6 +2192,36 @@ settings.post('/connected-accounts/google/unlink', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return refuse(c, 500, { code: 'unlink_failed', message: 'Google sign-in could not be unlinked. Nothing changed; try again in a moment.', raw: e });
+  } finally {
+    try { await sql.end(); } catch {}
+  }
+});
+
+// D6957 — unlink Sign in with Apple, under the same no-orphan guard as Google.
+settings.post('/connected-accounts/apple/unlink', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  try {
+    const rows = await sql`SELECT apple_sub FROM user_apple_links WHERE user_id = ${user.id}` as any[];
+    if (!rows[0]?.apple_sub) {
+      return c.json({ error: 'No Apple ID linked.' }, 400);
+    }
+    const totpConfigured = await hasTotpConfigured(c.env, user.id);
+    const smsRow = await loadSms(c.env, user.id);
+    if (!(totpConfigured || !!smsRow)) {
+      return c.json({
+        error: 'Set up your authenticator app (TOTP) or add SMS recovery before unlinking Apple — it is currently your only sign-in path.',
+        code: 'last_sign_in_path',
+      }, 409);
+    }
+    await sql`DELETE FROM user_apple_links WHERE user_id = ${user.id}`;
+    const eh = await hashEmail(user.email);
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+              VALUES ('apple_account_unlinked', 'user unlinked Sign in with Apple', ${eh}, ${user.id})`;
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return refuse(c, 500, { code: 'unlink_failed', message: 'Apple sign-in could not be unlinked. Nothing changed; try again in a moment.', raw: e });
   } finally {
     try { await sql.end(); } catch {}
   }
