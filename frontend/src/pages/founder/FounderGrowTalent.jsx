@@ -160,7 +160,7 @@ function TalentRoles({ projectId, query }) {
       <Stat label="Open roles" value={summary ? summary.open_roles ?? <Unrecorded /> : unavailable} note="Job postings · open or published" />
       <Stat label="Offers out" value={summary ? summary.offers ?? <Unrecorded /> : unavailable} note="Applications · offer stage" />
     </section>
-    <section className="a5-card" aria-label="Roles">
+    <section className="a5-card min-w-0" aria-label="Roles">
       <Head icon={BriefcaseBusiness} title="Roles" meta="Job postings and applications" />
       {!records ? <p role="status">Roles unavailable.</p>
         : records.rows.length === 0 ? <p>No roles recorded for this venture.</p>
