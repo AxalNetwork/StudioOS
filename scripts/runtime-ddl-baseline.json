@@ -1,7 +1,6 @@
 {
   "note": "Blind runtime ADD COLUMN per file, on record (#4568 R2-04). Only ever lowered: move a file onto runSchemaBootstrap or a migration, then lower or remove its entry.",
   "files": {
-    "cloudflare-worker/src/index.ts": 1,
     "cloudflare-worker/src/routes/admin.ts": 8,
     "cloudflare-worker/src/routes/advisor.ts": 2,
     "cloudflare-worker/src/routes/assistant.ts": 3,
