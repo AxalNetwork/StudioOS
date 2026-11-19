@@ -18,7 +18,7 @@ import { ProjectComparisons } from '../src/pages/research/ProjectComparisons.jsx
 import { FundDirectoryView } from '../src/pages/research/FundDirectory.jsx';
 import { EMPTY_QUERY } from '../src/pages/research/fundDirectoryRead.js';
 import { returnTarget } from '../src/pages/research/fundProfileRead.js';
-import { MEMBERSHIP_READS, fundPage, joinChoices, joinOutcome, pickerView } from '../src/pages/research/researchComparisons.js';
+import { MEMBERSHIP_READS, columnAfterRemoval, fundPage, joinChoices, joinOutcome, pickerView } from '../src/pages/research/researchComparisons.js';
 import { researchProjectsApi } from '../src/lib/api/researchProjects.js';
 import { researchProjectComparisonsApi } from '../src/lib/api/researchProjectComparisons.js';
 import { mountContracts } from './_contracts_dom.mjs';
@@ -113,6 +113,11 @@ test('fundPage and returnTarget: the pager stops at either end; focus goes to th
   // Mutation checked: return null when the row is gone → focus stays nowhere.
   assert.deepEqual(returnTarget('z', [{ uid: 'a' }]), { focus: 'heading', uid: null });
   assert.equal(returnTarget(null, [{ uid: 'a' }]), null);
+  // FND-P10: a removed column hands focus to the one that took its place, else the new last one, else Add fund (null).
+  // Mutation checked: always focus the first column → 'a' for index 1.
+  assert.equal(columnAfterRemoval([{ uid: 'a' }, { uid: 'c' }], 1), 'c');
+  assert.equal(columnAfterRemoval([{ uid: 'a' }], 1), 'a');
+  assert.equal(columnAfterRemoval([], 0), null);
 });
 
 function mountPicker(props, comparisons = {}) {

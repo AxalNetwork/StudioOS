@@ -19,7 +19,8 @@
  * picker's rows (`pickerView`: active projects with their membership, archived
  * ones read-only), the comparisons a fund can join in the chosen project
  * (`joinChoices`, n of 6, Full and Already in it), the sentence after joining
- * one (`joinOutcome`), and the phone's By fund pager (`fundPage`).
+ * one (`joinOutcome`), the phone's By fund pager (`fundPage`) and where focus
+ * goes after a column is removed (`columnAfterRemoval`).
  */
 import { money } from '../../lib/companyDirectoryView.js';
 import { eurM } from './fundDirectoryRead.js';
@@ -264,4 +265,15 @@ export function fundPage(count, index) {
   if (!count) return { index: 0, count: 0, label: null, first: true, last: true };
   const i = Math.min(Math.max(0, Number(index) || 0), count - 1);
   return { index: i, count, label: `Fund ${i + 1} of ${count}`, first: i === 0, last: i === count - 1 };
+}
+
+/**
+ * FND-P10: after a column is removed, focus goes to the column that took its
+ * place (the next one, else the new last one); `null` when none is left, and
+ * the caller focuses Add fund.
+ */
+export function columnAfterRemoval(members, at) {
+  const list = Array.isArray(members) ? members : [];
+  if (!list.length) return null;
+  return list[Math.min(Math.max(0, Number(at) || 0), list.length - 1)].uid;
 }
