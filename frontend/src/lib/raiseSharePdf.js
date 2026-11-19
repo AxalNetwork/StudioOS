@@ -1,7 +1,7 @@
 /**
- * D6897 part 2 (#6897, canvas D6054 RA-28 C, RA-30 B): the A4 PDF copy of an evidence pack or a readiness
- * snapshot, drawn in the browser on `pdfBoard.js` from `pages/cycles/evidence/sharePdfModel.js`. There is no Worker
- * PDF route: the Worker returns the frozen content and records that a copy left; this draws and saves it.
+ * D6897 part 2 (#6897, canvas D6054 RA-28 C, RA-30 B, and RA-31 C in part 4): the A4 PDF copy of an evidence pack,
+ * a readiness snapshot or a Raise status page, drawn in the browser on `pdfBoard.js` from the models in
+ * `pages/cycles/evidence/sharePdfModel.js` and `statusPageModel.js`. There is no Worker PDF route: the Worker returns the frozen content and records that a copy left; this draws and saves it.
  *
  * A4 portrait is 595.28 × 841.89 pt, which in the board's design px (÷ 0.75) is 794 × 1123. Tables flow down the
  * page and continue on a new one, with their header row repeated, so a long pack is never clipped. Every page
@@ -9,6 +9,7 @@
  */
 import { board } from './pdfBoard.js';
 import { readinessPdfModel, packPdfModel } from '../pages/cycles/evidence/sharePdfModel.js';
+import { statusPdfModel } from '../pages/cycles/evidence/statusPageModel.js';
 
 export const A4 = Object.freeze({ w: 794, h: 1123 });
 const M = 48;
@@ -108,4 +109,10 @@ export function downloadReadinessPdf(snapshot) {
 export function downloadPackPdf(pack) {
   const model = packPdfModel(pack);
   return save(model, 'Evidence pack');
+}
+
+/** RA-31 C: the Raise status page the Worker returned, as an A4 PDF download. */
+export function downloadStatusPdf(page) {
+  const model = statusPdfModel(page);
+  return save(model, 'Raise status');
 }

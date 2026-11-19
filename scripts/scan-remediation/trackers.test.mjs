@@ -73,12 +73,16 @@ test('new issues contain only the opaque alert link; repeat runs converge throug
   let trackers = await loadTrackers(api, ctx)
   const { issue, created, actionable } = await trackers.ensure(42)
   assert.ok(created && actionable)
-  assert.deepEqual(issue.labels, [{ name: 'bug' }])
+  assert.deepEqual(issue.labels, [{ name: 'bug' }, { name: 'slot:S21' }])
   assert.deepEqual([...issue.body.matchAll(/\]\(([^)]+)\)/g)].map(([, href]) => href), [url])
+  assert.match(issue.body, /## Finding evidence and access/)
+  assert.match(issue.body, /HTTP 403, retain `state:blocked`/)
+  assert.match(issue.body, /alert and its `main` instance as `fixed`/)
   await trackers.markReady(issue)
+  assert.deepEqual(issues.get(issue.number).labels.map(label => label.name), ['bug', 'slot:S21', 'state:ready'])
   await trackers.linkPull(issue, 99)
   await trackers.linkPull(issue, 99)
-  assert.deepEqual(issues.get(issue.number).labels, [{ name: 'bug' }, { name: 'state:review' }])
+  assert.deepEqual(issues.get(issue.number).labels, [{ name: 'bug' }, { name: 'slot:S21' }, { name: 'state:review' }])
   assert.equal(writes.filter(([, path]) => path.endsWith('/comments')).length, 1)
   trackers = await loadTrackers(api, ctx)
   assert.deepEqual(trackers.trackedNumbers(), [42])
@@ -91,7 +95,7 @@ test('new issues contain only the opaque alert link; repeat runs converge throug
   const reopened = await trackers.ensure(42)
   assert.equal(reopened.issue.number, issue.number)
   assert.ok(reopened.actionable)
-  assert.deepEqual(issues.get(issue.number).labels, [{ name: 'bug' }])
+  assert.deepEqual(issues.get(issue.number).labels, [{ name: 'bug' }, { name: 'slot:S21' }])
 })
 
 test('adopts a legacy owner tracker found without its original bug label and preserves a manual closure', async () => {
@@ -126,13 +130,48 @@ test('untrusted replica does not become a writable tracker or own the alert', as
 })
 
 test('claims, assignees and human workflow labels protect existing work even when added after discovery', async () => {
-  for (const change of ['claim', 'assignee', 'slot:S18', 'state:in-progress', 'state:blocked', 'needs-decision']) {
+  for (const change of ['claim', 'assignee', 'slot:S18', 'slot:S21', 'state:in-progress', 'state:blocked', 'needs-decision']) {
     const f = fixture([legacy])
     const t = await loadTrackers(f.api, ctx)
     const { issue } = await t.ensure(42)
     if (change === 'claim') f.claims.add(123)
     else if (change === 'assignee') f.issues.get(123).assignees = [{ login: 'tester' }]
     else f.issues.get(123).labels.push({ name: change })
+    assert.equal((await t.ensure(42)).actionable, false)
+    await t.markReady(issue)
+    await t.linkPull(issue, 99)
+    assert.equal(await t.closeFixed(confirmed), false)
+    assert.deepEqual(f.writes, [])
+  }
+})
+
+test('S21 routing preserves ownership barriers on automatic trackers', async () => {
+  for (const change of ['claim', 'assignee', 'locked', 'slot:S18', 'state:in-progress', 'state:blocked', 'needs-decision', 'needs-design']) {
+    const f = fixture()
+    const t = await loadTrackers(f.api, ctx)
+    const { issue } = await t.ensure(42)
+    await t.markReady(issue)
+    f.writes.length = 0
+    if (change === 'claim') f.claims.add(issue.number)
+    else if (change === 'assignee') f.issues.get(issue.number).assignees = [{ login: 'tester' }]
+    else if (change === 'locked') f.issues.get(issue.number).locked = true
+    else f.issues.get(issue.number).labels.push({ name: change })
+    assert.equal((await t.ensure(42)).actionable, false, change)
+    await t.markReady(issue)
+    await t.linkPrepared(issue, 'alert-fix-42')
+    await t.linkPull(issue, 99)
+    assert.equal(await t.closeFixed(confirmed), false, change)
+    assert.deepEqual(f.writes, [], change)
+  }
+})
+
+test('S21 stays a human assignment on owner-created or legacy trackers', async () => {
+  for (const issue of [
+    { ...legacy, user: bot },
+    { ...legacy, title: '[Code Scanning] Remediate alert #42', body: '<!-- studioos-scan-remediation:42 -->\n' + url },
+  ]) {
+    const f = fixture([{ ...issue, labels: [{ name: 'bug' }, { name: 'slot:S21' }, { name: 'state:ready' }] }])
+    const t = await loadTrackers(f.api, ctx)
     assert.equal((await t.ensure(42)).actionable, false)
     await t.markReady(issue)
     await t.linkPull(issue, 99)
