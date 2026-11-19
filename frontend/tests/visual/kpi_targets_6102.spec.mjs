@@ -38,5 +38,5 @@ for (const phone of [false, true]) test(`target/actual and Focus link in the ${p
   }
   await expect(focus).toHaveAttribute('href', `/grow/focus?project_id=${projectId}`);
   await focus.click();
-  await expect(page).toHaveURL(new RegExp(`/grow/focus\\?project_id=${projectId}$`));
+  await expect(page).toHaveURL((url) => url.href.endsWith(`/grow/focus?project_id=${projectId}`));
 });

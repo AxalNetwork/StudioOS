@@ -273,3 +273,25 @@ def test_a_run_of_unclosed_parentheses_is_read_in_linear_time():
     linkedin_import._content_to_lines("(" * 200_000 + " (Ada Lovelace) Tj T* (Analyst\\) Tj) Tj", out)
     assert time.monotonic() - started < 2, "200,000 unclosed ( must not take quadratic time"
     assert out == ["Ada Lovelace", "Analyst) Tj"]
+
+
+def test_a_run_of_escaped_parentheses_is_read_in_linear_time():
+    # CodeQL py/polynomial-redos: a "(" then many "\(" made each "\(" start a
+    # literal scan to the end of the stream.
+    import time
+
+    from backend.app.services import linkedin_import
+
+    out: list = []
+    started = time.monotonic()
+    linkedin_import._content_to_lines("(" + "\\(" * 100_000 + " (Ada Lovelace) Tj T* (Analyst\\) Tj) Tj", out)
+    assert time.monotonic() - started < 2, "100,000 escaped ( must not take quadratic time"
+    assert out == ["Ada Lovelace", "Analyst) Tj"]
+
+
+def test_a_literal_after_an_escaped_backslash_still_reads():
+    from backend.app.services import linkedin_import
+
+    out: list = []
+    linkedin_import._content_to_lines("\\\\(Ada) Tj T* (B\\(c) Tj", out)
+    assert out == ["Ada", "B(c"]

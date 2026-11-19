@@ -408,28 +408,51 @@ export function brandKitUnits(row: BrandKitRow): UnitDocument {
 /**
  * Whether a file's head is an SVG document: an optional XML declaration, any
  * comments, an optional `<!DOCTYPE svg …>` (with an internal subset), then
- * `<svg`. A forward scan, so a head of many unclosed `<!--` cannot make a
- * backtracking regular expression run in exponential time.
+ * `<svg`. It answers as `/^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE\s+svg[^\[>]*(\[[\s\S]*?\])?\s*>\s*)?<svg[\s>]/i`
+ * did, without its backtracking: that pattern's lazy parts could run on to a
+ * later `-->` or `]`, so each candidate end is tried in turn, as it would.
  */
 export function startsAsSvg(head: string): boolean {
-  let s = head;
-  const xml = /^<\?xml[^>]*>/i.exec(s);
-  if (xml) s = s.slice(xml[0].length).trimStart();
-  while (s.startsWith('<!--')) {
-    const end = s.indexOf('-->', 4);
-    if (end < 0) return false;
-    s = s.slice(end + 3).trimStart();
+  let at = 0;
+  const xml = XML_DECL.exec(head);
+  if (xml) at = skipSpace(head, xml[0].length);
+  if (doctypeThenSvg(head, at)) return true;
+  if (!head.startsWith('<!--', at)) return false;
+  // `(<!--[\s\S]*?-->\s*)*` from here covers everything up to any `-->`.
+  for (let end = head.indexOf('-->', at + 4); end >= 0; end = head.indexOf('-->', end + 1)) {
+    if (doctypeThenSvg(head, skipSpace(head, end + 3))) return true;
   }
-  if (/^<!DOCTYPE\s+svg/i.test(s)) {
-    const close = s.indexOf('>'), open = s.indexOf('[');
-    let end = close;
-    if (open >= 0 && (close < 0 || open < close)) {
-      const sub = s.indexOf(']', open);
-      if (sub < 0) return false;
-      end = s.indexOf('>', sub);
-    }
-    if (end < 0) return false;
-    s = s.slice(end + 1).trimStart();
+  return false;
+}
+
+const XML_DECL = /^<\?xml[^>]*>/i;
+const DOCTYPE_SVG = /<!DOCTYPE\s+svg[^\[>]*/iy;
+const SVG_OPEN = /<svg[\s>]/iy;
+const SPACE = /\s/;
+
+function skipSpace(s: string, at: number): number {
+  while (at < s.length && SPACE.test(s[at])) at++;
+  return at;
+}
+
+function svgAt(s: string, at: number): boolean {
+  SVG_OPEN.lastIndex = at;
+  return SVG_OPEN.test(s);
+}
+
+/** An optional `<!DOCTYPE svg …>` at `at`, then `<svg`. */
+function doctypeThenSvg(s: string, at: number): boolean {
+  if (svgAt(s, at)) return true;
+  DOCTYPE_SVG.lastIndex = at;
+  const d = DOCTYPE_SVG.exec(s);
+  if (!d) return false;
+  const rest = at + d[0].length;
+  if (s[rest] === '>') return svgAt(s, skipSpace(s, rest + 1));
+  if (s[rest] !== '[') return false;
+  // `\[[\s\S]*?\]\s*>` may close at any later `]` that whitespace and `>` follow.
+  for (let close = s.indexOf(']', rest + 1); close >= 0; close = s.indexOf(']', close + 1)) {
+    const gt = skipSpace(s, close + 1);
+    if (s[gt] === '>' && svgAt(s, skipSpace(s, gt + 1))) return true;
   }
-  return /^<svg[\s>]/i.test(s);
+  return false;
 }
