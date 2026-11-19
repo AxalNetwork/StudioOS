@@ -353,8 +353,6 @@ export interface ObservationWrites {
   unmapped: { stage: number; geography: number };
 }
 
-const KEY = 'fund_uid = ? AND fact = ? AND source_name = ? AND source_record_ref = ?';
-
 /**
  * Prepared statements that write `inputs` (one upsert per statement, then its
  * terms replaced), for the caller's batch. Throws ObservationInputError on an
@@ -392,7 +390,7 @@ export function observationStatements(db: D1Database, inputs: ObservationInput[]
       money?.currency ?? null, money?.currency_basis ?? null, money?.review_flags ? JSON.stringify(money.review_flags) : null,
     ));
     statements.push(db.prepare(
-      `DELETE FROM research_fund_observation_terms WHERE observation_id = (SELECT id FROM research_fund_observations WHERE ${KEY})`,
+      `DELETE FROM research_fund_observation_terms WHERE observation_id = (SELECT id FROM research_fund_observations WHERE fund_uid = ? AND fact = ? AND source_name = ? AND source_record_ref = ?)`,
     ).bind(...key));
     const terms: [string, string][] = [];
     if (o.fact === 'investment_stage') {
@@ -408,7 +406,7 @@ export function observationStatements(db: D1Database, inputs: ObservationInput[]
     for (const [vocabulary, term] of terms) {
       statements.push(db.prepare(
         `INSERT INTO research_fund_observation_terms (observation_id, vocabulary, term)
-         SELECT id, ?, ? FROM research_fund_observations WHERE ${KEY}`,
+         SELECT id, ?, ? FROM research_fund_observations WHERE fund_uid = ? AND fact = ? AND source_name = ? AND source_record_ref = ?`,
       ).bind(vocabulary, term, ...key));
     }
   }
