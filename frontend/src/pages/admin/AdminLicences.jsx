@@ -55,6 +55,8 @@ import { RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { licenceLedgerApi } from '../../lib/api/licenceLedger';
+import { licencePricingHqApi } from '../../lib/api/licencePricingHq';
+import { pricingSignalsRead } from './licences/pricingHqModel';
 import { reportError } from '../../lib/log';
 import { RailFrame, Unreadable, WorkerRail } from '../../ui';
 import { DEFAULT_TAB, LICENCE_TABS, kindFromParam, ledgerSelection, tabFromParam } from './licenceNavModel';
@@ -226,6 +228,8 @@ export default function AdminLicences() {
   // detail's panel makes (`limit=1`, so only the total crosses). `{ ok, total }`
   // per uid, `{ ok: false }` when it could not be read: unknown, never none.
   const [reads, setReads] = useState({});
+  // D5020 (#5020) — the four Needs HQ pricing signals, one read across the ledger, joined by licence uid.
+  const [pricingRes, setPricingRes] = useState(undefined);
   const readGen = useRef(0);
   const asked = useRef(new Set());
   const readRequests = useCallback((uids) => {
@@ -256,6 +260,10 @@ export default function AdminLicences() {
     licenceLedgerApi.summary()
       .then(setSummary)
       .catch((e) => { reportError('licence_summary_failed', e); setSummary(UNAVAILABLE); });
+    setPricingRes(undefined);
+    licencePricingHqApi.signals()
+      .then(setPricingRes)
+      .catch((e) => { reportError('licence_pricing_signals_failed', e); setPricingRes(null); });
     api.licenceTerritories()
       .then((d) => { setHeld(d?.items || []); setHeldUnreadable(false); })
       .catch((e) => { reportError('licence_territories_load_failed', e); setHeldUnreadable(true); });
@@ -369,8 +377,9 @@ export default function AdminLicences() {
   const summaryOk = summary && summary !== UNAVAILABLE ? summary : null;
   const empty = ledgerIsEmpty({ total, filtered, summaryTotal: summaryOk ? Number(summaryOk.counts?.total) : null });
   const counts = summaryOk ? countsLine(summaryOk.counts) : null;
-  const needItems = needsSummary(filteredItems, reads);
-  const rows = filterByMenus(filterByNeeds(filteredItems, reads, needs), reads, menus);
+  const pricing = pricingSignalsRead(pricingRes);
+  const needItems = needsSummary(filteredItems, reads, pricing);
+  const rows = filterByMenus(filterByNeeds(filteredItems, reads, needs, pricing), reads, menus, pricing);
   const coverageGrid = (withRenewals) => (summaryOk
     ? (withRenewals
       ? <Coverage items={summary.coverage} renewals={summary.renewals} onOpen={setSel} />
@@ -522,6 +531,10 @@ export default function AdminLicences() {
               HQ ledger · read {readClock(readAt)}
             </span>
           )}
+          <a href="/admin/licences/pricing" data-testid="licence-pricing-link"
+            className="inline-flex min-h-[36px] items-center rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            Country pricing
+          </a>
           <button type="button" onClick={load} aria-label="Refresh the ledger" data-testid="licence-refresh"
             className="grid h-8 w-8 place-items-center rounded-md border max-md:h-11 max-md:w-11 border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             <RefreshCw size={14} aria-hidden="true" />
@@ -607,7 +620,7 @@ export default function AdminLicences() {
         </div>
       ) : (
         <LedgerTable
-          rows={rows} reads={reads} onOpen={openRow} onRetryRequests={retryRequests}
+          rows={rows} reads={reads} pricing={pricing} onOpen={openRow} onRetryRequests={retryRequests}
           footer={(
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-2.5 font-mono text-[12px] text-gray-500 dark:border-gray-800 dark:text-gray-400">
               <span data-testid="licence-list-count">
