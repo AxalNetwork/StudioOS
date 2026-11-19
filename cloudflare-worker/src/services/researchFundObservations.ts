@@ -213,6 +213,12 @@ export interface AmountReading {
 }
 
 const UNIT = '(?:million|billion|mm|mn|bn|k|m|b)';
+/**
+ * The `*_cents` columns hold hundredths of the amount whatever its currency, or of none when the source names
+ * none (D7743): the currency is recorded beside the amount, never assumed, so the scale is fixed, as
+ * `capTableClose.amountMinor` raises 10 to a currency's digits.
+ */
+const CENT_DIGITS = 2;
 const MULTIPLIER: Readonly<Record<string, number>> = {
   k: 1e3, m: 1e6, mm: 1e6, mn: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9,
 };
@@ -306,7 +312,7 @@ export function readAmount(fact: MoneyFact, wording: string, heading?: string | 
   if (flags.size || !kind || amounts.length === 0) return asStated();
 
   if (kind === 'range' && !amounts[0].unit) amounts[0].unit = amounts[1].unit;
-  const cents = amounts.map(({ value, unit }) => Math.round(value * (unit ? MULTIPLIER[unit] : 1) * 100));
+  const cents = amounts.map(({ value, unit }) => Math.round(value * (unit ? MULTIPLIER[unit] : 1) * 10 ** CENT_DIGITS));
   if (cents.some((c) => !Number.isSafeInteger(c) || c < 0)) return asStated();
   const base = { fact, currency, currency_basis: basis, review_flags: null, min_cents: null, max_cents: null, point_cents: null };
   switch (kind) {
