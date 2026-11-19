@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { allowance, inherited, recheckOne, refreshSerially, reservationName } from '../../scripts/landing-bot/refresh-rules.mjs';
 import { assertWorkflow, parseJobs } from '../../scripts/landing-bot/workflowGuard.mjs';
+import { outputLine } from '../../scripts/landing-bot/refresh.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
 const WORKFLOW = readFileSync(new URL('.github/workflows/landing-bot-refresh.yml', ROOT), 'utf8');
@@ -93,4 +94,12 @@ test('#6478: the workflow: gated to main of this repository, no PR or workflow_r
   assert.match(src, /update-branch`, \{ expected_head_sha: pr\.head\.sha \}/);
   assert.doesNotMatch(WORKFLOW + src, /--force|force-with-lease|enqueuePullRequest|gh pr merge|HEAD:refs\/heads\/main\b/);
   assertWorkflow(new URL('.github/workflows/landing-bot-refresh.yml', ROOT).pathname);
+});
+
+test('#6478: a step output is one line; a line break or a bad name is refused', () => {
+  assert.equal(outputLine('count', 3), 'count=3\n');
+  assert.equal(outputLine('reservation', 'refresh-2026-11-19-1-1-3'), 'reservation=refresh-2026-11-19-1-1-3\n');
+  assert.throws(() => outputLine('count', '3\nreservation=x'), /line break/);
+  assert.throws(() => outputLine('count', '3\r'), /line break/);
+  assert.throws(() => outputLine('a=b', 1), /bad output name/);
 });

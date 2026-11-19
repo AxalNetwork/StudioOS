@@ -37,7 +37,14 @@ export function runnerMerge(env, pr) {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
-const out = (k, v) => { if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`); };
+/** One `key=value` line for $GITHUB_OUTPUT. A CR or LF in either half would start a second output line, so it is refused. */
+export function outputLine(k, v) {
+  const key = String(k), value = String(v);
+  if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(key)) throw new Error(`refresh: bad output name ${JSON.stringify(key)}`);
+  if (/[\r\n]/.test(value)) throw new Error(`refresh: output ${key} holds a line break`);
+  return `${key}=${value}\n`;
+}
+const out = (k, v) => { if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, outputLine(k, v)); };
 const say = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${s}\n`); };
 
 async function jobsOf(gh, run) {
