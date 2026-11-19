@@ -144,4 +144,3 @@ export async function ingestWorldBank(env: Env, raw: unknown, rawCursor?: unknow
       cursor: cursorFor(params, point), retry_cursor: cursorFor(params, initial), progressed: completed > 0, failure };
   });
 }
-
