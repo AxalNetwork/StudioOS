@@ -30,6 +30,8 @@ import { logCycleWrite } from '../cycleActivity';
 import { logProspectEvent, WriterError } from '../raiseWriters';
 import { insertVersion, sanitizeSlides } from '../../routes/decks';
 import { MAX_COPY_BYTES, WorkspaceError, type WorkspaceRead } from './workspace';
+import { putRecordOrThrow } from '../recordStore';
+import { eraseRecordObjects } from '../recordErasure';
 
 // ───────────────────────────────────────────────────────────── constants
 
@@ -262,10 +264,12 @@ async function copyFile(env: Env, a: { integrationId: number; projectId: number;
   const uid = crypto.randomUUID().replace(/-/g, '');
   // The R2 key is the venture's own: data-room/<project uid>/<file uid>.
   const key = `data-room/${project.uid}/${uid}`;
-  await env.FILES.put(key, bytes, { httpMetadata: { contentType }, customMetadata: { project_uid: project.uid, uploaded_by: String(a.user.id) } });
+  // D6651: a copy is a record, written once under a fresh key; a re-sync points the row at the newest key.
+  await putRecordOrThrow(env.FILES, key, bytes, { httpMetadata: { contentType }, customMetadata: { project_uid: project.uid, uploaded_by: String(a.user.id) } });
   const old = ledger?.local_id != null
     ? await env.DB.prepare('SELECT id, r2_key FROM data_room_files WHERE id = ? AND project_id = ?').bind(ledger.local_id, a.projectId).first<{ id: number; r2_key: string }>()
     : null;
+  let named = false; // a data_room_files row now names `key`: it is kept even when the ledger write fails
   try {
     if (old) {
       await env.DB.batch([
@@ -273,18 +277,21 @@ async function copyFile(env: Env, a: { integrationId: number; projectId: number;
           .bind(name, key, contentType, bytes.byteLength, old.id, a.projectId),
         env.DB.prepare(LEDGER).bind(a.integrationId, a.projectId, 'data_room', 'drive_copy', ext, 'data_room_files', old.id),
       ]);
-      await env.FILES.delete(old.r2_key).catch(() => {});
+      // D6651: the replaced copy is a record and is kept; the row now points at the newest key.
     } else {
       const ins = await env.DB.prepare(
         `INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
            created_at, updated_at, access_tier, source_kind, source_ref)
          VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 'connector', 'google_drive')`,
       ).bind(uid, a.projectId, name, key, contentType, bytes.byteLength, COPY_ACCESS.visibility, a.user.id, COPY_ACCESS.access_tier).run();
+      named = true;
       const id = Number(ins.meta?.last_row_id);
       await env.DB.prepare(LEDGER).bind(a.integrationId, a.projectId, 'data_room', 'drive_copy', ext, 'data_room_files', id).run();
     }
   } catch (e) {
-    await env.FILES.delete(key).catch(() => {});
+    // D6651: the copy this request just stored is named by no row: it leaves through the one
+    // record-erasure path as `unreferenced`; a cleanup failure never masks the original error.
+    if (!named) await eraseRecordObjects(env.FILES, key, 'unreferenced').catch(() => {});
     throw e;
   }
   await noteStorageLanded(env, storage);
@@ -410,7 +417,8 @@ export async function deleteRaiseGoogleCopy(env: Env, a: { integrationId: number
     env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL WHERE integration_id = ? AND project_id = ? AND local_table = 'data_room_files' AND local_id = ?`).bind(a.integrationId, a.projectId, row.id),
     env.DB.prepare('DELETE FROM data_room_files WHERE id = ? AND project_id = ?').bind(row.id, a.projectId),
   ]);
-  await env.FILES?.delete(row.r2_key).catch(() => {});
+  // D6651: the member deleting the copy goes through the one record-erasure path.
+  if (env.FILES) await eraseRecordObjects(env.FILES, row.r2_key, 'owner_removed').catch(() => {});
   await log(env, a.user, a.projectId, 'data-room', row.id, 'google_copy_deleted', 'Copy from Google Drive deleted; a sync leaves it deleted');
   return true;
 }

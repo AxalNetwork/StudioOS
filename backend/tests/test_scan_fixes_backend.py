@@ -8,6 +8,8 @@
   settings.py, still skips the work on the second call.
 - auth.py (py/cyclic-import): it imports the two helpers it needs from
   services/, not from routers that import it back.
+- LinkedIn PDF text (py/polynomial-redos): a run of unclosed "(" is read in
+  linear time, and a shown literal still reads as before.
 """
 import ast
 import json
@@ -259,3 +261,15 @@ def test_auth_imports_no_router_that_imports_it_back():
 def test_the_claim_helper_has_one_definition():
     router = (ROOT / "backend/app/api/routes/network_introductions.py").read_text()
     assert "def claim_offplatform_introductions" not in router
+
+
+def test_a_run_of_unclosed_parentheses_is_read_in_linear_time():
+    import time
+
+    from backend.app.services import linkedin_import
+
+    out: list = []
+    started = time.monotonic()
+    linkedin_import._content_to_lines("(" * 200_000 + " (Ada Lovelace) Tj T* (Analyst\\) Tj) Tj", out)
+    assert time.monotonic() - started < 2, "200,000 unclosed ( must not take quadratic time"
+    assert out == ["Ada Lovelace", "Analyst) Tj"]

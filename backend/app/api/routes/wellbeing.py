@@ -31,6 +31,7 @@ from backend.app.database import get_session
 from backend.app.models.entities import User, WellbeingCheckin, WellbeingResource
 from backend.app.api.routes.auth import get_current_user
 from backend.app.services.crypto_box import decrypt, encrypt
+from backend.app.services.log_safe import log_safe
 
 router = APIRouter(prefix="/wellbeing", tags=["wellbeing"])
 logger = logging.getLogger("studioos.wellbeing")
@@ -245,7 +246,7 @@ def aggregate(
     # Audit trail: aggregate access is sensitive even when anonymized.
     logger.info(
         "wellbeing aggregate access by admin user_id=%s window_days=%d cohort=%d",
-        user.id, days, cohort,
+        log_safe(user.id), days, cohort,
     )
     if cohort < MIN_AGGREGATE_COHORT:
         return {

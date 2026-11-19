@@ -43,6 +43,7 @@ import {
 } from '../services/trustContent';
 import { ensureAdminAuditLogTable } from './admin';
 import { noticeDeliveries, sendSubprocessorNotices, subscriberCounts } from '../services/subprocessorNotices';
+import { putRecord } from '../services/recordStore';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -218,7 +219,9 @@ r.post('/reports', async (c) => {
     const key = `trust-center/reports/${uid}.pdf`;
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     const sha = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
-    await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' } });
+    // D6651: an issued report is a record, written once.
+    const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: 'application/pdf' } });
+    if (!stored.ok) return c.json({ error: 'record_exists', message: 'A report is already stored under this name. Nothing was attached.' }, 409);
     await c.env.DB.prepare(
       `INSERT INTO trust_certification_reports (uid, r2_key, sha256, size_bytes, content_type, uploaded_by) VALUES (?, ?, ?, ?, 'application/pdf', ?)`,
     ).bind(uid, key, sha, bytes.length, admin.id).run();
