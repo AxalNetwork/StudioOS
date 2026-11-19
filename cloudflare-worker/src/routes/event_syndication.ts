@@ -195,7 +195,7 @@ eventSyndication.post('/:id/syndication/preview', async (c) => {
   const settings = await readSettings(c.env);
   const account = (await accountsFor(c.env, m.event, settings)).find((a) => a.uid === String(body?.account_uid ?? ''));
   if (!account) return refuse(c, 404, { code: 'account_not_found', message: 'That channel account is not one this event can use.' });
-  const adapter = syndicationChannel(account.channel);
+  const adapter = syndicationChannel(account.channel, c.env);
   if (!adapter) return refuse(c, 409, { code: 'adapter_not_ready', message: 'This channel is not available yet. Nothing was sent.' });
   const row = await c.env.DB.prepare('SELECT overrides_json FROM event_syndications WHERE event_id = ? AND account_id = ?').bind(m.event.id, account.id).first<{ overrides_json: string }>();
   const overrides = cleanOverrides(account.channel, body?.overrides ?? (row ? JSON.parse(row.overrides_json || '{}') : {}));
@@ -246,7 +246,7 @@ eventSyndication.post('/:id/syndication/:uid/withdraw', async (c) => {
   const row = await ownRow(c, m.event.id);
   if (!row) return refuse(c, 404, { code: 'not_found', message: 'This listing could not be found.' });
   if (row.status !== 'posted') return refuse(c, 409, { code: 'not_posted', message: 'Only a posted listing can be withdrawn.' });
-  const cancels = !!syndicationChannel(row.channel)?.cancels;
+  const cancels = !!syndicationChannel(row.channel, c.env)?.cancels;
   await c.env.DB.prepare(
     "UPDATE event_syndications SET sync_state = ?, attempts = 0, updated_at = datetime('now') WHERE id = ? AND status = 'posted'",
   ).bind(cancels ? 'pending' : 'unsupported', row.id).run();

@@ -299,8 +299,9 @@ function confidenceFor(rec, liveRoutes, nav) {
 export const esc = (s) => String(s).replace(/\\\|/g, '|').replace(/([\\|])/g, '\\$1');
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function build() {
-  const recs = parseRouteMap(readRouteMap());
+// D6471: `mapText` lets a test build the projection from another form of the map.
+export function build(mapText = readRouteMap()) {
+  const recs = parseRouteMap(mapText);
   const roles = parseSidebar(read(SIDEBAR));
 
   const rows = [];

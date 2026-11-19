@@ -25,11 +25,11 @@ import {
 } from './skillRunManifest';
 
 /** The version `cloudflare-worker/package.json` pins exactly. An upgrade is its own reviewed change. */
-export const SDK_PINNED_VERSION = '0.32.0';
+export const SDK_PINNED_VERSION = '0.33.0';
 export const SDK_SOURCE_HQ = 'axal-hq';
 export const SDK_SOURCE_COMPANY = 'axal-company';
 
-/** The slice of the SDK this adapter uses. The annotation makes `tsc` fail if 0.32.0's signatures change. */
+/** The slice of the SDK this adapter uses. The annotation makes `tsc` fail if 0.33.0's signatures change. */
 export type SkillsSdk = {
   version: string;
   manifest: (definition: SkillManifest) => SkillSource;

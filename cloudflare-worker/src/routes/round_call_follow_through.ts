@@ -7,6 +7,11 @@
  * Every path is behind ROUND_CALLS_ENABLED, as the rest of the area is. Remind
  * and export are the venture owner's (Q1); the read, Start and Record admit an
  * accepted co-founder too. The service re-reads the viewer live.
+ *
+ * D7513 (#7513, RAC20C, RAC20D): `GET /:uid/source-audience` is step 3 of a
+ * draft started from a closed call: that call's chosen recipients, ticked when
+ * still verified and in the pipeline. Owner or co-founder reads it; the owner
+ * alone sets the audience, through `round_calls.ts`' `PUT /:uid/audience`.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -20,7 +25,7 @@ import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import { RoundCallError, loadCall, projectFacts, type CallRow } from '../services/roundCalls';
-import { callRelation, exportCsv, exportPdf, followThrough, prepareExport, recordCommitment, remind, startFromClosed } from '../services/roundCallFollowThrough';
+import { callRelation, exportCsv, exportPdf, followThrough, prepareExport, recordCommitment, remind, sourceAudience, startFromClosed } from '../services/roundCallFollowThrough';
 
 type Ctx = Context<{ Bindings: Env }>;
 const followThroughRoutes = new Hono<{ Bindings: Env }>();
@@ -75,6 +80,10 @@ followThroughRoutes.get('/:uid/export.pdf', async (c) => {
     const { model, filename } = await prepareExport(c.env, call, user, 'pdf', c.req.query('scope'));
     return new Response(await exportPdf(model), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store' } });
   } catch (e) { return failure(c, e); }
+});
+followThroughRoutes.get('/:uid/source-audience', async (c) => {
+  try { const { call, user } = await requireCallMember(c); return c.json(await sourceAudience(c.env, call, user)); }
+  catch (e) { return failure(c, e); }
 });
 followThroughRoutes.post('/:uid/successor', async (c) => {
   try { const { call, user } = await requireCallMember(c); return c.json(await startFromClosed(c.env, call, user, await body(c)), 201); }

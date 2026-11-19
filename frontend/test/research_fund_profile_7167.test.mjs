@@ -16,6 +16,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import FundCatalogProfile from '../src/pages/research/FundCatalogProfile.jsx';
 import { api } from '../src/lib/api.js';
 import { researchFundsApi } from '../src/lib/api/researchFunds.js';
+import { researchMyFundsApi } from '../src/lib/api/researchMyFunds.js';
 import { mountContracts } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { FundDirectoryView } from '../src/pages/research/FundDirectory.jsx';
@@ -193,7 +194,7 @@ test('a comparison cell cites the same chip; USD stays USD; source use and the w
 });
 
 test('Save to shortlist re-reads the fund: a 410 then clears the page and nothing is saved', async () => {
-  const original = { research: api.research, get: researchFundsApi.get };
+  const original = { research: api.research, get: researchFundsApi.get, list: researchMyFundsApi.list };
   const sent = [];
   let reads = 0;
   const removed = { name: 'Taken down', reason: 'Its terms forbid republishing.' };
@@ -203,7 +204,8 @@ test('Save to shortlist re-reads the fund: a 410 then clears the page and nothin
     throw Object.assign(new Error('Removed'), { status: 410, data: { removed, reason: 'Taken down.' } });
   };
   // The shortlist holds the manager's OTHER vehicle: matched on catalogue_uid, Opp is not saved.
-  api.research = { ...original.research, funds: async () => ({ items: [{ uid: 'rf_1', name: 'Dawn Capital Opp', catalogue_uid: 'dawncapital-v' }] }), fundCreate: async (b) => { sent.push(b); return { uid: 'rf_2' }; } };
+  researchMyFundsApi.list = async () => ({ items: [{ uid: 'rf_1', name: 'Dawn Capital Opp', catalogue_uid: 'dawncapital-v' }] });
+  api.research = { ...original.research, fundCreate: async (b) => { sent.push(b); return { uid: 'rf_2' }; } };
   const m = await mountContracts(React.createElement(Routes, null, React.createElement(Route, { path: '/research/funds/catalog/:id', element: React.createElement(FundCatalogProfile, { role: 'founder' }) })), '/research/funds/catalog/dawncapital-opp');
   try {
     for (let i = 0; i < 6; i += 1) await m.flush();
@@ -221,5 +223,6 @@ test('Save to shortlist re-reads the fund: a 410 then clears the page and nothin
     await m.unmount();
     api.research = original.research;
     researchFundsApi.get = original.get;
+    researchMyFundsApi.list = original.list;
   }
 });

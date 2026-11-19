@@ -16,7 +16,7 @@ export const DRAFT_FIELDS = ['title', 'conclusion', 'notes', 'market_summary', '
 /** How each field is named in "Unsaved changes · title, conclusion". */
 export const FIELD_WORD = {
   title: 'title', conclusion: 'conclusion', notes: 'notes', market_summary: 'market summary',
-  gaps: 'gaps', wedge: 'wedge', next_actions: 'next steps',
+  gaps: 'gaps', wedge: 'wedge', next_actions: 'research questions',
 };
 
 /** The generated sections, by output field, with the heading the dossier gives each. */
@@ -24,7 +24,8 @@ export const GENERATED_SECTIONS = [
   ['market_summary', 'Market summary'],
   ['gaps', 'Gaps & opportunities'],
   ['wedge', 'Suggested wedge'],
-  ['next_actions', 'Next steps the run listed'],
+  // D7175: the run's next steps are questions, not findings.
+  ['next_actions', 'Suggested research questions'],
 ];
 
 /** Every field a rerun may rewrite, with its heading in the review. */
@@ -93,7 +94,7 @@ export function outputFrom(draft, record) {
 
 /** "Copy my changes": the unsaved fields as plain text, one block each. */
 export function changesText(draft, record) {
-  const labels = { title: 'Title', conclusion: 'Conclusion', notes: 'Notes', market_summary: 'Market summary', gaps: 'Gaps & opportunities', wedge: 'Suggested wedge', next_actions: 'Next steps' };
+  const labels = { title: 'Title', conclusion: 'Conclusion', notes: 'Notes', market_summary: 'Market summary', gaps: 'Gaps & opportunities', wedge: 'Suggested wedge', next_actions: 'Suggested research questions' };
   return dirtyFields(draft, record).map((f) => `${labels[f]}:\n${draft[f]}`).join('\n\n');
 }
 

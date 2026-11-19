@@ -62,7 +62,7 @@ export function useLimit(control, limit) {
   const count = limitState(control.props.value, limit);
   const node = (
     <span id={id} aria-live={count.ok ? 'off' : 'polite'} data-field-limit={count.ok ? 'within' : 'over'}
-      className={`mt-1 flex items-center gap-1 text-[11px] tabular-nums ${count.ok ? 'text-axal-faint' : 'font-semibold text-red-700 dark:text-red-300'}`}>
+      className={`mt-1 flex items-center gap-1 text-[11px] tabular-nums ${count.ok ? 'text-axal-muted' : 'font-semibold text-red-700 dark:text-red-300'}`}>
       {/* Over the limit says so in words and with a cross, never by colour alone. */}
       {count.ok ? null : <span aria-hidden="true">✕</span>}
       {limitLine(count)}

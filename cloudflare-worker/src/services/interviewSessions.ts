@@ -31,6 +31,8 @@ import { closeAttachedRefs } from './channels/meetings';
 import { consentRequired } from './channels/types';
 import { presentTables } from './interviewFindings';
 import { ensureDiscoveryTranscriptProjectionOwnerColumn } from './discoveryTranscriptOwnerSchema';
+import { putRecord } from './recordStore';
+import { eraseRecordObjects } from './recordErasure';
 
 export const CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
 export type Channel = typeof CHANNELS[number];
@@ -282,7 +284,10 @@ export async function putChunk(
   ).bind(session.id, seq).first<{ r2_key: string }>();
   if (existing) return { duplicate: true, objectPath: existing.r2_key };
   const objectPath = chunkKey(ownerUserId, session.uid, seq, CHUNK_MIME[mime]);
-  await env.FILES!.put(objectPath, bytes, {
+  // D6651: a chunk is a record, written once. When this sequence number's object is already stored (a
+  // concurrent upload, or an earlier attempt that stopped before its row), that object stands and is never
+  // replaced; the row insert below records it once, and a row already there makes this the duplicate.
+  await putRecord(env.FILES!, objectPath, bytes, {
     httpMetadata: { contentType: mime },
     customMetadata: { ...meta, session_id: String(session.id), seq: String(seq), owner_user_id: String(ownerUserId) },
   });
@@ -398,7 +403,9 @@ export async function deleteSessionAudio(env: Env, session: SessionRow, actorUse
   }
   const keys = (await listChunks(env, session.id)).map((c) => c.r2_key).filter((k) => k.startsWith(AUDIO_PREFIX));
   if (keys.length && env.FILES) {
-    for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
+    // D6651: audio removal (the owner's, or the retention purge) goes through the one record-erasure path.
+    const why = actorUserId === null ? 'retention_expired' : 'owner_removed';
+    for (let i = 0; i < keys.length; i += 1000) await eraseRecordObjects(env.FILES, keys.slice(i, i + 1000), why);
   }
   await env.DB.batch([
     env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ?').bind(session.id),
@@ -430,7 +437,8 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
   }
   const keys = (await listChunks(env, session.id)).map((c) => c.r2_key).filter((k) => k.startsWith(AUDIO_PREFIX));
   if (keys.length && env.FILES) {
-    for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
+    // D6651: deleting a session goes through the one record-erasure path.
+    for (let i = 0; i < keys.length; i += 1000) await eraseRecordObjects(env.FILES, keys.slice(i, i + 1000), 'owner_removed');
   }
   const counts = await env.DB.prepare(
     `SELECT (SELECT COUNT(*) FROM interview_transcript_segments WHERE session_id = ?) AS segments,

@@ -230,7 +230,9 @@ test('Team: each person as published, coverage as bands with the gap named, valu
     assert.ok(v.textOf('deal-team-person-u1').includes('Head of operations at Robo Co, 2019–2024'));
     assert.ok(v.textOf('deal-team-person-u1').includes('Builder'));
     assert.match(v.textOf('deal-team-person-u2'), /could not be read\. That is not the same as none\./);
-    assert.ok(v.textOf('deal-team-person-u3').includes('Not published'));
+    // D6164 part 2 (DE23): the canvas's words for what a member did not publish.
+    assert.ok(v.textOf('deal-team-person-u3').includes('No prior roles published'));
+    assert.ok(v.textOf('deal-team-person-u3').includes('No archetype published'));
     const coverage = v.textOf('deal-team-coverage');
     assert.ok(coverage.includes('Gaps: Finance.'));
     assert.ok(coverage.includes('Not recorded for at least two published team members'));
@@ -297,7 +299,7 @@ test('Traction: the gap month drawn as a gap and tabled as Not reported, never $
     assert.ok(v.textOf('deal-traction-row-burn-2026-03').includes('$0'), 'a recorded zero is a zero');
     assert.ok(v.textOf('deal-traction-row-customers-2025-11').includes(NOT_REPORTED));
     assert.equal(v.hrefOf('deal-traction-evidence-link'), '/deals/4/evidence');
-    assert.deepEqual(v.ids().filter((id) => /^deal-traction-scorecard-[a-z_]+$/.test(id) && !/-(score|value|coverage|open|retry)-|-scorecard-(unreadable|masked)$/.test(id)),
+    assert.deepEqual(v.ids().filter((id) => /^deal-traction-scorecard-[a-z_]+$/.test(id) && !/(?:-(?:score|value|coverage|open|retry)-)|(?:-scorecard-(?:unreadable|masked)$)/.test(id)),
       ['deal-traction-scorecard-traction', 'deal-traction-scorecard-financial'], 'Traction and Financial');
   } finally { await v.close(); }
 });

@@ -40,7 +40,9 @@ const VENTURES = () => [
   venture({ id: '3', name: 'Copperline Energy', daysInStage: null, scores: scoresOf('failed', 3), fit: 'failed', traction: 'failed' }),
 ];
 const markup = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(CompareView, props)));
-const strip = (s) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+// Tags are removed until none is left and &amp; is decoded last, so no entity is decoded twice (Code Scanning).
+const untag = (s) => { for (let prev = null; prev !== s;) { prev = s; s = s.replace(/<[^>]+>/g, ''); } return s; };
+const strip = (s) => untag(s).replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim();
 /** The table's body rows as on screen: [label, ...cell text], read from the rendered markup. */
 const screenRows = (html) => {
   const table = html.slice(html.indexOf('data-testid="dealflow-compare-table"'), html.indexOf('</table>'));
