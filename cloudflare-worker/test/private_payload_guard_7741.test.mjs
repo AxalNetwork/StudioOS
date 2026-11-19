@@ -267,7 +267,9 @@ test('a real checkout whose .git is broken fails with git\'s own reason', () => 
   const dir = mkdtempSync(join(tmpdir(), 'pp7741-'));
   try {
     writeFileSync(join(dir, '.git'), 'gitdir: ./missing-git-dir\n');
-    assert.throws(() => listTrackedFiles(dir), /cannot list tracked files.*(not a git repository|missing-git-dir)/);
+    // git's wording differs by version ('not a git repository: …missing-git-dir' locally,
+    // 'gitfile does not point to a valid repository' on the CI runner); its own 'fatal:' line is what must reach the message.
+    assert.throws(() => listTrackedFiles(dir), /cannot list tracked files inside the checkout at .*: fatal: .*(not a git repository|valid repository|missing-git-dir)/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
