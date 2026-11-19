@@ -74,14 +74,14 @@ test('the public tab: listed companies with bands as sent, unknown values Not re
   const ok = text(h(PublicPanel, { listed: ready({
     total: 2, as_of: '2026-10-02 00:00:00',
     items: [
-      { symbol: 'NU', name: 'Nu Holdings', exchange: 'NYSE', country: 'Brazil', market_cap_band: 'large', employee_band: '5k-20k' },
-      { symbol: 'ZZZ', name: 'Quiet Co', exchange: null, country: null, market_cap_band: null, employee_band: null },
+      { symbol: 'NU', name: 'Nu Holdings', exchange: 'NYSE', country: 'Brazil', sector: 'Fintech', market_cap_band: 'large', employee_band: '5k-20k' },
+      { symbol: 'ZZZ', name: 'Quiet Co', exchange: null, country: null, sector: null, market_cap_band: null, employee_band: null },
     ],
   }) }));
-  assert.match(ok, /These 2 are known to be listed\. The company directory/);
-  assert.match(ok, /NU Nu Holdings NYSE Brazil large 5k-20k/);
-  assert.match(ok, /ZZZ Quiet Co Not recorded Not recorded Not recorded Not recorded/);
-  assert.match(ok, /signal_companies · 2 listed companies · bands as the source sets them · as of 2026-10-02/);
+  // D7172: the count is listing records, and the directory's caveat stays.
+  assert.match(ok, /2 listing records All sources, no search\. The company directory does not record listing status\./);
+  assert.match(ok, /NU Nu Holdings NYSE Brazil Fintech large 5k-20k S Signal companies No link recorded/);
+  assert.match(ok, /ZZZ Quiet Co Not recorded Not recorded Not recorded Not recorded Not recorded S Signal companies/);
 });
 
 test('D595: the public tab labels each row by source, prints the API\'s counts and source lines, and pages on the Worker', () => {
@@ -89,35 +89,38 @@ test('D595: the public tab labels each row by source, prints the API\'s counts a
   const data = {
     total: 10234, offset: 50, limit: 50, as_of: '2026-10-02 00:00:00',
     items: [
-      { source: 'signal_companies', symbol: 'NU', name: 'Nu Holdings', exchange: 'NYSE', country: 'Brazil', market_cap_band: 'large', employee_band: '5k-20k' },
+      { source: 'signal_companies', symbol: 'NU', name: 'Nu Holdings', exchange: 'NYSE', country: 'Brazil', sector: 'Fintech', market_cap_band: 'large', employee_band: '5k-20k' },
       { source: 'sec_edgar', symbol: 'AAPL', name: 'Apple Inc.', exchange: 'Nasdaq', cik: '0000320193', source_url: EDGAR_URL },
       { source: 'sec_edgar', symbol: 'QQQX', name: 'Quiet Trust', exchange: null, cik: '0000000009', source_url: EDGAR_URL },
     ],
     sources: [
-      { key: 'signal_companies', label: 'StudioOS signal companies', total: 21, as_of: '2026-10-02 00:00:00' },
-      { key: 'sec_edgar', label: 'SEC EDGAR', total: 10213, as_of: '2026-10-06', url: EDGAR_URL,
+      { key: 'signal_companies', label: 'StudioOS signal companies', total: 21, store_total: 21, as_of: '2026-10-02 00:00:00' },
+      { key: 'sec_edgar', label: 'SEC EDGAR', total: 10213, store_total: 10213, as_of: '2026-10-06', url: EDGAR_URL,
         licence: 'US government work, not subject to copyright in the United States (17 U.S.C. § 105)', also_signal_companies: 7 },
     ],
   };
   const out = html(h(PublicPanel, { listed: ready(data), onPage: () => {} }));
   const t = text(h(PublicPanel, { listed: ready(data), onPage: () => {} }));
-  assert.match(t, /These 10,234 are known to be listed: 21 signal companies, with bands, and 10,213 from SEC EDGAR\./);
-  assert.match(t, /NU Nu Holdings NYSE Brazil large 5k-20k Signal companies/);
-  assert.match(t, /AAPL Apple Inc\. CIK 0000320193 Nasdaq Not recorded Not recorded Not recorded SEC EDGAR/);
-  assert.match(t, /QQQX Quiet Trust CIK 0000000009 Not recorded Not recorded Not recorded Not recorded SEC EDGAR/);
-  assert.match(t, /51–53 of 10,234 Previous Next/);
-  assert.match(t, /signal_companies · 21 listed companies · bands as the source sets them · as of 2026-10-02/);
-  assert.match(t, /SEC EDGAR · 10,213 companies · read 2026-10-06 · US government work, not subject to copyright in the United States \(17 U\.S\.C\. § 105\)/);
-  assert.match(t, /7 of its tickers are also a signal company, listed once per source/);
+  assert.match(t, /10,234 listing records · rows 51–53, page 2 of 205/);
+  assert.match(t, /21 from Signal companies, with bands, and 10,213 from SEC EDGAR\./);
+  assert.match(t, /NU Nu Holdings NYSE Brazil Fintech large 5k-20k S Signal companies/);
+  assert.match(t, /AAPL Apple Inc\. CIK 0000320193 Nasdaq Not recorded Not recorded Not recorded Not recorded E SEC EDGAR/);
+  assert.match(t, /QQQX Quiet Trust CIK 0000000009 Not recorded Not recorded Not recorded Not recorded Not recorded E SEC EDGAR/);
+  assert.match(t, /Rows 51–53 of 10,234 · page 2 of 205 ‹ Previous Next ›/);
+  assert.match(t, /Signal companies · 21 listed companies · bands as the source sets them · updated 2 Oct 2026/);
+  assert.match(t, /SEC EDGAR · 10,213 companies · read 6 Oct 2026 · US government work, not subject to copyright in the United States \(17 U\.S\.C\. § 105\)/);
+  // An answer with no `in_both` (a Worker before D7172) and no search: the store-wide overlap is the same claim.
+  assert.match(t, /7 tickers are in both sources, so each appears once per source and is counted twice/);
   // Counted as an exact string, so no pattern is built from the URL (CodeQL: incomplete hostname regex).
   assert.equal(out.split(`href="${EDGAR_URL}"`).length - 1, 3, 'each EDGAR row and the source line link the file');
-  assert.doesNotMatch(out, /disabled="" [^>]*>Previous/, 'Previous is live past the first page');
+  assert.doesNotMatch(out, /disabled="" [^>]*>‹ Previous/, 'Previous is live past the first page');
   const first = text(h(PublicPanel, { listed: ready({ ...data, offset: 0, items: data.items.slice(0, 1), total: 1, sources: [] }) }));
   assert.doesNotMatch(first, /Previous|Next/, 'one page needs no pager');
+  assert.match(first, /Rows 1–1 of 1 · one page/);
 
   const src = read('frontend/src/pages/research/MarketDirectoryZone.jsx');
-  assert.match(src, /listedCompanies\(\{\s*limit: LISTED_PAGE, offset: listedOffset \|\| undefined,/, 'the page asks the Worker for one page at a time');
-  assert.doesNotMatch(src, /10,?2\d\d|10213/, 'no count is written into the page');
+  assert.match(src, /useRead\(\(\) => researchMarketsApi\.listedCompanies\(listedReq\), listedKey\)/, 'the page asks the Worker for one page at a time');
+  assert.doesNotMatch(src + read('frontend/src/pages/research/ListedCompaniesPanel.jsx'), /10,?2\d\d|10213/, 'no count is written into the page');
 });
 
 test('government ownership is a coverage note: Not recorded with the reason, never a figure or a tab', () => {

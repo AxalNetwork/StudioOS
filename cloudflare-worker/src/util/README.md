@@ -37,3 +37,5 @@ D1174 (#3101): `useOfFunds.ts` owns the five fixed section keys and the shared
 stored-split reader for readiness, cards, records and decks. Unknown or invalid
 splits stay unrecorded; reads never correct or rewrite them. The legacy writer
 remains available until the old capital model is retired.
+
+| `errorPrivacy.ts` | D7256: classify unexpected failures and private error context, with bounded diagnostics and safe provider-error forwarding. |

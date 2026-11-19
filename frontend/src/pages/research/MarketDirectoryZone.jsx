@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Search } from 'lucide-react';
 import { Card, Pill } from '../../ui';
 import { Unreadable, Unrecorded } from '../../ui/Honesty';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -16,10 +15,17 @@ import {
   AGE_AT, FIELD_COPY, RANGE_BACKWARDS, READINGS_CSV_HEADER, comparableCount, dollarsToCents, firstError, freshReadingForm,
   rangeLine, rangeReadsForward, readingErrors, readingsCsvRows, scopeValue,
 } from './marketReadingRead';
-import { downloadCsv, stamp } from '../../lib/csvExport';
 import { LatestSignals } from './RankedSignals.jsx';
 
+import { PublicPanel, ScopedExport } from './ListedCompaniesPanel.jsx';
+import { LISTED_CSV_HEADER, MARKET_CSV_HEADER, changeListedQuery, clearListedFilters, collectMarkets,
+  listedCsvCells, listedExport, listedRequest, marketCsvCells, marketExport, readListedQuery, writeTab } from './listedCompaniesRead.js';
+import { downloadCsv, exportFileName, exportView, stamp } from '../../lib/csvExport';
+
 export { LatestSignals };
+export const MARKET_TABS = DIRECTORY_TABS;
+export { LISTED_PAGE } from './listedCompaniesRead.js';
+export { PublicPanel };
 
 /**
  * Research · Markets (`/research/markets`), to the Markets canvas
@@ -107,99 +113,6 @@ function Caption({ children }) {
 function Bar({ value, max }) {
   const w = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
   return <span className="block h-1.5 rounded-full bg-violet-100 dark:bg-violet-950"><span className="block h-1.5 rounded-full bg-violet-500" style={{ width: `${w}%` }} /></span>;
-}
-
-/** The page size the Public tab asks the Worker for (D595): the list is paged there, never here. */
-export const LISTED_PAGE = 50;
-
-const SOURCE_LABEL = { signal_companies: 'Signal companies', sec_edgar: 'SEC EDGAR' };
-
-/**
- * The Public tab (D533, D595). Two stores, each row labelled by its source:
- * the signal companies with the bands their source sets, and SEC EDGAR's
- * companies with what EDGAR records — ticker, name, exchange, CIK — so their
- * country and bands read Not recorded. Every count is the API's.
- */
-export function PublicPanel({ listed, onPage = null }) {
-  if (listed.status === 'loading' && !listed.data) return <Loading what="the listed companies" />;
-  if (listed.status === 'unreadable') {
-    return <Unreadable what="The listed companies" claim="This is not a sign there are none." onRetry={listed.reload} />;
-  }
-  const items = listed.data?.items || [];
-  if (!listed.data?.total) return <p data-testid="listed-empty" className="text-[12.5px] text-axal-muted">No listed companies are recorded yet.</p>;
-  const { total, offset = 0, limit = items.length } = listed.data;
-  const sources = listed.data.sources || [];
-  const sig = sources.find((x) => x.key === 'signal_companies');
-  const edgar = sources.find((x) => x.key === 'sec_edgar');
-  const from = items.length ? offset + 1 : 0;
-  const to = offset + items.length;
-  return (
-    <div data-testid="markets-public">
-      <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Listed companies</h3>
-      <p className="mt-1 text-[12.5px] text-axal-muted">
-        These {fmt(total)} are known to be listed
-        {sig && edgar ? `: ${fmt(sig.total)} signal companies, with bands, and ${fmt(edgar.total)} from SEC EDGAR` : ''}.
-        {' '}The company directory does not record listing status.
-      </p>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-[12.5px]">
-          <thead>
-            <tr className="border-b border-axal-hairline text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-faint dark:border-gray-800">
-              <th className="py-2 pr-3">Symbol</th><th className="py-2 pr-3">Company</th><th className="py-2 pr-3">Exchange</th>
-              <th className="py-2 pr-3">Country</th><th className="py-2 pr-3">Market cap</th><th className="py-2 pr-3">Employees</th>
-              <th className="py-2">Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((x) => (
-              <tr key={`${x.source || 'signal_companies'}:${x.cik || x.symbol}`} className="border-b border-axal-hairline/60 dark:border-gray-800">
-                <td className="py-2 pr-3 font-mono font-semibold">{x.symbol}</td>
-                <td className="py-2 pr-3 text-axal-ink dark:text-gray-100">
-                  {x.name}
-                  {x.cik ? <span className="block font-mono text-[10.5px] text-axal-faint">CIK {x.cik}</span> : null}
-                </td>
-                <td className="py-2 pr-3">{x.exchange || <Unrecorded />}</td>
-                <td className="py-2 pr-3">{x.country || <Unrecorded />}</td>
-                <td className="py-2 pr-3">{x.market_cap_band || <Unrecorded />}</td>
-                <td className="py-2 pr-3">{x.employee_band || <Unrecorded />}</td>
-                <td className="py-2">
-                  {x.source_url
-                    ? <a href={x.source_url} target="_blank" rel="noreferrer" className="text-axal-violet hover:underline dark:text-violet-300">{SOURCE_LABEL[x.source] || x.source}</a>
-                    : (SOURCE_LABEL[x.source || 'signal_companies'] || x.source)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {total > items.length ? (
-        <div data-testid="listed-pager" className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-axal-muted">
-          <span>{fmt(from)}–{fmt(to)} of {fmt(total)}</span>
-          <button type="button" disabled={!onPage || offset <= 0} onClick={() => onPage?.(Math.max(0, offset - limit))}
-            className="min-h-[36px] rounded-lg px-3 font-semibold text-axal-ink ring-1 ring-axal-hairline disabled:opacity-40 dark:text-gray-200 dark:ring-gray-700">
-            Previous
-          </button>
-          <button type="button" disabled={!onPage || to >= total} onClick={() => onPage?.(offset + limit)}
-            className="min-h-[36px] rounded-lg px-3 font-semibold text-axal-ink ring-1 ring-axal-hairline disabled:opacity-40 dark:text-gray-200 dark:ring-gray-700">
-            Next
-          </button>
-        </div>
-      ) : null}
-      <Caption>
-        {sig
-          ? `signal_companies · ${fmt(sig.total)} listed companies · bands as the source sets them${sig.as_of ? ` · as of ${sig.as_of.slice(0, 10)}` : ''}`
-          : `signal_companies · ${fmt(total)} listed companies · bands as the source sets them${listed.data.as_of ? ` · as of ${listed.data.as_of.slice(0, 10)}` : ''}`}
-      </Caption>
-      {edgar ? (
-        <p data-testid="listed-edgar-source" className="mt-1 text-[11px] leading-relaxed text-axal-faint">
-          {edgar.label} · {fmt(edgar.total)} companies{edgar.as_of ? ` · read ${edgar.as_of.slice(0, 10)}` : ''} · {edgar.licence} ·{' '}
-          <a href={edgar.url} target="_blank" rel="noreferrer" className="hover:underline">{edgar.url}</a>
-          {' '}· EDGAR records ticker, name, exchange and CIK only, so country, market cap and employees are Not recorded for its rows
-          {edgar.also_signal_companies ? ` · ${fmt(edgar.also_signal_companies)} of its tickers are also a signal company, listed once per source` : ''}.
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 export function WhereBased({ geos }) {
@@ -700,97 +613,35 @@ export function Readings({ readings, record = null, onExport = exportReadings })
   );
 }
 
-/**
- * D7171 (RMD-07): the Listed companies tab's search, source and sort, over the
- * Worker's own `q`, `source` and `sort` on `GET /api/research/listed-companies`,
- * kept in the URL (`lq`, `lsrc`, `lsort`).
- */
-export const LISTED_SORTS = [
-  { value: '-market_cap', label: 'Market cap band, largest first' },
-  { value: 'market_cap', label: 'Market cap band, smallest first' },
-  { value: 'name', label: 'Name, A to Z' },
-  { value: '-name', label: 'Name, Z to A' },
-];
-export const LISTED_SOURCE_OPTIONS = [
-  { value: '', label: 'Both sources' },
-  { value: 'signal_companies', label: 'Signal companies' },
-  { value: 'sec_edgar', label: 'SEC EDGAR' },
-];
-
-/** The URL → the Listed companies query; anything unreadable is its default. */
-export function readListedQuery(params) {
-  const q = String(params?.get?.('lq') || '').slice(0, 120);
-  const rawSrc = String(params?.get?.('lsrc') || '');
-  const rawSort = String(params?.get?.('lsort') || '');
-  return {
-    q,
-    source: LISTED_SOURCE_OPTIONS.some((o) => o.value === rawSrc) ? rawSrc : '',
-    sort: LISTED_SORTS.some((o) => o.value === rawSort) ? rawSort : LISTED_SORTS[0].value,
+/** D7172: export the entire filtered directory using the same request as D7171's view. */
+export function useDirectoryExport(markets, params) {
+  const view = readMarketQuery(params);
+  const count = markets.status === 'ready' ? (markets.data?.total ?? null) : null;
+  const ctl = marketExport({ status: markets.status, count, query: view.q, sort: view.sort,
+    sortLabel: MARKET_SORTS.find((x) => x.value === view.sort)?.label });
+  const rows = async () => {
+    if ((markets.data?.items?.length || 0) >= count && !markets.request?.offset) return markets.data?.items || [];
+    return collectMarkets({ request: markets.request, fetchPage: (p) => researchMarketsApi.list(p) });
   };
-}
-
-export function ListedControls({ query, onChange }) {
-  const [q, setQ] = useState(query.q);
-  useEffect(() => { setQ(query.q); }, [query.q]);
-  const CTRL = 'min-h-[40px] w-full rounded-lg border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
-  return (
-    <div className="mb-3 grid gap-3 md:grid-cols-[minmax(220px,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-end" data-testid="listed-controls">
-      <form role="search" onSubmit={(e) => { e.preventDefault(); onChange({ q: q.trim().slice(0, 120) }); }}>
-        <label htmlFor="listed-search" className="mb-1 block text-[11.5px] font-semibold text-axal-ink dark:text-gray-200">Search listed companies</label>
-        <span className="relative block">
-          <Search size={14} className="pointer-events-none absolute left-3 top-3 text-axal-faint" />
-          <input id="listed-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or symbol"
-            onBlur={() => { if (q.trim() !== query.q) onChange({ q: q.trim().slice(0, 120) }); }} className={`${CTRL} pl-9`} />
-        </span>
-      </form>
-      <label className="block">
-        <span className="mb-1 block text-[11.5px] font-semibold text-axal-ink dark:text-gray-200">Source</span>
-        <select value={query.source} onChange={(e) => onChange({ source: e.target.value })} className={CTRL}>
-          {LISTED_SOURCE_OPTIONS.map((o) => <option key={o.value || 'both'} value={o.value}>{o.label}</option>)}
-        </select>
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-[11.5px] font-semibold text-axal-ink dark:text-gray-200">Sort</span>
-        <select value={query.sort} onChange={(e) => onChange({ sort: e.target.value })} className={CTRL}>
-          {LISTED_SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </label>
-    </div>
-  );
+  return { ctl, rows };
 }
 
 export default function MarketDirectoryZone({ role = 'founder', zoneActions = null }) {
   const navigate = useNavigate();
+  // D7172: the tab and the Listed companies view are the URL's (history replace).
   const [params, setParams] = useSearchParams();
-  const { tab } = readMarketQuery(params);
-  const setTab = (next) => setParams((prev) => writeMarketQuery(prev, { ...readMarketQuery(prev), tab: next }));
-  const listedQuery = readListedQuery(params);
-  const setListedQuery = (patch) => {
-    setListedOffset(0);
-    setParams((prev) => {
-      const next = new URLSearchParams(prev);
-      const v = { ...readListedQuery(prev), ...patch };
-      for (const [key, value, dflt] of [['lq', v.q, ''], ['lsrc', v.source, ''], ['lsort', v.sort, LISTED_SORTS[0].value]]) {
-        if (value && value !== dflt) next.set(key, value); else next.delete(key);
-      }
-      return next;
-    });
-  };
-  // The directory reports the page it shows: its rows are what Export writes,
-  // and its directory total is the tab's count.
-  const [shown, setShown] = useState(null);
-  const [listedOffset, setListedOffset] = useState(0);
-  const listedKey = `${listedOffset}|${listedQuery.q}|${listedQuery.source}|${listedQuery.sort}`;
-  const [listed, reloadListed] = useRead(() => researchMarketsApi.listedCompanies({
-    limit: LISTED_PAGE, offset: listedOffset || undefined,
-    q: listedQuery.q || undefined, source: listedQuery.source || undefined, sort: listedQuery.sort,
-  }), listedKey);
-  const [geos, reloadGeos] = useRead(() => researchMarketsApi.geographies({ sort: 'company_count', limit: 100 }));
-  // D7173: the ranked signals' sector link names a tracked sector only on an exact match.
+  const view = readListedQuery(params);
+  const tab = view.tab;
+  const [markets, setDirectoryRead] = useState({ status: 'loading', data: null, request: null });
   const [sectors] = useRead(() => researchSectorsApi.list());
+  const listedReq = listedRequest(view);
+  const listedKey = JSON.stringify(listedReq);
+  const [listed, reloadListed] = useRead(() => researchMarketsApi.listedCompanies(listedReq), listedKey);
+  const directoryExport = useDirectoryExport(markets, params);
+  const [exportNote, setExportNote] = useState(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [geos, reloadGeos] = useRead(() => researchMarketsApi.geographies({ sort: 'company_count', limit: 100 }));
   const [sigs, reloadSigs] = useRead(() => api.signals.list({ limit: 3, mode: role === 'advisor' ? 'advisor' : 'founder' }), role);
-  // RS-17 (#6273 Q2, approved): market readings price an advisor's service
-  // line, so an investor neither sees them nor is offered the form.
   const showReadings = role !== 'investor';
   const [readings, reloadReadings] = useRead(() => (showReadings ? api.research.marketReadings() : Promise.resolve({ items: [] })), role);
   const [overview, reloadOverview] = useRead(() => researchOverviewApi.get(1));
@@ -806,6 +657,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
     setForm(readingForm(row));
     setOpened((n) => n + 1);
   };
+
   // A save opens the new reading, which is where its age, its comparables and
   // its proposal attachment are. Only a refusal leaves the form open, with
   // every input as typed (D7039 RMP-03C, RMP-08).
@@ -825,6 +677,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
       reloadReadings();
     }
   };
+
   // `Re-run stale` on the partner row (D593). Re-reading is work a person does,
   // so the op opens the form on the reading that needs it and runs nothing.
   const rerun = readings.status === 'ready' ? nextToRerun(readings.data?.items || []) : null;
@@ -841,47 +694,91 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
             : `No reading is past ${STALE_AT} days, and every service line has one.`),
     },
   };
+
+  // The Listed count is every listing record in both stores, one row per source
+  // (`store_total`), whatever the search; the result heading carries the search's.
   const tabCount = {
-    directory: shown ? `${fmt(shown.directory_total ?? shown.total ?? 0)}` : null,
-    listed: listed.status === 'ready' ? `${fmt(listed.data?.total ?? 0)}` : null,
+    directory: markets.status === 'ready' ? `${fmt(markets.data?.total ?? 0)} markets` : null,
+    listed: listed.status === 'ready' ? `${fmt(listed.data?.store_total ?? listed.data?.total ?? 0)} listing records` : null,
   };
-  const exportRows = tab === 'listed' ? (listed.data?.items || []) : (shown?.items || []);
+  const setTab = (t) => setParams((prev) => writeTab(prev, t), { replace: true });
+  const setListed = (patch) => setParams((prev) => changeListedQuery(prev, patch), { replace: true });
+  const clearListed = () => setParams((prev) => clearListedFilters(prev), { replace: true });
+
+  // The active tab's export: the same label and click in the zone's header row
+  // and beside the count. A new view drops the last Downloaded or Error note.
+  const exportKey = tab === 'listed' ? `listed|${listedKey}` : `directory|${JSON.stringify(markets.request)}|${markets.status}`;
+  useEffect(() => { setExportNote(null); }, [exportKey]);
+  const ctl = tab === 'listed' ? listedExport(listed, view) : directoryExport.ctl;
+  const runExport = async () => {
+    if (ctl.disabled || exportBusy) return;
+    setExportBusy(true);
+    setExportNote(null);
+    try {
+      const listedTab = tab === 'listed';
+      let rows;
+      try {
+        rows = listedTab ? (listed.data?.items || []) : await directoryExport.rows();
+      } catch {
+        setExportNote({ ok: false, text: 'The markets could not be read for the file.' });
+        return;
+      }
+      const header = listedTab ? LISTED_CSV_HEADER : MARKET_CSV_HEADER;
+      const cells = rows.map(listedTab ? listedCsvCells : marketCsvCells);
+      let ok = false;
+      try { ok = exportView({ scope: null, zone: ctl.zone, header, rows: cells }); } catch { ok = false; }
+      setExportNote(ok
+        ? { ok: true, count: cells.length, file: exportFileName({ scope: null, zone: ctl.zone, count: cells.length }) }
+        : { ok: false });
+    } finally {
+      setExportBusy(false);
+    }
+  };
+  const exporter = { ctl, note: exportNote, run: runExport, busy: exportBusy };
+  const scoped = { ...ctl, onClick: runExport, busy: exportBusy };
+  const tabRefs = useRef([]);
+  const tabKeys = (e, i) => {
+    const n = MARKET_TABS.length;
+    const to = { ArrowRight: (i + 1) % n, ArrowLeft: (i - 1 + n) % n, Home: 0, End: n - 1 }[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    setTab(MARKET_TABS[to].key);
+    tabRefs.current[to]?.focus();
+  };
+
   return (
     <div data-testid="market-directory" className="space-y-4">
-      {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(exportRows, opsHandlers)} /> : null}
+      {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(scoped, opsHandlers)} /> : null}
       <div>
         <h1 className="text-xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Markets</h1>
-        <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-axal-muted dark:text-gray-400">
-          {role === 'investor'
-            ? 'Which markets have recent evidence, and which of them match your thesis.'
-            : 'Find the markets with recent evidence in the countries you care about.'}
+        <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-axal-muted">
+          The markets of the Axal sector taxonomy, the listed companies StudioOS knows, and six indexes for each tracked sector.
         </p>
       </div>
       <Card>
-        <div role="tablist" aria-label="Markets" className="flex flex-wrap gap-1"
-          onKeyDown={(e) => {
-            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-            const i = DIRECTORY_TABS.findIndex((t) => t.key === tab);
-            const next = DIRECTORY_TABS[(i + (e.key === 'ArrowRight' ? 1 : DIRECTORY_TABS.length - 1)) % DIRECTORY_TABS.length];
-            setTab(next.key);
-          }}>
-          {DIRECTORY_TABS.map((t) => (
-            <button key={t.key} type="button" role="tab" id={`markets-tab-${t.key}`} aria-selected={tab === t.key} aria-controls="markets-tabpanel"
-              tabIndex={tab === t.key ? 0 : -1} onClick={() => setTab(t.key)}
-              className={`inline-flex min-h-[44px] items-center gap-2 rounded-lg px-3 text-[13px] font-semibold ${tab === t.key ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:ring-violet-800' : 'text-axal-ink dark:text-gray-200'}`}>
-              {t.label} {tabCount[t.key] ? <span className="text-[11.5px] font-medium text-axal-muted">{tabCount[t.key]}</span> : null}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div role="tablist" aria-label="Markets" className="flex flex-wrap gap-1">
+            {MARKET_TABS.map((t, i) => (
+              <button key={t.key} ref={(el) => { tabRefs.current[i] = el; }} type="button" role="tab" id={`markets-tab-${t.key}`}
+                aria-selected={tab === t.key} aria-controls="markets-tabpanel" tabIndex={tab === t.key ? 0 : -1}
+                onClick={() => setTab(t.key)} onKeyDown={(e) => tabKeys(e, i)}
+                className={`inline-flex min-h-[40px] items-center gap-2 rounded-lg px-3 text-[13px] font-semibold max-lg:min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-violet-600 dark:focus-visible:outline-violet-400 ${tab === t.key ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:ring-violet-800' : 'text-axal-ink dark:text-gray-200'}`}>
+                {t.label} {tabCount[t.key] ? <span className="text-[11.5px] font-medium text-axal-muted max-sm:hidden">{tabCount[t.key]}</span> : null}
+              </button>
+            ))}
+          </div>
+          {/* D537: no source names an owner, so government ownership is a note, not a tab. */}
+          <span data-testid="markets-government" className="inline-flex flex-wrap items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400 lg:ml-auto">
+            Government ownership <Unrecorded /> no source records who owns a company
+          </span>
         </div>
-        <div className="mt-3"><CoverageNote asOf={shown?.items?.[0]?.as_of} /></div>
+        <div className="mt-3"><CoverageNote asOf={markets.data?.items?.[0]?.as_of} /></div>
         <div className="mt-4" role="tabpanel" id="markets-tabpanel" aria-labelledby={`markets-tab-${tab}`}>
-          {tab === 'directory' ? <MarketDirectoryPanel role={role} onData={setShown} /> : null}
-          {tab === 'listed' ? (
-            <>
-              <ListedControls query={listedQuery} onChange={setListedQuery} />
-              <PublicPanel listed={{ ...listed, reload: reloadListed }} onPage={setListedOffset} />
-            </>
-          ) : null}
+          {tab === 'directory' ? <>
+            <ScopedExport exporter={exporter} />
+            <MarketDirectoryPanel role={role} onRead={setDirectoryRead} />
+          </> : null}
+          {tab === 'listed' ? <PublicPanel listed={{ ...listed, reload: reloadListed }} view={view} onChange={setListed} onClear={clearListed} exporter={exporter} /> : null}
         </div>
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
