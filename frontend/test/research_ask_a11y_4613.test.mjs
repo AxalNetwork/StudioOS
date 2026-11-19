@@ -15,6 +15,7 @@ import AskZone from '../src/pages/research/AskZone.jsx';
 import FundCatalogProfile from '../src/pages/research/FundCatalogProfile.jsx';
 import { api } from '../src/lib/api.js';
 import { researchFundsApi } from '../src/lib/api/researchFunds.js';
+import { researchMyFundsApi } from '../src/lib/api/researchMyFunds.js';
 import { RailPageProvider } from '../src/ui/railCrumbs.js';
 import {
   citationAvailability, referenceNote, splitCitations, REFERENCE_LIMIT,
@@ -170,13 +171,15 @@ test('the answer lists cited sources apart from retrieved ones, says [7] is unve
 const FUND = { uid: 'northwind2', name: 'Northwind Ventures II', website: 'https://northwind.test', source_name: 'EuroTech VC Funds (public spreadsheet)', source_url: 'https://example.org', as_of: '2026-10-04' };
 
 async function mountCatalog(createImpl) {
-  const original = { research: api.research, get: researchFundsApi.get };
+  const original = { research: api.research, get: researchFundsApi.get, mine: researchMyFundsApi.list };
   const sent = [];
   researchFundsApi.get = async () => ({ item: FUND, reports: [], reports_status: 'ok', source_boundary: 'Public list.' });
+  // D7168: the page asks for the one entry linked to this catalogue uid.
+  researchMyFundsApi.list = async () => ({ items: [] });
   api.research = { ...original.research, funds: async () => ({ items: [] }), fundCreate: async (body) => { sent.push(body); return createImpl(body); } };
   const m = await mountContracts(h(Routes, null, h(Route, { path: '/research/funds/catalog/:id', element: h(FundCatalogProfile, { role: 'founder' }) })), '/research/funds/catalog/northwind2');
   for (let i = 0; i < 6; i += 1) await m.flush();
-  return { ...m, sent, async close() { await m.unmount(); api.research = original.research; researchFundsApi.get = original.get; } };
+  return { ...m, sent, async close() { await m.unmount(); api.research = original.research; researchFundsApi.get = original.get; researchMyFundsApi.list = original.mine; } };
 }
 
 test('Save to shortlist: two presses in one frame send one request, carrying the catalogue uid', async () => {

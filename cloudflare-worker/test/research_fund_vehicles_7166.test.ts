@@ -13,6 +13,8 @@
  * Part 2, the route: the US dollar list's sizes are shown in US dollars, and
  * `size_currency` scopes the size filter, bands and sort to one list; a
  * retired uid opens the vehicle it moved to; `source` names served lists only.
+ * Part 3 (D7166 part 2, RFD-02's "Show them"): `size_band=none` answers the
+ * matches a size filter leaves out, exactly the rows `size_not_comparable` counts.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/research_fund_vehicles_7166.test.ts
@@ -202,4 +204,21 @@ test('a retired uid opens the vehicle it moved to; source names only the lists s
   const list = (await get(db, '/fund-directory')).body;
   assert.doesNotMatch(list.source, /Deep Tech/);
   assert.match(list.source, /EuroTech/);
+});
+
+test('size_band=none answers the funds a size filter leaves out, and only those', async () => {
+  const db = fixture();
+  // Euros: the US dollar rows, the unsized row and the list in no known currency.
+  const eur = (await get(db, '/fund-directory?size_band=none&limit=100')).body;
+  assert.deepEqual(uids(eur).sort(), ['aforeiv', 'deepone', 'nosize', 'smallusd']);
+  assert.equal(eur.total, (await get(db, '/fund-directory?size_min=50000000')).body.facets.size_not_comparable,
+    'the rows shown are the ones the size filter said it left out');
+  // US dollars: the euro rows, the unsized US dollar row and the unknown currency; never a sized US dollar row.
+  const usd = (await get(db, '/fund-directory?size_band=none&size_currency=USD&limit=100')).body;
+  assert.deepEqual(uids(usd).sort(), ['dawncapital-opp', 'dawncapital-v', 'deepone', 'nosize']);
+  // It narrows with the other filters, as the line it answers counts them.
+  assert.deepEqual(uids((await get(db, '/fund-directory?size_band=none&vintage=2024')).body).sort(), ['nosize', 'smallusd']);
+  const mixed = await get(db, '/fund-directory?size_band=none&size_min=1');
+  assert.equal(mixed.status, 400, 'none is a band, so it cannot be combined with from/to');
+  assert.equal((await get(db, '/fund-directory?size_band=nothing')).status, 400);
 });
