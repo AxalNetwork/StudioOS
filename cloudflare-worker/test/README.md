@@ -325,6 +325,7 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `_workspace_fake_5565.ts` | D5565: synthetic specification, atomic memory store and faultable fake executor; tests only. |
 | `workspace_contract_5565.test.ts` | D5565: strict contract, capability/location refusals, fake lifecycle and deterministic lease/replay/revocation/generation/cleanup mutations. |
 | `workspace_security_5567.test.ts` | D5567: actual WebCrypto, scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation journeys; synthetic only. |
+| `workspace_containment_5567.test.ts` | D5567 part 4: the fail-closed containment gate (evidence source/freshness from an injected clock, egress per network mode, metadata/localhost, guest bindings, privilege escalation, sandbox strength), the job-environment credential scan, and the real compute VM start options and image user; synthetic only. |
 | `_workspace_git_fake_5568.ts` | D5568: synthetic read-only Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network. |
 | `workspace_git_checkpoint_5568.test.ts` | D5568: 10 parallel worktrees, interrupted-workspace restore on the original and an alternate fake executor, wrong tenant/region/checksum/SHA/generation, mid-upload crash, revoked repo, stale GC, retention, metrics; nine mutations listed in its header. |
 | `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
