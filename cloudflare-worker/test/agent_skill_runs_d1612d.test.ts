@@ -84,8 +84,16 @@ function world() {
 const agent = (w: ReturnType<typeof world>) => w.db.prepare('SELECT * FROM team_agents WHERE id = 1').get() as any;
 const modelCalls = (w: ReturnType<typeof world>) => w.calls.filter((m) => m !== GUARD).length;
 
+/**
+ * D4667-p2: `board-meeting-brief` is one of the first ten, so a run of it is refused `skill_not_ready` until its
+ * readers supply its evidence (`skill_run_evidence_4667.test.ts`). The pinning tests below are about the version a
+ * run reads, so their skill runs under a slug outside the first ten.
+ */
+const outsideFirstTen = (w: ReturnType<typeof world>) => w.db.prepare("UPDATE agent_skills SET slug = 'synthetic-runway-note' WHERE id = 1").run();
+
 test('D1612 D: a run that names a skill uses its pinned version, in the turn and on the usage rows', async () => {
   const w = world();
+  outsideFirstTen(w);
   const r = await agentRun(w.env, { agent: agent(w), ...STEP, skill: SKILL_UID });
   assert.equal(r.ok, true, JSON.stringify(r));
   const sys = w.prompts.join('\n');
@@ -343,6 +351,7 @@ test('#4531 slice 3: each published result names the evaluator and the case text
 
 test('D4533 step 5: a newer version and a retirement move no pin; the run still reads the pinned version', async () => {
   const w = world();
+  outsideFirstTen(w);
   // A recovery published v3 (v1's definition under a new number), then HQ retired the skill. The agent was never re-pinned.
   w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
     VALUES (1, 3, 'md', 'Board meeting brief v3', 'From recorded figures, a runway note.', ?, '["mercury.read"]', 'brief', '[]', '["cfo"]', ?)`).run(JSON.stringify(['A restored step under v3']), SUPER);

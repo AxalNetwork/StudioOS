@@ -7,8 +7,8 @@
  *   · a service cannot be booked: founders book session types and booking
  *     links. It is on the public profile only once its owner publishes it
  *     (D5315 part 3, D4824); a Draft or Hidden service is the advisor's alone;
- *   · no proof is published. `is_public` is stored, but no page shows a proof
- *     item to anyone else, and publishing waits on the attestation rules (P1);
+ *   · proof is private until the advisor publishes a confirmed claim (#5315
+ *     part 2); what one proof card says is `proofModel.js` (D4825);
  *   · an article's state says who can read it and what the writer does next,
  *     from the statuses `routes/articles.ts` actually writes.
  */
@@ -134,8 +134,6 @@ export function serviceDraftOf(row) {
 }
 
 // ─────────────────────────────────────────────────────────── Proof
-
-export const PROOF_NOT_PUBLIC = 'Nothing in Proof is on your public profile. Publishing a claim waits on the rules for what an attestation must show, so for now every item is private to you.';
 
 /** What deleting a proof item takes with it, said before it happens. */
 export function proofDeleteLines(item) {

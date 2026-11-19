@@ -172,8 +172,18 @@ function useScoresAndFit(ids) {
  * you. Its read answers alone: a failure says Unreadable with Try again for
  * the strip and never 0, and the board below is unaffected.
  */
-export function AttentionStrip({ read, onRetry, newHref }) {
-  const a = attentionOf(read, unreadSources);
+function StaleRule({rule,onSaved}) {
+ const [days,setDays]=useState(rule.days??'');const [busy,setBusy]=useState(false);const [error,setError]=useState(null);
+ useEffect(()=>setDays(rule.days??''),[rule.days]);
+ async function save(){setBusy(true);setError(null);try{await dealFlowApi.setAttentionRule(days===''?null:Number(days));onSaved?.();}catch{setError('The firm’s stale rule could not be saved.');}finally{setBusy(false);}}
+ return <details className="text-xs"><summary className={`cursor-pointer font-semibold ${TAP}`}>Firm stale rule</summary><div className="mt-2 flex flex-wrap items-end gap-2">
+ <label>Days in stage<input aria-label="Firm stale days" type="number" min="1" max="3650" step="1" value={days} onChange={e=>setDays(e.target.value)} className={`ml-2 w-20 rounded border border-axal-hairline p-1 dark:border-gray-700 dark:bg-gray-900 ${TAP}`} /></label>
+ <button type="button" disabled={busy||(days!==''&&(!Number.isInteger(Number(days))||Number(days)<1||Number(days)>3650))} onClick={save} className={`font-semibold underline disabled:opacity-50 ${TAP}`}>{busy?'Saving…':'Save firm rule'}</button>
+ <span className="text-axal-muted dark:text-gray-400">Leave empty to keep stale Not recorded.</span>{error&&<span role="alert">{error}</span>}</div></details>;
+}
+
+export function AttentionStrip({ read, onRetry, newHref, recorded, onRuleSaved }) {
+  const a = attentionOf(read, unreadSources, recorded);
   const head = <b className="text-[13.5px]">Needs your attention</b>;
   const shell = 'flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900';
   if (a.kind === 'loading') return <section className={shell} aria-label="Needs your attention" aria-busy="true" data-testid="dealflow-attention">{head}<span className="text-[12.5px] text-axal-muted dark:text-gray-400">Reading…</span></section>;
@@ -193,12 +203,14 @@ export function AttentionStrip({ read, onRetry, newHref }) {
       {a.items.length ? (
         <div className="flex flex-wrap gap-1.5">
           {a.items.map((i) => (
-            <Link key={i.key} to={newHref} aria-label={i.label} className={`inline-flex items-center rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800 ${TAP}`} data-testid={`dealflow-attention-${i.key}`}>
+            i.key !== 'new' ? <span key={i.key} className="rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold dark:border-gray-700" data-testid={`dealflow-attention-${i.key}`}>{i.word}</span> : <Link key={i.key} to={newHref} aria-label={i.label} className={`inline-flex items-center rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800 ${TAP}`} data-testid={`dealflow-attention-${i.key}`}>
               {i.word}
             </Link>
           ))}
         </div>
-      ) : <span className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-attention-none">Nothing new for you{a.unread.length ? ' from the ways in that could be read' : ''}.</span>}
+      ) : <span className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-attention-none">{recorded ? 'No recorded items need your attention' : 'Nothing new for you'}{a.unread.length ? ' from the ways in that could be read' : ''}.</span>}
+      {recorded?.data?.stale?.state === 'not_recorded' && <span className="text-xs text-axal-muted dark:text-gray-400">Stale · Not recorded: {recorded.data.stale.reason}</span>}
+      {recorded?.data?.rule?.writable && <StaleRule rule={recorded.data.rule} onSaved={onRuleSaved} />}
       {a.unread.length > 0 && (
         <span className="text-[12.5px] text-amber-800 dark:text-amber-300" data-testid="dealflow-attention-unread">
           {a.unread.join(', ')} could not be read, so there may be more.
@@ -270,6 +282,7 @@ export default function DealFlow({ view, scope }) {
   // D4635: one accepted weighting for the control and the sort: a save re-reads it, and the order follows.
   const [weights, retryWeights] = useRead(() => ventureScoresApi.weights(), []);
   // D4815 part 3: the strip's one read, the inbox New for you already lists; not made under New for you itself.
+  const [attention, retryAttention] = useRead(() => (lists ? dealFlowApi.attention() : Promise.resolve(null)), [lists]);
   const [inbox, retryInbox] = useRead(() => (lists ? dealFlowApi.inbox() : Promise.resolve(null)), [lists]);
   // D6145 (#6145): who a deal can be given to, for the peek's picker and "Assign to me".
   const [owners, retryOwners] = useRead(() => (lists ? dealFlowApi.owners() : Promise.resolve(null)), [lists]);
@@ -434,7 +447,7 @@ export default function DealFlow({ view, scope }) {
     <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow">
       <DealFlowToolbar view={view} scope={scope} hrefFor={(v) => settingsHref({ ...v, settings })} onWeightsSaved={retryWeights} />
       {controls}
-      {lists && <AttentionStrip read={inbox} onRetry={retryInbox} newHref={settingsHref({ view, scope: 'new', settings })} />}
+      {lists && <AttentionStrip read={inbox} recorded={attention} onRuleSaved={retryAttention} onRetry={() => {retryInbox();retryAttention();}} newHref={settingsHref({ view, scope: 'new', settings })} />}
       <FlowOwnerContext.Provider value={ownerCtx}>{body}</FlowOwnerContext.Provider>
       {toast && (
         <div className={`flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 text-[13px] ${toast.kind === 'refused' ? 'border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'}`} role={toast.kind === 'refused' ? 'alert' : 'status'} data-testid="dealflow-toast">

@@ -279,6 +279,9 @@ export async function decideRailAs(env: Env, who: { ownerId: number; deciderId: 
   // D4488: Distribution acceptance requires fresh venture access and the creative transaction.
   if (routed?.rail_option === 'draft:distribution' && status !== 'discarded') return null;
   if (routed && routed.rail_option.startsWith('dataroom:') && status !== 'discarded') return null;
+  // D6909 part 4: a mark-request draft is kept only by its own route, behind the investor's held scope or HQ's gate
+  // (`routes/mark_request_drafts.ts`); here it can only be discarded.
+  if (routed && routed.rail_option.startsWith('markreq:') && status !== 'discarded') return null;
   // D6897 part 3: a Share outside Axal draft is kept only by its own route, behind the founders' Evidence gate
   // (`routes/raise_share_drafts.ts`); here it can only be discarded.
   if (routed && routed.rail_option.startsWith('share:') && status !== 'discarded') return null;
