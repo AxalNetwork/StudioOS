@@ -27,6 +27,9 @@
  *                 unfiltered answer must never pass for a filtered one.
  *   size_band     one of SIZE_BANDS (half-open euro bands), on the EuroTech list
  *                 only, like size_min/max; it cannot be combined with them.
+ *                 `none` (D7166 part 2, RFD-02's "Show them") is the other
+ *                 side of a size filter: every match with no size in the
+ *                 asked `size_currency`, the rows `size_not_comparable` counts.
  *   vintage       one `fund_year`, or `none`; not combined with vintage_from/to.
  *   `none`        for `hq_country`, `focus` and `vintage`: the field is empty
  *                 (NULL or blank) on the row — not recorded, which is a different
@@ -237,8 +240,8 @@ export function parseDirectoryQuery(get: (k: string) => string | undefined): Dir
   const sort = (get('sort') ?? 'name').trim() || 'name';
   if (!Object.hasOwn(SORTS, sort)) throw new DirectoryQueryError('sort', `sort must be one of ${Object.keys(SORTS).join(', ')}`);
   const band = (get('size_band') ?? '').trim();
-  if (band && !SIZE_BANDS.some((b) => b.value === band)) {
-    throw new DirectoryQueryError('size_band', `size_band must be one of ${SIZE_BANDS.map((b) => b.value).join(', ')}`);
+  if (band && band !== 'none' && !SIZE_BANDS.some((b) => b.value === band)) {
+    throw new DirectoryQueryError('size_band', `size_band must be one of ${SIZE_BANDS.map((b) => b.value).join(', ')}, none`);
   }
   const ccy = (get('size_currency') ?? '').trim().toUpperCase() || 'EUR';
   if (!(SIZE_CURRENCIES as readonly string[]).includes(ccy)) {
@@ -367,6 +370,12 @@ function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null
   if (q.focus && omit !== 'focus') {
     if (q.focus === 'none') where.push(`TRIM(COALESCE(sector_focus, '')) = ''`);
     else { where.push(`sector_focus IN (SELECT value FROM json_each(?))`); binds.push(r.focus); }
+  }
+  if (q.size_band === 'none' && omit !== 'size') {
+    // D7166 part 2: the matches a size filter leaves out — no size in the asked currency's list
+    // (no amount, another currency, or a currency not recorded), as `sizeFacet` counts them.
+    where.push(`(COALESCE(source_name, '') <> ? OR fund_size_cents IS NULL)`);
+    binds.push(currencySource(q.size_currency ?? 'EUR'));
   }
   const band = q.size_band ? SIZE_BANDS.find((b) => b.value === q.size_band) ?? null : null;
   const lo = band ? band.min : (q.size_min != null ? q.size_min * 100 : null);
