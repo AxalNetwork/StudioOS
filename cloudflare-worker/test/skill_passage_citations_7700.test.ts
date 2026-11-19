@@ -37,9 +37,9 @@ test('passage syntax works alongside dotted records, with exact selected-file id
   assert.equal(resolves('cap_table.read', r), true);
   assert.deepEqual(citations(`[${REF}] [cap_table.read]`), [REF, 'cap_table.read']);
   assert.equal(checkEvidence({ cite: [REF, 'cap_table.read'] }, r).ok, true);
-  assert.equal(checkEvidence({ cite: [REF, REF.toUpperCase()] }, r).ok, false);
-  assert.equal(checkEvidence({ cite: [`data_room_passage:${UID}:9999`] }, r).ok, false);
-  assert.equal(checkEvidence({ cite: [`data_room_passage:invalid:1`] }, r).ok, false);
+});
+
+test('the citation cap applies to distinct passages that all exist', () => {
   const many = records();
   many['data_room.index'].document.passages = Array.from({ length: 21 }, (_, i) => ({
     ref: `data_room_passage:${UID}:${i + 1}`, seq: i + 1, text: 'Synthetic instrument clause.',
@@ -48,14 +48,28 @@ test('passage syntax works alongside dotted records, with exact selected-file id
   assert.equal(checkEvidence({ cite: many['data_room.index'].document.passages.map(p => p.ref) }, many).ok, false);
 });
 
-test('unrecorded, mismatched or empty passages cannot supply evidence', () => {
-  const altered = (edit: (b: any) => void) => { const r = records(); edit(r['data_room.index']); return r; };
-  assert.equal(resolves(REF, altered(b => { b.document_status = 'not_read'; })), false);
-  assert.equal(resolves(REF, altered(b => { b.document.file_uid = OTHER; })), false);
-  assert.equal(resolves(REF, altered(b => { b.document.ref = `data_room_file:${OTHER}`; })), false);
-  assert.equal(resolves(REF, altered(b => { b.document.passages[0].seq = 2; })), false);
-  assert.equal(resolves(REF, altered(b => { b.document.passages[0].ref = `data_room_passage:${OTHER}:1`; })), false);
-  assert.equal(resolves(REF, altered(b => { b.document.passages[0].text = ''; })), false);
-  assert.equal(resolves(REF, altered(b => { b.document.passages = null; b.untrusted_note = REF; })), false);
+const changes: Array<[string, (b: any) => void]> = [
+  ['unrecorded document text', b => { b.document_status = 'not_read'; }],
+  ['another file UID', b => { b.document.file_uid = OTHER; }],
+  ['another file reference', b => { b.document.ref = `data_room_file:${OTHER}`; }],
+  ['a different passage sequence', b => { b.document.passages[0].seq = 2; }],
+  ['a different passage reference', b => { b.document.passages[0].ref = `data_room_passage:${OTHER}:1`; }],
+  ['an empty passage', b => { b.document.passages[0].text = ''; }],
+  ['a reference merely mentioned in an unrelated field', b => { b.document.passages = null; b.untrusted_note = REF; }],
+];
+for (const [name, edit] of changes) test(`passage evidence refuses ${name}`, () => {
+  const r = records(); edit(r['data_room.index']);
+  assert.equal(resolves(REF, r), false);
+});
+test('a case without the selected reader document holds no passage evidence', () => {
   assert.equal(resolves(REF, {}), false);
+});
+test('duplicate case-insensitive passage references are refused', () => {
+  assert.equal(checkEvidence({ cite: [REF, REF.toUpperCase()] }, records()).ok, false);
+});
+test('a sequence not held by the selected document is refused', () => {
+  assert.equal(checkEvidence({ cite: [`data_room_passage:${UID}:9999`] }, records()).ok, false);
+});
+test('a malformed passage reference is refused', () => {
+  assert.equal(checkEvidence({ cite: ['data_room_passage:invalid:1'] }, records()).ok, false);
 });
