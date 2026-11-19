@@ -123,6 +123,7 @@ export function goToTarget(placement, user, session = null) {
 export function guideOutline(sub, { related = 0, feedback = false, stuck = false } = {}) {
   return [
     sub?.overview && { id: 'overview', label: 'Overview' },
+    Array.isArray(sub?.beforeYouStart) && sub.beforeYouStart.length > 0 && { id: 'before-you-start', label: 'Before you start' },
     Array.isArray(sub?.howto) && sub.howto.length > 0 && { id: 'steps', label: 'Steps' },
     Array.isArray(sub?.tips) && sub.tips.length > 0 && { id: 'tips', label: 'Tips' },
     Array.isArray(sub?.pitfalls) && sub.pitfalls.length > 0 && { id: 'pitfalls', label: 'Pitfalls' },
@@ -193,7 +194,7 @@ export function directoryAreas(sections, filterRole = 'all') {
  * A guide's broken links, checked against the manifest it is built from: a
  * Related link that opens no guide, or a page its placement names that the
  * surface table does not know. No store is needed: the guides are code. A
- * stale flag needs first verified dates (#4641), so it is not recorded here.
+ * stale flag is `guideVerification` in `guideGovernance.js` (D7515), not here.
  */
 export function guideLinkFlags(anchor, sections) {
   const ids = new Set(sections.flatMap((s) => s.subsections.map((g) => `${s.id}/${g.id}`)));

@@ -75,7 +75,7 @@ test('a cell names its source and date; Not recorded keeps its reason; a removed
   // Mutation checked: read a removed member's values → its cells are not 'absent'.
   assert.deepEqual(row('country')[1], { state: 'absent', text: null, reason: 'No longer in the directory, so nothing is shown for it.' });
   assert.equal(cellView('country', null, { state: 'listed', values: {} }).state, 'unreadable');
-  assert.equal(cellView('country', null, { state: 'unreadable', values: null }).reason, 'Unreadable: the directory could not be read just now.');
+  assert.equal(cellView('country', null, { state: 'unreadable', values: null }).reason, 'Unavailable: the directory could not be read just now.');
   assert.equal(cellView('size', { status: 'recorded', value: 5000000000, currency: 'EUR', source: { name: 'List', url: null }, as_of: null }, { state: 'listed', values: {} }).text, '€50M');
   assert.equal(cellView('size', { status: 'recorded', value: 5000000000, currency: 'EUR', source: { name: 'List', url: null }, as_of: null }, { state: 'listed', values: {} }).source, 'List · date not recorded');
   // The candidates for a new column are the project's own of the same kind, not already in it.
@@ -209,7 +209,7 @@ function mountPanel(props, list) {
   researchProjectsApi.link = async (...args) => { calls.push(['link', ...args]); return { ok: true, added: true }; };
   Object.assign(researchProjectComparisonsApi, {
     addSubjects: async (...args) => { calls.push(['add', ...args]); return { ok: true, added: args[2].length, already: 0 }; },
-    create: async (...args) => { calls.push(['create', ...args]); return { item: { uid: 'k9', title: 'Nebula Compute · Aster Cloud' } }; },
+    create: async (...args) => { calls.push(['create', ...args]); return { item: { uid: 'k9', title: 'Nebula Compute · Aster Cloud', members: 2 }, project: { uid: args[0], title: 'Seed funds' }, repeat: false, rolled_back: false }; },
   });
   return mountContracts(h(AddToResearch, { onClose() {}, ...props }), '/research/companies', { id: 1, role: 'founder' }).then((m) => ({
     m, calls, restore() { Object.assign(researchProjectsApi, real); Object.assign(researchProjectComparisonsApi, realCompared); },
@@ -255,8 +255,12 @@ test('Compare: one comparison of the selection, with its title; more than six is
     await act(async () => { r.m.props(byTid(r.m, 'research-target-p2')).onChange(); });
     await change(r.m, 'input-comparison-title', 'Two clouds');
     await submit(r.m, 'form-add-to-research');
-    assert.deepEqual(r.calls, [['create', 'p2', { kind: 'company', uids: ['q-nebula', 'q-aster'], title: 'Two clouds' }]]);
-    assert.match(textOf(byTid(r.m, 'add-to-research-result')), /Comparison “Nebula Compute · Aster Cloud” is in “Seed funds”.*Open the comparison/);
+    // D7177: every attempt from the sheet carries its request id.
+    const [[, , body]] = r.calls;
+    assert.match(body.request_id, /^[A-Za-z0-9-]{8,64}$/);
+    assert.deepEqual(r.calls, [['create', 'p2', { kind: 'company', uids: ['q-nebula', 'q-aster'], title: 'Two clouds', request_id: body.request_id }]]);
+    assert.match(textOf(byTid(r.m, 'add-to-research-result')), /Comparison saved.*“Nebula Compute · Aster Cloud” is in “Seed funds” with 2 columns.*Open the comparison/);
+    assert.equal(r.m.props(byTid(r.m, 'add-to-research-open')).href, '/research/projects/p2/comparisons#comparison-k9');
   } finally { await r.m.unmount(); r.restore(); }
   const seven = Array.from({ length: 7 }, (_, i) => ({ uid: `c${i}`, name: `Company ${i}` }));
   r = await mountPanel({ kind: 'company', items: seven, mode: 'compare' });

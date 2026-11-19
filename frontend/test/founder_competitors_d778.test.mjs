@@ -161,7 +161,7 @@ test('the Companies workspace sends each press\'s option, the advisor\'s keys on
       React.createElement(CompetitorAnalysis, { linkToDossier: false })), '/research/companies?tab=analyses');
     try {
       await act(async () => { m.props(m.nodes().find((n) => n.tagName === 'INPUT' && /sales enablement/.test(String(m.props(n)?.placeholder || '')))).onChange({ target: { value: 'Freight' } }); });
-      await m.press('Analyze competitors');
+      await m.press('Run competitor analysis'); // D7175: the canvas's label
       assert.equal(net.calls.find((c) => c[0] === 'analyze')[2]['X-Rail-Option'], enc(keys.analyze), page);
       await act(async () => { net.pending.shift().ok(ONE); }); await m.settle();
       await m.press('Re-run');
@@ -194,7 +194,7 @@ test('in the workspace, a run answers only the analysis it was pressed on: openi
   const m = await mount(React.createElement(CompetitorAnalysis, { linkToDossier: false }), '/research/companies?tab=analyses');
   try {
     await act(async () => { m.props(m.nodes().find((n) => n.tagName === 'INPUT' && /sales enablement/.test(String(m.props(n)?.placeholder || '')))).onChange({ target: { value: 'Freight' } }); });
-    await m.press('Analyze competitors');
+    await m.press('Run competitor analysis'); // D7175: the canvas's label
     await act(async () => { net.pending.shift().ok(ONE); }); await m.settle();
     await m.press('Re-run');
     const saved = m.nodes().find((n) => n.tagName === 'BUTTON' && textOf(n).includes('Payroll'));

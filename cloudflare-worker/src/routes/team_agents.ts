@@ -389,7 +389,9 @@ router.get('/agents/:uid/skills/:slug/readiness', async (c) => {
       if (!p) return say(c, 404, 'project_not_in_company', 'The project is not this company\'s.');
       projectId = p.id;
     }
-    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to } });
+    // D4667-p2: through the keys the agent's rule book reads, as a run of it is checked; any other is `not_granted`.
+    const { rules } = await effectiveBook(c.env, s, a.role_key);
+    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to } }, undefined, undefined, undefined, undefined, { granted: rules.reads });
     return c.json({ readiness: r });
   } catch (e) { return mapError(c, e); }
 });
