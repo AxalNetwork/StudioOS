@@ -7,7 +7,7 @@
  * (`facebook_grow_5859.test.ts` holds the three to each other).
  *
  * Part 1 (#5292) built the sign-in and the Page list, which land nothing. Part 2a (`services/facebook/grow.ts`) built
- * the first two. The "Link your Facebook Page to a Distribution channel?" proposal is #5860.
+ * the first two. D5860 adds the local "Link your Facebook Page to a Distribution channel?" proposal.
  *
  * No side effects and no imports: the registry and the pages may read it.
  */
@@ -37,7 +37,7 @@ export const FACEBOOK_FEED_LIST: readonly FacebookFeed[] = Object.freeze(([
     calls: Object.freeze(['/insights?']),
   },
   {
-    key: 'channel', module: 'distribution', kind: 'proposal', built: false, decision: 'D2399',
+    key: 'channel', module: 'distribution', kind: 'proposal', built: true, decision: 'D5860',
     what: 'Link your Facebook Page to a Distribution channel, only when you accept',
     calls: Object.freeze([]),
   },

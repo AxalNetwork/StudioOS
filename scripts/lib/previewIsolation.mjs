@@ -44,6 +44,30 @@ import { parseToml } from './branchConfig.mjs';
 /** Placeholder ids committed for preview until the owner creates the resource. */
 export const PLACEHOLDER_RE = /^REPLACE_WITH_/;
 
+/** A D1 `database_id` as Cloudflare issues it (a UUID) and a KV namespace `id` (32 hex). */
+export const D1_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const KV_ID_RE = /^[0-9a-f]{32}$/;
+
+/**
+ * #7147 step 5: the environment's resource ids are written all at once or not
+ * at all. `unprovisioned` (every D1 and KV id a placeholder: before step 1, or
+ * after a tear-down) and `provisioned` (none) are both consistent. `partial`
+ * (some written, some not) is a half-finished write and fails the static
+ * check, so `--static` stops accepting a placeholder once any id is real. An
+ * id that is neither a placeholder nor in Cloudflare's format is `malformed`.
+ */
+export function provisioningState(tomlSrc, env = 'preview') {
+  const ids = [];
+  for (const b of declaredBindings(tomlSrc, env).bindings) {
+    if (b.kind === 'd1_databases' && b.identity.database_id != null) ids.push({ binding: b.binding, field: 'database_id', value: String(b.identity.database_id), re: D1_ID_RE });
+    if (b.kind === 'kv_namespaces' && b.identity.id != null) ids.push({ binding: b.binding, field: 'id', value: String(b.identity.id), re: KV_ID_RE });
+  }
+  const placeholders = ids.filter((i) => PLACEHOLDER_RE.test(i.value));
+  const malformed = ids.filter((i) => !PLACEHOLDER_RE.test(i.value) && !i.re.test(i.value));
+  const state = !ids.length || placeholders.length === ids.length ? 'unprovisioned' : placeholders.length ? 'partial' : 'provisioned';
+  return { state, ids: ids.map(({ re, ...i }) => i), placeholders: placeholders.map((i) => i.binding), malformed: malformed.map((i) => i.binding) };
+}
+
 /**
  * Every binding kind an environment may declare, how its identity is read,
  * and whether it is critical to agent execution validation (#4566 §1: Worker,
@@ -267,11 +291,18 @@ export function preflight(tomlSrc, { env = 'preview', observed = null, static: i
   for (const [k, want] of Object.entries(PRODUCTION_AGENT_VARS)) {
     if (prodVars[k] !== want) problems.push({ kind: 'production_var', binding: k, status: 'shared', detail: `production ${k} reads ${JSON.stringify(prodVars[k] ?? null)}, not "${want}"` });
   }
+  const prov = provisioningState(tomlSrc, env);
+  if (prov.state === 'partial') {
+    problems.push({ kind: 'provisioning', binding: prov.placeholders.join(','), status: 'partial', detail: 'some resource ids are written and these are still placeholders; write all of them (scripts/staging-write-ids.mjs) or none' });
+  }
+  for (const binding of prov.malformed) {
+    problems.push({ kind: 'provisioning', binding, status: 'malformed', detail: 'not a Cloudflare id (D1: a UUID; KV: 32 hex characters)' });
+  }
   const unsafe = [...matrix.rows.filter((r) => UNSAFE.has(r.status)), ...problems];
   const pending = matrix.rows.filter((r) => r.critical && !UNSAFE.has(r.status) && !['isolated', 'account_shared', 'not_applicable'].includes(r.status));
   if (!isStatic && observed && !Array.isArray(observed.account_permissions)) {
     pending.push({ kind: 'account_permissions', binding: 'token', status: 'unverified', detail: 'the observation does not say which read permissions it had' });
   }
   const verdict = unsafe.length ? 'unsafe' : (isStatic ? 'declared_only' : pending.length || !observed ? 'unverified' : 'isolated');
-  return { verdict, ok: isStatic ? !unsafe.length : verdict === 'isolated', env: matrix.env, worker: matrix.worker, rows: matrix.rows, unsafe, pending };
+  return { verdict, ok: isStatic ? !unsafe.length : verdict === 'isolated', env: matrix.env, worker: matrix.worker, provisioning: prov.state, rows: matrix.rows, unsafe, pending };
 }

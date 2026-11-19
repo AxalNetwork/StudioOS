@@ -35,7 +35,7 @@ routes.post('/', bodyLimit({ maxSize: 8192 }), async c => {
   if (!account) return c.json({ error: 'invalid_signed_request' }, 400);
   try {
     await c.env.DB.batch([
-      // D5859: the Grow facts this account's connections fed, their ledger rows and Page links, before the rows they name.
+      // D5859/D5860: the Grow facts, proposals, ledger and Page links, before the connections they name.
       ...purgeByAccountStatements(c.env, account),
       c.env.DB.prepare("DELETE FROM integration_logs WHERE provider_key = 'facebook' AND integration_id IN (SELECT id FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?)").bind(account),
       c.env.DB.prepare("DELETE FROM integration_companies WHERE integration_id IN (SELECT id FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?)").bind(account),

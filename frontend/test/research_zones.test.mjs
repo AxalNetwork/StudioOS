@@ -513,7 +513,8 @@ test('funds lists its canvas’s named columns', () => {
   assert.ok(head, 'the funds table no longer declares its column heads');
   assert.deepEqual(
     head[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')),
-    ['Fund', 'Cheque', 'State', 'What the research says'],
+    // D7168 (FND-S01): stage fit, route in and status are three columns.
+    ['Fund · vehicle · identity', 'Their cheque', 'Stage fit', 'Route in', 'Status', 'Your note', 'Updated'],
   );
   // Its own scroller: a narrow viewport must scroll the table, never the page.
   assert.match(code, /overflow-x-auto/, 'the funds table lost its own scroller');

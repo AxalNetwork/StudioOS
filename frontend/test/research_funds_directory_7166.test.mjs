@@ -193,6 +193,6 @@ test('My funds, empty: Browse fund directory and Add a fund by hand, and no row 
   assert.match(zone, />Browse fund directory</);
   assert.match(zone, />Add a fund by hand</);
   assert.match(zone, /const browse = \(\) => \{ pick\('directory'\); setTimeout\(\(\) => document\.getElementById\('fd-q'\)\?\.focus\(\), 0\); \};/);
-  assert.match(zone, /<div className=\{listState === 'ok' && !items\.length \? 'hidden' : 'grid grid-cols-2 gap-3 lg:grid-cols-4'\}>/);
+  assert.match(zone, /<div className=\{listState === 'ok' && !narrowed && !items\.length \? 'hidden' : 'grid grid-cols-2 gap-3 lg:grid-cols-5'\}>/);
   assert.match(zone, /<input id="fz-add-name"/);
 });

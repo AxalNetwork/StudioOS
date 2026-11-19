@@ -6,6 +6,7 @@
 | --- | --- |
 | `npm run build` | `build-frontend.mjs` — compiles the SPA into `docs/`, prerenders public routes, and prunes old hashed assets on a retention window. **Always build through this, never a bare `vite build`**: that empties `docs/` and deletes the retained assets and the hand-maintained changelogs living there. |
 | `npm run deploy` | Applies pending D1 migrations (`migrate-d1.mjs --remote`) and then deploys the worker. The migration step is a `predeploy` hook, which is why deploying by hand ships the worker ahead of its schema. |
+| `lib/shardPlan.mjs` | D5609: deterministic duration packing and exact-once coverage for `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`. |
 | `baselines/` | D5613: split auth-inventory and SQL-prepare ledgers, each directory with its own README. |
 
 ## The guards
@@ -240,5 +241,3 @@ Each harness describes itself in [the generated list](#the-files) below.
 D5676: `check-tail-archive.mjs` is an external authenticated metadata-only observer check; query/process fallback belongs to the shared independent monitor owner.
 
 D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt before normal production promotion, retaining sanitized stage evidence.
-
-
