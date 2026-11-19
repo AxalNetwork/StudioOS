@@ -14,7 +14,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { FileDown, Printer } from 'lucide-react';
-import SitePage from '../components/site/SitePage';
+import SitePage from '../../components/site/SitePage';
 import { AVAILABILITY, SECTION_IDS, SECTION_TITLES } from './collect.js';
 import './programs.css';
 
@@ -64,7 +64,7 @@ export function ProgramPanel({ program, children, action = null }) {
   return (
     <section className="pgs-panel" aria-labelledby="pgs-panel-h" data-testid="program-panel">
       <div className="pgs-panel-h">
-        <h2 className="pgs-panel-k" id="pgs-panel-h">Availability</h2>
+        <p className="pgs-panel-k" id="pgs-panel-h">Availability</p>
         <AvailabilityLabel avail={program.avail} text={program.availText} dark />
       </div>
       {children}

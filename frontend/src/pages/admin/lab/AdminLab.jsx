@@ -16,7 +16,7 @@ import LabHowItRuns from './LabHowItRuns';
 import LabSettings from './LabSettings';
 import LabActivity from './LabActivity';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { ViewPresentationLink } from '../../../programs/AdminPresentationLinks';
+import { ViewPresentationLink } from '../../programs/AdminPresentationLinks';
 import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
 import LabParticipants from './LabParticipants';
 import { participantsCount } from './participantsModel';

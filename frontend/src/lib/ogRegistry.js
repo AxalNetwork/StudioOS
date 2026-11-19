@@ -272,7 +272,7 @@ const ROUTES = [
   },
   // D6966 (#6966): the public Programs index. Prefix, so a /programs/<key> page that has no entry
   // of its own previews as the index; each program's own page is prerendered from its map entry
-  // (`frontend/src/programs/catalog/`, read by scripts/lib/programCatalog.mjs), so adding a
+  // (`frontend/src/pages/programs/catalog/`, read by scripts/lib/programCatalog.mjs), so adding a
   // program adds no row here.
   {
     path: '/programs',

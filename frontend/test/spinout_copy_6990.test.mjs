@@ -15,8 +15,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { LabApplyBand, LabHero } from '../src/components/spinout/LabIntro.jsx';
 import { numberWord, numberWordCap } from '../src/lib/numberWords.js';
-import LAB_PROGRAM from '../src/programs/catalog/spinout-lab.js';
-import LAB_CONTENT from '../src/programs/content/spinout-lab.js';
+import LAB_PROGRAM from '../src/pages/programs/catalog/spinout-lab.js';
+import LAB_CONTENT from '../src/pages/programs/content/spinout-lab.js';
 import { LAB_TOOLS } from '../src/lib/spinoutLabArsenal.js';
 import { DIMENSIONS } from '../src/lib/scoringViewModel.js';
 import { FOUNDER_DIMENSIONS } from '../src/lib/founderDimensions.js';
@@ -24,8 +24,8 @@ import { COHORT_WEEKS } from '../src/lib/spinoutLab.js';
 
 const FILES = [
   'frontend/src/pages/SpinoutLabBriefPage.jsx',
-  'frontend/src/programs/catalog/spinout-lab.js',
-  'frontend/src/programs/content/spinout-lab.js',
+  'frontend/src/pages/programs/catalog/spinout-lab.js',
+  'frontend/src/pages/programs/content/spinout-lab.js',
   'frontend/src/components/spinout/LabIntro.jsx',
   'frontend/src/lib/spinoutLabArsenal.js',
   'frontend/src/pages/events/PublicEventsPage.jsx',

@@ -3,9 +3,9 @@ import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import SitePage from '../../components/site/SitePage';
 import { Unreadable } from '../../ui/Honesty';
 import { usePageMeta } from '../../lib/seo';
-import { ProgramPanel, ProgramPresentation } from '../../programs/kit';
-import { loadContent, programFor } from '../../programs/registry';
-import '../../programs/programs.css';
+import { ProgramPanel, ProgramPresentation } from './kit';
+import { loadContent, programFor } from './registry';
+import './programs.css';
 
 /**
  * `/programs/:key` — a program's shareable address (D6966, #6966; PGS08D). Signed out.
@@ -13,7 +13,7 @@ import '../../programs/programs.css';
  *   - A key in the presentation map whose canonical page is elsewhere (Spin-Out Lab's
  *     `/spinout-lab/brief`) resolves there, keeping the query and the hash.
  *   - A key whose canonical page is this address draws its presentation from
- *     `programs/content/<key>.js`, with the fixed availability panel the content declares.
+ *     `content/<key>.js`, with the fixed availability panel the content declares.
  *   - Any other key gets the missing-programme page: no list of unpublished keys, no admin
  *     link, and `noindex`. The SPA answers 200 for it; a Worker 404 is #6965's optional rule.
  */

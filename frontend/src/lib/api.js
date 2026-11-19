@@ -5934,7 +5934,7 @@ export const spinoutLab = {
   // Public — the cohort's live values (D141): the Spin-Out Lab presentation's
   // availability panel reads them (D6966). Everything else the presentation
   // says is the programme's own description, in
-  // `programs/content/spinout-lab.js`; a route serving that too would be a
+  // `pages/programs/content/spinout-lab.js`; a route serving that too would be a
   // store invented so a page could look dynamic.
   brief: () => request('/spinout-lab/brief'),
   // D383 — the caller's own application lifecycle. No id in any path: each

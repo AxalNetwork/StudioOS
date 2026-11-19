@@ -1,4 +1,4 @@
-# `frontend/src/programs/` — program presentations and their map (D6966, #6965)
+# `frontend/src/pages/programs/` — program presentations and their map (D6966, #6965)
 
 One public page and one 16:9 PDF per program, telling the same story in the same order.
 The Spin-Out Lab pilot (#6966, decision `D6966-p2.md`) built the kit; the nine programs of
@@ -10,15 +10,16 @@ edits nothing shared**, so those PRs never conflict with each other.
 | Path | What it is |
 | --- | --- |
 | `catalog/` | The map: one file per program, `catalog/<key>.js`, default-exporting its entry (registry key → canonical page → committed PDF, the availability word, the name, purpose, audience, edition, slide count, link-preview title and description, and the index card's line). Plain data with no imports: Node scripts read it too. |
-| `content/` | One file per program, `content/<key>.js`: sections 1 to 4 of its page, the Next step band, its fixed availability panel when it has no live read, and its slides. Written in the block vocabulary below. It may import app code (the Lab reads its week names from `lib/spinoutLab.js`). |
+| `content/` | One file per program, `content/<key>.js`: sections 1 to 4 of its page, the Next step band, its fixed availability panel when it has no live read, and its slides. Written in the block vocabulary below. It may import app code (the Lab reads its week names from `frontend/src/lib/spinoutLab.js`). |
 | `collect.js` | The rules: the availability words, the five section names, the checks on an entry, and `collectPrograms`. |
-| `registry.jsx` | The map, collected with `import.meta.glob` (a `.jsx`, so the node test loader expands the glob): `PROGRAMS`, `programFor(key)`, `presentationHref(key)`, `loadContent(key)`. |
+| `registry.jsx` | The map, collected with `import.meta.glob` (a JSX module, so the node test loader expands the glob): `PROGRAMS`, `programFor(key)`, `presentationHref(key)`, `loadContent(key)`. |
 | `kit.jsx`, `programs.css` | The page kit (PGS00): availability label, Download PDF, Print, the panel, the hero, the section nav, the sections, the journey, the Next step band. In today's public-site frame (`SitePage`), light only. |
-| `deck.js`, `deck.css` | The slide master (PGS04): the deck as HTML, for the PDF builder only. |
+| `deck.js` | The slide master (PGS04): the deck as HTML and its stylesheet (`DECK_CSS`), for the PDF builder only. |
 | `AdminPresentationLinks.jsx` | The admin entry points (PGS07), derived from the map: the program's name on /admin/programs opens its presentation, "Open" reads "Manage program", and the program's admin header gains "View presentation". |
 
-The routes are `frontend/src/routes/programs.jsx` (`/programs`, `/programs/:key`) with their
-pages in `frontend/src/pages/programs/`. The PDFs are `frontend/public/program-briefs/`.
+The routes are `frontend/src/routes/programs.jsx`: `/programs` is `ProgramsIndexPage.jsx` and
+`/programs/:key` is `ProgramKeyPage.jsx` (here). Spin-Out Lab's own page is
+`frontend/src/pages/SpinoutLabBriefPage.jsx`. The PDFs are `frontend/public/program-briefs/`.
 
 ## Add a program
 

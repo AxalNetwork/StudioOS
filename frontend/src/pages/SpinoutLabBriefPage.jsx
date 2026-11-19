@@ -4,9 +4,9 @@ import { spinoutLab } from '../lib/api';
 import { reportError } from '../lib/log';
 import { Unrecorded, Unreadable } from '../ui';
 import { dateInZone } from '../lib/zoneTime';
-import { ProgramPanel, ProgramPresentation } from '../programs/kit';
-import { programFor } from '../programs/registry';
-import CONTENT, { APPLY_HREF, SIGN_IN_HREF } from '../programs/content/spinout-lab.js';
+import { ProgramPanel, ProgramPresentation } from './programs/kit';
+import { programFor } from './programs/registry';
+import CONTENT, { APPLY_HREF, SIGN_IN_HREF } from './programs/content/spinout-lab.js';
 
 /**
  * `/spinout-lab/brief` — the Spin-Out Lab's public presentation (D6966, #6966; boards PGS01 to
@@ -22,7 +22,7 @@ import CONTENT, { APPLY_HREF, SIGN_IN_HREF } from '../programs/content/spinout-l
  * ONE READ. The availability panel reads the public `GET /api/spinout-lab/brief`: the cohort's
  * name, start, application deadline and places, the zone they are enforced in, and
  * `applications_open`. Everything else on the page is the programme's own description, in
- * `programs/content/spinout-lab.js`. The PDF reads nothing live: it never prints a date or a
+ * `pages/programs/content/spinout-lab.js`. The PDF reads nothing live: it never prints a date or a
  * place. Download PDF works before the read answers and after it fails.
  */
 

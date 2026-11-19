@@ -4,7 +4,7 @@ import { Lightbox, usePhoneWidth } from '../../../ui';
 import { programsApi } from '../../../lib/api/programs';
 import { DIALOG_BODY, DIALOG_LINES, DialogButtons, GrantBadge, MovedNotice, ProgramDimensions, StatusPill, SUB, Unread } from './parts';
 import useProgramsTitle from './useProgramsTitle';
-import { ViewPresentationLink } from '../../../programs/AdminPresentationLinks';
+import { ViewPresentationLink } from '../../programs/AdminPresentationLinks';
 import { NOT_RECORDED, PAGES, crumbText, grantBadgeOf, movedNotice, programByKey, programDimensions, withoutMoved } from './programsModel';
 import { CSV_DONE, CSV_LINES, CSV_PROGRAMS, refusalSentence } from './programPagesModel';
 

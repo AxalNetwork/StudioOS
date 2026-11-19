@@ -29,7 +29,7 @@ const SURFACES = [
   'components/spinout/LabIntro.jsx',
   'pages/SpinoutLabPage.jsx',
   'pages/SpinoutLabBriefPage.jsx',
-  'programs/content/spinout-lab.js',
+  'pages/programs/content/spinout-lab.js',
   'pages/events/PublicEventsPage.jsx',
   'lib/siteMethod.js',
   'pages/site/MethodologyPage.jsx',
@@ -102,7 +102,7 @@ test('the Lab page and the brief draw the formation line once, under the gates',
   assert.ok(gates.includes(formationItemsFor('wy')[0]), 'with the chosen jurisdiction\'s incorporation line');
   // D6966: the brief's journey draws registering the company once, in the dashed band under the
   // weeks, as "depends on your starting point" (owner decision F1), never inside a week.
-  const { default: content, WEEKS } = await import('../src/programs/content/spinout-lab.js');
+  const { default: content, WEEKS } = await import('../src/pages/programs/content/spinout-lab.js');
   const journey = content.sections[1].blocks.find((b) => b.type === 'timeline');
   assert.match(journey.span.note, /^Which week depends on your starting point\./);
   assert.equal(journey.steps, WEEKS);

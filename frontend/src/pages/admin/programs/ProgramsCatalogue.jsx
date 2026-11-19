@@ -32,7 +32,7 @@ import { ProposalsSummary, YourProposals } from './ProposalTables';
 
 const TABLET_QUERY = '(max-width: 1023px)';
 import { ProgramsTabs, useWaitingProposals } from './ProposalsPage';
-import { PresentationName, manageDoor } from '../../../programs/AdminPresentationLinks';
+import { PresentationName, manageDoor } from '../../programs/AdminPresentationLinks';
 import NewProgramDialog from './NewProgramDialog';
 import { NEW_PROGRAM } from './proposalsModel';
 import {

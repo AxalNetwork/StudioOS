@@ -6,14 +6,14 @@ import NetworkSubNav from '../../components/site/NetworkSubNav';
 import { spinoutLab } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { dateInZone } from '../../lib/zoneTime';
-import { AvailabilityLabel } from '../../programs/kit';
-import { PROGRAMS } from '../../programs/registry';
-import '../../programs/programs.css';
+import { AvailabilityLabel } from './kit';
+import { PROGRAMS } from './registry';
+import './programs.css';
 
 /**
  * `/programs` — the public Programs index (D6966, #6966; board PGS08A, PGS08B), reached by
  * "See all programs →" on /events. Signed out. One card per program in the presentation map
- * (`programs/catalog/`): its group, name, availability in words, purpose and audience, and its
+ * (`catalog/` beside this file): its group, name, availability in words, purpose and audience, and its
  * presentation and PDF. Only a program with a map entry is listed: the canvas's two labelled
  * example cards (an invitation-only and a proposed program) are not published as programs; each
  * appears when its own presentation lands (#6967–#6975).

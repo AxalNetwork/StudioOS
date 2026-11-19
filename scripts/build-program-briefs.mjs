@@ -2,9 +2,9 @@
 /**
  * D6966 (#6966) — build the committed program PDFs from their source.
  *
- * For each program in the presentation map (`frontend/src/programs/catalog/*.js`) this renders
- * its slides (`frontend/src/programs/deck.js` over `content/<key>.js`, styled by
- * `frontend/src/programs/deck.css`) with Playwright's Chromium and writes
+ * For each program in the presentation map (`frontend/src/pages/programs/catalog/*.js`) this renders
+ * its slides (`frontend/src/pages/programs/deck.js` over `content/<key>.js`, styled by
+ * its `DECK_CSS`) with Playwright's Chromium and writes
  * `frontend/public/<the entry's pdf path>`: 16:9, 13.333 × 7.5 in, one slide per page, text kept
  * as selectable text, the faces embedded and subset, links live, tagged, with a document
  * outline. The PDF reads nothing live: no cohort, date or place is ever in it.
@@ -49,7 +49,6 @@ const FACES = [
   face('Space Grotesk', 700, 'space-grotesk-700.woff2'),
 ].join('\n');
 const MARK = dataUri(join(ROOT, 'frontend/public/axal-mark.png'), 'image/png');
-const CSS = readFileSync(join(ROOT, 'frontend/src/programs/deck.css'), 'utf8');
 const WORDMARK = '.d-logo b{font-family:"Space Grotesk",sans-serif;font-weight:700;}';
 
 /** The cover art: the site's own artwork, from `frontend/public/site/`, never anything else. */
@@ -97,11 +96,11 @@ async function launch() {
 async function main() {
   const programs = (await loadProgramCatalog()).filter((p) => !only.length || only.includes(p.key));
   if (only.length && programs.length !== only.length) throw new Error(`no map entry for: ${only.filter((k) => !programs.some((p) => p.key === k)).join(', ')}`);
-  const { deckHtml } = await import(pathToFileURL(join(ROOT, 'frontend/src/programs/deck.js')).href);
+  const { deckHtml, DECK_CSS: CSS } = await import(pathToFileURL(join(ROOT, 'frontend/src/pages/programs/deck.js')).href);
   const browser = await launch();
   try {
     for (const program of programs) {
-      const content = (await import(pathToFileURL(join(ROOT, `frontend/src/programs/content/${program.key}.js`)).href)).default;
+      const content = (await import(pathToFileURL(join(ROOT, `frontend/src/pages/programs/content/${program.key}.js`)).href)).default;
       const body = deckHtml(program, content, { gray: GRAY })
         .replaceAll('{{MARK}}', MARK)
         .replaceAll('{{ART}}', await asJpeg(browser, artUri(content.cover?.art)));

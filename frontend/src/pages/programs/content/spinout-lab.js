@@ -14,7 +14,7 @@
  * The week names and day ranges are the Lab's own (`LAB_WEEKS`, owner decision F1), read
  * rather than copied, so the presentation cannot name a week the Lab does not run.
  */
-import { LAB_WEEKS } from '../../lib/spinoutLab.js';
+import { LAB_WEEKS } from '../../../lib/spinoutLab.js';
 
 /** The four weeks' two pieces of work each (the public Lab page's activities). */
 const WORK = [

@@ -1,9 +1,9 @@
 /**
  * D6966 (#6966) — the program presentation map, read in Node.
  *
- * The SPA collects `frontend/src/programs/catalog/*.js` with a Vite glob; Node has no glob, so
+ * The SPA collects `frontend/src/pages/programs/catalog/*.js` with a Vite glob; Node has no glob, so
  * this reads the same folder from disk and hands the modules to the same `collectPrograms`
- * (`frontend/src/programs/collect.js`), which checks every entry the way the SPA does. The
+ * (`frontend/src/pages/programs/collect.js`), which checks every entry the way the SPA does. The
  * entries are plain data with no imports, so no loader is needed.
  *
  * Readers: `scripts/prerender-og.mjs` and `scripts/validate-og-tags.mjs` (each program's own
@@ -13,10 +13,10 @@
 import { readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { collectPrograms } from '../../frontend/src/programs/collect.js';
+import { collectPrograms } from '../../frontend/src/pages/programs/collect.js';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-export const CATALOG_DIR = join(ROOT, 'frontend/src/programs/catalog');
+export const CATALOG_DIR = join(ROOT, 'frontend/src/pages/programs/catalog');
 export const PUBLIC_DIR = join(ROOT, 'frontend/public');
 
 /** Every map entry, checked, in the index's order. */

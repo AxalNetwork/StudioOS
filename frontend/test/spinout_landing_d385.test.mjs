@@ -133,7 +133,7 @@ test('no landing surface prints the client calendar’s cohort number any more',
 test('the Brief\'s journey reads the enforced weeks, never a copy of its own', () => {
   // D6966: the presentation's journey is the four weeks the Lab checks (LAB_WEEKS over
   // PIPELINE_PHASES), read in programs/content/spinout-lab.js, with no gate column per track.
-  const content = codeOnly(read('../src/programs/content/spinout-lab.js'));
+  const content = codeOnly(read('../src/pages/programs/content/spinout-lab.js'));
   assert.match(content, /export const WEEKS = LAB_WEEKS\.map\(/, 'the Brief does not read the enforced set');
   assert.doesNotMatch(content + BRIEF, /LAB_TRACKS/, 'the Brief prints a gate column per track again');
   // The enforced set is the four weeks, each with its own gate.
@@ -146,7 +146,7 @@ test('no per-track gate copy and no open-decision notice remains', () => {
     assert.doesNotMatch(src, /GATES_DECISION|TRACK_GATES/, `${label} still reads the per-track copy or the open call`);
     assert.doesNotMatch(src, /still to be decided/, `${label} still says the gates call is open`);
   }
-  assert.match(read('../src/programs/content/spinout-lab.js'), /The four weeks are the same for everyone\./);
+  assert.match(read('../src/pages/programs/content/spinout-lab.js'), /The four weeks are the same for everyone\./);
   assert.match(INTRO, /The four gates are the same for every track\./);
   const sig = INTRO.slice(INTRO.indexOf('export function LabGates'));
   assert.ok(!sig.slice(sig.indexOf('('), sig.indexOf(')') + 1).includes('track'), 'the intro gates take a track again');

@@ -67,7 +67,7 @@
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,.14);
 }
-.ax-site .pgs-panel-k { font-family: var(--font-site); font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; color: var(--ax-lavender); }
+.ax-site .pgs-panel-k { margin: 0; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; color: var(--ax-lavender); }
 .ax-site .pgs-panel-act { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
 .ax-site .pgs-panel-fine { font-size: 13px; color: rgba(255,255,255,.8); line-height: 1.5; margin: 0; }
 .ax-site .pgs-panel a.pgs-panel-link { color: var(--ax-lilac); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
@@ -81,7 +81,7 @@
 .ax-site .pgs-coh-msg { font-size: 14.5px; line-height: 1.6; color: rgba(255,255,255,.88); margin: 10px 0 0; }
 .ax-site .pgs-coh-msg b { color: #fff; }
 /* "Not recorded" on the dark panel: the shared chip, lightened to read on ink. */
-.ax-site .pgs-coh dd [data-platform-state] { color: rgba(255,255,255,.88); border-color: rgba(255,255,255,.5); background: transparent; font-family: var(--font-site); }
+.ax-site .pgs-coh dd [data-platform-state] { color: rgba(255,255,255,.88); border-color: rgba(255,255,255,.5); background: transparent; }
 .ax-site .pgs-coh-err { margin-top: 10px; }
 .ax-site .pgs-coh-note { font-size: 13px; color: rgba(255,255,255,.72); margin: 8px 0 0; }
 .ax-site .pgs-skel { display: block; margin-left: auto; height: 12px; border-radius: 6px; background: linear-gradient(90deg, rgba(255,255,255,.14), rgba(255,255,255,.06)); }

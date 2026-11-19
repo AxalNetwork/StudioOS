@@ -24,7 +24,6 @@ Those two files together are the fastest way to answer "where does this URL go".
 | `decks/` | The pitch-deck renderer and its slide templates. |
 | `templates/` | Persona landing-page templates. |
 | `brand/` | Brand-builder template content. |
-| `programs/` | D6966: the program presentation kit and its map — one file per program in `catalog/` (key → page → PDF) and in `content/` (sections and slides). Adding a program adds files there and edits nothing shared. Read its README first. |
 
 ## Rules
 

@@ -18,11 +18,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes, useLocation, Link } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 
-import { collectPrograms, AVAILABILITY } from '../src/programs/collect.js';
-import { PROGRAMS, programFor, presentationHref } from '../src/programs/registry.jsx';
-import { deckSlides } from '../src/programs/deck.js';
-import { manageDoor, PresentationName, ViewPresentationLink } from '../src/programs/AdminPresentationLinks.jsx';
-import LAB_CONTENT from '../src/programs/content/spinout-lab.js';
+import { collectPrograms, AVAILABILITY } from '../src/pages/programs/collect.js';
+import { PROGRAMS, programFor, presentationHref } from '../src/pages/programs/registry.jsx';
+import { deckSlides } from '../src/pages/programs/deck.js';
+import { manageDoor, PresentationName, ViewPresentationLink } from '../src/pages/programs/AdminPresentationLinks.jsx';
+import LAB_CONTENT from '../src/pages/programs/content/spinout-lab.js';
 import SpinoutLabBriefPage, { LabAvailabilityPanel, applyLabel, contentFor, labPanelState } from '../src/pages/SpinoutLabBriefPage.jsx';
 import ProgramKeyPage, { resolveKey } from '../src/pages/programs/ProgramKeyPage.jsx';
 import ProgramsIndexPage, { labLine } from '../src/pages/programs/ProgramsIndexPage.jsx';
@@ -114,7 +114,7 @@ test('the deck: cover, the content\'s slides, a closing with the public address 
 
 test('no unapproved claim: no equity line, no general "Ask a question", no Demo Day, no promised outcome', () => {
   const all = [
-    read('frontend/src/programs/catalog/spinout-lab.js'), read('frontend/src/programs/content/spinout-lab.js'),
+    read('frontend/src/pages/programs/catalog/spinout-lab.js'), read('frontend/src/pages/programs/content/spinout-lab.js'),
     read('frontend/src/pages/SpinoutLabBriefPage.jsx'), readFileSync('frontend/public/program-briefs/axal-vc-spinout-lab-v1.pdf').toString('latin1'),
   ];
   const page = renderedText(at('/spinout-lab/brief', h(SpinoutLabBriefPage)));
