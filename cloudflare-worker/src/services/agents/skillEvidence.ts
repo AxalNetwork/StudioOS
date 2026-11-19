@@ -16,14 +16,19 @@
  * are kept (`blocks`), so the manual path binds the same snapshot it judged into the run's message as data. The
  * scheduled path's context already carries its rule book's reads, so it binds nothing more.
  *
- * Native readers only. A member's approved MCP tool read does not stand in for a required input (D4667: the
- * approved-MCP evidence shape is still open). Statuses and reasons go in the refusal, never a record's figures.
+ * Native readers only. A member's approved MCP tool read does not stand in for a required input: the check runs
+ * before any MCP call, so a skill not ready is refused with nothing called. D4667-p4: a ready or conditional run that
+ * also reads approved MCP tools carries them as their own evidence (`agentTools.ts` `McpEvidence`), and its system
+ * prompt says what they are and where one was cut or refused (`mcpPrompt`). An unapproved, ungranted or drifted tool
+ * is refused before the model call (`tool_not_granted`, `tool_not_in_skill`, `tool_disconnected`). Statuses and
+ * reasons go in the refusal, never a record's figures.
  */
 import type { Env } from '../../types';
 import type { Rules } from './catalogue';
 import type { AgentRow, Scope } from './teams';
 import { READERS, type ReadContext, type ReadResult } from './reads';
 import { FIRST_TEN_SLUGS, HARD, preflight, type InputReport, type Readiness } from './skillInputs';
+import { TOOL_RESULT_MAX, type McpEvidence } from './agentTools';
 
 type Reader = (env: Env, c: ReadContext) => Promise<unknown>;
 
@@ -103,6 +108,23 @@ export const documentOfRecord = (record: unknown): string | null =>
 /** D4667-p4: the fund a manual run's `record` selects, when it names one (`vc_fund:<id>`); else null. */
 export const fundOfRecord = (record: unknown): string | null =>
   typeof record === 'string' && /^vc_fund:[1-9][0-9]{0,11}$/.test(record.trim()) ? record.trim() : null;
+
+/**
+ * D4667-p4 — a first-ten skill run's approved MCP reads, for its system prompt: each by its reference, server and
+ * time, as the member's own connection's answer, which meets none of the skill's inputs; a cut or refused one is
+ * named, so the brief says so. Null when the run read none.
+ */
+export function mcpPrompt(evidence: readonly McpEvidence[]): string | null {
+  if (!evidence.length) return null;
+  const lines = evidence.map((e) => {
+    const what = `- [${e.ref}] ${e.tool} on ${e.server.name}, read ${e.fetched_at}`;
+    if (e.outcome === 'refused') return `${what}: the tool could not be read, so it supplies nothing.`;
+    if (!e.complete) return `${what}: cut at ${TOOL_RESULT_MAX} characters of ${e.bytes ?? 'an unknown number of'}; say the result is incomplete.`;
+    return `${what}.`;
+  });
+  return ['The tool results below come from the member\'s own approved MCP tools, not from a record the platform read. '
+    + 'They meet none of this skill\'s inputs: do not use one for an input the evidence check found missing. Cite each by its reference.', ...lines].join('\n');
+}
 
 /** A conditional run's system prompt states what its evidence lacks; null when nothing does. */
 export function limitsPrompt(e: Pick<RunEvidence, 'limits'> | null): string | null {
