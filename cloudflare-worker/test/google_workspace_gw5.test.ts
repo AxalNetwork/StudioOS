@@ -192,12 +192,13 @@ test('Drive files are copied into the data room under the venture’s key, repla
   const second = await syncRaiseGoogle(env, a);
   assert.equal(second.copies_unchanged, 2);
   assert.deepEqual(r.calls.slice(before).map((c) => c.call), ['files.get', 'files.get']);
-  // A new modifiedTime replaces the copy in place: same row, new object, old object deleted.
+  // A new modifiedTime replaces the copy: same row, new key. D6651: the old object is a record and is kept, unchanged.
   meta.doc1.modifiedTime = '2026-10-15T00:00:00Z';
   assert.equal((await syncRaiseGoogle(env, a)).copies_replaced, 1);
   const after = db.prepare('SELECT * FROM data_room_files WHERE id = ?').get(rows[0].id) as any;
   assert.notEqual(after.r2_key, rows[0].r2_key);
-  assert.ok(deleted.includes(rows[0].r2_key));
+  assert.ok(!deleted.includes(rows[0].r2_key), 'the replaced copy is not deleted');
+  assert.equal(new TextDecoder().decode(r2.get(rows[0].r2_key)), '%PDF 2026-10-01T00:00:00Z', 'the replaced copy keeps its bytes');
   assert.equal(new TextDecoder().decode(r2.get(after.r2_key)), '%PDF 2026-10-15T00:00:00Z');
   const part: any = await raiseGooglePart(env, { integrationId: integration.id, userId: 1, projectId: 1, slug: 'data-room' });
   assert.deepEqual(part.copies.map((c: any) => [c.name, c.as_of]), [['Board memo.pdf', '2026-10-15T00:00:00Z'], ['Financials.pdf', '2026-10-02T00:00:00Z']]);

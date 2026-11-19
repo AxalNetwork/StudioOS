@@ -1,6 +1,6 @@
 import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { Unreadable } from '../../../ui';
@@ -8,9 +8,12 @@ import { ProRataPanel } from '../RoundClosesPanel';
 import { Dialog, Footer, useWrite } from './CapRelPipeline';
 import CapRelExportMenu from './CapRelExportMenu.jsx';
 import { commitmentsCsv } from './capRelExports.js';
-import { CLOSING, amountText, centsText, tabHref } from './capRelModel';
+import { CLOSING, HOME_PATH, amountText, centsText, tabHref } from './capRelModel';
+import { callHref } from '../calls/callsModel';
 import { COMMITMENT_FILTERS, useTabFilters } from './capRelUrlFilters';
-import { CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS, commitmentBar, commitmentRows, exemptionNote, roundBody, sourceGaps } from './capRelTabsModel';
+import {
+  CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS, commitmentBar, commitmentRows, exemptionNote, isMovedRow, recordedNotice, recordedParam, roundBody, sourceGaps,
+} from './capRelTabsModel';
 
 /**
  * D1193 (#3127, CRL9, CRL10) — Commitments: committed against the target
@@ -23,6 +26,10 @@ import { CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS,
  * Indicated, Soft and "Status not recorded" are listed and never counted; a
  * missing amount reads "Not recorded", never $0. Commitments become signed
  * only in the closing room; this tab shows them and signs nothing.
+ *
+ * D7513 (#7513, RAC22C): a line recorded from a call's response names that
+ * call and its uid; arriving from the call page (`?recorded=<prospect>`) marks
+ * the moved line and says what was recorded, read back from this tab's read.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -180,7 +187,7 @@ function Bar({ read }) {
 }
 
 /** D5377: the search and status are the address's (`COMMITMENT_FILTERS`); typing replaces the entry, a status pushes one. */
-function Every({ read, f, setF }) {
+function Every({ read, f, setF, recorded }) {
   const [typed, setTyped] = useState(f.q);
   // Back, Forward or a venture switch moves the address: the box follows it, unless it already says the same.
   useEffect(() => { setTyped((t) => (t.trim() === f.q ? t : f.q)); }, [f.q]);
@@ -203,14 +210,21 @@ function Every({ read, f, setF }) {
             </tr></thead>
             <tbody role="rowgroup">
               {rows.map((r) => (
-                <tr role="row" key={r.key} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-commit-row">
+                <tr role="row" key={r.key} className={`border-b border-axal-hairline align-top last:border-0 dark:border-gray-800 ${isMovedRow(r, recorded) ? 'bg-violet-50 dark:bg-violet-950/30' : ''}`}
+                  data-testid="caprel-commit-row" data-moved={isMovedRow(r, recorded) ? 'true' : undefined}>
                   <td role="cell" className={`px-3 py-2 font-bold ${INK}`}><RecordLabel>Investor</RecordLabel>{r.investor}</td>
                   <td role="cell" className={`px-3 py-2 font-mono ${r.amount === 'Not recorded' ? MUTED : INK}`}><RecordLabel>Amount</RecordLabel>{r.amount}</td>
                   <td role="cell" className="px-3 py-2"><RecordLabel>Status</RecordLabel>
                     <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${STATUS_TONE[r.counted ? 'counted' : r.status === 'not_recorded' ? 'not_recorded' : 'listed']}`}>{r.status_label}</span>
                     {r.why ? <div className={`mt-1 text-[11.5px] ${MUTED}`}>{r.why}</div> : null}
                   </td>
-                  <td role="cell" className={`px-3 py-2 ${INK}`}><RecordLabel>Source</RecordLabel>{r.source_label}</td>
+                  <td role="cell" className={`px-3 py-2 ${INK}`}><RecordLabel>Source</RecordLabel>{r.source_label}
+                    {r.call ? (
+                      <div className={`mt-1 text-[11.5px] ${MUTED}`} data-testid="caprel-commit-call">
+                        From the call <Link className="font-semibold underline" to={callHref(r.call)}>{r.call.name || 'Name not recorded'}</Link> · <span className="font-mono">{r.call.uid}</span>
+                      </div>
+                    ) : null}
+                  </td>
                   <td role="cell" className={`px-3 py-2 font-mono ${r.on ? INK : MUTED}`}><RecordLabel>Date</RecordLabel>{r.on || '—'}</td>
                   <td role="cell" className="px-3 py-2 text-right">{r.status === 'not_recorded' || r.status === 'soft' ? <span className={`text-[12px] ${MUTED}`}>Set status on Pipeline</span> : null}</td>
                 </tr>
@@ -220,6 +234,7 @@ function Every({ read, f, setF }) {
         </ResponsiveRecords>
         {!rows.length ? <p className={`m-0 px-4 py-3 text-[12.5px] ${MUTED}`} data-testid="caprel-commit-none">{(read.investors || []).length ? 'No commitment matches.' : 'No commitment is recorded yet.'}</p> : null}
       </div>
+      {read.call_links === 'unreadable' ? <p className="m-0 border-t border-axal-hairline px-4 py-2 text-[11.5px] text-red-700 dark:border-gray-800 dark:text-red-300" data-testid="caprel-commit-calls-unread">Which call each recorded line came from could not be read. That is not a claim that none did.</p> : null}
       <p className={`m-0 border-t border-axal-hairline px-4 py-2 text-[11.5px] ${MUTED} dark:border-gray-800`}>Close or tranche, and route: not recorded on a commitment until a closing exists.</p>
     </section>
   );
@@ -280,6 +295,8 @@ export default function CapRelCommitments({ projectId, search = '' }) {
   const [dialog, setDialog] = useState(null);
   const [err, setErr] = useState('');
   const gaps = read.data ? sourceGaps(read.data).filter((g) => g.key !== 'mercury') : [];
+  const recorded = recordedParam(useLocation().search);
+  const notice = read.data ? recordedNotice(read.data, recorded) : null;
   return (
     <div className="flex flex-col gap-4" data-testid="caprel-commitments">
       <div className="flex flex-wrap items-center gap-2">
@@ -292,9 +309,15 @@ export default function CapRelCommitments({ projectId, search = '' }) {
       {read.status === 'loading' && !read.data ? <div className="h-40 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-commitments-loading" /> : null}
       {read.data ? (
         <>
+          {notice ? (
+            <p role="status" className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[12.5px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" data-testid="caprel-commit-recorded">
+              <span><span aria-hidden="true">✓ </span>{notice.text}, from the call {notice.call.name || 'Name not recorded'} · <span className="font-mono">{notice.call.uid}</span></span>
+              <Link className="font-semibold underline" to={`${HOME_PATH}/pipeline?project_id=${encodeURIComponent(String(projectId))}&investor=${recorded}`}>Open line</Link>
+            </p>
+          ) : null}
           <Bar read={read.data} />
           {gaps.map((g) => <p key={g.key} className={`m-0 text-[12.5px] ${g.state === 'unreadable' ? 'text-red-700 dark:text-red-300' : MUTED}`} data-testid="caprel-commit-gap">{g.reason}</p>)}
-          <Every read={read.data} f={filters} setF={setFilters} />
+          <Every read={read.data} f={filters} setF={setFilters} recorded={recorded} />
         </>
       ) : null}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

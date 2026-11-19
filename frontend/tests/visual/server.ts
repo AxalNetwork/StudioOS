@@ -23,8 +23,7 @@
  * `GET /__visual/manifest` answers the session token, the user and the
  * ventures, so the spec signs in and walks the matrix without a login page.
  *
- *   node --experimental-strip-types --no-warnings --import { reportPrivateError } from '../../../cloudflare-worker/src/util/errorPrivacy.ts';
-import ./cloudflare-worker/test/_ts-loader.mjs \
+ *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     frontend/tests/visual/server.ts            (from the repo root; PORT defaults to 4791)
  */
 import { createServer } from 'node:http';
@@ -43,6 +42,7 @@ import { fakeAI } from '../../../cloudflare-worker/test/_recorded_ai.mjs';
 import { ONE_CLICK, seedOneClickVenture } from '../../../cloudflare-worker/test/fixtures/oneClickVenture.ts';
 import { securityBackups, seedSecurity, SECURITY_ADMIN } from './_security_seed.ts';
 import { seedFundAdmin } from './_fund_admin_seed.ts';
+import { reportPrivateError } from '../../../cloudflare-worker/src/util/errorPrivacy.ts';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const DOCS = join(ROOT, 'docs');

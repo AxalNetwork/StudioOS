@@ -100,7 +100,7 @@ export function sniffFormat(b: Uint8Array): MediaFormat | null {
     if (ascii(b, 0, 7) === 'BLENDER') return 'blend';
     if (at(b, 0) === 0x50 && at(b, 1) === 0x4b && at(b, 2) === 0x03 && at(b, 3) === 0x04) return 'usdz';
     const head = new TextDecoder('utf-8', { fatal: false, ignoreBOM: false }).decode(b.subarray(0, 512)).replace(/^﻿/, '').trimStart();
-    if (/^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE\s+svg[^\[>]*(\[[\s\S]*?\])?\s*>\s*)?<svg[\s>]/i.test(head)) return 'svg';
+    if (startsAsSvg(head)) return 'svg';
     if (head.startsWith('{') && /"asset"\s*:/.test(new TextDecoder().decode(b.subarray(0, Math.min(b.length, 65536))))) return 'gltf';
     return null;
   })();
@@ -403,4 +403,33 @@ export function brandKitUnits(row: BrandKitRow): UnitDocument {
       tok('logo_uid', row.logo_uid),
     ],
   };
+}
+
+/**
+ * Whether a file's head is an SVG document: an optional XML declaration, any
+ * comments, an optional `<!DOCTYPE svg …>` (with an internal subset), then
+ * `<svg`. A forward scan, so a head of many unclosed `<!--` cannot make a
+ * backtracking regular expression run in exponential time.
+ */
+export function startsAsSvg(head: string): boolean {
+  let s = head;
+  const xml = /^<\?xml[^>]*>/i.exec(s);
+  if (xml) s = s.slice(xml[0].length).trimStart();
+  while (s.startsWith('<!--')) {
+    const end = s.indexOf('-->', 4);
+    if (end < 0) return false;
+    s = s.slice(end + 3).trimStart();
+  }
+  if (/^<!DOCTYPE\s+svg/i.test(s)) {
+    const close = s.indexOf('>'), open = s.indexOf('[');
+    let end = close;
+    if (open >= 0 && (close < 0 || open < close)) {
+      const sub = s.indexOf(']', open);
+      if (sub < 0) return false;
+      end = s.indexOf('>', sub);
+    }
+    if (end < 0) return false;
+    s = s.slice(end + 1).trimStart();
+  }
+  return /^<svg[\s>]/i.test(s);
 }

@@ -136,7 +136,7 @@ function freshDb() {
       reference TEXT, phone_verified INTEGER NOT NULL DEFAULT 0, note TEXT,
       recorded_by INTEGER NOT NULL,
       recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
-      company_id INTEGER
+      company_id INTEGER, phone_verified_by INTEGER
     );
     CREATE TABLE deal_closing_checklists (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,

@@ -19,13 +19,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { SECTIONS, filterSectionsForRole } from '../src/pages/docs/sections/index.js';
 import {
-  PRIORITY_HELP_REVIEW, REVIEW_WINDOW_DAYS, guideVerification, guideVerificationFor, recordedDate, staleWord, verifiedDay,
+  PRIORITY_HELP_REVIEW, REVIEW_WINDOW_DAYS, guideVerification, staleRuleSentence, guideVerificationFor, recordedDate, staleWord, verifiedDay,
 } from '../src/pages/docs/guideGovernance.js';
 import { guideOutline } from '../src/pages/docs/v2/helpV2.js';
 import { buildDocsRecords } from '../src/lib/docs/search.js';
@@ -170,4 +171,11 @@ test('search and reading time read Before you start too', () => {
   assert.match(rec.text, /obtain the participant consent required/);
   const sub = { overview: 'one', beforeYouStart: [Array.from({ length: 400 }, () => 'word').join(' ')] };
   assert.equal(readingMinutes(sub), 2);
+});
+
+test('the Help signals page states the agreed window, and that none is recorded while it is null', () => {
+  assert.equal(staleRuleSentence(), 'Stale needs an agreed review window, which is not recorded yet.');
+  assert.equal(staleRuleSentence(90), 'A guide is stale when its latest verified date is more than 90 days old.');
+  const page = readFileSync(new URL('../src/pages/docs/HelpSignals.jsx', import.meta.url), 'utf8');
+  assert.match(page, /\{staleRuleSentence\(\)\}/, 'the page shows the sentence from guideGovernance');
 });
