@@ -1,0 +1,313 @@
+/**
+ * D4667-p4 (#4667): one explicitly selected fund's recorded performance for a quarter, through the real
+ * `fund.performance` reader on the real migrated schema, into the skill evidence boundary that gates
+ * `lp-quarterly-letter-draft`. Synthetic funds, positions, marks, calls and distributions only; the model is a stub
+ * and nothing is charged for real.
+ *
+ *   · the reader: no selection answers the funds the sponsor runs here and no figures; one selected fund answers the
+ *     last whole quarter before `to`, D627's figures as of its end (point in time), each position's latest mark on or
+ *     before it, and the calls issued and distributions paid in it, each with a stable reference and its date;
+ *   · tenancy: only the GP of record, under the agent's company, on the institutional tier; another GP's fund and
+ *     another company's fund are `not_found`; an admin, a professional-tier investor and an agent with no company
+ *     are `withheld`;
+ *   · the evidence boundary: complete is ready; an unmarked position, an uncomputable figure (unknown, never zero) or
+ *     a cut record is conditional and named; a mark from before the quarter is stale; nothing recorded is empty;
+ *     none selected and not found are not ready;
+ *   · the manual run carries the figures it judged; one with no fund selected is refused before any charge;
+ *   · the matrix: the need reads `fund.performance`, and a scheduled session cannot select a fund.
+ *
+ *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *     --test cloudflare-worker/test/skill_fund_evidence_4667.test.ts
+ */
+import test, { after } from 'node:test';
+import assert from 'node:assert/strict';
+import { removeMigratedDatabases } from './_storage_schema.ts';
+import { ADMIN, AGENT, COMPANY, MEMBER, PROJECT, SPONSOR, STRANGER, world, type World } from './_agent_engine_fixture.ts';
+import { AI_FIXTURE_PLANS } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
+import { __resetForTest } from '../src/services/aiRouter.ts';
+import { agentRun, type AgentRunInput } from '../src/services/agents/agentRun.ts';
+import { READ_KEYS, roleOf } from '../src/services/agents/catalogue.ts';
+import { READERS, ReadPageError, coverageOf, quarterBefore, readOne, selectedFund, type ReadContext } from '../src/services/agents/reads.ts';
+import { FIRST_TEN, inputMatrix, pathsFor, preflight } from '../src/services/agents/skillInputs.ts';
+import { fundOfRecord } from '../src/services/agents/skillEvidence.ts';
+import { readFundPerformance } from '../src/services/fundPerformance.ts';
+
+after(removeMigratedDatabases);
+
+const RUN_MODEL = '@cf/openai/gpt-oss-120b';
+const GUARD = '@cf/meta/llama-guard-3-8b';
+const SKILL_UID = 'f'.repeat(32);
+const SLUG = 'lp-quarterly-letter-draft';
+const STEP = { module: 'use-of-funds', option: 'draft:raise/use-of-funds-runway', prompt: 'Draft the Q3 letter.' };
+const SCOPE = { kind: 'project', id: PROJECT, name: 'Kestrel', founder_id: 100, company_id: COMPANY } as any;
+const READS = ['project.summary', 'fund.performance', 'grow.records'];
+const FUND = 5, OTHER_GP = 6, NO_COMPANY = 7, OTHER_COMPANY = 9;
+const NOW = Date.parse('2026-11-19T12:00:00Z');
+const TO = '2026-11-19';
+/** Growth context answers complete and fresh, so the fund's performance is the only input in question. */
+const withGrowth = {
+  ...READERS,
+  'grow.records': async () => ({ records: [{ ref: 'activity:grow-1', at: '2026-11-10 10:00:00' }], coverage: coverageOf(1, 1) }),
+} as any;
+
+/**
+ * A project agent with the LP letter pinned, its rule book reading `fund.performance`, its sponsor an institutional
+ * investor who is the GP of record of fund 5 under the venture's company. Fund 5 in 2026-Q3: two positions marked on
+ * 2026-09-30 (and one later mark that is not the quarter's), a numbered call and a legacy LP line issued in the
+ * quarter, one paid distribution and one pending.
+ */
+function fundWorld(o: { sponsor?: number } = {}) {
+  __resetForTest();
+  const w = world();
+  const sponsor = o.sponsor ?? SPONSOR;
+  w.agent(AGENT, 'cfo', { sponsor });
+  w.db.exec(AI_FIXTURE_PLANS);
+  w.db.prepare("UPDATE users SET subscription_tier = 'growth', subscription_status = 'active', investor_tier = 'institutional', investor_subscription_status = 'active' WHERE id = ?").run(sponsor);
+  if (sponsor !== ADMIN) w.db.prepare("INSERT INTO account_licences (user_id, licence, source) VALUES (?, 'investor', 'synthetic')").run(sponsor);
+  w.db.prepare("INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES ('founder:growth', 0, 0, 1), ('investor:institutional', 0, 0, 1), ('admin', 0, 0, 1)").run();
+  w.db.prepare('INSERT INTO ai_topup_accounts(user_id, balance_microusd) VALUES (?, 50000000)').run(sponsor);
+  w.db.prepare('UPDATE team_agents SET model_id = ? WHERE id = ?').run(RUN_MODEL, AGENT);
+  const rules = { ...roleOf('cfo')!.default_rules, reads: READS };
+  w.db.prepare(`INSERT INTO team_rulebooks (uid, scope_kind, project_id, role_key, version, rules_json, created_by)
+    VALUES ('book-4667-p4', 'project', ?, 'cfo', 1, ?, ?)`).run(PROJECT, JSON.stringify(rules), SPONSOR);
+  w.db.prepare(`INSERT INTO agent_skills (id, uid, scope, slug, name, purpose, steps_json, allowed_tools_json, output_kind, status, current_version, created_by)
+    VALUES (1, ?, 'hq', ?, 'LP quarterly letter', 'The quarter for LPs.', '["Read the quarter"]', '[]', 'draft', 'published', 1, ?)`).run(SKILL_UID, SLUG, ADMIN);
+  w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
+    VALUES (1, 1, 'md', 'LP quarterly letter', 'The quarter for LPs.', '["Read the quarter"]', '[]', 'draft', '[]', '["cfo"]', ?)`).run(ADMIN);
+  w.db.prepare('INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (?, 1, 1, ?)').run(AGENT, sponsor);
+  w.db.exec(`
+    INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (8, 'p8', 'Tidepool Health', 101, 1);
+    INSERT INTO vc_funds (id, name, vintage_year, status, gp_user_id, company_id) VALUES
+      (${FUND}, 'Synthetic Fund I', 2025, 'investing', ${SPONSOR}, ${COMPANY}),
+      (${OTHER_GP}, 'Another GP fund', 2025, 'investing', ${MEMBER}, ${COMPANY}),
+      (${NO_COMPANY}, 'Synthetic Fund II', 2026, 'fundraising', ${SPONSOR}, NULL),
+      (${OTHER_COMPANY}, 'Elsewhere fund', 2024, 'investing', ${SPONSOR}, 2);
+    INSERT INTO limited_partners (id, fund_id, commitment_amount, name) VALUES (1, ${FUND}, 10000000, 'Synthetic LP');
+    INSERT INTO fund_capital_calls (id, uid, fund_id, call_number, amount_cents, line_count, created_at) VALUES
+      (1, 'call-2025-1', ${FUND}, 1, 300000000, 1, '2025-03-01 09:00:00'),
+      (2, 'call-2026-2', ${FUND}, 2, 250000000, 1, '2026-08-15 09:00:00'),
+      (3, 'call-2026-3', ${FUND}, 3, 100000000, 1, '2026-10-20 09:00:00');
+    INSERT INTO capital_calls (uid, limited_partner_id, amount, status, created_at) VALUES ('legacy-line-1', 1, 1000.5, 'paid', '2026-07-10 09:00:00');
+    INSERT INTO portfolio_positions (id, uid, fund_id, project_id, round_name, invested_amount, position_date) VALUES
+      (21, 'pos-kestrel', ${FUND}, ${PROJECT}, 'Seed', 2000000, '2025-04-01'),
+      (22, 'pos-tidepool', ${FUND}, 8, 'Pre-Seed', 1000000, '2025-05-01');
+    INSERT INTO fund_position_valuations (uid, position_id, valuation_date, value_cents, source, recorded_by) VALUES
+      ('mark-kestrel-q3', 21, '2026-09-30', 420000000, 'Synthetic board pack', ${SPONSOR}),
+      ('mark-kestrel-q4', 21, '2026-10-31', 999000000, 'Synthetic later round', ${SPONSOR}),
+      ('mark-tidepool-q3', 22, '2026-09-30', 180000000, 'Synthetic board pack', ${SPONSOR});
+    INSERT INTO fund_distributions (id, fund_id, lp_id, amount_cents, distribution_type, status, distributed_at) VALUES
+      (31, ${FUND}, 1, 5000000, 'profit_share', 'paid', '2026-09-01 12:00:00'),
+      (32, ${FUND}, 1, 7000000, 'profit_share', 'pending', '2026-09-15 12:00:00');
+  `);
+  const prompts: string[] = [];
+  const calls: string[] = [];
+  w.env.AI = withGuard({ run: async (model: string, input: any) => {
+    calls.push(model);
+    if (model !== GUARD) prompts.push(JSON.stringify(input.messages ?? input));
+    return { response: '## Quarter in brief\n- Called once.', usage: { prompt_tokens: 40, completion_tokens: 10 } };
+  } });
+  return { w, prompts, calls };
+}
+const agentOf = (w: World) => w.db.prepare('SELECT * FROM team_agents WHERE id = ?').get(AGENT) as any;
+const ctx = (w: World, fund: string | null = null, scope = SCOPE, to: string | null = TO): ReadContext => ({ scope, agent: agentOf(w), projectId: PROJECT, fund, page: { to } });
+const read = async (w: World, fund: string | null = null, scope = SCOPE, to: string | null = TO) => (await readOne(w.env, 'fund.performance', ctx(w, fund, scope, to))).data as any;
+const count = (w: World, sql: string) => (w.db.prepare(sql).get() as any).n as number;
+const modelCalls = (calls: string[]) => calls.filter((m) => m !== GUARD).length;
+const manual = (w: World, over: Partial<AgentRunInput> = {}) => agentRun(w.env, { agent: agentOf(w), ...STEP, skill: SKILL_UID, ...over });
+const letter = async (w: World, fund: string | null, readers = withGrowth) =>
+  (await preflight(w.env, SLUG, ctx(w, fund), readers, NOW, undefined, {}, { granted: READS }))!;
+const fundInput = (p: Awaited<ReturnType<typeof letter>>) => p.inputs.find((i) => i.read === 'fund.performance')!;
+
+// ── The reader ──────────────────────────────────────────────────────────────
+
+test('the quarter a read covers is the last whole one ending on or before `to`', () => {
+  // Mutation checked: a date on a quarter end read as the quarter before → the 2026-09-30 case fails.
+  assert.deepEqual(quarterBefore('2026-11-19'), { quarter: '2026-Q3', from: '2026-07-01', to: '2026-09-30' });
+  assert.deepEqual(quarterBefore('2026-09-30'), { quarter: '2026-Q3', from: '2026-07-01', to: '2026-09-30' });
+  assert.deepEqual(quarterBefore('2026-01-05'), { quarter: '2025-Q4', from: '2025-10-01', to: '2025-12-31' });
+  assert.deepEqual(quarterBefore('2026-03-31'), { quarter: '2026-Q1', from: '2026-01-01', to: '2026-03-31' });
+  assert.deepEqual([selectedFund('vc_fund:5'), selectedFund('5'), selectedFund('vc_fund:0'), selectedFund('fund:5'), selectedFund(5)], [5, 5, null, null, null]);
+  assert.deepEqual([fundOfRecord('vc_fund:5'), fundOfRecord('5'), fundOfRecord('data_room_file:5')], ['vc_fund:5', null, null]);
+});
+
+test('fund.performance with no fund selected lists the funds the sponsor runs under this company, and no figures', async () => {
+  const f = fundWorld();
+  try {
+    const r = await read(f.w);
+    assert.deepEqual([r.fund_status, r.fund], ['not_selected', null]);
+    // fundGpScope: the GP of record, under this company or none; never another GP's, never another company's.
+    // Mutation checked: the company arm dropped from the scope → fund 9 is listed and counted.
+    assert.deepEqual(r.funds.map((x: any) => x.ref), [`vc_fund:${FUND}`, `vc_fund:${NO_COMPANY}`]);
+    assert.deepEqual(r.coverage, { returned: 2, total: 2, omitted: 0, complete: true });
+    assert.ok(!JSON.stringify(r).includes('420000000') && !('performance' in r), 'an index carries no figures');
+  } finally { f.w.close(); }
+});
+
+test('one selected fund: the quarter\'s figures as of its end, each mark with its valuation date, the quarter\'s calls and paid distributions, each referenced', async () => {
+  const f = fundWorld();
+  try {
+    const r = await read(f.w, `vc_fund:${FUND}`);
+    assert.equal(r.fund_status, 'read');
+    assert.deepEqual(r.fund, { ref: `vc_fund:${FUND}`, name: 'Synthetic Fund I', vintage_year: 2025, status: 'investing' });
+    assert.deepEqual(r.period, { quarter: '2026-Q3', from: '2026-07-01', to: '2026-09-30' });
+    assert.equal(r.currency, null, 'no currency is recorded on a fund, so none is assumed');
+    // The same formula fund performance and the benchmark offer read (D627), point in time at the quarter end (D1158).
+    const want = await readFundPerformance(f.w.env, { id: FUND, name: 'Synthetic Fund I', vintage_year: 2025, status: 'investing' }, '2026-09-30', { pointInTime: true });
+    assert.deepEqual([r.performance.nav, r.performance.paid_in, r.performance.distributed, r.performance.tvpi, r.performance.dpi, r.performance.irr],
+      [want.nav_cents, want.paid_in_cents, want.distributed_cents, want.tvpi, want.dpi, want.irr]);
+    // Mutation checked: read as of today, not the quarter end → the October call and mark are counted.
+    assert.deepEqual([r.performance.nav, r.performance.paid_in, r.performance.distributed], [600_000_000, 550_100_050, 5_000_000]);
+    assert.equal(r.performance.as_of, '2026-09-30');
+    // Mutation checked: the mark taken as the latest of all (not on or before the quarter end) → the October mark is reported.
+    assert.deepEqual(r.marks.map((m: any) => [m.ref, m.company, m.mark?.ref, m.mark?.value, m.mark?.valuation_date, m.mark?.unit]), [
+      ['portfolio_position:pos-kestrel', 'Kestrel', 'fund_position_valuation:mark-kestrel-q3', 420_000_000, '2026-09-30', 'cents'],
+      ['portfolio_position:pos-tidepool', 'Tidepool Health', 'fund_position_valuation:mark-tidepool-q3', 180_000_000, '2026-09-30', 'cents'],
+    ]);
+    // Mutation checked: the period's lower bound dropped → the 2025 call is listed as this quarter's.
+    assert.deepEqual(r.capital_calls.map((c: any) => [c.ref, c.amount, c.at]), [
+      ['capital_call:legacy-line-1', 100_050, '2026-07-10'],
+      ['fund_capital_call:call-2026-2', 250_000_000, '2026-08-15'],
+    ]);
+    // Mutation checked: `status = 'paid'` dropped → the pending distribution is listed.
+    assert.deepEqual(r.distributions.map((d: any) => [d.ref, d.amount, d.at]), [['fund_distribution:31', 5_000_000, '2026-09-01']]);
+    for (const k of ['marks_coverage', 'capital_calls_coverage', 'distributions_coverage']) assert.equal(r[k].complete, true, k);
+    assert.deepEqual(r.capital_calls_coverage, { returned: 2, total: 2, omitted: 0, complete: true });
+    // An earlier `to` reads an earlier quarter; a bad selection is refused, never widened.
+    assert.equal((await read(f.w, `vc_fund:${FUND}`, SCOPE, '2026-07-15')).period.quarter, '2026-Q2');
+    await assert.rejects(() => readOne(f.w.env, 'fund.performance', ctx(f.w, 'fund-five')), (e: any) => e instanceof ReadPageError && e.code === 'invalid_page');
+  } finally { f.w.close(); }
+});
+
+test('tenancy: the GP of record under this company only; another GP\'s or company\'s fund is not found; an admin, a lower tier or no company is withheld', async () => {
+  const f = fundWorld();
+  try {
+    // Mutation checked: the scope clause dropped from the selected read → another GP's fund is read.
+    assert.equal((await read(f.w, `vc_fund:${OTHER_GP}`)).fund_status, 'not_found');
+    assert.equal((await read(f.w, `vc_fund:${OTHER_COMPANY}`)).fund_status, 'not_found');
+    assert.equal((await read(f.w, 'vc_fund:404')).fund_status, 'not_found', 'the same answer as a fund that does not exist');
+    assert.equal((await read(f.w, `vc_fund:${NO_COMPANY}`)).fund_status, 'read', 'a fund with no company is its GP\'s under every company');
+    const loose = await read(f.w, `vc_fund:${FUND}`, { ...SCOPE, company_id: null });
+    assert.equal(loose.withheld, true, 'an agent with no company reads no fund');
+    // A company agent of the fund's company reads it the same way.
+    const company = { kind: 'company', id: COMPANY, uid: 'co-1', name: 'Acme' } as any;
+    assert.equal((await read(f.w, `vc_fund:${FUND}`, company)).fund_status, 'read');
+    // Mutation checked: the tier check dropped → a professional-tier investor's agent reads the fund.
+    f.w.db.prepare("UPDATE users SET investor_tier = 'professional' WHERE id = ?").run(SPONSOR);
+    const lower = await read(f.w, `vc_fund:${FUND}`);
+    assert.equal(lower.withheld, true);
+    assert.ok(!JSON.stringify(lower).includes('Synthetic Fund'), 'none of the fund is carried');
+  } finally { f.w.close(); }
+  for (const who of [ADMIN, STRANGER]) {
+    const g = fundWorld({ sponsor: who });
+    try {
+      const r = await read(g.w, `vc_fund:${FUND}`);
+      // Mutation checked: the admin arm dropped → fundGpScope is unscoped for an admin and the fund is read.
+      assert.equal(r.withheld ? 'withheld' : r.fund_status, who === ADMIN ? 'withheld' : 'not_found', `sponsor ${who}`);
+    } finally { g.w.close(); }
+  }
+});
+
+// ── The evidence boundary ───────────────────────────────────────────────────
+
+test('preflight: a fund read whole is ready; none selected and not found are not ready', async () => {
+  const f = fundWorld();
+  try {
+    const complete = await letter(f.w, `vc_fund:${FUND}`);
+    assert.deepEqual([complete.state, fundInput(complete).status, complete.limits], ['ready', 'available', []]);
+    const none = await letter(f.w, null);
+    assert.deepEqual([none.state, fundInput(none).status, fundInput(none).reason], ['not_ready', 'missing', 'not_selected']);
+    const other = await letter(f.w, `vc_fund:${OTHER_GP}`);
+    assert.deepEqual([other.state, fundInput(other).status, fundInput(other).reason], ['not_ready', 'missing', 'not_found']);
+    f.w.db.prepare("UPDATE users SET investor_tier = 'professional' WHERE id = ?").run(SPONSOR);
+    assert.deepEqual([(await letter(f.w, `vc_fund:${FUND}`)).state, fundInput(await letter(f.w, `vc_fund:${FUND}`)).status], ['not_ready', 'withheld']);
+  } finally { f.w.close(); }
+});
+
+test('preflight: an unmarked position, an uncomputable figure and a cut record are partial; an old mark is stale; nothing recorded is empty', async () => {
+  const f = fundWorld();
+  try {
+    // A position held by the quarter end with no mark on or before it: "Not recorded", never its cost.
+    f.w.db.exec("INSERT INTO portfolio_positions (id, uid, fund_id, project_id, round_name, invested_amount, position_date) VALUES (23, 'pos-unmarked', 5, 8, 'Seed', 5000000, '2026-08-01')");
+    const r = await read(f.w, `vc_fund:${FUND}`);
+    const unmarked = r.marks.find((m: any) => m.ref === 'portfolio_position:pos-unmarked');
+    assert.equal(unmarked.mark, null);
+    // D627: one position without a mark leaves the fund's NAV unknown, so NAV, RVPI and TVPI are null with their reasons, never 0.
+    assert.equal(r.performance.nav, null);
+    assert.ok('nav_cents' in r.performance.unavailable);
+    const p = await letter(f.w, `vc_fund:${FUND}`);
+    assert.deepEqual([p.state, fundInput(p).status], ['conditional', 'partial']);
+    // Mutation checked: unmarked positions not counted → the limit no longer names the position.
+    assert.match(p.limits[0], /1 position\(s\) have no mark on or before 2026-09-30: Tidepool Health/);
+    assert.match(p.limits[0], /not recorded at the source: nav_cents, rvpi, tvpi, irr/);
+    f.w.db.exec('DELETE FROM portfolio_positions WHERE id = 23');
+    // Tidepool's only mark dated before the quarter: the figures compute, the mark is stale.
+    f.w.db.exec("UPDATE fund_position_valuations SET valuation_date = '2026-06-30' WHERE uid = 'mark-tidepool-q3'");
+    const s = await letter(f.w, `vc_fund:${FUND}`);
+    // Mutation checked: `before_period` not set → the input reads available and the skill ready.
+    assert.deepEqual([s.state, fundInput(s).status], ['conditional', 'stale']);
+    assert.match(s.limits[0], /1 mark\(s\) are dated before the quarter began \(2026-07-01\): Tidepool Health 2026-06-30/);
+    f.w.db.exec("UPDATE fund_position_valuations SET valuation_date = '2026-09-30' WHERE uid = 'mark-tidepool-q3'");
+    // Many positions: the read is cut to whole rows for length, and says so.
+    for (let i = 0; i < 60; i++) {
+      f.w.db.prepare("INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, position_date) VALUES (?, 5, 8, 'Seed', 1, '2025-06-01')").run(`pos-many-${i}`);
+      f.w.db.prepare("INSERT INTO fund_position_valuations (uid, position_id, valuation_date, value_cents, source, recorded_by) VALUES (?, last_insert_rowid(), '2026-09-30', 1, 'Synthetic', ?)").run(`mark-many-${i}`, SPONSOR);
+    }
+    const cut = await readOne(f.w.env, 'fund.performance', ctx(f.w, `vc_fund:${FUND}`));
+    assert.equal(cut.truncated, true);
+    assert.ok((cut.data as any).omitted_for_size.marks > 0, 'the rows left out are counted');
+    const c = await letter(f.w, `vc_fund:${FUND}`);
+    assert.deepEqual([c.state, fundInput(c).status], ['conditional', 'partial']);
+    assert.match(c.limits[0], /part of the record was left out for length/);
+  } finally { f.w.close(); }
+  const g = fundWorld();
+  try {
+    // A fund with no position, call or distribution by the quarter end has nothing to write a letter from.
+    const e = await letter(g.w, `vc_fund:${NO_COMPANY}`);
+    assert.deepEqual([e.state, fundInput(e).status], ['not_ready', 'empty']);
+    // Without the paid distribution, distributions are unknown (D627), not zero: DPI and TVPI are named, and partial.
+    g.w.db.exec('DELETE FROM fund_distributions');
+    const r = await read(g.w, `vc_fund:${FUND}`);
+    assert.deepEqual([r.performance.distributed, r.performance.dpi, r.performance.tvpi], [null, null, null]);
+    assert.deepEqual(r.distributions_coverage, { returned: 0, total: 0, omitted: 0, complete: true }, 'an empty, complete quarter of distributions');
+    const p = await letter(g.w, `vc_fund:${FUND}`);
+    assert.deepEqual([p.state, fundInput(p).status], ['conditional', 'partial']);
+    assert.match(p.limits[0], /not recorded at the source: distributed_cents, dpi, tvpi, irr/);
+  } finally { g.w.close(); }
+});
+
+test('manual: a run on a selected fund carries the figures it judged; one with no fund is refused before any charge', async () => {
+  const f = fundWorld();
+  try {
+    const none: any = await manual(f.w);
+    assert.deepEqual([none.ok, none.status, none.code], [false, 422, 'skill_not_ready'], JSON.stringify(none));
+    assert.deepEqual(none.extra.inputs, [{ field: 'recorded fund performance with periods and valuation dates', read: 'fund.performance', status: 'missing', reason: 'not_selected' }]);
+    // Mutation checked: the fund-specific words dropped → the refusal speaks of a document.
+    assert.match(none.message, /no fund is selected for the run/);
+    const other: any = await manual(f.w, { record: `vc_fund:${OTHER_GP}` });
+    assert.match(other.message, /not one the sponsor runs under this company/);
+    assert.equal(modelCalls(f.calls), 0);
+    assert.equal(count(f.w, 'SELECT COUNT(*) AS n FROM ai_usage_logs'), 0);
+    // Mutation checked: the record not passed as `fund` → the run is refused not_selected.
+    const r: any = await manual(f.w, { record: `vc_fund:${FUND}` });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    const turn = f.prompts.join('\n');
+    assert.match(turn, /source=\\"read:fund\.performance\\" trust=\\"data\\"/);
+    assert.ok(turn.includes('fund_position_valuation:mark-kestrel-q3') && turn.includes('fund_capital_call:call-2026-2'), 'the records the check read are the ones the run carries');
+    assert.ok(!turn.includes('mark-kestrel-q4'), 'never a mark from after the quarter');
+  } finally { f.w.close(); }
+});
+
+// ── The matrix ──────────────────────────────────────────────────────────────
+
+test('the LP letter\'s need reads fund.performance, a grantable key, and runs only where a run selects its fund', () => {
+  const need = FIRST_TEN.find((s) => s.slug === SLUG)!.needs[0];
+  // Mutation checked: the need left on `raise.records` → the reader is `built_other_shape` and this fails.
+  assert.deepEqual([need.read, need.expects, need.required], ['fund.performance', 'typed_record', true]);
+  assert.ok((READ_KEYS as readonly string[]).includes('fund.performance'), 'a rule book may grant it');
+  assert.equal(inputMatrix().find((s) => s.slug === SLUG)!.inputs[0].reader, 'built');
+  // A session's target kinds have no fund, so neither the task context nor a schedule can select one.
+  // Mutation checked: `MANUAL_SELECTION_ONLY` emptied → the scheduled path is claimed supported.
+  assert.deepEqual(pathsFor(SLUG), { default_context: 'unsupported', scheduled: 'unsupported', manual: 'approved_tool_reads_not_exercised_here', selected_record: 'supported' });
+  assert.deepEqual(pathsFor('board-meeting-brief')!.scheduled, 'supported', 'a skill that selects nothing is unchanged');
+});

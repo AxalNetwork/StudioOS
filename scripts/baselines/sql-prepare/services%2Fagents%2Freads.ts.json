@@ -1,4 +1,6 @@
 {
   "live @ services/agents/reads.ts": 3,
-  "owner.sql @ services/agents/reads.ts": 1
+  "owner.sql @ services/agents/reads.ts": 1,
+  "positionMarkIdSql('p.id') @ services/agents/reads.ts": 1,
+  "scope.sql @ services/agents/reads.ts": 3
 }

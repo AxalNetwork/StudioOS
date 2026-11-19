@@ -48,6 +48,8 @@ export type EvidenceInput = {
    * scheduled session's document target. None selected, a skill that needs a document's text is `not_ready`.
    */
   document?: string | null;
+  /** D4667-p4: the one fund the run selected (`vc_fund:<id>`): the manual run's `record`. None, a skill that needs its performance is `not_ready`. */
+  fund?: string | null;
   readers?: Partial<Record<string, Reader>>;
   now?: number;
 };
@@ -56,7 +58,7 @@ export type EvidenceInput = {
 export async function skillEvidenceForRun(env: Env, o: EvidenceInput): Promise<EvidenceCheck> {
   if (!o.slug || !FIRST_TEN_SLUGS.includes(o.slug)) return { ok: true, evidence: null };
   const capture = new Map<string, ReadResult>();
-  const p = await preflight(env, o.slug, { scope: o.scope, agent: o.agent, projectId: o.projectId, document: o.document ?? null }, o.readers ?? READERS, o.now ?? Date.now(),
+  const p = await preflight(env, o.slug, { scope: o.scope, agent: o.agent, projectId: o.projectId, document: o.document ?? null, fund: o.fund ?? null }, o.readers ?? READERS, o.now ?? Date.now(),
     undefined, {}, { granted: o.rules.reads, ...(o.bound ? { bound: o.bound } : {}), capture });
   if (!p) return { ok: true, evidence: null };
   if (p.state === 'not_ready') {
@@ -76,6 +78,8 @@ export async function skillEvidenceForRun(env: Env, o: EvidenceInput): Promise<E
 function statusWords(i: InputReport): string {
   if (i.reason === 'wrong_shape') return 'its reader gives another kind of record';
   if (i.reason === 'not_bound') return 'left out of the run\'s context for length';
+  if (i.reason === 'not_selected' && i.read === 'fund.performance') return 'no fund is selected for the run';
+  if (i.reason === 'not_found' && i.read === 'fund.performance') return 'the selected fund is not one the sponsor runs under this company';
   if (i.reason === 'not_selected') return 'no document is selected for the run';
   if (i.reason === 'not_found') return 'the selected document is not in the data room';
   if (i.reason === 'not_read') return 'the selected document\'s text has not been read yet';
@@ -95,6 +99,10 @@ function statusWords(i: InputReport): string {
 /** D4667-p3: the document a manual run's `record` selects, when it names one (`data_room_file:<uid>`); else null. */
 export const documentOfRecord = (record: unknown): string | null =>
   typeof record === 'string' && /^data_room_file:[a-f0-9]{32}$/.test(record.trim()) ? record.trim() : null;
+
+/** D4667-p4: the fund a manual run's `record` selects, when it names one (`vc_fund:<id>`); else null. */
+export const fundOfRecord = (record: unknown): string | null =>
+  typeof record === 'string' && /^vc_fund:[1-9][0-9]{0,11}$/.test(record.trim()) ? record.trim() : null;
 
 /** A conditional run's system prompt states what its evidence lacks; null when nothing does. */
 export function limitsPrompt(e: Pick<RunEvidence, 'limits'> | null): string | null {

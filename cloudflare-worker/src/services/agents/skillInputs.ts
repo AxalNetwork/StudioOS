@@ -50,7 +50,8 @@ export const FIRST_TEN: readonly SkillInputs[] = Object.freeze([
     need('build progress', 'build.records', 'activity_summaries', false),
   ] },
   { slug: 'lp-quarterly-letter-draft', needs: [
-    need('recorded fund performance with periods and valuation dates', 'raise.records', 'typed_record'),
+    // D4667-p4: the run's selected fund (`vc_fund:<id>`), for one quarter, read by its GP of record.
+    need('recorded fund performance with periods and valuation dates', 'fund.performance', 'typed_record'),
     need('growth context', 'grow.records', 'activity_summaries', false),
   ] },
   { slug: 'contract-clause-extraction', needs: [
@@ -92,6 +93,8 @@ export type InputStatus = 'available' | 'empty' | 'missing' | 'absent_optional' 
  * D4667-p3, a document's text: `not_selected` (the run names no document), `not_found` (not in this room, or in Trash),
  * `not_read` (its text was never read), `not_current` (replaced since its text was read, so the text on record is an
  * earlier version's), `no_text` (it holds none the reader can read), `failed` (reading it to text failed).
+ * D4667-p4, a fund's performance: `not_selected` (the run names no fund) and `not_found` (not a fund the sponsor runs
+ * under this company) as for a document.
  */
 export type InputReason = 'wrong_shape' | 'manual' | 'supplied_invalid' | 'not_bound' | 'not_selected' | 'not_found' | 'not_read' | 'not_current' | 'no_text' | 'failed';
 export type InputReport = {
@@ -124,20 +127,30 @@ export function suppliedProblem(e: unknown, now = Date.now()): string | null {
 }
 /** `ready`: every input available. `conditional`: the required inputs are there, in part or stale, or an optional one is not; the brief states its `limits`. `not_ready`: a required input cannot be supplied. */
 export type Readiness = 'ready' | 'conditional' | 'not_ready';
-export type PathSupport = { default_context: 'supported' | 'unsupported'; scheduled: 'supported' | 'unsupported'; manual: 'approved_tool_reads_not_exercised_here' };
+/** `selected_record` (D4667-p4): present when a required input is read only for a record a manual run selects. */
+export type PathSupport = { default_context: 'supported' | 'unsupported'; scheduled: 'supported' | 'unsupported'; manual: 'approved_tool_reads_not_exercised_here'; selected_record?: 'supported' | 'unsupported' };
 export type SkillPreflight = { slug: string; state: Readiness; inputs: InputReport[]; limits: string[]; paths: PathSupport };
 
 export const STALE_DAYS = 45;
 /** A required input in one of these leaves nothing to brief from: the skill is `not_ready`. */
 export const HARD: readonly InputStatus[] = Object.freeze(['unavailable_reader', 'missing', 'empty', 'withheld', 'not_granted', 'unreadable']);
 
+/**
+ * D4667-p4 — read keys whose evidence exists only for a record the run selects, and that a scheduled session cannot
+ * select: a session's target kinds (`agent_duties.target_kind`) have no fund. A skill that requires one runs only on
+ * the manual path, whose `record` selects it.
+ */
+export const MANUAL_SELECTION_ONLY: readonly string[] = Object.freeze(['fund.performance']);
+
 /** Which paths could carry this skill's inputs. Static: it asks no reader. */
 export function pathsFor(slug: string, readers: Partial<Record<string, unknown>> = READERS): PathSupport | null {
   const skill = FIRST_TEN.find((s) => s.slug === slug);
   if (!skill) return null;
-  const built = skill.needs.filter((n) => n.required).every((n) => typeof readers[n.read] === 'function' && satisfies(n));
+  const required = skill.needs.filter((n) => n.required);
+  const built = required.every((n) => typeof readers[n.read] === 'function' && satisfies(n));
   const side = built ? 'supported' : 'unsupported';
-  return { default_context: side, scheduled: side, manual: 'approved_tool_reads_not_exercised_here' };
+  const scheduled = built && !required.some((n) => MANUAL_SELECTION_ONLY.includes(n.read)) ? 'supported' : 'unsupported';
+  return { default_context: scheduled, scheduled, manual: 'approved_tool_reads_not_exercised_here', ...(side !== scheduled ? { selected_record: side } : {}) };
 }
 
 /** A native reader gives a shape; a need is met only by that shape. */
@@ -179,6 +192,7 @@ async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<R
     return { ...base, status: 'partial', reason: 'wrong_shape', note: `This reader gives ${(provides[n.read] ?? 'another shape').replace('_', ' ')}, not ${n.expects.replace('_', ' ')}.` };
   }
   if (n.expects === 'document_text') return documentReport(base, absent, data, out.truncated === true);
+  if (data && typeof data === 'object' && 'fund_status' in data) return fundReport(base, absent, data, out.truncated === true);
   // A typed reader names the fields its source does not record; the skill gets the rest, and the brief says so.
   const nothing = data?.coverage && Array.isArray(data.records) && data.coverage.total === 0;
   if (!nothing && Array.isArray(data?.missing_fields) && data.missing_fields.length) {
@@ -219,6 +233,47 @@ function documentReport(base: Pick<InputReport, 'field' | 'read' | 'required'>, 
   }
   if (truncated) return { ...base, status: 'partial', note: 'Part of the document was left out for length.' };
   if (!cov.complete) return { ...base, status: 'partial', note: `${cov.returned} of ${cov.total} passages of the document supplied; ${cov.total - cov.returned} left out.` };
+  return { ...base, status: 'available', note: null };
+}
+
+/**
+ * D4667-p4 — one selected fund's recorded performance for a quarter (`fund.performance`). None selected, or not a fund
+ * the sponsor runs here, leaves nothing to supply (`missing`). A fund with no position, call or distribution by the
+ * quarter end is `empty`. Otherwise every gap is named: a collection not read whole or not counted, a position with
+ * no mark by the quarter end, a figure the fund performance formula could not compute (unknown, never zero); and a
+ * mark dated before the quarter is `stale`. Each gap goes into the brief's limits.
+ */
+function fundReport(base: Pick<InputReport, 'field' | 'read' | 'required'>, absent: 'missing' | 'absent_optional', data: any, truncated: boolean): InputReport {
+  const st = data?.fund_status;
+  if (st === 'not_selected') return { ...base, status: absent, reason: 'not_selected', note: 'No fund is selected for this run.' };
+  if (st === 'not_found') return { ...base, status: absent, reason: 'not_found', note: 'The selected fund is not one the sponsor runs under this company.' };
+  const lists = [['marks', 'positions'], ['capital_calls', 'capital calls'], ['distributions', 'distributions']] as const;
+  if (st !== 'read' || !data?.fund?.ref || !data?.period?.to || !data?.performance || lists.some(([k]) => !Array.isArray(data[k]) || !data[`${k}_coverage`])) {
+    return { ...base, status: 'partial', reason: 'wrong_shape', note: 'This reader does not give a fund\'s performance for a period.' };
+  }
+  const end = data.period.to;
+  const perf = data.performance;
+  const marks: any[] = data.marks;
+  if (lists.every(([k]) => data[`${k}_coverage`].total === 0) && perf.paid_in === null && perf.nav === null) {
+    return { ...base, status: 'empty', note: `Nothing is recorded for this fund by ${end}.` };
+  }
+  const gaps: string[] = [];
+  if (truncated) gaps.push('part of the record was left out for length');
+  for (const [k, words] of lists) {
+    const cov = data[`${k}_coverage`];
+    if (cov.total === null) gaps.push(`how many ${words} exist could not be counted`);
+    else if (!cov.complete) gaps.push(`${cov.returned} of ${cov.total} ${words} supplied; ${cov.omitted} left out`);
+  }
+  const unmarked = marks.filter((m) => !m?.mark);
+  if (unmarked.length) gaps.push(`${unmarked.length} position(s) have no mark on or before ${end}: ${unmarked.map((m) => m.company ?? m.ref).join(', ')}`);
+  const unknown = Object.keys(perf.unavailable ?? {});
+  if (unknown.length) gaps.push(`not recorded at the source: ${unknown.join(', ')}`);
+  const before = marks.filter((m) => m?.mark?.before_period);
+  if (gaps.length) {
+    if (before.length) gaps.push(`${before.length} mark(s) are dated before ${data.period.from}`);
+    return { ...base, status: 'partial', note: `${gaps.join('; ')}.` };
+  }
+  if (before.length) return { ...base, status: 'stale', note: `${before.length} mark(s) are dated before the quarter began (${data.period.from}): ${before.map((m) => `${m.company ?? m.ref} ${m.mark.valuation_date}`).join(', ')}.` };
   return { ...base, status: 'available', note: null };
 }
 

@@ -16,9 +16,10 @@
  * Built: the project and company summaries, the team roster, the four
  * cycles' records (their activity lines, D690) and the typed records
  * (Mercury balances, Stripe revenue, the cap table, board metrics, burn, the
- * raise pipeline, transcripts and diligence) and the data room's document text
- * (D4667-p3). Research, network, compliance, GitHub and Vercel are not built yet
- * and refuse `read_unavailable`.
+ * raise pipeline, transcripts and diligence), the data room's document text
+ * (D4667-p3) and a fund's recorded performance for one quarter (D4667-p4).
+ * Research, network, compliance, GitHub and Vercel are not built yet and
+ * refuse `read_unavailable`.
  *
  * D4667 (#4667) — EVIDENCE, NOT JUST DATA. A read says what it covers. A collection
  * carries `returned`, `total` and `omitted` (counted, not guessed: `total` is
@@ -38,7 +39,10 @@ import { readRecord } from '../capTableRecord';
 import { heldLicences } from '../accountLicences';
 import { canWrite } from '../../routes/_founder_validate_helpers';
 import { liveFiles } from '../dataRoomTrash';
-import { projectOwnerScope } from '../tenancyScope';
+import { fundGpScope, projectOwnerScope } from '../tenancyScope';
+import { userMeetsInvestorTier } from '../../middleware/requireInvestorTier';
+import { readFundPerformance } from '../fundPerformance';
+import { positionMarkIdSql } from '../portfolioValuation';
 
 export const READ_MAX = 8 * 1024;
 /**
@@ -51,7 +55,11 @@ export type ReadPage = { after?: string | null; from?: string | null; to?: strin
  * `document` (D4667-p3): the one data-room file a run explicitly selected, as `data_room_file:<uid>` or its bare uid.
  * Only `data_room.index` reads it; with none, that read answers the room's index and no text.
  */
-export type ReadContext = { scope: Scope; agent: AgentRow; projectId: number | null; page?: ReadPage; document?: string | null };
+/**
+ * `fund` (D4667-p4): the one fund a run explicitly selected, as `vc_fund:<id>` or its bare id. Only `fund.performance`
+ * reads it; with none, that read answers the funds the sponsor runs and no figures.
+ */
+export type ReadContext = { scope: Scope; agent: AgentRow; projectId: number | null; page?: ReadPage; document?: string | null; fund?: string | null };
 export type ReadResult = { untrusted: true; data: unknown; truncated?: true; incomplete?: true; reason?: 'too_large' };
 
 /** What one collection in a read covers. `total` is null when it could not be counted. */
@@ -519,10 +527,150 @@ async function dataRoomIndex(env: Env, c: ReadContext) {
   };
 }
 
+// ── A fund's recorded performance (D4667-p4) ────────────────────────────────
+
+const FUND_REF = /^(?:vc_fund:)?([1-9][0-9]{0,11})$/;
+/** At most this many funds in the index, and this many rows of each collection of one quarter. */
+export const FUND_LIST_LIMIT = 40;
+export const FUND_ROWS_LIMIT = 200;
+
+/** The fund id a run selected, from `vc_fund:<id>` or a bare id; null for anything else. */
+export function selectedFund(v: unknown): number | null {
+  const m = typeof v === 'string' ? FUND_REF.exec(v.trim()) : null;
+  return m ? Number(m[1]) : null;
+}
+
+/** The last whole quarter ending on or before `day`: `{ quarter: '2026-Q3', from: '2026-07-01', to: '2026-09-30' }`. */
+export function quarterBefore(day: string) {
+  const y = Number(day.slice(0, 4)), q = Math.floor((Number(day.slice(5, 7)) - 1) / 3);
+  const thisEnd = new Date(Date.UTC(y, q * 3 + 3, 0)).toISOString().slice(0, 10);
+  const [yy, qq] = thisEnd === day ? [y, q] : q === 0 ? [y - 1, 3] : [y, q - 1];
+  const from = new Date(Date.UTC(yy, qq * 3, 1)).toISOString().slice(0, 10);
+  const to = new Date(Date.UTC(yy, qq * 3 + 3, 0)).toISOString().slice(0, 10);
+  return { quarter: `${yy}-Q${qq + 1}`, from, to };
+}
+
+/**
+ * The company a fund is read under: a company agent's own, a project agent's company. A fund is its GP's firm's
+ * (`vc_funds.company_id`, migration 195), so an agent with no company reads none.
+ */
+const companyOfScope = (s: Scope): number | null => (s.kind === 'company' ? s.id : s.company_id ?? null);
+
+/**
+ * `fund.performance` — one fund's recorded performance for one quarter, as its GP of record reads it.
+ *
+ * Who: the agent's sponsor, as `requireFundGp` admits a GP (`fundGpScope`: the GP of record, under the agent's
+ * company, on the institutional investor tier). An admin reads funds through audited admin acts and an LP through
+ * the LP portal, so neither reads one as an agent's sponsor: `withheld`. A fund the sponsor does not run under this
+ * company is `not_found`, the same answer as a fund that does not exist.
+ *
+ * With no fund selected it answers the funds the sponsor runs here, with no figures (`fund_status: 'not_selected'`).
+ *
+ * With one selected (`ReadContext.fund`) it answers the last whole quarter ending on or before `page.to` (default
+ * today), stated as `period`:
+ *   - `performance`: D627's `readFundPerformance` as of the quarter end, point in time (D1158) — the same formula as
+ *     fund performance and the benchmark offer, never a second one; a figure it cannot compute is null with its reason;
+ *   - `marks`: each position the fund held by the quarter end and its latest valuation on or before it, with the
+ *     valuation's date and its own reference; a position with none is `mark: null`, never its cost;
+ *   - `capital_calls` and `distributions`: those issued, or paid, in the quarter, each with its reference and date.
+ * Amounts are integer cents; no currency is recorded on a fund, so `currency` is null, never assumed. Each collection
+ * carries its coverage, counted apart from the rows returned.
+ */
+async function fundPerformance(env: Env, c: ReadContext) {
+  const who = await sponsorOf(env, c);
+  const companyId = companyOfScope(c.scope);
+  if (!who || String(who.role).toLowerCase() === 'admin' || !userMeetsInvestorTier(who, 'institutional')) {
+    return withheld('Only the fund\'s general partner of record, on the institutional tier, reads its performance.');
+  }
+  if (companyId === null) return withheld('A fund is read under the company that runs it, and this agent has no company.');
+  const scope = fundGpScope(who, companyId, 'f');
+  if (c.fund == null) {
+    const rows = (await env.DB.prepare(
+      `SELECT f.id, f.name, f.vintage_year, f.status FROM vc_funds f WHERE ${scope.sql} ORDER BY f.id LIMIT ?`,
+    ).bind(...scope.binds, FUND_LIST_LIMIT).all<{ id: number; name: string; vintage_year: number | null; status: string | null }>()).results ?? [];
+    const n = await env.DB.prepare(`SELECT COUNT(*) AS n FROM vc_funds f WHERE ${scope.sql}`).bind(...scope.binds).first<{ n: number }>().catch(() => null);
+    return {
+      fund_status: 'not_selected', fund: null,
+      funds: rows.map((f) => ({ ref: `vc_fund:${f.id}`, name: cut(f.name, 160), vintage_year: f.vintage_year ?? null, status: f.status ?? null })),
+      coverage: coverageOf(rows.length, n && Number.isFinite(Number(n.n)) ? Number(n.n) : null), source: 'vc_funds',
+    };
+  }
+  const id = selectedFund(c.fund);
+  if (id === null) throw new ReadPageError('invalid_page');
+  const to = c.page?.to ?? new Date().toISOString().slice(0, 10);
+  if (!DAY.test(to)) throw new ReadPageError('invalid_page');
+  const f = await env.DB.prepare(`SELECT f.id, f.name, f.vintage_year, f.status FROM vc_funds f WHERE f.id = ? AND ${scope.sql}`)
+    .bind(id, ...scope.binds).first<{ id: number; name: string; vintage_year: number | null; status: string | null }>();
+  if (!f) return { fund_status: 'not_found', fund: null, source: 'vc_funds' };
+  const period = quarterBefore(to);
+  const count = async (sql: string, ...binds: unknown[]) => {
+    const r = await env.DB.prepare(sql).bind(...binds).first<{ n: number }>().catch(() => null);
+    return r && Number.isFinite(Number(r.n)) ? Number(r.n) : null;
+  };
+  // Positions held by the quarter end, each with its latest mark on or before it (D627's precedence).
+  const positions = (await env.DB.prepare(
+    `SELECT p.uid, pr.name AS company, p.round_name, v.uid AS mark_uid, v.value_cents, v.valuation_date, v.source
+       FROM portfolio_positions p
+       LEFT JOIN projects pr ON pr.id = p.project_id
+       LEFT JOIN fund_position_valuations v ON v.id = ${positionMarkIdSql('p.id')}
+      WHERE p.fund_id = ? AND COALESCE(substr(p.position_date, 1, 10), substr(p.created_at, 1, 10)) <= ? ORDER BY p.id LIMIT ?`,
+  ).bind(period.to, f.id, period.to, FUND_ROWS_LIMIT).all<any>()).results ?? [];
+  const positionsTotal = await count(`SELECT COUNT(*) AS n FROM portfolio_positions p WHERE p.fund_id = ? AND COALESCE(substr(p.position_date, 1, 10), substr(p.created_at, 1, 10)) <= ?`, f.id, period.to);
+  const marks = positions.map((p) => ({
+    ref: `portfolio_position:${p.uid}`, company: cut(p.company, 160), round: cut(p.round_name, 80),
+    mark: p.mark_uid ? {
+      ref: `fund_position_valuation:${p.mark_uid}`, value: Number(p.value_cents), unit: 'cents', currency: null,
+      valuation_date: p.valuation_date, source: cut(p.source, 200),
+      ...(String(p.valuation_date) < period.from ? { before_period: true } : {}),
+    } : null,
+  }));
+  // Calls issued in the quarter: the ledger's headers, and the legacy unnumbered LP lines, as D627 counts them.
+  const calls = (await env.DB.prepare(
+    `SELECT 'fund_capital_call:' || uid AS ref, call_number, amount_cents, substr(created_at, 1, 10) AS at, due_date FROM fund_capital_calls
+      WHERE fund_id = ? AND substr(created_at, 1, 10) BETWEEN ? AND ?
+     UNION ALL
+     SELECT 'capital_call:' || c.uid, NULL, CASE WHEN c.amount_cents IS NOT NULL THEN c.amount_cents ELSE round(c.amount * 100) END,
+            substr(c.created_at, 1, 10), c.due_date
+       FROM capital_calls c JOIN limited_partners lp ON lp.id = c.limited_partner_id
+      WHERE lp.fund_id = ? AND c.fund_call_id IS NULL AND substr(c.created_at, 1, 10) BETWEEN ? AND ?
+     ORDER BY at, ref LIMIT ?`,
+  ).bind(f.id, period.from, period.to, f.id, period.from, period.to, FUND_ROWS_LIMIT).all<any>()).results ?? [];
+  const callsTotal = await count(
+    `SELECT (SELECT COUNT(*) FROM fund_capital_calls WHERE fund_id = ? AND substr(created_at, 1, 10) BETWEEN ? AND ?)
+          + (SELECT COUNT(*) FROM capital_calls c JOIN limited_partners lp ON lp.id = c.limited_partner_id
+              WHERE lp.fund_id = ? AND c.fund_call_id IS NULL AND substr(c.created_at, 1, 10) BETWEEN ? AND ?) AS n`,
+    f.id, period.from, period.to, f.id, period.from, period.to);
+  const dists = (await env.DB.prepare(
+    `SELECT id, amount_cents, distribution_type, substr(distributed_at, 1, 10) AS at FROM fund_distributions
+      WHERE fund_id = ? AND status = 'paid' AND substr(distributed_at, 1, 10) BETWEEN ? AND ? ORDER BY distributed_at, id LIMIT ?`,
+  ).bind(f.id, period.from, period.to, FUND_ROWS_LIMIT).all<any>()).results ?? [];
+  const distsTotal = await count(
+    `SELECT COUNT(*) AS n FROM fund_distributions WHERE fund_id = ? AND status = 'paid' AND substr(distributed_at, 1, 10) BETWEEN ? AND ?`,
+    f.id, period.from, period.to);
+  const p = await readFundPerformance(env, f, period.to, { pointInTime: true });
+  return {
+    fund_status: 'read',
+    fund: { ref: `vc_fund:${f.id}`, name: cut(f.name, 160), vintage_year: f.vintage_year ?? null, status: f.status ?? null },
+    period, units: { money: 'cents', ratios: 'multiple', irr: 'annual rate' }, currency: null,
+    currency_note: 'No currency is recorded on a fund, its calls or its marks.',
+    performance: {
+      as_of: p.as_of, nav_basis: p.nav_basis, nav: p.nav_cents, paid_in: p.paid_in_cents, distributed: p.distributed_cents,
+      rvpi: p.rvpi, dpi: p.dpi, tvpi: p.tvpi, irr: p.irr, unavailable: p.unavailable,
+    },
+    marks, marks_coverage: coverageOf(marks.length, positionsTotal),
+    capital_calls: calls.map((r) => ({ ref: r.ref, call_number: r.call_number ?? null, amount: r.amount_cents == null ? null : Number(r.amount_cents), unit: 'cents', currency: null, at: r.at, due: r.due_date ?? null })),
+    capital_calls_coverage: coverageOf(calls.length, callsTotal),
+    distributions: dists.map((r) => ({ ref: `fund_distribution:${r.id}`, amount: Number(r.amount_cents), unit: 'cents', currency: null, type: r.distribution_type, at: r.at })),
+    distributions_coverage: coverageOf(dists.length, distsTotal),
+    source: 'vc_funds',
+  };
+}
+
 export const READERS: Partial<Record<string, Reader>> = {
   ...TYPED,
   ...TYPED_MORE,
   'data_room.index': dataRoomIndex,
+  'fund.performance': fundPerformance,
   'project.summary': async (env, c) => {
     if (!c.projectId) return null;
     const p = await env.DB.prepare(
@@ -568,7 +716,7 @@ export const READER_PROVIDES: Readonly<Record<string, 'project_profile' | 'compa
   'project.summary': 'project_profile', 'company.profile': 'company_profile', 'team.roster': 'roster',
   'mercury.balances': 'typed_record', 'stripe.revenue': 'typed_record', 'cap_table.read': 'typed_record',
   'grow.burn': 'typed_record', 'raise.pipeline': 'typed_record', 'validate.transcripts': 'typed_record', 'raise.diligence': 'typed_record',
-  'grow.board_metrics': 'typed_record', 'data_room.index': 'document_text',
+  'grow.board_metrics': 'typed_record', 'data_room.index': 'document_text', 'fund.performance': 'typed_record',
   'validate.records': 'activity_summaries', 'build.records': 'activity_summaries', 'raise.records': 'activity_summaries', 'grow.records': 'activity_summaries',
 });
 

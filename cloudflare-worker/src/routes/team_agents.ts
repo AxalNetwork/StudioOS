@@ -61,7 +61,7 @@ import { refuse } from '../util/refusal';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
 import { FIRST_TEN_SLUGS, inputMatrix, preflight } from '../services/agents/skillInputs';
-import { selectedDocument } from '../services/agents/reads';
+import { selectedDocument, selectedFund } from '../services/agents/reads';
 import { ATTACH_STATUS, checkSkillList, linkStatement, logSkillsChanged } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
@@ -394,9 +394,14 @@ router.get('/agents/:uid/skills/:slug/readiness', async (c) => {
     const docAsked = c.req.query('document') || null;
     const document = docAsked === null ? null : selectedDocument(docAsked);
     if (docAsked !== null && !document) return say(c, 400, 'invalid_document', 'The document is a data room file reference such as data_room_file:<uid>.');
+    // D4667-p4: the one fund a run would read (`vc_fund:<id>`), for the last whole quarter ending on or before `to`.
+    const fundAsked = c.req.query('fund') || null;
+    const fundId = fundAsked === null ? null : selectedFund(fundAsked);
+    if (fundAsked !== null && fundId === null) return say(c, 400, 'invalid_fund', 'The fund is a fund reference such as vc_fund:<id>.');
+    const fund = fundId === null ? null : `vc_fund:${fundId}`;
     // D4667-p2: through the keys the agent's rule book reads, as a run of it is checked; any other is `not_granted`.
     const { rules } = await effectiveBook(c.env, s, a.role_key);
-    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to }, document }, undefined, undefined, undefined, undefined, { granted: rules.reads });
+    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to }, document, fund }, undefined, undefined, undefined, undefined, { granted: rules.reads });
     return c.json({ readiness: r });
   } catch (e) { return mapError(c, e); }
 });

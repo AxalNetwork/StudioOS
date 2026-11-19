@@ -106,7 +106,7 @@ import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type Agen
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
 import { skillForRun, tagUsage } from './skillEval';
 import { skillEngineOf, skillTextForRun, type RunSkillDeps, type RunSkillText } from './skillRuntime';
-import { documentOfRecord, EVIDENCE_NOTICE, limitsPrompt, skillEvidenceForRun, ventureOfRun, type RunEvidence } from './skillEvidence';
+import { documentOfRecord, EVIDENCE_NOTICE, fundOfRecord, limitsPrompt, skillEvidenceForRun, ventureOfRun, type RunEvidence } from './skillEvidence';
 
 export const PROMPT_MAX = 8000;
 const CYCLE_PAGE = { validate: 'Founder · Validate', build: 'Founder · Build', raise: 'Founder · Raise', grow: 'Founder · Grow' } as const;
@@ -443,6 +443,8 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
         agent: a, scope: c.scope, rules: c.rules, slug: skill.skill.slug, projectId: await ventureOfRun(env, c.scope, input.taskId),
         // D4667-p3: a run on one data-room document (`record`, `data_room_file:<uid>`) reads that document's text.
         document: documentOfRecord(input.record),
+        // D4667-p4: a run on one fund (`record`, `vc_fund:<id>`) reads that fund's recorded performance.
+        fund: fundOfRecord(input.record),
       });
       if (!checked.ok) return refused(env, a, checked, input.module, input.option);
       evidence = checked.evidence;
