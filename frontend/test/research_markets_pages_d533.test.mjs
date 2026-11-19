@@ -168,10 +168,15 @@ test('latest signals: illustrative seed signals say so; a failed read is not emp
 test('market readings are the way back into /research/markets/:uid; a never-run row has no link', () => {
   const markup = html(h(Readings, { readings: ready({ items: [
     { uid: 'r-1', metric: 'Advisory day rate', ran_at: '2026-09-02T00:00:00Z' },
-    { uid: null, metric: 'Never run', ran_at: null },
+    { uid: null, offering_uid: 'o-never', metric: 'Never run', ran_at: null },
   ] }) }));
   assert.match(markup, /href="\/research\/markets\/r-1"/);
-  assert.doesNotMatch(markup, /Never run/);
+  // D7174 (D7039 RMP-01): a service line never read keeps its row and says
+  // No reading yet, never $0, and it links nowhere.
+  assert.match(text(h(Readings, { readings: ready({ items: [{ uid: null, offering_uid: 'o-never', metric: 'Never run', ran_at: null }] }) })),
+    /Never run Service line · in your catalog No reading yet/);
+  assert.doesNotMatch(markup, /href="\/research\/markets\/null"/);
+  assert.equal((markup.match(/href="\/research\/markets\//g) || []).length, 3, 'only the read row links: its name and Open on the table, its name on the phone card');
   assert.match(text(h(Readings, { readings: ready({ items: [] }) })), /You have not run a market reading yet/);
   assert.match(text(h(Readings, { readings: unreadable })), /could not be read/);
 });
