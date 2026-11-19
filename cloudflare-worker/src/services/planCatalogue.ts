@@ -115,12 +115,13 @@ const SPECS: Spec[] = [
   {
     key: 'partner:free', family: 'partner', name: 'Partner Basic', tagline: 'Get listed.', licence_key: null, matches: null,
     sellable: false, sellable_reason: NOT_SOLD.free,
-    included: ['Provider profile and directory listing', 'Live founder requests', 'Verification badges', TOP_UP],
+    // D4653 part 2 (#4653): no "Verification badges" and no Stripe Connect payouts; D676 dropped both as not running.
+    included: ['Provider profile and directory listing', 'Live founder requests', TOP_UP],
   },
   {
     key: 'partner:pro', family: 'partner', name: 'Operating Partner Pro', tagline: 'Manage client work from proposal to delivery.', licence_key: 'partner', matches: { plan_group: 'partner' },
     sellable: true,
-    included: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect'],
+    included: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports'],
   },
   {
     key: 'other', family: 'other', name: 'No plan yet', tagline: 'Choose a profile to see its plans.', licence_key: 'other', matches: null,
