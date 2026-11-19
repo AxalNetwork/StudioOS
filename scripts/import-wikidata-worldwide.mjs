@@ -17,7 +17,7 @@ import { COMPANY_SECTOR_RULES, normalizeLabel } from '../cloudflare-worker/src/s
 
 export const DEFAULT_OUT='cloudflare-worker/sql/migrations/419_research_company_directory_worldwide.sql';
 export const DEFAULT_REPORT='documentation/audits/research-companies-worldwide-coverage.json';
-export const DEFAULT_TARGET=600;
+export const DEFAULT_TARGET=800;
 export const MIN_TOTAL=25000;
 export const MIN_COUNTRIES=50;
 export const REGION_MIN={north_america:1000,europe:1000,asia:1000,latin_america:250,africa:250,middle_east:250,oceania:250};
@@ -28,11 +28,15 @@ export const COUNTRIES=[
  ['NL','Netherlands','europe'],['SE','Sweden','europe'],['NO','Norway','europe'],['DK','Denmark','europe'],['FI','Finland','europe'],
  ['ES','Spain','europe'],['IT','Italy','europe'],['IE','Ireland','europe'],['EE','Estonia','europe'],['LV','Latvia','europe'],['LT','Lithuania','europe'],
  ['PL','Poland','europe'],['CZ','Czechia','europe'],['AT','Austria','europe'],['BE','Belgium','europe'],['PT','Portugal','europe'],['RO','Romania','europe'],
+ ['GR','Greece','europe'],['HU','Hungary','europe'],['BG','Bulgaria','europe'],['HR','Croatia','europe'],['SI','Slovenia','europe'],['SK','Slovakia','europe'],['LU','Luxembourg','europe'],['IS','Iceland','europe'],
  ['CN','China','asia'],['IN','India','asia'],['JP','Japan','asia'],['KR','South Korea','asia'],['SG','Singapore','asia'],
  ['ID','Indonesia','asia'],['VN','Vietnam','asia'],['MY','Malaysia','asia'],['PH','Philippines','asia'],['TH','Thailand','asia'],
+ ['TW','Taiwan','asia'],['HK','Hong Kong','asia'],['PK','Pakistan','asia'],['BD','Bangladesh','asia'],['LK','Sri Lanka','asia'],
  ['AE','United Arab Emirates','middle_east'],['SA','Saudi Arabia','middle_east'],['IL','Israel','middle_east'],['TR','Türkiye','middle_east'],
  ['NG','Nigeria','africa'],['ZA','South Africa','africa'],['KE','Kenya','africa'],['EG','Egypt','africa'],['GH','Ghana','africa'],['MA','Morocco','africa'],['RW','Rwanda','africa'],
+ ['TN','Tunisia','africa'],['SN','Senegal','africa'],['CI','Côte d’Ivoire','africa'],['UG','Uganda','africa'],['TZ','Tanzania','africa'],
  ['BR','Brazil','latin_america'],['AR','Argentina','latin_america'],['CL','Chile','latin_america'],['CO','Colombia','latin_america'],['PE','Peru','latin_america'],['UY','Uruguay','latin_america'],
+ ['CR','Costa Rica','latin_america'],['PA','Panama','latin_america'],['EC','Ecuador','latin_america'],
  ['AU','Australia','oceania'],['NZ','New Zealand','oceania'],
 ].map(([code,name,region])=>({code,name,region}));
 
@@ -98,7 +102,8 @@ export function acceptance(c){
  for(const [r,n] of Object.entries(REGION_MIN))if((c.regions[r]||0)<n)failures.push(`${r} ${c.regions[r]||0} < ${n}`);
  return {pass:failures.length===0,failures};
 }
-const COLS=['uid','name','website','country','country_code','founded_year','sector','source_name','source_url','source_license','as_of'];
+// country_code is an API-derived field today (mapped from country), not a physical D1 column.
+const COLS=['uid','name','website','country','founded_year','sector','source_name','source_url','source_license','as_of'];
 export function migration(rows,asOf){
  const lines=rows.map(r=>`INSERT OR IGNORE INTO research_company_directory (${COLS.join(',')}) VALUES (${COLS.map(k=>sqlValue(r[k])).join(',')});`);
  return `-- 419 — D7316 worldwide Research company identities. Generated; do not hand-edit.
