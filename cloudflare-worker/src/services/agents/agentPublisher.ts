@@ -157,7 +157,7 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const REPO = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 const REF = /^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/;
 const positive = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0;
-const PASSING: ReadonlySet<CheckConclusion> = new Set(['success', 'skipped', 'neutral']);
+const PASSING: ReadonlySet<CheckConclusion> = new Set(['success']);
 const FAILING: ReadonlySet<CheckConclusion> = new Set(['failure', 'cancelled', 'timed_out', 'action_required']);
 
 const refuse = (code: PublisherRefusalCode, retryable: boolean, extra: Omit<PublisherRefusal, 'ok' | 'code' | 'retryable'> = {}): PublisherRefusal =>
@@ -170,7 +170,7 @@ export function safePath(path: unknown): path is string {
   return path.split('/').every(s => s !== '' && s !== '.' && s !== '..' && s.toLowerCase() !== '.git');
 }
 
-function intentProblem(i: PublishIntent): string | null {
+export function publishIntentProblem(i: PublishIntent): string | null {
   if (!i || typeof i !== 'object') return 'intent';
   if (i.version !== PUBLISHER_VERSION) return 'version';
   for (const k of ['tenant_id', 'company_id', 'project_id'] as const) if (!positive(i[k])) return k;
@@ -302,7 +302,7 @@ function renderBody(intent: PublishIntent, digest: string, approvals: PublisherO
 /** The one decision. Refusals come in a fixed order, so the same inputs always give the same code. */
 export async function planAgentPublish(intent: PublishIntent, obs: PublisherObservations): Promise<PublishDecision> {
   if (obs?.enabled !== true) return refuse('publisher_disabled', false);
-  const bad = intentProblem(intent);
+  const bad = publishIntentProblem(intent);
   if (bad) return refuse('invalid_intent', false, { field: bad });
   const badObs = observationProblem(obs);
   if (badObs) return refuse('invalid_observation', true, { field: badObs });
