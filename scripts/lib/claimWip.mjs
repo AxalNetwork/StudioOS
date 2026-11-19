@@ -6,7 +6,9 @@ const slotPattern = /^slot:(S\d+)$/i;
 const slotsFor = labels => labels.map(label => slotPattern.exec(label)?.[1].toUpperCase()).filter(Boolean);
 
 function bodyIssue(pull) {
-  const body = (pull.body ?? '').replace(/<!--[^]*?-->/g, '');
+  // Strip comments until none is left, so a nested `<!-<!---->-` cannot leave one behind.
+  let body = pull.body ?? '';
+  for (let prev = null; prev !== body;) { prev = body; body = body.replace(/<!--[^]*?-->/g, ''); }
   const match = /^\s*(?:Closes|Part of)\s+#([1-9]\d*)\b/im.exec(body);
   return match ? Number(match[1]) : null;
 }

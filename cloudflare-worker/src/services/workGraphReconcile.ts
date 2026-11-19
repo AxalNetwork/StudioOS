@@ -27,6 +27,7 @@ import {
   type BlobCost, type BlobRefusal, type IntegrityEvent,
 } from './workGraphBlobs';
 import type { Actor, Scope, ValidationContext } from './workGraphContracts';
+import { eraseRecordObjects } from './recordErasure';
 
 type ReconcileEnv = Pick<Env, 'DB'> & { FILES?: R2Bucket };
 
@@ -246,7 +247,8 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
   report.stuckEffects = Number(stuck?.n ?? 0);
 
   if (deleteKeys.length && !dry) {
-    await bucket.delete(deleteKeys);
+    // D6651: orphans past the grace window and tombstoned bytes past retention go through the one record-erasure path.
+    await eraseRecordObjects(bucket, deleteKeys, 'retention_expired');
     s.cost.r2ClassA++;
     writes.push(env.DB.prepare(
       `UPDATE work_graph_blobs SET deleted_at = ?

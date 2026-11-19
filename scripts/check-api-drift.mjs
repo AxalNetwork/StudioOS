@@ -119,7 +119,7 @@ const KNOWN_DRIFT_ALLOWLIST = new Set([
 
 function declaresIdent(src, ident) {
   // #3973: a router factory mounted by its own name (`function workBoardRoutes(…) { … return router; }`).
-  if (new RegExp(`(?:^|[^A-Za-z0-9_$])function\\s+${ident}\\s*\\(`).test(src)) return true;
+  for (const m of src.matchAll(/(?<![A-Za-z0-9_$])function\s+([A-Za-z0-9_$]+)\s*\(/g)) if (m[1] === ident) return true;
   for (const kind of ['const ', 'let ', 'var ']) {
     const needle = kind + ident;
     let from = 0;

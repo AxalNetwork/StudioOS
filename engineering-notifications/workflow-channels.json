@@ -163,6 +163,11 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/landing-bot-main-repair.yml",
+      "channel": "#axalvc-actions-landing-bot-main-repair"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/landing-bot-model-round.yml",
       "channel": "#axalvc-actions-landing-bot-model-round"
     },

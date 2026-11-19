@@ -227,7 +227,7 @@ test('dark mode: every hover the drawer adds has its dark counterpart', () => {
   const css = read('frontend/src/pages/investor/investorFundLpRecord.css');
   const hovers = [...css.matchAll(/(?:^|[},])\s*(\.[\w.-]+(?:\s+[\w.-]+)?):hover/g)].map((m) => m[1]).filter((sel) => !sel.startsWith('.dark') && !/strong$/.test(sel));
   for (const sel of hovers) {
-    const background = new RegExp(`${sel.replace(/[.]/g, '\\.')}:hover\\{background`).test(css);
+    const background = new RegExp(`${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:hover\\{background`).test(css);
     if (background) assert.ok(css.includes(`.dark ${sel}:hover`), `${sel}:hover has no dark value`);
   }
   assert.match(css, /\.dark \.lpr\{/);
