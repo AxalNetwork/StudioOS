@@ -170,11 +170,11 @@ test('the page root carries Research violet on every licence, for both grounds',
     assert.ok(style.includes(`--mr-accent-line:${a.border}`), `${role}: no accent border`);
     assert.ok(style.includes(`--mr-accent-dark:${a.deepDark}`), `${role}: no dark-ground accent`);
   }
-  // An admin reaches this page as a founder (App.jsx `researchRole`); an
-  // unknown role still gets an accent rather than none.
-  assert.deepEqual(accentVars('nobody'), accentVars('founder'));
-  assert.deepEqual(accentVars('partner'), accentVars('founder'));
-  assert.equal(accentVars('partner')['--mr-accent'], '#7c3aed');
+  // The accent no longer depends on the licence, so the helper takes no role
+  // (an admin reaches this page as a founder, App.jsx `researchRole`; the loop
+  // above shows every licence draws the same violet).
+  assert.equal(accentVars.length, 0, 'accentVars takes no role');
+  assert.equal(accentVars()['--mr-accent'], '#7c3aed');
 });
 
 test('buttons, the draft pill, Accept, the focus ring and the back link read the accent, light and dark', () => {

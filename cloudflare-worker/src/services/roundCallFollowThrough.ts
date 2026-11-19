@@ -363,6 +363,54 @@ export async function startFromClosed(env: Env, call: CallRow, actor: User, inpu
   return { call: { ...draft, source_call_id: call.id }, source: { uid: call.uid, name: call.name, closed_at: call.closed_at }, data_room_carried: room != null };
 }
 
+/* ------------------------------------- step 3 of a new call (D7513, RAC20C) */
+
+export type SourceOn = 'responded' | 'did_not_respond' | 'not_delivered';
+export type SourceToday = 'verified' | 'not_verified' | 'not_active' | 'not_in_pipeline';
+
+/** Where a chosen recipient of the closed call stands today; only `verified` may be ticked. */
+export function sourceToday(r: { role: string; is_active: number; kyc_status: string | null; prospect_id: number | null }): SourceToday {
+  if (r.role !== 'investor' || Number(r.is_active) !== 1) return 'not_active';
+  if (r.kyc_status !== 'approved') return 'not_verified';
+  if (r.prospect_id == null) return 'not_in_pipeline';
+  return 'verified';
+}
+
+/**
+ * D7513 (#7513, boards RAC20C and RAC20D): the audience step of a draft started
+ * from a closed call. The closed call's CHOSEN recipients only (a matching
+ * investor is re-matched at the preview, never copied), each with how they
+ * answered that call and where they stand today, ticked when they are still a
+ * verified investor in this venture's pipeline. Names only, as the call page
+ * shows them; no email and no user id. Owner or co-founder reads it; only the
+ * owner sets the audience (`can_set`), as `saveAudience` enforces.
+ */
+export async function sourceAudience(env: Env, call: CallRow, actor: User) {
+  const relation = await callRelation(env, actor, call);
+  if (call.state !== 'draft') throw new RoundCallError('call_read_only', 409, 'Only a draft takes its audience from the call it was started from.');
+  const sourceId = (call as CallRow & { source_call_id?: number | null }).source_call_id ?? null;
+  if (sourceId == null) throw new RoundCallError('no_source_call', 409, 'This draft was not started from a closed call.');
+  const source = await env.DB.prepare('SELECT id,uid,name,closed_at FROM round_calls WHERE id=? AND project_id=?').bind(sourceId, call.project_id)
+    .first<{ id: number; uid: string; name: string; closed_at: string | null }>();
+  if (!source) throw new RoundCallError('source_not_found', 404, 'The call this draft was started from is no longer recorded.');
+  const read = await env.DB.prepare(`SELECT r.id,r.responded_at,r.delivery_state,u.name,u.role,u.is_active,u.kyc_status,
+      (SELECT p.id FROM raise_prospects p WHERE p.project_id=? AND p.email IS NOT NULL AND LOWER(p.email)=LOWER(u.email) ORDER BY p.id LIMIT 1) AS prospect_id
+    FROM round_call_recipients r JOIN users u ON u.id=r.investor_user_id WHERE r.call_id=? AND r.origin='chosen' ORDER BY u.name,r.id`)
+    .bind(call.project_id, source.id).all<{ id: number; responded_at: string | null; delivery_state: string; name: string | null; role: string; is_active: number; kyc_status: string | null; prospect_id: number | null }>();
+  const rows = (read.results || []).map((r) => {
+    const today = sourceToday(r);
+    const on: SourceOn = r.responded_at ? 'responded' : r.delivery_state === 'not_delivered' ? 'not_delivered' : 'did_not_respond';
+    return { recipient_id: r.id, prospect_id: r.prospect_id, name: r.name, on_source: on, today, ticked: today === 'verified' };
+  });
+  const count = (on: SourceOn) => rows.filter((r) => r.on_source === on).length;
+  return {
+    source: { uid: source.uid, name: source.name, closed_at: source.closed_at },
+    can_set: relation === 'owner',
+    counts: { chosen: rows.length, responded: count('responded'), did_not_respond: count('did_not_respond'), not_delivered: count('not_delivered'), ticked: rows.filter((r) => r.ticked).length },
+    rows,
+  };
+}
+
 /* ---------------------------------------------------- recorded commitment */
 
 /** Record a response as Signed or Wired with the amount the founder typed. Owner or co-founder (D1191). Never overwrites a Wired line. */
