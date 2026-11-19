@@ -621,7 +621,7 @@ export async function overviewRead(environment: Env, projectId: number, part?: s
       // pre-D1193 changes nor deleted prospects have a trustworthy baseline snapshot.
       const moves = rows.results.filter((r: any) => /Investor edited:.*stage [^,\n]+ → [^,\n]+/.test(String(r.details)));
       return { state: 'not_recorded', as_of: since.slice(0, 10), observed_moves: moves.length,
-        reason: 'A complete stage snapshot 30 days ago is not recorded. Logged stage moves began with D1193 and do not establish coverage of earlier changes or deleted investors.' };
+        reason: 'A complete stage snapshot 30 days ago is not recorded. The available stage-change records do not establish coverage of earlier changes or deleted investors.' };
     },
   };
   const entries = await Promise.all((part ? [part as keyof typeof readers] : [...OVERVIEW_PARTS]).map(async (key) => {
