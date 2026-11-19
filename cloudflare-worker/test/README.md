@@ -369,6 +369,7 @@ catalogue version only in the fixture.
 | `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
+| `research_global_funds_7325.test.mjs` | D7325: evidence validation, canonical catalogue preservation, source takedowns, country facets, duplicate suppression, replay and fault-injection checks on real SQLite. |
 
 | File | What it covers |
 |---|---|
