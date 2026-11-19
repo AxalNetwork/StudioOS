@@ -371,3 +371,4 @@ catalogue version only in the fixture.
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `research_companies_registers_d7316.test.mjs` | D7316 part 2: native registry identity/status and retained-hold admission; record/file hash tampering; shared-domain/name conflicts; immutable evidence and exact SQL ownership; real-schema insert-only replay, unknown metrics, and source-ledger overwrite refusal. |
