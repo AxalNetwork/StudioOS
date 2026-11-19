@@ -8,7 +8,7 @@ can be read to find out what a rule actually is.
 
 | File | What it decides |
 | --- | --- |
-| `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. D5973: one row per merge-group head SHA (request, first runner start, last required check's wait and runtime, queue entry and removal, recorded reason) classified as `deadline-expired`, `failed-check`, `cancelled-or-superseded`, `merged` or `missing-evidence`, and the scorecard's request budget. |
+| `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. D5973: one row per merge-group head SHA (request, first runner start, last required check's wait and runtime, queue entry and removal, recorded reason) classified as `deadline-expired`, `failed-check`, `cancelled-or-superseded`, `merged` or `missing-evidence`, and the scorecard's request budget. D6479: the landing section's rows and its own request budget. |
 | `requiredChecks.mjs` | #4107, D5973: main's required checks and the workflow that reports each, read by `frontend/test/merge_queue_ci_4107.test.mjs` and `ciScorecard.mjs`. |
 | `actionsConcurrency.mjs` | #6462: per-minute executing and queued job levels from job timestamps (a job executes only once a runner took it), effective ceiling (the level held while jobs queue), slot shares, PR draft state at run time and the plan-cap match; `actionsConcurrency.test.mjs` holds the fixture jobs. |
 | `deckEval.mjs` | D1518 (#3770): the deck harness's data and decisions: the golden briefs (records, never a prompt), rubric v0 (named, D1517's), the investor rubric (recorded, not gated), editing tasks v0, the competitor arms (waiting on decision F), the zero-edit verdict, the live-run refusal, and the readers of `documentation/product/ELEMENT_EVAL.md` and `DECK_BENCHMARK.md`. Owned by `../eval-elements.mjs`. |
@@ -63,7 +63,7 @@ can be read to find out what a rule actually is.
 | `shardPlan.mjs` | D5609: longest-first duration packing, suite p90 for unknown tests, and exact-once coverage validation; tested in `shardPlan.test.mjs`. |
 | `splitLedger.mjs` | D5613: validate and merge per-entry JSON maps and rewrite only changed files; tested in `splitLedger.test.mjs`. |
 | `hubFreeze.mjs` | D5615 (#5615): the names each frozen hub holds (`api.js`'s exports and object keys, `App.jsx`'s and `CycleRoute.jsx`'s import specifiers, `index.ts`'s static imports and app registrations, `advisors.ts`'s method plus path registrations; dynamic imports unfrozen) and every name `../hub-freeze.json` does not list, each with its `HUBS.md` section. A set, not a count. Run by `frontend/test/hub_freeze_5615.test.mjs`. |
-| `prOverlap.mjs` | D5616: pure path classes, overlapping pairs, migration stamps, landing order and escaped Markdown. |
+| `prOverlap.mjs` | D5616: pure path classes, overlapping pairs, migration stamps, landing order and escaped Markdown. Also read by `cloudflare-worker/src/services/agents/agentPublisher.ts` (D5569 part 2, typed by `prOverlap.d.mts`). |
 
 ## Tests
 
@@ -107,5 +107,7 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `flakyTests.test.mjs` | D6464: classification, expiry, the one-retry rule and the runner's reporter wiring. |
 | `sectionIncidentIssue.mjs` | D5984 (#5984): the one public template for a section-incident GitHub bug: the fixed cases, the marker, the title, body and labels, the power-of-two count milestone and its receipt comment. No episode, Slack or customer field reaches it. Owned by `../section-triage.mjs` and `cloudflare-worker/src/services/sectionIncidentIssue.ts` (typed by `sectionIncidentIssue.d.mts`). |
 | `sectionDraftGate.mjs` | D5985 (#5985): whether a reproduced section defect may get one automatic draft fix: section-triage's `cases` as the allowlist, trusted reproduced evidence, #5681's excluded inputs, no self-generated events, existing claims and PRs, the attempt, branch, PR and concurrency budget, and the stop switch. Emits five fixed job fields or one reason code. Tested in `sectionDraftGate.test.mjs`. |
+| `scanTrackerIssueBody.mjs` | D7283: public Code Scanning tracker instructions from validated coordinates; finding evidence stays in a private export or protected alert. Owned by `../scan-remediation/trackers.mjs`. |
+| `scanTrackerIssueBody.test.mjs` | D7283: private export arguments, local file modes, failure handling, coordinate rejection and finding-payload non-disclosure. Uses a local CLI stub without network access. |
 
 | `localFiles7255.test.mjs` | D7255: private-file permissions, link refusals, descriptor-bound edits and CLI recovery regressions with disposable local fixtures. |

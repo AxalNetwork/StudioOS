@@ -150,7 +150,64 @@ async function companyOf(env: Env, projectId: number): Promise<number | null> {
   return r?.company_id ?? null;
 }
 
-export async function growFigures(x: Ctx): Promise<Figure[]> {
+/**
+ * D4864 (#4864, GR-12, GR-19): why a Grow figure holds no value, as a code the page reads instead of
+ * parsing the prose `reason`. `no_record`: the store was read and holds nothing for it. `not_connected`:
+ * nothing was typed AND the source that would write it (Stripe, for MRR and Customers) is not connected.
+ * `unavailable`: the read failed, which is not a claim that nothing is recorded. No Grow figure is
+ * team-only today, so none is `restricted`: a viewer who may not read the venture is refused the whole read.
+ */
+export type FigureReasonCode = 'no_record' | 'not_connected' | 'unavailable';
+export type GrowFigure = Figure & { reason_code: FigureReasonCode | null; freshness: 'current' | 'stale' | null };
+
+/** The figures a connected Stripe writes (`project_metrics` rows with `source = 'stripe'`). */
+const STRIPE_FIGURES = new Set(['mrr', 'customers']);
+
+/**
+ * D4864: a recorded figure is `stale` when its as-of month is before the last closed calendar month, so
+ * at least one whole month went unrecorded since it (in November, a figure as of 30 September). The
+ * rule is the calendar's, not a guessed threshold; a figure with no parseable as-of has no freshness.
+ */
+export function figureFreshness(asOf: string | null | undefined, now: number): 'current' | 'stale' | null {
+  if (typeof asOf !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])/.test(asOf)) return null;
+  const closed = prevMonth(new Date(now).toISOString().slice(0, 7));
+  return asOf.slice(0, 7) < closed ? 'stale' : 'current';
+}
+
+/** Whether the venture's founder has an active Stripe integration; `unknown` when that cannot be read. */
+export async function stripeConnection(env: Env, projectId: number): Promise<'connected' | 'not_connected' | 'unknown'> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT 1 AS ok FROM integrations i JOIN users u ON u.id = i.user_id JOIN projects p ON p.founder_id = u.founder_id
+        WHERE p.id = ? AND i.provider_key = 'stripe' AND i.status = 'active' LIMIT 1`,
+    ).bind(projectId).first();
+    return row ? 'connected' : 'not_connected';
+  } catch {
+    console.warn('[growCycle] stripe connection unreadable');
+    return 'unknown';
+  }
+}
+
+/** D4864: the code and freshness for each figure; Stripe's connection is read only when a Stripe figure is missing. */
+async function withReasonCodes(x: Ctx, figures: Figure[]): Promise<GrowFigure[]> {
+  const stripe = figures.some((f) => f.state === 'not_recorded' && STRIPE_FIGURES.has(f.key))
+    ? await stripeConnection(x.env, x.projectId) : 'unknown';
+  return figures.map((f): GrowFigure => {
+    if (f.state === 'unreadable') return { ...f, reason_code: 'unavailable', freshness: null };
+    if (f.state === 'not_recorded') {
+      if (STRIPE_FIGURES.has(f.key) && stripe === 'not_connected') {
+        return { ...f, reason_code: 'not_connected', freshness: null, reason: `Not recorded: Stripe is not connected and no ${f.label} figure was entered by hand` };
+      }
+      if (STRIPE_FIGURES.has(f.key) && stripe === 'connected') {
+        return { ...f, reason_code: 'no_record', freshness: null, reason: `Not recorded: Stripe is connected but has not recorded ${f.label} yet` };
+      }
+      return { ...f, reason_code: 'no_record', freshness: null };
+    }
+    return { ...f, reason_code: null, freshness: figureFreshness(f.as_of, x.now) };
+  });
+}
+
+export async function growFigures(x: Ctx): Promise<GrowFigure[]> {
   const settle = async (key: string, label: string, unit: string, f: () => Promise<Figure>): Promise<Figure> => {
     try { return await f(); } catch (e) {
       console.error('[growCycle] figure unreadable:', key, (e as Error).message);
@@ -158,7 +215,7 @@ export async function growFigures(x: Ctx): Promise<Figure[]> {
     }
   };
   const snaps = () => readSnapshots(x.env, x.projectId);
-  return Promise.all([
+  return withReasonCodes(x, await Promise.all([
     settle('mrr', 'MRR', 'usd_cents', async () => {
       const f = metricFigure(await snaps(), 'mrr', 'mrr', 'MRR', 'usd', x.now);
       return f;
@@ -185,7 +242,7 @@ export async function growFigures(x: Ctx): Promise<Figure[]> {
         delta_30d: rows.filter((p) => p.start_date && p.start_date > cutoff).length,
         spark, source: 'Team roster', as_of: iso(x.now) });
     }),
-  ]);
+  ]));
 }
 
 // ── Cards ───────────────────────────────────────────────────────────────────

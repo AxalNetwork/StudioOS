@@ -107,7 +107,7 @@ test('the hub draws its rows from the lists it is handed, links each block, and 
 
   for (const [text, to] of [
     ['Browse all →', '/directory'], ['Calendar →', '/events'], ['All articles →', '/articles'],
-    ['All circles →', '/circles'], ['All roles →', '/jobs'], ['Request directory access →', '/contact'],
+    ['All circles →', '/circles'], ['All roles →', '/jobs'], ['Request directory access →', '/contact?topic=directory'],
   ]) assert.ok(empty.includes(`href="${to}" data-discover="true">${text}</a>`), `${text} links ${to}`);
   assert.match(empty, /Verified members only\./, 'the canvas\'s access line stays');
 

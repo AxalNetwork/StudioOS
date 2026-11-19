@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { deprovisionLicenceAdmins, unbindBranchAdmins } from '../src/routes/admin_licences.ts';
 import { licenceRoutesSource } from './_licenceRoutes.mjs';
+import { openSchema } from './_schema_once.mjs';
 
 const ACTOR = { id: 1, name: 'HQ Holder', email: 'hq@axal.test' };
 const LICENCE = 42;
@@ -62,28 +63,10 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
 }
 
 function seedDb({ holders = [] as number[], withSuperAdmins = true, withLicenceAdmins = true } = {}) {
-  const db = new DatabaseSync(':memory:', {
-    enableForeignKeyConstraints: false,
-    enableDoubleQuotedStringLiterals: true,
-  });
-  db.exec(`
-    CREATE TABLE users (
-      id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);
-    CREATE TABLE activity_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER);
-    -- D5361 (#5361): the demotion batch also records the trust re-seed each
-    -- former administrator is owed, so the batch needs its table.
-    CREATE TABLE licence_termination_reseeds (
-      licence_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
-      state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
-      failure_code TEXT, last_attempt_at TEXT, completed_at TEXT,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-      PRIMARY KEY (licence_id, user_id));
-  `);
-  if (withLicenceAdmins) {
-    db.exec('CREATE TABLE licence_admins (licence_id INTEGER, user_id INTEGER UNIQUE, admin_role TEXT)');
-  }
-  if (withSuperAdmins) db.exec('CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY)');
+  const db = openSchema(); // D5503: current-schema isolated cached file copy.
+  // D5503: these two cases intentionally simulate incomplete deployments.
+  if (!withLicenceAdmins) db.exec('DROP TABLE licence_admins');
+  if (!withSuperAdmins) db.exec('DROP TABLE super_admins');
   db.prepare("INSERT INTO users (id,email,name,role,is_active) VALUES (1,'hq@axal.test','HQ Holder','admin',1)").run();
   db.prepare("INSERT INTO users (id,email,name,role,is_active) VALUES (7,'p@fr.test','Margot','admin',1)").run();
   db.prepare("INSERT INTO users (id,email,name,role,is_active) VALUES (8,'d@fr.test','Luc','admin',1)").run();
@@ -195,6 +178,20 @@ test('both sides of the audit are written, and name the cause', async () => {
   // invisible in every reader until three sweeps had been done.
   assert.deepEqual([...new Set(rows.map((r) => r.action))].sort(), ['role_changed', 'your_role_changed']);
   db.close();
+});
+
+test('D5503: current-schema termination writes canonical audit identities and timestamps', async () => {
+  const db = seedDb();
+  try {
+    await deprovisionLicenceAdmins({ DB: makeD1(db) } as any, LICENCE, ACTOR, 'synthetic termination');
+    const rows = db.prepare('SELECT uid, created_at FROM activity_logs ORDER BY id').all() as any[];
+    assert.equal(rows.length, 4);
+    assert.equal(new Set(rows.map(row => row.uid)).size, 4);
+    for (const row of rows) {
+      assert.match(row.uid, /^[a-f0-9]{32}$/);
+      assert.match(row.created_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    }
+  } finally { db.close(); }
 });
 
 test('running it twice is a no-op the second time', async () => {

@@ -556,6 +556,13 @@ export async function investorEvidence(env:Env,projectId:number,investorUserId:n
   await logOpenEvidence(env,projectId,investorUserId);
   return view;
 }
+/** #6629 (D6629): the same read for the deal summary PDF, by the same audience, NDA and sharing rules, and not logged:
+ *  the download writes its own `data_room_access_log` row once the file is made. Null for a reader with no audience. */
+export async function investorEvidenceView(env:Env,projectId:number,investorUserId:number){
+  const aud=await evidenceAudience(env,projectId,investorUserId);
+  if(!aud)return null;
+  return sharedView(env,projectId,aud,await evidenceNda(env,projectId,investorUserId));
+}
 /** #6173 (D6173): the investment case's Main evidence, the coverage this investor's `investorEvidence` read shows, by
  *  the same audience, NDA and sharing rules. Counts by area, kind and source only, never an item; not logged as an open,
  *  since nothing is opened (the Evidence block's own read logs `open_evidence`). `null` when the investor is no audience. */
