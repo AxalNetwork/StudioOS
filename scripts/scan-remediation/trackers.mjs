@@ -1,9 +1,12 @@
 // Match public tracking issues to protected alerts using their repo, number and creator.
+import { trackerIssueBody } from '../lib/scanTrackerIssueBody.mjs'
+
 const titles = /^(?:\[Code Scanning\] Investigate and fix alert #|\[Code Scanning\] Remediate alert #)([1-9]\d*)$/
 const validNumber = value => Number.isSafeInteger(value) && value > 0
 const names = issue => issue.labels.map(label => typeof label === 'string' ? label : label.name)
 const marker = number => '<!-- studioos-scan-remediation:' + number + ' -->'
 const login = value => String(value || '').toLowerCase()
+const routingSlot = 'slot:S21'
 
 export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin = 'github-actions[bot]' }) {
   const base = 'https://github.com/' + owner + '/' + repo
@@ -33,8 +36,14 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
 
   async function unclaimed(issue, review = false) {
     const labels = names(issue)
+    const number = Number(titles.exec(issue.title)?.[1])
+    // S21 routing permits reconciliation until a session claims the automatic tracker.
+    const automaticallyRouted = bots.has(login(issue.user?.login)) &&
+      issue.title === '[Code Scanning] Remediate alert #' + number &&
+      String(issue.body || '').split('\n').includes(marker(number))
     if (issue.locked || issue.assignees?.length || labels.some(label =>
-      label.startsWith('slot:') || label === 'needs-decision' || label === 'needs-design' ||
+      (label.startsWith('slot:') && !(automaticallyRouted && label === routingSlot)) ||
+      label === 'needs-decision' || label === 'needs-design' ||
       (label.startsWith('state:') && label !== 'state:ready' && !(review && label === 'state:review')))) return false
     try {
       await api.request('GET', '/git/ref/heads/claim/' + issue.number)
@@ -81,10 +90,8 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
 
     const issue = await api.request('POST', '/issues', {
       title: '[Code Scanning] Remediate alert #' + number,
-      body: [marker(number), '', 'Track [Code Scanning alert #' + number + '](' + alertUrl(number) + ').',
-        '', 'Keep finding details in Code Scanning. Close this tracker when a scan confirms the fix on ' +
-          '`' + defaultBranch + '`.'].join('\n'),
-      labels: ['bug'],
+      body: trackerIssueBody({ owner, repo, defaultBranch, number }),
+      labels: ['bug', routingSlot],
     })
     if (!trusted(issue) || !validNumber(issue.number) || !recognized(issue, number)) throw Error('Unexpected tracker identity')
     remember(issue)
