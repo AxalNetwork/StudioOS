@@ -248,7 +248,7 @@ r.get('/', async (c) => {
           ORDER BY s.created_at DESC, s.id DESC
           LIMIT ? OFFSET ?`,
       ).bind(csv, csv, user.id, stateFilter, stateFilter, stateFilter, win.limit, win.offset)
-        .all<SupportRow>().catch(() => ({ results: [] as SupportRow[] })),
+        .all<SupportRow>().catch(() => ({ results: null as SupportRow[] | null })),
       // The book itself, so "no support at all" is an anti-join over two stored
       // sets rather than an inference from the ledger's silence.
       c.env.DB.prepare(
@@ -303,6 +303,12 @@ r.get('/', async (c) => {
         .catch(() => ({ results: null })),
     ]);
 
+    // #5847: a failed entries read is Unreadable, never an empty ledger. Only
+    // the figures (below) may fail on their own and leave a readable page.
+    if (entries.results == null) {
+      const reason = "Unreadable — the support ledger's entries could not be read. Try again.";
+      return c.json({ available: false, source: 'entries', detail: reason, reason }, 503);
+    }
     const rows = (entries.results || []).map((r) => ({ ...r, overdue: Number(r.overdue) === 1 }));
     const bookRows = book.results || [];
     // #4647: a failed aggregate read is not zero. `agg.results` is null only

@@ -333,9 +333,9 @@ export default function ServicesZone() {
             { label: 'Unpriced', value: String(counts?.unpriced ?? unpriced.length), note: (counts?.unpriced ?? unpriced.length) ? 'scope settled, price is not' : 'all priced' },
           ].map((s) => (
             <Card key={s.label} padding="md">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{s.label}</div>
               <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value}</div>
-              <div className="mt-0.5 text-[10px] text-axal-faint">{s.note}</div>
+              <div className="mt-0.5 text-[10px] text-axal-muted">{s.note}</div>
             </Card>
           ))}
         </div>
@@ -472,7 +472,7 @@ export default function ServicesZone() {
         </div>
         <div className="space-y-3">
           <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-services-more" />
-          <p className="text-[11px] leading-relaxed text-axal-faint">
+          <p className="text-[11px] leading-relaxed text-axal-muted">
             How many times each service has been delivered is not shown. Nothing in the product links
             a booking to a service — a booking records a free-text topic — so a count here would be a
             guess wearing the shape of a number.

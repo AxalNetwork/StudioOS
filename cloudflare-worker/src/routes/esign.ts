@@ -7,6 +7,7 @@
  *  - GET    /api/legal/esign/:id             (scoped) — envelope detail + audit log
  *  - GET    /api/legal/esign/:id/document    (scoped) — stream signed PDF from R2
  *  - POST   /api/legal/esign/:id/forward     (scoped) — email the signed PDF onward
+ *  - POST   /api/legal/esign/:id/resend      (the caller's own pending row) — mail my signing link again (D6197)
  *  - GET    /api/legal/esign/:id/forward     (scoped) — that envelope's forward log
  *
  *    "scoped" is services/tenancyScope.ts's esignEnvelopeScope: the sender,
@@ -2229,6 +2230,99 @@ esign.post('/:id{[0-9]+}/remind', async (c) => {
     });
   }
   return c.json({ reminded: true, results });
+});
+
+// ---------------------------------------------------------------------------
+// D6197 (#6197) — a signer asks for their own signing link again.
+//
+// THE CALLER'S OWN ROW, NOBODY ELSE'S. `/remind` is the sender's and mails
+// every unsigned recipient (D411); this mails one recipient, the caller, and
+// only when the caller is that recipient by account (`esign_recipients.user_id`,
+// the key `esignEnvelopeScope` reads a recipient by). Anyone else, the sender
+// included, gets the 404 a missing id gets (D410).
+//
+// The link goes to the caller's inbox and never into the response (D410): a
+// staged closing paper's room reads stages, not tokens, and a browser never
+// builds a signing URL. A link past its expiry is replaced, as `/remind`
+// replaces it. At most one resend an hour per signer (`signing_link_resent` on
+// the envelope's trail), on top of the fail-closed `esign_send` bucket
+// (ESIGN_SIGNER_RESEND in middleware/rateLimit.ts). A failed send does not
+// count against the hour. In-house envelopes only, as for `/remind`.
+// ---------------------------------------------------------------------------
+const RESEND_MIN_INTERVAL_MS = 60 * 60 * 1000;
+
+esign.post('/:id{[0-9]+}/resend', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const row: any = await c.env.DB.prepare(
+    `SELECT r.id, r.recipient_email, r.recipient_name, r.signing_token, r.token_expires_at, r.status AS recipient_status,
+            e.document_title, e.status, e.provider, e.created_by
+       FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE e.id = ? AND r.user_id = ? ORDER BY r.id LIMIT 1`
+  ).bind(id, user.id).first();
+  if (!row) return refuse(c, 404, { code: 'envelope_not_found', message: 'No envelope here.' });
+  if (row.provider && row.provider !== 'native') {
+    return refuse(c, 409, {
+      code: 'provider_managed',
+      message: 'This envelope was sent through DocuSign, so its signing link comes in DocuSign’s email.',
+    });
+  }
+  if (row.recipient_status === 'signed') {
+    return refuse(c, 409, { code: 'already_signed', message: 'You have already signed this envelope, so there is no link to send.' });
+  }
+  if (!PENDING_ENVELOPE.includes(String(row.status)) || row.recipient_status !== 'pending') {
+    const why = row.status === 'completed' ? 'it is fully executed'
+      : isVoided(row.status) ? 'it was voided'
+      : row.status === 'rejected' || row.recipient_status === 'rejected' ? 'it was declined'
+      : 'it is not waiting on your signature';
+    return refuse(c, 409, { code: 'envelope_not_pending', message: `There is no link to send: ${why}.` });
+  }
+
+  const last: any = await c.env.DB.prepare(
+    `SELECT ts FROM esign_audit_events WHERE envelope_id = ? AND action = 'signing_link_resent' AND signer_id = ? ORDER BY ts DESC, id DESC LIMIT 1`
+  ).bind(id, user.id).first();
+  const lastAt = last?.ts ? new Date(String(last.ts)).getTime() : NaN;
+  if (Number.isFinite(lastAt) && Date.now() - lastAt < RESEND_MIN_INTERVAL_MS) {
+    return refuse(c, 429, {
+      code: 'resend_too_soon',
+      message: 'Your signing link was sent again in the last hour. Check your inbox and spam folder; you can ask again after that.',
+      extra: { next_resend_at: new Date(lastAt + RESEND_MIN_INTERVAL_MS).toISOString() },
+    });
+  }
+
+  let tokenValue = String(row.signing_token);
+  let expiresAt = String(row.token_expires_at);
+  const lapsed = new Date(expiresAt).getTime() < Date.now();
+  if (lapsed) {
+    tokenValue = genToken();
+    expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
+    await c.env.DB.prepare(
+      `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ? WHERE id = ? AND status = 'pending'`
+    ).bind(tokenValue, expiresAt, row.id).run();
+  }
+  const sender: any = row.created_by
+    ? await c.env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(row.created_by).first()
+    : null;
+  const sent = await sendAgreementAssignedEmail(
+    c.env, row.recipient_email, row.recipient_name || '', row.document_title || 'Agreement',
+    `${c.env.APP_URL || 'https://axal.vc'}/esign/${tokenValue}`, sender?.name || 'Axal VC',
+  );
+  await appendAudit(c.env, id, {
+    ts: new Date().toISOString(),
+    signer_id: user.id,
+    signer_email: user.email,
+    action: sent ? 'signing_link_resent' : 'signing_link_resend_failed',
+    ip: clientIp(c.req.raw),
+    meta: { recipient_id: row.id, link_renewed: lapsed },
+  });
+  if (!sent) {
+    return refuse(c, 502, {
+      code: 'resend_not_sent',
+      message: 'Your signing link could not be emailed just now. Nothing changed; try again in a few minutes.',
+    });
+  }
+  return c.json({ resent: true, link_renewed: lapsed, expires_at: expiresAt });
 });
 
 export default esign;

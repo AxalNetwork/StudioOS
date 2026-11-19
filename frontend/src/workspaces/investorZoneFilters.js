@@ -64,23 +64,15 @@ const NO_OFFER_ON_THIS_DESK =
 // `/network/organizations` (D6258). An organisation on this zone is the
 // counterpart's OWN company, which `GET /api/partnernet/relationships` has
 // returned as `other.company` since D572 part 3: the company the other person
-// links on their account, read at query time. Nothing is stored on the
-// relationship. That makes `All` a live chip, and leaves two labels that would
-// have to say what KIND of firm a company is to you, which nothing records.
+// links on their account, read at query time. Co-investors narrows to
+// companies with a co-investor contact.
 //
 // `Portfolio` would need the company tied to a deal you invested in; the
 // company is a name read off another person's account, and this page never
-// loads your deals. `Co-investors` is a live chip one zone up, where
-// `relationship_type = 'co_investor'` selects PEOPLE. Here it would have to
-// select firms, and a tie's type describes the person, not the company they
-// link, so calling a firm a co-investor because one person at it is would be a
-// guess printed as a fact.
+// loads your deals.
 const NO_PORTFOLIO_LINK =
   'a company here is the name the other person links on their own account, and nothing ties it to a deal you invested in; this page never loads your deals';
 const NO_PORTFOLIO_LINK_HOVER = 'Nothing ties these companies to your investments yet.';
-const NO_FIRM_KIND =
-  'a tie’s type describes the person, not the company they link, so a company cannot be called a co-investor because one person at it is';
-const NO_FIRM_KIND_HOVER = 'A tie’s type describes the person, not their company.';
 // The other two name records that are real and are kept somewhere this page
 // never opens: it loads the relationship book, the network summary and the
 // introductions desk, and nothing else. `limited_partners` is keyed on
@@ -315,7 +307,7 @@ export const INVESTOR_ZONE_FILTERS = {
   'network/organizations': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Portfolio', unbuilt: NO_PORTFOLIO_LINK, hover: NO_PORTFOLIO_LINK_HOVER },
-    { canvas: 'Co-investors', unbuilt: NO_FIRM_KIND, hover: NO_FIRM_KIND_HOVER },
+    { canvas: 'Co-investors', key: 'co_investors' },
     { canvas: 'LPs', unbuilt: KEPT_IN_ANOTHER_STORE },
     { canvas: 'Passed', unbuilt: KEPT_IN_ANOTHER_STORE },
   ],

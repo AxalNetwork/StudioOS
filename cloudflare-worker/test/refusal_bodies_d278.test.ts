@@ -39,9 +39,9 @@ test('member: our sentence, a code in error, no provider text anywhere in the bo
   assert.equal(out.detail, 'Checkout could not be started.');
   assert.equal(out.upstream, undefined);
   assert.doesNotMatch(JSON.stringify(out), /card_declined|stripe_error|declined/);
-  assert.ok(logged.some((l) => l.includes('checkout_failed') && l.includes('card_declined')), 'the raw text was not logged beside the code');
+  assert.ok(logged.some((l) => l.includes('checkout_failed') && l.includes('card_declined')), 'the provider classification was not logged beside the code');
   // The log call's first argument is a constant: the Semgrep rule this repo has fixed twenty-one times.
-  assert.ok(logged.every((l) => l.startsWith('[refusal] ')));
+  assert.ok(logged.every((l) => l.startsWith('[error] ')));
 });
 
 test('owner and admin: the provider text travels clipped on upstream, never in message, detail or error', () => {
