@@ -158,7 +158,7 @@ export function caseAllowed(
   };
 }
 
-async function requireDdReader(c: AppContext): Promise<AppUser> {
+export async function requireDdReader(c: AppContext): Promise<AppUser> {
   const user = await requireAuth(c);
   // D4472: founder-only accounts cannot read diligence. An independently
   // held Investor, Advisor or Operating Partner licence admits the caller;
@@ -1193,7 +1193,7 @@ dd.get('/cases/:uid/findings/:id/history', async (c) => {
 /** The user the case is ABOUT: project → owning founder user; every
  *  other subject_type stores a users.id directly in subject_id (see
  *  partnerDeals.activatePartnerDealOnSignature + /report/share). */
-async function resolveSubjectUserId(env: Env, cs: Record<string, unknown>): Promise<number | null> {
+export async function resolveSubjectUserId(env: Env, cs: Record<string, unknown>): Promise<number | null> {
   if (cs.subject_type === 'project') {
     const sql = getSQL(env);
     try {
@@ -2039,7 +2039,7 @@ dd.get('/documents/dl/:token', async (c) => {
 
 const LEAD_ROLES = new Set(['admin', 'partner', 'investor']);
 const MEMO_FIELDS = ['summary', 'verified', 'on_trust', 'conditions'] as const;
-const MEMO_MAX = 8000;
+export const MEMO_MAX = 8000;
 const REASON_MAX = 2000;
 
 function isDay(v: string): boolean {
