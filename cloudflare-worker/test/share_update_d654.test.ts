@@ -175,7 +175,7 @@ async function fixture() {
                                   status TEXT, company_id INTEGER, deleted_at TEXT);
            CREATE TABLE pitch_decks (id INTEGER PRIMARY KEY);`);
   db.exec(ddl('125'));
-  db.exec(file('437')); db.exec(file('202611091055'));
+  db.exec(file('437')); db.exec(file('202611091055')); db.exec(file('202611182124'));
   db.exec(ddl('001')); db.exec(ddl('252')); db.exec(ddl('443')); db.exec(ddl('436'));
   for (const p of ['119', '127', '128', '132']) db.exec(ddl(p));
   db.exec('ALTER TABLE raise_prospects ADD COLUMN amount REAL');

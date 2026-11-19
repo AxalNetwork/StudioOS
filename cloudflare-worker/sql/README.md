@@ -78,6 +78,7 @@ HEAD metadata after deployment; the migration never reads or deletes objects.
 | `migrations/202611122121_4557_compute_host.sql` | D4557 part 2: request/run snapshots, execution fences and private object metadata. |
 | `migrations/202611151923_6637_intro_offer_history.sql` | D6637: preserve closed offers while constraining pending pairs and legacy matches. |
 
+| `migrations/202611151450_6424_flow_attention.sql` | D6424: a per-firm optional stale threshold and its recorded writer; no default. |
 | `migrations/202611151226_6562_agreement_revision.sql` | D6562: nullable rendered terms/schedule revisions and contractual input snapshot on licence contracts; legacy agreements remain unknown. |
 | `migrations/202611151315_6272_ask_history_cleared.sql` | D6272 (#6272): `research_ask_sessions.cleared_at` — Ask's Clear history hides the caller's sessions and Restore sets it back to NULL; nothing is deleted. Additive, no backfill. |
 | `migrations/202611161505_6195_commitment_route_preference.sql` | D6195 (#6195): `commitments.route_preference` (direct, syndicate, fund or NULL) — the investor's preference only; the studio sets the closing line's route. Additive, no backfill; NULL reads "No preference recorded". |

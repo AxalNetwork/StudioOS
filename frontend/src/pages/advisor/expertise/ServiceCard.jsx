@@ -37,7 +37,7 @@ export default function ServiceCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="m-0 break-words text-[13.5px] font-extrabold">{row.title}</h3>
-          <div className="mt-0.5 text-[11.5px] text-axal-faint">
+          <div className="mt-0.5 text-[11.5px] text-axal-muted">
             {[kind, row.duration_note].filter(Boolean).join(' · ')}
           </div>
         </div>
@@ -46,10 +46,10 @@ export default function ServiceCard({
         </span>
       </div>
       <div className="text-[15px] font-extrabold tabular-nums" data-testid={`advisor-service-price-${row.id}`}>
-        {price ?? <span className="font-semibold text-axal-faint">— No price set</span>}
+        {price ?? <span className="font-semibold text-axal-muted">— No price set</span>}
       </div>
       {row.scope && <p className="m-0 text-[12px] leading-relaxed text-axal-muted">{row.scope}</p>}
-      <p className="m-0 text-[11.5px] text-axal-faint" data-testid={`advisor-service-booking-${row.id}`}>
+      <p className="m-0 text-[11.5px] text-axal-muted" data-testid={`advisor-service-booking-${row.id}`}>
         {meta.hint}{' '}Booking:{' '}
         <Link to={SESSIONS_PATH} className="font-semibold text-emerald-700 underline dark:text-emerald-300">a session type in Practice › Sessions</Link>
       </p>

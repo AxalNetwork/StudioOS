@@ -805,3 +805,38 @@ test('D7171: the coverage summary counts the filtered markets, keeps both countr
     assert.ok(!/market_size|growth/.test(JSON.stringify(r.body)), 'no invented size or growth');
   } finally { mock.timers.reset(); }
 });
+
+// --- D7172 (#7172, the ◇ of D7037): tickers in both sources, for this search ----------
+
+test('D7172: in_both counts the result\'s tickers held by both sources, across every page, not the page or the store', async () => {
+  const db = freshDb();
+  seedListed(db);
+  seedEdgar(db);
+  db.prepare(`INSERT INTO research_public_companies (cik, name, ticker, exchange, other_listings, source_name, source_url, licence, as_of)
+    VALUES ('0000000077', 'Toast Inc', 'TOST', 'NYSE', NULL, 'SEC EDGAR', ?, 'US government work', '2026-10-06')`).run(EDGAR_URL);
+  // EDGAR's DLO row is named apart from the signal company DLocal, so a search
+  // for "DLoc" reaches only the signal row.
+  db.prepare(`INSERT INTO research_public_companies (cik, name, ticker, exchange, other_listings, source_name, source_url, licence, as_of)
+    VALUES ('0000000088', 'Uruguay Payments SA', 'DLO', 'Nasdaq', NULL, 'SEC EDGAR', ?, 'US government work', '2026-10-06')`).run(EDGAR_URL);
+  const all = await get(db, '/listed-companies');
+  assert.deepEqual([all.body.in_both, all.body.sources[1].also_signal_companies], [3, 3], 'NU, TOST and DLO, with no search');
+  const dloc = await get(db, '/listed-companies?q=DLoc');
+  assert.deepEqual([dloc.body.items.map((i: any) => [i.source, i.symbol]), dloc.body.in_both], [[['signal_companies', 'DLO']], 0],
+    'EDGAR\'s DLO row is not in this search, so DLO is not in both');
+  const first = await get(db, '/listed-companies?limit=1');
+  assert.deepEqual([first.body.items.map((i: any) => i.symbol), first.body.in_both], [['NU'], 3],
+    'one row on the page, and the count is still the whole result\'s');
+  const nu = await get(db, '/listed-companies?q=Nu');
+  assert.deepEqual([nu.body.in_both, nu.body.sources[1].also_signal_companies], [1, 3], 'the search, not the store');
+  // "T" matches EDGAR's "Nu Holdings Ltd." by name but not the signal company NU,
+  // so NU is one row of this result, not two: only TOST counts.
+  const t = await get(db, '/listed-companies?q=T');
+  assert.ok(t.body.items.some((i: any) => i.source === 'sec_edgar' && i.symbol === 'NU'));
+  assert.ok(!t.body.items.some((i: any) => i.source === 'signal_companies' && i.symbol === 'NU'));
+  assert.equal(t.body.in_both, 1);
+  for (const q of ['source=sec_edgar', 'source=signal_companies', 'sector=Technology', 'country=US']) {
+    assert.equal((await get(db, `/listed-companies?${q}`)).body.in_both, 0, `${q} leaves a source out, so no ticker is in both`);
+  }
+  const inj = await get(db, `/listed-companies?q=${encodeURIComponent("' OR 1=1 --")}`);
+  assert.deepEqual([inj.status, inj.body.in_both], [200, 0], 'the search reached the SQL as text');
+});

@@ -97,11 +97,12 @@ test('the Commitment tab says the preference with the owner\'s sentence, and non
   try {
     api.dealCommitments = async () => [PENDING];
     await m.render(h(DealCommitment, { deal: DEAL, user: { id: 30, role: 'investor' }, onChangeAmount() {}, onShare() {} }));
-    assert.match(m.text(), /How you would like to invest Through a fund This is your preference\. The studio sets the route in the closing room\./);
+    // D5906 (DE09): the preference is the Investment route card, the chosen route marked and said.
+    assert.match(m.text(), /● Through a fund Your preference [\s\S]*Your preference: Through a fund\. This is your preference\. The studio sets the route in the closing room\./);
     api.dealCommitments = async () => [{ ...PENDING, route_preference: null }];
     await m.render(h(DealCommitment, { key: 'none', deal: DEAL, user: { id: 30, role: 'investor' }, onChangeAmount() {}, onShare() {} }));
-    assert.match(m.text(), /How you would like to invest No preference recorded/);
-    assert.doesNotMatch(m.text(), /How you would like to invest Direct/);
+    assert.match(m.text(), /No preference recorded\. No route is selected\./);
+    assert.doesNotMatch(m.text(), /● Direct/, 'none recorded marks no route, never Direct');
   } finally { await m.unmount(); api.dealCommitments = saved; }
 });
 
