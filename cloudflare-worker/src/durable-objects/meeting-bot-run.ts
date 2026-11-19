@@ -12,6 +12,7 @@ import {
   BOT_HEARTBEAT_MS, BOT_PROCESSING_MAX_MS, BotError, botRow, botSession, botView, botConfigured, botMemberEnabled, botVentureName, terminal,
   type BotRun, type BotStatus,
 } from '../services/meetingBots';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 export const BOT_RENEWAL_LEAD_MS = 20_000;
 export const BOT_CALLBACK_WINDOW_MS = 5 * 60_000;
@@ -501,7 +502,8 @@ export class MeetingBotRun implements DurableObject {
     const saved=await putChunk(this.env,session,run.user_id,seq,'audio/wav',bytes,ticket.start);
     try { await botSession(this.env,run); }
     catch {
-      await this.env.FILES!.delete(saved.objectPath);
+      // D886: recording permission ended, so the chunk is not kept. D6651: it leaves through the one record-erasure path.
+      await eraseRecordObjects(this.env.FILES!, saved.objectPath, 'erasure_request');
       await this.env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ? AND seq = ?').bind(session.id,seq).run();
       throw new BotError(409,'consent_required','The recording permission ended during upload.');
     }
