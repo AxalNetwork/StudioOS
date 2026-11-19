@@ -321,3 +321,7 @@ e1bdd3a4037ef7238fd171c04e6110ca7aff8643:frontend/test/landing_bot_model_6473.te
 # now builds the value at run time, so the merge queue's squashed commit holds
 # no literal; this entry covers the PR's own history only.
 ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.test.mjs:generic-api-key:177
+# 4d6854891e (#7256) first wrote the privacy test's synthetic marker as a
+# literal; 62a7171032 assembles it at run time, so the squashed commit holds
+# no literal; this entry covers the PR's own history only.
+4d6854891ea6194cea00a2d89559e6f863ebc6db:cloudflare-worker/test/error_privacy_7256.test.ts:generic-api-key:18

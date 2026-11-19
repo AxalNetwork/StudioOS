@@ -302,11 +302,11 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
-  // the directory canvas's. Export view pages the whole filtered view from the
-  // Worker (the page supplies it); Edit thesis opens Settings › My thesis. They
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); Edit thesis opens Settings › My thesis. They
   // replace New deep-dive, Export and Cite in a memo.
   'research/markets': [
-    { label: 'Export view', kind: 'handler', handler: 'exportFilteredView' },
+    { label: 'Export view', kind: 'export' },
     { label: 'Edit thesis', kind: 'handler', handler: 'editThesis', primary: true },
   ],
   // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call

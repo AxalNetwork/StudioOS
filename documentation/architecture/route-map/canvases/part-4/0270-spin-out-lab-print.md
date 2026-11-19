@@ -1,1 +1,4 @@
-| Spin-Out Lab-print | public | `/spinout-lab/brief` | `/spinout-lab/brief` | `spinout_lab.ts` | OUT OF SCOPE | **Not** a duplicate of the above. A truncated 4,547 B fragment of the printable Program Brief that stops mid-element and carries no `x-dc` data block, so every binding is unresolvable. |
+| Spin-Out Lab-print | public | `/spinout-lab/brief` | `/spinout-lab/brief` | {backend} | OUT OF SCOPE | **Not** a duplicate of the above. A truncated 4,547 B fragment of the printable Program Brief that stops mid-element and carries no `x-dc` data block, so every binding is unresolvable. |
+
+backend:
+- `spinout_lab.ts`

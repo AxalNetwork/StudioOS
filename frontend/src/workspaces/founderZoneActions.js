@@ -245,12 +245,12 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer', hover: 'Nothing deletes from the history; an answer is kept or it is not.' },
   ],
   // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
-  // the directory canvas's. Export view pages the whole filtered view from the
-  // Worker (the page supplies it); New market research opens My Research's New
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); New market research opens My Research's New
   // research form with the market named. They replace New deep-dive, Export
   // and Cite in deck.
   'research/markets': [
-    { label: 'Export view', kind: 'handler', handler: 'exportFilteredView' },
+    { label: 'Export view', kind: 'export' },
     { label: 'New market research', kind: 'handler', handler: 'newMarketResearch' },
   ],
   'research/companies': [

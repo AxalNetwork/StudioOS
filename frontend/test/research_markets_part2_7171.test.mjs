@@ -18,10 +18,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 
 import { marketListParams, readMarketQuery, thesisFrom } from '../src/pages/research/marketDirectoryQuery.js';
-import {
-  EXPORT_MAX, EXPORT_PAGE, THESIS_EDIT, exportControl, marketCsvHeader, marketCsvRow, newMarketResearchHref,
-  readWholeView, researchSubject, runViewExport,
-} from '../src/pages/research/marketDirectoryExport.js';
+import { THESIS_EDIT, newMarketResearchHref, researchSubject } from '../src/pages/research/marketDirectoryExport.js';
+import { useDirectoryExport } from '../src/pages/research/MarketDirectoryZone.jsx';
+import { listedExport, readListedQuery } from '../src/pages/research/listedCompaniesRead.js';
 import {
   COUNTRIES_SHOWN, FiltersSheetBody, ThesisStrip, draftCountParams, sheetFilterCount, showLabel,
 } from '../src/pages/research/MarketDirectoryPhone.jsx';
@@ -37,7 +36,6 @@ const at = (path, el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: 
 const words = (markup) => String(markup).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
 const p = (s) => new URLSearchParams(s);
 
-const READ_AT = '2026-11-16T09:40:00.000Z';
 const market = (i, extra = {}) => ({
   slug: `m-${i}`, name: `Market ${i}`, mi_sector: 'Climate Intelligence', supplied_count: 10 + i,
   countries: { status: 'recorded', value: [{ code: 'DE', count: 2 }, { code: 'NL', count: 1 }] },
@@ -46,25 +44,7 @@ const market = (i, extra = {}) => ({
   sources_by_kind: { market_intel: { count: 2 }, signal_evidence: { count: 1 } },
   ...extra,
 });
-const BARE = market(0, {
-  mi_sector: null,
-  countries: { status: 'not_recorded', value: null, reason: 'No company placed' },
-  source_count: { status: 'not_recorded', value: null, reason: 'No live source yet' },
-  newest_source_at: { status: 'not_recorded', value: null, reason: 'No live source yet' },
-});
 const PROFILE = { thesis_text: 'Industrial software for operators.', sectors: ['Climate', 'Defense'], stages: ['Seed'], geos: ['DACH'], anti_thesis_sectors: [] };
-
-/** A fake Worker: `total` markets, answering each request with its slice, and recording what it was asked. */
-function worker(total) {
-  const calls = [];
-  const all = Array.from({ length: total }, (_, i) => market(i + 1));
-  const list = async (params) => {
-    calls.push(params);
-    const off = params.offset || 0;
-    return { items: all.slice(off, off + params.limit), total, read_at: READ_AT };
-  };
-  return { list, calls };
-}
 
 // ---- The header ops (RMD-01, RMD-08) ----------------------------------------------
 
@@ -75,8 +55,8 @@ test('the Markets header is the D7036 header on every licence: Export view, then
   assert.deepEqual(labels(ADVISOR_ZONE_ACTIONS), ['Export view', 'New market research']);
   assert.deepEqual(labels(PARTNER_ZONE_ACTIONS), ['Re-run stale', 'Export view', 'New market research']);
   for (const t of [FOUNDER_ZONE_ACTIONS, INVESTOR_ZONE_ACTIONS, ADVISOR_ZONE_ACTIONS, PARTNER_ZONE_ACTIONS]) {
-    assert.deepEqual(t['research/markets'].find((o) => o.label === 'Export view'), { label: 'Export view', kind: 'handler', handler: 'exportFilteredView' },
-      'Export view is the page\'s, so it can page the whole view rather than write the rows loaded');
+    assert.deepEqual(t['research/markets'].find((o) => o.label === 'Export view'), { label: 'Export view', kind: 'export' },
+      'Export view is the builder\'s export, so the header runs D7172\'s scoped export of the active tab: one export path');
   }
   assert.equal(FOUNDER_ZONE_ACTIONS['research/markets'][1].handler, 'newMarketResearch');
   assert.deepEqual(INVESTOR_ZONE_ACTIONS['research/markets'][1], { label: 'Edit thesis', kind: 'handler', handler: 'editThesis', primary: true });
@@ -86,20 +66,22 @@ test('the Markets header is the D7036 header on every licence: Export view, then
   assert.match(read('frontend/src/routes/researchProjects.jsx'), /path="\/research\/projects" element=\{guard\(labRoles\(\['admin', 'founder'\]\)/);
 });
 
-test('the zone supplies the three handlers, and the header renders them live', () => {
+test('the zone supplies New market research and Edit thesis, and hands the header its scoped export', () => {
   const zone = codeOnly(read('frontend/src/pages/research/MarketDirectoryZone.jsx'));
-  for (const name of ['exportFilteredView', 'newMarketResearch', 'editThesis']) {
+  for (const name of ['newMarketResearch', 'editThesis']) {
     assert.match(zone, new RegExp(`${name}: headerOps\\.handlers\\.${name},`), name);
   }
-  assert.match(zone, /<MarketDirectoryPanel role=\{role\} onData=\{setShown\} onRead=\{setDirRead\} \/>/);
+  assert.doesNotMatch(zone, /exportFilteredView/, 'no second export beside D7172\'s');
+  assert.match(zone, /zoneActions\(scoped, opsHandlers\)/);
+  assert.match(zone, /<MarketDirectoryPanel role=\{role\} onRead=\{setDirectoryRead\} \/>/);
   let went = null;
-  const handlers = { exportFilteredView: { onClick: () => {}, disabled: false, title: 'x' }, newMarketResearch: () => { went = 'research'; }, editThesis: () => { went = 'thesis'; } };
-  const f = founderZoneActions('research/markets', { handlers });
-  assert.deepEqual(f.map((a) => [a.label, a.disabled]), [['Export view', false], ['New market research', false]]);
+  const handlers = { newMarketResearch: () => { went = 'research'; }, editThesis: () => { went = 'thesis'; } };
+  const f = founderZoneActions('research/markets', { handlers, view: { scoped: { label: 'Export filtered markets · 3 rows', onClick: () => {} } } });
+  assert.deepEqual(f.map((a) => [a.label, a.disabled]), [['Export filtered markets · 3 rows', false], ['New market research', false]]);
   f[1].onClick();
   assert.equal(went, 'research');
-  const i = investorZoneActions('research/markets', { handlers });
-  assert.deepEqual(i.map((a) => a.label), ['Export view', 'Edit thesis']);
+  const i = investorZoneActions('research/markets', { handlers, view: { scoped: { label: 'Export filtered markets · 3 rows', onClick: () => {} } } });
+  assert.deepEqual(i.map((a) => a.label), ['Export filtered markets · 3 rows', 'Edit thesis']);
   assert.equal(i[1].primary, true);
   i[1].onClick();
   assert.equal(went, 'thesis');
@@ -116,69 +98,42 @@ test('New market research opens the New research form with the market named; Edi
   assert.match(read('frontend/src/pages/research/MarketHeaderOps.jsx'), /editThesis: \{ onClick: \(\) => navigate\(THESIS_EDIT\)/);
 });
 
-// ---- Export view writes the view --------------------------------------------------
+// ---- Export view is D7172's scoped export ------------------------------------------
 
-test('Export view pages the exact filtered request, 100 at a time, until the Worker\'s total', async () => {
-  const { list, calls } = worker(230);
-  const request = marketListParams(readMarketQuery(p('q=energy&country=DE&fresh=30&sort=name:asc&page=3')), []);
-  const whole = await readWholeView(list, request);
-  assert.equal(whole.items.length, 230, 'every market in the view, not the 25 on screen');
-  assert.equal(whole.total, 230);
-  assert.deepEqual(calls.map((c) => [c.offset, c.limit]), [[undefined, EXPORT_PAGE], [100, EXPORT_PAGE], [200, EXPORT_PAGE]], 'from the first market, whatever page is shown');
-  for (const c of calls) {
-    assert.equal(c.q, 'energy');
-    assert.equal(c.country, 'DE');
-    assert.equal(c.fresh, '30');
-    assert.equal(c.sort, 'name');
-    assert.equal(c.dir, 'asc');
+const ready = (total, items = [], request = {}) => ({ status: 'ready', data: { total, items }, request });
+
+test('Export view carries the active tab\'s export: its label, its disabled states and its click', () => {
+  let ran = 0;
+  const header = (scoped) => founderZoneActions('research/markets', { handlers: {}, view: { scoped } })[0];
+  const run = () => { ran += 1; };
+  // Market directory: every market the filtered view holds, the Worker's total when one read is short.
+  const dir = useDirectoryExport(ready(230, [market(1)], { q: 'energy' }), p('q=energy'));
+  const live = header({ ...dir.ctl, onClick: run, busy: false });
+  assert.deepEqual([live.label, live.disabled, live.busy], ['Export filtered markets · 230 rows', false, false]);
+  live.onClick();
+  assert.equal(ran, 1);
+  assert.equal(header({ ...dir.ctl, onClick: run, busy: true }).busy, true, 'the header shows the export in progress');
+  // Loading, a failed read and an empty view each say so and offer no click.
+  for (const [read, label] of [
+    [{ status: 'loading', data: null, request: null }, 'Export filtered markets · loading'],
+    [{ status: 'unreadable', data: null, request: {} }, 'Export · not available'],
+    [ready(0), 'Export filtered markets · 0 rows'],
+  ]) {
+    const off = header({ ...useDirectoryExport(read, p('')).ctl, onClick: run });
+    assert.deepEqual([off.label, off.disabled, off.onClick], [label, true, undefined], label);
   }
-  assert.deepEqual(whole.items.slice(0, 2).map((m) => m.slug), ['m-1', 'm-2'], 'in the view\'s order');
-  // The thesis switch's sectors travel with the request.
-  const thesis = marketListParams(readMarketQuery(p('thesis=1')), ['Climate Intelligence']);
-  await readWholeView(list, thesis);
-  assert.equal(calls.at(-1).sector, 'Climate Intelligence');
+  // Listed companies: the header exports that tab's page, not the directory.
+  const listed = listedExport({ status: 'ready', data: { items: [{ symbol: 'A' }, { symbol: 'B' }], total: 2, limit: 50, offset: 0 } }, readListedQuery(p('tab=listed')));
+  assert.equal(header({ ...listed, onClick: run }).label, 'Export this page · 2 rows');
+  assert.match(codeOnly(read('frontend/src/pages/research/MarketDirectoryZone.jsx')),
+    /const ctl = tab === 'listed' \? listedExport\(listed, view\) : directoryExport\.ctl;/);
 });
 
-test('a view past the file limit is refused with a sentence, never cut short', async () => {
-  const { list } = worker(EXPORT_MAX + 1);
-  await assert.rejects(readWholeView(list, {}), (e) => e.code === 'too_many' && e.total === EXPORT_MAX + 1);
-  const saved = [];
-  const note = await runViewExport({ status: 'ready', data: { total: EXPORT_MAX + 1 }, request: {} }, { list, save: (x) => { saved.push(x); return true; } });
-  assert.equal(note.ok, false);
-  assert.match(note.text, /This view holds 5,001 markets, more than one file takes \(5,000\)\. Narrow it/);
-  assert.equal(saved.length, 0);
-});
-
-test('the file carries the table\'s facts, Not recorded where no source holds one, and the thesis when there is one', async () => {
-  assert.deepEqual(marketCsvHeader(), ['Market', 'Tracked sector', 'Taxonomy company count (not market size)', 'Countries represented',
-    'Distinct sources', 'Sector-level sources', 'Sources naming the market', 'Latest source', 'Latest source age (days)']);
-  assert.deepEqual(marketCsvRow(market(1), READ_AT), ['Market 1', 'Climate Intelligence', 11, 'DE 2; NL 1', 3, 2, 1, '2026-11-06', 10]);
-  assert.deepEqual(marketCsvRow(BARE, READ_AT),
-    ['Market 0', 'Not mapped yet', 10, 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Not recorded']);
-  const thesis = thesisFrom(PROFILE);
-  assert.equal(marketCsvHeader(thesis).at(-1), 'Your thesis');
-  assert.equal(marketCsvRow(market(1), READ_AT, thesis).at(-1), 'Matches via Climate');
-  assert.equal(marketCsvRow(market(1, { mi_sector: 'DevTools' }), READ_AT, thesis).at(-1), 'Not a thesis sector');
-  assert.equal(marketCsvRow(BARE, READ_AT, thesis).at(-1), 'No tracked sector');
-
-  const { list } = worker(130);
-  const saved = [];
-  const note = await runViewExport({ status: 'ready', data: { total: 130 }, request: {}, thesis }, { list, save: (x) => { saved.push(x); return true; } });
-  assert.deepEqual(note, { ok: true, text: 'Downloaded 130 markets: every market this view holds.' });
-  assert.equal(saved[0].rows.length, 130);
-  assert.equal(saved[0].header.at(-1), 'Your thesis');
-  assert.equal(saved[0].zone, 'markets-view');
-  const failed = await runViewExport({ status: 'ready', data: { total: 3 }, request: {} }, { list: async () => { throw new Error('503'); }, save: () => true });
-  assert.deepEqual(failed, { ok: false, text: 'The markets could not be read for the file, so nothing was written. Try again.' });
-});
-
-test('Export view is live only once the directory is read and holds a market', () => {
-  assert.deepEqual(exportControl(null), { disabled: true, title: 'The markets are still loading.' });
-  assert.equal(exportControl({ status: 'loading', data: null }).disabled, true);
-  assert.deepEqual(exportControl({ status: 'unreadable', data: null }), { disabled: true, title: 'The markets could not be read, so there is nothing to write.' });
-  assert.deepEqual(exportControl({ status: 'ready', data: { total: 0 } }), { disabled: true, title: 'No market is in this view.' });
-  assert.deepEqual(exportControl({ status: 'ready', data: { total: 82 } }),
-    { disabled: false, total: 82, title: 'Writes the 82 markets this view holds, every page, as CSV.' });
+test('the directory hands the export its exact request; a thesis no market can match exports nothing', () => {
+  const panel = codeOnly(read('frontend/src/pages/research/MarketDirectory.jsx'));
+  assert.match(panel, /onRead\?\.\(gate\.impossible\s*\? \{ status: 'ready', data: \{ total: 0, items: \[\] \}, request: listParams \}\s*: \{ \.\.\.markets, request: listParams \}\)/);
+  const impossible = useDirectoryExport(ready(0, [], marketListParams(readMarketQuery(p('thesis=1')), [])), p('thesis=1'));
+  assert.deepEqual([impossible.ctl.label, impossible.ctl.disabled], ['Export filtered markets · 0 rows', true]);
 });
 
 // ---- Phone (RMD-11) -------------------------------------------------------------------

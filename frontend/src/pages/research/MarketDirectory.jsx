@@ -767,8 +767,8 @@ export function ThesisImpossible({ thesis, onShowAll }) {
  * The Market directory tab: the URL's view, the investor's thesis when the
  * reader is an investor, and one read of the Worker's page. `onData` hands the
  * page it shows to the zone (the tab's count). `onRead` hands it the read's
- * state with its exact request and the thesis, which is what Export view pages
- * through (part 2), so the file is the view and never the 25 rows on screen.
+ * state with its exact request, which D7172's export (the header's Export view
+ * too) pages through, so the file is the view and never the 25 rows on screen.
  */
 export default function MarketDirectoryPanel({ role = 'founder', onData = null, onRead = null }) {
   const [params, setParams] = useSearchParams();
@@ -786,13 +786,14 @@ export default function MarketDirectoryPanel({ role = 'founder', onData = null, 
   const data = markets.status === 'ready' ? markets.data : (markets.status === 'loading' ? markets.data : null);
 
   useEffect(() => { if (markets.status === 'ready') onData?.(markets.data); }, [markets.status, markets.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Export view (part 2): the read, the request that made it and the thesis it is matched against.
-  const exportThesis = gate.notApplied || gate.impossible ? null : thesis;
+  // The zone's export (D7172, the header's Export view too) pages this exact
+  // request. A thesis no market can match is an empty view (part 2), never
+  // the unfiltered directory.
   useEffect(() => {
     onRead?.(gate.impossible
-      ? { status: 'ready', data: { total: 0 }, request: listParams, thesis: null }
-      : { status: markets.status, data: markets.data, request: listParams, thesis: exportThesis });
-  }, [markets.status, markets.data, listKey, gate.impossible, exportThesis]); // eslint-disable-line react-hooks/exhaustive-deps
+      ? { status: 'ready', data: { total: 0, items: [] }, request: listParams }
+      : { ...markets, request: listParams });
+  }, [markets.status, markets.data, listKey, gate.impossible, onRead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // RMD-05B: back from a sector page, the open row's expand button takes focus.
   const focused = useRef('');

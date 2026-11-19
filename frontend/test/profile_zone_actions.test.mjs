@@ -101,7 +101,7 @@ const PROFILES = {
     // `Export` went with that zone (owner, 2026-10-20). 20 → 19 (D1109):
     // `raise/data-room`'s `Export log`; Activity's Export (CSV) is the tool's.
     // 19 → 18 (D1194): `raise/capital-match`'s `Export shortlist` went with that zone.
-    exports: 17,
+    exports: 18,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
     // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
@@ -138,7 +138,9 @@ const PROFILES = {
     // `logInterview` and `exportInterviews` (interviews), `exportPainMap`
     // (pain map), `newHypothesis` and `linkPain` (hypotheses), `exportSummary`
     // (verdict). Each has its home on a module page or record (#1659, #1704).
-    handlers: 12,
+    // 10 → 11 (D7171 part 2): `research/markets`'s `New market research`. Its
+    // `Export view` is the builder's export (D7172's scoped export), not a handler.
+    handlers: 11,
     // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
     withheld: { 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
     offCanvas: { 'research/markets': ['Export view', 'New market research'] },
@@ -190,7 +192,7 @@ const PROFILES = {
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
     // is stored to export" was true until migration 312's receipts (D371).
     // 14 since D1243: `deals/pipeline`'s Export left with its zone.
-    exports: 14,
+    exports: 15,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -264,7 +266,8 @@ const PROFILES = {
     // TWENTY-SECOND: `network/relationships`'s `Add person` (D6636) — the
     // network picker is now supplied by its page.
     // TWENTY-THIRD: `network/introductions`'s `Offer one` (D6637), supplied by its page.
-    handlers: 25,
+    // TWENTY-FOURTH: `research/markets`'s `Edit thesis` (D7171 part 2).
+    handlers: 24,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -335,7 +338,7 @@ const PROFILES = {
     // inside each. The two absent columns ship as empty cells rather than as
     // the words "Not recorded", which in a spreadsheet invite a formula over a
     // fact that does not exist. Was 19.
-    exports: 19,
+    exports: 20,
     // Eight page-supplied ops. `research/ask`: `New session` starts a thread,
     // `Saved answers` switches the view to the kept ones. `research/library`:
     // `Add document` opens the file picker, `Re-index` re-queues every document
@@ -377,7 +380,7 @@ const PROFILES = {
     // Was 0, then 5, then 7, then 8, then 9, then 10, then 12, then 13, then 14,
     // then 15. SIXTEEN NOW: D1424 (#3700, PH14s) adds Status reports' `New
     // report`, the zone's primary, which opens the page's own Composer.
-    handlers: 17,
+    handlers: 16,
     // D1424 (#3700): labels the profiles canvas adds that no `Pages · …` artboard
     // draws. Each is listed by zone, so the canvas-order check still pins the
     // rest of the row exactly and this list cannot grow by accident.
@@ -462,7 +465,7 @@ const PROFILES = {
     // dump `exportView` produces. Was 15/14 at PR4.
     zones: 16,
     links: 1,
-    exports: 13,
+    exports: 14,
     // FIVE PAGE-SUPPLIED OPS, AND THE FIFTH IS THE FIRST ONE THIS PROFILE DID
     // NOT SHARE WITH PARTNER. Four of them are `AskZone` and `LibraryZone`,
     // which are each one file serving both licences. The fifth is Delivery's
@@ -491,7 +494,7 @@ const PROFILES = {
     // said no public profile page existed, and `/advisors/:uid` does; both
     // are the page's `openPublicPreview`. Two gaps became two handlers.
     // FOURTEEN: #4832 (D4832) — Sessions' `Share booking link` (PX-05).
-    handlers: 15,
+    handlers: 14,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -1645,8 +1648,11 @@ test('the label says the export is of this view, because it is', () => {
   const builder = read('frontend/src/workspaces/zoneActionBuilder.js');
   assert.match(builder, /label: `\$\{item\.label\} · this view`/,
     'the export button no longer says which rows it covers');
-  assert.match(read('frontend/src/lib/csvExport.js'), /\$\{list\.length\}-rows/,
-    'the filename no longer carries the row count');
+  // D7172: the name is built by `exportFileName`, which a page that says
+  // "Downloaded" also reads; `exportView` hands it the count it writes.
+  const csv = read('frontend/src/lib/csvExport.js');
+  assert.match(csv, /\$\{count\}-rows/, 'the filename no longer carries the row count');
+  assert.match(csv, /exportFileName\(\{ scope, zone, count: list\.length \}\)/, 'the count in the filename is not the rows written');
   // An export over rows that have not LOADED is the one control that stays and
   // goes quiet: the store and the writer both exist, so it renders disabled
   // rather than vanishing like an unbuilt op.
