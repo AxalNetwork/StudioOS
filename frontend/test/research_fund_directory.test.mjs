@@ -50,7 +50,8 @@ test('the directory is read from the Worker, and its rows are added to the priva
   assert.doesNotMatch(page, /data\/fundDirectory\.json/, 'FundsZone still reads the bundled catalog');
   assert.doesNotMatch(directory, /data\/fundDirectory\.json/, 'FundDirectory still reads the bundled catalog');
   assert.match(directory, /researchFundsApi\.list\(toParams\(query\)\)/);
-  assert.match(page, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\}/);
+  // D7168: "on My funds" is answered by catalogue uid, never by a normalised name.
+  assert.match(page, /<FundDirectory isAdded=\{isAdded\} onAdd=\{addDirectoryFund\}/);
   // D4613: the directory uid travels with the add, so a repeat of it is one row.
   assert.match(page, /fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null, catalogue_uid: fund\.uid \}\)/);
   // D7167: the action is "Save to shortlist" (ACTIONS.save in fundProfileRead.js); D7166 retired "Add to my funds".

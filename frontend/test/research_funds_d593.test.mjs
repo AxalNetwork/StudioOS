@@ -220,21 +220,26 @@ test('F0: while the founder’s list is unread or unreadable, no add is offered 
 });
 
 test('F0: the row the POST returns is kept, so the dossier opens before the list reloads', () => {
+  // D7168: keyed by catalogue uid (the Worker's `catalogue_links`), never by a
+  // normalised name — "Atlas A-I" and "Atlas AI" are two vehicles.
   const map = zone.dossierMap(
-    [{ uid: 'rf_1', name: 'Alpha Ventures' }, { uid: 'rf_2', name: 'alpha-ventures' }],
-    { zetadeeptech: 'rf_9', alphaventures: 'rf_stale' },
+    [{ uid: 'rf_1', catalogue_uid: 'atlas-a-i' }, { uid: 'rf_2', catalogue_uid: 'atlasai' }, { uid: 'rf_3', catalogue_uid: 'atlas-a-i' }],
+    { zetadeeptech: 'rf_9', 'atlas-a-i': 'rf_stale' },
   );
-  assert.equal(map.get('alphaventures'), 'rf_1', 'the list as read wins, and its first row of a name');
+  assert.equal(map.get('atlas-a-i'), 'rf_1', 'the list as read wins, and its first row of a catalogue uid');
+  assert.equal(map.get('atlasai'), 'rf_2', 'a vehicle whose name normalises the same opens its own entry');
   assert.equal(map.get('zetadeeptech'), 'rf_9', 'a row the POST created is a dossier before the reload answers');
   assert.equal(zone.dossierMap(undefined).size, 0);
+  assert.equal(zone.dossierMap([{ uid: 'rf_4', catalogue_uid: null }]).size, 0, 'a legacy entry is never in the map');
   const add = ZONE.slice(ZONE.indexOf('const addDirectoryFund'), ZONE.indexOf('const choose'));
   assert.match(add, /const row = await api\.research\.fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null, catalogue_uid: fund\.uid \}\);/);
-  assert.match(add, /if \(row\?\.uid\) setCreated\(\(rows\) => \(\{ \.\.\.rows, \[normalizeFundName\(fund\.name\)\]: row\.uid \}\)\);/);
+  assert.match(add, /if \(row\?\.uid\) setCreated\(\(rows\) => \(\{ \.\.\.rows, \[fund\.uid\]: row\.uid \}\)\);/);
   assert.match(add, /if \(!fund \|\| listState !== 'ok' \|\|/);
   // D4613: an add an earlier request already made says so.
   assert.match(add, /text: row\?\.existing \? `\$\{fund\.name\} is already on your shortlist\.` : `\$\{fund\.name\} saved to your shortlist\.`/);
-  assert.match(ZONE, /const dossiers = useMemo\(\(\) => dossierMap\(items, created\), \[items, created\]\);/);
-  assert.match(ZONE, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\} busy=\{directoryBusy\}\s+dossierOf=\{dossierOf\} listState=\{listState\} notice=\{directoryNote\} onTotal=\{setDirectoryTotal\}/);
+  assert.match(ZONE, /const dossiers = useMemo\(\(\) => dossierMap\(links, created\), \[links, created\]\);/);
+  assert.doesNotMatch(ZONE, /normalizeFundName/, 'a name match is back');
+  assert.match(ZONE, /<FundDirectory isAdded=\{isAdded\} onAdd=\{addDirectoryFund\} busy=\{directoryBusy\}\s+dossierOf=\{dossierOf\} listState=\{listState\} notice=\{directoryNote\} onTotal=\{setDirectoryTotal\}/);
 });
 
 test('F0: the catalog profile says "Save to shortlist" (D7167), and its way back (D7166) is the Directory tab', () => {
@@ -409,13 +414,13 @@ test('a save note is the { ok, text } SaveNote reads, so "Added." and a failed s
   const setRead = ZONE.slice(ZONE.indexOf('const setRead = async'), ZONE.indexOf('const add = async'));
   assert.match(setRead, /setRowNote\(\{ ok: false, text: e\?\.detail \|\| e\?\.message \|\| 'That did not save\.' \}\)/);
   assert.doesNotMatch(setRead, /setSaved\(/);
-  const profiles = ZONE.slice(ZONE.indexOf('Fund profiles'), ZONE.indexOf('Fund profiles') + 400);
+  const profiles = ZONE.slice(ZONE.indexOf('Your saved funds</h3>'), ZONE.indexOf('Your saved funds</h3>') + 900);
   assert.match(profiles, /<SaveNote note=\{rowNote\} \/>/);
 });
 
 test('the zone heading gets the props ZoneHeading reads, so its line and its route-in pill render', () => {
   const heading = ZONE.slice(ZONE.indexOf('<ZoneHeading'), ZONE.indexOf('<FundStat', ZONE.indexOf('<ZoneHeading')));
-  assert.match(heading, /\bblurb="Thesis in their words/);
+  assert.match(heading, /\bblurb="Your private shortlist\. Stage fit, route in and status are three separate reads/);
   assert.match(heading, /\baction=\{data \? <Pill/);
   assert.doesNotMatch(heading, /\b(sub|right)=/);
 });
@@ -433,5 +438,6 @@ test('a stat tile draws no figure while loading, and a failed read is Unavailabl
   assert.match(out({ value: null, phase: 'ok' }), /Not recorded/);
   assert.match(out({ value: 4, phase: 'ok' }), />4</);
   // The zone passes the list's own state to every tile.
-  assert.equal((ZONE.match(/<FundStat\b[^>]*?phase=\{listState\}/gs) || []).length, 4);
+  // D7168: five tiles — Researched, Right stage, Whole-round test, Allocation test, Passed.
+  assert.equal((ZONE.match(/<FundStat\b[^>]*?phase=\{listState\}/gs) || []).length, 5);
 });

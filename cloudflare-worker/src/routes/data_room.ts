@@ -128,6 +128,7 @@ import { SupportHistoryError, supportPage, supportReadHistory } from '../service
 import { hasActiveVentureNda } from '../services/dealAccess';
 import { roomCan, roomCapabilities } from '../services/dataRoomCapabilities';
 import { liveFiles, purgeFile, readTrash, restoreFile, trashCount, trashFile, PurgeIncomplete, TrashUnavailable } from '../services/dataRoomTrash';
+import { putRecord } from '../services/recordStore';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -975,10 +976,12 @@ export async function storeDataRoomFile(env: Env, a: {
   const storage = await assertStorageRoom(env, { projectId: project.id }, bytes.byteLength, user);
   const uid = newUid();
   const key = `data-room/${project.uid}/${uid}`;
-  await env.FILES.put(key, bytes, {
+  // D6651: a data room original is a record, written once under a fresh key.
+  const stored = await putRecord(env.FILES, key, bytes, {
     httpMetadata: { contentType: a.contentType },
     customMetadata: { project_uid: project.uid, uploaded_by: String(user.id) },
   });
+  if (!stored.ok) throw new WriterError(409, 'record_exists');
   const ins = await env.DB.prepare(
     `INSERT INTO data_room_files
        (uid, project_id, folder_id, name, r2_key, content_type, size_bytes,
@@ -1032,10 +1035,12 @@ export async function replaceDataRoomFile(
   // The key is derived, never taken from the request.
   const uid = newUid();
   const key = `data-room/${project.uid}/${uid}`;
-  await env.FILES.put(key, a.bytes, {
+  // D6651: a replacement is a new key; the file row points at it and the old key stays as a version.
+  const stored = await putRecord(env.FILES, key, a.bytes, {
     httpMetadata: { contentType },
     customMetadata: { project_uid: project.uid, uploaded_by: String(a.userId) },
   });
+  if (!stored.ok) throw new WriterError(409, 'record_exists');
   const deckReady = await deckSourceReady(env);
   await env.DB.batch([
     env.DB.prepare(

@@ -109,10 +109,6 @@ export function personView(p) {
     role: roleWord(p.role),
     archetype: p.archetype?.label || null,
     roles,
-    fullTime: p.full_time_since ? dateText(p.full_time_since) : null,
-    fullTimeReason: p.full_time_reason || NOT_RECORDED,
-    fit: p.founder_market_fit || null,
-    fitReason: p.founder_market_fit_reason || NOT_RECORDED,
   };
 }
 
@@ -243,6 +239,8 @@ export function tractionView(read) {
   return {
     state: history ? 'recorded' : b.state,
     months,
+    // D6164 part 2 (DE25): which months the founder reported, for the month table.
+    reportedMonths: history ? history.filter((m) => m.state === 'reported').map((m) => m.month) : [],
     reported: history ? history.filter((m) => m.state === 'reported').length : 0,
     lastShared: history ? history.filter((m) => m.state === 'reported').map((m) => m.month).sort().at(-1) || null : null,
     series,
@@ -309,9 +307,6 @@ export const EVIDENCE_LINK = Object.freeze({
   act: 'Open the Evidence tab',
 });
 
-/** Words for the team values band, advisors and geography the read holds no figure for. */
-export const ADVISORS_LINE = 'No advisor count is read for this deal yet.';
-
 
 /** D6177 (#6177): each chart names its sources and each source's newest recorded as-of. */
 export function tractionSources(points) {
@@ -343,3 +338,95 @@ export function tractionCsv(view) {
   }
   return rows.map(row => row.map(tractionCsvCell).join(',')).join('\r\n') + '\r\n';
 }
+
+
+// ---------------------------------------------------------------- D6164 part 2: Team, Market and Traction to the Evidence addendum
+
+/**
+ * D6164 part 2 (#6164, DE23 to DE25 of D6163's canvas). The three tabs keep
+ * their places in the tab row: moving them under the Scorecard's scopes is a
+ * placement the canvas draws pending the owner, and the tab set is #5903's.
+ * What changes is what each tab draws, in the canvas's words.
+ */
+export const TEAM_WORDS = Object.freeze({
+  people: 'People, as they published themselves',
+  noArchetype: 'No archetype published',
+  noRoles: 'No prior roles published',
+  coverageTitle: 'Team coverage by skill area',
+  coverageLine: 'A band for the team as a whole, never a person’s number. Shown where at least two published members contribute.',
+  values: 'Team values band',
+  advisors: 'Advisors',
+  advisorsLine: 'How many, and their roles.',
+  next: 'Next: Diligence, the next step on this deal.',
+});
+
+/** DE23: how many people are listed, and who is not. */
+export function peopleLine(n) {
+  const count = Number.isInteger(n) && n >= 0 ? n : 0;
+  return `${count} published · anyone with a private profile is not listed`;
+}
+
+/** DE24: the competitors' sorts. Search and sort are the browser's; the read is unchanged. */
+export const COMPETITOR_SORTS = Object.freeze([['name', 'Name A–Z'], ['name_desc', 'Name Z–A']]);
+
+/**
+ * DE24: the competitors a search and a sort leave. The search reads the name
+ * and why it matters; a row with no name sorts first under A–Z, as the empty
+ * string does.
+ */
+export function competitorsView(rows, { query = '', sort = 'name' } = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const q = String(query ?? '').trim();
+  const needle = q.toLocaleLowerCase('en');
+  const shown = (needle
+    ? list.filter((r) => [r?.name, r?.why_it_matters].some((x) => String(x ?? '').toLocaleLowerCase('en').includes(needle)))
+    : list.slice());
+  const key = (r) => String(r?.name ?? '').toLocaleLowerCase('en');
+  shown.sort((a, b) => key(a).localeCompare(key(b), 'en'));
+  if (sort === 'name_desc') shown.reverse();
+  return {
+    total: list.length,
+    shown,
+    line: needle ? `${shown.length} of ${list.length} match “${q}”` : null,
+    none: needle && !shown.length ? `No competitor matches “${q}”.` : null,
+  };
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** DE25: how many of the months were reported, in the canvas's words. */
+export function monthsLine(view) {
+  if (!view || view.state !== 'recorded') return null;
+  const reported = view.reportedMonths?.length || 0;
+  const gaps = (view.months?.length || 0) - reported;
+  return `${plural(reported, 'month', 'months')} reported, ${gaps} not reported. A month not reported is a gap, never 0.`;
+}
+
+export const NOT_IN_UPDATE = 'Not in this update';
+export const NO_UPDATE = 'No update shared for this month';
+
+/**
+ * DE25: one row a month, newest first. A month the founder did not report is
+ * Not reported, with no figure; a reported month without a figure says it was
+ * not in that update. A recorded 0 stays 0.
+ */
+export function monthRows(view) {
+  if (!view || view.state !== 'recorded') return [];
+  const reported = new Set(view.reportedMonths || []);
+  const at = (key, month) => (view.series?.[key] || []).find((p) => p.month === month) || { value: null };
+  const cell = (p, suffix = '') => (p.value == null ? null : `${figureText(p.value, p.unit)}${suffix}`);
+  return [...(view.months || [])].reverse().map((month) => {
+    const mrr = at('mrr', month), customers = at('customers', month), growth = at('growth', month);
+    if (!reported.has(month)) return { month, label: dateText(month) || month, reported: false };
+    return {
+      month,
+      label: dateText(month) || month,
+      reported: true,
+      mrr: cell(mrr),
+      customers: cell(customers),
+      growth: cell(growth),
+      source: sourceText(mrr.source) || sourceText(customers.source) || sourceText(growth.source) || null,
+    };
+  });
+}
+

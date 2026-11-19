@@ -325,8 +325,10 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `_workspace_fake_5565.ts` | D5565: synthetic specification, atomic memory store and faultable fake executor; tests only. |
 | `workspace_contract_5565.test.ts` | D5565: strict contract, capability/location refusals, fake lifecycle and deterministic lease/replay/revocation/generation/cleanup mutations. |
 | `workspace_security_5567.test.ts` | D5567: actual WebCrypto, scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation journeys; synthetic only. |
+| `workspace_containment_5567.test.ts` | D5567 part 4: the fail-closed containment gate (evidence source/freshness from an injected clock, egress per network mode, metadata/localhost, guest bindings, privilege escalation, sandbox strength), the job-environment credential scan, and the real compute VM start options and image user; synthetic only. |
 | `_workspace_git_fake_5568.ts` | D5568: synthetic read-only Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network. |
 | `workspace_git_checkpoint_5568.test.ts` | D5568: 10 parallel worktrees, interrupted-workspace restore on the original and an alternate fake executor, wrong tenant/region/checksum/SHA/generation, mid-upload crash, revoked repo, stale GC, retention, metrics; nine mutations listed in its header. |
+| `workspace_placement_5570.test.ts` | D5570: placement order and reasons, Cloudflare-first fallback, unavailable cost and dry run, fair fenced admission leases over a restarted instance, reconcile-before-free, bill once; injected clock, synthetic only. |
 | `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
 | `byoc_runner_5572.test.ts` | D5572: disabled outbound-only runner protocol; one fail-closed test per acceptance case (rogue, rotated/revoked, duplicate lease, offline, stale callback, escalation, egress, enforcement, cross-border resume, consent) and sixteen mutation journeys; runtime-generated keys. |
 | File | Guarantee |
@@ -360,6 +362,7 @@ catalogue version only in the fixture.
 | `network_intro_offers_6637.test.ts` | D6637: real migrated SQLite authorization, consent, failure and concurrency regressions. |
 | `network_tie_candidates_6636.test.ts` | D6636: real migrated SQLite authorization, consent, failure and concurrency regressions. |
 
+| `deal_flow_attention_6424.test.ts` | D6424: mounted per-firm stale rules, visible unanswered diligence requests, firm/reviewer isolation, null/unreadable counts and support refusal. |
 | `file_recovery_6428.test.mjs` | D6428: runs synthetic-only Python recovery regressions through the standard Worker test suite. |
 | `deal_activity_sources_6430.test.ts` | D6430: mounted real-SQLite data-room grant/folder/tier/NDA isolation, exact-firm deck grants, anonymous signature events, bounds and per-source failures. |
 | `licence_agreement_revision_6562.test.ts` | D6562: recorded rendered-input snapshots, truthful comparisons, independent readiness, legacy uncertainty, frozen text and unready-send refusal over the full migrated schema. |
@@ -371,3 +374,5 @@ catalogue version only in the fixture.
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
+| `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |

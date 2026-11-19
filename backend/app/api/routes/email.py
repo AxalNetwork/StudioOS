@@ -14,6 +14,7 @@ Activity logs are written under action="email_sent" with details JSON that
 includes type (deal|referral), to_count, sent, failed, subject. Per-recipient
 addresses are NOT logged in full — we keep counts only to avoid a PII trail.
 """
+from html import escape as html_escape
 import json
 import logging
 from typing import List, Optional
@@ -56,7 +57,7 @@ def unsubscribe_landing(email: str = ""):
   </p>
   <p style="font-size:12px;color:#9ca3af;margin-top:24px;">Axal Ventures &middot; axal.vc</p>
 </div>
-</body></html>""".replace("__DETAIL__", detail)
+</body></html>""".replace("__DETAIL__", html_escape(detail))
     return HTMLResponse(html)
 
 

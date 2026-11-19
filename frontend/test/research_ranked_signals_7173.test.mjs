@@ -24,7 +24,8 @@ import {
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const html = (el, at = '/research/markets') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [at] }, el));
-const text = (el, at) => html(el, at).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ');
+// &amp; is decoded last, so no entity is decoded twice (Code Scanning js/double-escaping).
+const text = (el, at) => html(el, at).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
 const ready = (data) => ({ status: 'ready', data, reload: () => {} });
 const SECTORS = ready({ items: [{ slug: 'test-storage', name: 'Test storage' }] });

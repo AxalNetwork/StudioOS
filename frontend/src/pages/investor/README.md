@@ -262,3 +262,4 @@ live in `roundCallsModel.js`, pure. A founder's `?project_id` list stays in
 `introCreditModel.js` (D6262) uses the introduction service's spendable balance and counterpart answer, preserving unknown versus recorded zero and preventing acceptance against an unread balance.
 
 - `settings/` holds the investor Firm Settings editor (#6287).
+- `fund/` holds the Axal VC Fund workspace's section components and navigation (#6130).

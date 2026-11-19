@@ -179,6 +179,11 @@ class R2Storage:
 
     def _sign(self, method: str, key: str, payload: bytes, content_type: Optional[str] = None) -> dict:
         """Return signed request kwargs for httpx."""
+        # The key is a path inside this bucket and nothing else: no empty, "." or
+        # ".." segment, so a key can never reach another bucket on the account.
+        parts = str(key).split("/")
+        if not key or any(p in ("", ".", "..") for p in parts):
+            raise ValueError("invalid storage key")
         canonical_uri = "/" + urllib.parse.quote(f"{self.bucket}/{key}", safe="/")
         url = self.endpoint + canonical_uri
         now = datetime.utcnow()

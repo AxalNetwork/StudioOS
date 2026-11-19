@@ -107,6 +107,15 @@ _HEADSHOT_MIME = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 _HEADSHOT_DIR = Path(os.environ.get("HEADSHOT_DIR", "/tmp/axal_headshots"))
 
 
+def _headshot_path(fname: str) -> Path:
+    """Where a headshot is written: a plain file name inside _HEADSHOT_DIR, never a path out of it."""
+    root = os.path.realpath(_HEADSHOT_DIR)
+    full = os.path.realpath(os.path.join(root, fname))
+    if not full.startswith(root + os.sep) or os.path.dirname(full) != root:
+        raise ValueError("invalid headshot file name")
+    return Path(full)
+
+
 def _is_email(value: str) -> bool:
     return bool(re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", value or ""))
 
@@ -561,7 +570,7 @@ def _apply_linkedin_photo(session: Session, user: User, url: str) -> bool:
         if ext not in {"jpg", "png", "webp"}:
             return False
         fname = f"{user.id}_{uuid.uuid4().hex}.{ext}"
-        fpath = _HEADSHOT_DIR / fname
+        fpath = _headshot_path(fname)
         fpath.write_bytes(raw_bytes)
         prev = session.exec(text(
             "SELECT headshot_local_path FROM users WHERE id = :uid").bindparams(uid=user.id)).first()
@@ -617,7 +626,7 @@ def upload_headshot(
 
     _HEADSHOT_DIR.mkdir(parents=True, exist_ok=True)
     fname = f"{user.id}_{uuid.uuid4().hex}.{ext}"
-    fpath = _HEADSHOT_DIR / fname
+    fpath = _headshot_path(fname)
     fpath.write_bytes(raw_bytes)
 
     # Best-effort cleanup of previous file.

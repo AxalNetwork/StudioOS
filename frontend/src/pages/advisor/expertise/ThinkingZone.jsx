@@ -23,9 +23,9 @@ function History({ id }) {
     );
     return () => { live = false; };
   }, [id]);
-  if (read.status === 'loading') return <p className="mt-2 text-[11.5px] text-axal-faint">Reading its history…</p>;
-  if (read.status === 'error') return <p className="mt-2 text-[11.5px] text-axal-faint" data-testid={`advisor-thinking-history-error-${id}`}>Its history could not be read.</p>;
-  if (!read.rows.length) return <p className="mt-2 text-[11.5px] text-axal-faint">No revision is saved yet.</p>;
+  if (read.status === 'loading') return <p className="mt-2 text-[11.5px] text-axal-muted">Reading its history…</p>;
+  if (read.status === 'error') return <p className="mt-2 text-[11.5px] text-axal-muted" data-testid={`advisor-thinking-history-error-${id}`}>Its history could not be read.</p>;
+  if (!read.rows.length) return <p className="mt-2 text-[11.5px] text-axal-muted">No revision is saved yet.</p>;
   return (
     <ul className="mt-2 space-y-1 text-[11.5px] text-axal-muted" data-testid={`advisor-thinking-history-${id}`}>
       {read.rows.map(revisionLine).map((r) => <li key={r.key}><span className="font-semibold">{r.title}</span> · {r.line}</li>)}
@@ -136,11 +136,11 @@ export default function ThinkingZone() {
             { label: 'Talk reach', value: counts?.talk_reach ?? null, note: 'where a piece ran is not recorded' },
           ].map((t) => (
             <Card key={t.label} className="px-3 py-2.5">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{t.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{t.label}</div>
               {t.value === null || t.value === undefined
                 ? <div className="mt-1.5"><Unrecorded /></div>
                 : <div className="mt-1 text-base font-extrabold tabular-nums tracking-tight">{t.value}</div>}
-              <div className="mt-1 text-[10px] leading-snug text-axal-faint">{t.note}</div>
+              <div className="mt-1 text-[10px] leading-snug text-axal-muted">{t.note}</div>
             </Card>
           ))}
         </div>
@@ -148,7 +148,7 @@ export default function ThinkingZone() {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Your shelf</span>
-            <span className="text-[11px] text-axal-faint">Newest first</span>
+            <span className="text-[11px] text-axal-muted">Newest first</span>
           </div>
           {shown.length === 0 && (
             <p className="text-[12.5px] text-axal-muted">{`No piece is in this state. ${total} in total.`}</p>
@@ -161,7 +161,7 @@ export default function ThinkingZone() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Pill tone={stage.tone}>{stage.label}</Pill>
-                    {a.sector && <span className="text-[11px] text-axal-faint">{a.sector}</span>}
+                    {a.sector && <span className="text-[11px] text-axal-muted">{a.sector}</span>}
                   </div>
                   <div className="mt-1 text-[12.5px] font-semibold leading-snug">
                     {a.status === 'published' && a.slug
@@ -169,7 +169,7 @@ export default function ThinkingZone() {
                       : a.title}
                   </div>
                   {a.subtitle && (
-                    <div className="mt-0.5 truncate text-[11px] text-axal-faint">{a.subtitle}</div>
+                    <div className="mt-0.5 truncate text-[11px] text-axal-muted">{a.subtitle}</div>
                   )}
                   <div className="mt-1 text-[11.5px] text-axal-muted" data-testid={`advisor-thinking-audience-${a.id}`}>{stage.audience}</div>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-[11.5px]">
@@ -181,7 +181,7 @@ export default function ThinkingZone() {
                   </div>
                   {history === a.id ? <History id={a.id} /> : null}
                 </div>
-                <div className="shrink-0 text-left text-[11px] tabular-nums text-axal-faint sm:text-right">
+                <div className="shrink-0 text-left text-[11px] tabular-nums text-axal-muted sm:text-right">
                   {/* A draft has no views because nobody can open it, so it shows
                       no open figure at all. A published piece whose counter did
                       not come back is absent, never a typed zero (D392). */}
