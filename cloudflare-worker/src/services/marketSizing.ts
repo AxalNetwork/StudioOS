@@ -194,14 +194,14 @@ export function sizeMarket(raw: Record<string, unknown>): SizingResult {
   const computedRaw = read.population !== undefined ? read.population.value * acv : null;
   const tamRaw = overridden ? v('tamOverride') * 1e6 : (computedRaw as number);
   const share = v('samPct') / 100;
-  const winRate = v('winRate') / 100;
+  const winShare = v('winRate') / 100;
   const retention = v('retentionPct') / 100;
   const deals = v('capacity');
   const horizon = v('horizonMonths');
   const cycle = v('salesCycleMonths');
 
   const samRaw = tamRaw * share;
-  const somWinRaw = samRaw * winRate;
+  const somWinRaw = samRaw * winShare;
   const sellingMonths = Math.max(0, horizon - cycle);
   const somCapRaw = deals * sellingMonths * acv * retention;
   const somRaw = Math.min(somWinRaw, somCapRaw);
