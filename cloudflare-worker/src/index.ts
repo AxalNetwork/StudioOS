@@ -242,7 +242,6 @@ import research from './routes/research';
 import usage from './routes/usage';
 import researchOverview from './routes/research_overview';
 import researchMarkets from './routes/research_markets';
-import researchMarketData from './routes/research_market_data';
 import researchSectors from './routes/research_sectors';
 import cycleGrow from './routes/cycle_grow';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
@@ -1468,7 +1467,6 @@ app.route('/api/research/overview', researchOverview);
 // D533 — Research · Markets and · Geographies, read through the crosswalk in
 // services/researchTaxonomy.ts. Paths do not overlap research.ts's.
 app.route('/api/research', researchMarkets);
-app.route('/api/research', researchMarketData);
 app.route('/api/research', researchSectors);
 // D664 (#1477): the Grow cycle's overview, module reads and store writes.
 // D1086 (#2951): each section's Notion sync, ahead of the cycle routers so `/:section/notion` is never read as a module.

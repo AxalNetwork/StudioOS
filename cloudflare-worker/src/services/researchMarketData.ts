@@ -1,3 +1,7 @@
+/**
+ * Research › Markets global sourced observations (D7318, #7318): the append-only observation store, the source
+ * registry (World Bank WDI enabled, the rest registered but off) and the World Bank ingest the refresh route calls.
+ */
 import type { Env } from '../types';
 
 export const WORLD_BANK_METRICS = {

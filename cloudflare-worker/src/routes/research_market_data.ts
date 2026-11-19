@@ -1,7 +1,14 @@
+/**
+ * Research › Markets global sourced observations (D7318, #7318): the market-data sources, one country's observations,
+ * the CSV export and the World Bank refresh, under /api/research/market-data. Mounts itself (#4105) just ahead of
+ * research_sectors, where its hand-written line sat.
+ */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ingestWorldBank } from '../services/researchMarketData';
+import researchSectors from './research_sectors';
+import type { RouteMount } from '../util/routeRegistry';
 
 const app=new Hono<{Bindings:Env}>();
 const safeCode=(v:string)=>/^[A-Z]{3}$/.test(v.toUpperCase())?v.toUpperCase():null;
@@ -43,3 +50,4 @@ app.post('/market-data/refresh/world-bank',async c=>{
   return c.json(await ingestWorldBank(c.env,{from:Number.isInteger(body.from)?body.from:undefined,to:Number.isInteger(body.to)?body.to:undefined}),202);
 });
 export default app;
+export const mount: RouteMount = { path: '/api/research', router: app, before: [researchSectors] };
