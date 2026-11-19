@@ -343,6 +343,29 @@ test('recorded HQs resolve to existing countries and real directory filters, whi
   }
 });
 
+test('the Georgia country qualifier preserves the existing U.S.-state geography', async () => {
+  const georgia = manifest.funds.find((row) => row.hq_countries.includes('GE'));
+  assert.ok(georgia, 'the reviewed Georgian headquarters has an explicit country label');
+  const distinct = async (sql: string, countryRaw: string) => {
+    const db = emptyDirectory();
+    try {
+      const before = mapFundHq('Georgia', await loadOverrides(env(db)));
+      apply(db, sql);
+      const overrides = await loadOverrides(env(db));
+      assert.deepEqual(mapFundHq('Georgia', overrides), before,
+        'a new country mapping must not reinterpret existing U.S.-state values');
+      assert.deepEqual(mapFundHq(countryRaw, overrides).targets, georgia.hq_countries,
+        'the qualified new headquarters resolves to its evidenced country');
+    } finally { db.close(); }
+  };
+  await assert.doesNotReject(() => distinct(EXPANSION, georgia.hq!));
+  const ambiguous = structuredClone(manifest);
+  ambiguous.funds.find((row) => row.uid === georgia.uid)!.hq = 'Georgia';
+  ambiguous.hq_overrides.find((row) => row.raw === georgia.hq)!.raw = 'Georgia';
+  await assert.rejects(() => distinct(render(ambiguous), 'Georgia'), { code: 'ERR_ASSERTION' },
+    'removing the country qualifier must fail the preservation regression');
+});
+
 test('complete HQ overrides preserve prior manual mappings and explicit unmapped pins', async (t) => {
   // Exercise the template even when the actual batch needs no new HQ override.
   const data = structuredClone(manifest);

@@ -10,11 +10,23 @@ INSERT OR IGNORE INTO research_fund_sources
    verdict,verdict_reason,reviewed_on,repo_copy,repo_copy_note)
 VALUES ('Axal VC verified global fund managers (2026-11-19)','Axal VC worldwide fund-manager evidence, 19 November 2026','Axal VC','https://github.com/AxalNetwork/StudioOS/blob/main/attached_assets/research-global-funds-2026-11-19.json','not found',NULL,NULL,'Independent compilation of names, official links and supported headquarters countries. The committed manifest records the first-party evidence checked for every entry; no third-party directory or website prose is republished.','cite only','Citation-only factual metadata; no permission to republish manager website content is asserted.','2026-11-19','attached_assets/research-global-funds-2026-11-19.json','D7585. Official manager links remain on each row; this shared citation opens the complete evidence manifest. Unknown vehicle facts remain NULL.');
 
+INSERT OR IGNORE INTO research_countries (code,name,region) VALUES ('GE','Georgia','Asia');
+
+INSERT OR IGNORE INTO research_countries (code,name,region) VALUES ('GH','Ghana','Africa');
+
+INSERT OR IGNORE INTO research_countries (code,name,region) VALUES ('JM','Jamaica','Latin America');
+
 INSERT OR IGNORE INTO research_countries (code,name,region) VALUES ('KH','Cambodia','Asia');
+
+INSERT OR IGNORE INTO research_countries (code,name,region) VALUES ('NP','Nepal','Asia');
 
 -- Add a complete new mapping only when no manual mapping or unmapped pin exists.
 WITH requested(raw_value,target) AS (VALUES
-  ('Cambodia','KH')),
+  ('Cambodia','KH'),
+  ('Georgia (country)','GE'),
+  ('Ghana','GH'),
+  ('Jamaica','JM'),
+  ('Kathmandu, Nepal','NP')),
 missing(raw_value) AS MATERIALIZED (
   SELECT DISTINCT r.raw_value FROM requested r
   WHERE NOT EXISTS (SELECT 1 FROM research_taxonomy_overrides o
@@ -25,35 +37,91 @@ SELECT 'fund_hq',r.raw_value,r.target,'manual','D7585: verified HQ countries in 
 FROM requested r JOIN missing m ON m.raw_value = r.raw_value;
 
 WITH candidates(uid,name,website,hq,source_url,as_of,aliases,hosts) AS (VALUES
+  ('axal-aadhyantafundmanagement','Aadhyanta Fund Management','https://www.aadhyanta.com/','Kathmandu, Nepal','https://www.aadhyanta.com/about/','2026-11-19','["aadhyantafundmanagement","aadhyanta","aadhyantafundmanagementlimited"]','["aadhyanta.com"]'),
+  ('axal-adbventures','ADB Ventures','https://ventures.adb.org/',NULL,'https://ventures.adb.org/','2026-11-19','["adbventures","adbventuresfinancingpartnershipfacility"]','["ventures.adb.org"]'),
+  ('axal-astanahubventures','Astana Hub Ventures','https://www.astanahub.vc/',NULL,'https://www.astanahub.vc/','2026-11-19','["astanahubventures","astanahubventuresltd"]','["astanahub.vc"]'),
+  ('axal-asterionventures','Asterion Ventures','https://www.asterionventures.com/en',NULL,'https://www.asterionventures.com/en','2026-11-19','["asterionimpact","asterionventures"]','["asterionventures.com"]'),
+  ('axal-auragroup','Aura Group','https://www.aura.co/',NULL,'https://www.aura.co/','2026-11-19','["auragroup","auraventures","auraprivateequity","auragroupsingaporepteltd","auracapitalptyltd"]','["aura.co","aura.vc"]'),
+  ('axal-avventures','AV Ventures','https://av-ventures.com/','United States','https://av-ventures.com/our_funds/','2026-11-19','["avventuresacdivoca","avventures","avventuresllc","avventuresghana","avventuresghanallc"]','["av-ventures.com"]'),
   ('axal-baicapital','BAI Capital','https://www.bai-cap.com/',NULL,'https://www.bai-cap.com/about.html','2026-11-18','["baicapital","bertelsmannasiainvestments"]','["bai-cap.com"]'),
+  ('axal-baltcap','BaltCap','https://www.baltcap.com/',NULL,'https://www.baltcap.com/','2026-11-19','["baltcap"]','["baltcap.com"]'),
+  ('axal-beamlineaccelerator','Beamline Accelerator','https://www.beamline.fund/',NULL,'https://www.beamline.fund/','2026-11-19','["beamline","beamlineaccelerator","beamlineou"]','["beamline.fund"]'),
   ('axal-betaventures','Beta.Ventures','https://beta.ventures/',NULL,'https://beta.ventures/','2026-11-19','["betaventures"]','["beta.ventures"]'),
   ('axal-bicyclecapital','Bicycle Capital','https://bicycle.capital/','USA / Brazil','https://idbinvest.org/en/news-media/idb-invest-partners-bicycle-capital-boost-growth-financing-tech-firms-latin-america-and','2026-11-18','["bicyclecapital","bicyclei","bicyclelacgrowthfund","bicyclemanagementcompany"]','["bicycle.capital"]'),
+  ('axal-bidra','Bidra','https://www.bidra.vc/','United States','https://www.bidra.vc/home','2026-11-19','["bidra","bidrainnovationventures"]','["bidra.vc"]'),
+  ('axal-bigskycapital','Big Sky Capital','https://bigskycapital.vc/','Miami, United States','https://bigskycapital.vc/','2026-11-19','["bigskycapital","bigskycapitalvc"]','["bigskycapital.vc"]'),
+  ('axal-bisonventures','Bison Ventures','https://www.bison.vc/',NULL,'https://www.bison.vc/','2026-11-19','["bisonventures","bisonventuresmanagementcompanyllc"]','["bison.vc"]'),
   ('axal-brandoncapital','Brandon Capital','https://brandoncapital.vc/',NULL,'https://brandoncapital.vc/who-we-are/','2026-11-18','["brandonbiocatalyst","brandoncapital","brandoncapitalpartners","medicalresearchcommercialisationfund","mrcf"]','["brandoncapital.vc"]'),
   ('axal-buentripventures','BuenTrip Ventures','https://www.buentrip.vc/',NULL,'https://www.buentrip.vc/strategy','2026-11-19','["buentripventures","buentrip"]','["buentrip.vc"]'),
+  ('axal-bunatventures','Bunat Ventures','https://bunat.vc/',NULL,'https://bunat.vc/','2026-11-19','["bunatventures","bunatventureslimited"]','["bunat.vc"]'),
   ('axal-canary','Canary','https://www.canary.com.br/',NULL,'https://www.canary.com.br/about-us/','2026-11-18','["canary"]','["canary.com.br"]'),
+  ('axal-cardinalstonecapitaladvisers','CardinalStone Capital Advisers','https://cardinalstonepe.com/',NULL,'https://cardinalstonepe.com/cardinalstone-capital-advisers-cca-announces-first-close-of-cca-growth-fund-ii-ccagf-ii/','2026-11-19','["cardinalstonecapitaladvisers","cardinalstonecapitaladvisersgrowthfund","cardinalstonecapitaladvisersgrowthfundlp","cardinalstonecapitaladvisersgrowthfundiilp","ccagrowthfundi","ccagrowthfundiilp"]','["cardinalstonepe.com"]'),
+  ('axal-confrapar','Confrapar','https://confrapar.com.br/en/',NULL,'https://confrapar.com.br/en/management-company/','2026-11-19','["confrapar","confraparadministracaoegestaoderecursossa","confraparavanti","confraparfipblackbird","confraparfipblackbirdii","confraparfundokx","confraparfundokv"]','["confrapar.com.br"]'),
+  ('axal-cresceracapital','Crescera Capital','https://crescera.com/en/',NULL,'https://crescera.com/en/who-we-are/','2026-11-19','["cresceracapital","brinvestimentos","bozanoinvestimentos","cresceragestaoderecursosltda","bozanoventurecapitalltda","bpventurecapitalltda"]','["crescera.com"]'),
+  ('axal-cygnumcapital','Cygnum Capital','https://www.cygnumcapital.com/',NULL,'https://www.cygnumcapital.com/asset-management','2026-11-19','["cygnumcapital","cygnumcapitalgroup","cygnumcapitalassetmanagement","lionsheadgroup","lionsheadglobalpartners","offgridenergyaccessfund","facilityforenergyinclusion","africagogreenfund","africanlocalcurrencybondfund"]','["cygnumcapital.com"]'),
+  ('axal-darkmodeventures','DarkMode Ventures','https://www.darkmode.vc/',NULL,'https://www.darkmode.vc/','2026-11-19','["darkmodeventures"]','["darkmode.vc"]'),
+  ('axal-dgfinvestimentos','DGF Investimentos','https://www.dgf.com.br/',NULL,'https://www.dgf.com.br/','2026-11-19','["dgfinvestimentos","dgf","dgfinvestimentosgestaodefundosltda"]','["dgf.com.br"]'),
   ('axal-dolmafundmanagement','Dolma Fund Management','https://dolmaimpact.com/',NULL,'https://dolmaimpact.com/investment-criteria/','2026-11-19','["dolmafundmanagement","dolmaimpactfund","dolmaimpactfundi","dolmaimpactfundii"]','["dolmaimpact.com"]'),
+  ('axal-emergingmarketsinvestmentadvisers','Emerging Markets Investment Advisers','https://www.emergingmarkets.asia/investments/',NULL,'https://www.emergingmarkets.asia/investments/','2026-11-19','["emergingmarketsinvestmentadvisers","emergingmarketsinvestmentadviserspteltd","emia"]','["emergingmarkets.asia"]'),
+  ('axal-empowermentcapitalinvestmentpartners','Empowerment Capital Investment Partners','https://www.empowerment.capital/',NULL,'https://www.imvelo.ventures/','2026-11-19','["empowermentcapitalinvestmentpartners","empowermentcapital","empowermentcapitalinvestmentpartnersptyltd","imveloventures","imveloventuresptyltd","andzaniventures","andzaniventuresptyltd"]','["empowerment.capital"]'),
+  ('axal-enyorraprivateequity','Enyorra Private Equity','https://enyorra.org/','Singapore','https://enyorra.org/about','2026-11-19','["enyorraprivateequity","enyorraprivateequitypteltd","enyorra"]','["enyorra.org"]'),
   ('axal-epakoncapital','Epakon Capital','https://epakon.com/',NULL,'https://epakon.com/','2026-11-19','["epakoncapital","epakon"]','["epakon.com"]'),
+  ('axal-fireballcapital','Fireball Capital','https://fireballcapital.co.za/',NULL,'https://fireballcapital.co.za/','2026-11-19','["fireballcapital","fireballcapitalptyltd"]','["fireballcapital.co.za"]'),
+  ('axal-firstpartycapital','FirstPartyCapital','https://firstpartycapital.com/',NULL,'https://firstpartycapital.com/','2026-11-19','["firstpartycapital"]','["firstpartycapital.com"]'),
+  ('axal-g2momentumcapital','G2 Momentum Capital','https://g2momentum.capital/',NULL,'https://g2momentum.capital/','2026-11-19','["g2momentumcapital","g2fintechfund"]','["g2momentum.capital"]'),
+  ('axal-gazellefinance','Gazelle Finance','https://gazellefinance.com/','Georgia (country)','https://gazellefinance.com/','2026-11-19','["gazellefinance"]','["gazellefinance.com","gazellefinance.am"]'),
+  ('axal-gridx','GRIDX','https://www.gridexponential.com/',NULL,'https://www.gridexponential.com/investment-thesis','2026-11-19','["gridx"]','["gridexponential.com"]'),
+  ('axal-highlandcapitalcentralasia','Highland Capital (Central Asia)','https://www.highlandcapitalpartners.com/?locale=en',NULL,'https://www.highlandcapitalpartners.com/?locale=en','2026-11-19','["highlandcapitalcentralasia","highlandcapitalkyrgyzstan"]','["highlandcapitalpartners.com"]'),
+  ('axal-hiveventuresarmenianfounders','HIVE Ventures (Armenian founders)','https://hiveventures.co/',NULL,'https://hovnanianfoundation.org/en/special-projects/armenia-special-projects','2026-11-19','["hiveventuresarmenianfounders","hiveventuresarmenia"]','["hiveventures.co","hivefund.co"]'),
   ('axal-i2iventures','i2i Ventures','https://www.i2iventures.com/',NULL,'https://www.i2iventures.com/','2026-11-19','["i2iventures","i2iventuresgpllc","i2iventurecapitalfund","i2iventurecapitalfundi","i2iventurecapitalfundilp"]','["i2iventures.com"]'),
   ('axal-impactavc','Impacta VC','https://www.impacta.vc/',NULL,'https://www.impacta.vc/why-how','2026-11-19','["impactavc","impacta","impactavcfund"]','["impacta.vc"]'),
   ('axal-indusvalleycapital','Indus Valley Capital','https://www.indus.vc/',NULL,'https://www.indus.vc/','2026-11-19','["indusvalleycapital"]','["indus.vc"]'),
   ('axal-insitorpartners','Insitor Partners','https://www.insitorpartners.com/',NULL,'https://www.insitorpartners.com/ourwork','2026-11-19','["insitor","insitorpartners","insitorpartnerspteltd","insitorfund","insitorseedpilot","insitorimpactasiafund","insitorimpactasiafundi","insitorimpactasiafundii"]','["insitorpartners.com","insitorfunds.com"]'),
+  ('axal-inuacapital','Inua Capital','https://inuacapital.com/',NULL,'https://inuacapital.com/about-us/','2026-11-19','["inuacapital"]','["inuacapital.com"]'),
+  ('axal-investisseurspartenaires','Investisseurs & Partenaires','https://www.ietp.com/en',NULL,'https://www.ietp.com/en/content/our-work','2026-11-19','["investisseurspartenaires","investisseursetpartenaires","ipafriqueentrepreneurs","ipafriqueentrepreneurs2","ipdeveloppement","ipdeveloppement2"]','["ietp.com"]'),
   ('axal-kamayventures','Kamay Ventures','https://www.kamayventures.com/',NULL,'https://www.kamayventures.com/','2026-11-19','["kamayventures","kamay"]','["kamayventures.com"]'),
   ('axal-kayyakventures','Kayyak Ventures','https://www.kayyakventures.com/',NULL,'https://www.kayyakventures.com/','2026-11-19','["kayyakventures","kayyak"]','["kayyakventures.com"]'),
   ('axal-latitud','Latitud','https://latitud.com/',NULL,'https://latitud.com/','2026-11-18','["latitud"]','["latitud.com"]'),
+  ('axal-loggerheadventures','Loggerhead Ventures','https://loggerhead.vc/',NULL,'https://loggerhead.vc/','2026-11-19','["loggerheadventures","loggerheadventuresaedakes"]','["loggerhead.vc"]'),
+  ('axal-lombardasia','Lombard Asia','https://www.lombardasia.com/',NULL,'https://www.lombardasia.com/','2026-11-19','["lombardasia","lombardasiamanagement","lombardasiamanagementltd"]','["lombardasia.com"]'),
+  ('axal-ma7ventures','MA7 Ventures','https://ma7.vc/',NULL,'https://ma7.vc/','2026-11-19','["ma7ventures","ma7venture"]','["ma7.vc"]'),
   ('axal-mcsventures','MCS Ventures','https://mcsventures.mn/',NULL,'https://mcsventures.mn/about','2026-11-19','["mcsventures","mcsventuresllc"]','["mcsventures.mn"]'),
   ('axal-mekongstrategiccapital','Mekong Strategic Capital','https://www.mekongstrategic.com/','Cambodia','https://www.mekongstrategic.com/investment-management','2026-11-19','["mekongstrategiccapital","mekongstrategicpartners","mekongstrategicventures","smartaxiatadigitalinnovationfund","sadif","angkorgrowthinvestments"]','["mekongstrategic.com"]'),
+  ('axal-morningsidehillcapitalmanagement','Morningside Hill Capital Management','https://www.morningsidehill.com/',NULL,'https://www.morningsidehill.com/','2026-11-19','["morningsidehill","morningsidehillcapitalmanagement"]','["morningsidehill.com"]'),
+  ('axal-mscalellc','Mscale LLC','https://mscalellc.com/','Jamaica','https://mscalellc.com/','2026-11-19','["mscalellc","mscale","caribbeanventurecapitalfund","caribbeanventurecapitalfundlp"]','["mscalellc.com"]'),
   ('axal-n47','N47','https://www.n47.com/',NULL,'https://www.n47.com/','2026-11-18','["n47","next47"]','["n47.com","next47.com"]'),
   ('axal-novoholdings','Novo Holdings','https://novoholdings.com/',NULL,'https://novoholdings.com/investments','2026-11-18','["novoas","novoholdings","novoholdingsas","novoventures"]','["novoholdings.com","novoholdings.dk"]'),
   ('axal-nventuressingapore','nVentures (Singapore)','https://nventures.sg/',NULL,'https://nventures.sg/fund-ii/','2026-11-19','["nventuressingapore","nventurespteltd"]','["nventures.sg"]'),
+  ('axal-oasiscapitalghana','Oasis Capital Ghana','https://oasiscapitalghana.com/v2/',NULL,'https://oasiscapitalghana.com/v2/about-us/','2026-11-19','["oasiscapitalghana","oasiscapitalghanalimited","oasiscapitalghanaltd","ebankeseventurefund","oasisafricavcfund","oasisafricavcfundltd","oasisafricavcfundii","oasisafricavcfundiiltd","oasisafricafundii"]','["oasiscapitalghana.com"]'),
   ('axal-obormanagement','OBOR Management','https://obor.asia/',NULL,'https://obor.asia/','2026-11-19','["obormanagement","obormanagementcoltd","oborasia","oborcapital","axsventures"]','["obor.asia","oborcapital.com"]'),
   ('axal-onetowatch','One to Watch','https://www.onetowatch.nl/',NULL,'https://www.onetowatch.nl/investment-management/','2026-11-19','["onetowatch","onetowatchsmefund","onetowatchorefund","onetowatchoffgridrenewableenergyfund"]','["onetowatch.nl"]'),
   ('axal-onevc','ONEVC','https://onevc.vc/',NULL,'https://onevc.vc/','2026-11-18','["onevc"]','["onevc.vc"]'),
+  ('axal-origins','Origins','https://www.origins.fund/',NULL,'https://www.origins.fund/','2026-11-19','["origins","originsfund"]','["origins.fund"]'),
+  ('axal-pampastart','Pampa Start','https://pampastart.com/',NULL,'https://pampastart.com/','2026-11-19','["pampastart"]','["pampastart.com"]'),
+  ('axal-portfolion','Portfolion','https://www.portfolion.com/',NULL,'https://www.portfolion.com/','2026-11-19','["portfolion","portfolioncapitalpartners","portfolionkockazatitokealapkezelozrt"]','["portfolion.com","portfolion.hu"]'),
   ('axal-prosperity7ventures','Prosperity7 Ventures','https://www.prosperity7vc.com/',NULL,'https://www.prosperity7vc.com/about/','2026-11-18','["prosperity7","prosperity7ventures"]','["prosperity7vc.com"]'),
+  ('axal-rabapartnership','Raba Partnership','https://rabacap.com/',NULL,'https://rabacap.com/','2026-11-19','["rabapartnership","therabapartnership","raba"]','["rabacap.com"]'),
   ('axal-rallycap','Rally Cap','https://rallycap.vc/',NULL,'https://rallycap.vc/','2026-11-19','["rallycap","rallycapvc","ralicap"]','["rallycap.vc"]'),
+  ('axal-rocax','ROCA X','https://rocax.ro/',NULL,'https://rocax.ro/about-us/','2026-11-19','["rocax"]','["rocax.ro"]'),
+  ('axal-sabahfund','SABAH.fund','https://sabahhub.com/fund/',NULL,'https://sabahhub.com/fund/','2026-11-19','["sabahfund"]','["sabahhub.com"]'),
+  ('axal-sarmoventures','Sarmo Ventures','https://sarmo.vc/',NULL,'https://sarmo.vc/','2026-11-19','["sarmoventures"]','["sarmo.vc"]'),
+  ('axal-savannahimpactadvisory','Savannah Impact Advisory','https://www.siaghana.com/','Ghana','https://www.siaghana.com/faqs','2026-11-19','["savannahimpactadvisory","savannahimpactadvisorylimitedcompany","cigabafund","cigabafundoffunds","cigabaprogressfund"]','["siaghana.com"]'),
+  ('axal-semurgventures','Semurg Ventures','https://semurg.vc/en',NULL,'https://semurg.vc/en','2026-11-19','["semurgventures","semurgvc"]','["semurg.vc"]'),
   ('axal-shequitypartners','ShEquity Partners','https://shequity.com/',NULL,'https://shequity.com/shequity-unveils-final-10-smes-for-its-gender-smart-climate-technical-assistance-facility/','2026-11-19','["shequitypartners","shequity","shequityclimatefund","shequityfund"]','["shequity.com"]'),
   ('axal-smilegateinvestment','Smilegate Investment','https://www.smilegateinvestment.com/en/',NULL,'https://www.smilegateinvestment.com/en/company.html','2026-11-18','["mvpventurecapital","smilegateinvestment"]','["smilegateinvestment.com"]'),
   ('axal-spventures','SP Ventures','https://spventures.com.br/',NULL,'https://spventures.com.br/','2026-11-18','["spventures"]','["spventures.com.br"]'),
-  ('axal-uniseed','Uniseed','https://www.uniseed.com/',NULL,'https://www.uniseed.com/','2026-11-18','["uniseed","uniseedcommercialisationfund","uniseedventurefund"]','["uniseed.com"]')),
+  ('axal-sturgeoncapital','Sturgeon Capital','https://www.sturgeoncapital.com/',NULL,'https://www.sturgeoncapital.com/','2026-11-19','["sturgeoncapital","sturgeoncapitalltd"]','["sturgeoncapital.com"]'),
+  ('axal-tbsinnovationpartners','TBS Innovation Partners','https://tbs-ip.co.jp/',NULL,'https://tbs-ip.co.jp/mission/','2026-11-19','["tbsinnovationpartners"]','["tbs-ip.co.jp"]'),
+  ('axal-tecscapital','TECS Capital','https://tecs.capital/',NULL,'https://tecs.capital/','2026-11-19','["tecscapital","venturestoriespartners","venturestoriespartnersaedakes"]','["tecs.capital"]'),
+  ('axal-thecontinentventurepartners','The Continent Venture Partners','https://www.tcvp.co/',NULL,'https://www.tcvp.co/','2026-11-19','["thecontinentventurepartners","continentventurepartners","tcvp"]','["tcvp.co"]'),
+  ('axal-uniseed','Uniseed','https://www.uniseed.com/',NULL,'https://www.uniseed.com/','2026-11-18','["uniseed","uniseedcommercialisationfund","uniseedventurefund"]','["uniseed.com"]'),
+  ('axal-unitedventuresuzbekistan','United Ventures (Uzbekistan)','https://uventures.uz/','Uzbekistan','https://new.startupbase.uz/en/ecosystem/investors-directory/133','2026-11-19','["unitedventuresuzbekistan","unitedventuresuz","unitedventuresmchjuzbekistan"]','["uventures.uz"]'),
+  ('axal-uzvc','UzVC','https://uzvc.uz/',NULL,'https://uzvc.uz/','2026-11-19','["uzvc","nationalventurefunduzvc","uzvcnationalventurefund"]','["uzvc.uz"]'),
+  ('axal-vespuccipartners','Vespucci Partners','https://vespuccipartners.com/',NULL,'https://vespuccipartners.com/','2026-11-19','["vespuccipartners","vespuccipartnerszrt"]','["vespuccipartners.com"]'),
+  ('axal-wiccapital','WIC Capital','https://wic-capital.net/en/',NULL,'https://wic-capital.net/en/a-propos/','2026-11-19','["wiccapital"]','["wic-capital.net"]'),
+  ('axal-wlcventures','WLC Ventures','https://white-lotus-centre.com/impact-investment/',NULL,'https://white-lotus-centre.com/impact-investment/','2026-11-19','["wlcventures","wlcventurespvtltd"]','["white-lotus-centre.com","bo2.com.np"]'),
+  ('axal-wyldvc','Wyld VC','https://wyldvc.com/',NULL,'https://wyldvc.com/','2026-11-19','["wyldvc"]','["wyldvc.com"]'),
+  ('axal-zacuaventures','Zacua Ventures','https://zacuaventures.com/',NULL,'https://zacuaventures.com/','2026-11-19','["zacuaventures"]','["zacuaventures.com"]')),
 -- Match the API's served-source rule. Withheld legacy rows are never
 -- overwritten or relabelled; these new IDs have independent evidence.
 served_base AS (
