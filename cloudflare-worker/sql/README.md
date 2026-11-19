@@ -86,3 +86,4 @@ HEAD metadata after deployment; the migration never reads or deletes objects.
 | `migrations/202611171541_7116_wellness_program.sql` | D7116 (#7116) registers the global Wellness program and its personal Wellbeing link. |
 | `migrations/202611161338_6925_investor_cohort_readiness.sql` | D6925 corrects the build status and original purpose of the unopened global investor cohort program. |
 | `migrations/202611181335_7326_research_global_funds.sql` | D7326: independently sourced worldwide manager records; additive import with served-manager deduplication, retired-UID preservation, source review/provenance, and the verified Malaysia HQ crosswalk. |
+| `migrations/202611191414_7672_network_directory.sql` | D7672: source-backed person/organization identities, affiliations, private raw provenance, review candidates and import reconciliation; no account, membership, relationship or private-book backfill. |

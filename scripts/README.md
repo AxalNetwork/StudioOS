@@ -37,6 +37,10 @@
 
 ## The guards
 
+| File | Purpose |
+| --- | --- |
+| `plan-network-directory.mjs` | D7672: offline planner for reviewed Airtable/Folk source snapshots; creates a restricted parameterized import plan outside the repository and reports aggregate counts; never contacts a database. |
+
 `npm run test:guards` runs every `check-*.mjs`. They exist because each one
 represents a bug that reached production once:
 
