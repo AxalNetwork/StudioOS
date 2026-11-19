@@ -89,6 +89,8 @@ test('clockEnv: libfaketime and the loader ahead; every libfaketime variable emp
   assert.equal(real.LD_PRELOAD, '/x/other.so');
   for (const k of ['FAKETIME', 'FAKETIME_DONT_FAKE_MONOTONIC', 'FAKETIME_DONT_RESET', 'FAKETIME_NO_CACHE', 'FUTURE_CLOCK_DAYS']) assert.equal(real[k], '', k);
   assert.equal(real.NODE_OPTIONS, '--max-old-space-size=4096');
+  // libfaketime's handle to its parent's shared memory passes through: emptied, a child under the nightly cannot start.
+  assert.equal(clockEnv({ FAKETIME_SHARED: '/faketime_sem_1 /faketime_shm_1' }, OFFSETS[0]).FAKETIME_SHARED, '/faketime_sem_1 /faketime_shm_1');
 });
 
 test('only changed files a suite runs are tested, with that suite\'s own command; helpers and other files are not', () => {

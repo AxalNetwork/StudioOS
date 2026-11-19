@@ -65,13 +65,13 @@ export function suiteCommands(scripts, suites = SUITES) {
   return suites.filter((key) => typeof scripts?.[key] === 'string').map((key) => ({ key, cmd: scripts[key].split(' && ')[0] }));
 }
 
-/** Changed files that some suite runs, each with its suite command, in suite order; helpers (`_*`) are not tests. */
+/** Changed files that some suite's own globs run (so no helper), each group with its suite command, in suite order. */
 export function groupBySuite(files, commands, root) {
   const groups = [];
   const left = new Set(files);
   for (const { key, cmd } of commands) {
     const owned = new Set(suiteFiles(cmd, root));
-    const mine = [...left].filter((f) => owned.has(f) && !/(^|\/)_[^/]*$/.test(f)).sort();
+    const mine = [...left].filter((f) => owned.has(f)).sort();
     for (const f of mine) left.delete(f);
     if (mine.length) groups.push({ key, cmd, files: mine });
   }
@@ -98,7 +98,9 @@ export function clockEnv(env, offset, lib = LIBFAKETIME) {
   const out = { ...env };
   delete out.NODE_TEST_CONTEXT;
   // Emptied rather than deleted: the loader in a parent running under libfaketime puts missing ones back (withClock).
-  for (const k of Object.keys(out)) if (k.startsWith('FAKETIME')) out[k] = '';
+  // FAKETIME_SHARED is libfaketime's own handle to its parent's shared memory: emptied, a child's libfaketime
+  // cannot parse it and leaves the clock where it was, so it is passed on as it came.
+  for (const k of Object.keys(out)) if (k.startsWith('FAKETIME') && k !== 'FAKETIME_SHARED') out[k] = '';
   out.FUTURE_CLOCK_DAYS = '';
   out.LD_PRELOAD = preload.join(' ');
   out.NODE_OPTIONS = options.join(' ');
