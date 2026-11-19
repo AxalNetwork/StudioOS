@@ -146,7 +146,9 @@ function msToken(env: Env): string {
 // set.
 function appBase(env: Env): string {
   const e = env as Env & { PUBLIC_BASE_URL?: string; OAUTH_CALLBACK_BASE_URL?: string };
-  return ((e.OAUTH_CALLBACK_BASE_URL || e.PUBLIC_BASE_URL || e.APP_URL || '')).replace(/\/+$/, '');
+  let base = e.OAUTH_CALLBACK_BASE_URL || e.PUBLIC_BASE_URL || e.APP_URL || '';
+  while (base.endsWith('/')) base = base.slice(0, -1);
+  return base;
 }
 // Reject any override that still points at the workers.dev sandbox in
 // production — a stale env var set before Task #5 (DC) would otherwise
