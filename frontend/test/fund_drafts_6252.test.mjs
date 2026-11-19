@@ -59,7 +59,7 @@ test('D6252 AI off, no budget or nothing recorded: the Worker\'s own sentence, a
     const view = await mountForm(React.createElement(FundDraftBand, { title: 't', body: 'b', writes: 'w', run: 'Draft', onRun: async () => { throw Object.assign(new Error(message), { status }); } }));
     try {
       await view.click('Draft');
-      assert.match(view.text(), new RegExp(message.replace(/[.]/g, '\\.')));
+      assert.match(view.text(), new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
       assert.doesNotMatch(view.text(), /Accept|Drawn from/);
     } finally { await view.unmount(); }
   }

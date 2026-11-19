@@ -31,6 +31,8 @@ const TEAM = {
     { uid: 'u3', name: 'Cy', role: 'member', prior_roles: [], archetype: null, full_time_since: null, full_time_reason: 'Not in the team read', founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' },
   ] },
   coverage: { state: 'recorded', data: [{ slug: 'product', label: 'Product', coverage_band: 'covered', reason: null }] },
+  advisors: { state: 'recorded', data: { count: 2, roles: [{ role: 'Advisor', count: 2 }], source: 'Accepted project memberships' } },
+  founder_market_fit: { state: 'recorded', data: { groups: [], partial: false } },
   values_band: { value: null, state: 'not_recorded', reason: 'No consent to share a team values band' },
 };
 
@@ -136,11 +138,9 @@ test('Team (DE23): the Team row first, who published, what each did not publish,
     assert.equal(v.textOf('deal-team-people-head'), `${TEAM_WORDS.people}2 published · anyone with a private profile is not listed`);
     assert.equal(v.textOf('deal-team-person-u3-archetype'), 'No archetype published');
     assert.ok(v.textOf('deal-team-person-u3').includes('No prior roles published'));
-    assert.equal(v.textOf('deal-team-person-u1-fulltime'), '1 Mar 2024', 'a published date is drawn');
-    assert.equal(v.textOf('deal-team-person-u3-fulltime'), `${NOT_RECORDED}Not in the team read`, 'a missing one is Not recorded with its reason');
-    assert.equal(v.textOf('deal-team-person-u3-fit'), `${NOT_RECORDED}No published evidence recorded`);
+    assert.doesNotMatch(v.textOf('deal-team-person-u1'), /Full-time since|Founder–market fit/, 'unsupported per-person fields are absent');
     assert.ok(v.textOf('deal-team-coverage').startsWith(TEAM_WORDS.coverageTitle));
-    assert.ok(v.textOf('deal-team-advisors').includes(TEAM_WORDS.advisorsLine));
+    assert.match(v.textOf('deal-team-advisors'), /2 accepted advisors.*Advisor.*2.*Accepted project memberships/);
     assert.equal(v.hrefOf('deal-team-next'), '/deals/4/diligence');
   } finally { await v.close(); }
 });

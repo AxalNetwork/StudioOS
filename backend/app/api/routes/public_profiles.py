@@ -51,6 +51,7 @@ from backend.app.models.entities import (
     User,
     VCFund,
 )
+from backend.app.services.log_safe import log_safe
 
 router = APIRouter(prefix="/public", tags=["public-profiles"])
 logger = logging.getLogger("studioos.public_profiles")
@@ -502,7 +503,7 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
         socials_raw = _json.loads(getattr(user, "socials", None) or "{}") or {}
     except (ValueError, TypeError) as exc:
         # Malformed socials JSON on the row — treat as no socials.
-        logger.debug("public profile: unparseable socials for user %s: %s", user_id, exc)
+        logger.debug("public profile: unparseable socials for user %s: %s", log_safe(user_id), log_safe(exc))
 
     location_parts = [p for p in [getattr(user, "city", None), getattr(user, "country", None)] if p]
     location = ", ".join(location_parts) or None
@@ -520,7 +521,7 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
             company = ext_row["company"] or None
     except Exception as exc:
         # Optional enrichment — user_profile_ext may not exist on older dev DBs.
-        logger.debug("public profile: company lookup failed for user %s: %s", user_id, exc)
+        logger.debug("public profile: company lookup failed for user %s: %s", log_safe(user_id), log_safe(exc))
 
     author_obj: dict[str, Any] = {
         "id": user.id,
@@ -575,7 +576,7 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
     except Exception as exc:
         # Articles table may be absent on older dev DBs — fall through to the
         # empty-items 404 below rather than 500ing the public page.
-        logger.debug("public profile: article listing failed for user %s: %s", user_id, exc)
+        logger.debug("public profile: article listing failed for user %s: %s", log_safe(user_id), log_safe(exc))
 
     if not items:
         raise HTTPException(status_code=404, detail="Not found")

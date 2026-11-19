@@ -10,6 +10,8 @@ export const roundCallFollowThroughApi = {
   // Owner only. `scope` is 'responses' or 'terms'; each export is logged on the call before the file is answered.
   exportCsv: (uid, scope = 'responses') => api._downloadCsv(`${at(uid)}/export.csv?scope=${encodeURIComponent(scope)}`, 'call-responses.csv'),
   exportPdf: (uid, scope = 'responses') => api._downloadCsv(`${at(uid)}/export.pdf?scope=${encodeURIComponent(scope)}`, 'call-responses.pdf'),
+  // D7513 (RAC20C): step 3 of a draft started from a closed call — that call's chosen recipients, ticked when still verified.
+  sourceAudience: (uid) => request(`${at(uid)}/source-audience`),
   startFromClosed: (uid, body) => request(`${at(uid)}/successor`, { method: 'POST', body: JSON.stringify(body) }),
   recordCommitment: (uid, body) => request(`${at(uid)}/commitments`, { method: 'POST', body: JSON.stringify(body) }),
 };

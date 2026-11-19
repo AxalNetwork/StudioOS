@@ -196,6 +196,7 @@ test('documents and decisions roll back when their audit cannot be saved; partia
   try {
     f.breakRead('INSERT INTO activity_logs');
     assert.equal((await f.call('/account-3/documents','POST',{ kind: 'other', data_uri: 'data:application/pdf;base64,JVBERg==' })).status, 503);
+    // D6651: the document this request just stored, named by no row, is erased as `unreferenced`.
     assert.equal(f.objects.size, 0);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM kyb_documents').get()?.n, 0);
     assert.equal((await approve(f,'account-3',{ ...checks, unchecked_owner_reason: 'Awaiting identity.' } as any)).status, 503);
@@ -208,7 +209,7 @@ test('documents and decisions roll back when their audit cannot be saved; partia
     assert.equal((await f.call(`/account-3/documents/${up.body.uid}`)).status, 404, 'tombstoned bytes must not be streamable while cleanup retries');
     f.failDeletes(false);
     assert.equal((await f.call('/account-3/reject','PATCH',{ reason: 'Registry mismatch.' })).status, 200);
-    assert.equal(f.objects.size, 0);
+    assert.equal(f.objects.size, 0, 'the recorded document is purged');
   } finally { f.db.close(); }
 });
 
@@ -561,7 +562,7 @@ test('D1231 mutation checks: the guards, audit, redaction and decision paths fai
     ["maskFor('date_of_birth', p.dob || null)", 'p.dob || null',privacyScenario],
     ["'kyc_field_shown'", "'kyb_wrong_showing'",privacyScenario],
     ["kyb.use('/:id/documents/:documentId', requireCfAccess());",'',documentScenario],
-    ["await c.env.FILES!.delete(doc.file_key);",';',documentScenario],
+    ["await eraseRecordObjects(c.env.FILES!, doc.file_key, 'purge');",';',documentScenario],
     ["'kyb_document_access'", "'kyb_wrong_document_action'",documentScenario],
     ['row.linked_user_id === user.id', 'false', selfReviewScenario],
     ['if (ids.includes(user.id))', 'if (false)', selfReviewScenario],

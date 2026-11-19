@@ -31,7 +31,9 @@ assert run(NativeZoom)
 for name, before, after in mutations:
     assert before in source, name
     module = types.ModuleType('native_mutant')
-    exec(compile(source.replace(before, after, 1), 'native_mutant', 'exec'), module.__dict__)
+    # The mutation harness runs this repository's own native.py with one listed edit applied; no outside input
+    # reaches it. Running a changed copy of the source is what a mutation check is.
+    exec(compile(source.replace(before, after, 1), 'native_mutant', 'exec'), module.__dict__)  # nosemgrep: python.lang.security.audit.exec-detected.exec-detected
     assert not run(module.NativeZoom), 'survived: ' + name
     assert run(NativeZoom), 'restore: ' + name
 print(f'{len(mutations)} native mutations caught; restored implementation passes')
