@@ -185,7 +185,7 @@ async function assertWhen(m) {
     assert.ok(seg.text().includes('Interviews since is required.'));
     await seg.input('score_since', '2026-09-01');
     await seg.submit();
-    assert.deepEqual(seg.calls, [['segment', P, { name: 'Finance leads', who_they_are: null, job_to_be_done: null, urgency: 'high', value_promised: null, score_since: '2026-09-01' }]]);
+    assert.deepEqual(seg.calls, [['segment', P, { name: 'Finance leads', who_they_are: null, context: null, job_to_be_done: null, urgency: 'high', value_promised: null, value_source: null, score_since: '2026-09-01' }]]);
   } finally { await seg.unmount(); }
 }
 
@@ -279,14 +279,14 @@ function routeKeys(method, route) {
 
 const ADDS = {
   'problem-discovery': ['/themes', 'theme', { title: 'Month-end is manual', severity: 'severe' }],
-  'ideal-customer-profile': ['/segments', 'segment', { name: 'Finance leads', who_they_are: 'Controllers at 50-person firms', job_to_be_done: 'Close the month', urgency: 'medium', value_promised: 'Two days back' }],
+  'ideal-customer-profile': ['/segments', 'segment', { name: 'Finance leads', who_they_are: 'Controllers at 50-person firms', context: 'During month-end close', job_to_be_done: 'Close the month', urgency: 'medium', value_promised: 'Two days back', value_source: 'Three recorded interviews' }],
   'market-intelligence': ['/competitors', 'competitor', { company: 'Ledgerline', kind: 'adjacent', why: 'Same buyer' }],
   'demand-signals': ['/demand-signals', 'signal', { kind: 'pre_sale', who: 'Harbour Works', amount: '1,200', signal_date: '2026-10-12', status: 'to_confirm' }],
   experiments: ['/hypotheses', 'hypothesis', { claim: 'Controllers pay to skip month-end', success_bar: '5 of 8 say yes', disproof: 'Fewer than 3', deadline: '2026-10-31' }],
 };
 const BODIES = {
   'problem-discovery': { title: 'Month-end is manual', severity: 'severe', quotes: [], hypothesis_id: null },
-  'ideal-customer-profile': { name: 'Finance leads', who_they_are: 'Controllers at 50-person firms', job_to_be_done: 'Close the month', urgency: 'medium', value_promised: 'Two days back', score_since: null },
+  'ideal-customer-profile': { name: 'Finance leads', who_they_are: 'Controllers at 50-person firms', context: 'During month-end close', job_to_be_done: 'Close the month', urgency: 'medium', value_promised: 'Two days back', value_source: 'Three recorded interviews', score_since: null },
   'market-intelligence': { name: 'Ledgerline', kind: 'adjacent', watch: { funding: true, launch: true, hiring: false }, why: 'Same buyer' },
   'demand-signals': { kind: 'pre_sale', who: 'Harbour Works', amount_cents: 120000, currency: 'usd', signal_date: '2026-10-12', status: 'to_confirm' },
   experiments: { claim: 'Controllers pay to skip month-end', success_bar: '5 of 8 say yes', disproof: 'Fewer than 3', pain_group_ids: [], direction: 'supports', deadline: '2026-10-31' },
@@ -325,6 +325,8 @@ test('each Add sends the body its route on main takes, and Add competitor names 
     ['watch: watchBody(v), why: str(v.why) };\n  },\n  search:', 'watch: v.watch, why: str(v.why) };\n  },\n  search:'],
     ["currency: amount == null ? null : 'usd'", 'currency: null'],
     ['return at > 0 && id != null && s.slice(at + 1)', 'return id != null'],
+    ['context: str(v.context), job_to_be_done:', 'context: null, job_to_be_done:'],
+    ['value_source: str(v.value_source),\n  score_since:', 'value_source: null,\n  score_since:'],
     ["w.validate.hypothesis(projectId, hypothesis.toBody(v))", "w.validate.theme(projectId, hypothesis.toBody(v))"],
   ]);
 });

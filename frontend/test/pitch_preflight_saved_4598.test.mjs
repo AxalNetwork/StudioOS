@@ -38,8 +38,17 @@ async function replaceAll(m, find, replace) {
 async function pressExport(m) {
   await m.press(m.by('deck-toolbar-share'));
   await m.press(m.by('deck-toolbar-item-export'));
-  for (let i = 0; i < 8 && !m.by('pitch-preflight-gate-nothing') && !m.by('pitch-export-dialog') && !m.by('pitch-preflight-gate-fix-list'); i += 1) await m.settle();
+  await until(m, () => m.by('pitch-preflight-gate-nothing') || m.by('pitch-export-dialog') || m.by('pitch-preflight-gate-fix-list'));
+  if (m.by('pitch-export-dialog')) await exportChecked(m);
 }
+async function until(m, ready) {
+  const deadline = Date.now() + 5000;
+  while (!ready()) {
+    if (Date.now() >= deadline) throw new Error('The export check did not reach its expected state');
+    await m.settle();
+  }
+}
+const exportChecked = (m) => until(m, () => m.by('pitch-export-run') && !m.by('pitch-export-checking'));
 /** D4598 part 2: `a.click()` in the dialog's own `download()`; the synthetic DOM draws no anchor behaviour. */
 function allowDownloadClick() {
   const make = document.createElement.bind(document);
@@ -82,6 +91,7 @@ test('unsaved edits that fix a defect do not clear the saved version that has it
     await replaceAll(w, '[Your logo]', 'Acme');
     await pressExport(w);
     await w.press(w.by('pitch-preflight-gate-anyway'));
+    await exportChecked(w);
     assert.ok(w.by('pitch-export-dialog'), 'Export anyway opens the dialog');
     const dGate = w.by('pitch-export-gate');
     assert.ok(dGate, 'the dialog runs its own check on the version it opened with, and finds the same warning');
@@ -141,6 +151,7 @@ test('Export\'s version picker checks the picked version itself, and a change in
     // v3 also has the sample at the editor's own first-look gate (before the dialog is even open);
     // its own "anyway" only gets past THAT gate — the dialog runs its own check regardless.
     await m.press(m.by('pitch-preflight-gate-anyway'));
+    await exportChecked(m);
     assert.ok(m.by('pitch-export-dialog'));
     assert.ok(m.by('pitch-export-gate'), 'v3 is picked by default, and it has the sample');
     assert.equal(m.pr(m.by('pitch-export-run')).disabled, true);
@@ -150,6 +161,7 @@ test('Export\'s version picker checks the picked version itself, and a change in
     // Picking v2 is a new combination: the confirmation for v3 does not carry over, and v2's own
     // (clean) content is read and checked fresh — not just said to be "not the one checked".
     await m.type(m.by('pitch-export-version'), '30');
+    await exportChecked(m);
     assert.equal(m.by('pitch-export-confirmed'), undefined, 'the earlier confirmation was for v3, not v2');
     assert.equal(m.by('pitch-export-gate'), undefined, 'v2 has no sample: nothing to confirm');
     assert.equal(m.pr(m.by('pitch-export-run')).disabled, false, 'v2 checked clean on its own content');
@@ -161,6 +173,7 @@ test('Export\'s version picker checks the picked version itself, and a change in
     // Back to v3: the check runs again (the deckGet calls below the version switches prove it was re-read,
     // not remembered from the first visit), and the old warning is there again, unconfirmed.
     await m.type(m.by('pitch-export-version'), '31');
+    await exportChecked(m);
     assert.ok(m.by('pitch-export-gate'), 'back on v3, the sample is found again');
     assert.equal(m.pr(m.by('pitch-export-run')).disabled, true, 'a fresh combination: the earlier "anyway" does not apply here either');
     const reads = m.calls.filter(([n, id]) => n === 'deckGet' && [30, 31].includes(id)).map(([, id]) => id);
