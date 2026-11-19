@@ -55,7 +55,7 @@ import { fundAllocationNote, fundOverlapNote } from '../services/researchFundRea
 import { MyFundsQueryError, catalogueHolder, fundIdentity, listMyFunds, parseMyFundsQuery, publicRecordFor } from '../services/researchMyFunds';
 import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkDetail, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
 import { markCited, referenceCheck } from '../services/researchCitations';
-import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
+import { CompanyQueryError, EVIDENCE_PARTS, getCompany, getCompanyPart, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
 import { admitsCompanies, refuseCompanies } from '../services/researchCompaniesAccess';
 import { DirectoryQueryError, citeSource, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { SOURCE_WITHDRAWN_MESSAGE, withdrawnSourceOf } from '../services/researchFundProfile';
@@ -4138,12 +4138,18 @@ research.get('/company-directory', async (c) => {
 
 // One company (D534): identity, each metric with its source and as-of date,
 // the migration-370 evidence keyed on company_id = id, and same-sector peers.
+// D7180: `?part=<collection>` reads one evidence collection on its own, so its
+// Retry does not re-read the company.
 research.get('/company-directory/:uid', async (c) => {
   // D7178: the directory's rule, checked before the record is read, so a refusal never says whether it exists.
   if (!admitsCompanies(await requireAuth(c))) return refuseCompanies(c);
+  const part = c.req.query('part');
+  if (part != null && !EVIDENCE_PARTS.includes(part)) {
+    return c.json({ detail: `part must be one of ${EVIDENCE_PARTS.join(', ')}`, field: 'part' }, 400);
+  }
   let company;
   try {
-    company = await getCompany(c.env, c.req.param('uid'));
+    company = part != null ? await getCompanyPart(c.env, c.req.param('uid'), part) : await getCompany(c.env, c.req.param('uid'));
   } catch {
     return c.json({ detail: 'Unreadable', reason: 'The company could not be read' }, 503);
   }
