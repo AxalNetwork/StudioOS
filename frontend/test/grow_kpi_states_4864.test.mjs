@@ -101,6 +101,7 @@ test('domain tiles: zero is None with one setup action, a failed read is Unavail
   const p = growDomain(area('partnerships'), { cards, search: q });
   assert.deepEqual([p.state, p.summary, p.action.label, p.action.href], ['none', 'No partners yet.', 'Add partner', '/grow/partner-network?project_id=7&add=1']);
   assert.equal(growDomain(area('markets'), { cards, search: q }).action, null, 'an off-site next is never a link');
+  assert.equal(growDomain(area('markets'), { cards, search: q }).summary, 'No markets yet.', 'one sentence is kept whole');
   assert.equal(growDomain(area('talent'), { cards, search: q }).state, 'unavailable');
   assert.equal(growDomain(area('customers'), { attention, search: q, readOnly: true }).action, null);
 });

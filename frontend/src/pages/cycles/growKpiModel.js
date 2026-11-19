@@ -125,7 +125,9 @@ export function growDomain(area, { cards = [], attention = null, search = '', re
   if (card.state === 'empty') {
     const next = card.next && typeof card.next.href === 'string' && SAFE_NEXT.test(card.next.href) ? card.next : null;
     // The first sentence only: the overview is a summary, not a wall of explanations.
-    const why = sentence(card.reason)?.split(/(?<=[.!?])\s+/)[0];
+    // No lookbehind (Safari before 16.4 cannot parse one, #3592): the text up to the first . ! or ? followed by a space.
+    const said = sentence(card.reason);
+    const why = said ? (said.match(/^[\s\S]*?[.!?](?=\s)/)?.[0] ?? said) : said;
     return { state: 'none', summary: why || 'Nothing recorded yet.', action: next ? act(String(next.text).replace(/\.$/, ''), next.href.replace('?project=', '?project_id=')) : null };
   }
   return { state: 'value', summary: card.caption || 'Open the workspace to review its records.', action: null };
