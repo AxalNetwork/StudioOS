@@ -114,10 +114,11 @@ function GenericBillingPanel({ flash, overview }) {
 const PERSONA_PLANS = {
   partner: {
     label: 'Partner',
+    // D4653 part 2 (#4653): no Stripe Connect payouts and no verified partner badge (D676: neither runs).
     starter: { name: 'Starter', tagline: 'Get listed and answer posted needs.',
-      features: ['Marketplace + directory listing', 'Manage up to 3 service offers', 'Respond to Needs Board posts', 'Stripe Connect payouts'] },
+      features: ['Marketplace + directory listing', 'Manage up to 3 service offers', 'Respond to Needs Board posts'] },
     pro: { name: 'Pro', tagline: 'For partners who want inbound demand on tap.',
-      features: ['Unlimited service offers', 'Priority placement in search + directory', 'Full partner analytics dashboard', 'Verified partner badge', 'Partner deal portal access'] },
+      features: ['Unlimited service offers', 'Priority placement in search + directory', 'Full partner analytics dashboard', 'Partner deal portal access'] },
   },
   advisor: {
     label: 'Advisor',
