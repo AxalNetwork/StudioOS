@@ -31,6 +31,7 @@ import type { Env } from '../types';
 import { logCycleWrite } from './cycleActivity';
 import { forgetFile } from './dataRoomSearch';
 import { bindingKey } from '../util/schemaBootstrap';
+import { eraseRecordObjects } from './recordErasure';
 
 export const TRASH_DAYS = 30;
 const DAY_MS = 86_400_000;
@@ -281,7 +282,8 @@ export async function purgeFile(
   const keys = [file.r2_key, ...versions.map((v) => v.r2_key)].filter((k) => typeof k === 'string' && k.startsWith(prefix));
   if (keys.length) {
     if (!env.FILES) throw new PurgeIncomplete();
-    try { await env.FILES.delete(keys); }
+    // D6651: a Trash purge goes through the one record-erasure path.
+    try { await eraseRecordObjects(env.FILES, keys, 'purge'); }
     catch (e) {
       console.error('[data_room_trash] object delete failed; kept in Trash for the next sweep', e instanceof Error ? e.message : 'error');
       throw new PurgeIncomplete();
