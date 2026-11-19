@@ -343,8 +343,8 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
     const q = await env.DB.prepare(
       `SELECT p.id, p.title, p.team, p.target_start, p.status,
               (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id) AS applicants,
-              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND a.stage = 'interview') AS in_interview,
-              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND a.stage = 'offer') AS in_offer
+              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND (CASE WHEN a.stage_changed_at IS NOT NULL THEN a.stage ELSE a.status END) = 'interview') AS in_interview,
+              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND (CASE WHEN a.stage_changed_at IS NOT NULL THEN a.stage ELSE a.status END) = 'offer') AS in_offer
          FROM job_postings p WHERE p.project_id = ? AND p.status IN ('draft', 'pending_review', 'open', 'published', 'rejected') ORDER BY p.id DESC`,
     ).bind(projectId).all<Row>();
     const rows = (q.results || []).map((p) => ({ ...p, state: LABEL[String(p.status)] ?? p.status }));

@@ -156,9 +156,9 @@ function TalentRoles({ projectId, query }) {
     <section className="grid gap-3 sm:grid-cols-3" aria-label="Talent figures">
       <Stat label="Headcount" value={summary ? summary.headcount ?? <Unrecorded /> : unavailable}
         note={<>Team roster{read.card?.as_of && ` · as of ${read.card.as_of}`}<br />
-          Hiring plan · {summary ? plan ? `${plan.target} by ${growPeriod(plan.period)}` : <Unrecorded /> : unavailable}</>} />
+          Hiring plan · {summary ? plan ? `${plan.target} by ${growPeriod(plan.period)}` : summary.plan_reason || <Unrecorded /> : unavailable}</>} />
       <Stat label="Open roles" value={summary ? summary.open_roles ?? <Unrecorded /> : unavailable} note="Job postings · open or published" />
-      <Stat label="Offers out" value={summary ? summary.offers ?? <Unrecorded /> : unavailable} note="Applications · offer stage" />
+      <Stat label="Offers out" value={summary ? summary.offers ?? <Unrecorded /> : unavailable} note="Applications · recorded offer stage on listed roles" />
     </section>
     <section className="a5-card min-w-0" aria-label="Roles">
       <Head icon={BriefcaseBusiness} title="Roles" meta="Job postings and applications" />

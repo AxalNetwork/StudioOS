@@ -563,12 +563,48 @@ test('GR-08 combines the venture roster, its nearest plan period, open roles and
     (5, 'published-gr08', ${FOUNDER}, ${PID}, 'Engineer', 'published'),
     (6, 'draft-gr08', ${FOUNDER}, ${PID}, 'Designer', 'draft'),
     (7, 'other-gr08', ${FOUNDER}, 999, 'Other role', 'published');
-    INSERT INTO job_applications (id, posting_id, email, stage) VALUES
-    (1, 5, 'a@x.example', 'offer'), (2, 6, 'b@x.example', 'offer'), (3, 7, 'c@x.example', 'offer');`);
+    INSERT INTO job_applications (id, posting_id, email, stage, stage_changed_at) VALUES
+    (1, 5, 'a@x.example', 'offer', '2026-11-12'), (2, 6, 'b@x.example', 'offer', NULL), (3, 7, 'c@x.example', 'offer', '2026-11-12');`);
   const card = await teamCard({ env: f.env, projectId: PID, now: Date.parse('2026-11-12T00:00:00Z'), href: (slug) => `/grow/${slug}` });
   assert.deepEqual((card.series as { talent: unknown }).talent, {
-    headcount: 1, plan: { period: '2026-12', target: 4 }, open_roles: 1, offers: 1,
+    headcount: 1, plan: { period: '2026-12', target: 4 }, plan_reason: null, open_roles: 1, offers: 1,
   });
   const rows = (await module_(f, 'team-expansion')).body.records.rows;
-  assert.deepEqual(rows.map((row: any) => [row.id, row.in_offer]).sort(), [[5, 1], [6, 1]]);
+  assert.deepEqual(rows.map((row: any) => [row.id, row.in_offer]).sort(), [[5, 1], [6, 0]]);
+});
+
+test('GR-08 offer totals and listed roles use recorded stages, including draft roles, without trusting legacy defaults', async () => {
+  const f = await fixture();
+  try {
+    f.db.exec(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status) VALUES
+      (51, 'recorded-published', ${FOUNDER}, ${PID}, 'Published role', 'published'),
+      (52, 'recorded-draft', ${FOUNDER}, ${PID}, 'Draft role', 'draft');
+      INSERT INTO job_applications (id, posting_id, email, stage, stage_changed_at) VALUES
+      (51, 51, 'recorded-published@example.test', 'offer', '2026-11-12'),
+      (52, 52, 'recorded-draft@example.test', 'offer', '2026-11-12'),
+      (53, 51, 'legacy-a@example.test', 'offer', NULL),
+      (54, 51, 'legacy-b@example.test', 'offer', NULL);`);
+    const card = await teamCard({ env: f.env, projectId: PID, now: Date.parse('2026-11-12T00:00:00Z'), href: (slug) => `/grow/${slug}` });
+    assert.equal(card.series.talent.offers, 2, 'the same listed roles contribute only their recorded offers');
+    assert.equal(card.series.talent.open_roles, 1, 'open-role inventory still excludes drafts');
+    const rows = (await module_(f, 'team-expansion')).body.records.rows;
+    assert.deepEqual(rows.map((r: any) => [r.id, r.in_offer]).sort(), [[51, 1], [52, 1]]);
+    assert.equal(card.series.roles_by_stage.find((r: any) => r.stage === 'applied').count, 2, 'legacy submitted applications retain their job-board status');
+  } finally { f.db.close(); }
+});
+
+test('GR-08 conflicting plan labels for the same month are unavailable in either row order', async () => {
+  for (const targets of [[4, 8], [8, 4]]) {
+    const f = await fixture();
+    try {
+      f.db.prepare('INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, updated_by) VALUES (?, 70, ?, ?, ?)')
+        .run('quarter-conflict', 'Q4 2026', targets[0], FOUNDER);
+      f.db.prepare('INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, updated_by) VALUES (?, 70, ?, ?, ?)')
+        .run('month-conflict', '2026-12', targets[1], FOUNDER);
+      const card = await teamCard({ env: f.env, projectId: PID, now: Date.parse('2026-12-12T00:00:00Z'), href: (slug) => `/grow/${slug}` });
+      assert.equal(card.series.talent.plan, null, 'a conflicting target is never chosen by row order');
+      assert.match(card.series.talent.plan_reason, /conflicting hiring targets/i);
+      assert.equal(card.series.plan.at(-1), null, 'the chart also refuses the conflicting month');
+    } finally { f.db.close(); }
+  }
 });
