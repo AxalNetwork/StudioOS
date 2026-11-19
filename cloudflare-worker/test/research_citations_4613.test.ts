@@ -40,6 +40,7 @@ function fixture(modelAnswer = 'Same-day reconciliation [1].') {
   db.exec(sql('migrations/202611151315_6272_ask_history_cleared.sql'));
   db.exec(sql('migrations/385_research_disposition_collections.sql'));
   db.exec(sql('migrations/202611092035_research_fund_catalogue_uid.sql'));
+  db.exec(sql('migrations/202611180053_7168_research_fund_identity_allocation.sql'));
   db.exec(`INSERT INTO users (id,email,name,role) VALUES (${OWNER},'owner@example.test','Owner','founder'), (${OTHER},'other@example.test','Other','founder')`);
   db.prepare(`INSERT INTO research_documents (id,uid,owner_user_id,title,r2_key,index_state,indexed_at,chunk_count) VALUES (1,'doc-1',?,'Interviews','r/1','indexed',?,2)`).run(OWNER, REV);
   db.exec(`INSERT INTO research_ask_sessions (id,uid,owner_user_id) VALUES (1,'s-1',${OWNER})`);

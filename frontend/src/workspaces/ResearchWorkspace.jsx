@@ -214,17 +214,15 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       // signals themselves.
       // `handlers` carries the page's own ops (D593): the partner row's
       // `Re-run stale` opens the directory's record-a-reading form.
+      // D7172: the first argument is the active tab's export as the page states it
+      // ("Export this page · N rows", "Export filtered markets · N rows").
+      // The header row's Export runs it; it used to write the first 100
+      // markets read, unfiltered, on either tab.
       return (
         <Suspense fallback={<Loading />}>
           <MarketDirectoryZone
             role={role}
-            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/markets', { handlers, view: {
-              scope: null,
-              zone: 'markets',
-              header: ['Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug'],
-              rows,
-              cells: (x) => [x.name, x.supplied_count, x.mi_sector || 'Not mapped', x.slug],
-            } })}
+            zoneActions={(scoped, handlers) => zoneActionsFor(role, 'research/markets', { handlers, view: { scoped } })}
           />
         </Suspense>
       );

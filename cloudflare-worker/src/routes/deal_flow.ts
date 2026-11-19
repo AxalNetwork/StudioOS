@@ -1,3 +1,5 @@
+import { attentionRule, flowAttention, saveAttentionRule } from '../services/dealFlowAttention';
+import { selectJwt } from '../auth';
 import { holdsLicence } from '../services/accountLicences';
 import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
@@ -79,6 +81,13 @@ function failure(c: Ctx, e: unknown) {
 // Literal paths first: `/inbox`, `/owners`, `/passes` and `/compare-note` must not be read
 // as a deal id. Only PATCH and POST take a bare `/:dealId` today, so a GET
 // literal cannot be shadowed, but it sits here with the others all the same.
+// D6424: a firm's own recorded rule and recorded diligence waits.
+routes.get('/attention', async c => {try{return c.json(await flowAttention(c.env,await scope(c)));}catch(e){return failure(c,e);}});
+routes.get('/attention-rule', async c => {try{return c.json(await attentionRule(c.env,await scope(c)));}catch(e){return failure(c,e);}});
+routes.put('/attention-rule', async c => {try{
+ if((await selectJwt(c))?.payload.impersonated_by)return refuse(c,403,{code:'support_session_refused',message:'A support session cannot change a firm’s stale rule.'});
+ return c.json(await saveAttentionRule(c.env,await scope(c),(await body(c)).days));
+}catch(e){return failure(c,e);}});
 routes.get('/owners', async (c) => { try { return c.json(await flowOwners(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
 routes.get('/passes', async (c) => { try { return c.json(await readPasses(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
 routes.get('/compare-note', async (c) => {

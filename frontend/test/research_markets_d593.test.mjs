@@ -270,7 +270,7 @@ test('the partner row\'s Re-run stale opens the form on the stale reading; Attac
   // The page that renders the zone supplies it, through the workspace.
   assert.deepEqual(unsuppliedHandlers().filter((b) => b.zone === 'research/markets'), []);
   assert.match(codeOnly(read('frontend/src/workspaces/ResearchWorkspace.jsx')),
-    /zoneActions=\{\(rows, handlers\) => zoneActionsFor\(role, 'research\/markets', \{ handlers, view:/);
+    /zoneActions=\{\(scoped, handlers\) => zoneActionsFor\(role, 'research\/markets', \{ handlers, view:/);
 });
 
 test('copy that described the page without its form or its directory says what is there', () => {
