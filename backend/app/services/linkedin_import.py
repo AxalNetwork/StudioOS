@@ -148,7 +148,11 @@ _CONTENT_RE = re.compile(
     # Number sub-pattern is linear (no `\d*…\d+` overlap) to avoid polynomial
     # backtracking (CodeQL py/polynomial-redos) while matching the same set.
     r"|(-?(?:\d+\.\d+|\.\d+|\d+))\s+(-?(?:\d+\.\d+|\.\d+|\d+))\s+(Td|TD)"
-    r"|(T\*)",
+    r"|(T\*)"
+    # An escape outside a literal is consumed whole, so its "(" never starts a
+    # literal: a "(" followed by many "\(" was quadratic, each "\(" starting a
+    # scan to the end (CodeQL py/polynomial-redos). No group: the loop skips it.
+    r"|\\.",
     re.DOTALL,
 )
 _LIT_RE = re.compile(r"\(((?:\\.|[^\\)])*)\)", re.DOTALL)
@@ -170,6 +174,8 @@ def _content_to_lines(content: str, out: list) -> None:
 
     guard = 0
     for m in _CONTENT_RE.finditer(content):
+        if m.lastindex is None:
+            continue
         guard += 1
         if guard > 500000:
             break

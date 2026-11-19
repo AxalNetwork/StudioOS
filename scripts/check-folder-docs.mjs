@@ -207,6 +207,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
   ['frontend/src/pages/partner/offers',       'the partner Offers bucket’s zones and the pure rules they read (#4688, D4842, D4843)'],
   ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],
+  ['frontend/src/pages/investor/fund',         'Axal VC Fund workspace sections and navigation (D6130)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/portfolio',            'the Portfolio v2 frame, its shared parts and models, the company workspace and the Admin Investor preview (D4817)'],
   ['frontend/src/pages/incorporate',          'Incorporate: the formation flow, its review quote, the bank step, Done and HQ\'s read-only frame'],
