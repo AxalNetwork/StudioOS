@@ -6,7 +6,8 @@
  *   node scripts/github-alerts.mjs main-red        (reads the latest finished CI run on a push to main)
  *   node scripts/github-alerts.mjs review-blocked  OUTCOME, PR, RUN_URL
  *   node scripts/github-alerts.mjs queue           QUEUE_ALERT_QUEUED, QUEUE_ALERT_OLDEST_MIN, QUEUE_ALERT_IGNORE_BEFORE (optional)
- *   node scripts/github-alerts.mjs future-clock    FUTURE_CLOCK_DAYS, FUTURE_CLOCK_DIR (attempt-bound artifacts), RUN_URL
+ *   node scripts/github-alerts.mjs future-clock    FUTURE_CLOCK_DAYS, FUTURE_CLOCK_DIR (attempt-bound artifacts), RUN_URL;
+ *                                                  failing test names to the job log and GITHUB_STEP_SUMMARY only (D7124)
  *   node scripts/github-alerts.mjs queue-stalled   (reads merge_group runs, their jobs and `ci-failure-id` annotations: checks: read, D7125)
  *
  * Always: GITHUB_TOKEN (issues: write for the three alert kinds; actions: read
@@ -15,11 +16,12 @@
  */
 import { ALERT_KINDS, FAILURE_ID_TITLE, QUEUE_DEFAULTS, mainState, parseQueueCutoff, possibleRepairs, queueAfterCutoff, queueStallState, queueState, reviewState, stallEvidence, stallRunsToRead, stallTestFile, withQueueCutoffLine } from './lib/githubAlerts.mjs';
 import { SUMMARY_JOBS, safeGithubUrl } from './lib/ciClassify.mjs';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
 import { createHealthMonitor, runSource } from './health-alert-episodes.mjs';
 import { webhookDelivery } from './health-alert-transport.mjs';
 import { futureClockReport } from './future-clock-report.mjs';
+import { breakDate, futureClockLogLines, futureClockSummary, withFutureClockRunLine } from './lib/futureClockNames.mjs';
 
 const env = process.env;
 const api = env.GITHUB_API_URL || 'https://api.github.com';
@@ -178,11 +180,21 @@ async function main() {
     return apply('queue', q.active, { ...q, ignored: read.ignored, cutoff: read.cutoff });
   }
   if (mode === 'future-clock') {
-    const evidence = await futureClockReport({ env, api: gh });
+    const { failures, startedAt, ...evidence } = await futureClockReport({ env, api: gh });
     console.log(JSON.stringify({ kind: 'future-clock', ...evidence }));
     const active = evidence.active;
     if (!evidence.complete) process.exitCode = 1;
-    return apply('future-clock', active, { days: 7, failedCount: evidence.failed, runUrl: env.RUN_URL }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
+    // D7124: the names go to this job's log and step summary only; the issue and Slack get the break date (D5663).
+    const broke = breakDate(startedAt, 7);
+    const runUrl = safeGithubUrl(env.RUN_URL);
+    for (const line of futureClockLogLines({ failures, broke })) console.log(line);
+    if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, futureClockSummary({ failures, failed: evidence.failed, broke, runUrl, complete: evidence.complete }));
+    const open = active === true ? await openIssue('future-clock') : null;
+    if (open) {
+      const body = withFutureClockRunLine(open.body, { runUrl, broke });
+      if (body !== open.body) await gh(`/repos/${repo}/issues/${open.number}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+    }
+    return apply('future-clock', active, { days: 7, failedCount: evidence.failed, runUrl: env.RUN_URL, breakDate: broke }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
   }
   throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled, future-clock or scan`);
 }

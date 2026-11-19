@@ -301,6 +301,21 @@ jobs:
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
         env:
           TEST_TRACE_DIR: ${{ (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('{0}/test-traces', runner.temp) || '' }}
+      # D7124: the test files this pull request adds or edits, run again with
+      # the clock 7 days and 9 days 11 hours ahead under libfaketime (as the
+      # nightly does, D5398), so a date-bound test fails here and not on main
+      # (#7108: 6 h 25 min with nothing merged). Non-draft PRs only, in the
+      # `rest` part, which has every install and the built SPA; never under
+      # merge_group. No changed test file: nothing is installed.
+      - name: Changed tests with the clock moved ahead (D7124)
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft && matrix.part == 'rest'
+        env:
+          FUTURE_CLOCK_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files=$(node scripts/future-clock-changed.mjs --list)
+          if [ -z "$files" ]; then exit 0; fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq faketime
+          node scripts/future-clock-changed.mjs
       - name: Upload this part's test traces
         if: always() && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')
         continue-on-error: true

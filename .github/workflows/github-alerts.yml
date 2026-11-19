@@ -8,7 +8,9 @@ name: GitHub alerts
 #   queue-stalled every 15 min: one failure (test, guard, or job and step) in
 #                 merge-queue candidates of two queue chains (D5604, D7125)
 #   future-clock  nightly: the suites with the clock 7 days ahead, which finds a
-#                 date-bound test (D5052, D5039) before its date breaks main
+#                 date-bound test (D5052, D5039) before its date breaks main;
+#                 the report job writes the failing names to its own log and
+#                 step summary, and the alert gets the break date (D7124)
 # The reviewer's alert (no model called) is a job in claude-review.yml, where
 # its outcome is known. main-red polls instead of using `workflow_run`, which
 # WF-4 (frontend/test/workflow_security_4571.test.mjs) keeps out of the repo.
@@ -289,7 +291,8 @@ jobs:
           name: future-clock-${{ matrix.part }}
           path: ${{ runner.temp }}/future-clock/
           if-no-files-found: error
-          retention-days: 3
+          # D7124: the evidence outlives the 7-day fuse it warns about.
+          retention-days: 14
 
   future-clock:
     name: future clock (report)
