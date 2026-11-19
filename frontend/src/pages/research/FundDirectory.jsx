@@ -12,7 +12,7 @@ import {
 } from './fundDirectoryRead';
 import { FUNDS_FILTERS_DROPPED, consumeFundsReturn } from '../../lib/pendingNext.js';
 import { canAddToResearch } from './researchComparisons.js';
-import { ACTIONS, UNAVAILABLE, WITHDRAWN, day, reportedSize, rereadBeforeAction } from './fundProfileRead.js';
+import { ACTIONS, UNAVAILABLE, WITHDRAWN, day, reportedSize, rereadBeforeAction, returnTarget } from './fundProfileRead.js';
 import { ProposedFields, SourceChip, SourceDatesCard, StateChip } from './FundProvenance.jsx';
 import ResearchActions from './ResearchActions.jsx';
 
@@ -79,6 +79,11 @@ const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
  * (`size_band=none`). Arriving signed in at the Directory link the sign-in
  * guard kept, the page says once, politely, "Signed in. This is the search you
  * opened." and focus lands on the results heading (RFD-04B, RFD-06).
+ *
+ * D7167 part 2 (#7167, FND-P10): Back to results from a full profile also
+ * keeps the row of the fund just viewed in its selected style until another
+ * row is opened; a row that has left the results hands focus to the results
+ * heading instead (`returnTarget`).
  */
 
 const SELECT = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
@@ -623,7 +628,7 @@ export function FundDirectoryView({
   filtersOpen = false, onToggleFilters = () => {}, sortOpen = false, onToggleSort = () => {}, onShowUnsized = null,
   onRetry = () => {}, onClear = () => {}, onResearch = null,
   onRetryDrawer = () => {}, sheetResearch = null, backHref = null,
-  opened = null, backTo = backHref || '/research/funds?view=directory',
+  opened = null, backTo = backHref || '/research/funds?view=directory', returnedUid = null,
 }) {
   const { loading, error, data } = result;
   const active = activeFilters(query, facets);
@@ -737,8 +742,9 @@ export function FundDirectoryView({
                   const s = sizeOf(x);
                   const v = vehicleLabel(x);
                   const on = selected?.uid === x.uid;
+                  const marked = on || (!selected && returnedUid === x.uid);
                   return (
-                    <li key={x.uid} className={`px-4 py-3 ${on ? 'bg-violet-50/70 dark:bg-violet-950/20' : ''}`}>
+                    <li key={x.uid} className={`px-4 py-3 ${marked ? 'bg-violet-50/70 dark:bg-violet-950/20' : ''}`} data-returned={marked && !on ? 'true' : undefined}>
                       <button type="button" data-fund-uid={x.uid} className="min-h-[44px] w-full text-left" onClick={() => onSelect(x)}
                         aria-expanded={on ? 'true' : 'false'} aria-controls="fd-drawer">
                         <span className="block text-[14px] font-semibold text-axal-ink dark:text-gray-100">{v.vehicle}</span>
@@ -772,8 +778,9 @@ export function FundDirectoryView({
                       const s = sizeOf(x);
                       const v = vehicleLabel(x);
                       const on = selected?.uid === x.uid;
+                      const marked = on || (!selected && returnedUid === x.uid);
                       return (
-                        <tr key={x.uid} className={on ? 'bg-violet-50/70 dark:bg-violet-950/20' : 'hover:bg-violet-50/40 dark:hover:bg-violet-950/10'}>
+                        <tr key={x.uid} className={marked ? 'bg-violet-50/70 dark:bg-violet-950/20' : 'hover:bg-violet-50/40 dark:hover:bg-violet-950/10'} data-returned={marked && !on ? 'true' : undefined}>
                           <td className="px-3 py-2.5 align-top">
                             <button type="button" data-fund-uid={x.uid} className="text-left text-[13px] font-semibold text-axal-ink hover:text-axal-violet hover:underline dark:text-gray-100"
                               onClick={() => onSelect(x)} aria-expanded={on ? 'true' : 'false'} aria-controls="fd-drawer">{v.vehicle}</button>
@@ -915,11 +922,15 @@ export default function FundDirectory({
 
   // D7166 (RFD-04C): Back to results from a full profile names the row that was
   // open. Once the same list has answered, focus returns to that row.
+  // D7167 part 2 (FND-P10): the row keeps its selected style until another is
+  // opened; a row that has left the results hands focus to the results heading.
   const [restore, setRestore] = useState(() => location.state?.selected || null);
+  const [returned, setReturned] = useState(() => location.state?.selected || null);
   useEffect(() => {
     if (!restore || !result.data) return;
     setRestore(null);
-    if (!result.data.items.some((x) => x.uid === restore)) return;
+    const to = returnTarget(restore, result.data.items);
+    if (to?.focus !== 'row') { setReturned(null); document.getElementById('fd-results')?.focus(); return; }
     const el = [...document.querySelectorAll('[data-fund-uid]')].find((b) => b.getAttribute('data-fund-uid') === restore && b.offsetParent !== null);
     el?.focus();
   }, [restore, result.data]);
@@ -949,6 +960,7 @@ export default function FundDirectory({
 
   const pick = async (item) => {
     const mine = ++pickSeq.current;
+    setReturned(null);
     setSelected(item);
     setDrawer({ loading: true, error: null, data: null });
     try {
@@ -995,7 +1007,7 @@ export default function FundDirectory({
         onShowUnsized={() => { focusResults.current = true; change(showUnsized()); }}
         onRetry={load} onClear={clear}
         onResearch={canAddToResearch(role) ? (x, el) => { researchOpener.current = el; setResearching({ uid: x.uid, name: x.name }); } : null}
-        opened={opened} backTo={`${location.pathname}${location.search}`}
+        opened={opened} backTo={`${location.pathname}${location.search}`} returnedUid={returned}
       />
       {researching ? (
         <Suspense fallback={null}>

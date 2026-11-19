@@ -14,10 +14,16 @@
  * publisher and reported date, the same chip as the fund's Sheet and profile;
  * a size is printed in the currency its list reported, never converted; and a
  * read that failed reads "Unavailable" on screen.
+ *
+ * D7167 part 2 (#7167, FND-P05, FND-P06 B, FND-P08 C to E): the project
+ * picker's rows (`pickerView`: active projects with their membership, archived
+ * ones read-only), the comparisons a fund can join in the chosen project
+ * (`joinChoices`, n of 6, Full and Already in it), the sentence after joining
+ * one (`joinOutcome`), and the phone's By fund pager (`fundPage`).
  */
 import { money } from '../../lib/companyDirectoryView.js';
 import { eurM } from './fundDirectoryRead.js';
-import { amount, day, sourceChip } from './fundProfileRead.js';
+import { UNAVAILABLE, amount, day, sourceChip } from './fundProfileRead.js';
 import { NOT_RECORDED } from './researchStates.js';
 
 /**
@@ -130,6 +136,7 @@ export function comparisonsView(read) {
         updated: k.updated_at || null,
         members: members.map((m) => ({ uid: m.uid, name: m.name, state: m.state, note: memberNote(m), href: subjectHref(k.kind, m.uid) })),
         rows,
+        limit: Number(v.limits?.members) || 6,
         full: members.length >= (Number(v.limits?.members) || 6),
         // The project's own companies or funds not yet in this comparison.
         candidates: subjects.filter((s) => s.kind === k.kind && !inSet.has(s.uid)),
@@ -171,4 +178,90 @@ export function addOutcome(names, projectTitle, res) {
   if (added && !already) return `Added ${what} to “${projectTitle}”.`;
   if (!added) return `${what} ${names.length === 1 ? 'is' : 'are'} already in “${projectTitle}”.`;
   return `Added ${added} to “${projectTitle}”; ${already} ${already === 1 ? 'was' : 'were'} already there.`;
+}
+
+/** The most project reads the picker makes to learn membership; the rest say "not checked". */
+export const MEMBERSHIP_READS = 20;
+
+const updatedText = (value) => {
+  const d = day(value);
+  return d ? `updated ${d}` : null;
+};
+
+/**
+ * FND-P05 (RFP05, RFP08 C): the picker's projects. `list` is the read of
+ * `GET /api/research/projects?status=all`; `memberships` maps a project uid to
+ * the read of its comparisons (`{ status, value }`), which holds its subjects.
+ * Active projects are offered; a project that already holds every item says
+ * Already here and is not offered for Add (Compare may still use it); a
+ * membership read that failed says so and leaves the project offered, since
+ * the add itself answers "already there". Archived projects are listed apart,
+ * read-only, never offered. `kind` 'answer' has no membership to show.
+ */
+export function pickerView(list, memberships, items, kind, mode = 'add') {
+  if (!list || list.status === 'loading') return { state: 'loading', active: [], archived: [] };
+  if (list.status !== 'ok') return { state: 'unreadable', active: [], archived: [] };
+  const rows = (list.value?.items || []).filter((p) => p && p.uid);
+  const want = (items || []).map((x) => x.uid);
+  const words = KIND_WORDS[kind] || null;
+  const active = rows.filter((p) => p.status !== 'archived').map((p, i) => {
+    const row = { uid: p.uid, title: p.title, offered: true, chip: null, meta: updatedText(p.updated_at), note: null };
+    if (!words) return row;
+    const m = memberships?.get?.(p.uid) || (i < MEMBERSHIP_READS ? { status: 'loading' } : { status: 'skipped' });
+    if (m.status === 'loading') return { ...row, meta: ['Checking what it holds…', row.meta].filter(Boolean).join(' · ') };
+    if (m.status === 'skipped') return { ...row, meta: ['What it holds was not checked', row.meta].filter(Boolean).join(' · ') };
+    if (m.status !== 'ok') return { ...row, meta: [`${UNAVAILABLE}: what it holds could not be read`, row.meta].filter(Boolean).join(' · '), note: 'unavailable' };
+    const subjects = (m.value?.subjects || []).filter((s) => s.kind === kind);
+    const held = new Set(subjects.map((s) => s.uid));
+    const there = want.filter((u) => held.has(u)).length;
+    const meta = [`${words.title} · ${subjects.length}`, row.meta].filter(Boolean).join(' · ');
+    if (want.length && there === want.length) {
+      return { ...row, meta, chip: 'Already here', offered: mode === 'compare' };
+    }
+    return { ...row, meta, note: there ? `${there} of ${want.length} already here` : null };
+  });
+  const archived = rows.filter((p) => p.status === 'archived').map((p) => ({
+    uid: p.uid, title: p.title, offered: false, chip: 'Read-only',
+    meta: `${day(p.archived_at) ? `Archived ${day(p.archived_at)}` : 'Archived'} · restore it in My Research to change it`,
+  }));
+  return { state: 'ok', active, archived };
+}
+
+/**
+ * FND-P06 B (RFP06B): the comparisons of this kind in the chosen project that
+ * one item can join, each with n of 6. A full one is Full and a comparison
+ * that already holds the item is Already in it; neither is offered. `read` is
+ * that project's comparisons read.
+ */
+export function joinChoices(read, kind, itemUid) {
+  if (!read || read.status === 'loading') return { state: 'loading', choices: [] };
+  if (read.status !== 'ok') return { state: 'unreadable', choices: [] };
+  const limit = Number(read.value?.limits?.members) || 6;
+  const words = KIND_WORDS[kind] || KIND_WORDS.fund;
+  const sets = (read.value?.comparisons || []).filter((k) => k && k.kind === kind);
+  return {
+    state: 'ok',
+    limit,
+    choices: sets.map((k) => {
+      const members = Array.isArray(k.members) ? k.members : [];
+      const n = members.length;
+      const count = `${n} of ${limit} ${n === 1 ? words.one : words.many}`;
+      if (members.some((m) => m.uid === itemUid)) return { uid: k.uid, title: k.title, count: n, limit, state: 'already', offered: false, meta: `${count} · already in it`, chip: 'Already in it' };
+      if (n >= limit) return { uid: k.uid, title: k.title, count: n, limit, state: 'full', offered: false, meta: `${count} · remove one there first`, chip: 'Full' };
+      return { uid: k.uid, title: k.title, count: n, limit, state: 'open', offered: true, meta: count, chip: null };
+    }),
+  };
+}
+
+/** RFP06B: "Added Dawn Capital Fund V to “Dawn Capital Opp · Afore IV”. 3 of 6." or already there. */
+export function joinOutcome(name, choice, res) {
+  if (res && res.added === false) return `${name} is already in “${choice.title}”. Nothing was added.`;
+  return `Added ${name} to “${choice.title}”. ${Math.min(choice.count + 1, choice.limit)} of ${choice.limit}.`;
+}
+
+/** FND-P08 E: the phone's By fund pager, one column at a time; it stops at either end. */
+export function fundPage(count, index) {
+  if (!count) return { index: 0, count: 0, label: null, first: true, last: true };
+  const i = Math.min(Math.max(0, Number(index) || 0), count - 1);
+  return { index: i, count, label: `Fund ${i + 1} of ${count}`, first: i === 0, last: i === count - 1 };
 }
