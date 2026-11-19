@@ -225,6 +225,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `network_picker_6637.test.mjs` | D6637: mounted picker selection, eligibility and submission. |
 | `network_picker_6636.test.mjs` | D6636: mounted picker selection, eligibility and submission. |
 
+| `deal_flow_attention_6424.test.mjs` | D6424: recorded stale/new/waiting badges, unset rule, firm setting and failed attention-source rendering. |
 | `licence_agreement_replacement_6562.test.mjs` | D6562: rendered replacement readiness, frozen preview and hash, honest unknown comparison and send gating. |
 | `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
 | `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |

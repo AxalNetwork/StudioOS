@@ -204,7 +204,7 @@ export default function PublicDirectoryPage() {
         </div>
 
         <p className="ax-dir-foot">
-          Verified members only. <Link to="/contact">Request directory access →</Link>
+          Verified members only. <Link to="/contact?topic=directory">Request directory access →</Link>
         </p>
       </div>
     </SitePage>

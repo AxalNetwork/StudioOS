@@ -48,6 +48,8 @@ function fixture() {
   db.exec(m378.match(/CREATE TABLE IF NOT EXISTS research_fund_directory_reports \(.*?\);/)![0]);
   db.exec(sql('migrations/406_research_fund_sources.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_sources \([\s\S]*?\n\);/)![0]);
   db.exec(sql('migrations/202611130634_5157_research_project_comparisons.sql'));
+  // D7177: a comparison save records its request id.
+  db.exec(sql('migrations/202611180051_7177_research_comparison_request_id.sql'));
   db.exec(sql(M7167));
   db.exec(`INSERT INTO users (id,email,name,role) VALUES (${OWNER},'owner@example.test','Owner','founder')`);
   db.exec(`INSERT INTO research_fund_sources (source_name,title,publisher,published_url,terms_status,evidence,verdict,verdict_reason,reviewed_on) VALUES

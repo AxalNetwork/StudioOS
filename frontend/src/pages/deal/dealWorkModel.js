@@ -345,6 +345,14 @@ export function signedLine(e) {
 export const PAPER_CLOSED_LINE = 'It can no longer be signed, and there is no signed copy to download.';
 export const PAPER_WAIT_DOWNLOAD = 'Download opens once the envelope is fully signed.';
 export const SIGN_BY_EMAIL = 'Your signing link was sent by email';
+/** D6197 (#6197): the signer's own link again, by email, and the finished envelope's file. */
+export const PAPER_WORDS = Object.freeze({
+  resend: 'Send me the link again',
+  resending: 'Sending…',
+  resent: 'Sent again. Look for it in your inbox, and in spam if it is not there.',
+  resendFailed: 'The link could not be sent again. Try again.',
+  download: 'Download the executed copy',
+});
 
 /**
  * D6184 (#6184): how the viewer signs an open envelope, from `GET /api/legal/esign/:id`. That read returns each

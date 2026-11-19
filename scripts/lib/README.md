@@ -8,7 +8,7 @@ can be read to find out what a rule actually is.
 
 | File | What it decides |
 | --- | --- |
-| `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. D5973: one row per merge-group head SHA (request, first runner start, last required check's wait and runtime, queue entry and removal, recorded reason) classified as `deadline-expired`, `failed-check`, `cancelled-or-superseded`, `merged` or `missing-evidence`, and the scorecard's request budget. |
+| `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. D5973: one row per merge-group head SHA (request, first runner start, last required check's wait and runtime, queue entry and removal, recorded reason) classified as `deadline-expired`, `failed-check`, `cancelled-or-superseded`, `merged` or `missing-evidence`, and the scorecard's request budget. D6479: the landing section's rows and its own request budget. |
 | `requiredChecks.mjs` | #4107, D5973: main's required checks and the workflow that reports each, read by `frontend/test/merge_queue_ci_4107.test.mjs` and `ciScorecard.mjs`. |
 | `actionsConcurrency.mjs` | #6462: per-minute executing and queued job levels from job timestamps (a job executes only once a runner took it), effective ceiling (the level held while jobs queue), slot shares, PR draft state at run time and the plan-cap match; `actionsConcurrency.test.mjs` holds the fixture jobs. |
 | `deckEval.mjs` | D1518 (#3770): the deck harness's data and decisions: the golden briefs (records, never a prompt), rubric v0 (named, D1517's), the investor rubric (recorded, not gated), editing tasks v0, the competitor arms (waiting on decision F), the zero-edit verdict, the live-run refusal, and the readers of `documentation/product/ELEMENT_EVAL.md` and `DECK_BENCHMARK.md`. Owned by `../eval-elements.mjs`. |
@@ -63,7 +63,7 @@ can be read to find out what a rule actually is.
 | `shardPlan.mjs` | D5609: longest-first duration packing, suite p90 for unknown tests, and exact-once coverage validation; tested in `shardPlan.test.mjs`. |
 | `splitLedger.mjs` | D5613: validate and merge per-entry JSON maps and rewrite only changed files; tested in `splitLedger.test.mjs`. |
 | `hubFreeze.mjs` | D5615 (#5615): the names each frozen hub holds (`api.js`'s exports and object keys, `App.jsx`'s and `CycleRoute.jsx`'s import specifiers, `index.ts`'s static imports and app registrations, `advisors.ts`'s method plus path registrations; dynamic imports unfrozen) and every name `../hub-freeze.json` does not list, each with its `HUBS.md` section. A set, not a count. Run by `frontend/test/hub_freeze_5615.test.mjs`. |
-| `prOverlap.mjs` | D5616: pure path classes, overlapping pairs, migration stamps, landing order and escaped Markdown. |
+| `prOverlap.mjs` | D5616: pure path classes, overlapping pairs, migration stamps, landing order and escaped Markdown. Also read by `cloudflare-worker/src/services/agents/agentPublisher.ts` (D5569 part 2, typed by `prOverlap.d.mts`). |
 
 ## Tests
 
