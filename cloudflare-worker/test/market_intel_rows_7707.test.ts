@@ -25,7 +25,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/market_intel_rows_7707.test.ts
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -54,6 +54,9 @@ const MIGRATION = '../sql/migrations/202611191833_7707_market_intel_row_dates_ru
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 1, FOUNDER = 2;
 const DAY = 86_400_000;
+// The clock is pinned (D5614): every fetch time, window and retrieval date below is this instant's.
+const NOW = Date.parse('2026-11-19T12:00:00.000Z');
+mock.timers.enable({ apis: ['Date'], now: NOW });
 type Db = InstanceType<typeof DatabaseSync>;
 
 function fixture(withMigration = true): Db {
@@ -159,7 +162,7 @@ function withFetch<T>(impl: (input: any) => Promise<Response>, fn: () => Promise
 const rowsOf = (db: Db, key: string) =>
   db.prepare('SELECT * FROM market_intel_rows WHERE source_key = ? ORDER BY id').all(key) as any[];
 const runsOf = (db: Db) => db.prepare('SELECT * FROM market_intel_source_runs ORDER BY id').all() as any[];
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => '2026-11-19';
 
 /* ------------------------------------------------------------------ */
 /* 1–3. What a stored row measures, and what stays as on main          */
@@ -176,13 +179,13 @@ const MAIN: Record<string, { metric_key: string; metric_value: number; raw: numb
 };
 
 async function runAll(db: Db) {
-  const before = Date.now();
+  const before = NOW;
   const env = envFor(db, { ...MACRO, ...RESEARCH });
   await withResponses({}, async () => {
     await runSourcesByCadence(env, 'weekly');
     await runSourcesByCadence(env, 'daily');
   });
-  return { before, after: Date.now() };
+  return { before, after: NOW };
 }
 
 test('world_bank: a 2025 value fetched today is stored with period 2025, today as its retrieval date and the provider\'s last-updated date', async () => {
@@ -222,7 +225,7 @@ test('oecd and eurostat: each row carries the year its response names, from the 
 test('crossref, openalex and arxiv: each row carries the window queried, to the day, and is tagged sector', async () => {
   const db = fixture();
   await runAll(db);
-  const from = new Date(Date.now() - 30 * DAY).toISOString().slice(0, 10);
+  const from = '2026-10-20';
   for (const key of ['crossref', 'openalex', 'arxiv']) {
     const rows = rowsOf(db, key);
     assert.equal(rows.length, SECTORS.length, key);
@@ -338,7 +341,7 @@ test('a failing provider writes a failed run row with an error class from the fi
   db.prepare(
     `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, unit, ts, citation_url)
      VALUES ('openalex', ?, 'global', 'research', 0.6, 'count', ?, 'https://openalex.org/W1')`,
-  ).run(SECTORS[0], new Date(Date.now() - DAY).toISOString());
+  ).run(SECTORS[0], new Date(NOW - DAY).toISOString());
   await withFetch(async () => new Response('down for maintenance', { status: 503 }),
     () => runSourcesByCadence(envFor(db, { MI_FLAG_OPENALEX: 'live' }), 'daily'));
   const [r] = runsOf(db);
@@ -482,7 +485,7 @@ test('health: an HQ admin reads each source\'s flag, cadence, last runs, live ro
   db.prepare(
     `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, ts, citation_url, observed_period, observed_period_end)
      VALUES ('world_bank', 'A', 'global', 'capital', 0.5, ?, ?, '2099', '2099-12-31')`,
-  ).run(new Date().toISOString(), `${STUB_CITATION_PREFIX}world_bank`);
+  ).run(new Date(NOW).toISOString(), `${STUB_CITATION_PREFIX}world_bank`);
   const env = envFor(db, { MI_FLAG_WORLD_BANK: 'live' });
   for (let i = 0; i < 7; i++) await withResponses({}, () => runSourcesByCadence(env, 'weekly'));
   await withFetch(async () => new Response('', { status: 502 }), () => runSourcesByCadence(env, 'weekly'));
