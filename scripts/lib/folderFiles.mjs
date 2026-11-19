@@ -154,7 +154,7 @@ export function headingLine(text) {
 /** What a list row says about a file: a Markdown file's heading, a shell or Python file's `#` header, any other file's header comment. */
 export const describe = (name, text) => (/\.md$/.test(name) ? headingLine(text) : /\.(sh|py)$/.test(name) ? hashHeaderLine(text) : headerLine(text));
 
-const cell = (s) => String(s).replace(/\|/g, '\\|');
+const cell = (s) => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 
 /** The block's text for these files, sorted by name (D999 before D1000): `{ name, text }` each, `text` the file's contents. */
 export function renderList(files) {

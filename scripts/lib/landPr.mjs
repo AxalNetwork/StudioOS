@@ -79,14 +79,13 @@ export function parseClassifierOutput(text) {
  */
 export function parseLandingSummary(text) {
   const s = String(text || '');
-  const pick = (label) => new RegExp(`${label}:[ \\t]*\`?([^\`\\s]+)\`?`).exec(s)?.[1] ?? null;
-  const base = pick('Base SHA');
-  const head = pick('Head SHA');
+  const base = /Base SHA:[ \t]*`?([^`\s]+)`?/.exec(s)?.[1] ?? null;
+  const head = /Head SHA:[ \t]*`?([^`\s]+)`?/.exec(s)?.[1] ?? null;
   const result = parseClassifierOutput(s);
   return {
     baseSha: isSha(base) ? base : null,
     headSha: isSha(head) ? head : null,
-    landingAuto: bool(pick('LANDING_AUTO')),
+    landingAuto: bool(/LANDING_AUTO:[ \t]*`?([^`\s]+)`?/.exec(s)?.[1] ?? null),
     tier: result?.tier ?? null,
     reasons: result?.reasons ?? [],
   };

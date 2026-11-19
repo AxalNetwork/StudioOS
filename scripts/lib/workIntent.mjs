@@ -192,7 +192,10 @@ export function resolve(issue, regs) {
   return { winner, notes };
 }
 
-const LINK = n => new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part\\s+of)\\s+#${n}\\b`, 'i');
+const LINKS = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part\s+of)\s+#(\d+)\b/gi;
+const BRANCH_ISSUE = /^agent\/[\w.-]+\/(\d+)-/;
+/** Whether a PR body links issue `n` with a closing or `part of` keyword. */
+const LINK = n => ({ test: body => [...body.matchAll(LINKS)].some(m => m[1] === String(n)) });
 const pathsOfPr = pr => [...new Set((pr.files ?? []).flatMap(f => typeof f === 'string' ? [f] : [f?.filename, f?.previous_filename]).filter(Boolean))].sort();
 
 /** The open PRs an intent owns: the PR its holder's STATUS names, else every open PR whose body links the issue. */
@@ -204,7 +207,7 @@ export function linkPrs(issue, winner, prs, { scanPartial = false } = {}) {
       : `#${issue}: PR #${winner.pr} from STATUS is no longer open (merged, closed or gone); dropped`);
   }
   const re = LINK(issue);
-  return { prs: prs.filter(p => re.test(p.body ?? '') || new RegExp(`^agent/[\\w.-]+/${issue}-`).test(p.head?.ref ?? '')).map(p => p.number).sort((a, b) => a - b), notes };
+  return { prs: prs.filter(p => re.test(p.body ?? '') || BRANCH_ISSUE.exec(p.head?.ref ?? '')?.[1] === String(issue)).map(p => p.number).sort((a, b) => a - b), notes };
 }
 
 function riskOf(paths) {
