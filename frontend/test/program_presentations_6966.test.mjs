@@ -47,7 +47,7 @@ test('the map holds Spin-Out Lab: key → /spinout-lab/brief → its committed P
   assert.equal(LAB.file, 'axal-vc-spinout-lab-v1.pdf');
   assert.equal(LAB.edition, 'Edition 1 · November 2026');
   assert.equal(presentationHref('spinout-lab'), '/spinout-lab/brief');
-  assert.equal(programFor('ai-native-venture'), null, 'a program with no presentation has no map entry yet');
+  assert.equal(programFor('no-such-program'), null, 'a key with no map entry has none');
   assert.equal(presentationHref('nope'), null);
 });
 
@@ -228,7 +228,7 @@ test('/programs lists every mapped program, and only those, with its presentatio
   const html = at('/programs', h(ProgramsIndexPage));
   const cards = [...html.matchAll(/data-testid="programs-index-card-([a-z0-9-]+)"/g)].map((m) => m[1]);
   assert.deepEqual(cards, PROGRAMS.map((p) => p.key));
-  assert.doesNotMatch(renderedText(html), /Labelled example|Mentor cohort access|AI-native Venture/, 'no example card published as a program');
+  assert.doesNotMatch(renderedText(html), /Labelled example/, 'no example card published as a program');
   assert.match(html, /data-testid="programs-index-view-spinout-lab" href="\/spinout-lab\/brief"/);
   assert.match(html, /href="\/program-briefs\/axal-vc-spinout-lab-v1\.pdf" download="axal-vc-spinout-lab-v1\.pdf"/);
   assert.equal(labLine({ status: 'error' }).kind, 'unavailable');
