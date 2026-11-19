@@ -51,7 +51,8 @@ import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
-import { fundOverlapNote } from '../services/researchFundRead';
+import { fundAllocationNote, fundOverlapNote } from '../services/researchFundRead';
+import { MyFundsQueryError, catalogueHolder, fundIdentity, listMyFunds, parseMyFundsQuery, publicRecordFor } from '../services/researchMyFunds';
 import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkDetail, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
 import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
@@ -3952,6 +3953,8 @@ interface FundRow {
   stage_fit: string | null; path: string | null; status: string;
   pass_reason: string | null; thesis: string | null; note: string | null;
   source_url: string | null; catalogue_uid?: string | null; created_at: string; updated_at: string;
+  // D7168: when the member kept the row as their own record; the intended allocation, USD cents.
+  own_record_at?: string | null; intended_allocation_cents?: number | null;
 }
 
 const fundDto = (r: FundRow) => ({
@@ -3972,6 +3975,12 @@ const fundDto = (r: FundRow) => ({
   source_url: r.source_url,
   // D4613: the fund-directory row this came from; null for a hand-written fund.
   catalogue_uid: r.catalogue_uid ?? null,
+  // D7168: linked (a catalogue uid), own (kept as the member's own record) or
+  // legacy (saved before catalogue links, waiting for a choice).
+  identity: fundIdentity(r),
+  own_record_at: r.own_record_at ?? null,
+  // D7168: what the founder intends to raise from this fund, USD cents; null is Not recorded.
+  intended_allocation_cents: r.intended_allocation_cents ?? null,
   created_at: r.created_at,
   // The dossier's "Last updated" tile. Every write to the row stamps it —
   // PATCH, and a brief accepted into the note.
@@ -4007,10 +4016,15 @@ async function activeRaiseTargetCents(c: any, user: { id: number }): Promise<num
 
 research.get('/funds', async (c) => {
   const user = await requireAuth(c);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM research_funds WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT 500`
-  ).bind(user.id).all<FundRow>();
-  const items = (rows.results || []).map(fundDto);
+  // D7168: searched and paged on the server (services/researchMyFunds.ts).
+  // It was the newest 500 by created_at, and every count was over those 500.
+  let query;
+  try {
+    query = parseMyFundsQuery((k) => c.req.query(k));
+  } catch (e) {
+    if (e instanceof MyFundsQueryError) return c.json({ detail: e.reason, field: e.field }, 400);
+    throw e;
+  }
 
   // The cheque-overlap figure the canvas asks for needs the size of the round
   // being raised, and that lives on the project rather than here. When no
@@ -4025,26 +4039,50 @@ research.get('/funds', async (c) => {
   // measure against different asks. `company_switcher.test.mjs` caught it
   // reading unscoped before this comment existed.
   const askCents = await activeRaiseTargetCents(c, user);
-  const overlaps = askCents === null ? null : items.filter((f) => {
-    if (f.cheque_min_cents === null && f.cheque_max_cents === null) return false;
-    const lo = f.cheque_min_cents ?? 0;
-    const hi = f.cheque_max_cents ?? Number.MAX_SAFE_INTEGER;
-    return askCents >= lo && askCents <= hi;
-  }).length;
+  let page;
+  try {
+    page = await listMyFunds<FundRow>(c.env, user.id, query, askCents);
+  } catch (e) {
+    // A failed read says so; it is never an empty list.
+    return refuse(c, 503, { code: 'funds_unreadable', message: 'Your saved funds could not be read. This is not an empty list.', raw: e });
+  }
+  const items = page.rows.map(fundDto);
+  const k = page.counts;
 
   return c.json({
     items,
-    researched_count: items.length,
-    right_stage_count: items.filter((f) => f.stage_fit === 'right').length,
-    warm_path_count: items.filter((f) => f.path === 'warm').length,
-    passed_count: items.filter((f) => f.status === 'passed').length,
+    // The page: `total` is how many saved funds match the search and filters.
+    total: page.total,
+    limit: query.limit,
+    offset: query.offset,
+    q: query.q,
+    sort: query.sort,
+    filter: query.filter || 'all',
+    identity: query.identity || 'all',
+    // Every count below is over all saved funds, whatever the page, search or filter.
+    counts_scope: 'all_saved',
+    saved_count: k.saved,
+    researched_count: k.saved,
+    right_stage_count: k.right_stage,
+    warm_path_count: k.warm_path,
+    passed_count: k.passed,
     // A pass with no reason is indistinguishable from a fund nobody reached,
     // which is the whole thing recording a pass is meant to prevent.
-    passed_without_reason: items.filter((f) => f.status === 'passed' && !f.pass_reason).length,
-    cheque_overlap_count: overlaps,
+    passed_without_reason: k.passed_without_reason,
+    linked_count: k.linked,
+    own_count: k.own,
+    legacy_count: k.legacy,
+    cheque_overlap_count: k.round_inside,
     cheque_overlap_note: askCents === null
       ? 'No raise target is recorded on the active company\'s project, so there is no ask to compare a cheque range against. The count is absent rather than zero.'
       : null,
+    raise_target_cents: askCents,
+    // D7168: the allocation test. Both figures are USD cents, so they compare;
+    // a fund with no allocation set is not counted either way.
+    allocation_count: k.allocation_inside,
+    allocation_set_count: k.allocation_set,
+    allocation_currency: 'USD',
+    catalogue_links: page.catalogue_links,
   });
 });
 
@@ -4206,15 +4244,20 @@ research.post('/funds', async (c) => {
   const write = await c.env.DB.prepare(
     `INSERT OR IGNORE INTO research_funds
        (uid, owner_user_id, project_id, name, cheque_min_cents, cheque_max_cents,
-        stage_fit, path, status, pass_reason, thesis, note, source_url, catalogue_uid, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        stage_fit, path, status, pass_reason, thesis, note, source_url, catalogue_uid, own_record_at,
+        intended_allocation_cents, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     uid, user.id, clampInt(body.project_id), name,
     clampInt(body.cheque_min_cents), clampInt(body.cheque_max_cents),
     oneOf(body.stage_fit, FUND_STAGE_FIT), oneOf(body.path, FUND_PATH),
     oneOf(body.status, FUND_STATUS) || 'researching',
     clampText(body.pass_reason, 1000), clampText(body.thesis, 2000),
-    clampText(body.note, 2000), clampText(body.source_url, 500), catalogueUid, now, now,
+    clampText(body.note, 2000), clampText(body.source_url, 500), catalogueUid,
+    // D7168: a fund typed in by hand is the member's own record from the
+    // start; only rows saved before this are legacy entries.
+    catalogueUid === null ? now : null,
+    allocationOf(body.intended_allocation_cents), now, now,
   ).run();
   const created = Number(write.meta?.changes ?? 1) > 0;
   const row = created
@@ -4466,6 +4509,14 @@ research.post('/funds/sheet/runs/:runUid/reconcile', async (c) => {
   }
 });
 
+/** D7168: an intended allocation in USD cents; null (blank) stays Not recorded, and a negative is no allocation. */
+function allocationOf(v: unknown): number | null {
+  const n = clampInt(v);
+  return n === null || n < 0 ? null : n;
+}
+
+const FUND_CHANGED = 'This fund changed since you opened it. Compare both versions before choosing what to keep.';
+
 research.patch('/funds/:uid', async (c) => {
   const user = await requireAuth(c);
   const uid = c.req.param('uid');
@@ -4475,6 +4526,57 @@ research.patch('/funds/:uid', async (c) => {
   if (!existing) return c.json({ detail: 'Not found' }, 404);
   const b = await c.req.json<any>().catch(() => ({}));
   const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+
+  // D7168 conflict detection: a write that names the `updated_at` it read is
+  // refused when the row has changed since, with the stored row, so the page
+  // can compare both versions. A write that names none behaves as before.
+  const expected = has('expected_updated_at') && b.expected_updated_at != null ? String(b.expected_updated_at) : null;
+  if (expected !== null && expected !== existing.updated_at) {
+    return refuse(c, 409, { code: 'fund_changed', message: FUND_CHANGED, extra: { item: fundDto(existing) } });
+  }
+
+  if (has('intended_allocation_cents') && b.intended_allocation_cents !== null && b.intended_allocation_cents !== ''
+      && (clampInt(b.intended_allocation_cents) === null || clampInt(b.intended_allocation_cents)! < 0)) {
+    return refuse(c, 400, { code: 'allocation_invalid', message: 'An intended allocation is a whole number of US cents, 0 or more, or blank.' });
+  }
+
+  // D7168: link a row that has no catalogue uid (a legacy entry, or your own
+  // record) to one catalogue vehicle. Never on a row already linked, never to
+  // a vehicle another of your rows holds, and only to a vehicle the catalogue
+  // holds. The rest of the row is untouched.
+  let catalogueUid = existing.catalogue_uid ?? null;
+  if (has('catalogue_uid') && b.catalogue_uid != null && b.catalogue_uid !== '' && String(b.catalogue_uid) !== catalogueUid) {
+    const wanted = String(b.catalogue_uid);
+    if (!CATALOGUE_UID_RE.test(wanted)) return c.json({ detail: 'catalogue_uid_invalid' }, 400);
+    if (catalogueUid) {
+      return refuse(c, 409, { code: 'fund_already_linked', message: 'This entry is already linked to a catalogue vehicle. Nothing changed.' });
+    }
+    const holder = await catalogueHolder(c.env, user.id, wanted, uid);
+    if (holder) {
+      return refuse(c, 409, {
+        code: 'catalogue_uid_taken',
+        message: 'That vehicle is already linked to another of your entries. One catalogue vehicle has one entry. Nothing changed here.',
+        extra: { holder },
+      });
+    }
+    let vehicle;
+    try {
+      vehicle = await getFund(c.env, wanted);
+    } catch (e) {
+      return refuse(c, 503, { code: 'catalogue_unreadable', message: 'The catalogue could not be read, so nothing was linked. Try again.', raw: e });
+    }
+    if (!vehicle) return refuse(c, 404, { code: 'catalogue_vehicle_not_found', message: 'The catalogue does not hold that vehicle. Nothing was linked.' });
+    if ('removed' in vehicle && vehicle.removed) {
+      return refuse(c, 410, { code: 'catalogue_vehicle_withdrawn', message: 'That vehicle’s list was taken down for its terms, so it cannot be linked.' });
+    }
+    catalogueUid = wanted;
+  }
+  // D7168 "Keep as my own record": a row with no catalogue link stops being
+  // offered a match (D7033 Q2, drawn as A).
+  const ownRecordAt = !catalogueUid && !existing.own_record_at && b.own_record === true
+    ? nowIso()
+    : (existing.own_record_at ?? null);
+
   const next = {
     name: has('name') ? (clampText(b.name, 200) || existing.name) : existing.name,
     cheque_min_cents: has('cheque_min_cents') ? clampInt(b.cheque_min_cents) : existing.cheque_min_cents,
@@ -4486,21 +4588,51 @@ research.patch('/funds/:uid', async (c) => {
     thesis: has('thesis') ? clampText(b.thesis, 2000) : existing.thesis,
     note: has('note') ? clampText(b.note, 2000) : existing.note,
     source_url: has('source_url') ? clampText(b.source_url, 500) : existing.source_url,
+    intended_allocation_cents: has('intended_allocation_cents')
+      ? allocationOf(b.intended_allocation_cents)
+      : (existing.intended_allocation_cents ?? null),
   };
-  await c.env.DB.prepare(
-    `UPDATE research_funds
-        SET name = ?, cheque_min_cents = ?, cheque_max_cents = ?, stage_fit = ?, path = ?,
-            status = ?, pass_reason = ?, thesis = ?, note = ?, source_url = ?, updated_at = ?
-      WHERE uid = ? AND owner_user_id = ?`
-  ).bind(
-    next.name, next.cheque_min_cents, next.cheque_max_cents, next.stage_fit, next.path,
-    next.status, next.pass_reason, next.thesis, next.note, next.source_url, nowIso(),
-    uid, user.id,
-  ).run();
+  // A new stamp always differs from the one read, so a second writer in the
+  // same millisecond still sees a change.
+  let stamp = nowIso();
+  if (stamp === existing.updated_at) stamp = new Date(Date.parse(stamp) + 1).toISOString();
+  let write;
+  try {
+    // `updated_at = ?` makes the check and the write one statement: a write
+    // that lands between the read above and this one is still a conflict.
+    write = await c.env.DB.prepare(
+      `UPDATE research_funds
+          SET name = ?, cheque_min_cents = ?, cheque_max_cents = ?, stage_fit = ?, path = ?,
+              status = ?, pass_reason = ?, thesis = ?, note = ?, source_url = ?,
+              catalogue_uid = ?, own_record_at = ?, intended_allocation_cents = ?, updated_at = ?
+        WHERE uid = ? AND owner_user_id = ? AND updated_at = ?`
+    ).bind(
+      next.name, next.cheque_min_cents, next.cheque_max_cents, next.stage_fit, next.path,
+      next.status, next.pass_reason, next.thesis, next.note, next.source_url,
+      catalogueUid, ownRecordAt, next.intended_allocation_cents, stamp,
+      uid, user.id, existing.updated_at,
+    ).run();
+  } catch (e) {
+    // The unique index on (owner, catalogue_uid): another link landed first.
+    if (/UNIQUE/i.test(String((e as Error)?.message || e))) {
+      const holder = catalogueUid ? await catalogueHolder(c.env, user.id, catalogueUid, uid) : null;
+      return refuse(c, 409, {
+        code: 'catalogue_uid_taken',
+        message: 'That vehicle is already linked to another of your entries. One catalogue vehicle has one entry. Nothing changed here.',
+        raw: e, extra: { holder },
+      });
+    }
+    throw e;
+  }
   const row = await c.env.DB.prepare(
     `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
   ).bind(uid, user.id).first<FundRow>();
-  return c.json(fundDto(row as FundRow));
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  if (!Number(write.meta?.changes ?? 1)) {
+    // Changed between the read and the write.
+    return refuse(c, 409, { code: 'fund_changed', message: FUND_CHANGED, extra: { item: fundDto(row) } });
+  }
+  return c.json(fundDto(row));
 });
 
 research.delete('/funds/:uid', async (c) => {
@@ -4607,11 +4739,18 @@ research.get('/funds/:uid', async (c) => {
     `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
   ).bind(c.req.param('uid'), user.id).first<FundRow>();
   if (!row) return c.json({ detail: 'Not found' }, 404);
-  const askCents = await activeRaiseTargetCents(c, user);
+  const [askCents, publicRecord] = await Promise.all([
+    activeRaiseTargetCents(c, user),
+    // D7168: the linked catalogue row, read-only and apart from the private
+    // fields above it; Unavailable or the directory's 410 never hide the dossier.
+    publicRecordFor(c.env, row.catalogue_uid),
+  ]);
   return c.json({
     ...fundDto(row),
     raise_target_cents: askCents,
     overlap_note: fundOverlapNote(row, askCents),
+    allocation_test: fundAllocationNote(row),
+    public_record: publicRecord,
   });
 });
 
