@@ -566,7 +566,7 @@ export async function applyLicenceCopy(
       void res;
     } catch (e) {
       failed.push(sec.name);
-      console.warn(`[branchOps] branch_licence.${sec.key} not written`, (e as Error).message);
+      console.warn('[branchOps] branch_licence.%s not written', sec.key, (e as Error).message);
     }
   }
   if (revision !== null) {

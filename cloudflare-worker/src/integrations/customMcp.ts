@@ -510,7 +510,7 @@ const PRINTABLE_NAME = /^[A-Za-z0-9_.\-/]{1,64}$/;
 /** The server's description as data: control characters removed, cut to the limit. */
 export function untrustedText(v: unknown): string | null {
   if (typeof v !== 'string') return null;
-  const clean = v.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩]/g, '').trim();
+  const clean = v.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim();
   return clean ? clean.slice(0, CUSTOM_LIMITS.description) : null;
 }
 

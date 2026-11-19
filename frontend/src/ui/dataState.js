@@ -83,15 +83,13 @@ export function isRefusal(error) {
 
 const READ_STATUSES = new Set(['ready', 'partial', 'unavailable']);
 
+/** Path segments `pick` never follows: they lead to a prototype, not to data. */
+const UNSAFE_PATH_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
 function pick(data, field) {
   if (field == null || field === '') return data;
   if (typeof field === 'function') return field(data);
-  let cur = data;
-  for (const key of String(field).split('.')) {
-    if (cur == null) return undefined;
-    cur = cur[key];
-  }
-  return cur;
+  return String(field).split('.').reduce((cur, key) => (cur == null || UNSAFE_PATH_KEYS.has(key) ? undefined : cur[key]), data);
 }
 
 const absent = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
