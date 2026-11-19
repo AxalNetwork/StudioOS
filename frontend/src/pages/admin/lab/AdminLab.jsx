@@ -16,6 +16,7 @@ import LabHowItRuns from './LabHowItRuns';
 import LabSettings from './LabSettings';
 import LabActivity from './LabActivity';
 import { useAuth } from '../../../hooks/useAuthSync';
+import { ViewPresentationLink } from '../../../programs/AdminPresentationLinks';
 import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
 import LabParticipants from './LabParticipants';
 import { participantsCount } from './participantsModel';
@@ -272,6 +273,8 @@ function AdminLabBody({ onImpersonate }) {
 
   const actions = (
     <>
+      {/* D6966 (PGS07C–D): the public presentation, first in the header on every tab. */}
+      <ViewPresentationLink programKey={LAB_KEY} />
       <Link to="/admin/programs/spinout-lab/preview" className={GHOST} data-testid="lab-preview"><Eye size={14} aria-hidden="true" /> Preview founder journey</Link>
       {tab === 'overview' && (
         <>
