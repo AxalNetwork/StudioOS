@@ -749,9 +749,11 @@ export async function updateSegment(
   const name = input.name === undefined ? String(row.name) : trimOrNull(input.name, 120);
   if (!name) throw new WriterError(400, 'A segment needs a name');
   const norm = segmentNameNorm(name);
-  const clash = await env.DB.prepare('SELECT id FROM customer_segments WHERE project_id = ? AND name_norm = ? AND id <> ?')
-    .bind(input.projectId, norm, input.segmentId).first();
-  if (clash) throw new WriterError(409, 'Another segment already has that name');
+  const clash = await env.DB.prepare('SELECT id, archived_at FROM customer_segments WHERE project_id = ? AND name_norm = ? AND id <> ?')
+    .bind(input.projectId, norm, input.segmentId).first<{ id: number; archived_at: string | null }>();
+  if (clash) throw new WriterError(409, clash.archived_at != null
+    ? 'This segment name is archived. Choose another name.'
+    : 'Another segment already has that name');
   const steps = segmentSteps(input);
   const keep = (k: (typeof SEGMENT_STEP_KEYS)[number]) => (steps[k] === undefined ? row[k] ?? null : steps[k]);
   const updated = await env.DB.prepare(

@@ -165,3 +165,24 @@ test('D6003 an edit losing a race to archive refuses without a phantom edit audi
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'segment_edited'").get()?.n, 0);
   } finally { db.close(); }
 });
+
+test('D6003 renaming onto an archived name explains the conflict without changing names or history', async () => {
+  const db = fixture();
+  try {
+    db.exec("INSERT INTO customer_segments (id, project_id, name, name_norm, created_by) VALUES (81, 1, 'Operators', 'operators', 10), (83, 1, 'Active segment', 'active segment', 10), (84, 1, 'Existing active', 'existing active', 10)");
+    const archive = await call(db, 10, 'POST', '/validate/modules/ideal-customer-profile/records/81/actions/archive?project=1', {}, RECORD_SPECS);
+    assert.equal(archive.status, 200);
+    const list = await call(db, 10, 'GET', '/validate/modules/ideal-customer-profile?project=1&sort=name', undefined, RECORD_SPECS);
+    assert.deepEqual(list.body.records.rows.map((r: any) => r.segment), ['Active segment', 'Existing active']);
+    const edit = '/validate/modules/ideal-customer-profile/records/83/actions/edit?project=1';
+    const archivedClash = await call(db, 10, 'POST', edit, { name: 'Operators' }, RECORD_SPECS);
+    assert.equal(archivedClash.status, 409);
+    assert.equal(archivedClash.body.detail, 'This segment name is archived. Choose another name.');
+    const activeClash = await call(db, 10, 'POST', edit, { name: 'Existing active' }, RECORD_SPECS);
+    assert.equal(activeClash.status, 409);
+    assert.equal(activeClash.body.detail, 'Another segment already has that name');
+    assert.equal(db.prepare('SELECT name FROM customer_segments WHERE id = 83').get()?.name, 'Active segment');
+    assert.equal(db.prepare('SELECT name_norm FROM customer_segments WHERE id = 81').get()?.name_norm, 'operators');
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'segment_edited'").get()?.n, 0);
+  } finally { db.close(); }
+});
