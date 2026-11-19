@@ -9,10 +9,13 @@
  * real count + abstract URL per sector, parsed from the Atom feed by regex
  * (no XML dependency). Set MI_FLAG_ARXIV=live to engage fetchLive; otherwise
  * the deterministic stub keeps the pipeline exercisable in dev.
+ *
+ * D7707 — each row's period is the `submittedDate` window queried, to the
+ * day; arXiv applies both bounds.
  */
 import { registerSource, type CommonRow } from '../registry';
 import { row, seededAround, doy } from './_helpers';
-import { buildLiveRows, fetchText, saturate, UA } from './_live';
+import { buildLiveRows, fetchText, saturate, windowPeriod, UA } from './_live';
 
 const KEY = 'arxiv';
 /** The recent window, in days — the one OpenAlex and Crossref query too. */
@@ -52,15 +55,22 @@ registerSource({
   weight: 0.55,
   daily_cap: 5000,
   status: 'live',
-  fetchLive: async (_env, { sectors }) =>
-    buildLiveRows({
+  fetchLive: async (_env, { sectors }) => {
+    const now = new Date();
+    const submitted = arxivSubmittedWindow(now);
+    const period = windowPeriod(
+      new Date(now.getTime() - WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10),
+      now.toISOString().slice(0, 10),
+    );
+    return buildLiveRows({
       sectors,
       key: KEY,
       metric_key: 'research',
+      now,
       perSector: async (_sector, query) => {
         const url =
           'https://export.arxiv.org/api/query?search_query=' +
-          `all:%22${encodeURIComponent(query)}%22+AND+${arxivSubmittedWindow(new Date())}` +
+          `all:%22${encodeURIComponent(query)}%22+AND+${submitted}` +
           '&start=0&max_results=1&sortBy=submittedDate&sortOrder=descending';
         const xml = await fetchText(url, { headers: { 'User-Agent': UA } });
         const countMatch = xml.match(
@@ -70,8 +80,15 @@ registerSource({
         const entryMatch = xml.match(/<entry>[\s\S]*?<id>([^<]+)<\/id>/);
         const id = entryMatch?.[1]?.trim();
         if (!count || !id) return null;
-        return { value: saturate(count, 150), raw: count, citation_url: id };
+        return {
+          value: saturate(count, 150),
+          raw: count,
+          citation_url: id,
+          observed_period: period?.observed_period ?? null,
+          observed_period_end: period?.observed_period_end ?? null,
+        };
       },
-    }),
+    });
+  },
   fetchStub: ({ sectors, now }) => buildRows(sectors, now ?? new Date()),
 });
