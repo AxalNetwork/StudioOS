@@ -530,6 +530,9 @@ export interface Env {
   STREAM_API_TOKEN?: string;
   // #4176: verifies Stream's Webhook-Signature (owner step B).
   STREAM_WEBHOOK_SECRET?: string;
+  // D5585 part 3 (#5585): `preview` lets `drainReleaseEffects` deliver WorkGraph release effects through the real
+  // provider adapters. Unset (the default) it delivers nothing. Nothing schedules that drain yet.
+  WORK_GRAPH_RELEASE_DELIVERY?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
