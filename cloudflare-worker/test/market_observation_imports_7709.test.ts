@@ -177,7 +177,10 @@ test('HQ write bar, reason and audit; members, plain admins and branches cannot 
   assert.equal((await w.call(1)).status, 403);
   w.db.prepare('UPDATE user_sessions SET created_at=?,last_step_up_at=? WHERE user_id=1').run(new Date(NOW).toISOString(), new Date(NOW).toISOString());
   assert.equal((await w.call(1, 'POST', { importer: 'world-bank', params: PARAMS, reason: 'no' })).status, 400);
-  assert.equal(calls.length, 0);
+  assert.equal((await w.call(1, 'POST', { importer: 'world-bank', params: PARAMS, reason: 'x'.repeat(501) })).status, 400);
+  assert.equal((await w.call(1, 'POST', 'invalid-body')).status, 400);
+  assert.equal((await w.call(1, 'POST', { importer: 'toString', params: PARAMS, reason: 'Synthetic import check' })).status, 400);
+  assert.deepEqual([calls.length, w.runs().length], [0, 0]);
   const made = await w.call(1);
   assert.equal(made.status, 202, JSON.stringify(made.body));
   const audit = w.db.prepare("SELECT admin_user_id,filters_json FROM admin_audit_log WHERE action='market_observation_import'").get() as any;
