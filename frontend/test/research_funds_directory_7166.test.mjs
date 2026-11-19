@@ -145,9 +145,10 @@ test('the drawer: Save to shortlist, the vehicle as title, Investment geography 
   assert.match(html, /<h2 id="[^"]+"[^>]*>Dawn Capital V<\/h2>/);
   assert.match(text, /Save to shortlist/);
   assert.match(text, /Investment geographyNot recordedNo list records where a fund invests\./);
-  assert.match(text, /Manager HQUKWhere the manager is based, not where it invests\./);
+  assert.match(text, /Manager HQUKWhere the manager is based, not where it invests/);
   assert.match(text, /VehicleDawn Capital V · managed by Dawn Capital/);
-  assert.match(text, /Reported size€582MEUR/);
+  // D7167: the Sheet's size is the dated reported size (fundProfileRead.reportedSize).
+  assert.match(text, /Reported size€582m EUR/);
   const dir = src('frontend/src/pages/research/FundDirectory.jsx');
   assert.match(dir, /state=\{\{ back: backTo, selected: item\.uid \}\}/);
   assert.match(dir, /opened=\{opened\} backTo=\{`\$\{location\.pathname\}\$\{location\.search\}`\}/);
@@ -192,6 +193,6 @@ test('My funds, empty: Browse fund directory and Add a fund by hand, and no row 
   assert.match(zone, />Browse fund directory</);
   assert.match(zone, />Add a fund by hand</);
   assert.match(zone, /const browse = \(\) => \{ pick\('directory'\); setTimeout\(\(\) => document\.getElementById\('fd-q'\)\?\.focus\(\), 0\); \};/);
-  assert.match(zone, /<div className=\{listState === 'ok' && !items\.length \? 'hidden' : 'grid grid-cols-2 gap-3 lg:grid-cols-4'\}>/);
+  assert.match(zone, /<div className=\{listState === 'ok' && !narrowed && !items\.length \? 'hidden' : 'grid grid-cols-2 gap-3 lg:grid-cols-5'\}>/);
   assert.match(zone, /<input id="fz-add-name"/);
 });

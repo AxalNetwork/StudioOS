@@ -221,6 +221,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 | `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
 | `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
+| `practice_cockpit_4829.test.mjs` | D4829: source isolation, canonical counts, timezone boundaries, pagination, record destinations, retry and Client Sheet. |
 | `network_picker_6637.test.mjs` | D6637: mounted picker selection, eligibility and submission. |
 | `network_picker_6636.test.mjs` | D6636: mounted picker selection, eligibility and submission. |
 
@@ -230,3 +231,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `scan_remediation_6935.test.mjs` | D6935 automated tracking, Autofix publishing, retries and default-branch verification. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+| `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |

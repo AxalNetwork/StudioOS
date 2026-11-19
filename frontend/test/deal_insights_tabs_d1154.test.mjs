@@ -230,7 +230,9 @@ test('Team: each person as published, coverage as bands with the gap named, valu
     assert.ok(v.textOf('deal-team-person-u1').includes('Head of operations at Robo Co, 2019–2024'));
     assert.ok(v.textOf('deal-team-person-u1').includes('Builder'));
     assert.match(v.textOf('deal-team-person-u2'), /could not be read\. That is not the same as none\./);
-    assert.ok(v.textOf('deal-team-person-u3').includes('Not published'));
+    // D6164 part 2 (DE23): the canvas's words for what a member did not publish.
+    assert.ok(v.textOf('deal-team-person-u3').includes('No prior roles published'));
+    assert.ok(v.textOf('deal-team-person-u3').includes('No archetype published'));
     const coverage = v.textOf('deal-team-coverage');
     assert.ok(coverage.includes('Gaps: Finance.'));
     assert.ok(coverage.includes('Not recorded for at least two published team members'));
