@@ -31,7 +31,7 @@ import { deleteInterview, updateInterviewDetails } from '../interviewWriters';
 import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
-  addCompetitorSignal, addEvidence, addExperiment, assignInterviewSegment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
+  addCompetitorSignal, addEvidence, addExperiment, archiveSegment, assignInterviewSegment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
   INTERVIEW_STAGES, latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setInterviewStage, setLinkStrength,
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
   updateTheme, updateThemeStatement,
@@ -855,7 +855,7 @@ const segmentMemo = memo<{ s: Any; total: number; summary: ReturnType<typeof seg
 
 function loadSegment(ctx: RecordContext, id: string) {
   return segmentMemo(ctx, id, async () => {
-    const s = await ctx.env.DB.prepare('SELECT * FROM customer_segments WHERE id = ? AND project_id = ?').bind(Number(id), ctx.projectId).first<Any>();
+    const s = await ctx.env.DB.prepare('SELECT * FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL').bind(Number(id), ctx.projectId).first<Any>();
     if (!s) throw vanished();
     const c = vctx(ctx);
     const [segments, interviews] = await Promise.all([loadSegments(c), loadInterviews(c)]);
@@ -956,6 +956,14 @@ const icp: ModuleSpec = {
     const { s } = await loadSegment(ctx, id);
     const segmentId = Number(s.id);
     return [
+      {
+        key: 'archive', label: 'Archive', kind: 'write', tone: 'danger',
+        confirm: { title: 'Archive this segment?', body: 'It leaves the active list and chart. Interviews keep their fit and historical segment link; they appear as unassigned until you choose an active segment.', cta: 'Archive' },
+        execute: (c) => refusing(async () => {
+          await archiveSegment(c.env, { projectId: c.projectId, userId: userId(c), segmentId });
+          return { ok: true };
+        }),
+      },
       { key: 'compare-segments', label: 'Compare segments', kind: 'link', href: `/validate/ideal-customer-profile?project=${ctx.projectId}` },
       // #1658's client action draws the PDF; PNG is not built (decision 15).
       { key: 'export-persona', label: 'Export persona', kind: 'link', href: `/validate/ideal-customer-profile/${segmentId}?project=${ctx.projectId}&export=persona` },

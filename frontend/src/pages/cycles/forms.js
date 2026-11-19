@@ -1472,16 +1472,18 @@ const SINCE = 'since';
 const segmentFields = [
   { kind: 'T', name: 'name', k: 'Segment', ph: 'Segment name', required: true, max: 120 },
   { kind: 'T', name: 'who_they_are', k: 'Who they are', ph: 'Role at company type, size, where', max: 1000 },
+  { kind: 'T', name: 'context', k: 'Context', ph: 'When and where the need arises', max: 1000 },
   { kind: 'T', name: 'job_to_be_done', k: 'Job to be done', ph: 'What they are trying to get done', max: 1000 },
   { kind: 'CH', name: 'urgency', k: 'Urgency', opts: URGENCY, def: 2 },
   { kind: 'T', name: 'value_promised', k: 'Value promised', ph: 'What changes for them', max: 1000 },
+  { kind: 'T', name: 'value_source', k: 'Source for the value', ph: 'The evidence behind the promised value', max: 1000 },
   { kind: 'CH', name: 'score_against', k: 'Score against', opts: [{ value: 'all', label: 'All interviews' }, { value: SINCE, label: 'Interviews since a date' }], def: 0 },
   // The second chip reveals its date (decision 2).
   { kind: 'T', name: 'score_since', k: 'Interviews since', input: 'date', required: true, when: { name: 'score_against', value: SINCE } },
 ];
 const segmentBody = (v) => ({
-  name: str(v.name), who_they_are: str(v.who_they_are), job_to_be_done: str(v.job_to_be_done),
-  urgency: v.urgency || null, value_promised: str(v.value_promised),
+  name: str(v.name), who_they_are: str(v.who_they_are), context: str(v.context), job_to_be_done: str(v.job_to_be_done),
+  urgency: v.urgency || null, value_promised: str(v.value_promised), value_source: str(v.value_source),
   score_since: v.score_against === SINCE ? str(v.score_since) : null,
 });
 const segment = {
@@ -1724,7 +1726,7 @@ const editSegment = {
   fields: segmentFields,
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
-    const v = carried(['name', 'who_they_are', 'job_to_be_done', 'urgency', 'value_promised', 'score_since'])(row);
+    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since'])(row);
     if (Object.hasOwn(growEdit(row) || {}, 'score_since')) v.score_against = v.score_since ? SINCE : 'all';
     if (v.score_since) v.score_since = dateText(v.score_since);
     return v;

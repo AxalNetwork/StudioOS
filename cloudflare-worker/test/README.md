@@ -375,3 +375,5 @@ catalogue version only in the fixture.
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
 | `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
+
+`icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
