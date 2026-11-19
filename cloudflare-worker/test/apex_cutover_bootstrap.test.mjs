@@ -64,6 +64,7 @@ test('static, health, and verified anonymous public reads bypass blocking role-s
 test('cold-isolate role-schema repairs are single-flight, per database', async () => {
   const index = await read('src/index.ts');
   const exploring = await read('src/services/exploringSchema.ts');
+  const investor = await read('src/util/usersRoleRebuild.ts');
 
   // UPDATED FOR #204, AND STRENGTHENED RATHER THAN REPOINTED. The three latches
   // used to be `let _xSchemaBootstrap: Promise<void> | null = null` — module
@@ -74,7 +75,7 @@ test('cold-isolate role-schema repairs are single-flight, per database', async (
   // `WeakMap` line below is the new half, and it is the one that would have
   // failed before this change.
   for (const [source, latch] of [
-    [index, 'INVESTOR_SCHEMA_IN_FLIGHT'],
+    [investor, 'INVESTOR_SCHEMA_IN_FLIGHT'],
     [index, 'ADVISOR_SCHEMA_IN_FLIGHT'],
     [exploring, 'IN_FLIGHT'],
   ]) {
@@ -87,7 +88,7 @@ test('cold-isolate role-schema repairs are single-flight, per database', async (
   }
   // And the readiness latch beside each of them, for the same reason.
   for (const [source, ready] of [
-    [index, 'INVESTOR_SCHEMA_READY'],
+    [investor, 'INVESTOR_SCHEMA_READY'],
     [index, 'ADVISOR_SCHEMA_READY'],
     [exploring, 'READY'],
   ]) {

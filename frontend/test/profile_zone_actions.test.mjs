@@ -138,7 +138,12 @@ const PROFILES = {
     // `logInterview` and `exportInterviews` (interviews), `exportPainMap`
     // (pain map), `newHypothesis` and `linkPain` (hypotheses), `exportSummary`
     // (verdict). Each has its home on a module page or record (#1659, #1704).
-    handlers: 10,
+    // 10 → 11 (D7171 part 2): `research/markets`'s `New market research`. Its
+    // `Export view` is the builder's export (D7172's scoped export), not a handler.
+    handlers: 11,
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
+    offCanvas: { 'research/markets': ['Export view', 'New market research'] },
     // NOTHING IS EXCLUDED BUT VALIDATE'S RETIRED ZONES. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -175,9 +180,10 @@ const PROFILES = {
     // ever be a disabled button. The investor asks instead (Ask HQ in the
     // mark-history Sheet). Each label here must still be on its artboard and
     // must not be in the table.
-    withheld: { 'portfolio/positions': ['Add follow-on'] },
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'portfolio/positions': ['Add follow-on'], 'research/markets': ['New deep-dive', 'Export', 'Cite in a memo'] },
     // #6276 adds a visible-row CSV beside the original canvas controls.
-    offCanvas: { 'research/benchmarking': ['Export'] },
+    offCanvas: { 'research/benchmarking': ['Export'], 'research/markets': ['Export view', 'Edit thesis'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -260,7 +266,8 @@ const PROFILES = {
     // TWENTY-SECOND: `network/relationships`'s `Add person` (D6636) — the
     // network picker is now supplied by its page.
     // TWENTY-THIRD: `network/introductions`'s `Offer one` (D6637), supplied by its page.
-    handlers: 23,
+    // TWENTY-FOURTH: `research/markets`'s `Edit thesis` (D7171 part 2).
+    handlers: 24,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -377,7 +384,9 @@ const PROFILES = {
     // D1424 (#3700): labels the profiles canvas adds that no `Pages · …` artboard
     // draws. Each is listed by zone, so the canvas-order check still pins the
     // rest of the row exactly and this list cannot grow by accident.
-    offCanvas: { 'delivery/status-reports': ['New report'] },
+    offCanvas: { 'delivery/status-reports': ['New report'], 'research/markets': ['Export view', 'New market research'] },
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['Attach to proposal', 'Export'] },
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.
@@ -443,9 +452,12 @@ const PROFILES = {
     // tab's sessions, built in the browser (D4832). Delivery's two PR3 ops stay
     // too, after its v2 primary: the nudge and the client pack are working
     // controls the v2 header does not draw (D4833-p4).
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['Re-run stale', 'Add source', 'Export'] },
     offCanvas: {
       'practice/sessions': ['Export to calendar'],
       'practice/delivery': ['Bulk: nudge unopened', 'Export as client pack'],
+      'research/markets': ['Export view', 'New market research'],
     },
     buckets: /^(expertise|network|research|practice)\//,
     // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
@@ -1739,7 +1751,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasOps(profile);
     const table = tableEntries(SRC);
     const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
-    assert.equal(primaries.length, { founder: 0, investor: 7, advisor: 5, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
+    assert.equal(primaries.length, { founder: 0, investor: 8, advisor: 5, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
     for (const e of primaries) {
       const zone = e.zone;
       // `canvas:` is the artboard's word where the rendered label differs.
