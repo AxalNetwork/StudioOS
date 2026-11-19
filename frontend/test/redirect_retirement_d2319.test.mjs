@@ -14,6 +14,10 @@ import { ROUND_LINK } from '../src/pages/raise/pitch/newDeckModel.js';
 import { REDIRECT_ROUTES, ADMIN_TAB_REDIRECTS, FORWARD_REDIRECTS, ROLE_REDIRECTS, isRedirectKey } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor } from '../src/lib/redirectBeacon.js';
 import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
+
+// Code Scanning js/bad-code-sanitization: a value put into generated source as a string literal, with <, >,
+// U+2028 and U+2029 escaped as well as JSON.stringify's quotes, so it cannot close the literal or a script.
+const lit = (v) => JSON.stringify(v).replace(/[<>\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 const read = (p) => readFileSync(p, 'utf8');
 const decision = read('documentation/architecture/decisions/D2319.md');
 const retired = [...decision.split('<!-- retired-paths:begin -->')[1].split('<!-- retired-paths:end -->')[0].matchAll(/^- `([^`]+)`$/gm)].map((m) => m[1]);
@@ -110,18 +114,18 @@ test('D2319: every retired address is caught in each link syntax, including quer
   for (const path of retired) {
     const target = path.replace(/:[^/]+/g, '17').replace(/\*/g, 'keys');
     for (const source of [
-      `<Link to=${JSON.stringify(target)} />`,
-      `const item = {to:${JSON.stringify(target)}};`,
-      `const item = {href:withProject(${JSON.stringify(target)})};`,
+      `<Link to=${lit(target)} />`,
+      `const item = {to:${lit(target)}};`,
+      `const item = {href:withProject(${lit(target)})};`,
       `navigate(${JSON.stringify(target + '?project=7#details')});`,
-      `const item = {page_target:${JSON.stringify(target)}};`,
-      `const destination=${JSON.stringify(target)}; <Link to={destination} />`,
-      `function cta(){const browse=${JSON.stringify(target)}; const selected=found ? browse : '/studio'; return {route:selected};}`,
-      `function row(label,page){return {href:page};} row('title',${JSON.stringify(target)});`,
+      `const item = {page_target:${lit(target)}};`,
+      `const destination=${lit(target)}; <Link to={destination} />`,
+      `function cta(){const browse=${lit(target)}; const selected=found ? browse : '/studio'; return {route:selected};}`,
+      `function row(label,page){return {href:page};} row('title',${lit(target)});`,
     ]) {
       assert.ok(retiredNavigationLinks(source).length > 0, `${path}: ${source}`);
     }
-    for (const field of ['href', 'route', 'url', 'page_url', 'open_url']) assert.ok(retiredNavigationLinks(`const item = {${field}:scopePath(${JSON.stringify(target)})};`, 'fixture.ts', { worker: true }).length > 0, `${field}: ${path}`);
+    for (const field of ['href', 'route', 'url', 'page_url', 'open_url']) assert.ok(retiredNavigationLinks(`const item = {${field}:scopePath(${lit(target)})};`, 'fixture.ts', { worker: true }).length > 0, `${field}: ${path}`);
     assert.equal(retiredRouteMapLinks(`Live: \`${target}\``).length, 1, path);
     assert.deepEqual(retiredRouteMapLinks(`Historical: \`${target}\` (retired D2319)`), [], path);
   }

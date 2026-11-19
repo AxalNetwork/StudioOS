@@ -954,7 +954,10 @@ if STATIC_DIR.exists():
 
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
-        file_path = STATIC_DIR / full_path
-        if file_path.is_file():
-            return FileResponse(str(file_path))
+        # The request path names a file under STATIC_DIR or nothing: resolved,
+        # it must stay inside the directory ("../" is never served).
+        root = os.path.realpath(STATIC_DIR)
+        file_path = os.path.realpath(os.path.join(root, full_path))
+        if file_path.startswith(root + os.sep) and os.path.isfile(file_path):
+            return FileResponse(file_path)
         return FileResponse(str(STATIC_DIR / "index.html"))
