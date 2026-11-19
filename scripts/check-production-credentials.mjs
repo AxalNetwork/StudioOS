@@ -62,7 +62,7 @@ function secretReads(mapping, catalog) {
   }
   visit('', mapping);
   for (const name of names) {
-    if (name.startsWith('DR_COPY_') && !catalog.has(name)) errors.add(`add ${name} to the secret inventory`);
+    if (/^(FILE_)?DR_COPY_/.test(name) && !catalog.has(name)) errors.add(`add ${name} to the secret inventory`);
   }
   return { names: [...names].filter(name => catalog.has(name)), errors };
 }

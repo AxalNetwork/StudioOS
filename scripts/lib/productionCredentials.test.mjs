@@ -86,6 +86,7 @@ test('workflow-level access, dynamic lookup, bulk access and implicit secret inh
     assert.match(audit(workflow({ read })).join(), /bulk or dynamic/);
   }
   assert.match(audit(workflow({ read: '${{ secrets.DR_COPY_FUTURE_TOKEN }}' })).join(), /add DR_COPY_FUTURE_TOKEN/);
+  assert.match(audit(workflow({ read: '${{ secrets.FILE_DR_COPY_FUTURE_TOKEN }}' })).join(), /add FILE_DR_COPY_FUTURE_TOKEN/);
   const reusable = '  call:\n    uses: ./.github/workflows/called.yml\n    secrets: inherit\n';
   assert.match(audit(workflow() + reusable).join(), /name reusable workflow secrets explicitly/);
 });
