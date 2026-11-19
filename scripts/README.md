@@ -241,3 +241,7 @@ Each harness describes itself in [the generated list](#the-files) below.
 D5676: `check-tail-archive.mjs` is an external authenticated metadata-only observer check; query/process fallback belongs to the shared independent monitor owner.
 
 D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt before normal production promotion, retaining sanitized stage evidence.
+
+
+
+| `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |

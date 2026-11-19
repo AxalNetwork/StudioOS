@@ -326,7 +326,8 @@ test('7. tenant limits on assets, versions and bytes; an offline revision is met
   assert.ok(!big.ok); assert.equal(big.code, 'tenant_limit');
   assert.equal(w.r2.ops.put, 1, 'no write is even attempted past the limit');
   assert.equal(w.r2.objects.size, 1);
-  // Two puts that each fit, at once: the limit holds inside the ledger insert, and the loser's object is removed.
+  // Two puts that each fit, at once: the limit holds inside the ledger insert. D6651: the loser's object is a record and
+  // is not deleted from request code; it has no row, so only the winner counts and reconciliation collects the orphan.
   const race = await (async () => {
     const r = world();
     const cap = { ...WORK_GRAPH_BLOB_LIMITS, maxBytesPerTenant: 10 };
@@ -334,7 +335,8 @@ test('7. tenant limits on assets, versions and bytes; an offline revision is met
     return { r, codes: [x.ok ? 'ok' : x.code, y.ok ? 'ok' : y.code].sort() };
   })();
   assert.deepEqual(race.codes, ['ok', 'tenant_limit']);
-  assert.equal(race.r.r2.objects.size, 1);
+  assert.equal(race.r.r2.objects.size, 2);
+  assert.equal(race.r.r2.ops.delete ?? 0, 0, 'nothing is deleted');
   assert.equal(count(race.r, 'SELECT COUNT(*) AS n FROM work_graph_blobs'), 1);
   const tooBig = await put(w, bytesOf('x'.repeat(40)), {}, CTX, { ...WORK_GRAPH_BLOB_LIMITS, maxPutBytes: 10 });
   assert.ok(!tooBig.ok); assert.equal(tooBig.code, 'size_limit');
