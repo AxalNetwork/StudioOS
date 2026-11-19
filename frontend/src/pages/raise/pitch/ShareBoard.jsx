@@ -9,6 +9,7 @@ import {
   boardState, dailyBars, dropRows, dropTitle, funnelRows, posthogLine,
 } from './shareBoardModel';
 import { NOT_RECORDED } from './pitchStudioModel';
+import ShareFeedback from './ShareFeedback';
 
 /**
  * D4254 P4 (#4272, ps7, ps7x, ps7b) — Share & analytics, the top of the tile:
@@ -16,7 +17,8 @@ import { NOT_RECORDED } from './pitchStudioModel';
  * links, first views marked, 30 days), the two funnels side by side, where
  * readers drop off on a version against the one before it, and the PostHog line.
  * Everything comes from the daily read (D4272); the investors table below it is
- * StudioAnalytics' own.
+ * StudioAnalytics' own. D6064 (#6064): viewer feedback (`ShareFeedback.jsx`) has its
+ * own read and its own states, under the same version filter.
  */
 
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
@@ -96,6 +98,8 @@ export default function ShareBoard({ deckId, projectId, versions = [] }) {
           <DropOff dropoff={d.dropoff} />
         </>
       )}
+
+      <ShareFeedback deckId={deckId} version={version} />
 
       {line ? (
         <p className={`m-0 ${MUTED}`} data-testid={`share-board-posthog-${line.kind}`}>

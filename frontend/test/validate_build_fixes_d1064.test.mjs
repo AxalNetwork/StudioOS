@@ -17,7 +17,7 @@ function guardOf(path) {
 
 /** App.jsx's own `labRoles`, run on a session, so the test admits whom the app admits. */
 function labRolesFor(session) {
-  const src = routes.match(/const labRoles = \(roles\) => \{[\s\S]*?\n {2}\};/);
+  const src = routes.match(/const labRoles = \(roles(?:, \{ preview = true \} = \{\})?\) => \{[\s\S]*?\n {2}\};/);
   assert.ok(src, 'labRoles is defined in App.jsx');
   // eslint-disable-next-line no-new-func
   return new Function('user', 'isImpersonating', 'viewMode', `${src[0]}; return labRoles;`)(session.user, false, null);

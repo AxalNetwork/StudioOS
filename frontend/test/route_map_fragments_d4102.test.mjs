@@ -15,7 +15,8 @@ import { readRouteMap, routeMapFragments, ROUTE_MAP_DIR } from '../../scripts/li
 
 const HEAD = '| Canvas | Persona | Proposed route | Live route today | Backend it wires to | STATUS | Notes |';
 const SEP = '| --- | --- | --- | --- | --- | --- | --- |';
-const row = (canvas, status = 'CURRENT') => `| ${canvas} | founder | \`/x\` | \`/x\` | \`x.ts\` | ${status} | — |`;
+// D6471: a backend cell that is a list is written one item per line (route_map_lists_d6471); these rows hold none.
+const row = (canvas, status = 'CURRENT') => `| ${canvas} | founder | \`/x\` | \`/x\` | — | ${status} | — |`;
 
 /** A map in a temp root: { 'sections/0000-a.md': '…', 'canvases/part-1/0010-x.md': '…' }. */
 function mapAt(files) {
