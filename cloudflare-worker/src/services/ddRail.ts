@@ -4,6 +4,7 @@ import { caseAllowed, MEMO_MAX, resolveSubjectUserId } from '../routes/dd';
 import { decField, blockingSectionsWithOpenSevereFlags } from './dueDiligence';
 import { UNTRUSTED_RULE, untrustedBlock, withoutUnrecordedLinks } from './ai/untrusted';
 import { MAX_PASSAGES_PER_FILE, type Hit } from './dataRoomSearch';
+import { liveFiles } from './dataRoomTrash';
 
 export const DD_PAGE = 'Due diligence';
 export const DD_OPTIONS = ['dd:summary', 'dd:request_drafts', 'dd:memo_draft', 'dd:section_summary', 'dd:answer_from_room'] as const;
@@ -116,7 +117,7 @@ export async function ddContext(env: Env, scope: DdScope, input: DdInput, hits?:
   if (scope.request) {
     raw.push({ id: `request:${scope.request.id}`, kind: 'request', text: JSON.stringify({ title: scope.request.title, details: scope.request.details, answer: input.text ?? scope.request.response_note }) });
     for (const [index, hit] of (hits ?? []).entries()) {
-      const passages = (await env.DB.prepare('SELECT f.uid, f.name, p.text AS passage_text FROM data_room_files f JOIN data_room_passages p ON p.file_id = f.id AND p.project_id = f.project_id WHERE f.uid = ? AND f.project_id = ? ORDER BY p.seq LIMIT ?').bind(hit.file_uid, scope.projectId, MAX_PASSAGES_PER_FILE).all<Row>()).results;
+      const passages = (await env.DB.prepare(`SELECT f.uid, f.name, p.text AS passage_text FROM data_room_files f JOIN data_room_passages p ON p.file_id = f.id AND p.project_id = f.project_id WHERE f.uid = ? AND f.project_id = ?${await liveFiles(env.DB, 'f')} ORDER BY p.seq LIMIT ?`).bind(hit.file_uid, scope.projectId, MAX_PASSAGES_PER_FILE).all<Row>()).results;
       // Search slices JS strings (UTF-16); SQLite substr counts code points.
       // Use the same slice for an exact recheck, including astral characters.
       const file = passages.find(p => String(p.passage_text).slice(0, 320) === hit.snippet);
