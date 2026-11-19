@@ -59,10 +59,13 @@ export const FIRST_TEN: readonly SkillInputs[] = Object.freeze([
   ] },
   { slug: 'contract-risk-issue-spotting', needs: [
     need('the contract text, with document and version identity', 'data_room.index', 'document_text'),
+    // Owner's answer on #4588 (D4667-p3, A): a person supplies the review policy. It is not a company-profile field.
     need('the organization review policy', 'manual:review_policy', 'manual_evidence'),
     need('the company profile', 'company.profile', 'company_profile', false),
   ] },
   { slug: 'safe-convertible-instrument-review', needs: [
+    // Owner's answer on #4588 (D4667-p3, A): the instrument's text is the run's selected data-room document, and the
+    // skill declares `data_room.read`. It is not a typed `raise.records` instrument.
     need('the instrument text, with version identity', 'data_room.index', 'document_text'),
     need('capitalization definitions and holdings', 'cap_table.read', 'typed_record'),
     need('raise terms', 'raise.records', 'activity_summaries', false),

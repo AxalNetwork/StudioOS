@@ -1,7 +1,7 @@
 {
   "skill": "safe-convertible-instrument-review",
   "pack_revision": 1,
-  "note": "Synthetic qualification scenarios for #4588. Every record is made up. The instrument terms are supplied as a typed raise.records instrument because the skill declares raise.read and cap_table.read only; #4667 lists the instrument text under data_room.index, which this skill does not declare (D4588 §3).",
+  "note": "Synthetic qualification scenarios for #4588. Every record is made up. The owner answered #4588 (D4667-p3, A): a run reads the instrument text from its selected data-room document (data_room.index), and the skill declares data_room.read. These scenarios, written before that answer, still supply the terms as a typed raise.records instrument with document and version identity; recasting them as data-room passages is left to #4667.",
   "scenarios": [
     {
       "case_id": "safe-convertible-instrument-review-complete",

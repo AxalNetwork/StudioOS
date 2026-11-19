@@ -9,7 +9,9 @@
  *   · complete: `contract-clause-extraction` is ready, and the manual run carries the passages it judged;
  *   · partial (bounded): a document longer than one read is conditional, and says how many passages it supplied;
  *   · unreadable, not current, never read, not found and not selected each refuse `skill_not_ready`, naming why;
- *   · the scheduled path reads the document its session targets, and refuses a session with none.
+ *   · the scheduled path reads the document its session targets, and refuses a session with none;
+ *   · the owner's answers on #4588 (A, A): `safe-convertible-instrument-review` reads its instrument from the selected
+ *     document (ready complete, conditional bounded, not_ready with none), and the review policy stays a person's.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/skill_document_evidence_4667.test.ts
@@ -17,6 +19,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { removeMigratedDatabases } from './_storage_schema.ts';
 import { ADMIN, AGENT, MEMBER, PROJECT, SPONSOR, STRANGER, fakeAgentRun, loopDeps, world, type World } from './_agent_engine_fixture.ts';
 import { AI_FIXTURE_PLANS } from './_ai_budget_fixture.mjs';
@@ -25,8 +28,9 @@ import { __resetForTest } from '../src/services/aiRouter.ts';
 import { agentRun, type AgentRunInput } from '../src/services/agents/agentRun.ts';
 import { load, context, runStep } from '../src/agents/loop.ts';
 import { roleOf } from '../src/services/agents/catalogue.ts';
-import { DOCUMENT_TEXT_BUDGET, READERS, ReadPageError, readOne, type ReadContext } from '../src/services/agents/reads.ts';
-import { preflight } from '../src/services/agents/skillInputs.ts';
+import { DOCUMENT_TEXT_BUDGET, READERS, ReadPageError, coverageOf, readOne, type ReadContext } from '../src/services/agents/reads.ts';
+import { FIRST_TEN, preflight } from '../src/services/agents/skillInputs.ts';
+import { readLibrarySkill } from '../src/services/agents/skillLibrarySeed.ts';
 import { skillEvidenceForRun } from '../src/services/agents/skillEvidence.ts';
 import { targetReadable } from '../src/services/agents/sessions.ts';
 
@@ -300,4 +304,55 @@ test('a session may target a document only of a room in its scope that the spons
     const ok = await skillEvidenceForRun(h.w.env, { agent: agentOf(h.w), scope: SCOPE, rules: { reads: READS }, slug: SLUG, projectId: PROJECT, document: `data_room_file:${LONG}` });
     assert.ok(ok.ok && ok.evidence?.state === 'conditional' && ok.evidence.blocks.some((b) => b.includes(`data_room_passage:${LONG}:0`)));
   } finally { h.w.close(); }
+});
+
+// ── The owner's answers on #4588 (A, A) ─────────────────────────────────────
+
+const SAFE = 'safe-convertible-instrument-review';
+const SAFE_READS = ['data_room.index', 'cap_table.read', 'raise.records'];
+/** The cap table and raise terms answer complete and fresh, so the instrument's text is the only thing in question. */
+const typedRest = {
+  ...READERS,
+  'cap_table.read': async () => ({ records: [{ ref: `cap_table:${PROJECT}`, at: '2026-11-10 10:00:00' }], coverage: coverageOf(1, 1) }),
+  'raise.records': async () => ({ records: [{ ref: 'activity:raise-1', at: '2026-11-10 10:00:00' }], coverage: coverageOf(1, 1) }),
+} as any;
+
+test('#4588 A: the SAFE review reads its instrument text from the selected document, and declares data_room.read', async () => {
+  const need = FIRST_TEN.find((s) => s.slug === SAFE)!.needs.find((n) => n.field.startsWith('the instrument text'))!;
+  // Mutation checked: the need moved to `raise.records` (typed), or made optional → this fails, and so do the states below.
+  assert.deepEqual([need.read, need.expects, need.required], ['data_room.index', 'document_text', true]);
+  const md = readFileSync(new URL('../src/services/agents/skills/safe-convertible-instrument-review.md', import.meta.url), 'utf8');
+  // Mutation checked: data_room.read dropped from the skill's tools → this fails.
+  assert.ok((readLibrarySkill(md)!.tools as string[]).includes('data_room.read'), 'the skill declares the read its instrument comes from');
+  const f = docWorld();
+  try {
+    const safe = async (document: string | null) => (await preflight(f.w.env, SAFE, ctx(f.w, document), typedRest, NOW, undefined, {}, { granted: SAFE_READS }))!;
+    const text = (p: Awaited<ReturnType<typeof safe>>) => p.inputs.find((i) => i.read === 'data_room.index')!;
+    const complete = await safe(`data_room_file:${MSA}`);
+    assert.deepEqual([complete.state, text(complete).status, complete.limits], ['ready', 'available', []]);
+    const none = await safe(null);
+    assert.deepEqual([none.state, text(none).status, text(none).reason], ['not_ready', 'missing', 'not_selected']);
+    const bounded = await safe(LONG);
+    assert.deepEqual([bounded.state, text(bounded).status], ['conditional', 'partial']);
+    assert.deepEqual(bounded.limits, ['the instrument text, with version identity: 4 of 6 passages of the document supplied; 2 left out.']);
+  } finally { f.w.close(); }
+});
+
+test('#4588 A: the contract review policy stays a person\'s evidence, manual:review_policy, never a company-profile field', async () => {
+  const risk = FIRST_TEN.find((s) => s.slug === 'contract-risk-issue-spotting')!;
+  const policy = risk.needs.find((n) => n.field === 'the organization review policy')!;
+  // Mutation checked: the policy read as `company.profile.review_policy` → this and the preflight below fail.
+  assert.deepEqual([policy.read, policy.expects, policy.required], ['manual:review_policy', 'manual_evidence', true]);
+  assert.ok(!FIRST_TEN.some((s) => s.needs.some((n) => n.read.includes('review_policy') && n.read !== 'manual:review_policy')));
+  const f = docWorld();
+  try {
+    const at = (supplied = {}) => preflight(f.w.env, 'contract-risk-issue-spotting', ctx(f.w, `data_room_file:${MSA}`), READERS, NOW, undefined, supplied, { granted: READS });
+    const without = (await at())!;
+    const p = without.inputs.find((i) => i.read === 'manual:review_policy')!;
+    assert.deepEqual([without.state, p.status, p.source], ['not_ready', 'missing', 'manual']);
+    const given = (await at({ 'manual:review_policy': { ref: 'manual:review-policy-2026', recorded_at: '2026-11-01', text: 'Cap liability at twelve months of fees.' } }))!;
+    const q = given.inputs.find((i) => i.read === 'manual:review_policy')!;
+    assert.deepEqual([q.status, q.source, q.ref], ['available', 'manual', 'manual:review-policy-2026']);
+    assert.notEqual(given.state, 'not_ready', 'a person\'s policy and the selected contract are enough to run');
+  } finally { f.w.close(); }
 });
