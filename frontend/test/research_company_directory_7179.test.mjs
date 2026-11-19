@@ -211,8 +211,14 @@ test('the last valid results are labelled while the year range is invalid', () =
 
 test('the selection lives in this tab\'s session, keyed by member, and never in the URL', () => {
   const s = memoryStore();
-  writeSelection(s, 7, new Map([['hg', 'Halden Grid'], ['od', 'Orchard Data']]));
-  assert.deepEqual([...readSelection(s, 7)], [['hg', 'Halden Grid'], ['od', 'Orchard Data']]);
+  writeSelection(s, 7, new Map([['hg', { name: 'Halden Grid', page: 2, sector: 'energy', country: 'NO' }], ['od', { name: 'Orchard Data', page: 1 }]]));
+  // D7177: each pick keeps the page it was ticked on, for Review selection.
+  assert.deepEqual([...readSelection(s, 7)], [
+    ['hg', { name: 'Halden Grid', page: 2, sector: 'energy', country: 'NO' }],
+    ['od', { name: 'Orchard Data', page: 1, sector: null, country: null }],
+  ]);
+  s.setItem(selectionKey(6), JSON.stringify([['hg', 'Halden Grid']]));
+  assert.deepEqual([...readSelection(s, 6)], [['hg', { name: 'Halden Grid', page: null, sector: null, country: null }]], 'a pick kept as a bare name still reads');
   assert.equal(readSelection(s, 8).size, 0, 'another member starts with nothing selected');
   writeSelection(s, 7, new Map());
   assert.equal(s.getItem(selectionKey(7)), null, 'an empty selection leaves nothing behind');

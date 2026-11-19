@@ -218,10 +218,18 @@ function writeJSON(store, key, value) {
   try { if (value == null) store?.removeItem(key); else store?.setItem(key, JSON.stringify(value)); } catch { /* blocked storage keeps nothing */ }
 }
 
-/** The member's selection in this tab: Map(uid → name). */
+/**
+ * The member's selection in this tab: Map(uid → { name, page, sector, country }), the
+ * shape D7177's Review selection reads (the page a company was ticked on). An entry kept
+ * as a bare name reads with page, sector and country null.
+ */
 export function readSelection(store, member) {
   const list = readJSON(store, selectionKey(member));
-  return new Map(Array.isArray(list) ? list.filter((e) => Array.isArray(e) && typeof e[0] === 'string').map(([uid, name]) => [uid, String(name ?? uid)]) : []);
+  const pick = (uid, v) => {
+    const o = v && typeof v === 'object' ? v : { name: v };
+    return { name: String(o.name ?? uid), page: Number.isInteger(o.page) ? o.page : null, sector: o.sector ?? null, country: o.country ?? null };
+  };
+  return new Map(Array.isArray(list) ? list.filter((e) => Array.isArray(e) && typeof e[0] === 'string').map(([uid, v]) => [uid, pick(uid, v)]) : []);
 }
 export function writeSelection(store, member, selected) {
   writeJSON(store, selectionKey(member), selected?.size ? [...selected] : null);

@@ -42,7 +42,11 @@ test('the page states what it will not do', () => {
   assert.match(band, /surface="research\/funds"/);
   assert.match(band, /scopeKey=\{fund\.uid\}/);
   assert.match(band, /\bscoped\b/);
-  assert.match(band, /onAccepted=\{load\}/, 'the note on the page would be stale after Accept wrote it');
+  // D7168: Accept re-reads the row and moves focus to the added text (FND-S05B),
+  // and it waits while the note has unsaved text.
+  assert.match(band, /onAccepted=\{acceptedBrief\}/, 'the note on the page would be stale after Accept wrote it');
+  assert.match(band, /acceptBlocked=\{acceptWaitReason\(noteDirty\)\}/, 'Accept would append the brief to a note with unsaved text');
+  assert.match(page, /const row = await api\.research\.fundGet\(target\);\s+setDrafts\(\(d\) => mergeDrafts\(d, fundRef\.current, row, \['note'\]\)\);/);
   assert.doesNotMatch(page, /draftRestatement|Draft restates only what is on this page/);
   assert.doesNotMatch(page, /\/example\\.com\/i/,
     'a host check must parse the URL; a substring match treats example.com.evil as the sample host');

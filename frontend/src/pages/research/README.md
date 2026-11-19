@@ -47,10 +47,14 @@ zones: one record each, reached from a zone's list.
 | `researchComparisons.js` | The readings that tab and the Add to research panel share: cells, columns that left the directory, the badge (absent, never 0, on a failed read), refusal words and which shells may add to research. |
 | `AddToResearch.jsx` | D5157 part 3: the Add to research and Compare panel (RS-04, RS-05), the shared `Sheet`: pick one of your active projects or start one, then keep the companies or funds there or open a comparison of them. |
 | `ResearchActions.jsx` | D5157 part 3: a company or fund profile's Add to research and Compare buttons, which open that panel. |
-| `MarketDirectoryZone.jsx` | `/research/markets`, the Markets zone `ResearchWorkspace` mounts (D546, D593): the taxonomy's markets by tracked sector, the public tab, and the Your market readings card, where a comparable range is recorded. Each card reads, fails and retries on its own. |
+| `MarketDirectoryZone.jsx` | `/research/markets`, the Markets zone `ResearchWorkspace` mounts (D546, D593): the taxonomy's markets by tracked sector, the Listed companies tab (D7172), and the Your market readings card, where a comparable range is recorded. Each card reads, fails and retries on its own. |
+| `ListedCompaniesPanel.jsx` | D7172: the Markets zone's Listed companies tab (D7037 canvas): name or ticker search, Source and Sort, two sources never merged, Details, folded columns, focus after paging, the scoped export control both tabs use, phone cards and the filters sheet. Every count is the Worker's. |
+| `listedCompaniesRead.js` | D7172: that tab's URL state (`tab`, `q`, `source`, `sort`, `country`, `sector`, `page`), its page and count readings, and both CSV mappings with the export labels; missing values are written "Not recorded". |
 | `GeographiesZone.jsx` | `/research/geographies`. The countries the directories place a company or a fund in, with both counts and the unplaced counted, never dropped (D546). |
 | `GeographyProfile.jsx` | `/research/geographies/:code`. One country inside `WorkspaceShell` (D593). Per-country demand is Not recorded; a fund size shows only in euros. |
 | `MarketReading.jsx` | `/research/markets/:uid`. One comparable range. A save writes a new reading; a reading past ninety days cannot be attached. Its readings, age windows (`STALE_AT`, `AGE_AT`), `daysSince` and `ageBand` are in `marketReadingRead.js` (D6285). |
+| `CompanySelection.jsx` | D7177 (RS-15 A, D): the company directory's selection bar (both limits, Compare disabled with a visible reason, fixed to the bottom on a phone) and Review selection (each pick with its page and Remove). |
+| `comparisonSave.js` | D7177: the selection rules, the generated title, the save outcomes and their words, Check save status, "Saved part-way" and the comparison pager and stepper, pure so the pages and tests share them. |
 
 The workspace chrome — crumb, zone pills, company chip — lives in
 `frontend/src/workspaces/WorkspaceShell.jsx`, not in these files. A fit score

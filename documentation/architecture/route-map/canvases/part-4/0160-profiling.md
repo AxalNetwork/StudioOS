@@ -1,1 +1,7 @@
-| Profiling | founder | `/spinout-lab/profiling` | `/spinout-lab/profiling` | `profiling.ts`, `assessment.ts`, `values.ts`, `skills.ts` | OUT OF SCOPE | Lab tool, Wk 1. |
+| Profiling | founder | `/spinout-lab/profiling` | `/spinout-lab/profiling` | {backend} | OUT OF SCOPE | Lab tool, Wk 1. |
+
+backend:
+- `assessment.ts`
+- `profiling.ts`
+- `skills.ts`
+- `values.ts`
