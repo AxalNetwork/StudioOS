@@ -43,7 +43,7 @@ class FakeGmail {
   install() {
     globalThis.fetch = (async (input: any, init: any = {}) => {
       const url = String(input);
-      if (url === 'https://oauth2.googleapis.com/token') { this.tokens++; return Response.json({ access_token: 'ya29.fake' }); }
+      if (url === 'https://oauth2.googleapis.com/token') { this.tokens++; return Response.json({ access_token: 'test-access-token' }); }
       if (url === 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send') {
         if (this.failNext) { this.failNext = false; return new Response('{}', { status: 503 }); }
         this.sent.push(Buffer.from(JSON.parse(init.body).raw, 'base64url').toString('utf8'));
