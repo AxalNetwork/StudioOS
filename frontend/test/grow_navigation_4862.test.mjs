@@ -56,7 +56,7 @@ test('GR-04 entry points and existing module, Distribution and Reporting deep li
     'partner-network', 'market-expansion', 'durable-company-building'];
   for (const slug of legacy) assert.ok(modules.has(slug), slug + ' must remain a recognized Grow module');
   for (const slug of modules) {
-    check('/grow/' + slug, slug === 'partner-network' ? '/grow/partner-network' : '/grow/:slug');
+    check('/grow/' + slug, ['partner-network', 'team-expansion'].includes(slug) ? '/grow/' + slug : '/grow/:slug');
     check('/grow/' + slug + '/new', '/grow/:slug/new');
     check('/grow/' + slug + '/record-123', '/grow/:slug/:id');
   }

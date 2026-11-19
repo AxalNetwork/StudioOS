@@ -21,7 +21,7 @@ import revenue from '../src/routes/revenue.ts';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { CARD_STATES, MIN_POINTS, figure, pageOf, seriesState, settleCard } from '../src/services/cycleCards.ts';
 import { billingPeriods, cohortRetention, computeMovements, movementGap, recomputeRevenueMovements, type LedgerRecurring } from '../src/services/revenueMovements.ts';
-import { nrrFromLedger, planMonth, readiness, utmSource, DURABILITY_ITEMS } from '../src/services/growCycle.ts';
+import { nrrFromLedger, planMonth, readiness, teamCard, utmSource, DURABILITY_ITEMS } from '../src/services/growCycle.ts';
 import { landReply } from '../src/services/updateShare.ts';
 import { STRIPE_NO_CUSTOMER } from '../src/services/revenueLedger.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -550,4 +550,25 @@ test('D969: a feedback row carries its roadmap item\'s id, so Edit feedback\'s c
   const of = (uid: string) => rows.find((r: any) => r.id === uid);
   assert.deepEqual([of(linked.body.uid).roadmap_item_ref, of(linked.body.uid).roadmap_item_label], ['12', 'CSV export']);
   assert.deepEqual([of(typed.body.uid).roadmap_item_ref, of(typed.body.uid).roadmap_item_label], [null, 'Sync'], 'a typed item has no id');
+});
+
+
+test('GR-08 combines the venture roster, its nearest plan period, open roles and recorded offer stages', async () => {
+  const f = await fixture();
+  f.db.exec(`INSERT INTO company_people (uid, company_id, name, person_type, status, start_date, created_by) VALUES
+    ('person-gr08', 70, 'Team member', 'employee', 'active', '2026-01-01', ${FOUNDER});
+    INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, updated_by) VALUES
+    ('old-gr08', 70, '2026-08', 3, ${FOUNDER}), ('next-gr08', 70, 'Q4 2026', 4, ${FOUNDER});
+    INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status) VALUES
+    (5, 'published-gr08', ${FOUNDER}, ${PID}, 'Engineer', 'published'),
+    (6, 'draft-gr08', ${FOUNDER}, ${PID}, 'Designer', 'draft'),
+    (7, 'other-gr08', ${FOUNDER}, 999, 'Other role', 'published');
+    INSERT INTO job_applications (id, posting_id, email, stage) VALUES
+    (1, 5, 'a@x.example', 'offer'), (2, 6, 'b@x.example', 'offer'), (3, 7, 'c@x.example', 'offer');`);
+  const card = await teamCard({ env: f.env, projectId: PID, now: Date.parse('2026-11-12T00:00:00Z'), href: (slug) => `/grow/${slug}` });
+  assert.deepEqual((card.series as { talent: unknown }).talent, {
+    headcount: 1, plan: { period: '2026-12', target: 4 }, open_roles: 1, offers: 1,
+  });
+  const rows = (await module_(f, 'team-expansion')).body.records.rows;
+  assert.deepEqual(rows.map((row: any) => [row.id, row.in_offer]).sort(), [[5, 1], [6, 1]]);
 });
