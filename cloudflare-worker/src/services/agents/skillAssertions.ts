@@ -64,9 +64,33 @@ export const UNIT_MAX = 12;
 
 export type NumberAssertion = { metric: string; value: number; unit: string; tolerance: number };
 
-const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** The term as a whole word, case-insensitive. */
-const word = (term: string) => new RegExp(`(?:^|[^a-z0-9])${esc(term.toLowerCase())}(?:$|[^a-z0-9])`);
+const ALNUM = /[a-z0-9]/;
+/**
+ * Where `label` starts in `p` at a word start (the start of `p`, or after a character other than a-z and 0-9), from
+ * `from` on, or -1. A plain scan, never a pattern built from the label (Semgrep detect-non-literal-regexp is fixed, not
+ * suppressed: GOTCHAS.md).
+ */
+function wordStart(p: string, label: string, from: number): number {
+  for (let i = p.indexOf(label, from); i >= 0; i = p.indexOf(label, i + 1)) {
+    if (i === 0 || !ALNUM.test(p[i - 1])) return i;
+  }
+  return -1;
+}
+/** The term as a whole word, case-insensitive: `p` (lower-case) holds it between non-alphanumerics or the ends. */
+const word = (term: string) => {
+  const t = term.toLowerCase();
+  return {
+    test(p: string): boolean {
+      for (let i = wordStart(p, t, 0); i >= 0; i = wordStart(p, t, i + 1)) {
+        const after = p[i + t.length];
+        if (after === undefined || !ALNUM.test(after)) return true;
+      }
+      return false;
+    },
+  };
+};
+/** What may follow a metric's label: a separator, then the figure, its attached unit and a spaced word. */
+const AFTER_LABEL = /^\s*(?:\|\s*)?(?:[:=]|is|of|at|was)?\s*(?:\|\s*)?(-?\d[\d,]*(?:\.\d+)?)([a-z%$€£]*)(?: ([a-z%$€£]+))?/;
 const CONDITIONAL = /(?:^|[^a-z])(if|would|could|assume|assuming|suppose|hypothetical(?:ly)?)(?:$|[^a-z])/;
 const FIGURE = /\d/;
 
@@ -113,12 +137,20 @@ export function checkNumberAssertion(raw: unknown): NumberAssertion | null {
  * the assertion asks for.
  */
 export function valuesOf(metric: string, parts: readonly string[]): Array<{ value: number; attached: string; spaced: string }> {
-  const label = esc(metric.toLowerCase());
-  const re = new RegExp(`(?:^|[^a-z0-9])${label}\\s*(?:\\|\\s*)?(?:[:=]|is|of|at|was)?\\s*(?:\\|\\s*)?(-?\\d[\\d,]*(?:\\.\\d+)?)([a-z%$€£]*)(?: ([a-z%$€£]+))?`, 'g');
+  const label = metric.toLowerCase();
   const out: Array<{ value: number; attached: string; spaced: string }> = [];
   for (const p of parts) {
     if (CONDITIONAL.test(p)) continue;
-    for (const m of p.matchAll(re)) out.push({ value: Number(m[1].replace(/,/g, '')), attached: m[2] ?? '', spaced: m[3] ?? '' });
+    // Left to right and never overlapping, as a global match would: a match's leading boundary character
+    // (the one before the label) may not sit inside the previous match.
+    let end = 0;
+    for (let i = wordStart(p, label, 0); i >= 0; i = wordStart(p, label, i + 1)) {
+      if (i > 0 && i - 1 < end) continue;
+      const m = AFTER_LABEL.exec(p.slice(i + label.length));
+      if (!m) continue;
+      out.push({ value: Number(m[1].replace(/,/g, '')), attached: m[2] ?? '', spaced: m[3] ?? '' });
+      end = i + label.length + m[0].length;
+    }
   }
   return out;
 }
@@ -278,7 +310,7 @@ export function resolves(path: string, records: Record<string, unknown>): boolea
     let at: unknown = records[key];
     let ok = true;
     for (const s of seg.slice(k)) {
-      if (Array.isArray(at) && /^\d+$/.test(s) && Number(s) < at.length) { at = at[Number(s)]; continue; }
+      if (Array.isArray(at) && /^\d+$/.test(s) && Number(s) < at.length) { at = at.at(Number(s)); continue; }
       const o = obj(at);
       const kk = o ? keyOf(o, s) : undefined;
       if (!o || kk === undefined) { ok = false; break; }

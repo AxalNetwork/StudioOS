@@ -198,3 +198,36 @@ test('each fact that cannot be read makes the step unavailable, never a lower ru
   }
   assert.equal((await focus(db)).rule, 'next_interview', 'a healthy read recovers');
 });
+
+// D4589 part 2 (#4589): the fact readers on the D4585/D4586 definitions.
+
+test('part 2: a result of only whitespace is no observed result, as D4586 § 4 defines it', async () => {
+  const db = fixture();
+  interview(db, ['slow dispatch']);
+  db.prepare(`INSERT INTO hypothesis_experiments (uid, project_id, hypothesis_id, title, status, result) VALUES ('e3', ?, 31, 'Landing page', 'done', ?)`).run(P, '\n\t ');
+  const f = await focus(db);
+  assert.equal(f.rule, 'record_result', 'a tab-and-newline result is not a finding');
+  assert.match(f.why, /“Landing page” is marked done with no result/);
+});
+
+test('part 2: a claim at the bar with material contradiction is contested (v2): a next test, never a decision to consider', async () => {
+  const db = fixture();
+  for (let i = 0; i < 5; i += 1) interview(db, ['slow dispatch']);
+  for (let i = 0; i < 3; i += 1) interview(db, ['churn']);
+  link(db, 1, 'supports');
+  link(db, 2, 'contradicts');
+  const f = await focus(db);
+  assert.equal(f.rule, 'next_test', 'v1 read 5 supporting as validated; v2 reads 5 against 3 as contested');
+  assert.equal(f.why, '5 interviews support it and 3 contradict it. One more test should tell them apart.');
+});
+
+test('part 2: missing fits that could change the status leave it Not recorded, and the why says so', async () => {
+  const db = fixture();
+  for (let i = 0; i < 3; i += 1) interview(db, ['slow dispatch']);
+  interview(db, ['slow dispatch'], null);
+  interview(db, ['slow dispatch'], null);
+  link(db, 1, 'supports');
+  const f = await focus(db);
+  assert.equal(f.rule, 'missing_fit');
+  assert.equal(f.why, '2 supporting interviews have no ICP fit recorded, so H1’s status reads Not recorded until they do.');
+});

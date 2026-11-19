@@ -126,7 +126,7 @@ test('rows with no store say so; the LPA reads the holdings', () => {
 });
 
 test('the page takes its onboarding status from the records, not the access ladder', () => {
-  const src = codeOnly(read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx'));
+  const src = codeOnly(read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx') + read('frontend/src/pages/investor/fund/FundOnboardingSection.jsx'));
   assert.match(src, /const status = onboardingStatus\(name, \{/);
   assert.doesNotMatch(src, /committed: 5, voting: 5/, 'the ladder-derived status is back');
   assert.match(src, /api\.kycStatus\(\)/);
@@ -142,7 +142,7 @@ test('a scheduled date that has passed says so', () => {
 });
 
 test('no page claims Parallel Markets, a countersignature it cannot see, or verified accreditation', () => {
-  const page = read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx');
+  const page = read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx') + read('frontend/src/pages/investor/fund/FundParticipationSection.jsx') + read('frontend/src/pages/investor/fund/FundOnboardingSection.jsx');
   assert.doesNotMatch(page, /Parallel Markets/);
   assert.doesNotMatch(page, /Committed = countersigned subscription/);
   assert.doesNotMatch(page, /activate once your commitment is countersigned/);

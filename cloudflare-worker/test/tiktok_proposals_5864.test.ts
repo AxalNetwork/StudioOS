@@ -197,12 +197,10 @@ test('5. the writes are logged through logGrowWrite, counts only', async () => {
   await decide(v, proposals(v.db)[0].id, 'dismiss');
   assert.deepEqual(activity(v.db, 'grow_tiktok_channel_dismissed').map((a: any) => a.details), ['TikTok channel proposal dismissed']);
 
-  const logged = JSON.stringify([lines, w.db.prepare('SELECT * FROM activity_logs').all()]);
-  // #5504: a random hex uid (an entity_id) can hold these digits by chance, so a number counts only where it is not
-  // part of a longer hex or digit run. The words and ids are matched as they are.
-  const holds = (text: string, never: string) => (/^\d+$/.test(never) ? new RegExp(`(?<![0-9a-f])${never}(?![0-9a-f])`, 'i').test(text) : text.includes(never));
-  assert.ok(holds('{"likes_count":8765}', '8765') && !holds('"entity_id":"7f6787d50069e8765fa3"', '8765'), 'the matcher sees a count, not a uid');
-  for (const never of ['4321', '8765', '6543', 'Demo reel', OPEN_ID, 'tok-61']) assert.ok(!holds(logged, never), `a log holds ${never}`);
+  // A new channel's uid is 32 random hex characters, which hold one of the figures below about once in 800 runs
+  // (the merge queue saw "6543" in one on 2026-11-19); the uid is not a figure, so it is masked before the check.
+  const logged = JSON.stringify([lines, w.db.prepare('SELECT * FROM activity_logs').all()]).replace(/\b[0-9a-f]{32}\b/g, '<uid>');
+  for (const never of ['4321', '8765', '6543', 'Demo reel', OPEN_ID, 'tok-61']) assert.ok(!logged.includes(never), `a log holds ${never}`);
 });
 
 test('6. disconnect and the deauthorization webhook delete the connection\'s proposals; an accepted channel stays', async () => {

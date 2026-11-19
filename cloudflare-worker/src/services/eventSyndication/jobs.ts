@@ -102,7 +102,7 @@ export async function runSyndicationJob(env: Env, payload: { syndication_uid?: s
     }
   }
 
-  const adapter = syndicationChannel(row.channel);
+  const adapter = syndicationChannel(row.channel, env);
   if (!adapter || !account || !event) {
     await fail(env, row, base, action, 'This channel has no adapter yet, so nothing was sent.', null, true);
     return;

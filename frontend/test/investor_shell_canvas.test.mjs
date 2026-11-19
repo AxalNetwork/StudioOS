@@ -107,6 +107,8 @@ test('D1424 (#3700): each investor zone header fills the primary D1424 names, or
     'portfolio/updates': ['Chase all overdue'],
     'portfolio/value-add': ['Log support'],
     'research/ask': ['New brief'],
+    // D7171 part 2 (D7036 RMD-08): the investor's Markets header leads with Edit thesis.
+    'research/markets': ['Edit thesis'],
   });
   for (const none of ['deals/screening', 'deals/commit', 'portfolio/positions', 'funds/ledger']) {
     assert.ok(INVESTOR_ZONE_ACTIONS[none], `${none} left the table`);

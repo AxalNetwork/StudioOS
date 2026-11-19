@@ -8,6 +8,11 @@
  * (`api.raiseProspects`), the materials read and the caller's own drafts;
  * Activity its read. Every value nobody recorded reads "Not recorded", never
  * 0, and a commitment with no status is never counted.
+ *
+ * D7513 (#7513, RAC22C): a typed line recorded from a call's response keeps
+ * that call (`line.call`, from `raise_prospects.round_call_uid`); the row names
+ * it with its uid, and `?recorded=<prospect>` (the call page's link) marks the
+ * moved line and says what was recorded, from the read alone.
  */
 import { NO_STATUS, PASSED, STAGE_LABEL, centsText } from './capRelModel';
 
@@ -143,11 +148,38 @@ export function commitmentRows(read, f = {}) {
         source_label: l.source_label || words.source?.[l.source] || 'Not recorded',
         on: day(l.on),
         counted: !!l.counted && l.key === inv.chosen?.key,
+        call: l.call && l.call.uid ? { uid: String(l.call.uid), name: String(l.call.name || '') } : null,
         why: l.why_not_counted || (l.counted && l.key !== inv.chosen?.key ? 'Counted once, by this investor’s strongest line.' : null),
       });
     }
   }
   return rows.filter((r) => (!f.status || r.status === f.status) && (!q || r.investor.toLowerCase().includes(q)));
+}
+
+/** The prospect `?recorded=` names, or null for anything that is not a positive id. */
+export function recordedParam(search = '') {
+  const v = new URLSearchParams(search).get('recorded');
+  return v && /^[1-9]\d{0,9}$/.test(v) ? Number(v) : null;
+}
+
+/** True for the moved line: the named prospect's typed line that keeps a call. */
+export const isMovedRow = (row, prospectId) => prospectId != null && row.prospect_id === prospectId && !!row.call;
+
+/**
+ * RAC22C's notice: what the call page recorded, read back from the commitments
+ * read (never from the address): the named prospect's typed line that keeps a
+ * call. Null when the read holds no such line.
+ */
+export function recordedNotice(read, prospectId) {
+  if (prospectId == null) return null;
+  const inv = (read?.investors || []).find((i) => i.prospect_id === prospectId);
+  const l = (inv?.lines || []).find((x) => x.source === 'typed' && x.call?.uid);
+  if (!l) return null;
+  const words = read?.words?.status || {};
+  return {
+    text: `Recorded as ${l.status_label || words[l.status] || NO_STATUS} · ${l.cents == null ? 'Not recorded' : centsText(l.cents, l.currency)} · ${inv.name}`,
+    call: { uid: String(l.call.uid), name: String(l.call.name || '') },
+  };
 }
 
 /** A source of the read that did not answer, with why, so a gap is never read as none. */
