@@ -191,8 +191,12 @@ test('HQ write bar, reason and audit; members, plain admins and branches cannot 
 
 test('operator run reads are per source, capped, HQ-only, body-free and name unfinished runs honestly', async t => {
   const w = world(t);
+  w.db.prepare("INSERT INTO research_market_ingestion_runs(source_id,vintage,started_at,status) VALUES('world-bank','older','1999-01-01','succeeded')").run();
   w.db.prepare("INSERT INTO research_market_ingestion_runs(source_id,vintage,started_at,status,error) VALUES('world-bank','unknown','2000-01-01','running','PRIVATE_PROVIDER_BODY')").run();
+  const expectedId = w.runs()[1].id;
+  w.db.prepare("INSERT INTO research_market_ingestion_runs(source_id,vintage,started_at,status) VALUES('oecd','other-source','2001-01-01','running')").run();
   const got = await w.call(2, 'GET', undefined, mount.path + '/runs?source=world-bank&limit=1');
+  assert.deepEqual([got.body.items.length, got.body.items[0].id, got.body.items[0].source_id], [1, expectedId, 'world-bank']);
   assert.deepEqual([got.status, got.body.items[0].status_label, got.body.items[0].error], [200, 'Not finished', 'previous_import_error']);
   assert.deepEqual([got.body.items[0].rows_seen, got.body.items[0].rows_inserted, got.body.items[0].rows_unchanged], [null, null, null]);
   assert.doesNotMatch(JSON.stringify(got.body), /PRIVATE_PROVIDER_BODY/);
