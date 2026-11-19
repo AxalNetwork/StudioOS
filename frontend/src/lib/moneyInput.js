@@ -35,13 +35,14 @@ export function amountToCents(input) {
   } else if (mark >= 0) {
     const head = raw.slice(0, mark);
     const tail = raw.slice(mark + 1);
-    const several = (raw.match(new RegExp(`\\${raw[mark]}`, 'g')) || []).length > 1;
+    const markCount = raw.split(raw[mark]).length - 1;
+    const several = markCount > 1;
     if (/^\d{1,2}$/.test(tail) && !several && /^\d+$/.test(head.replace(/\s/g, ''))) {
       whole = head.replace(/\s/g, ''); frac = tail;
     } else if (raw[mark] === '.' && !several && /^\d{3}$/.test(tail)) {
       // "1.500" is 1,500 where a dot groups and 1.5 where it is the decimal mark.
       return { error: 'Enter an amount like 1500 or 1500.50. A dot followed by three digits could mean thousands or a decimal, so write the amount without one.' };
-    } else if (GROUPED.test(raw) && raw.replace(/\d|\s/g, '') === raw[mark].repeat((raw.match(new RegExp(`\\${raw[mark]}`, 'g')) || []).length)) {
+    } else if (GROUPED.test(raw) && raw.replace(/\d|\s/g, '') === raw[mark].repeat(markCount)) {
       whole = raw.replace(/[.,\s]/g, '');
     } else return bad;
   } else {

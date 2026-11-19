@@ -33,6 +33,7 @@ from sqlmodel import Session
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
 from backend.app.models.entities import Project, User
+from backend.app.services.log_safe import log_safe
 
 router = APIRouter(prefix="/brand", tags=["Brand & Landing"])
 
@@ -1237,7 +1238,7 @@ def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Ses
         session.commit()
     except Exception as exc:
         session.rollback()
-        logger.warning("brand: contacts ingest failed for landing %s: %s", safe_slug, exc)
+        logger.warning("brand: contacts ingest failed for landing %s: %s", safe_slug, log_safe(exc))
     return {"ok": True}
 
 

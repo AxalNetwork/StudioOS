@@ -44,6 +44,8 @@ import { logCycleWrite } from '../cycleActivity';
 import { cashNow } from '../mercurySpend';
 import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES } from './parse';
 import type { CashflowMonth, MercuryReads } from './reads';
+import { putRecordOrThrow } from '../recordStore';
+import { eraseRecordObjects } from '../recordErasure';
 
 // ───────────────────────────────────────────────────────────── the reads
 
@@ -696,7 +698,8 @@ async function acceptStatement(env: Env, a: { integrationId: number; projectId: 
     if (e instanceof Response) throw new AcceptError(413, 'storage_full', String(((await e.json().catch(() => null)) as any)?.message || 'Storage is full.'));
     throw e;
   }
-  await env.FILES.put(key, pdf.bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: project.uid, uploaded_by: String(a.user.id) } });
+  // D6651: a filed statement is a record, written once under a fresh key.
+  await putRecordOrThrow(env.FILES, key, pdf.bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: project.uid, uploaded_by: String(a.user.id) } });
   let fileId: number | null = null;
   try {
     const ins = await env.DB.prepare(
@@ -709,8 +712,11 @@ async function acceptStatement(env: Env, a: { integrationId: number; projectId: 
     fileId = Number(ins.meta?.last_row_id) || null;
     await env.DB.batch(landedStmts(env, a.integrationId, a.projectId, p, 'data_room_files', fileId, null));
   } catch (e) {
-    if (fileId != null) await env.DB.prepare('DELETE FROM data_room_files WHERE id = ?').bind(fileId).run().catch(() => {});
-    await env.FILES.delete(key).catch(() => {});
+    const unnamed = fileId == null
+      || await env.DB.prepare('DELETE FROM data_room_files WHERE id = ?').bind(fileId).run().then(() => true, () => false);
+    // D6651: the statement this request just stored under a fresh key, once no row names it, leaves
+    // through the one record-erasure path as `unreferenced`; a row that could not be removed keeps it.
+    if (unnamed) await eraseRecordObjects(env.FILES, key, 'unreferenced').catch(() => {});
     throw e;
   }
   await noteStorageLanded(env, storage);

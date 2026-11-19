@@ -103,7 +103,9 @@ test('the completeness meter counts each profile field once', () => {
   // D392 moved the list to `MATCH_FIELDS`, keyed, so the `Match-critical` chip
   // and the meter read one list. Each entry is `['Label', 'field_key']`, and
   // the key is what it scores.
-  const block = profile.slice(profile.indexOf('export const MATCH_FIELDS = ['), profile.indexOf('];', profile.indexOf('export const MATCH_FIELDS = [')));
+  // D7516: the list moved to `profileFields.js`; ProfileZone re-exports it and still scores it.
+  const fieldsSrc = readFileSync(new URL('../src/pages/advisor/expertise/profileFields.js', import.meta.url), 'utf8');
+  const block = fieldsSrc.slice(fieldsSrc.indexOf('export const MATCH_FIELDS = ['), fieldsSrc.indexOf('];', fieldsSrc.indexOf('export const MATCH_FIELDS = [')));
   assert.ok(block.length > 0, 'the field list must be findable');
   const scored = block.split('\n')
     .filter((l) => /^\s*\['/.test(l))

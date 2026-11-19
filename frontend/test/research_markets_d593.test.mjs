@@ -53,7 +53,6 @@ function words(markup) {
 }
 
 /** Where each "Open sector →" link goes, in page order. */
-const opens = (markup) => [...markup.matchAll(/href="(\/research\/markets\/sector\/[^"]+)"[^>]*>Open sector/g)].map((m) => m[1]);
 
 const ready = (data) => ({ status: 'ready', data });
 const loading = { status: 'loading', data: null };
@@ -69,16 +68,6 @@ const MARKETS = {
 };
 
 // `GET /api/research/sectors` as the Worker answers it. Two have no market.
-const SECTORS = {
-  total: 3,
-  items: [
-    { name: 'Agentic B2B', slug: 'agentic-b2b', company_count: 0, fund_count: 0 },
-    { name: 'Fintech / DeFi', slug: 'fintech-defi', company_count: 12, fund_count: 40 },
-    { name: 'Quantum Infrastructure', slug: 'quantum-infrastructure', company_count: 0, fund_count: 3 },
-  ],
-};
-
-const MD = MARKETS.items;
 
 // ---- M1: the markets index ---------------------------------------------------
 //
@@ -294,12 +283,12 @@ test('an investor\'s Markets view draws no readings card and reads none (D6273 Q
   assert.match(src, /\{showReadings \? \(\s*<Readings/);
 });
 
-test('the partner row\'s Re-run stale opens the form on the stale reading; Attach to proposal stays unbuilt', () => {
+test('the partner row\'s Re-run stale opens the form on the stale reading; the unbuilt ops gave way to the D7036 header', () => {
   const ops = PARTNER_ZONE_ACTIONS['research/markets'];
   assert.deepEqual(ops.find((o) => o.label === 'Re-run stale'), { label: 'Re-run stale', kind: 'handler', handler: 'reRunStale' });
-  assert.ok(ops.find((o) => o.label === 'Attach to proposal').unbuilt, 'nothing on this page attaches a reading');
-  // The advisor's AR3 op re-runs sourced sector figures, which no store holds.
-  assert.ok(ADVISOR_ZONE_ACTIONS['research/markets'].find((o) => o.label === 'Re-run stale').unbuilt);
+  // D7171 part 2: Export view and New market research replace the unbuilt ops (D7036 RMD-01).
+  assert.equal(ops.find((o) => o.label === 'Attach to proposal'), undefined);
+  assert.equal(ADVISOR_ZONE_ACTIONS['research/markets'].find((o) => o.label === 'Re-run stale'), undefined);
 
   // Stale first, then a service line never read, else nothing.
   assert.equal(directory.nextToRerun(LIST.items).uid, 'r-old');

@@ -256,17 +256,36 @@ export function apply(doc, op) {
 
 export const BOUND_NEVER = 'Bound figures are never replaced.';
 
-const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const finder = (find, matchCase) => new RegExp(escape(String(find)), matchCase ? 'g' : 'gi');
+/** One UTF-16 unit each, compared without case exactly as a non-unicode `i` regex does. */
+const canon = (ch) => {
+  const up = ch.toUpperCase();
+  // ECMAScript Canonicalize without the u flag: one unit to one unit, and never a non-ASCII unit onto ASCII.
+  return up.length !== 1 || (ch.charCodeAt(0) >= 128 && up.charCodeAt(0) < 128) ? ch : up;
+};
+const sameUnit = (a, b) => canon(a) === canon(b);
 
-/** Where `find` is in a string, as [start, end) pairs, left to right. */
+/**
+ * Where `find` is in a string, as [start, end) pairs, left to right and never overlapping. A plain scan, not a pattern
+ * built from what the user typed (Semgrep detect-non-literal-regexp is fixed, not suppressed: GOTCHAS.md).
+ */
 function spans(text, find, matchCase) {
   if (!find) return [];
+  const needle = String(find);
   const out = [];
-  const re = finder(find, matchCase);
-  let m;
-  while ((m = re.exec(text))) { out.push([m.index, m.index + m[0].length]); if (!m[0].length) re.lastIndex += 1; }
+  for (let i = 0; i + needle.length <= text.length;) {
+    let k = 0;
+    while (k < needle.length && (matchCase ? text[i + k] === needle[k] : sameUnit(text[i + k], needle[k]))) k += 1;
+    if (k === needle.length) { out.push([i, i + needle.length]); i += needle.length; } else i += 1;
+  }
   return out;
+}
+
+/** `text` with each [start, end) span (left to right, not overlapping) replaced by `replace`, taken literally. */
+function replaceSpans(text, hits, replace) {
+  let out = '';
+  let at = 0;
+  for (const [s, e] of hits) { out += text.slice(at, s) + replace; at = e; }
+  return out + text.slice(at);
 }
 
 /** A text block with every match replaced, its rich runs kept (the replacement takes the marks of the words it replaces). */
@@ -305,8 +324,8 @@ function replaceAll(doc, { find, replace = '', matchCase = false }) {
     const next = { ...c };
     for (const k of ['title', 'notes']) {
       if (typeof c[k] !== 'string') continue;
-      const n = spans(c[k], find, matchCase).length;
-      if (n) { next[k] = c[k].replace(finder(find, matchCase), () => replace); total += n; changed = true; }
+      const hits = spans(c[k], find, matchCase);
+      if (hits.length) { next[k] = replaceSpans(c[k], hits, replace); total += hits.length; changed = true; }
     }
     if (Array.isArray(c.blocks)) {
       const blocks = c.blocks.map((b) => {
