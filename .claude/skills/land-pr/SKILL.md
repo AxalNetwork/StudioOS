@@ -93,7 +93,7 @@ The result is written to the run's step summary:
 Base SHA: `<base>`
 Head SHA: `<head>`
 LANDING_AUTO: `true|false`
-    {"tier":"T0|T1|T2","reasons":["T1: route, service, or page: <path>", ...]}
+    {"tier":"T0|T1|T2","reasons":["T1: named source folder: <path>", ...]}
 ```
 
 Eligible means all three: `Head SHA` equals the PR's current head, `LANDING_AUTO`

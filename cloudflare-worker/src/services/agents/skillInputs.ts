@@ -15,13 +15,14 @@
  *   stale              the newest record is older than the window
  *   unavailable_reader no reader is built for this key
  *   withheld           the sponsor may not read this source for this venture (its own rule, checked as them)
+ *   not_granted        the agent's rule book does not read this key, so no run of it carries the evidence (D4667-p2)
  *   unreadable         the reader threw
  *
  * Nothing here is a model call, a network read or a write. Native readers only: an approved MCP adapter or a
  * manually supplied record is a different path, named in `paths`, and is not exercised by this module.
  */
 import type { Env } from '../../types';
-import { isWithheld, READERS, READER_PROVIDES, readOne, type ReadContext } from './reads';
+import { isWithheld, READERS, READER_PROVIDES, readOne, type ReadContext, type ReadResult } from './reads';
 
 export type Expects = 'project_profile' | 'company_profile' | 'activity_summaries' | 'typed_record' | 'document_text' | 'manual_evidence';
 export type Need = { field: string; read: string; expects: Expects; required: boolean };
@@ -81,10 +82,13 @@ export const FIRST_TEN: readonly SkillInputs[] = Object.freeze([
 
 export const FIRST_TEN_SLUGS = Object.freeze(FIRST_TEN.map((s) => s.slug));
 
-export type InputStatus = 'available' | 'empty' | 'missing' | 'absent_optional' | 'partial' | 'stale' | 'unavailable_reader' | 'withheld' | 'unreadable';
-/** `wrong_shape`: the reader answers, but not what the skill needs (summaries where it needs typed fields). */
+export type InputStatus = 'available' | 'empty' | 'missing' | 'absent_optional' | 'partial' | 'stale' | 'unavailable_reader' | 'withheld' | 'not_granted' | 'unreadable';
+/**
+ * `wrong_shape`: the reader answers, but not what the skill needs (summaries where it needs typed fields).
+ * `not_bound` (D4667-p2): the rule book reads it, but the run's context left it out for length, so the run does not carry it.
+ */
 export type InputReport = {
-  field: string; read: string; required: boolean; status: InputStatus; note: string | null; reason?: 'wrong_shape' | 'manual' | 'supplied_invalid';
+  field: string; read: string; required: boolean; status: InputStatus; note: string | null; reason?: 'wrong_shape' | 'manual' | 'supplied_invalid' | 'not_bound';
   /** Where the evidence came from: a native reader, or a person (`manual`, with its reference). */
   source?: 'native' | 'manual'; ref?: string;
 };
@@ -117,6 +121,8 @@ export type PathSupport = { default_context: 'supported' | 'unsupported'; schedu
 export type SkillPreflight = { slug: string; state: Readiness; inputs: InputReport[]; limits: string[]; paths: PathSupport };
 
 export const STALE_DAYS = 45;
+/** A required input in one of these leaves nothing to brief from: the skill is `not_ready`. */
+export const HARD: readonly InputStatus[] = Object.freeze(['unavailable_reader', 'missing', 'empty', 'withheld', 'not_granted', 'unreadable']);
 
 /** Which paths could carry this skill's inputs. Static: it asks no reader. */
 export function pathsFor(slug: string, readers: Partial<Record<string, unknown>> = READERS): PathSupport | null {
@@ -151,12 +157,13 @@ type Reader = (env: Env, c: ReadContext) => Promise<unknown>;
 
 type Provides = Readonly<Record<string, string>>;
 
-async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<Record<string, Reader>>, now: number, provides: Provides): Promise<InputReport> {
+async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<Record<string, Reader>>, now: number, provides: Provides, capture?: Map<string, ReadResult>): Promise<InputReport> {
   const base = { field: n.field, read: n.read, required: n.required };
   const absent = n.required ? 'missing' as const : 'absent_optional' as const;
   if (typeof readers[n.read] !== 'function') return { ...base, status: 'unavailable_reader', note: 'No reader is built for this evidence yet.' };
   let out;
   try { out = await readOne(env, n.read, c, readers); } catch { return { ...base, status: 'unreadable', note: 'The source could not be read.' }; }
+  capture?.set(n.read, out);
   if (isWithheld(out.data)) return { ...base, status: 'withheld', note: out.data.reason };
   if (out.incomplete) return { ...base, status: 'partial', note: 'The record is larger than a run may carry, so none of it is supplied.' };
   const data: any = out.data;
@@ -185,11 +192,20 @@ async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<R
 }
 
 /**
+ * D4667-p2 — what binds the evidence to a run. `granted`: the read keys the agent's rule book names; any other key
+ * is `not_granted` and is not read, because no run of that agent carries it. `bound`: the keys whose blocks the
+ * run's context actually holds (the task loop's prompt, after what it left out for length); a granted key outside
+ * it is `missing` (`absent_optional`), reason `not_bound`. `capture` receives each read's answer, so a run binds the
+ * same snapshot the preflight judged.
+ */
+export type Binding = { granted?: readonly string[]; bound?: readonly string[]; capture?: Map<string, ReadResult> };
+
+/**
  * Reads the real readers for one scope and says whether the skill can run. Required inputs that are not
  * `available` make it `not_ready` when they are absent or unreadable, and `conditional` when some of the
  * evidence is there (partial or stale): a conditional result must state its `limits`.
  */
-export async function preflight(env: Env, slug: string, c: ReadContext, readers: Partial<Record<string, Reader>> = READERS, now = Date.now(), provides: Provides = READER_PROVIDES, supplied: Supplied = {}): Promise<SkillPreflight | null> {
+export async function preflight(env: Env, slug: string, c: ReadContext, readers: Partial<Record<string, Reader>> = READERS, now = Date.now(), provides: Provides = READER_PROVIDES, supplied: Supplied = {}, binding: Binding = {}): Promise<SkillPreflight | null> {
   const skill = FIRST_TEN.find((s) => s.slug === slug);
   if (!skill) return null;
   const inputs: InputReport[] = [];
@@ -203,7 +219,15 @@ export async function preflight(env: Env, slug: string, c: ReadContext, readers:
       else inputs.push({ ...base, status: 'available', note: null, source: 'manual', ref: given!.ref });
       continue;
     }
-    const native = await inputReport(env, n, c, readers, now, provides);
+    if (binding.granted && !binding.granted.includes(n.read)) {
+      inputs.push({ ...base, status: 'not_granted', note: `This agent's rule book does not read ${n.read}.`, source: 'native' });
+      continue;
+    }
+    if (binding.bound && !binding.bound.includes(n.read)) {
+      inputs.push({ ...base, status: n.required ? 'missing' : 'absent_optional', reason: 'not_bound', note: 'The run\'s context left it out for length.', source: 'native' });
+      continue;
+    }
+    const native = await inputReport(env, n, c, readers, now, provides, binding.capture);
     // A person's record stands in only where the platform has nothing to read, and the brief says so.
     if (given !== undefined && !problem && ['unavailable_reader', 'missing', 'absent_optional', 'empty'].includes(native.status)) {
       inputs.push({ ...base, status: 'partial', reason: 'manual', source: 'manual', ref: given.ref, note: `Supplied by a person (recorded ${given.recorded_at}), not read from a record.` });
@@ -211,7 +235,7 @@ export async function preflight(env: Env, slug: string, c: ReadContext, readers:
   }
   // A required input the reader cannot give at all (absent, empty, unreadable, or the wrong shape) leaves nothing to
   // brief from. Some of it (a page of many rows, a stale newest record) leaves a brief that must state its limits.
-  const hard = inputs.some((i) => i.required && (['unavailable_reader', 'missing', 'empty', 'withheld', 'unreadable'].includes(i.status) || i.reason === 'wrong_shape'));
+  const hard = inputs.some((i) => i.required && (HARD.includes(i.status) || i.reason === 'wrong_shape'));
   const lacking = inputs.filter((i) => i.status !== 'available');
   const state: Readiness = hard ? 'not_ready' : lacking.length ? 'conditional' : 'ready';
   const limits = lacking.map((i) => `${i.field}: ${i.note ?? i.status}`);

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
@@ -72,7 +73,9 @@ export default function EngagementsZone() {
   const [note, setNote] = useState(null);
   const [deciding, setDeciding] = useState(null);
   const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '', end_reason: '' });
-  const [adding, setAdding] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [adding, setAdding] = useState(() => searchParams.get('new') === '1');
+  useEffect(() => { if (searchParams.get('new') === '1') setAdding(true); }, [searchParams]);
   const [candidates, setCandidates] = useState([]);
   const [partial, setPartial] = useState(null);
   // #4714 (D4714): whether the bookings the candidates come from were read.

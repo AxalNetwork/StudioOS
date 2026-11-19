@@ -229,10 +229,14 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Attach to session', unbuilt: 'a grant can open a client’s sessions to you, but nothing records a brief against one' },
     { label: 'Export', kind: 'export' },
   ],
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); New market research is drawn and disabled:
+  // a research project opens for the founder licence only. They replace the
+  // unbuilt Re-run stale and Add source, and Export.
   'research/markets': [
-    { label: 'Re-run stale', unbuilt: 'sector counts are a supplied baseline; nothing re-runs one from here' },
-    { label: 'Add source', unbuilt: 'each sector names its source; nothing here configures one' },
-    { label: 'Export', kind: 'export' },
+    { label: 'Export view', kind: 'export' },
+    { label: 'New market research', unbuilt: 'research projects open for the founder licence only; this licence has none to start' },
   ],
   'research/companies': [
     { label: 'Add company', unbuilt: 'the directory is a sourced baseline; nothing here adds a company' },

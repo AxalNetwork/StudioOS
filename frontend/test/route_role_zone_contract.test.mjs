@@ -173,10 +173,15 @@ test('zoneForPath answers a root with its first zone and an unknown slug with nu
  */
 const FOUNDER_PREVIEW_PREFIXES = ['/research', '/network'];
 
-test('admin, browsing Research and Network as the founder, reaches only zones the founder shell lists', () => {
-  assert.match(appSrc, /const researchRole = \(!effectiveRole \|\| effectiveRole === 'admin'\) \? 'founder' : effectiveRole;/,
-    'an admin no longer previews Research as the founder; this guard must learn the new rule');
-  assert.match(appSrc, /const networkRole = researchRole;/);
+test('admin, browsing Research and Network as the founder, reaches only zones the founder shell lists', async () => {
+  // D7178: researchRole is the held-licence rule (`researchRoleFor`); its admin case is the one this test relies on.
+  assert.match(appSrc, /const researchRole = researchRoleFor\(\{ effectiveRole, heldLicences, pathname: location\.pathname, labActive: user\?\.spinout_lab_active === 1 \}\);/);
+  const { researchRoleFor } = await import('../src/lib/researchAccess.js');
+  for (const pathname of ['/research', '/research/markets', '/research/companies', '/research/diligence', '/research/client-prep']) {
+    assert.equal(researchRoleFor({ effectiveRole: 'admin', heldLicences: ['admin'], pathname }), 'founder',
+      `an admin no longer previews ${pathname} as the founder; this guard must learn the new rule`);
+  }
+  assert.match(appSrc, /const networkRole = \(!effectiveRole \|\| effectiveRole === 'admin'\) \? 'founder' : effectiveRole;/);
   const founder = declared.get('founder');
   const offenders = [];
   let foreign = 0;
