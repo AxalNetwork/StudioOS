@@ -57,6 +57,9 @@ export const ESIGN_FORWARD = /^\/api\/(legal\/)?esign\/\d+\/forward$/;
 // signing link again, and POST `/:id/void` is a write on a legal record. Both
 // join origination and forwarding in `esign_send`. Same anchoring as above.
 export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$/;
+// D6197: a signer's own "send me my link again" (POST `/:id/resend`) mails an
+// Axal-branded link too, so it joins `esign_send`. Same anchoring as above.
+export const ESIGN_SIGNER_RESEND = /^\/api\/(legal\/)?esign\/\d+\/resend$/;
 
 // D691 — the deck share link's signup (routes/deck_share_actions.ts), mounted
 // under /api/decks. Exported so the test executes the pattern itself.
@@ -201,7 +204,7 @@ const BUCKETS: Bucket[] = [
     name: 'esign_send',
     limit: 10,
     windowSec: 3600,
-    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send' || ESIGN_FORWARD.test(p) || ESIGN_SENDER_ACTION.test(p)),
+    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send' || ESIGN_FORWARD.test(p) || ESIGN_SENDER_ACTION.test(p) || ESIGN_SIGNER_RESEND.test(p)),
     scope: 'user',
     failClosed: true,
   },
