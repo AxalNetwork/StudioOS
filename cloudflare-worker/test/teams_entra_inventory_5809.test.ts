@@ -31,9 +31,11 @@ const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8
 
 /** The quoted strings of a `const NAME = [ … ];` array in the source. */
 function arrayConst(src: string, name: string): string[] {
-  const m = new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(src);
-  assert.ok(m, `no const ${name}`);
-  return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  const head = `const ${name} = [`;
+  const at = src.indexOf(head);
+  const end = at < 0 ? -1 : src.indexOf(']', at + head.length);
+  assert.ok(end >= 0, `no const ${name}`);
+  return [...src.slice(at + head.length, end).matchAll(/'([^']+)'/g)].map((x) => x[1]);
 }
 
 /** One table's `KEY = "value"` lines, up to the next table header. */
