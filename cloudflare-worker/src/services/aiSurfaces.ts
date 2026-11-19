@@ -72,6 +72,8 @@ export const AI_SURFACE = {
   raiseCapitalRelationships: '/raise/capital-relationships',
   /** Raise · Data room — search inside the room on its own index (`POST /api/data-room/:uid/search`, `/search/index`, `/shared/:uid/search`), #3938. */
   raiseDataRoom: '/raise/data-room',
+  /** Portfolio · Positions — Eadwyn's drafts on a mark request: the investor's reason and HQ's basis and source, never a value (`/api/mark-requests/drafts/*`), D6909 part 4. */
+  portfolioPositions: '/portfolio/positions',
   /** Raise · Evidence — Eadwyn's proposed pack selection for one reader, before Share outside Axal (`POST /api/cycles/raise/share-drafts/run`), D6897 part 3. */
   raiseEvidence: '/raise/evidence',
   /** Grow · Partner network — the founder's press ranks the venture's partners against a need (`POST /api/cycles/grow/partners/rank`), #3938 GR17. */

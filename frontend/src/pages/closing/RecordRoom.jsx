@@ -25,7 +25,7 @@ import { closingHrefFor, envelopesOf, moneyCents } from './deskModel';
 import { parseMinor } from '../../lib/money';
 import { SyndicatePanel } from './RoutePanels';
 import PaperState from './PaperState';
-import { AccountDialog, CaptableDialog, MatchDialog, PaymentDrawer, ReceiptDrawer, SignDrawer } from './RoomDialogs';
+import { AccountDialog, CaptableDialog, MatchDialog, PaymentDrawer, ReceiptDrawer, SignDrawer, saveBlob } from './RoomDialogs';
 import {
   ACCOUNT_WORDS, accountView, savedNote, INVESTOR_PART_CLAIM, NO_ACCESS, ROOM_FAILED, ROOM_WAITS, STEPS, captableView, dutyRows, investorDuties, investorLeft, investorPartUnreadable, investorSummary,
   liveEnvelope, matchesFor, needsYou, portfolioCompanyHref, roomLines, roomTiles, stepStrip,
@@ -464,17 +464,6 @@ function SentDeclaration({ closing, row, full, onDone }) {
       </div>
     </div>
   );
-}
-
-function saveBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** D6199: the investor's own signed copy, fetched only when its button is pressed. */

@@ -23,7 +23,8 @@
  * `GET /__visual/manifest` answers the session token, the user and the
  * ventures, so the spec signs in and walks the matrix without a login page.
  *
- *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *   node --experimental-strip-types --no-warnings --import { reportPrivateError } from '../../../cloudflare-worker/src/util/errorPrivacy.ts';
+import ./cloudflare-worker/test/_ts-loader.mjs \
  *     frontend/tests/visual/server.ts            (from the repo root; PORT defaults to 4791)
  */
 import { createServer } from 'node:http';
@@ -209,8 +210,8 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
     res.end(readFileSync(file));
   } catch (e) {
-    // The trace goes to the runner's log, never into the reply.
-    console.error('[visual] request failed', e);
+    // Keep a diagnostic classification, without exception messages, paths or stack contents.
+    reportPrivateError('visual_request', e);
     res.writeHead(500, { 'content-type': 'text/plain' });
     res.end('The visual test server could not answer this request.');
   }

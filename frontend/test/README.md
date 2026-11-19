@@ -221,9 +221,11 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 | `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
 | `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
+| `practice_cockpit_4829.test.mjs` | D4829: source isolation, canonical counts, timezone boundaries, pagination, record destinations, retry and Client Sheet. |
 | `network_picker_6637.test.mjs` | D6637: mounted picker selection, eligibility and submission. |
 | `network_picker_6636.test.mjs` | D6636: mounted picker selection, eligibility and submission. |
 
+| `deal_flow_attention_6424.test.mjs` | D6424: recorded stale/new/waiting badges, unset rule, firm setting and failed attention-source rendering. |
 | `licence_agreement_replacement_6562.test.mjs` | D6562: rendered replacement readiness, frozen preview and hash, honest unknown comparison and send gating. |
 | `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
 | `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |
@@ -232,3 +234,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
 
 `release_phases_5667.test.mjs` verifies release/target isolation, ordered receipt selection, phase failures and the existing publication relay boundary.
+| `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
