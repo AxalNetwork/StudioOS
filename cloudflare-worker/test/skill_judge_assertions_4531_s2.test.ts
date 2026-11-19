@@ -40,8 +40,8 @@ const refused = (expect: Record<string, unknown>, message: RegExp | string) => {
   }
 };
 
-test('the evaluator is version 4 (D4531 part 4 extends claims) and names its assertion keys', () => {
-  assert.equal(JUDGE_VERSION, 4);
+test('the evaluator is version 5 (D7700 adds selected-passage citations) and names its assertion keys', () => {
+  assert.equal(JUDGE_VERSION, 5);
   assert.deepEqual([...ASSERTION_KEYS], ['numbers', 'output_schema', 'structure', 'evidence', 'refusal', 'claims']);
 });
 
