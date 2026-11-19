@@ -79,6 +79,14 @@
  * through the Agent Skills SDK adapter, over the D1-authorized run manifest;
  * a D1 re-check that refuses there is 409 `skill_unavailable` before any
  * model call, and its `run` event names the runtime (`skill_runtime`).
+ *
+ * EVIDENCE (D4667-p2, #4667). A skill of the first ten runs only when its required evidence can be supplied:
+ * right after `skillForRun`, and before the skill text, the tool reads, the hold and the model,
+ * `skillEvidenceForRun` reads the same preflight the readiness surface reports, as the sponsor, through the keys
+ * the agent's rule book reads. `not_ready` is 422 `skill_not_ready`, naming the inputs; nothing is held or charged.
+ * A conditional run's system prompt states its limits. A manual run carries the evidence it judged in its message,
+ * as data. An engine run gets that check from the task loop (`readiness`), whose context holds the reads already.
+ * A retried step still answers its proposal first, before any check.
  */
 import { agentModels, planOk } from './modelOffers';
 import { allowlistRefusal } from './allowlists';
@@ -98,6 +106,7 @@ import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type Agen
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
 import { skillForRun, tagUsage } from './skillEval';
 import { skillEngineOf, skillTextForRun, type RunSkillDeps, type RunSkillText } from './skillRuntime';
+import { EVIDENCE_NOTICE, limitsPrompt, skillEvidenceForRun, ventureOfRun, type RunEvidence } from './skillEvidence';
 
 export const PROMPT_MAX = 8000;
 const CYCLE_PAGE = { validate: 'Founder · Validate', build: 'Founder · Build', raise: 'Founder · Raise', grow: 'Founder · Grow' } as const;
@@ -124,6 +133,11 @@ export type AgentRunInput = {
   skillDeps?: RunSkillDeps;
   /** D7073: true only from the task loop (`agents/loop.ts`). An engine run needs the `agents` gateway. */
   engine?: boolean;
+  /**
+   * D4667-p2: the task loop's evidence check of this run's skill (`skillEvidenceForRun` over its own context).
+   * Read only on an engine run and only for the same skill; any other run makes its own check.
+   */
+  readiness?: Pick<RunEvidence, 'slug' | 'limits'> | null;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -419,6 +433,19 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   // D1612 part D (#3954): a named skill runs at the agent's pinned version; its tools are checked again now.
   const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool), input.skillVersion ?? null) : null;
   if (skill && !skill.ok) return refused(env, a, skill, input.module, input.option);
+  // D4667-p2: a skill of the first ten runs only on evidence its readers can supply; before any text, read, hold or charge.
+  let evidence: Pick<RunEvidence, 'slug' | 'limits'> & { blocks?: string[] } | null = null;
+  if (skill) {
+    const given = input.engine === true && input.readiness && input.readiness.slug === skill.skill.slug ? input.readiness : null;
+    if (given) evidence = given;
+    else {
+      const checked = await skillEvidenceForRun(env, {
+        agent: a, scope: c.scope, rules: c.rules, slug: skill.skill.slug, projectId: await ventureOfRun(env, c.scope, input.taskId),
+      });
+      if (!checked.ok) return refused(env, a, checked, input.module, input.option);
+      evidence = checked.evidence;
+    }
+  }
   // D4555: the skill's text through the skill runtime; the legacy loader unless the preview switch is on.
   const engine = skill ? skillEngineOf(env) : 'legacy';
   let loaded: RunSkillText | null = null;
@@ -426,6 +453,8 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     loaded = await skillTextForRun(env, a.id, skill, engine, input.skillDeps);
     if (!loaded.ok) return refused(env, a, no(409, 'skill_unavailable', 'This skill is no longer available to this agent, so it was not run.'), input.module, input.option);
     c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${loaded.text}`;
+    const limits = limitsPrompt(evidence);
+    if (limits) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${limits}`;
     // #5340: the SDK path's text (activation and files) is priced before any hold; the ceiling quote above did not hold it.
     if (loaded.runtime === 'cloudflare_sdk') {
       const policy = await readPolicy(env);
@@ -434,6 +463,15 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
       if (over) return refused(env, a, over, input.module, input.option);
     }
   }
+  // D4667-p2: a manual run carries the evidence its check read, as data, priced against the ceiling before any hold.
+  const bound = evidence?.blocks?.length ? `${EVIDENCE_NOTICE}\n${evidence.blocks.join('\n')}` : '';
+  if (bound) {
+    c.opts.messages = [{ role: 'user', content: `${input.prompt}\n\n${bound}` }];
+    const policy = await readPolicy(env);
+    const over = policy ? await ceilingRefusal(env, c, policy.per_run_ceiling_microusd)
+      : no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
+    if (over) return refused(env, a, over, input.module, input.option);
+  }
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
   if ('disconnected' in read) {
     await pause(env, a, 'tool_disconnected');
@@ -441,7 +479,7 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
       { server: read.disconnected }), input.module, input.option);
   }
   if (!read.ok) return refused(env, a, read, input.module, input.option);
-  if (read.block) c.opts.messages = [{ role: 'user', content: `${input.prompt}\n\n${read.block}` }];
+  if (read.block) c.opts.messages = [{ role: 'user', content: [input.prompt, bound, read.block].filter(Boolean).join('\n\n') }];
   // #7073 part 2 (D7073-p2): a run the engine started calls the model accounts through the `agents` gateway, in order.
   // The Stage A preview's stub answers on the router's path below, so it never reaches a live account.
   if (input.engine === true && !inferenceStubOn(env)) {

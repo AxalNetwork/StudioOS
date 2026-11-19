@@ -432,19 +432,19 @@ async function checkRelRateLimit(env: Env, userId: number): Promise<boolean> {
  * the oldest link. Null when the read fails, so a caller can tell "not
  * readable" from "no company".
  */
-async function companiesOf(env: Env, ids: number[]): Promise<Map<number, string> | null> {
+async function companiesOf(env: Env, ids: number[]): Promise<Map<number, { name: string; uid: string | null }> | null> {
   const unique = [...new Set(ids.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
-  const out = new Map<number, string>();
+  const out = new Map<number, { name: string; uid: string | null }>();
   if (!unique.length) return out;
   try {
     const { results } = await env.DB.prepare(
-      `SELECT l.user_id, cp.company_name FROM user_company_links l JOIN company_profiles cp ON cp.id = l.company_id
+      `SELECT l.user_id, cp.company_name, cp.uid AS company_uid FROM user_company_links l JOIN company_profiles cp ON cp.id = l.company_id
         WHERE l.user_id IN (SELECT value FROM json_each(?))
         ORDER BY l.user_id, l.is_primary_admin DESC, l.id ASC`,
-    ).bind(JSON.stringify(unique)).all<{ user_id: number; company_name: string }>();
+    ).bind(JSON.stringify(unique)).all<{ user_id: number; company_name: string; company_uid: string | null }>();
     for (const r of results || []) {
       const name = String(r.company_name ?? '').trim();
-      if (name && !out.has(Number(r.user_id))) out.set(Number(r.user_id), name);
+      if (name && !out.has(Number(r.user_id))) out.set(Number(r.user_id), { name, uid: r.company_uid ?? null });
     }
     return out;
   } catch (e) {
@@ -496,10 +496,13 @@ partnernet.get('/relationships', async (c) => {
     // A company read that fails says so (`companies_unreadable`) rather than
     // reading as "no company", and never takes the book down with it.
     const other = r.partner_a_id === user.id
-      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role, company: companyOf(r.partner_b_id) }
-      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role, company: companyOf(r.partner_a_id) };
+      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role }
+      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role };
+    const company = companyOf(other.id);
     return {
-      ...relationshipForParty(r, user.id), other, my_company: companyOf(user.id),
+      ...relationshipForParty(r, user.id),
+      other: { ...other, company: company?.name ?? null, company_profile_id: company?.uid ?? null },
+      my_company: companyOf(user.id)?.name ?? null,
       ...(companies ? {} : { companies_unreadable: true }),
     };
   });

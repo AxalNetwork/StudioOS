@@ -145,7 +145,7 @@ test('a save never sends the candidate set, so a blank relevance is never writte
 });
 
 test('the page is routed for the list’s licences and the list links to it', () => {
-  assert.match(app, /path="\/research\/companies\/:id" element=\{guard\(labRoles\(\['admin', 'founder', 'advisor'\]\), <CompanyAnalysis /);
+  assert.match(app, /path="\/research\/companies\/:id" element=\{guard\(labRoles\(\['admin', 'founder', 'advisor'\], \{ preview: false \}\), <CompanyAnalysis /);
   // The zone's saved list is a link, and it is the branch `linkToDossier`
   // takes — the text of a Link in a dead arm would prove nothing.
   assert.match(component, /linkToDossier \? \(\s*\/\/[^\n]*\n\s*<Link key=\{a\.id\} to=\{`\/research\/companies\/\$\{encodeURIComponent\(a\.id\)\}`\}/);

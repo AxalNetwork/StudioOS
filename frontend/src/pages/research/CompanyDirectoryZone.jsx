@@ -30,6 +30,7 @@ import {
   activeFilters, companyHref, directoryParams, employees, lastRound, latestOnly, listState, pageList, pageWindow, withoutFilter,
 } from '../../lib/companyDirectoryView.js';
 import { canAddToResearch } from './researchComparisons.js';
+import { ReviewSelection, SelectionBar, SelectionHint } from './CompanySelection.jsx';
 
 const CompetitorAnalysis = lazy(() => import('../../components/CompetitorAnalysis'));
 const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
@@ -292,21 +293,8 @@ export function DirectoryResults({ state, data, filters, onChange, onRetry, pick
   );
 }
 
-/** RS-04 A's selection bar: N selected, Add to research, Compare N (two or more). */
-export function SelectionBar({ count, opener, compareOpener, onClear, onAdd, onCompare }) {
-  return (
-    <div role="region" aria-label="Selected companies" data-testid="company-selection"
-      className="sticky bottom-3 z-10 mx-auto flex w-fit max-w-full flex-wrap items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-900">
-      <span className="text-[12.5px] text-axal-ink dark:text-gray-100"><b>{count}</b> selected</span>
-      <button type="button" onClick={onClear} className="min-h-[44px] rounded-lg px-2 text-[12px] font-semibold text-axal-muted underline sm:min-h-[32px] dark:text-gray-400">Clear</button>
-      <button type="button" ref={opener} onClick={onAdd} data-testid="button-selection-add"
-        className="min-h-[44px] rounded-lg border border-axal-hairline px-3 text-[12px] font-semibold text-axal-ink sm:min-h-[32px] dark:border-gray-700 dark:text-gray-100">Add to research</button>
-      <button type="button" ref={compareOpener} onClick={onCompare} disabled={count < 2} data-testid="button-selection-compare"
-        title={count < 2 ? 'Select two or more companies to compare' : undefined}
-        className="min-h-[44px] rounded-lg bg-violet-700 px-3 text-[12px] font-semibold text-white hover:bg-violet-800 disabled:opacity-50 sm:min-h-[32px] dark:bg-violet-600 dark:hover:bg-violet-500">Compare {count}</button>
-    </div>
-  );
-}
+// D7177: the selection bar and Review selection live in `CompanySelection.jsx`.
+export { SelectionBar };
 
 function useDebounced(value, ms) {
   const [v, setV] = useState(value);
@@ -341,26 +329,42 @@ function Directory({ role, zoneActions, initial, onTotal }) {
   useEffect(() => { load(); }, [load]);
 
   const state = listState(read);
-  // D5157: the selection is kept across pages and filters, by uid with its name.
+  // D5157: the selection is kept across pages and filters, by uid with its name
+  // (D7177: and the page it was ticked on, for Review selection). It is kept
+  // after any failed save: only Clear and Remove change it.
   const [selected, setSelected] = useState(() => new Map());
   const [panel, setPanel] = useState(null);
+  const [reviewing, setReviewing] = useState(false);
   const opener = useRef(null);
   const compareOpener = useRef(null);
+  const reviewOpener = useRef(null);
   const pick = canAddToResearch(role) ? {
     selected,
-    toggle: (x) => setSelected((m) => { const next = new Map(m); if (next.has(x.uid)) next.delete(x.uid); else next.set(x.uid, x.name); return next; }),
+    toggle: (x) => setSelected((m) => {
+      const next = new Map(m);
+      if (next.has(x.uid)) next.delete(x.uid);
+      else next.set(x.uid, { name: x.name, page: filters.page, sector: x.sector || null, country: x.country || null });
+      return next;
+    }),
     // A row's own button is the opener the panel returns focus to.
     onAdd: (x) => setPanel({ mode: 'add', items: [{ uid: x.uid, name: x.name }], back: null }),
   } : null;
-  const chosen = [...selected].map(([uid, name]) => ({ uid, name }));
+  const chosen = [...selected].map(([uid, v]) => ({ uid, ...v }));
+  const removePick = (uid) => setSelected((m) => { const next = new Map(m); next.delete(uid); return next; });
+  const openPanel = (mode) => () => { setReviewing(false); setPanel({ mode, items: chosen.map(({ uid, name }) => ({ uid, name })), back: mode === 'compare' ? compareOpener : opener }); };
   return (
     <>
       {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(read.data?.items || [])} /> : null}
       <CoverageCard coverage={shape?.coverage} />
       <DirectoryFilters filters={filters} facets={shape?.facets} onChange={setFilters} open={open} onToggle={() => setOpen((o) => !o)} />
       <DirectoryResults state={state} data={read.data} filters={filters} onChange={setFilters} onRetry={load} pick={pick} />
-      {pick && chosen.length ? <SelectionBar count={chosen.length} opener={opener} compareOpener={compareOpener} onClear={() => setSelected(new Map())}
-        onAdd={() => setPanel({ mode: 'add', items: chosen, back: opener })} onCompare={() => setPanel({ mode: 'compare', items: chosen, back: compareOpener })} /> : null}
+      {pick && !chosen.length ? <SelectionHint /> : null}
+      {pick && chosen.length ? <SelectionBar picks={chosen} page={filters.page} opener={opener} compareOpener={compareOpener} reviewOpener={reviewOpener}
+        onReview={() => setReviewing(true)} onClear={() => setSelected(new Map())} onAdd={openPanel('add')} onCompare={openPanel('compare')} /> : null}
+      {pick && reviewing ? (
+        <ReviewSelection picks={chosen} onRemove={removePick} onClear={() => { setSelected(new Map()); setReviewing(false); }}
+          onAdd={openPanel('add')} onCompare={openPanel('compare')} onClose={() => setReviewing(false)} returnFocusTo={reviewOpener} />
+      ) : null}
       {panel ? (
         <Suspense fallback={null}>
           <AddToResearch kind="company" items={panel.items} mode={panel.mode} returnFocusTo={panel.back || undefined} onClose={() => setPanel(null)} />

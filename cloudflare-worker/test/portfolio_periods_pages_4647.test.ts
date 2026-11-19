@@ -219,11 +219,23 @@ test('an outstanding promise can be asked for directly, however deep the history
 // 7 ───────────────────────────────────────────────────────────────────────────
 test('a failed figures read says Unreadable; it does not report an empty ledger', async () => {
   const db = fixture(10);
-  // The page read and the figures read are separate statements. Dropping the
-  // table makes both fail; the response must not then claim zero support.
-  db.exec('DROP TABLE portfolio_support_entries');
-  const res = await get(db, '');
+  // The page read and the figures read are separate statements. Only the
+  // figures fail here (#5847: a failed entries read answers 503 instead, see
+  // portfolio_unreadable_reads_5847.test.ts); the response must not then claim zero support.
+  const real = d1Over(db) as any;
+  const refuse = () => Promise.reject(new Error('synthetic read failure'));
+  const DB = { ...real, prepare: (sql: string) => {
+    if (!/GROUP BY s\.(project_id|kind)/.test(sql)) return real.prepare(sql);
+    const stmt: any = { bind: () => stmt, all: refuse, first: refuse, run: refuse };
+    return stmt;
+  } };
+  const token = await new SignJWT({ user_id: ADMIN, role: 'admin' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const r = await app.fetch(new Request('http://t/api/portfolio-support', { headers: { Authorization: `Bearer ${token}` } }),
+    { JWT_SECRET, ENVIRONMENT: 'development', DB } as any, ctx as any);
+  const res = { status: r.status, body: await r.json() as any };
   assert.equal(res.status, 200, 'the ledger still answers');
+  assert.equal(res.body.entries.length, 10, 'with the entries it could read');
   assert.equal(res.body.totals, null, 'with no figures at all rather than zeros');
   assert.match(res.body.totals_reason, /^Unreadable/);
   assert.equal(res.body.page_state, 'unreadable');

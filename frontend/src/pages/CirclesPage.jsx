@@ -6,8 +6,10 @@
  * admin authors at /admin/circles. The canvas also draws a cadence line and a
  * seats chip on each card; a circle row stores neither, so neither is drawn.
  * The access chip, the type and region line, the tagline and the member count
- * are the row's own fields. Joining and requesting access go where they went
- * before this rebuild.
+ * are the row's own fields. Every way in — the page's one button, "Register
+ * interest in a circle", and each card's Join or Request access — opens the
+ * contact form on its Circle topic (#6987). They used to go to the
+ * registration page with a circle intent that page never read.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -33,10 +35,12 @@ const TYPE_ICONS = {
 const TYPE_FILTERS = [{ value: '', label: 'All' }, ...CIRCLE_TYPES.map((t) => ({ value: t.id, label: t.short }))];
 const ACCESS_FILTERS = [{ id: '', label: 'All access' }, ...ACCESS_TYPES];
 
-/** Where a circle's Join / Request access goes: the existing hand-off into registration. */
-export function circleJoinHref(c) {
-  return `/register?intent=circle&circle=${encodeURIComponent(c.slug || c.id)}`;
-}
+/**
+ * Where every circle way in goes: the contact form's Circle topic (#6987),
+ * whose enquiries reach the network desk. Registration read neither the
+ * intent nor the circle the old link sent it, so the link carried nothing.
+ */
+export const CIRCLE_INTEREST_HREF = '/contact?topic=circle';
 
 /** One circle, as the canvas's card, drawn from the row's own fields only. */
 export function CircleCard({ c }) {
@@ -60,7 +64,7 @@ export function CircleCard({ c }) {
         {Number.isFinite(members) && members > 0 && (
           <span className="ax-mono ax-n2-count">{members.toLocaleString('en-US')} {members === 1 ? 'member' : 'members'}</span>
         )}
-        <Link to={circleJoinHref(c)} className={`ax-btn ax-btn-sm ${isPrivate ? 'ax-btn-quiet' : 'ax-btn-primary'}`}>
+        <Link to={CIRCLE_INTEREST_HREF} className={`ax-btn ax-btn-sm ${isPrivate ? 'ax-btn-quiet' : 'ax-btn-primary'}`}>
           {isPrivate ? 'Request access' : 'Join'}
         </Link>
       </div>
@@ -126,8 +130,7 @@ export default function CirclesPage() {
           <h1 className="ax-n2-h1">{CIRCLES_COPY.title}</h1>
           <p className="ax-n2-lede">{CIRCLES_COPY.lede}</p>
           <div className="ax-row-btns" style={{ marginTop: 24 }}>
-            <Link to="/register?intent=circle" className="ax-btn ax-btn-md ax-btn-primary">Join the network →</Link>
-            <Link to="/contact?topic=circle" className="ax-btn ax-btn-md ax-btn-quiet">Create a circle</Link>
+            <Link to={CIRCLE_INTEREST_HREF} className="ax-btn ax-btn-md ax-btn-primary">Register interest in a circle</Link>
           </div>
         </header>
 

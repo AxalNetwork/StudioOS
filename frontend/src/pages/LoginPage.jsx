@@ -123,7 +123,7 @@ function safeNextPath() {
  * generic page.
  */
 function signInContext() {
-  try { return signInContextFor(safeNextPath()); } catch { return null; }
+  try { return signInContextFor(safeNextPath(), window.location.search); } catch { return null; }
 }
 
 export default function LoginPage() {
@@ -600,6 +600,11 @@ export default function LoginPage() {
         {context && (
           <p className="mt-2 text-[13.5px] leading-relaxed text-[#3d3650]" data-testid="login-destination">
             {context.area.what} {context.area.who}
+          </p>
+        )}
+        {context?.ended && (
+          <p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] leading-relaxed text-sky-900" data-testid="login-session-ended">
+            {context.ended}
           </p>
         )}
         <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577]">
