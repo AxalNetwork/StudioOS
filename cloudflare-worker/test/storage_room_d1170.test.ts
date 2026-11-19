@@ -208,31 +208,31 @@ const src = (p: string) => readFileSync(new URL(`../src/${p}`, import.meta.url),
 /** Each member upload: the file, a marker inside its handler, and its write. The guard sits between them. */
 const SITES: Array<[string, string, string]> = [
   // D1089: the upload's storage step is `storeDataRoomFile`, which the route and a Notion snapshot both call.
-  ['routes/data_room.ts', 'export async function storeDataRoomFile', 'await env.FILES.put(key, bytes'],
-  ['routes/data_room.ts', 'export async function replaceDataRoomFile', 'await env.FILES.put(key, a.bytes'],
-  ['routes/dd.ts', "dd.post('/cases/:uid/sections/:sectionId/nda'", 'await c.env.FILES.put(storageKey, buf'],
-  ['routes/dd.ts', "dd.post('/cases/:uid/items/:itemId/evidence'", 'await c.env.FILES.put(key, buf'],
-  ['routes/research.ts', "research.post('/documents', async", 'await c.env.FILES.put(r2Key'],
+  ['routes/data_room.ts', 'export async function storeDataRoomFile', 'await putRecord(env.FILES, key, bytes'],
+  ['routes/data_room.ts', 'export async function replaceDataRoomFile', 'await putRecord(env.FILES, key, a.bytes'],
+  ['routes/dd.ts', "dd.post('/cases/:uid/sections/:sectionId/nda'", 'await putRecord(c.env.FILES, storageKey, buf'],
+  ['routes/dd.ts', "dd.post('/cases/:uid/items/:itemId/evidence'", 'await putRecord(c.env.FILES, key, buf'],
+  ['routes/research.ts', "research.post('/documents', async", 'await putRecordOrThrow(c.env.FILES, r2Key'],
   // D1590 (#3837): a walkthrough take is kept until its maker deletes it, so the upload is guarded.
   ['routes/deck_recordings.ts', "deckRecordings.post('/:id{[0-9]+}/recordings', async", 'await c.env.FILES.put(key, mediaBytes'],
-  ['routes/founder_validate.ts', "founderValidate.post('/interviews/:id/recording'", 'await c.env.FILES.put(key, await file.arrayBuffer()'],
+  ['routes/founder_validate.ts', "founderValidate.post('/interviews/:id/recording'", 'await putRecordOrThrow(c.env.FILES, key, await file.arrayBuffer()'],
   // D1569 (#3816): every per-card clip (an AI voice-over today) lands through the one writer, weighed first.
   ['services/decks/cardAudio.ts', 'export async function putCardAudio', 'await env.FILES.put(key, a.bytes'],
-  ['routes/deck_reviewer.ts', "deckReviewer.post('/upload'", 'await c.env.FILES.put(r2Key, bytes'],
-  ['routes/imports.ts', 'async function maybeStoreRaw', "await env.FILES.put(key, csv"],
+  ['routes/deck_reviewer.ts', "deckReviewer.post('/upload'", 'await putRecord(c.env.FILES, r2Key, bytes'],
+  ['routes/imports.ts', 'async function maybeStoreRaw', "await putRecord(env.FILES, key, csv"],
   ['routes/brand.ts', "brand.post('/logo/upload'", 'await files.put(key, logoBytes'],
-  ['routes/captable.ts', "captable.post('/register/:projectId/snapshot'", 'await c.env.FILES.put(key, bytes'],
+  ['routes/captable.ts', "captable.post('/register/:projectId/snapshot'", 'await putRecord(c.env.FILES, key, bytes'],
   // D6084 (#6084): Use of funds' dated PDF filed in the data room, weighed as the cap table's snapshot is.
-  ['routes/cycle_use_of_funds.ts', "r.post('/snapshot'", 'await c.env.FILES.put(key,bytes'],
+  ['routes/cycle_use_of_funds.ts', "r.post('/snapshot'", 'await putRecord(c.env.FILES,key,bytes'],
   ['services/r2.ts', 'export async function putHeadshotFromDataUri', 'await env.FILES.put(fileKey, bytes'],
-  ['services/validateWriters.ts', 'export async function attachDemandEvidence', 'await env.FILES.put(key, await input.file.arrayBuffer()'],
-  ['services/records/build.ts', 'async function uploadProof', 'await files.put(key, bytes'],
-  ['services/growWriters.ts', 'export async function markHeld', 'await env.FILES.put(key, await file.arrayBuffer()'],
-  ['services/mercury/raiseFeeds.ts', 'async function acceptStatement', 'await env.FILES.put(key, pdf.bytes'],
+  ['services/validateWriters.ts', 'export async function attachDemandEvidence', 'await putRecordOrThrow(env.FILES, key, await input.file.arrayBuffer()'],
+  ['services/records/build.ts', 'async function uploadProof', 'await putRecordOrThrow(files, key, bytes'],
+  ['services/growWriters.ts', 'export async function markHeld', 'await putRecordOrThrow(env.FILES, key, await file.arrayBuffer()'],
+  ['services/mercury/raiseFeeds.ts', 'async function acceptStatement', 'await putRecordOrThrow(env.FILES, key, pdf.bytes'],
   // D4493 (#4493): a sequence's voice note is the founder's own recording, weighed before it lands.
   ['routes/grow_sequences.ts', "router.put('/:uid/steps/:position/recording'", 'await c.env.FILES.put(key, await file!.arrayBuffer()'],
   // D1094: a Drive file copied into the data room is the member's, weighed before it lands.
-  ['services/google/raise.ts', 'async function copyFile', 'await env.FILES.put(key, bytes'],
+  ['services/google/raise.ts', 'async function copyFile', 'await putRecordOrThrow(env.FILES, key, bytes'],
   // D903: a deck image is the member's file. Room is checked before either write; the bytes are not in the usage total yet.
   // D1506 (#3757): the drawn image is stripped of its metadata before it lands (`drawn`).
   // D1505: the press's images are written by the pipeline (`services/decks/imageDraw.ts`); the route checks room before it starts.
@@ -240,7 +240,7 @@ const SITES: Array<[string, string, string]> = [
   // D1506: upload and import (an external image copied in) both land through `landImage`.
   ['routes/deck_images.ts', 'async function landImage', 'await c.env.FILES.put(key, bytes'],
   // D5960 (#5960): a deliverable version's file is the advisor's own upload, weighed before it lands.
-  ['routes/advisors_deliverables.ts', 'async function storeVersionFile', 'await c.env.FILES.put(key, bytes'],
+  ['routes/advisors_deliverables.ts', 'async function storeVersionFile', 'await putRecord(c.env.FILES, key, bytes'],
   // D1506: save/export-time copies also check room before storage.
   ['services/decks/imageCopy.ts', 'export async function copyExternalImages', 'await env.FILES.put(key, img.bytes'],
   // D1545 (#3788): a deck's uploaded MP4 is the member's file, weighed before it lands.
@@ -310,6 +310,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'services/meetingBotDiagnose.ts': 'an HQ owner\'s bot diagnostic record and screenshot (#3708), never counted',
   'routes/admin_governance.ts': 'the Axal entities\' governance documents (D4563): HQ records, never counted',
   'routes/deck_rehearsals.ts': 'a deck rehearsal\'s recording (D1580): held an hour for transcription, then deleted unless the founder keeps it; kept audio is not yet a measured D1169 store',
+  'services/recordStore.ts': 'the write-once record writer (D6651): it holds no store of its own; each member upload that calls it is guarded at its own site above',
   'services/workGraphBlobs.ts': 'WorkGraph content-addressed revision bytes (D5581 part 3): verified by digest and held to their own per-tenant byte cap, not a measured D1169 member store',
 };
 

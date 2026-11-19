@@ -16,6 +16,7 @@
  */
 import { ALERT_KINDS } from './githubAlerts.mjs';
 import { VERDICTS } from './ciClassify.mjs';
+import { testGlobMatches } from './literalMatch.mjs';
 
 export const DIGEST_MARKER = '<!-- studioos-ci-digest:v1 -->';
 export const DIGEST_AUTHOR = 'github-actions[bot]';
@@ -179,7 +180,8 @@ export function parseLog(text) {
       const fields = {};
       for (let k = i + 1; k < lines.length && k < i + 60; k++) {
         const l = lines[k];
-        if (new RegExp(`^\\s{${indent}}\\s*\\.\\.\\.\\s*$`).test(l) && k > i + 1) break;
+        const close = /^(\s*)\.\.\.\s*$/.exec(l);
+        if (close && close[1].length >= indent && k > i + 1) break;
         const f = /^\s+(location|failureType|error|code): (.*)$/.exec(l);
         if (f && !(f[1] in fields)) {
           let value = f[2];
@@ -227,7 +229,8 @@ export function parseLog(text) {
   return out;
 }
 
-const globRegex = (pattern) => new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/?/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '(?:.*/)?')}$`);
+/** A package.json test glob as a matcher (`**` any directories, `*` within one); see literalMatch.mjs. */
+const globRegex = (pattern) => ({ test: (file) => testGlobMatches(pattern, file) });
 
 /**
  * The `node … --test` prefixes package.json uses, with the file globs each one owns.

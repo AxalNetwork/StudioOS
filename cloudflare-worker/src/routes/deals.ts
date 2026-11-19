@@ -578,9 +578,11 @@ deals.get('/transfers', async (c) => {
     ? await sql`
       SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
              t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name,
-             t.company_id, cp.company_name AS company_name
+             t.company_id, cp.company_name AS company_name,
+             t.phone_verified_by, pv.name AS phone_verified_by_name
         FROM deal_transfers t
         LEFT JOIN users u ON u.id = t.recorded_by
+        LEFT JOIN users pv ON pv.id = t.phone_verified_by
         LEFT JOIN company_profiles cp ON cp.id = t.company_id
         LEFT JOIN deals d ON d.id = t.deal_id
         LEFT JOIN projects p ON p.id = d.project_id
@@ -592,9 +594,11 @@ deals.get('/transfers', async (c) => {
     : await sql`
       SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
              t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name,
-             t.company_id, cp.company_name AS company_name
+             t.company_id, cp.company_name AS company_name,
+             t.phone_verified_by, pv.name AS phone_verified_by_name
         FROM deal_transfers t
         LEFT JOIN users u ON u.id = t.recorded_by
+        LEFT JOIN users pv ON pv.id = t.phone_verified_by
         LEFT JOIN company_profiles cp ON cp.id = t.company_id
         LEFT JOIN deals d ON d.id = t.deal_id
         LEFT JOIN projects p ON p.id = d.project_id
@@ -1418,8 +1422,10 @@ deals.get('/:id/transfers', async (c) => {
   const rows = await sql`
     SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
            t.recorded_by, t.recorded_at, u.name AS recorded_by_name,
-           t.company_id, cp.company_name AS company_name
+           t.company_id, cp.company_name AS company_name,
+           t.phone_verified_by, pv.name AS phone_verified_by_name
       FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by
+      LEFT JOIN users pv ON pv.id = t.phone_verified_by
       LEFT JOIN company_profiles cp ON cp.id = t.company_id
      WHERE t.deal_id = ${id} ORDER BY t.recorded_at DESC`;
   await sql.end();
@@ -1514,6 +1520,31 @@ deals.post('/:id/transfers', async (c) => {
   const reference = data?.reference != null ? String(data.reference).trim().slice(0, 200) || null : null;
   const note = data?.note != null ? String(data.note).trim().slice(0, 2000) || null : null;
   const phoneVerified = data?.phone_verified === true ? 1 : 0;
+  // D6889 (#6889): who confirmed the wire instructions by phone, when it was
+  // phone-verified: an Admin's user id, or nothing (Not recorded). Never taken
+  // from the recorder, and never kept on a transfer that was not verified.
+  let phoneVerifiedBy: number | null = null;
+  if (data?.phone_verified_by != null && data.phone_verified_by !== '') {
+    const v = data.phone_verified_by;
+    if (!phoneVerified) {
+      await sql.end();
+      return c.json({
+        error: 'phone_verifier_without_verification',
+        message: 'A phone verifier is recorded only on a transfer confirmed by phone. Tick phone-verified or leave the verifier out. Nothing was recorded.',
+      }, 400);
+    }
+    const verifier = typeof v === 'number' && Number.isSafeInteger(v) && v > 0
+      ? await c.env.DB.prepare("SELECT id FROM users WHERE id = ? AND role = 'admin'").bind(v).first<{ id: number }>()
+      : null;
+    if (!verifier) {
+      await sql.end();
+      return c.json({
+        error: 'phone_verifier_invalid',
+        message: 'The phone verifier is an Admin, named by their user id. Nothing was recorded.',
+      }, 400);
+    }
+    phoneVerifiedBy = Number(verifier.id);
+  }
   const firm = await transferFirm(c, user);
   if ('refuse' in firm) { await sql.end(); return firm.refuse; }
   // D1215: the closing line this transfer serves, when one is named: a line
@@ -1532,18 +1563,19 @@ deals.post('/:id/transfers', async (c) => {
   const uid = newUid();
   const ins = lineUid === null
     ? await c.env.DB.prepare(
-      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at, company_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId).run()
-    : await c.env.DB.prepare(
-      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at, company_id, closing_line_uid)
+      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, phone_verified_by, note, recorded_by, recorded_at, company_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId, lineUid).run();
+    ).bind(uid, id, amountCents, reference, phoneVerified, phoneVerifiedBy, note, user.id, nowIso(), firm.companyId).run()
+    : await c.env.DB.prepare(
+      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, phone_verified_by, note, recorded_by, recorded_at, company_id, closing_line_uid)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, id, amountCents, reference, phoneVerified, phoneVerifiedBy, note, user.id, nowIso(), firm.companyId, lineUid).run();
   await sql.end();
-  await logDealRoomAction(c.env, user, 'deal_transfer_recorded', id, { transfer_uid: uid, amount_cents: amountCents, company_id: firm.companyId });
+  await logDealRoomAction(c.env, user, 'deal_transfer_recorded', id, { transfer_uid: uid, amount_cents: amountCents, company_id: firm.companyId, phone_verified_by: phoneVerifiedBy });
   const row = await c.env.DB.prepare(
-    `SELECT t.*, u.name AS recorded_by_name, cp.company_name AS company_name
+    `SELECT t.*, u.name AS recorded_by_name, cp.company_name AS company_name, pv.name AS phone_verified_by_name
        FROM deal_transfers t LEFT JOIN users u ON u.id = t.recorded_by
+       LEFT JOIN users pv ON pv.id = t.phone_verified_by
        LEFT JOIN company_profiles cp ON cp.id = t.company_id WHERE t.id = ?`
   ).bind((ins as any).meta?.last_row_id).first<any>();
   return c.json({ item: withFirm(row) }, 201);

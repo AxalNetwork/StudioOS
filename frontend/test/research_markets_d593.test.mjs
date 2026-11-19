@@ -53,7 +53,6 @@ function words(markup) {
 }
 
 /** Where each "Open sector →" link goes, in page order. */
-const opens = (markup) => [...markup.matchAll(/href="(\/research\/markets\/sector\/[^"]+)"[^>]*>Open sector/g)].map((m) => m[1]);
 
 const ready = (data) => ({ status: 'ready', data });
 const loading = { status: 'loading', data: null };
@@ -69,16 +68,6 @@ const MARKETS = {
 };
 
 // `GET /api/research/sectors` as the Worker answers it. Two have no market.
-const SECTORS = {
-  total: 3,
-  items: [
-    { name: 'Agentic B2B', slug: 'agentic-b2b', company_count: 0, fund_count: 0 },
-    { name: 'Fintech / DeFi', slug: 'fintech-defi', company_count: 12, fund_count: 40 },
-    { name: 'Quantum Infrastructure', slug: 'quantum-infrastructure', company_count: 0, fund_count: 3 },
-  ],
-};
-
-const MD = MARKETS.items;
 
 // ---- M1: the markets index ---------------------------------------------------
 //
