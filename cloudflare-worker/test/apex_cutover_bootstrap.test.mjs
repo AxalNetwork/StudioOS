@@ -64,12 +64,14 @@ test('static, health, and verified anonymous public reads bypass blocking role-s
 test('role-schema readiness remains per database and in-flight I/O is never shared across requests', async () => {
   const index = await read('src/index.ts');
   const exploring = await read('src/services/exploringSchema.ts');
+  const investor = await read('src/util/usersRoleRebuild.ts');
   // D7587: sharing a pending promise by binding stranded recording Start when
   // its creating request ended. research_recording_7587 drives that lifecycle
   // in workerd; this guard keeps every readiness latch scoped to its database.
   for (const [source, ready] of [
-    [index, 'INVESTOR_SCHEMA_READY'], [index, 'ADVISOR_SCHEMA_READY'], [exploring, 'READY'],
+    [investor, 'INVESTOR_SCHEMA_READY'], [index, 'ADVISOR_SCHEMA_READY'], [exploring, 'READY'],
   ]) assert.match(source, new RegExp(`const ${ready} = new WeakMap<object, boolean>\\(\\);`));
+  assert.doesNotMatch(investor, /INVESTOR_SCHEMA_IN_FLIGHT/);
   assert.doesNotMatch(index, /(?:INVESTOR|ADVISOR)_SCHEMA_IN_FLIGHT/);
   assert.doesNotMatch(exploring, /const IN_FLIGHT/);
 });

@@ -108,7 +108,7 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, not
     // #5363: not a failed read, so no "Source unavailable" and no Try again.
     return wrap(shared || (
       <Card variant="dashed" padding="lg" role="alert" data-testid="advisor-licence-required">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">
           Advisor licence
         </div>
         <h3 className="mt-2 text-sm font-extrabold tracking-tight">{error}</h3>
@@ -123,7 +123,7 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, not
     // announced, not only drawn.
     return wrap(shared || (
       <Card variant="dashed" padding="lg" role="alert">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">
           Source unavailable
         </div>
         <h3 className="mt-2 text-sm font-extrabold tracking-tight">This did not load</h3>
@@ -171,7 +171,7 @@ export function NothingYet({ title, body, action }) {
 export function MoreRows({ line, onMore, busy = false, error = '', testid }) {
   if (!line) return null;
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-3 text-[11.5px] text-axal-faint" data-testid={testid}>
+    <div className="mt-3 flex flex-wrap items-center gap-3 text-[11.5px] text-axal-muted" data-testid={testid}>
       <span className="tabular-nums">{line}</span>
       <button type="button" className="font-semibold text-emerald-700 hover:underline disabled:opacity-60 dark:text-emerald-300"
         onClick={onMore} disabled={busy}>
@@ -212,7 +212,7 @@ export function Unreadable({ children, onRetry }) {
 export function StatedLimit({ title, children }) {
   return (
     <Card variant="sunken" padding="md" className="mt-3">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">
         {title}
       </div>
       {/*
@@ -253,12 +253,12 @@ export function Field({ label, hint, fill = null, limit, children }) {
       ...count.props,
     })
     : children;
-  const hintNode = (hint || count.node) ? <>{hint ? <span id={hintId} className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span> : null}{count.node}</> : null;
+  const hintNode = (hint || count.node) ? <>{hint ? <span id={hintId} className="mt-1 block text-[11px] leading-relaxed text-axal-muted">{hint}</span> : null}{count.node}</> : null;
   if (fill?.ctl) {
     return (
       <div className="block">
         <FillLabel fill={fill.ctl} name={fill.name} label={label} value={fill.value}>
-          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint" aria-hidden="true">{label}</span>
+          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted" aria-hidden="true">{label}</span>
         </FillLabel>
         <label className="block"><span className="sr-only">{label}</span>{described}</label>
         {hintNode}
@@ -267,7 +267,7 @@ export function Field({ label, hint, fill = null, limit, children }) {
   }
   return (
     <label className="block">
-      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>
+      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{label}</span>
       {described}
       {hintNode}
     </label>

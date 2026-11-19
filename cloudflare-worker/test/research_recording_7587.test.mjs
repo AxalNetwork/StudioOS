@@ -8,13 +8,11 @@ const { build } = require('esbuild');
 const { Miniflare, convertV4MiniflareOptions } = require('miniflare');
 const root = new URL('../', import.meta.url).pathname;
 const source = readFileSync(root + 'src/index.ts', 'utf8');
-const investor = source.slice(source.indexOf('const INVESTOR_SCHEMA_READY'), source.indexOf('// Task #74'));
 const advisor = source.slice(source.indexOf('const ADVISOR_SCHEMA_READY'), source.indexOf('/**\n * Role-schema repairs'));
 const entry = `
 import { bindingKey } from './src/util/schemaBootstrap';
-import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './src/util/usersRoleRebuild';
+import { ensureInvestorSchema, rebuildUsersRoleCheckForAdvisor } from './src/util/usersRoleRebuild';
 import { ensureExploringSchema } from './src/services/exploringSchema';
-${investor}
 ${advisor}
 const databases = new Map();
 function database(key, abandon) {

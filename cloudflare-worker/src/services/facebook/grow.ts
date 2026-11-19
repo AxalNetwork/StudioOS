@@ -16,8 +16,10 @@
  *
  * WHAT IS MISSING SAYS SO. A metric Facebook did not return has no row and reads "Not recorded"; never 0. Logs carry
  * counts only: no figure, Page name or token.
+ * D5860 adds the channel-link proposal, its resumable acceptance through the route's channel writer and final dismissal.
  */
 import type { Env } from '../../types';
+import { projectEnabled } from '../../integrations/companyScope';
 import { addDays, WINDOW_DAYS, type FacebookReads, type InsightKind } from './insights';
 
 export type FacebookSlug = 'distribution' | 'revenue-and-traction';
@@ -41,6 +43,7 @@ export const SENTENCES = Object.freeze({
   not_revenue: 'Your Facebook Page audience, shown beside revenue and never as revenue.',
   page_views: 'Views of your Facebook Page and its posts. A view is not a visit to your site.',
   unique_per_day: 'Unique viewers are counted per day, so days do not add up.',
+  channel_link: 'Link your Facebook Page to a Distribution channel?',
 });
 
 const fromFacebook = (asOf: string | null) => (asOf ? `From Facebook, as of ${asOf.slice(0, 10)}` : null);
@@ -88,6 +91,7 @@ export async function linkPage(env: Env, p: { integrationId: number; projectId: 
        page_id = excluded.page_id, page_name = excluded.page_name, linked_by = excluded.linked_by, updated_at = datetime('now')
      WHERE facebook_page_links.integration_id = excluded.integration_id`,
   ).bind(p.integrationId, p.projectId, p.pageId, p.pageName.slice(0, 200), p.userId).run();
+  await raiseFacebookProposal(env, p.integrationId, p.projectId, p.pageId);
   return 'ok';
 }
 
@@ -197,6 +201,7 @@ export async function syncFacebook(env: Env, reads: FacebookReads, x: SyncCtx): 
     if (i > 0) oldestOlder = since;
   }
   if (!readAny) throw first;
+  await raiseFacebookProposal(env, x.integrationId, x.projectId, x.pageId);
   await land(env, x, rows, counts);
 
   const floor = addDays(x.today, -(HISTORY_DAYS - 1));
@@ -230,6 +235,7 @@ export async function facebookPart(env: Env, projectId: number, slug: FacebookSl
     can_link: (!link || link.owner_id === viewer.userId) && !viewer.support && viewer.writer,
     can_delete: viewer.writer && !viewer.support,
     note: slug === 'revenue-and-traction' ? SENTENCES.not_revenue : SENTENCES.page_views,
+    ...(slug === 'distribution' && link ? { proposal: await facebookProposal(env, projectId, link, viewer) } : {}),
   };
   if (!link) return { state: 'not_linked' as const, reason: SENTENCES.not_linked, connect_href: CONNECT_HREF, ...common };
   if (slug === 'revenue-and-traction') {
@@ -276,6 +282,99 @@ export async function facebookPart(env: Env, projectId: number, slug: FacebookSl
   };
 }
 
+// D5860: decisions belong to this venture's linked Page and survive every re-sync.
+async function raiseFacebookProposal(env: Env, integrationId: number, projectId: number, pageId: string) {
+  await env.DB.prepare(
+    `INSERT INTO facebook_proposals (integration_id, project_id, kind, subject)
+     SELECT ?, ?, 'channel_link', ? WHERE EXISTS (
+       SELECT 1 FROM facebook_page_links WHERE project_id = ? AND integration_id = ? AND page_id = ?
+     )
+     ON CONFLICT(project_id, kind, subject) DO UPDATE SET integration_id = excluded.integration_id
+     WHERE facebook_proposals.integration_id <> excluded.integration_id`,
+  ).bind(integrationId, projectId, pageId, projectId, integrationId, pageId).run();
+}
+
+interface FacebookProposal {
+  id: number; state: string; growth_channel_id: number | null; decided_at: string | null;
+}
+
+async function facebookProposal(env: Env, projectId: number, link: FacebookLink, viewer: PartViewer) {
+  const proposal = await env.DB.prepare(
+    `SELECT id, state, growth_channel_id, decided_at FROM facebook_proposals
+     WHERE project_id = ? AND integration_id = ? AND subject = ? AND kind = 'channel_link'`,
+  ).bind(projectId, link.integration_id, link.page_id).first<FacebookProposal>();
+  if (!proposal || proposal.state === 'dismissed') return null;
+  const pending = proposal.state === 'pending' || proposal.decided_at === null;
+  const channel = proposal.growth_channel_id === null ? null : await env.DB.prepare(
+    "SELECT uid, name FROM growth_channels WHERE id = ? AND project_id = ? AND utm_source = 'facebook'",
+  ).bind(proposal.growth_channel_id, projectId).first<{ uid: string; name: string }>();
+  return {
+    id: proposal.id, kind: 'channel_link' as const, state: pending ? 'pending' as const : 'accepted' as const,
+    sentence: pending ? SENTENCES.channel_link : null,
+    can_decide: pending && link.active && viewer.writer && !viewer.support && link.owner_id === viewer.userId
+      && await projectEnabled(env, link.integration_id, projectId),
+    channel,
+  };
+}
+
+export type FacebookDecision = 'ok' | 'not_found' | 'decided' | 'unknown_channel' | 'wrong_source';
+
+/** Scope the decision to the current connection and Page, including after relinking. */
+async function facebookDecision(env: Env, projectId: number, id: number, link: FacebookLink) {
+  return env.DB.prepare(
+    `SELECT id, state, growth_channel_id, decided_at FROM facebook_proposals
+     WHERE id = ? AND project_id = ? AND integration_id = ? AND subject = ? AND kind = 'channel_link'`,
+  ).bind(id, projectId, link.integration_id, link.page_id).first<FacebookProposal>();
+}
+
+/** Reserve acceptance before the channel writer so a concurrent Dismiss cannot win halfway through. */
+export async function acceptFacebookProposal(env: Env, projectId: number, id: number, userId: number, link: FacebookLink,
+  channelUid: string | null, create: () => Promise<string>): Promise<FacebookDecision> {
+  let proposal = await facebookDecision(env, projectId, id, link);
+  if (!proposal) return 'not_found';
+  if (proposal.state === 'dismissed' || proposal.decided_at !== null) return 'decided';
+  if (channelUid !== null) {
+    const chosen = await env.DB.prepare('SELECT utm_source FROM growth_channels WHERE uid = ? AND project_id = ?')
+      .bind(channelUid, projectId).first<{ utm_source: string }>();
+    if (!chosen) return 'unknown_channel';
+    if (chosen.utm_source !== 'facebook') return 'wrong_source';
+  }
+  await env.DB.prepare(
+    `UPDATE facebook_proposals SET state = 'accepted', decided_by = ?, updated_at = datetime('now')
+     WHERE id = ? AND project_id = ? AND state = 'pending'`,
+  ).bind(userId, id, projectId).run();
+  proposal = await facebookDecision(env, projectId, id, link);
+  if (!proposal || proposal.state !== 'accepted' || proposal.decided_at !== null) return 'decided';
+
+  const findChannel = () => env.DB.prepare("SELECT id FROM growth_channels WHERE project_id = ? AND utm_source = 'facebook'")
+    .bind(projectId).first<{ id: number }>();
+  let channel = await findChannel();
+  if (!channel) {
+    try { await create(); } catch (error) {
+      // Two accepts may reach the writer together. Its UTM uniqueness leaves one channel.
+      channel = await findChannel();
+      if (!channel) throw error;
+    }
+    channel ??= await findChannel();
+  }
+  if (!channel) return 'unknown_channel';
+  const result = await env.DB.prepare(
+    `UPDATE facebook_proposals SET growth_channel_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
+     WHERE id = ? AND project_id = ? AND state = 'accepted' AND decided_at IS NULL`,
+  ).bind(channel.id, id, projectId).run();
+  return Number(result.meta?.changes ?? 0) ? 'ok' : 'decided';
+}
+
+/** A successful dismissal is final. A reserved acceptance is completed by retrying Accept. */
+export async function dismissFacebookProposal(env: Env, projectId: number, id: number, userId: number, link: FacebookLink): Promise<FacebookDecision> {
+  if (!await facebookDecision(env, projectId, id, link)) return 'not_found';
+  const result = await env.DB.prepare(
+    `UPDATE facebook_proposals SET state = 'dismissed', decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now')
+     WHERE id = ? AND project_id = ? AND state = 'pending'`,
+  ).bind(userId, id, projectId).run();
+  return Number(result.meta?.changes ?? 0) ? 'ok' : 'decided';
+}
+
 // ═════════════════════════════════════════════════════════════ delete and disconnect
 
 /** Delete one figure; the ledger keeps it deleted through every later sync. Its slug, or null. */
@@ -291,6 +390,7 @@ export async function deleteFacebookFact(env: Env, projectId: number, id: number
 /** Disconnect: the connection's facts, their ledger rows and its Page links. */
 export function purgeStatements(env: Env, integrationId: number) {
   return [
+    env.DB.prepare('DELETE FROM facebook_proposals WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare("DELETE FROM connector_fed_items WHERE integration_id = ? AND kind = 'facebook_page_fact'").bind(integrationId),
     env.DB.prepare('DELETE FROM facebook_page_facts WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare('DELETE FROM facebook_page_links WHERE integration_id = ?').bind(integrationId),
@@ -307,6 +407,7 @@ export async function purgeFacebookConnection(env: Env, integrationId: number): 
  */
 export function purgeByAccountStatements(env: Env, account: string) {
   return [
+    env.DB.prepare("DELETE FROM facebook_proposals WHERE integration_id IN (SELECT id FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?)").bind(account),
     env.DB.prepare("DELETE FROM connector_fed_items WHERE kind = 'facebook_page_fact' AND integration_id IN (SELECT id FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?)").bind(account),
     env.DB.prepare("DELETE FROM facebook_page_facts WHERE integration_id IN (SELECT id FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?)").bind(account),
     env.DB.prepare("DELETE FROM facebook_page_links WHERE integration_id IN (SELECT id FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?)").bind(account),
