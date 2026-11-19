@@ -6,7 +6,6 @@ import subprocess
 import unittest
 
 import pip_audit_gate
-from pip_audit_gate import audit
 
 READ_TIMEOUT = (
     "Traceback (most recent call last):\n"
@@ -30,7 +29,7 @@ class AuditTest(unittest.TestCase):
             return subprocess.CompletedProcess(command, code, out, err)
 
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            code = audit(run=run, sleep=delays.append, report=messages.append)
+            code = pip_audit_gate.audit(run=run, sleep=delays.append, report=messages.append)
         return code, calls, delays, messages, stdout.getvalue(), stderr.getvalue()
 
     def test_timeout_then_healthy_scan(self):

@@ -138,7 +138,12 @@ def _decode_pdf_literal(s: str) -> str:
 
 
 _CONTENT_RE = re.compile(
-    r"\(((?:\\.|[^\\)])*)\)\s*(Tj|')"
+    # A literal's body stops at an unescaped "(" as well as ")": otherwise every
+    # "(" of an unclosed run starts a scan to the end of the stream, which is
+    # quadratic (CodeQL py/polynomial-redos; 20,000 "(" took ten seconds).
+    # Real streams escape unbalanced parentheses, and a nested balanced pair
+    # never matched here anyway, because the body could not hold its ")".
+    r"\(((?:\\.|[^\\()])*)\)\s*(Tj|')"
     r"|\[((?:[^\]\\]|\\.)*)\]\s*TJ"
     # Number sub-pattern is linear (no `\d*…\d+` overlap) to avoid polynomial
     # backtracking (CodeQL py/polynomial-redos) while matching the same set.

@@ -1,4 +1,14 @@
 {
+  "GET /api/auth/apple/config": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "GET /api/auth/apple/start": {
+    "review": "optional_auth",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
   "GET /api/auth/factors": {
     "review": "no_gate_found",
     "kind": "sign_in",
@@ -37,6 +47,11 @@
   "GET /api/auth/verify-email": {
     "review": "no_gate_found",
     "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/apple/callback": {
+    "review": "no_gate_found",
+    "kind": "oauth_callback",
     "state": "unreviewed"
   },
   "POST /api/auth/confirm-verify-email": {

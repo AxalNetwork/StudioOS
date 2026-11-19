@@ -60,8 +60,7 @@ import {
  * the licence's accent (partner amber, advisor green, investor indigo); the
  * Comparable prices canvas (D7039) draws Research's violet, and the owner
  * answered A, as drawn (D7039-p2). `ACCENT.founder` is that violet: #7c3aed,
- * deep #6d28d9, #a78bfa on dark. A caller that still passes a role gets the
- * same values. Tailwind cannot build a class from a hex at runtime, so the page root
+ * deep #6d28d9, #a78bfa on dark, whatever the licence, so it takes no role. Tailwind cannot build a class from a hex at runtime, so the page root
  * carries the values as CSS variables and the classes below read them.
  *
  * Two pairs, as `ui/WorkerRail.jsx` does it. What sits on the page ground (the
@@ -337,7 +336,7 @@ export function MarketReadingView({
         />
       )}
     >
-      <div data-testid="market-reading" className="space-y-3" style={accentVars(role)}>
+      <div data-testid="market-reading" className="space-y-3" style={accentVars()}>
         <Link to="/research/markets" className={`inline-flex min-h-[44px] items-center text-[12px] sm:min-h-0 ${accentLink}`}>
           ‹ Markets
         </Link>

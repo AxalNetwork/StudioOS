@@ -28,7 +28,7 @@ export function pointWords(q, metric) {
   if (!q.report) return `${label}, no report`;
   const v = q.report[metric];
   if (v === null || v === undefined) return `${label}, not recorded`;
-  const words = fmtValue(metric, v).replace('%', ' percent').replace('×', ' times').replace('−', 'minus ');
+  const words = fmtValue(metric, v).replaceAll('%', ' percent').replaceAll('×', ' times').replaceAll('−', 'minus ');
   return `${label}, ${words}${v === 0 ? ', measured' : ''}`;
 }
 

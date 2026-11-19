@@ -83,8 +83,18 @@ export function inboxLine(item = {}) {
       const on = dayWithYear(item.return?.revisit_at);
       return `You passed${passed ? ` on ${passed}` : ''} (${passReasonLabel(item.return?.reason)}) and asked to see it again${on ? ` on ${on}` : ''}.`;
     }
+    case 'thesis': return thesisReasonsLine(item.reasons);
     default: return null;
   }
+}
+
+/** D6147: a thesis match's criteria in words, in the fit's order (D1239's four). */
+const REASON_WORD = Object.freeze({ sector: 'sector', stage: 'stage', region: 'market region', ticket: 'minimum check within your ticket' });
+const listWords = (w) => (w.length < 2 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`);
+/** "Matches your thesis: sector and minimum check within your ticket." The top reasons are the matching criteria, at most three. */
+export function thesisReasonsLine(reasons) {
+  const words = (Array.isArray(reasons) ? reasons : []).map((r) => REASON_WORD[r]).filter(Boolean).slice(0, 3);
+  return words.length ? `Matches your thesis: ${listWords(words)}.` : 'Matches your thesis.';
 }
 
 /**
@@ -101,7 +111,7 @@ export function inboxActions(item = {}) {
 
 const SOURCE_WORD = Object.freeze({
   invitation: 'invitations', room: 'invitations you asked for', commitment: 'commitments', introduction: 'introductions',
-  syndicate: 'open syndicates', watchlist: 'your watchlist', revisit: 'passes due back',
+  syndicate: 'open syndicates', watchlist: 'your watchlist', revisit: 'passes due back', thesis: 'matches to your thesis',
 });
 
 /** The ways in that could not be read, in words; the rest still list. */
@@ -112,10 +122,6 @@ export function unreadSources(sources = {}) {
 /** D6148: Next round is not detected; the read says so, and so does the page. */
 export const nextRoundLine = (sources = {}) => (sources?.next_round && sources.next_round.detected === false
   ? (sources.next_round.reason || 'A new round on a venture you passed is not detected.') : null);
-
-/** Matches to the thesis, when the read says none are recorded: the reason, never "no matches". */
-export const thesisLine = (sources = {}) => (sources?.thesis && sources.thesis.recorded === false
-  ? (sources.thesis.reason || 'Matches to your thesis are not recorded yet.') : null);
 
 /** #6146: describe only the event's recorded fields; actor/time are rendered separately. */
 export function flowEventSentence(event, enteredVia) {
@@ -137,3 +143,19 @@ export function currentReturnLine(pass) {
   if (pass.revisit === 'date' && pass.revisit_at) return `Current pass · return date: ${pass.revisit_at}.`;
   return 'Current pass · return date: Not recorded.';
 }
+/**
+ * D6147 — the thesis source's line, from its one `{ recorded, reason }` shape:
+ *   - not recorded (no thesis set): its reason, with the way to set it;
+ *   - unreadable: nothing here, `unreadSources` names it;
+ *   - recorded: the cap, when there were more High-fit matches than are listed.
+ * Never "no matches" for a source that could not say.
+ */
+export const thesisLine = (sources = {}) => {
+  const t = sources?.thesis;
+  if (!t || t.unreadable) return null;
+  if (t.recorded === false) return t.reason || 'Matches to your thesis are not recorded yet.';
+  if (t.recorded === true && t.more && t.cap) return `Only the newest ${t.cap} matches to your thesis are listed. Each is a High fit.`;
+  return null;
+};
+/** Whether the line offers Set your thesis: the read says no thesis is set. */
+export const thesisNeedsSetting = (sources = {}) => sources?.thesis?.recorded === false && sources.thesis.thesis_set === false;

@@ -209,7 +209,7 @@ test('D716 #1866 the rail labels are Parts 2 to 9 of the booklet', () => {
 });
 
 test('D716 #1866 the mount: only for an approved application, and the old sentence is gone', () => {
-  const page = src('../src/pages/SpinoutLabLpWorkspacePage.jsx');
+  const page = src('../src/pages/investor/fund/FundParticipationSection.jsx');
   assert.match(page, /derived\.applicationStatus === 'approved' && <SubscriptionBooklet \/>/);
   assert.equal((page.match(/<SubscriptionBooklet/g) || []).length, 1);
   assert.ok(!page.includes('The fund team is preparing your subscription documents.'));

@@ -77,6 +77,7 @@ const PrivacySection = lazySection(loadPrivacy, 'Public profile', 'PrivacySectio
 const NotificationsSection = lazySection(loadNotifications, 'Your notification settings', 'NotificationsSection');
 const DigestQuietHoursCard = lazySection(loadNotifications, 'Digest and quiet hours', 'DigestQuietHoursCard');
 const BillingTab = lazySection(() => import('./account/BillingSection'), 'Billing and orders', 'BillingTab');
+import { appleSignInApi } from '../lib/api/appleSignIn.js';
 
 // D433 — THE COMPLIANCE BRIDGE. The Account canvas puts a trust-score strip
 // above every pane: the write side of Trust Center, on the page whose data the
@@ -1086,6 +1087,24 @@ function RecoveryActivityPanel() {
 // TOTP + SMS + recovery state. The unlink button is hidden when the
 // worker reports `unlinkable=false` (no other sign-in path) — see
 // /api/settings/connected-accounts.
+// D6957 — what each Apple link return code means, in our words.
+const APPLE_LINK_ERRORS = {
+  already_linked: 'An Apple ID is already linked to this account.',
+  sub_owned_by_other: 'That Apple ID is linked to a different Axal VC account.',
+  caller_email_unverified: 'Confirm your email before linking Apple.',
+  account_inactive: 'This account is inactive. Contact support.',
+  cancelled: 'Apple linking cancelled.',
+  provider_error: 'Apple could not link the account. Please try again.',
+  exchange_failed: "Apple didn't confirm the link. Please try again.",
+  token_invalid: "We couldn't verify your Apple ID. Please try again.",
+  email_unverified: 'Apple has not verified the email on this Apple ID.',
+  not_configured: 'Sign in with Apple is not available here yet.',
+  bad_state: 'That linking attempt expired. Please retry.',
+  missing_code: 'Apple returned without a sign-in. Please retry.',
+  user_gone: 'This account no longer exists.',
+  internal_error: 'Something went wrong on our side. Please try again.',
+};
+
 function ConnectedAccountsPanel({ flash }) {
   const [row, setRow] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -1118,10 +1137,14 @@ function ConnectedAccountsPanel({ flash }) {
       };
       flash(copy[err] || 'Google linking failed.', 'error');
     }
-    if (params.has('google_linked') || params.has('google_error')) {
+    // D6957 — the same for Sign in with Apple's link return.
+    if (params.get('apple_linked') === '1') flash('Apple ID linked.');
+    const appleErr = params.get('apple_error');
+    if (appleErr) flash(APPLE_LINK_ERRORS[appleErr] || 'Apple linking failed. Please try again.', 'error');
+    const keys = ['google_linked', 'google_error', 'apple_linked', 'apple_error'];
+    if (keys.some((k) => params.has(k))) {
       const url = new URL(window.location.href);
-      url.searchParams.delete('google_linked');
-      url.searchParams.delete('google_error');
+      for (const k of keys) url.searchParams.delete(k);
       window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
     }
   }, []);
@@ -1148,15 +1171,41 @@ function ConnectedAccountsPanel({ flash }) {
       flash(e.message || 'Unlink failed', 'error');
     } finally { setBusy(false); }
   };
+  const linkApple = async () => {
+    setBusy(true);
+    try {
+      const { url } = await appleSignInApi.startUrl({ action: 'link', redirect: '/account/security' });
+      if (!url) throw new Error('No redirect URL.');
+      window.location.href = url;
+    } catch (e) {
+      flash(e.message || 'Apple linking unavailable', 'error');
+      setBusy(false);
+    }
+  };
+  const unlinkApple = async () => {
+    if (!window.confirm('Unlink Sign in with Apple from this account?')) return;
+    setBusy(true);
+    try {
+      await appleSignInApi.unlink();
+      flash('Apple sign-in unlinked.');
+      await load();
+    } catch (e) {
+      flash(e.message || 'Unlink failed', 'error');
+    } finally { setBusy(false); }
+  };
 
   if (!row) return null;
-  if (!row.available?.configured) return null; // env not set — hide the card entirely
+  const googleOn = !!row.available?.configured;
+  const appleOn = !!row.available?.apple_configured;
+  if (!googleOn && !appleOn) return null; // env not set — hide the card entirely
   const google = (row.accounts || []).find(a => a.provider === 'google') || { connected: false };
+  const apple = (row.accounts || []).find(a => a.provider === 'apple') || { connected: false };
 
   return (
     <Card
       title="Connected sign-in accounts"
-      description="Link your Google account for one-click sign-in. Google counts as one factor — sensitive actions still ask for your authenticator.">
+      description="Link Google or Apple for one-click sign-in. Each counts as one factor — sensitive actions still ask for your authenticator.">
+      {googleOn && (
       <div className="flex items-center justify-between py-2">
         <div className="flex items-center gap-3">
           <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
@@ -1190,6 +1239,39 @@ function ConnectedAccountsPanel({ flash }) {
           </button>
         )}
       </div>
+      )}
+      {appleOn && (
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" className="text-gray-900 dark:text-gray-100">
+              <path fill="currentColor" d="M16.37 12.6c-.02-2.1 1.72-3.11 1.8-3.16-0.98-1.43-2.5-1.63-3.04-1.65-1.29-.13-2.52.76-3.18.76-.66 0-1.67-.74-2.74-.72-1.41.02-2.71.82-3.44 2.08-1.47 2.54-.38 6.3 1.05 8.37.7 1.01 1.53 2.14 2.62 2.1 1.05-.04 1.45-.68 2.72-.68 1.27 0 1.63.68 2.74.66 1.13-.02 1.85-1.03 2.54-2.04.8-1.17 1.13-2.3 1.15-2.36-.03-.01-2.2-.84-2.22-3.36zM14.3 6.42c.58-.7.97-1.68.86-2.65-.83.03-1.84.55-2.44 1.25-.53.62-1 1.61-.88 2.57.93.07 1.88-.47 2.46-1.17z" />
+            </svg>
+            <div>
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Apple</div>
+              <div className={`text-xs ${apple.connected ? 'text-emerald-700' : 'text-gray-500 dark:text-gray-400'}`}>
+                {apple.connected ? (apple.private_email ? 'Linked · Hide My Email' : 'Linked') : 'Not linked'}
+              </div>
+            </div>
+          </div>
+          {apple.connected ? (
+            apple.unlinkable ? (
+              <button onClick={unlinkApple} disabled={busy}
+                className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
+                {busy ? 'Working…' : 'Unlink'}
+              </button>
+            ) : (
+              <span className="text-xs text-amber-700" title="Set up TOTP or SMS first.">
+                Cannot unlink — only sign-in path
+              </span>
+            )
+          ) : (
+            <button onClick={linkApple} disabled={busy}
+              className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+              {busy ? 'Redirecting…' : 'Link Apple'}
+            </button>
+          )}
+        </div>
+      )}
       {google.connected && (
         <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3">
           Heads up: signing out of Axal VC does <strong>not</strong> sign you out of Google
