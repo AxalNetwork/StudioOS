@@ -1,0 +1,218 @@
+name: Landing bot main repair
+
+# #6477: when main is red, take the existing repair issue (D6387, or the
+# `[alert] main is red` episode) and open exactly one repair PR on the bot's
+# own `repair/main-*` branch, or step aside for a session (D5398: one repair).
+# `plan` holds a read-only token and calls no model; `claim` posts the one
+# diagnosis comment, or claims the issue with scripts/claim.mjs before any
+# model call; `repair` is the model runner (#6473) on main, with no GitHub
+# write; `apply` holds the App token and no model key, runs no repository
+# code, re-checks the patch with main's code or falls back to a plain revert,
+# and opens the PR. Never pushes to main, never queues or merges: the owner
+# lands every repair PR. No workflow_run trigger: the #4571 guard (WF-4)
+# admits only pull_request runs there, so this sweeps every 10 minutes and
+# applies the trigger gate (a push to main, from this repository, whose CI
+# failed) to the run data in scripts/landing-bot/mainRepair.mjs.
+# scripts/landing-bot/README.md, "Main repair", has the rules.
+
+on:
+  schedule:
+    - cron: '7-59/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: main-repair
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Confirm main is red and find who owns the repair
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      (vars.LANDING_BOT_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' && vars.LANDING_BOT_ENABLED == 'dispatch'))
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    outputs:
+      decision: ${{ steps.plan.outputs.decision }}
+      task: ${{ steps.plan.outputs.task }}
+      issue: ${{ steps.plan.outputs.issue }}
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_DAILY_MODEL_RUNS: ${{ vars.LANDING_BOT_DAILY_MODEL_RUNS }}
+      LANDING_BOT_DAILY_PUSHES: ${{ vars.LANDING_BOT_DAILY_PUSHES }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      # Only to learn the App's login; this token reads metadata and nothing else.
+      - name: Read the landing bot's login
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-metadata: read
+      - name: Check every rule before any write or model call
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+        run: node scripts/landing-bot/mainRepair.mjs plan
+      - name: Keep the plan for the next jobs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: landing-bot-main-repair-plan
+          path: ${{ runner.temp }}/main-repair/plan.json
+          if-no-files-found: error
+          retention-days: 7
+      # The attempt on this failure's fingerprint and today's model run, reserved before the model is called.
+      - name: Reserve the attempt on this fingerprint
+        if: steps.plan.outputs.decision == 'repair'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.fingerprint_artifact }}
+          path: ${{ runner.temp }}/main-repair/plan.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Reserve today's model run
+        if: steps.plan.outputs.decision == 'repair'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.day_artifact }}
+          path: ${{ runner.temp }}/main-repair/plan.json
+          if-no-files-found: error
+          retention-days: 7
+
+  claim:
+    name: Comment once, or claim the repair issue
+    needs: plan
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' &&
+      (needs.plan.outputs.decision == 'comment' || needs.plan.outputs.decision == 'repair' ||
+       needs.plan.outputs.decision == 'revert')
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      go: ${{ steps.claim.outputs.go }}
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-main-repair-plan
+          path: ${{ runner.temp }}/plan
+      # Contents write is for the claim/<issue> ref only (scripts/claim.mjs); issues write for one comment and labels.
+      - name: Get the landing bot's installation token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+      - name: Comment, or claim before any model call
+        id: claim
+        env:
+          MAIN_REPAIR_APP_TOKEN: ${{ steps.app.outputs.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+          PLAN_DIR: ${{ runner.temp }}/plan
+        run: node scripts/landing-bot/mainRepair.mjs claim
+
+  repair:
+    name: Fix main with a model
+    needs: [plan, claim]
+    if: needs.plan.outputs.decision == 'repair' && needs.claim.outputs.go == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/landing-bot-model.yml
+    with:
+      ref: main
+      task: ${{ needs.plan.outputs.task }}
+
+  apply:
+    name: Check the patch or revert, and open one repair PR
+    needs: [plan, claim, repair]
+    if: >-
+      always() && github.repository == 'AxalNetwork/StudioOS' && needs.claim.outputs.go == 'true' &&
+      (needs.plan.outputs.decision == 'repair' || needs.plan.outputs.decision == 'revert')
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      MODEL_OUTCOME: ${{ needs.repair.outputs.outcome }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-main-repair-plan
+          path: ${{ runner.temp }}/plan
+      - if: needs.repair.outputs.outcome == 'passed'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-model-patch
+          path: ${{ runner.temp }}/patch
+      - name: Get the landing bot's installation token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - name: Check with main's code, then open the repair PR or hand back
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_REPAIR_APP_TOKEN: ${{ steps.app.outputs.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+          PLAN_DIR: ${{ runner.temp }}/plan
+          PATCH_DIR: ${{ runner.temp }}/patch
+        run: node scripts/landing-bot/mainRepair.mjs apply

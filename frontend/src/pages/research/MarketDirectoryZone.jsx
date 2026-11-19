@@ -16,6 +16,7 @@ import {
   rangeLine, rangeReadsForward, readingErrors, readingsCsvRows, scopeValue,
 } from './marketReadingRead';
 import { LatestSignals } from './RankedSignals.jsx';
+import { useMarketHeaderOps } from './MarketHeaderOps.jsx';
 
 import { PublicPanel, ScopedExport } from './ListedCompaniesPanel.jsx';
 import { LISTED_CSV_HEADER, MARKET_CSV_HEADER, changeListedQuery, clearListedFilters, collectMarkets,
@@ -633,6 +634,9 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
   const view = readListedQuery(params);
   const tab = view.tab;
   const [markets, setDirectoryRead] = useState({ status: 'loading', data: null, request: null });
+  // D7171 part 2: New market research and Edit thesis (MarketHeaderOps.jsx).
+  // Export view is D7172's scoped export below: one export path.
+  const headerOps = useMarketHeaderOps({ read: markets, params, navigate });
   const [sectors] = useRead(() => researchSectorsApi.list());
   const listedReq = listedRequest(view);
   const listedKey = JSON.stringify(listedReq);
@@ -693,6 +697,11 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
             ? `Record a fresh reading for ${rerun.metric}.`
             : `No reading is past ${STALE_AT} days, and every service line has one.`),
     },
+    // D7171 part 2: the D7036 header ops (MarketHeaderOps.jsx). Export view
+    // is not a handler: the tables declare it `kind: 'export'`, and the zone
+    // header runs D7172's scoped export (`scoped`) for the active tab.
+    newMarketResearch: headerOps.handlers.newMarketResearch,
+    editThesis: headerOps.handlers.editThesis,
   };
 
   // The Listed count is every listing record in both stores, one row per source

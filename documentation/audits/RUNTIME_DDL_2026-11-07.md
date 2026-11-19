@@ -64,3 +64,16 @@ Every one of these columns is declared by a migration.
 ## Next, measured file by file
 
 The remaining 60 files are the same mechanical move: route each file's statements through `runSchemaBootstrap`, then lower its baseline entry. Each move should come with its own handler test proving no ALTER against the migrated schema, as `runtime_ddl_4568.test.ts` does for the cohort bootstrap. Order them by how often their path runs: the cron and per-request middleware first. Production's query insights (`D1_BENCHMARK.md` §3) can rank them by observed `duplicate column` errors.
+
+
+### #5343 batch 4 — investor role bootstrap
+
+The investor bootstrap runs before role-dependent requests on a cold binding. This
+puts it ahead of individual route bootstraps based on the entry point, without
+using production traffic data. The checked-in schema baseline already declares
+`users.investor_id`. The same safety net adds it for legacy local/branch databases
+through `runSchemaBootstrap`. A failed schema check returns
+`investor_schema_not_ready` with HTTP 503 for those requests and is retried on the
+next request. Anonymous reads that bypassed role bootstrap still bypass it.
+
+The guard baseline drops from 310 to 309 statements, in 41 files instead of 42.

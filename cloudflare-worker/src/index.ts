@@ -510,7 +510,7 @@ import { branchOf, assertBranchAppUrl } from './util/branch';
 import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, reportPrivateError, stepUpRefusalBody } from './util/authErrors';
 import { BRANCH_SUSPENDED } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
-import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
+import { ensureInvestorSchema, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
 // Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
 import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
@@ -1876,79 +1876,6 @@ import { withThrownResponses } from './util/thrownResponse';
 // only this function (mercury_member_privacy_d752 reads its words).
 import { pruneCardBlobs } from './services/decks/cardBlobs';
 
-// Phase 0.1 — D1 schema migration for the partner→investor split.
-// Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
-// fetch entry point because workers have no startup hook; the cold-start
-// penalty is one cheap PRAGMA + two CREATE/ALTER ... IF NOT EXISTS calls.
-const INVESTOR_SCHEMA_READY = new WeakMap<object, boolean>();
-const INVESTOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
-async function ensureInvestorSchema(env: Env): Promise<void> {
-  const key = bindingKey(env);
-  if (INVESTOR_SCHEMA_READY.get(key)) return;
-  // A cold isolate can receive several requests before its first D1 operation
-  // settles. Share the migration work inside that isolate rather than issuing
-  // overlapping CREATE/ALTER/rebuild statements for every concurrent request —
-  // per DATABASE, so a second binding is not handed the first one's promise and
-  // told a users-table rebuild it never saw has already happened (#204).
-  const pending = INVESTOR_SCHEMA_IN_FLIGHT.get(key);
-  if (pending) return pending;
-  const started = (async () => {
-  try {
-    await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-    );
-    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)");
-    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_type ON investors(investor_type)");
-    // SQLite/D1 lacks ADD COLUMN IF NOT EXISTS. Probe pragma instead.
-    const cols = await env.DB.prepare("PRAGMA table_info(users)").all<{ name: string }>();
-    const hasInvestorId = (cols.results || []).some(r => r.name === 'investor_id');
-    if (!hasInvestorId) {
-      try { await env.DB.exec("ALTER TABLE users ADD COLUMN investor_id INTEGER"); } catch {}
-    }
-    // Phase 0.1 — relax the legacy users.role CHECK constraint that excluded
-    // 'investor'. SQLite/D1 has no ALTER TABLE DROP/MODIFY CONSTRAINT, so on
-    // existing prod DBs we must rebuild the table. To avoid drifting from
-    // schema.sql + every migration that has touched `users`, we derive the new
-    // table DDL from the LIVE definition (sqlite_master) and rewrite ONLY the
-    // table name (to a temp) and the role CHECK (to also accept 'investor').
-    // Every column, default, FK, UNIQUE/CHECK and (replayed) index is preserved
-    // — nothing is hardcoded, so no founder/investor/subscription/PII/linkedin/
-    // public-id data or index is lost the first time the rebuild commits.
-    // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
-    // must retry on the next request in this isolate, or role changes to
-    // 'investor' 500 forever behind a permanently-latched INVESTOR_SCHEMA_READY.
-    let investorRebuildOk = true;
-    try {
-      await rebuildUsersRoleCheckForInvestor(env);
-    } catch (e) {
-      investorRebuildOk = false;
-      console.warn('[boot] users role-CHECK investor rebuild failed (will retry next request):', (e as Error).message);
-    }
-    // Promote partner users with an LP record to investor; create investor row.
-    try {
-      await env.DB.exec(
-        "UPDATE users SET role = 'investor' WHERE role = 'partner' AND id IN (SELECT DISTINCT u.id FROM users u JOIN limited_partners lp ON lp.user_id = u.id OR lower(lp.email) = lower(u.email))"
-      );
-      await env.DB.exec(
-        "INSERT INTO investors (uid, user_id, investor_type, accreditation_status) SELECT lower(hex(randomblob(16))), u.id, 'lp', 'verified' FROM users u WHERE u.role = 'investor' AND NOT EXISTS (SELECT 1 FROM investors i WHERE i.user_id = u.id)"
-      );
-      await env.DB.exec(
-        "UPDATE users SET investor_id = (SELECT i.id FROM investors i WHERE i.user_id = users.id LIMIT 1) WHERE role = 'investor' AND investor_id IS NULL"
-      );
-    } catch (e) {
-      console.warn('[boot] investor promote step skipped:', (e as Error).message);
-    }
-    if (investorRebuildOk) INVESTOR_SCHEMA_READY.set(key, true);
-  } catch (e) {
-    console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
-  } finally {
-    INVESTOR_SCHEMA_IN_FLIGHT.delete(key);
-  }
-  })();
-  INVESTOR_SCHEMA_IN_FLIGHT.set(key, started);
-  return started;
-}
-
 // Task #74 — Mentor→Advisor rename. Idempotent, runs at most once per isolate.
 // Mirrors ensureInvestorSchema: the mentor tables/columns live OUTSIDE the
 // migrations chain (sql/t13_t14_t15.sql is applied manually), and a role-CHECK
@@ -2167,8 +2094,14 @@ const studioos = {
     // verified anonymous public reads, and telemetry endpoints are safe without
     // these schemas and must stay responsive during cold starts and D1 contention.
     if (requiresBlockingRoleSchemaBootstrap(pathname, request.method) && env.DB) {
-      if (!INVESTOR_SCHEMA_READY.get(bindingKey(env))) {
+      try {
         await ensureInvestorSchema(env);
+      } catch {
+        console.error('[boot] investor_schema_not_ready');
+        return Response.json(
+          { ok: false, error: { code: 503, type: 'investor_schema_not_ready', message: 'Service temporarily unavailable' } },
+          { status: 503 },
+        );
       }
       if (!ADVISOR_SCHEMA_READY.get(bindingKey(env))) {
         await ensureAdvisorSchema(env);

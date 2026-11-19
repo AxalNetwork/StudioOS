@@ -51,6 +51,8 @@ import {
 import { confirmationOf, evidenceOf, isHighRisk } from '../services/governanceHighRisk';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
+import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const governance = new Hono<{ Bindings: Env }>();
 const UID = /^[0-9a-f-]{36}$/;
@@ -489,7 +491,10 @@ governance.post('/documents/:uid/versions', async (c) => {
   const last = await c.env.DB.prepare('SELECT COALESCE(MAX(version), 0) AS v FROM governance_document_versions WHERE document_uid = ?').bind(doc.uid).first<{ v: number }>();
   const version = Number(last?.v ?? 0) + 1;
   const key = versionKey(doc.entity_key as GovernanceEntity, doc.uid, version, type);
-  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: type }, customMetadata: { governance_uid: doc.uid, version: String(version) } });
+  // D6651: a version file is written once under a fresh key; when another upload took this number first,
+  // its file stands untouched and the row insert below refuses this one.
+  const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: type }, customMetadata: { governance_uid: doc.uid, version: String(version) } });
+  if (!stored.ok) return refuse(c, 409, { code: 'version_conflict', message: 'Another version was uploaded at the same moment. Reload and upload again.' });
   try {
     await c.env.DB.prepare(
       `INSERT INTO governance_document_versions (document_uid, version, signed, r2_key, file_sha256, file_bytes, content_type, note, uploaded_by, signed_on, signatory, attested_by, copy_of_version)
@@ -497,8 +502,10 @@ governance.post('/documents/:uid/versions', async (c) => {
     ).bind(doc.uid, version, signed ? 1 : 0, key, sha, bytes.length, type, note, Number(user.id),
       copy?.ok ? copy.signed_on : null, copy?.ok ? copy.signatory : null, copy?.ok ? Number(user.id) : null, copyOf).run();
   } catch {
-    // Another upload took this number first: its row stands, and this file is not recorded.
-    await c.env.FILES.delete(key).catch(() => {});
+    // Another upload took this number first: its row stands, and this file is not recorded. D6651: this
+    // request created the file under its own fresh key and no row names it, so it leaves through the
+    // one record-erasure path as `unreferenced`.
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
     return refuse(c, 409, { code: 'version_conflict', message: 'Another version was uploaded at the same moment. Reload and upload again.' });
   }
   await c.env.DB.prepare('UPDATE governance_documents SET updated_by = ?, updated_at = ? WHERE uid = ?').bind(Number(user.id), now(), doc.uid).run();
