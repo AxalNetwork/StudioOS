@@ -478,9 +478,10 @@ test('health: an HQ admin reads each source\'s flag, cadence, last runs, live ro
     `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, ts, citation_url)
      VALUES ('world_bank', 'A', 'global', 'capital', 0.5, '2030-01-01T00:00:00.000Z', 'https://data.worldbank.org/x')`,
   ).run();
+  // The stub row claims a later period: it must move neither the count nor the newest period.
   db.prepare(
-    `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, ts, citation_url)
-     VALUES ('world_bank', 'A', 'global', 'capital', 0.5, ?, ?)`,
+    `INSERT INTO market_intel_rows (source_key, sector, geo, metric_key, metric_value, ts, citation_url, observed_period, observed_period_end)
+     VALUES ('world_bank', 'A', 'global', 'capital', 0.5, ?, ?, '2099', '2099-12-31')`,
   ).run(new Date().toISOString(), `${STUB_CITATION_PREFIX}world_bank`);
   const env = envFor(db, { MI_FLAG_WORLD_BANK: 'live' });
   for (let i = 0; i < 7; i++) await withResponses({}, () => runSourcesByCadence(env, 'weekly'));
@@ -495,7 +496,7 @@ test('health: an HQ admin reads each source\'s flag, cadence, last runs, live ro
   assert.equal(wb.runs[1].outcome, 'fetched');
   assert.ok(!('runs_reason' in wb));
   assert.equal(wb.live_rows, 7 * SECTORS.length + 1, 'live rows only: the stub row is not held');
-  assert.deepEqual([wb.newest_period, wb.newest_period_end], ['2025', '2025-12-31']);
+  assert.deepEqual([wb.newest_period, wb.newest_period_end], ['2025', '2025-12-31'], 'from live rows only');
   assert.equal(wb.newest_retrieved_at, '2030-01-01T00:00:00.000Z', 'an old row\'s retrieval time is its ts');
 
   const oecd = body.sources.find((s: any) => s.key === 'oecd');
