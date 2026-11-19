@@ -135,14 +135,18 @@ const audits = (db: any) => {
   try { return db.prepare("SELECT admin_user_id, action, filters_json FROM admin_audit_log WHERE action = 'licence_sync_retried'").all() as any[]; } catch { return []; }
 };
 
-/** A branch binding that records calls; `gate` holds its answer until released. */
+/** A branch binding that records calls; `gate` holds its answer until released, and `reached` resolves on the first call. */
 function branch(mode: { throws?: boolean; gate?: Promise<void> } = {}) {
   const calls: any[] = [];
+  let arrived!: () => void;
+  const reached = new Promise<void>((r) => { arrived = r; });
   return {
     calls,
+    reached,
     binding: {
       applyLicence: async (r: any) => {
         calls.push(r);
+        arrived();
         if (mode.gate) await mode.gate;
         if (mode.throws) throw new Error('branch unreachable');
         return { ok: true, hq_revision: r.hq_revision };
@@ -230,8 +234,9 @@ test('D6733: one manual retry at a time — a second press while an attempt runs
   const gate = new Promise<void>((r) => { release = r; });
   const b = branch({ gate });
   const first = retry(db, b);
-  // Let the first request claim the row and reach the branch.
-  for (let i = 0; i < 50 && b.calls.length === 0; i += 1) await new Promise((r) => setImmediate(r));
+  // Let the first request claim the row and reach the branch (#7471): wait on the stub's own
+  // signal, raced with the request, so a request that never reaches the branch still fails here.
+  await Promise.race([b.reached, first]);
   assert.equal(b.calls.length, 1, 'the first retry is at the branch');
   const second = await retry(db, b);
   assert.equal(second.status, 409);

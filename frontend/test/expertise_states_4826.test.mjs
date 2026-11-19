@@ -113,7 +113,7 @@ test('the shelf row keeps its state and figures at a phone’s width', () => {
   // that squeezed the pill and the figures on a phone.
   const zone = read('frontend/src/pages/advisor/expertise/ThinkingZone.jsx');
   assert.match(zone, /className="flex flex-col gap-2 py-2\.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4"/, 'the row stacks below sm');
-  assert.match(zone, /text-left text-\[11px\] tabular-nums text-axal-faint sm:text-right/, 'and the figures read from the start when it does');
+  assert.match(zone, /text-left text-\[11px\] tabular-nums text-axal-muted sm:text-right/, 'and the figures read from the start when it does');
   // The state is a word as well as a colour, at either width (D4681's Pill
   // draws `stage.label`), and the row carries its state for a test to read.
   assert.match(zone, /<Pill tone=\{stage\.tone\}>\{stage\.label\}<\/Pill>/, 'the pill is the label, so colour is never the only signal');

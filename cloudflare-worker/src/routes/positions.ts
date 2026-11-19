@@ -652,15 +652,25 @@ r.get('/:projectUid', async (c) => {
           WHERE project_id = ?
             AND (? IS NULL OR fund_id IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
           ORDER BY as_of_date DESC`,
-      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: null as any[] | null })),
       c.env.DB.prepare(
         `SELECT uid, distribution_date, amount, kind, note
            FROM portfolio_distributions
           WHERE project_id = ?
             AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
           ORDER BY distribution_date DESC`,
-      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: null as any[] | null })),
     ]);
+    // #5847: a failed marks or distributions read is Unreadable, never an
+    // empty history, "None recorded" or $0. The page reads a refused read as
+    // Unreadable (`readOf`); an empty but successful read is still [].
+    const unread = markRows.results == null ? 'marks' : distRows.results == null ? 'distributions' : null;
+    if (unread) {
+      const reason = unread === 'marks'
+        ? "Unreadable — this company's valuation marks could not be read. Try again."
+        : "Unreadable — this company's distributions could not be read. Try again.";
+      return c.json({ available: false, source: unread, detail: reason, reason }, 503);
+    }
     const marks = markRows.results || [];
     const invested = (rounds.results || []).reduce((a: number, x: any) => a + (Number(x.invested_amount) || 0), 0);
     const roll = rollUpPosition(invested, marks.length > 0 ? Number(marks[0].fmv) : null);
