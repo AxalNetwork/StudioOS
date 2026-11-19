@@ -41,7 +41,6 @@ test.after(() => { __setEngineRouteDeps(null); removeMigratedDatabases(); });
 
 const P = { kind: 'project' as const, id: PROJECT };
 const T200 = hex(200, 'c');
-const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const ENGINE_MODEL = ACCOUNT_MODEL; // #7073 part 2: engine runs are answered by the primary Claude account
 const runRow = (w: World, uid: string) => w.db.prepare('SELECT * FROM agent_task_runs WHERE uid = ?').get(uid) as any;
 const taskRow = (w: World, id: number) => w.db.prepare('SELECT * FROM scope_tasks WHERE id = ?').get(id) as any;

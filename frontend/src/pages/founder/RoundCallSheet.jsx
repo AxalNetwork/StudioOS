@@ -2,11 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundCallsApi } from '../../lib/api/roundCalls';
 import { prospectInvitesApi } from '../../lib/api/prospectInvites';
+import { roundCallFollowThroughApi } from '../../lib/api/roundCallFollowThrough';
+import { Unreadable } from '../../ui/Honesty.jsx';
 import { reportError } from '../../lib/log';
 import { callHref } from '../raise/calls/callsModel';
 import Lightbox from '../../ui/Lightbox';
 import ActionSheet, { primary, ghost } from '../../ui/ActionSheet';
 import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsToCents, callDate } from './roundCallParts';
+import {
+  NOT_RECORDED, SOURCE_FILTERS, SOURCE_ON, SOURCE_OWNER_ONLY, SOURCE_REMATCH, SOURCE_TODAY, SOURCE_WHY, sourceChip, sourceFooter, sourceRows, sourceTicks,
+} from './callFollowThroughModel';
 
 /**
  * D686 §5.6 (#1598) — Raise's Call for Capital: five steps, a draft resumed
@@ -24,6 +29,14 @@ import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsT
  * Axal greyed, the preview with counsel's four states, and Send with what is
  * missing acknowledged one by one, then its result. A saved draft's address is
  * `callHref`'s, under Calls in the Raise shell. A refusal keeps every entry.
+ *
+ * D7513 (#7513, RAC20C, RAC20D) — a draft started from a closed call
+ * (`round_calls.source_call_id`, D6863) opens its Audience step on that call's
+ * chosen investors, read from `GET /round-calls/:uid/source-audience`: each one
+ * still verified and in the pipeline is ticked, the rest are greyed with why.
+ * The draft's own recorded audience always wins over the closed call. Only the
+ * venture's owner sets the audience (D1222's `can.audience`): a co-founder sees
+ * the ticks read only, and the step writes nothing for them.
  */
 export const ROUND_CALL_STEPS=['The round','Materials','Audience','Preview','Send'];
 
@@ -185,6 +198,10 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   const [wording,setWording]=useState(null);
   // D6052 (#6052): each prospect's invitation state, read on the audience step, and the open invite form.
   const [invites,setInvites]=useState(null),[inviteRun,setInviteRun]=useState(0),[inviting,setInviting]=useState(null);
+  // D7513: the closed call this draft was started from, read on the audience step; its ticks are applied once.
+  const [source,setSource]=useState(null),[sourceRun,setSourceRun]=useState(0);
+  const preticked=useRef(false);
+  const sourceId=page?.call?.source_call_id??null,canSet=page?.can?.audience!==false;
   const termsInput=useRef(null);
   const saved=useRef(null),touched=useRef(false),[matchRun,setMatchRun]=useState(0);
   useEffect(()=>{
@@ -202,12 +219,32 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   },[context.data,resume.data]);
   useEffect(()=>{
     if(step!==2||!uid)return;
+    // D1222: the preview is the owner's; a co-founder's step says who re-matches instead of failing a read.
+    if(!canSet){setMatches({off:true});return;}
     let alive=true;setMatches({loading:true});
     roundCallsApi.previewAudience(uid,{chosen_prospect_ids:chosen,include_matches:true}).then(
       data=>{if(alive){setMatches({data});if(!data.matched)setIncludeMatches(false);}},
       e=>{reportError('round-calls:matches',e);if(alive)setMatches({error:e});});
     return()=>{alive=false;};
-  },[step,uid,chosen,matchRun]);
+  },[step,uid,chosen,matchRun,canSet]);
+  useEffect(()=>{
+    if(step!==2||!uid||sourceId==null)return;
+    let alive=true;setSource(current=>current?.data?current:{loading:true});
+    roundCallFollowThroughApi.sourceAudience(uid).then(
+      data=>{
+        if(!alive)return;
+        setSource({data});
+        const ticks=preticked.current?null:sourceTicks(data,page);
+        if(!ticks)return;
+        preticked.current=true;
+        if(!ticks.length)return;
+        setChosen(values=>[...new Set([...values,...ticks])]);
+        // The ticks are an audience the owner has not saved yet: Next writes them.
+        if(canSet)touched.current=true;
+      },
+      e=>{reportError('round-calls:source-audience',e);if(alive)setSource({error:e});});
+    return()=>{alive=false;};
+  },[step,uid,sourceId,sourceRun,page,canSet]);
   useEffect(()=>{
     if(step!==2)return;
     let alive=true;setInvites({loading:true});
@@ -257,7 +294,7 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     await run(async()=>{
       if(step===0){await persist(ROUND_KEYS);setNote(null);setStep(1);}
       else if(step===1){await persist(['deck_id','room']);setStep(2);}
-      else if(step===2){if(touched.current||!page)await roundCallsApi.audience(uid,{chosen_prospect_ids:chosen,include_matches:includeMatches});touched.current=false;setPage(await roundCallsApi.page(uid));setStep(3);}
+      else if(step===2){if(canSet&&(touched.current||!page))await roundCallsApi.audience(uid,{chosen_prospect_ids:chosen,include_matches:includeMatches});touched.current=false;setPage(await roundCallsApi.page(uid));setStep(3);}
       else if(step===3){setPage(await roundCallsApi.page(uid));setStep(4);}
     });
   }
@@ -288,11 +325,12 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     recheck:()=>run(async()=>setPage(await roundCallsApi.page(uid))),
     retryInvites:()=>setInviteRun(n=>n+1),inviteOpen:id=>setInviting({prospectId:id,email:'',busy:false,error:''}),
     inviteEmail:value=>setInviting(form=>form&&{...form,email:value}),inviteCancel:()=>setInviting(null),inviteSend:sendInvite,
+    retrySource:()=>setSourceRun(n=>n+1),
     requestCounsel:()=>run(async()=>{await roundCallsApi.requestCounsel(uid,page.call.revision);setCleared(false);setPage(await roundCallsApi.page(uid));}),retryMatches:()=>setMatchRun(n=>n+1),
     includeMatches:value=>{touched.current=true;setIncludeMatches(value);},
     choose:id=>{touched.current=true;setChosen(values=>values.includes(id)?values.filter(value=>value!==id):[...values,id]);}};
   const ready=context.data&&resume.data;
-  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,invites,inviting,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft,wording:wording?.uid===uid&&wording?.projectId===projectId?wording:null}} on={on} onClose={onClose}/>;
+  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,invites,inviting,page,source,sourceId,canSet,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft,wording:wording?.uid===uid&&wording?.projectId===projectId?wording:null}} on={on} onClose={onClose}/>;
   return <ActionSheet {...CALL_SHEET} onClose={onClose}><CallReadState read={context}><CallReadState read={resume}>{ready&&<OpenCallNotice call={resume.data.open}/>}</CallReadState></CallReadState></ActionSheet>;
 }
 
@@ -416,10 +454,16 @@ export function matchLine(d) {
 
 function AudienceStep({s,on}) {
   const m=s.matches,data=m?.data,others=data?.not_on_axal||[];
+  const fromSource=s.sourceId!=null;
+  // D7513: an investor the closed call already lists is ticked there, not twice.
+  const listed=new Set((s.source?.data?.rows||[]).map(r=>r.prospect_id).filter(id=>id!=null));
+  const pipeline=s.context.chosen.filter(p=>!listed.has(p.prospect_id));
   return <>
-    <div><h3 className="font-semibold">From your pipeline</h3><p className="text-xs text-axal-muted">Investors with a verified Axal account can be chosen.</p></div>
+    {s.canSet===false&&<p role="note" className="rounded-xl border border-axal-hairline bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-800" data-testid="call-audience-owner-only"><span aria-hidden="true">⦸ </span>{SOURCE_OWNER_ONLY}</p>}
+    {fromSource&&<SourceAudience s={s} on={on}/>}
+    <div><h3 className="font-semibold">{fromSource?'Others in your pipeline':'From your pipeline'}</h3><p className="text-xs text-axal-muted">Investors with a verified Axal account can be chosen.</p></div>
     <ul className="divide-y divide-axal-hairline border-y border-axal-hairline" aria-label="Your pipeline">
-      {s.context.chosen.map(p=><li key={p.prospect_id} className="flex items-center gap-3 py-2"><input type="checkbox" aria-label={'Choose '+(p.name||'this investor')} checked={s.chosen.includes(p.prospect_id)} onChange={()=>on.choose(p.prospect_id)}/>
+      {pipeline.map(p=><li key={p.prospect_id} className="flex items-center gap-3 py-2"><input type="checkbox" aria-label={'Choose '+(p.name||'this investor')} checked={s.chosen.includes(p.prospect_id)} disabled={s.canSet===false} onChange={()=>on.choose(p.prospect_id)}/>
         <span className="min-w-0 flex-1 font-semibold">{p.name||'Name not recorded'}</span><span className={chip}>Verified on Axal</span></li>)}
       {others.map(p=>{const row=inviteRow(s.invites,p.prospect_id),open=s.inviting?.prospectId===p.prospect_id;
         return <li key={'n'+p.prospect_id} className="py-2 text-axal-muted" data-testid="call-not-on-axal"><div className="flex flex-wrap items-center gap-3"><input type="checkbox" disabled aria-label={(p.name||'This investor')+' is not on Axal'} checked={false} readOnly/>
@@ -428,12 +472,13 @@ function AudienceStep({s,on}) {
             :row.kind==='invited'?<span className={chip}>Invited · {shortDate(row.date)||'date not recorded'}</span>
             :<><span className={chip}>Not on Axal</span><button type="button" className={callButton} disabled={row.kind!=='open'||open} title={row.reason||undefined} onClick={()=>on.inviteOpen(p.prospect_id)}>Invite to Axal</button></>}</div>
           {open&&<InviteForm s={s} on={on} name={p.name} hasEmail={row.hasEmail}/>}</li>;})}
-      {!s.context.chosen.length&&!others.length&&<li className="py-2">No investor from this venture’s pipeline is available.</li>}
+      {!pipeline.length&&!others.length&&<li className="py-2">{fromSource&&s.context.chosen.length?'Every verified investor in your pipeline is listed above.':'No investor from this venture’s pipeline is available.'}</li>}
     </ul>
     {others.length>0&&(s.invites?.error?<p role="alert" className="text-xs">Invitations are unreadable · <button type="button" className={callButton} onClick={on.retryInvites}>Try again</button></p>
       :<p className="text-xs text-axal-muted">{s.invites?.data&&!s.invites.data.can_invite?'Invite to Axal: '+(s.invites.data.reason||INVITE_ROLE_FALLBACK):INVITE_NOTE}</p>)}
     <div className={card} aria-live="polite">
-      {!m||m.loading?<p role="status">Checking matches…</p>
+      {m?.off?<p data-testid="call-matches-owner">Matching investors are re-matched when the venture’s owner previews the audience.</p>
+        :!m||m.loading?<p role="status">Checking matches…</p>
         :m.error?<p role="alert">Matches are unreadable · <button type="button" className={callButton} onClick={on.retryMatches}>Try again</button></p>
         :data.matched>0?<><div className="flex items-center gap-3"><button type="button" role="switch" aria-checked={!!s.includeMatches} aria-label="Also invite investors whose published focus fits" className={callButton} onClick={()=>on.includeMatches(!s.includeMatches)}>{s.includeMatches?'On':'Off'}</button>
             <span className="font-semibold">Also invite investors whose published focus fits</span></div>
@@ -443,6 +488,36 @@ function AudienceStep({s,on}) {
     </div>
   </>;
 }
+/**
+ * D7513 (RAC20C, RAC20D): the closed call's chosen investors, filtered by how
+ * they answered it, each ticked when still verified and in the pipeline and
+ * greyed with its reason when not. The checkboxes are the sheet's `chosen`.
+ */
+function SourceAudience({s,on}) {
+  const [filter,setFilter]=useState('all');
+  const src=s.source;
+  if(src?.error)return <Unreadable what="The closed call’s investors" claim="Nothing is ticked from it until it can be read." onRetry={on.retrySource} size="block"/>;
+  if(!src?.data)return <section className={card} aria-label="The closed call’s investors" role="status" data-testid="call-source-loading"><p className="text-sm">Reading the closed call’s investors…</p>
+    {[70,55,62].map(w=><span key={w} className="block h-3 rounded bg-gray-100 dark:bg-gray-800" style={{width:`${w}%`}}/>)}</section>;
+  const d=src.data,rows=sourceRows(d,filter),closed=shortDate(d.source?.closed_at);
+  return <section className={card} aria-label={'From '+d.source.name} data-testid="call-source-audience">
+    <div><h3 className="font-semibold">{`From ${d.source.name}${closed?`, closed ${closed}`:''}`}</h3>
+      <p className="text-xs text-axal-muted">Its chosen investors, ticked when still verified on Axal and in your pipeline. {SOURCE_REMATCH}</p></div>
+    <div role="group" aria-label="Filter past recipients" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">{SOURCE_FILTERS.map(([key,label])=>{const n=sourceChip(d,key);
+      return <button key={key} type="button" aria-pressed={filter===key} className={`${filter===key?primary:ghost} shrink-0 whitespace-nowrap`} onClick={()=>setFilter(key)} data-testid={'call-source-chip-'+key}>{`${label} ${n==null?NOT_RECORDED:n}`}</button>;})}</div>
+    {rows.length?<ul className="divide-y divide-axal-hairline border-y border-axal-hairline dark:divide-gray-700 dark:border-gray-700" aria-label={'Chosen on '+d.source.name}>
+      {rows.map(r=>{const why=SOURCE_WHY[r.today],name=r.name||'Name not recorded',id='call-source-why-'+r.recipient_id;
+        const can=s.canSet!==false&&r.ticked===true&&r.prospect_id!=null;
+        return <li key={r.recipient_id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 py-2 ${why?'text-axal-muted dark:text-gray-400':''}`} data-testid={'call-source-row-'+r.recipient_id}>
+          <input type="checkbox" className="h-4 w-4" aria-label={'Include '+name} aria-describedby={why?id:undefined} checked={r.prospect_id!=null&&s.chosen.includes(r.prospect_id)} disabled={!can} onChange={()=>on.choose(r.prospect_id)}/>
+          <span className="min-w-0 flex-1"><b className="block">{name}</b>{why&&<span id={id} className="block text-xs"><span aria-hidden="true">⦸ </span>{why}</span>}</span>
+          <span className="text-xs">{`On ${d.source.name}: ${SOURCE_ON[r.on_source]||NOT_RECORDED}`}</span>
+          <span className={chip}>{SOURCE_TODAY[r.today]||NOT_RECORDED}</span></li>;})}
+    </ul>:<p className="text-sm text-axal-muted">{d.rows.length?'No chosen investor under this filter.':'The closed call had no chosen investors. Choose from your pipeline below.'}</p>}
+    <p className="text-xs text-axal-muted" data-testid="call-source-footer">{sourceFooter(d,rows,s.chosen)}</p>
+  </section>;
+}
+
 /**
  * D6052 (#6052): Invite to Axal, through Contacts' one invite path. An invited investor is chosen only once
  * their investor account is verified; inviting adds nobody to the audience.

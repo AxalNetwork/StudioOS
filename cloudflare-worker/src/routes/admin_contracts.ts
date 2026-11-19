@@ -48,6 +48,7 @@ import {
   resolveFormat,
   type FormatPatch,
 } from '../services/legalTemplateStore';
+import { putRecord } from '../services/recordStore';
 
 type AppContext = Context<{ Bindings: Env }>;
 type ContractDownloadResult =
@@ -1745,8 +1746,11 @@ adminContracts.post('/:uid/evidence', async (c) => {
   const copy = signedCopyOf({ signed_on: form?.get('signed_on'), signatory: form?.get('signatory'), attest: form?.get('attest') }, new Date().toISOString().slice(0, 10));
   if (!copy.ok) return refuse(c, 422, { code: copy.code, message: copy.message.replace('uploaded', 'attached') });
   const sha = await sha256HexBytes(bytes);
-  const key = `contracts/evidence/${uid}.pdf`;
-  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { agreement_uid: uid } });
+  // D6651: write-once under a fresh key, so a file whose row was not recorded never blocks the next attach.
+  const key = `contracts/evidence/${uid}/${crypto.randomUUID()}.pdf`;
+  // D6651: the evidence is written once; a second attach never replaces the first file.
+  const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { agreement_uid: uid } });
+  if (!stored.ok) return refuse(c, 409, { code: 'already_evidenced', message: 'This agreement already has its execution evidence. It is written once. Nothing was attached.' });
   try {
     await c.env.DB.prepare('INSERT INTO agreement_evidence (agreement_uid, r2_key, file_sha256, file_bytes, signed_on, signatory, attested_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .bind(uid, key, sha, bytes.length, copy.signed_on, copy.signatory, Number(admin.id)).run();

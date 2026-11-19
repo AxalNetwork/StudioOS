@@ -32,7 +32,7 @@ const AREA_RULES = [
   ['merge-control', /^merge-control\//],
   ['scripts', /^scripts\//],
   ['backend', /^backend\//],
-  ['prose', /^(?:documentation|design|attached_assets)\/|\.md$/],
+  ['prose', /(?:^(?:documentation|design|attached_assets)\/)|(?:\.md$)/],
   ['skills', /^\.claude\//],
 ];
 
