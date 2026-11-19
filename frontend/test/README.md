@@ -233,6 +233,18 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `scan_remediation_6935.test.mjs` | D6935 automated tracking, Autofix publishing, retries and default-branch verification. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+
+## Observable readiness (D5504)
+
+| File | Guarantee |
+| --- | --- |
+| `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
+| `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+
+Prefer scoped business clocks and explicit observable outcomes to a fixed count
+of event-loop turns. The migration inventory and first changed-test command are
+in `documentation/architecture/decisions/D5504.md`; the coordinated future-clock
+run remains the integration signal for JavaScript, SQLite and child processes.
 | `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
