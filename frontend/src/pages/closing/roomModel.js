@@ -271,6 +271,35 @@ export function signingRows(envelope, viewer) {
   });
 }
 
+/**
+ * D6197 (#6197): what the viewer may do with their own stage, from the staged read's `you` (the Worker names the
+ * caller's own stage and the numeric id of the envelope sent to them; a reader who signs no stage gets null).
+ * `resend` while that stage is out for the viewer's signature; `download` once every stage is signed, for the
+ * viewer's own executed stage. Each is the envelope id the routes take, or null. A non-party gets neither.
+ */
+export function signActions(envelope) {
+  const you = envelope?.you;
+  const id = Number(you?.envelope_id);
+  if (!envelope || envelope.voided || !you || !Number.isInteger(id) || id <= 0) return { resend: null, download: null };
+  return {
+    resend: you.state === 'sent' ? id : null,
+    download: envelope.complete === true && you.state === 'signed' ? id : null,
+  };
+}
+
+/** D6197: the words of the two actions, and what the room says after a resend. */
+export const SIGN_WORDS = Object.freeze({
+  resend: 'Send me the link again',
+  resending: 'Sending…',
+  resent: 'Sent again. Look for it in your inbox, and in spam if it is not there.',
+  resendFailed: 'The link could not be sent again. Try again.',
+  download: 'Download the executed copy',
+  downloading: 'Downloading…',
+  downloadFailed: 'The executed copy could not be downloaded. Try again.',
+  copyNote: 'Your copy is the paper you signed, with your signature. Every stage signed the same text.',
+  paper: 'You read the paper on the e-sign page the link opens, before you sign.',
+});
+
 // ───────────────────────────────────────────────────────────── CP10: the receipt drawer
 
 const EVIDENCE_WORD = Object.freeze({

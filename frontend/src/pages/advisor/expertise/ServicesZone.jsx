@@ -7,6 +7,10 @@ import {
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, refusalText,
 } from './kit';
 import { SERVICE_LIMITS, SUPPORTED_CURRENCIES } from '../../../lib/advisorLimits';
+import { overLimitKeys, overLimitLine } from './feedback';
+
+/** D4828: each limited field's label, for the sentence a blocked save shows. */
+export const SERVICE_LIMIT_LABELS = { title: 'Title', duration_note: 'Duration', scope: 'What it covers' };
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -144,6 +148,9 @@ export default function ServicesZone() {
     setNote(null);
     const title = draft.title.trim();
     if (!title) { setNote({ ok: false, text: 'A service needs a title.' }); return; }
+    // D4828 (EX-16): over a limit blocks the add; nothing is cut.
+    const overAdd = overLimitKeys(draft, SERVICE_LIMITS);
+    if (overAdd.length) { setNote({ ok: false, text: overLimitLine(overAdd, SERVICE_LIMIT_LABELS) }); return; }
     // Parsed here so a typo is a sentence rather than a 400 from the worker.
     const parsed = dollarsToCents(draft.price);
     if (parsed.error) { setNote({ ok: false, text: parsed.error }); return; }
@@ -203,6 +210,8 @@ export default function ServicesZone() {
   };
   const saveEdit = async (e, row) => {
     e.preventDefault();
+    const overEdit = overLimitKeys(editDraft, SERVICE_LIMITS);
+    if (overEdit.length) { setEditNote({ ok: false, text: overLimitLine(overEdit, SERVICE_LIMIT_LABELS) }); return; }
     const parsed = dollarsToCents(editDraft.price);
     if (parsed.error) { setEditNote({ ok: false, text: parsed.error }); return; }
     const { body, error } = serviceEditBody(row, editDraft, parsed.cents);
@@ -324,9 +333,9 @@ export default function ServicesZone() {
             { label: 'Unpriced', value: String(counts?.unpriced ?? unpriced.length), note: (counts?.unpriced ?? unpriced.length) ? 'scope settled, price is not' : 'all priced' },
           ].map((s) => (
             <Card key={s.label} padding="md">
-              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{s.label}</div>
               <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value}</div>
-              <div className="mt-0.5 text-[10px] text-axal-faint">{s.note}</div>
+              <div className="mt-0.5 text-[10px] text-axal-muted">{s.note}</div>
             </Card>
           ))}
         </div>
@@ -343,8 +352,8 @@ export default function ServicesZone() {
         </p>
         <FillFormBar fill={fill} />
         <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="advisor-service-add">
-          <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }}>
-            <input ref={titleRef} className={inputClass} value={draft.title} data-testid="advisor-service-title" maxLength={SERVICE_LIMITS.title}
+          <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }} limit={SERVICE_LIMITS.title}>
+            <input ref={titleRef} className={inputClass} value={draft.title} data-testid="advisor-service-title"
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               placeholder="Fractional CTO day" />
           </Field>
@@ -365,19 +374,19 @@ export default function ServicesZone() {
               {SUPPORTED_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="Duration" hint="In your own words.">
-            <input className={inputClass} value={draft.duration_note} maxLength={SERVICE_LIMITS.duration_note}
+          <Field label="Duration" hint="In your own words." limit={SERVICE_LIMITS.duration_note}>
+            <input className={inputClass} value={draft.duration_note} data-testid="advisor-service-duration"
               onChange={(e) => setDraft({ ...draft, duration_note: e.target.value })}
               placeholder="One day, on site" />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="What it covers" fill={{ ctl: fill, name: 'scope', value: draft.scope }}>
-              <textarea rows={2} className={inputClass} value={draft.scope} maxLength={SERVICE_LIMITS.scope}
+            <Field label="What it covers" fill={{ ctl: fill, name: 'scope', value: draft.scope }} limit={SERVICE_LIMITS.scope}>
+              <textarea rows={2} className={inputClass} value={draft.scope} data-testid="advisor-service-scope"
                 onChange={(e) => setDraft({ ...draft, scope: e.target.value })} />
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <button type="submit" className={buttonClass} disabled={busy}>
+            <button type="submit" className={`${buttonClass} w-full sm:w-auto`} disabled={busy || overLimitKeys(draft, SERVICE_LIMITS).length > 0} data-testid="advisor-service-add-submit">
               {busy ? 'Adding…' : 'Add service'}
             </button>
             <SaveNote note={note} testid="advisor-services-note" />
@@ -391,7 +400,7 @@ export default function ServicesZone() {
         filters={advisorZoneFilters('expertise/services', { value: view, onChange: setView })}
         actions={advisorZoneActions('expertise/services', { handlers: { focusAddForm }, view: { header: ['Service', 'Kind', 'Active', 'Price (minor units)', 'Currency', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.currency, r.units_sold] } })}
       />
-      <ZoneBody loading={state.loading} error={state.error} onRetry={load}
+      <ZoneBody loading={state.loading} error={state.error} onRetry={load} what="Your services"
         notice={<StaleNote error={list.refreshError} onRetry={list.refresh} testid="advisor-services-stale" />}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
@@ -418,8 +427,8 @@ export default function ServicesZone() {
               {editing === row.id ? (
                 <form onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault?.(); stopEdit(); } }} onSubmit={(e) => saveEdit(e, row)} className="mt-3 grid grid-cols-1 gap-3 border-t border-axal-hairline pt-3 sm:grid-cols-2 dark:border-gray-700"
                   data-testid={`advisor-service-form-${row.id}`}>
-                  <Field label="Title">
-                    <input ref={editTitleRef} className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title" maxLength={SERVICE_LIMITS.title}
+                  <Field label="Title" limit={SERVICE_LIMITS.title}>
+                    <input ref={editTitleRef} className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title"
                       onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} />
                   </Field>
                   <Field label="Kind">
@@ -439,18 +448,18 @@ export default function ServicesZone() {
                         .map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </Field>
-                  <Field label="Duration">
-                    <input className={inputClass} value={editDraft.duration_note} data-testid="advisor-service-edit-duration" maxLength={SERVICE_LIMITS.duration_note}
+                  <Field label="Duration" limit={SERVICE_LIMITS.duration_note}>
+                    <input className={inputClass} value={editDraft.duration_note} data-testid="advisor-service-edit-duration"
                       onChange={(e) => setEditDraft({ ...editDraft, duration_note: e.target.value })} />
                   </Field>
                   <div className="sm:col-span-2">
-                    <Field label="What it covers">
-                      <textarea rows={2} className={inputClass} value={editDraft.scope} data-testid="advisor-service-edit-scope" maxLength={SERVICE_LIMITS.scope}
+                    <Field label="What it covers" limit={SERVICE_LIMITS.scope}>
+                      <textarea rows={2} className={inputClass} value={editDraft.scope} data-testid="advisor-service-edit-scope"
                         onChange={(e) => setEditDraft({ ...editDraft, scope: e.target.value })} />
                     </Field>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-                    <button type="submit" className={buttonClass} disabled={saving} data-testid="advisor-service-edit-save">
+                    <button type="submit" className={buttonClass} disabled={saving || overLimitKeys(editDraft, SERVICE_LIMITS).length > 0} data-testid="advisor-service-edit-save">
                       {saving ? 'Saving…' : 'Save changes'}
                     </button>
                     <button type="button" className={ghostButtonClass} onClick={stopEdit}>Cancel</button>
@@ -463,7 +472,7 @@ export default function ServicesZone() {
         </div>
         <div className="space-y-3">
           <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-services-more" />
-          <p className="text-[11px] leading-relaxed text-axal-faint">
+          <p className="text-[11px] leading-relaxed text-axal-muted">
             How many times each service has been delivered is not shown. Nothing in the product links
             a booking to a service — a booking records a free-text topic — so a count here would be a
             guess wearing the shape of a number.

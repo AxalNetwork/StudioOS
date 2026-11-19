@@ -8,7 +8,7 @@ import { SECTIONS, filterSectionsForRole } from '../../pages/docs/sections';
 
 // Build a flat list of search records — one per subsection — with a
 // `text` blob fuse can score against. The blob folds in the overview,
-// how-to steps, tips, pitfalls, and related-link labels so a query
+// before-you-start items (D7515), how-to steps, tips, pitfalls, and related-link labels so a query
 // like "vesting cliff" matches the cap-table page even when the term
 // only appears inside a how-to step.
 export function buildDocsRecords(role) {
@@ -36,6 +36,7 @@ export function buildDocsRecords(role) {
       const text = [
         sub.title,
         sub.overview || '',
+        ...(sub.beforeYouStart || []),
         ...(sub.howto || []),
         ...(sub.tips || []),
         ...(sub.pitfalls || []),

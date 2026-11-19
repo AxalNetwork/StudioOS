@@ -17,9 +17,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import {
-  PrivatePanel, PublicPanel, GovernmentPanel, WhereBased, LatestSignals, Readings,
-  groupMarkets, sectorSlug,
+  PublicPanel, WhereBased, LatestSignals, Readings, sectorSlug,
 } from '../src/pages/research/MarketDirectoryZone.jsx';
+import { CoverageNote, DirectoryBody } from '../src/pages/research/MarketDirectory.jsx';
+import { readMarketQuery } from '../src/pages/research/marketDirectoryQuery.js';
 import { GeographiesList } from '../src/pages/research/GeographiesZone.jsx';
 import { GeographyBody, GeographyState, euroMillions, backingLabel } from '../src/pages/research/GeographyProfile.jsx';
 import { researchMarketsApi } from '../src/lib/api/researchMarkets.js';
@@ -44,35 +45,25 @@ const MARKETS = {
 
 // ---- Markets ---------------------------------------------------------------
 
-test('markets group by tracked sector, the unmapped last and said so; counts are summed per group', () => {
-  const g = groupMarkets(MARKETS.items);
-  // D593 — the unmapped group takes the canvas M1 wording.
-  assert.deepEqual(g.map((x) => [x.name, x.markets.length, x.companies, x.mapped]), [
-    ['Fintech / DeFi', 2, 910, true],
-    ['Not mapped yet', 1, 50, false],
-  ]);
-  assert.equal(g[0].slug, 'fintech-defi');
-  assert.equal(g[1].slug, null, 'an unmapped group has no sector page to open');
+test('the sector slug is the tracked sector\'s own name, slugged', () => {
   assert.equal(sectorSlug('Data / Analytics'), 'data-analytics');
+  assert.equal(sectorSlug('Fintech / DeFi'), 'fintech-defi');
 });
 
-test('the private tab: each state, and the totals the API sends', () => {
-  assert.match(text(h(PrivatePanel, { markets: loading })), /Loading the markets/);
-  const bad = text(h(PrivatePanel, { markets: unreadable }));
+// D7171 (#7171) replaced the private tab's grouped list with the paged
+// directory; its states are drawn by `DirectoryBody`, from the Worker's totals.
+test('the market directory: each state, and the totals the API sends', () => {
+  const view = readMarketQuery(new URLSearchParams(''));
+  const body = (markets) => text(h(DirectoryBody, { markets, view, onPatch: () => {} }));
+  assert.match(body(loading), /Reading the markets/);
+  const bad = body(unreadable);
   assert.match(bad, /could not be read/);
   assert.doesNotMatch(bad, /No markets/, 'a failed read is not "none"');
-  assert.match(text(h(PrivatePanel, { markets: ready({ total: 0, items: [] }) })), /No markets are in the directory yet/);
-  const ok = text(h(PrivatePanel, { markets: ready(MARKETS) }));
-  assert.match(ok, /3 markets holding 960 companies, as the taxonomy source counts them/);
-  assert.match(ok, /not independently verified/);
-  assert.match(ok, /Not mapped yet 1 markets · no index applies/);
-  assert.match(ok, /Fintech \/ DeFi 2 markets · 910 companies/);
-  const markup = html(h(PrivatePanel, { markets: ready(MARKETS) }));
-  // D593 — #1139's per-sector page landed (D547), so a sector group opens it.
-  // The unmapped group has no sector page, and no link.
-  assert.match(markup, /href="\/research\/markets\/sector\/fintech-defi"/, 'a sector group opens its own page');
-  assert.equal((markup.match(/Open sector/g) || []).length, 1, 'one link, on the one sector group');
-  assert.match(markup, /href="\/research\/markets\/sector\/payments"/, 'a market opens its own page');
+  assert.match(body(ready({ total: 0, directory_total: 0, items: [] })), /No markets are in the directory yet/);
+  const ok = body(ready({ ...MARKETS, directory_total: 3, offset: 0 }));
+  assert.match(ok, /FinTech Tracked sector Fintech \/ DeFi 900/);
+  assert.match(ok, /Fashion Not mapped yet · no tracked sector 50/);
+  assert.match(ok, /not market size/);
 });
 
 test('the public tab: listed companies with bands as sent, unknown values Not recorded; failed read is not empty', () => {
@@ -83,14 +74,14 @@ test('the public tab: listed companies with bands as sent, unknown values Not re
   const ok = text(h(PublicPanel, { listed: ready({
     total: 2, as_of: '2026-10-02 00:00:00',
     items: [
-      { symbol: 'NU', name: 'Nu Holdings', exchange: 'NYSE', country: 'Brazil', market_cap_band: 'large', employee_band: '5k-20k' },
-      { symbol: 'ZZZ', name: 'Quiet Co', exchange: null, country: null, market_cap_band: null, employee_band: null },
+      { symbol: 'NU', name: 'Nu Holdings', exchange: 'NYSE', country: 'Brazil', sector: 'Fintech', market_cap_band: 'large', employee_band: '5k-20k' },
+      { symbol: 'ZZZ', name: 'Quiet Co', exchange: null, country: null, sector: null, market_cap_band: null, employee_band: null },
     ],
   }) }));
-  assert.match(ok, /These 2 are known to be listed\. The company directory/);
-  assert.match(ok, /NU Nu Holdings NYSE Brazil large 5k-20k/);
-  assert.match(ok, /ZZZ Quiet Co Not recorded Not recorded Not recorded Not recorded/);
-  assert.match(ok, /signal_companies · 2 listed companies · bands as the source sets them · as of 2026-10-02/);
+  // D7172: the count is listing records, and the directory's caveat stays.
+  assert.match(ok, /2 listing records All sources, no search\. The company directory does not record listing status\./);
+  assert.match(ok, /NU Nu Holdings NYSE Brazil Fintech large 5k-20k S Signal companies No link recorded/);
+  assert.match(ok, /ZZZ Quiet Co Not recorded Not recorded Not recorded Not recorded Not recorded S Signal companies/);
 });
 
 test('D595: the public tab labels each row by source, prints the API\'s counts and source lines, and pages on the Worker', () => {
@@ -98,41 +89,44 @@ test('D595: the public tab labels each row by source, prints the API\'s counts a
   const data = {
     total: 10234, offset: 50, limit: 50, as_of: '2026-10-02 00:00:00',
     items: [
-      { source: 'signal_companies', symbol: 'NU', name: 'Nu Holdings', exchange: 'NYSE', country: 'Brazil', market_cap_band: 'large', employee_band: '5k-20k' },
+      { source: 'signal_companies', symbol: 'NU', name: 'Nu Holdings', exchange: 'NYSE', country: 'Brazil', sector: 'Fintech', market_cap_band: 'large', employee_band: '5k-20k' },
       { source: 'sec_edgar', symbol: 'AAPL', name: 'Apple Inc.', exchange: 'Nasdaq', cik: '0000320193', source_url: EDGAR_URL },
       { source: 'sec_edgar', symbol: 'QQQX', name: 'Quiet Trust', exchange: null, cik: '0000000009', source_url: EDGAR_URL },
     ],
     sources: [
-      { key: 'signal_companies', label: 'StudioOS signal companies', total: 21, as_of: '2026-10-02 00:00:00' },
-      { key: 'sec_edgar', label: 'SEC EDGAR', total: 10213, as_of: '2026-10-06', url: EDGAR_URL,
+      { key: 'signal_companies', label: 'StudioOS signal companies', total: 21, store_total: 21, as_of: '2026-10-02 00:00:00' },
+      { key: 'sec_edgar', label: 'SEC EDGAR', total: 10213, store_total: 10213, as_of: '2026-10-06', url: EDGAR_URL,
         licence: 'US government work, not subject to copyright in the United States (17 U.S.C. § 105)', also_signal_companies: 7 },
     ],
   };
   const out = html(h(PublicPanel, { listed: ready(data), onPage: () => {} }));
   const t = text(h(PublicPanel, { listed: ready(data), onPage: () => {} }));
-  assert.match(t, /These 10,234 are known to be listed: 21 signal companies, with bands, and 10,213 from SEC EDGAR\./);
-  assert.match(t, /NU Nu Holdings NYSE Brazil large 5k-20k Signal companies/);
-  assert.match(t, /AAPL Apple Inc\. CIK 0000320193 Nasdaq Not recorded Not recorded Not recorded SEC EDGAR/);
-  assert.match(t, /QQQX Quiet Trust CIK 0000000009 Not recorded Not recorded Not recorded Not recorded SEC EDGAR/);
-  assert.match(t, /51–53 of 10,234 Previous Next/);
-  assert.match(t, /signal_companies · 21 listed companies · bands as the source sets them · as of 2026-10-02/);
-  assert.match(t, /SEC EDGAR · 10,213 companies · read 2026-10-06 · US government work, not subject to copyright in the United States \(17 U\.S\.C\. § 105\)/);
-  assert.match(t, /7 of its tickers are also a signal company, listed once per source/);
+  assert.match(t, /10,234 listing records · rows 51–53, page 2 of 205/);
+  assert.match(t, /21 from Signal companies, with bands, and 10,213 from SEC EDGAR\./);
+  assert.match(t, /NU Nu Holdings NYSE Brazil Fintech large 5k-20k S Signal companies/);
+  assert.match(t, /AAPL Apple Inc\. CIK 0000320193 Nasdaq Not recorded Not recorded Not recorded Not recorded E SEC EDGAR/);
+  assert.match(t, /QQQX Quiet Trust CIK 0000000009 Not recorded Not recorded Not recorded Not recorded Not recorded E SEC EDGAR/);
+  assert.match(t, /Rows 51–53 of 10,234 · page 2 of 205 ‹ Previous Next ›/);
+  assert.match(t, /Signal companies · 21 listed companies · bands as the source sets them · updated 2 Oct 2026/);
+  assert.match(t, /SEC EDGAR · 10,213 companies · read 6 Oct 2026 · US government work, not subject to copyright in the United States \(17 U\.S\.C\. § 105\)/);
+  // An answer with no `in_both` (a Worker before D7172) and no search: the store-wide overlap is the same claim.
+  assert.match(t, /7 tickers are in both sources, so each appears once per source and is counted twice/);
   // Counted as an exact string, so no pattern is built from the URL (CodeQL: incomplete hostname regex).
   assert.equal(out.split(`href="${EDGAR_URL}"`).length - 1, 3, 'each EDGAR row and the source line link the file');
-  assert.doesNotMatch(out, /disabled="" [^>]*>Previous/, 'Previous is live past the first page');
+  assert.doesNotMatch(out, /disabled="" [^>]*>‹ Previous/, 'Previous is live past the first page');
   const first = text(h(PublicPanel, { listed: ready({ ...data, offset: 0, items: data.items.slice(0, 1), total: 1, sources: [] }) }));
   assert.doesNotMatch(first, /Previous|Next/, 'one page needs no pager');
+  assert.match(first, /Rows 1–1 of 1 · one page/);
 
   const src = read('frontend/src/pages/research/MarketDirectoryZone.jsx');
-  assert.match(src, /listedCompanies\(\{ limit: LISTED_PAGE, offset: listedOffset \|\| undefined \}\), listedOffset\)/, 'the page asks the Worker for one page at a time');
-  assert.doesNotMatch(src, /10,?2\d\d|10213/, 'no count is written into the page');
+  assert.match(src, /useRead\(\(\) => researchMarketsApi\.listedCompanies\(listedReq\), listedKey\)/, 'the page asks the Worker for one page at a time');
+  assert.doesNotMatch(src + read('frontend/src/pages/research/ListedCompaniesPanel.jsx'), /10,?2\d\d|10213/, 'no count is written into the page');
 });
 
-test('the government tab reads Not recorded with the reason, never a figure', () => {
-  const gov = text(h(GovernmentPanel));
+test('government ownership is a coverage note: Not recorded with the reason, never a figure or a tab', () => {
+  const gov = text(h(CoverageNote, {}));
   assert.match(gov, /Not recorded/);
-  assert.match(gov, /No source lists government-owned companies/);
+  assert.match(gov, /Government ownership is not available: no source we hold records who owns a company/);
   assert.doesNotMatch(gov, /\d/);
 });
 
@@ -174,10 +168,15 @@ test('latest signals: illustrative seed signals say so; a failed read is not emp
 test('market readings are the way back into /research/markets/:uid; a never-run row has no link', () => {
   const markup = html(h(Readings, { readings: ready({ items: [
     { uid: 'r-1', metric: 'Advisory day rate', ran_at: '2026-09-02T00:00:00Z' },
-    { uid: null, metric: 'Never run', ran_at: null },
+    { uid: null, offering_uid: 'o-never', metric: 'Never run', ran_at: null },
   ] }) }));
   assert.match(markup, /href="\/research\/markets\/r-1"/);
-  assert.doesNotMatch(markup, /Never run/);
+  // D7174 (D7039 RMP-01): a service line never read keeps its row and says
+  // No reading yet, never $0, and it links nowhere.
+  assert.match(text(h(Readings, { readings: ready({ items: [{ uid: null, offering_uid: 'o-never', metric: 'Never run', ran_at: null }] }) })),
+    /Never run Service line · in your catalog No reading yet/);
+  assert.doesNotMatch(markup, /href="\/research\/markets\/null"/);
+  assert.equal((markup.match(/href="\/research\/markets\//g) || []).length, 3, 'only the read row links: its name and Open on the table, its name on the phone card');
   assert.match(text(h(Readings, { readings: ready({ items: [] }) })), /You have not run a market reading yet/);
   assert.match(text(h(Readings, { readings: unreadable })), /could not be read/);
 });

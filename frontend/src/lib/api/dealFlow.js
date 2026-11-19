@@ -20,6 +20,9 @@ import { request } from '../api.js';
 // A pass is the investor's alone and never closes the round; Closing follows a commitment.
 const id = (v) => encodeURIComponent(String(v));
 export const dealFlowApi = {
+  attention: () => request('/deals/flow/attention'),
+  attentionRule: () => request('/deals/flow/attention-rule'),
+  setAttentionRule: (days) => request('/deals/flow/attention-rule', {method:'PUT',body:JSON.stringify({days})}),
   studio: () => request('/deals/studio'),
   flow: () => request('/deals/flow'),
   add: (body) => request('/deals/flow', { method: 'POST', body: JSON.stringify(body) }),

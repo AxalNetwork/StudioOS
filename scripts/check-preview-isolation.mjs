@@ -5,7 +5,8 @@
  *   node scripts/check-preview-isolation.mjs --static
  *       CI (test:guards): wrangler.toml alone. Fails when preview DECLARES a
  *       production identity, an unknown binding kind, or production's agent
- *       switches are not off/manual. Placeholders are reported, not failed.
+ *       switches are not off/manual. Placeholders are reported, not failed,
+ *       unless only some ids are written (#7147: all or none).
  *   node scripts/check-preview-isolation.mjs --observed <file.json> [--env preview]
  *       Before every hosted test run, with the owner's read-only observation
  *       (the runbook, documentation/operations/AGENT_EXECUTION_VALIDATION.md).
@@ -53,7 +54,7 @@ if (flag('--json')) {
     for (const u of r.unsafe) console.error(`  - ${u.kind} ${u.binding}${u.field ? `.${u.field}` : ''}: ${u.status}${u.detail ? ` (${u.detail})` : u.declared ? ` (${u.declared})` : ''}`);
   } else if (isStatic) {
     const ph = r.rows.filter((x) => x.status === 'placeholder').map((x) => x.binding);
-    console.log(`✓ check-preview-isolation: ${r.env} declares no production identity (${line})${ph.length ? `; placeholders still to be provisioned: ${ph.join(', ')}` : ''}. A hosted run needs --observed.`);
+    console.log(`✓ check-preview-isolation: ${r.env} declares no production identity (${line}); ids ${r.provisioning}${ph.length ? `, placeholders still to be provisioned: ${ph.join(', ')}` : ''}. A hosted run needs --observed.`);
   } else if (r.verdict === 'isolated') {
     console.log(`✓ check-preview-isolation: ${r.env} is isolated (${line}).`);
   } else {

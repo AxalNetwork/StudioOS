@@ -9,11 +9,6 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
-  "DELETE /api/research/benchmarks/:uid/constituents/:cuid": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
-  },
   "DELETE /api/research/brief-notes/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
@@ -50,11 +45,6 @@
     "state": "unreviewed"
   },
   "DELETE /api/research/market-readings/:uid": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
-  },
-  "GET /api/research/benchmarks/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
     "state": "unreviewed"
@@ -116,11 +106,6 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
-  "PATCH /api/research/benchmarks/:uid": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
-  },
   "PATCH /api/research/brief-notes/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
@@ -152,11 +137,6 @@
     "state": "verified",
     "test": "cloudflare-worker/test/research_fund_reports_7169.test.ts",
     "note": "Signed in (requireAuth). The report is read and written only WHERE uid, fund_uid and owner_user_id = the caller match; another owner, another fund or an unknown report gets the same 404."
-  },
-  "POST /api/research/benchmarks/:uid/constituents": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
   },
   "POST /api/research/collections/:uid/documents": {
     "review": "record_without_ownership_check",

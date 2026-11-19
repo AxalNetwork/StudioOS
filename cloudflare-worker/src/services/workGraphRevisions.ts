@@ -495,7 +495,18 @@ export type AdvanceHeadResult =
 /** Approval policies under which a head may move only with a person's approval of the exact bytes (D5579 §1). */
 export const APPROVAL_REQUIRED_POLICIES: ReadonlySet<string> = new Set(['human_publication']);
 
-export async function advanceHead(env: AdvanceHeadEnv, ctx: ValidationContext, input: AdvanceHeadInput): Promise<AdvanceHeadResult> {
+/**
+ * D5585: statements a caller adds to the CAS batch, so they commit with the head move or not at all (a release's
+ * queued outbox effects). Each statement must hold only when THIS batch's swap applied: guard it on the
+ * `advance_head` event with `idempotencyKey` and `requestHash` (inserted just before it, `WHERE changes() > 0`).
+ */
+export interface AdvanceHooks {
+  afterSwap?: (swap: { idempotencyKey: string; requestHash: string; at: string }) => D1PreparedStatement[];
+}
+
+export async function advanceHead(
+  env: AdvanceHeadEnv, ctx: ValidationContext, input: AdvanceHeadInput, hooks: AdvanceHooks = {},
+): Promise<AdvanceHeadResult> {
   const m = new Meter(env);
   if (!keyOk(input.idempotencyKey) || actorMalformed(input.actor) || typeof input.revisionUid !== 'string'
     || (input.expectedRevisionUid !== null && typeof input.expectedRevisionUid !== 'string')
@@ -637,6 +648,7 @@ export async function advanceHead(env: AdvanceHeadEnv, ctx: ValidationContext, i
       ).bind(row.tenant_id, row.company_id, row.project_id, asset.id, kind, userId, runId, chargeId, input.expectedRevisionUid,
         rev.revision_uid, asset.id, approval?.ref ?? null, approval?.contentDigest ?? null, approverId,
         input.idempotencyKey, hash, at),
+      ...(hooks.afterSwap?.({ idempotencyKey: input.idempotencyKey, requestHash: hash, at }) ?? []),
     ]);
   } catch (e) {
     const raced = await replay();

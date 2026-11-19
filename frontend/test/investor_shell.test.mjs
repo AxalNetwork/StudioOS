@@ -485,9 +485,11 @@ test('a failed read is never rendered as an empty one', () => {
   const network = codeOnly(read(`${investorDir}/InvestorNetworkWorkspace.jsx`));
   assert.match(network, /const detailFor = \(error, value, describe\)/,
     'the three section headings must read the error before the null');
-  for (const source of ['errors.relationships', 'errors.introductions', 'errors.organizations']) {
+  for (const source of ['errors.relationships', 'errors.introductions']) {
     assert.ok(network.includes(`detailFor(${source}`), `${source} is not consulted by its heading`);
   }
+  assert.match(network, /id="organizations" title="Organizations" detail=\{detailFor\(errors\.relationships, relationships,/,
+    'Organizations must use the error from the relationship read it shares with the book');
   assert.ok(!/'Loading propositions'|'Loading relationship records'|'Loading attributed context'/.test(network),
     'a heading still hard-codes a loading string a failed fetch can never leave');
   // And a fund with no LP count reads as absent, not as zero.
