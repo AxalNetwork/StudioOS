@@ -5,15 +5,20 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
 import { DealMoreActions } from '../src/pages/deal/DealFrame.jsx';
+import { useNavigate } from 'react-router-dom';
 import { dealSummaryApi } from '../src/lib/api/dealSummary.js';
 
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+function NextTab() {
+  const navigate = useNavigate();
+  return React.createElement('button', { onClick: () => navigate('/deals/17/terms') }, 'Next tab');
+}
 async function fixture(availability, pdfBlob = async () => { throw new Error('Unexpected download'); }) {
   const original = { ...dealSummaryApi };
   const calls = [];
   dealSummaryApi.availability = async id => { calls.push(id); return availability(); };
   dealSummaryApi.pdfBlob = pdfBlob;
-  const v = await mountContracts(React.createElement(DealMoreActions, { dealId: 17, profileUrl: '/startups/harbor' }), '/deals/17');
+  const v = await mountContracts(React.createElement(React.Fragment, null, React.createElement(DealMoreActions, { dealId: 17, profileUrl: '/startups/harbor' }), React.createElement(NextTab)), '/deals/17');
   return { ...v, calls, async close() { await v.unmount(); Object.assign(dealSummaryApi, original); } };
 }
 function downloads() {
@@ -137,5 +142,24 @@ test('reopening and selecting during a pending download does not start a second 
     assert.equal(requests, 1);
     await act(async () => pending.resolve({ blob: new Blob(['pdf']), filename: 'once.pdf' }));
     assert.deepEqual(dl.saved, [{ filename: 'once.pdf', href: 'blob:summary' }]);
+  } finally { dl.restore(); await v.close(); }
+});
+
+
+test('navigation aborts a pending download and reports cancellation on the new tab', async () => {
+  const pending = deferred();
+  let signal;
+  const v = await fixture(async () => ({ available: true }), async (_id, options) => { signal = options.signal; return pending.promise; });
+  const dl = downloads();
+  try {
+    await v.click('⋯');
+    await v.click('Download summary (PDF)');
+    assert.match(v.text(), /Downloading summary/);
+    await v.click('Next tab');
+    assert.equal(signal.aborted, true);
+    assert.match(v.text(), /Summary download cancelled\./);
+    await act(async () => pending.resolve({ blob: new Blob(['pdf']), filename: 'cancelled.pdf' }));
+    assert.deepEqual(dl.saved, []);
+    assert.match(v.text(), /Summary download cancelled\./);
   } finally { dl.restore(); await v.close(); }
 });

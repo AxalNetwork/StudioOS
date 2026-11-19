@@ -160,11 +160,14 @@ export function DealMoreActions({ dealId, profileUrl }) {
 
   useEffect(() => {
     setAvailable(false);
+    if (download.current?.signal.aborted) {
+      setFeedback({ key, text: 'Summary download cancelled.' });
+      download.current = null;
+    }
     return () => {
       lifetime.current += 1;
       availabilityRead.current += 1;
       download.current?.abort();
-      download.current = null;
     };
   }, [dealId, firmId, key]);
 
