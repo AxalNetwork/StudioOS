@@ -625,11 +625,12 @@ async function fundPerformance(env: Env, c: ReadContext) {
     } : null,
   }));
   // Calls issued in the quarter: the ledger's headers, and the legacy unnumbered LP lines, as D627 counts them.
+  // A legacy line with no `amount_cents` is converted from its dollar column by `centsOf` (D5373: one conversion here).
   const calls = (await env.DB.prepare(
-    `SELECT 'fund_capital_call:' || uid AS ref, call_number, amount_cents, substr(created_at, 1, 10) AS at, due_date FROM fund_capital_calls
+    `SELECT 'fund_capital_call:' || uid AS ref, call_number, amount_cents, NULL AS amount_dollars, substr(created_at, 1, 10) AS at, due_date FROM fund_capital_calls
       WHERE fund_id = ? AND substr(created_at, 1, 10) BETWEEN ? AND ?
      UNION ALL
-     SELECT 'capital_call:' || c.uid, NULL, CASE WHEN c.amount_cents IS NOT NULL THEN c.amount_cents ELSE round(c.amount * 100) END,
+     SELECT 'capital_call:' || c.uid, NULL, c.amount_cents, c.amount,
             substr(c.created_at, 1, 10), c.due_date
        FROM capital_calls c JOIN limited_partners lp ON lp.id = c.limited_partner_id
       WHERE lp.fund_id = ? AND c.fund_call_id IS NULL AND substr(c.created_at, 1, 10) BETWEEN ? AND ?
@@ -658,7 +659,7 @@ async function fundPerformance(env: Env, c: ReadContext) {
       rvpi: p.rvpi, dpi: p.dpi, tvpi: p.tvpi, irr: p.irr, unavailable: p.unavailable,
     },
     marks, marks_coverage: coverageOf(marks.length, positionsTotal),
-    capital_calls: calls.map((r) => ({ ref: r.ref, call_number: r.call_number ?? null, amount: r.amount_cents == null ? null : Number(r.amount_cents), unit: 'cents', currency: null, at: r.at, due: r.due_date ?? null })),
+    capital_calls: calls.map((r) => ({ ref: r.ref, call_number: r.call_number ?? null, amount: centsOf(r.amount_cents, r.amount_dollars), unit: 'cents', currency: null, at: r.at, due: r.due_date ?? null })),
     capital_calls_coverage: coverageOf(calls.length, callsTotal),
     distributions: dists.map((r) => ({ ref: `fund_distribution:${r.id}`, amount: Number(r.amount_cents), unit: 'cents', currency: null, type: r.distribution_type, at: r.at })),
     distributions_coverage: coverageOf(dists.length, distsTotal),
