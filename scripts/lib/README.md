@@ -109,5 +109,7 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `sectionDraftGate.mjs` | D5985 (#5985): whether a reproduced section defect may get one automatic draft fix: section-triage's `cases` as the allowlist, trusted reproduced evidence, #5681's excluded inputs, no self-generated events, existing claims and PRs, the attempt, branch, PR and concurrency budget, and the stop switch. Emits five fixed job fields or one reason code. Tested in `sectionDraftGate.test.mjs`. |
 | `productionCredentials.test.mjs` | D7145 tests the credential inventory, deployment environments and the temporary PR preview exception. |
 | `productionEnvironment.test.mjs` | D7145 runtime-policy response and release-step ordering regression fixtures. |
+| `scanTrackerIssueBody.mjs` | D7283: public Code Scanning tracker instructions from validated coordinates; finding evidence stays in a private export or protected alert. Owned by `../scan-remediation/trackers.mjs`. |
+| `scanTrackerIssueBody.test.mjs` | D7283: private export arguments, local file modes, failure handling, coordinate rejection and finding-payload non-disclosure. Uses a local CLI stub without network access. |
 
 | `localFiles7255.test.mjs` | D7255: private-file permissions, link refusals, descriptor-bound edits and CLI recovery regressions with disposable local fixtures. |

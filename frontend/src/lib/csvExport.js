@@ -80,7 +80,15 @@ export function downloadCsv(filename, header, rows) {
 export function exportView({ scope, zone, header, rows }) {
   const list = Array.isArray(rows) ? rows : [];
   if (!list.length) return false;
+  return downloadCsv(exportFileName({ scope, zone, count: list.length }), header, list);
+}
+
+/**
+ * The name `exportView` gives a file: scope, zone, row count and day, e.g.
+ * `listed-companies-page-2-14-rows-2026-11-16.csv`. D7172: exported so a page
+ * that says "Downloaded" can name the file it handed over (RML-04B).
+ */
+export function exportFileName({ scope, zone, count, now = new Date() }) {
   const slug = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const name = [slug(scope), slug(zone), `${list.length}-rows`, stamp()].filter(Boolean).join('-');
-  return downloadCsv(`${name}.csv`, header, list);
+  return `${[slug(scope), slug(zone), `${count}-rows`, stamp(now)].filter(Boolean).join('-')}.csv`;
 }

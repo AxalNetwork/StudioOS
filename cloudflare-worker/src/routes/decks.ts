@@ -530,8 +530,9 @@ export function publicDeckOf(row: any): any {
   // D1545 (#3788): a hidden card reaches no reader: not Present, the share page or the print page.
   deck.slides = visibleCards(deck.slides || []).map((s: any) => {
     // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
-    const { notes, status, assignee, voice, ...card } = s || {};
-    void notes; void status; void assignee;
+    // D6066 (#6060): the "intentionally qualitative" mark is the founders' note to Review, never a reader's.
+    const { notes, status, assignee, voice, qualitative, ...card } = s || {};
+    void notes; void status; void assignee; void qualitative;
     // D1569 (#3816): an accepted AI voice-over reaches a reader as its label and model only; the clip plays through a signed link.
     if (voice?.key) card.voice = { label: voice.label, model: voice.model };
     return card;
