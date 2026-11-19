@@ -174,5 +174,7 @@ proposal for the statement: `StatementCoverNote.jsx` is the card (Copy, Edit,
 Discard, and "Eadwyn is unavailable. The statement does not need it." when
 Eadwyn is off), and `coverNoteModel.js` holds its words and what each answer
 reads as. It drafts on the press from the statement's own figures for the date
-and keeps nothing. The Statement sheet mounts it after #6867. Decision notes:
-`documentation/architecture/decisions/D6888.md`.
+and keeps nothing. The Statement sheet mounts it in its rail for the chosen
+date, and Edit ticks "Include as a cover note" with the proposal in that box.
+Decision notes: `documentation/architecture/decisions/D6888.md` and
+`documentation/architecture/decisions/D6888-p1.md`.

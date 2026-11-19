@@ -24,6 +24,7 @@ from sqlmodel import Session
 
 from backend.app.database import engine
 from backend.app.models.entities import Notification, User
+from backend.app.services.log_safe import log_safe
 
 logger = logging.getLogger("studioos.notify")
 
@@ -214,5 +215,5 @@ def notify(
 
             return row_id
     except Exception as exc:
-        logger.exception("notify failed for user=%s type=%s: %s", user_id, type, exc)
+        logger.exception("notify failed for user=%s type=%s: %s", log_safe(user_id), log_safe(type), log_safe(exc))
         return None

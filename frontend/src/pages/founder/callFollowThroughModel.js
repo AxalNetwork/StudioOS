@@ -7,6 +7,10 @@
  * call (RAC20, RAC21), and the conflicts a recorded commitment meets (RAC22,
  * RAC23).
  *
+ * D7513 (#7513): step 3 of a call started from a closed one, pre-ticked from
+ * that call's chosen recipients (RAC20C, RAC20D), and the address of the moved
+ * line on Capital relationships › Commitments (RAC22C).
+ *
  * AN INDICATED AMOUNT IS NEVER COMMITTED (D653): it is always labelled
  * "Indicated, not committed". A matching investor stays "Matching investor"
  * until they respond. Nothing the read lacks is drawn as zero.
@@ -208,6 +212,64 @@ export function successorBody(form, call, today) {
 export function startNewState(d) {
   if (!d?.start_new) return { show: false };
   return { show: true, on: !!d.start_new.on, reason: d.start_new.sentence || null };
+}
+
+/* ------------------------- Step 3 of a call started from a closed one (D7513) */
+
+/** RAC20C's chips over the closed call's chosen recipients, in the canvas's order. */
+export const SOURCE_FILTERS = Object.freeze([
+  ['all', 'All chosen'], ['responded', 'Responded'], ['did_not_respond', 'Did not respond'], ['not_delivered', 'Not delivered'],
+]);
+export const SOURCE_ON = Object.freeze({ responded: 'Responded', did_not_respond: 'Did not respond', not_delivered: 'Not delivered' });
+/** The Today chip, from the Worker's `today`. */
+export const SOURCE_TODAY = Object.freeze({ verified: 'Verified', not_verified: 'Not verified', not_active: 'Not active', not_in_pipeline: 'Not in pipeline' });
+/** Why a chosen investor of the closed call cannot be ticked today, from the Worker's `today`. */
+export const SOURCE_WHY = Object.freeze({
+  not_verified: 'No longer verified on Axal',
+  not_active: 'Account no longer active on Axal',
+  not_in_pipeline: 'No longer in your pipeline',
+});
+export const SOURCE_OWNER_ONLY = 'The audience is set by the venture’s owner. You can see who is ticked. Only the owner can change it (D1222).';
+export const SOURCE_REMATCH = 'Matching investors are re-matched when you preview the audience, never copied from the closed call.';
+
+/**
+ * The prospects step 3 ticks from the closed call: each chosen recipient the
+ * Worker marks `ticked` (still a verified investor in this pipeline). Null when
+ * nothing was read, or when the draft already records its own chosen audience,
+ * which always wins over the closed call.
+ */
+export function sourceTicks(data, page) {
+  if (!Array.isArray(data?.rows)) return null;
+  if ((page?.recipients || []).some((r) => r.origin === 'chosen')) return null;
+  return [...new Set(data.rows.filter((r) => r.ticked === true && Number.isSafeInteger(r.prospect_id)).map((r) => r.prospect_id))];
+}
+
+/** The closed call's rows under one chip. */
+export function sourceRows(data, filter = 'all') {
+  const rows = data?.rows || [];
+  return filter === 'all' ? rows : rows.filter((r) => r.on_source === filter);
+}
+
+/** A chip's count, the Worker's; null (Not recorded) when the read has none. */
+export function sourceChip(data, key) {
+  const n = key === 'all' ? data?.counts?.chosen : data?.counts?.[key];
+  return Number.isFinite(n) ? n : null;
+}
+
+/** "Showing 8 of 18 · 16 ticked": the ticks are the sheet's own, so a change shows at once. */
+export function sourceFooter(data, shown, chosen) {
+  const rows = data?.rows || [];
+  const ticked = rows.filter((r) => r.prospect_id != null && (chosen || []).includes(r.prospect_id)).length;
+  return `Showing ${shown.length} of ${rows.length} · ${ticked} ticked`;
+}
+
+/** The address of the moved line on Capital relationships › Commitments (RAC22C), with the line it names. */
+export function commitmentsHref(projectId, prospectId) {
+  const q = new URLSearchParams();
+  if (projectId != null) q.set('project_id', String(projectId));
+  if (Number.isSafeInteger(Number(prospectId)) && Number(prospectId) > 0) q.set('recorded', String(prospectId));
+  const s = q.toString();
+  return `/raise/capital-relationships/commitments${s ? `?${s}` : ''}`;
 }
 
 /* ------------------------------------------ Record a commitment (RAC22, 23) */

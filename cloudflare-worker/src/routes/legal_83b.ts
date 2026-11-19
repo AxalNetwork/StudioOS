@@ -14,6 +14,7 @@ import {
   type Section83bRow,
 } from '../services/section83b';
 import { canReadOperatorReview, projectById, readOperatorReview } from '../services/section83bOperatorReview';
+import { putRecordOrThrow } from '../services/recordStore';
 
 // ----------------------- 83(b) tracker (Task #13) ---------------------------
 // Worker parity for the 83(b) tracker (/spinout-lab/83b). The dev FastAPI backend
@@ -309,7 +310,8 @@ app.post('/83b/trackers/:id/receipt', async (c) => {
   }
   const r2Key = `83b-receipts/${t.uid}/${crypto.randomUUID()}`;
   try {
-    await files.put(r2Key, bytes, {
+    // D6651: a filed receipt is a record, written once.
+    await putRecordOrThrow(files, r2Key, bytes, {
       httpMetadata: { contentType },
       customMetadata: { userId: String(user.id), trackerId: String(id) },
     });
