@@ -7,7 +7,7 @@ import { SignJWT } from 'jose';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import cycleValidate from '../src/routes/cycle_validate.ts';
-import { archiveSegment } from '../src/services/validateWriters.ts';
+import { archiveSegment, updateSegment } from '../src/services/validateWriters.ts';
 import type { RecordContent, RecordRegistry } from '../src/services/records/types.ts';
 import { RECORD_SPECS } from '../src/services/records/index.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -138,5 +138,30 @@ test('D6003 concurrent archive attempts produce one state change and one audit r
     const results = await Promise.allSettled([archiveSegment({ DB: d1Over(db) } as any, input), archiveSegment({ DB: d1Over(db) } as any, input)]);
     assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'segment_archived'").get()?.n, 1);
+  } finally { db.close(); }
+});
+
+test('D6003 an edit losing a race to archive refuses without a phantom edit audit', async () => {
+  const db = fixture();
+  try {
+    db.exec("INSERT INTO customer_segments (id, project_id, name, name_norm, context, created_by) VALUES (89, 1, 'Archived during edit', 'archived during edit', 'Original context', 10)");
+    const d1 = d1Over(db) as any;
+    let archived = false;
+    const DB = new Proxy(d1, { get(target, key) {
+      if (key === 'prepare') return (sql: string) => {
+        if (/^\s*UPDATE customer_segments\s+SET name/.test(sql)) {
+          db.exec('UPDATE customer_segments SET archived_at = CURRENT_TIMESTAMP WHERE id = 89');
+          archived = true;
+        }
+        return target.prepare(sql);
+      };
+      const value = target[key];
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    await assert.rejects(updateSegment({ DB } as any, { projectId: 1, userId: 10, segmentId: 89, context: 'Stale change' }),
+      (error: any) => error.status === 404);
+    assert.equal(archived, true);
+    assert.equal(db.prepare('SELECT context FROM customer_segments WHERE id = 89').get()?.context, 'Original context');
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'segment_edited'").get()?.n, 0);
   } finally { db.close(); }
 });

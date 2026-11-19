@@ -754,7 +754,7 @@ export async function updateSegment(
   if (clash) throw new WriterError(409, 'Another segment already has that name');
   const steps = segmentSteps(input);
   const keep = (k: (typeof SEGMENT_STEP_KEYS)[number]) => (steps[k] === undefined ? row[k] ?? null : steps[k]);
-  await env.DB.prepare(
+  const updated = await env.DB.prepare(
     `UPDATE customer_segments
         SET name = ?, name_norm = ?, description = ?, who_they_are = ?, context = ?, job_to_be_done = ?, urgency = ?,
             value_promised = ?, value_source = ?, score_since = ?, updated_at = datetime('now')
@@ -764,6 +764,7 @@ export async function updateSegment(
     keep('who_they_are'), keep('context'), keep('job_to_be_done'), keep('urgency'), keep('value_promised'),
     keep('value_source'), keep('score_since'), input.segmentId, input.projectId,
   ).run();
+  if (Number(updated.meta?.changes) !== 1) throw new WriterError(404, 'Segment not found on this project');
   await recordActor(env, input.userId, input.projectId, 'ideal-customer-profile', input.segmentId, 'segment_edited', `Segment ${input.segmentId} edited`);
   return { id: input.segmentId };
 }
