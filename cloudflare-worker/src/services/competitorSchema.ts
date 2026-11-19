@@ -23,7 +23,7 @@ export async function ensureCompetitorSchema(env: Env): Promise<void> {
   if (READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS competitor_analyses (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, project_id INTEGER, mode TEXT NOT NULL DEFAULT 'custom', title TEXT, inputs_json TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'draft', edited INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS competitor_analyses (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, project_id INTEGER, mode TEXT NOT NULL DEFAULT 'custom', title TEXT, inputs_json TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'draft', edited INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), subject_uid TEXT)",
     );
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_competitor_analyses_user ON competitor_analyses (user_id, updated_at)",

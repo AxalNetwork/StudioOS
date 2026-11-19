@@ -3,6 +3,8 @@
 // routes/mark_requests.ts (/api/mark-requests).
 // D6909 (#6909): optional evidence on a request (a link or one file), HQ's
 // queue across companies oldest first, and the evidence file's download.
+// D6909 part 4: Eadwyn's drafts (`/api/mark-requests/drafts/*`): the investor's reason ({ kind: 'reason', project_uid,
+// request_kind }) and HQ's basis and source on a request ({ kind: 'basis', request_uid }), never a value. Quoted first.
 import { rawRequestHeaders, refusalError, request } from '../api.js';
 
 // A binary answer `request()` would parse as JSON, so it is fetched here with exactly the headers `request()` sends (D717).
@@ -45,6 +47,12 @@ export const markRequestsApi = {
   queue: () => request('/mark-requests/queue'),
   // D6909: the request's evidence file, to the investor who asked or HQ. Resolves { blob, filename }.
   downloadEvidence: (uid) => download(`/mark-requests/${encodeURIComponent(uid)}/evidence`),
+  // D6909 part 4: quote → { quote: { hold_microusd, model, confirm_quote } }; run (+ confirm_quote) → { draft | null, cost }.
+  draftQuote: (scope) => request('/mark-requests/drafts/quote', { method: 'POST', body: JSON.stringify(scope) }),
+  draftRun: (scope, confirmQuote) => request('/mark-requests/drafts/run', { method: 'POST', body: JSON.stringify({ ...scope, confirm_quote: confirmQuote }) }),
+  // Accept writes the draft only → { draft, kept }. `edit` is { reason } or { basis?, source?, as_of_date? }.
+  draftAccept: (uid, scope, edit = {}) => request(`/mark-requests/drafts/${encodeURIComponent(uid)}/accept`, { method: 'POST', body: JSON.stringify({ ...scope, ...edit }) }),
+  draftDiscard: (uid, scope) => request(`/mark-requests/drafts/${encodeURIComponent(uid)}/discard`, { method: 'POST', body: JSON.stringify(scope) }),
   // Admin: { state: 'resolved' | 'declined', mark_uid?, note? }.
   answer: (uid, { state, markUid, note } = {}) => request(`/mark-requests/${encodeURIComponent(uid)}`, {
     method: 'PATCH',

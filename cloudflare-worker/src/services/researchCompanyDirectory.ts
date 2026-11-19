@@ -228,24 +228,88 @@ export async function listCompanies(env: Env, q: CompanyQuery) {
 
 type Row = Record<string, any>;
 
-/** A metric with its source and as-of date, or `Not recorded` — never a zero. */
-function metric(value: unknown, extra: Row, source: Row, asOf: unknown) {
-  if (value == null) return { value: null, status: 'not_recorded' as const, reason: 'Not recorded' };
-  return { value, ...extra, source_name: source.name ?? null, source_url: source.url ?? null, as_of: asOf ?? source.updated ?? null, status: 'recorded' as const };
+/**
+ * D7180 (#7180, D7046): which `company_sources.field_name` values cite each
+ * headline metric. A field citation is the metric's own publisher; without
+ * one, the publisher is the directory record's shared `metrics_source_*`,
+ * and the metric says so (`provenance: 'directory_record'`).
+ */
+export const METRIC_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  funding_total: ['funding_total', 'total_funding', 'funding'],
+  last_funding: ['last_funding_amount', 'last_funding', 'last_round'],
+  valuation: ['valuation'],
+  revenue: ['revenue'],
+  headcount: ['employee_count', 'employees', 'headcount'],
+  market_share_pct: ['market_share_pct', 'market_share'],
+};
+
+const CONFIDENCE_RANK: Readonly<Record<string, number>> = { high: 3, medium: 2, low: 1 };
+
+/** The field citation a metric rests on: the most confident, then the most recently published or retrieved. */
+export function citationFor(metricKey: string, citations: Row[] | null): Row | null {
+  const fields = METRIC_FIELDS[metricKey] || [];
+  const hits = (citations || []).filter((c) => fields.includes(String(c.field_name ?? '').trim().toLowerCase()));
+  if (!hits.length) return null;
+  const rank = (c: Row) => CONFIDENCE_RANK[String(c.confidence ?? '').toLowerCase()] ?? 0;
+  const date = (c: Row) => String(c.publication_date ?? c.retrieved_at ?? '');
+  return [...hits].sort((a, b) => rank(b) - rank(a) || date(b).localeCompare(date(a)))[0];
 }
 
-export function presentMetrics(r: Row) {
-  const source = { name: r.metrics_source_name, url: r.metrics_source_url, updated: r.metrics_updated_at };
+/**
+ * A metric with its own provenance, or `Not recorded` — never a zero.
+ *
+ * `observed_on` is the date the figure was true, from the metric's own
+ * column, and `null` when no column records it. It never borrows
+ * `metrics_updated_at`: that is `updated_on`, when the directory record was
+ * last updated (D7046). `as_of` stays for older readers and equals
+ * `observed_on`.
+ */
+function metric(key: string, value: unknown, extra: Row, r: Row, citations: Row[] | null, observed: { on: unknown; basis: string } | null) {
+  if (value == null) {
+    return { value: null, status: 'not_recorded' as const, reason: 'Not recorded', publisher: null, url: null, confidence: null, observed_on: null, updated_on: null };
+  }
+  const cite = citationFor(key, citations);
+  const observedOn = observed == null || observed.on == null || observed.on === '' ? null : String(observed.on);
+  const publisher = cite ? cite.source_name ?? null : r.metrics_source_name ?? null;
+  const url = cite ? cite.source_url ?? null : r.metrics_source_url ?? null;
   return {
-    funding_total: metric(r.funding_total, { currency: r.funding_currency ?? null }, source, r.metrics_updated_at),
-    last_funding: metric(r.last_funding_amount, {
+    value, ...extra,
+    publisher,
+    url,
+    provenance: cite ? 'field_citation' as const : publisher || url ? 'directory_record' as const : null,
+    confidence: cite?.confidence ?? r.metrics_confidence ?? null,
+    confidence_basis: cite?.confidence != null ? 'field_citation' as const : r.metrics_confidence != null ? 'directory_record' as const : null,
+    citation: cite ? {
+      field_name: cite.field_name, source_type: cite.source_type ?? null, publication_date: cite.publication_date ?? null,
+      retrieved_at: cite.retrieved_at ?? null, verified_at: cite.verified_at ?? null,
+    } : null,
+    observed_on: observedOn,
+    observed_basis: observedOn && observed ? observed.basis : null,
+    updated_on: r.metrics_updated_at ?? null,
+    source_name: publisher, source_url: url, as_of: observedOn,
+    status: 'recorded' as const,
+  };
+}
+
+/**
+ * Each headline metric with its publisher, URL, confidence, observation date
+ * and update date (D7046). `citations` are the company's `company_sources`
+ * rows; `null` when that read failed (the response's `sources.status` says
+ * so), and then every metric falls back to the directory record's shared
+ * source, which it names.
+ */
+export function presentMetrics(r: Row, citations: Row[] | null = null) {
+  return {
+    funding_total: metric('funding_total', r.funding_total, { currency: r.funding_currency ?? null }, r, citations, null),
+    last_funding: metric('last_funding', r.last_funding_amount, {
       currency: r.last_funding_currency ?? null, date: r.last_funding_date ?? null, type: r.last_funding_type ?? null,
-    }, source, r.last_funding_date),
-    valuation: metric(r.valuation, { currency: r.valuation_currency ?? null }, source, r.valuation_as_of),
-    revenue: metric(r.revenue, { currency: r.revenue_currency ?? null }, source, r.revenue_as_of),
-    headcount: metric(r.employee_count, { growth_pct: r.employee_growth_pct ?? null }, source, r.employee_as_of),
-    market_share_pct: metric(r.market_share_pct, {}, source, r.market_share_as_of),
+    }, r, citations, { on: r.last_funding_date, basis: 'announced' }),
+    valuation: metric('valuation', r.valuation, { currency: r.valuation_currency ?? null }, r, citations, { on: r.valuation_as_of, basis: 'as_of' }),
+    revenue: metric('revenue', r.revenue, { currency: r.revenue_currency ?? null }, r, citations, { on: r.revenue_as_of, basis: 'as_of' }),
+    headcount: metric('headcount', r.employee_count, { growth_pct: r.employee_growth_pct ?? null }, r, citations, { on: r.employee_as_of, basis: 'as_of' }),
+    market_share_pct: metric('market_share_pct', r.market_share_pct, {}, r, citations, { on: r.market_share_as_of, basis: 'as_of' }),
     confidence: r.metrics_confidence ?? null,
+    updated_on: r.metrics_updated_at ?? null,
   };
 }
 
@@ -263,6 +327,53 @@ async function evidence(env: Env, sql: string, id: number) {
 }
 
 export const PEER_LIMIT = 8;
+
+/**
+ * The rule the peers query below runs, as data the page prints (D7046: "the
+ * Worker's rule is printed"). It names the label and country it matched on,
+ * and stays in step with the SQL: same label (case and outer spaces ignored),
+ * same country first when both are recorded, then by name, `PEER_LIMIT` shown.
+ */
+export function peerRule(sector: string, country: unknown) {
+  const c = typeof country === 'string' && country.trim() ? country.trim() : null;
+  return {
+    sector_label: sector,
+    country: c,
+    match: 'same_sector_label' as const,
+    order: c ? ['same_country', 'name'] as const : ['name'] as const,
+    limit: PEER_LIMIT,
+  };
+}
+
+/**
+ * The four migration-370 evidence collections, each read on its own. The keys
+ * are the response's own (`funding_rounds`, not the table name) and the
+ * values of `?part=` (D7180).
+ */
+export const EVIDENCE_SQL: Readonly<Record<string, string>> = {
+  financials: `SELECT period, period_type, metric_type, revenue, revenue_currency, revenue_growth, arr, mrr,
+        gross_profit, gross_margin, ebitda, ebitda_margin, net_income, cash, debt, burn_rate, runway, employees,
+        source_name, source_url, verified_at, confidence
+      FROM company_financials WHERE company_id = ? ORDER BY period DESC, financial_id`,
+  employment: `SELECT observed_date, employee_count, source, source_url, verified_at, confidence
+      FROM company_employment_history WHERE company_id = ? ORDER BY observed_date DESC, employment_id`,
+  sources: `SELECT field_name, source_name, source_type, source_url, publication_date, retrieved_at, verified_at, confidence
+      FROM company_sources WHERE company_id = ? ORDER BY field_name, source_id`,
+  funding_rounds: `SELECT round_type, stage, announcement_date, closing_date, amount, currency, pre_money_valuation,
+        post_money_valuation, valuation_currency, lead_investor, investors, source_name, source_url, verified_at, confidence
+      FROM company_funding_rounds WHERE company_id = ? ORDER BY announcement_date DESC, funding_round_id`,
+};
+export const EVIDENCE_PARTS = Object.keys(EVIDENCE_SQL);
+
+/**
+ * One evidence collection on its own (D7180, `?part=`), so a collection's
+ * Retry does not re-read the company. Null when no company has this uid.
+ */
+export async function getCompanyPart(env: Env, uid: string, part: string) {
+  const row = await env.DB.prepare(`SELECT id, uid FROM research_company_directory WHERE uid = ?`).bind(uid).first<Row>();
+  if (!row) return null;
+  return { uid: row.uid, part, [part]: await evidence(env, EVIDENCE_SQL[part], row.id) };
+}
 
 /**
  * The market the company's sector label maps to through the crosswalk, with
@@ -294,21 +405,11 @@ async function trackedSector(env: Env, row: Row) {
 export async function getCompany(env: Env, uid: string) {
   const row = await env.DB.prepare(`SELECT * FROM research_company_directory WHERE uid = ?`).bind(uid).first<Row>();
   if (!row) return null;
-  const [financials, employment, sources, fundingRounds] = await Promise.all([
-    evidence(env, `SELECT period, period_type, metric_type, revenue, revenue_currency, revenue_growth, arr, mrr,
-        gross_profit, gross_margin, ebitda, ebitda_margin, net_income, cash, debt, burn_rate, runway, employees,
-        source_name, source_url, verified_at, confidence
-      FROM company_financials WHERE company_id = ? ORDER BY period DESC, financial_id`, row.id),
-    evidence(env, `SELECT observed_date, employee_count, source, source_url, verified_at, confidence
-      FROM company_employment_history WHERE company_id = ? ORDER BY observed_date DESC, employment_id`, row.id),
-    evidence(env, `SELECT field_name, source_name, source_type, source_url, publication_date, retrieved_at, verified_at, confidence
-      FROM company_sources WHERE company_id = ? ORDER BY field_name, source_id`, row.id),
-    evidence(env, `SELECT round_type, stage, announcement_date, closing_date, amount, currency, pre_money_valuation,
-        post_money_valuation, valuation_currency, lead_investor, investors, source_name, source_url, verified_at, confidence
-      FROM company_funding_rounds WHERE company_id = ? ORDER BY announcement_date DESC, funding_round_id`, row.id),
-  ]);
+  const [financials, employment, sources, fundingRounds] = await Promise.all(
+    ['financials', 'employment', 'sources', 'funding_rounds'].map((k) => evidence(env, EVIDENCE_SQL[k], row.id)),
+  );
 
-  let peers: { status: 'ok' | 'unreadable' | 'not_recorded'; rows: unknown[]; total: number | null; reason?: string };
+  let peers: { status: 'ok' | 'unreadable' | 'not_recorded'; rows: unknown[]; total: number | null; reason?: string; rule?: ReturnType<typeof peerRule> };
   const sector = typeof row.sector === 'string' ? row.sector.trim() : '';
   if (!sector) {
     peers = { status: 'not_recorded', rows: [], total: null, reason: 'Not recorded: this company has no sector, so it has no peers to match' };
@@ -329,19 +430,21 @@ export async function getCompany(env: Env, uid: string) {
           `SELECT COUNT(*) AS n FROM research_company_directory WHERE LOWER(TRIM(sector)) = LOWER(?) AND uid <> ?`,
         ).bind(sector, row.uid).first<{ n: number }>(),
       ]);
-      peers = { status: 'ok', rows: r.results || [], total: Number(n?.n ?? 0) };
+      peers = { status: 'ok', rows: r.results || [], total: Number(n?.n ?? 0), rule: peerRule(sector, row.country) };
     } catch {
-      peers = { status: 'unreadable', rows: [], total: null, reason: 'Unreadable' };
+      peers = { status: 'unreadable', rows: [], total: null, reason: 'Unreadable', rule: peerRule(sector, row.country) };
     }
   }
 
   const item: Row = {};
   for (const k of ['uid', 'name', 'website', 'country', 'founded_year', 'sector', 'source_name', 'source_url', 'source_license', 'as_of',
-    'competitor_status', 'diligence_status']) item[k] = row[k] ?? null;
+    'competitor_status', 'diligence_status', 'website_verified_at']) item[k] = row[k] ?? null;
+  // D7175: the recorded website's own state, in words the subject card prints.
+  item.website_status = !String(item.website ?? '').trim() ? 'not_recorded' : item.website_verified_at ? 'verified' : 'not_verified';
   return {
     item,
     tracked_sector: await trackedSector(env, row),
-    metrics: presentMetrics(row),
+    metrics: presentMetrics(row, sources.status === 'ok' ? (sources.rows as Row[]) : null),
     financials, employment, sources, funding_rounds: fundingRounds,
     peers,
     evidence_key: 'company_id = research_company_directory.id',

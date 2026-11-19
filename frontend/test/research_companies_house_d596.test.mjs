@@ -14,7 +14,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { EMPTY_FILTERS } from '../src/lib/companyDirectoryView.js';
 import { DirectoryResults } from '../src/pages/research/CompanyDirectoryZone.jsx';
-import { CompanyHeader, SourcesTable, recordSource } from '../src/pages/research/CompanyProfile.jsx';
+import { CompanyHeader, recordSource } from '../src/pages/research/CompanyProfile.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -42,13 +42,13 @@ test('D596: the record card cites Companies House with the OGL line, and Wikidat
   assert.equal(recordSource({}).short, 'Wikidata (CC0)', 'a row with no source name is the directory\'s original Wikidata row');
 });
 
-test('D596: the sources table names the row\'s own register', () => {
-  const base = { metrics: {}, financials: { status: 'ok', rows: [] }, employment: { status: 'ok', rows: [] }, sources: { status: 'ok', rows: [] } };
-  const t = render(SourcesTable, { ...base, item: CH });
-  assert.match(t, /Name, website, country, founded\s*Companies House \(OGL v3\.0\)/);
-  assert.match(t, /Sector label\s*Companies House \(OGL v3\.0\)/);
-  assert.doesNotMatch(t, /Wikidata/);
-  assert.match(render(SourcesTable, { ...base, item: WD }), /Name, website, country, founded\s*Wikidata \(CC0\)/);
+test('D596: the record card names the fields the row\'s own register holds', () => {
+  // D7180 retired the sources table (its rows are the evidence collections and
+  // the metric cards now); the record card carries what it said about the register.
+  const t = render(CompanyHeader, { item: CH, tracked: { status: 'not_recorded' } });
+  assert.match(t, /Name, country, founded year \(from the incorporation date\) and sector label \(from the SIC code\)/);
+  assert.match(t, /Official site: Not recorded/, 'a Companies House row with no website says so');
+  assert.match(render(CompanyHeader, { item: WD, tracked: { status: 'not_recorded' } }), /Name, website, country, founded year and sector label/);
 });
 
 test('D596: a directory row from Companies House says so; the page names both sources and the OGL', () => {

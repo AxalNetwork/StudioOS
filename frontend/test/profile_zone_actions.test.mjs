@@ -1637,8 +1637,11 @@ test('the label says the export is of this view, because it is', () => {
   const builder = read('frontend/src/workspaces/zoneActionBuilder.js');
   assert.match(builder, /label: `\$\{item\.label\} · this view`/,
     'the export button no longer says which rows it covers');
-  assert.match(read('frontend/src/lib/csvExport.js'), /\$\{list\.length\}-rows/,
-    'the filename no longer carries the row count');
+  // D7172: the name is built by `exportFileName`, which a page that says
+  // "Downloaded" also reads; `exportView` hands it the count it writes.
+  const csv = read('frontend/src/lib/csvExport.js');
+  assert.match(csv, /\$\{count\}-rows/, 'the filename no longer carries the row count');
+  assert.match(csv, /exportFileName\(\{ scope, zone, count: list\.length \}\)/, 'the count in the filename is not the rows written');
   // An export over rows that have not LOADED is the one control that stays and
   // goes quiet: the store and the writer both exist, so it renders disabled
   // rather than vanishing like an unbuilt op.

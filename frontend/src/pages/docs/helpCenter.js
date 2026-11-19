@@ -36,7 +36,7 @@ export function hashTarget(hash, visibleSections, { isAdmin = false, restricted 
 
 /** Reading time from the guide's own words, at 200 a minute, never under one. */
 export function readingMinutes(sub) {
-  const text = [sub?.overview, ...(sub?.howto || []), ...(sub?.tips || []), ...(sub?.pitfalls || [])]
+  const text = [sub?.overview, ...(sub?.beforeYouStart || []), ...(sub?.howto || []), ...(sub?.tips || []), ...(sub?.pitfalls || [])]
     .filter(Boolean).join(' ');
   const words = text.split(/\s+/).filter(Boolean).length;
   return Math.max(1, Math.round(words / 200));
