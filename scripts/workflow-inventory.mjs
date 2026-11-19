@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { REQUIRED } from './lib/requiredChecks.mjs';
+import { branchFilterMatches } from './lib/literalMatch.mjs';
 
 const requireWorker = createRequire(new URL('../cloudflare-worker/package.json', import.meta.url));
 const { parse } = requireWorker('yaml');
@@ -14,7 +15,10 @@ const columns = ['pull_request', 'pull_request_target', 'merge_group', 'push', '
 
 function checkMap(name) {
   const source = readFileSync(new URL('../frontend/test/merge_queue_ci_4107.test.mjs', import.meta.url), 'utf8');
-  const literal = source.match(new RegExp(`const ${name} = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\);`))?.[1];
+  const head = `const ${name} = Object.freeze({`;
+  const at = source.indexOf(head);
+  const close = at < 0 ? -1 : source.indexOf('});', at + head.length);
+  const literal = close < 0 ? undefined : source.slice(at + head.length, close);
   if (literal === undefined) throw new Error(`Missing ${name} check map`);
   const pairs = [...literal.matchAll(/(?:'([^']+)'|([\w-]+)):\s*'([^']+)'/g)];
   if (!pairs.length || literal.replace(/(?:'[^']+'|[\w-]+):\s*'[^']+'/g, '').replace(/[\s,]/g, '')) {
@@ -41,11 +45,7 @@ export function jobState(condition, event) {
 }
 
 function matchesMain(pattern) {
-  if (/[^\w/.*?-]/.test(pattern)) return null;
-  const regex = pattern.split(/(\*\*|\*|\?)/).map(part => ({
-    '**': '.*', '*': '[^/]*', '?': '?',
-  }[part] ?? part.replaceAll('.', '\\.'))).join('');
-  try { return new RegExp(`^${regex}$`).test('main'); } catch { return null; }
+  return branchFilterMatches(pattern, 'main');
 }
 
 export function mainPush(rules) {

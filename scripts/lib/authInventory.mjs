@@ -32,6 +32,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { registeredMounts } from './routeRegistry.mjs';
+import { honoPathMatches, matchAfterWord } from './literalMatch.mjs';
 
 export const GATES = ['public', 'forwarded', 'optional_auth', 'service', 'authenticated', 'cf_access', 'admin', 'hq_admin', 'super_admin'];
 
@@ -265,14 +266,16 @@ export const REACH_DEPTH = 3;
 
 const defaultExportIdent = (src) => (src.match(/export\s+default\s+(\w+)/) || [])[1] || null;
 function declaresIdent(src, ident) {
-  return new RegExp(`(?:^|[^\\w$])(?:function\\s+${ident}\\s*\\(|(?:const|let|var)\\s+${ident}\\s*(?::[^=\\n]+)?=)`).test(src);
+  for (const m of src.matchAll(/(?<![\w$])(?:function\s+([\w$]+)\s*\(|(?:const|let|var)\s+([\w$]+)\s*(?::[^=\n]+)?=)/g)) {
+    if ((m[1] ?? m[2]) === ident) return true;
+  }
+  return false;
 }
 
 /** Does a Hono path pattern (`*`, `/x/*`, `/x/:id`) cover the sub-path `sub`? */
 export function covers(pattern, sub) {
   if (pattern == null || pattern === '*' || pattern === '/*') return true;
-  const re = new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\/\*$/, '(?:/.*)?').replace(/\*/g, '.*').replace(/:[A-Za-z_]\w*/g, '[^/]+')}$`);
-  return re.test(sub || '/') || re.test(sub);
+  return honoPathMatches(pattern, sub || '/') || honoPathMatches(pattern, sub);
 }
 
 /** Every route: `{ method, path, file, line, text }`, `text` being what its gate is read from. */
@@ -291,13 +294,13 @@ export function routeTable(root) {
     const ident = mountedIdent && declaresIdent(src, mountedIdent) ? mountedIdent : defaultExportIdent(src);
     if (!ident) return;
     const uses = [];
-    for (const m of src.matchAll(new RegExp(`\\b${ident}\\s*\\.\\s*use\\(`, 'g'))) {
+    for (const m of matchAfterWord(src, ident, /\s*\.\s*use\(/y)) {
       const open = m.index + m[0].length - 1;
       const call = src.slice(open, closeOf(src, open));
       const pat = /^\(\s*['"`]([^'"`]*)['"`]/.exec(call)?.[1] ?? null;
       uses.push({ pattern: pat, text: reach(call, src, file, REACH_DEPTH) });
     }
-    for (const m of src.matchAll(new RegExp(`\\b${ident}\\s*\\.\\s*(get|post|put|patch|delete|all)\\(\\s*(['"\`])([^'"\`]*)\\2`, 'g'))) {
+    for (const m of matchAfterWord(src, ident, /\s*\.\s*(get|post|put|patch|delete|all)\(\s*(['"`])([^'"`]*)\2/y)) {
       const open = m.index + m[0].indexOf('(');
       const call = src.slice(open, closeOf(src, open));
       const sub = m[3] === '/' ? '' : m[3];
@@ -308,7 +311,7 @@ export function routeTable(root) {
         text: [...inherited, ...mw, reach(call, src, file, REACH_DEPTH)].join('\n'),
       });
     }
-    for (const m of src.matchAll(new RegExp(`\\b${ident}\\s*\\.\\s*route\\(\\s*['"\`]([^'"\`]*)['"\`]\\s*,\\s*(\\w+)`, 'g'))) {
+    for (const m of matchAfterWord(src, ident, /\s*\.\s*route\(\s*['"`]([^'"`]*)['"`]\s*,\s*(\w+)/y)) {
       const target = imports.get(m[2]);
       const sub = m[1] === '/' ? '' : m[1];
       const mw = uses.filter((u) => covers(u.pattern, sub) || covers(u.pattern, `${sub}/x`)).map((u) => u.text);
