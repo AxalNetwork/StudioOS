@@ -234,6 +234,7 @@ test('Deal More copies the current tab, reports failure, and uses the supplied c
   const url = 'https://axal.example' + tab;
   const v = await mounted(tab, INVESTOR, handlerWith({
     '/api/deals/4$': () => response({ ...DEAL, company_profile_url: '/startups/harbor-ledger' }),
+    '/api/deals/4/summary$': () => response({ available: true }),
   }));
   const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   const written = [];
@@ -246,6 +247,7 @@ test('Deal More copies the current tab, reports failure, and uses the supplied c
   try {
     await v.click('deal-more');
     assert.equal(v.hrefOf('deal-open-company-profile'), '/startups/harbor-ledger');
+    assert.ok(v.has('deal-download-summary'), 'the mounted deal header passes its deal id to the summary read');
     await v.click('deal-copy-link');
     assert.deepEqual(written, [url]);
     assert.match(v.text(), /Link copied\./);

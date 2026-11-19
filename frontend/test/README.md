@@ -48,6 +48,8 @@ also exercises a `project_id` deep link.
 | `storage_areas_contract_5507.test.mjs` | D5507: the Usage card, the Storage page's places and kinds, and ROUTE_MAP's D642 section each keep the storage-area contract. |
 | `build_overview_v2_6028.test.mjs` | D6028 (#6028): Build Overview V2's states (loading, empty venture, partial read, refused, read only, a failed overview), one primary, Not recorded never 0, and the phone root's parts. |
 
+| `deal_summary_menu_7771.test.mjs` | #7771: mounted More menu availability, PDF filename and blob, Worker refusals and abort on unmount. |
+
 ## Conventions
 
 - One file per surface or per rule; the header comment says what went wrong and

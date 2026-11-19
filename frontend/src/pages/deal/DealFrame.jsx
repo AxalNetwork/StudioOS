@@ -15,6 +15,8 @@
  * founder. The sequence itself draws no action.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { dealSummaryApi } from '../../lib/api/dealSummary';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { Link, useLocation } from 'react-router-dom';
 import { Check, ExternalLink, Globe } from 'lucide-react';
 import { Lightbox, Unreadable, actionPrimary, actionGhost, usePhoneWidth } from '../../ui';
@@ -147,9 +149,66 @@ export function DealTabs({ dealId, role, tab }) {
 }
 
 /** Sharing actions for the authorized deal header. */
-export function DealMoreActions({ profileUrl }) {
+export function DealMoreActions({ dealId, profileUrl }) {
   const { key } = useLocation();
   const [feedback, setFeedback] = useState(null);
+  const firmId = useActiveCompany()?.company?.id ?? null;
+  const [available, setAvailable] = useState(false);
+  const lifetime = useRef(0);
+  const availabilityRead = useRef(0);
+  const download = useRef(null);
+
+  useEffect(() => {
+    setAvailable(false);
+    return () => {
+      lifetime.current += 1;
+      availabilityRead.current += 1;
+      download.current?.abort();
+      download.current = null;
+    };
+  }, [dealId, firmId, key]);
+
+  const checkSummary = async () => {
+    const read = ++availabilityRead.current;
+    setAvailable(false);
+    if (!dealId) return;
+    try {
+      const answer = await dealSummaryApi.availability(dealId);
+      if (read === availabilityRead.current) setAvailable(answer?.available === true);
+    } catch {
+      // A refused or failed read offers no download action.
+    }
+  };
+
+  const downloadSummary = async () => {
+    if (download.current) return;
+    const controller = new AbortController();
+    download.current = controller;
+    const mine = lifetime.current;
+    setFeedback({ key, text: 'Downloading summary…' });
+    try {
+      const { blob, filename } = await dealSummaryApi.pdfBlob(dealId, { signal: controller.signal });
+      if (controller.signal.aborted || mine !== lifetime.current) return;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      try {
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+      } finally {
+        anchor.parentNode?.removeChild(anchor);
+        URL.revokeObjectURL(url);
+      }
+      setFeedback({ key, text: 'Summary downloaded.' });
+    } catch (error) {
+      if (controller.signal.aborted || mine !== lifetime.current) return;
+      setAvailable(false);
+      setFeedback({ key, text: error.message || 'The deal summary could not be downloaded.' });
+    } finally {
+      if (download.current === controller) download.current = null;
+    }
+  };
 
   const copyLink = async () => {
     try {
@@ -162,9 +221,10 @@ export function DealMoreActions({ profileUrl }) {
 
   return (
     <div className="relative">
-      <MoreMenu className="" testId="deal-more">
+      <MoreMenu className="" testId="deal-more" onOpen={checkSummary}>
         {profileUrl && <HeaderMenuItem to={profileUrl} data-testid="deal-open-company-profile">Open company profile</HeaderMenuItem>}
         <HeaderMenuItem onSelect={copyLink} data-testid="deal-copy-link">Copy link</HeaderMenuItem>
+        {available && <HeaderMenuItem onSelect={downloadSummary} data-testid="deal-download-summary">Download summary (PDF)</HeaderMenuItem>}
       </MoreMenu>
       <span role="status" className={`absolute right-0 top-full z-20 mt-1 w-max max-w-56 rounded-axal-sm bg-white text-[12px] text-axal-ink dark:bg-gray-900 dark:text-gray-100 ${feedback?.key === key ? 'border border-axal-hairline px-2 py-1 dark:border-gray-700' : 'sr-only'}`}>
         {feedback?.key === key ? feedback.text : ''}

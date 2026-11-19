@@ -198,7 +198,7 @@ export default function DealRoomPage() {
           )}
           {/* The one next action; on a phone it sits at the foot instead (DE15). */}
           {!phone && <NextAction next={next} onRespond={setRespondTo} />}
-          <DealMoreActions key={deal.id} profileUrl={deal.company_profile_url} />
+          <DealMoreActions key={`${deal.id}:${firmId ?? ''}`} dealId={deal.id} profileUrl={deal.company_profile_url} />
         </div>
       </header>
 

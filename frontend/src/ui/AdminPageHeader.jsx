@@ -166,7 +166,7 @@ export function HeaderMenuItem({ to = null, onSelect = null, children, 'data-tes
  * Exported for a page that draws its own header (the licence identity header,
  * D4819 part 4, #5927): `className` then replaces the header-grid placement.
  */
-export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin-page-more' }) {
+export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin-page-more', onOpen = null }) {
   const [open, setOpen] = useState(false);
   const phone = usePhoneWidth('(max-width: 639px)');
   const wrap = useRef(null);
@@ -207,7 +207,7 @@ export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin
   );
   return (
     <div ref={wrap} className={`relative ${className ?? `col-start-2 justify-self-end ${hasCrumb ? 'row-start-2' : 'row-start-1'}`}`} onKeyDown={onKey}>
-      <button ref={button} type="button" aria-label="More" aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className="grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10" data-testid={testId}>⋯</button>
+      <button ref={button} type="button" aria-label="More" aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => { if (!open) onOpen?.(); setOpen(!open); }} className="grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10" data-testid={testId}>⋯</button>
       {open ? phone ? (
         <Lightbox label="More" phone="sheet" onClose={() => close(true)} returnFocusTo={button} testId={`${testId}-sheet`}>
           {content}
