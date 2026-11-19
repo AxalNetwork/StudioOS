@@ -101,6 +101,7 @@ async function world() {
   db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
   db.exec(readFileSync(`${M}/435_connector_companies.sql`, 'utf8'));
   db.exec(readFileSync(`${M}/${MIGRATION}`, 'utf8'));
+  db.exec(readFileSync(`${M}/${readdirSync(M).find((f) => /^\d{12}_5860_facebook_proposals\.sql$/.test(f))!}`, 'utf8'));
   db.prepare('INSERT INTO user_company_links (company_id, user_id) VALUES (?, ?)').run(COMPANY, FOUNDER);
   Object.assign(env, { WHATSAPP_APP_ID: '123', WHATSAPP_APP_SECRET: randomBytes(32).toString('hex'), FACEBOOK_LOGIN_CONFIG_ID: '456', FACEBOOK_APP_APPROVED: '1' });
   await connection(db, env, FB, FOUNDER);
@@ -327,8 +328,9 @@ test('8. logs carry counts only; the feeds list, the registry and the page agree
   assert.deepEqual(meta.feeds, [...FACEBOOK_FEEDS]);
   assert.deepEqual([...FACEBOOK_FEEDS].sort(), ['distribution', 'revenue_and_traction']);
   const page = CONNECTOR_PAGES.facebook as any;
-  assert.deepEqual(page.tools.map((t: any) => [t.lands_in, t.calls]), FACEBOOK_BUILT_FEEDS.map((f) => [f.module, [...f.calls]]));
-  assert.ok(FACEBOOK_FEED_LIST.some((f) => !f.built && f.kind === 'proposal'), 'the channel proposal waits for its part');
+  // Local channel decisions add a feed, without adding a Facebook API tool.
+  assert.deepEqual(page.tools.map((t: any) => [t.lands_in, t.calls]), FACEBOOK_BUILT_FEEDS.filter((f) => f.calls.length).map((f) => [f.module, [...f.calls]]));
+  assert.ok(FACEBOOK_FEED_LIST.some((f) => f.built && f.kind === 'proposal' && f.decision === 'D5860'), 'the channel proposal is built');
 
   const files = readdirSync('cloudflare-worker/src', { recursive: true }) as string[];
   const src = (f: string) => readFileSync(`cloudflare-worker/src/${f}`, 'utf8');

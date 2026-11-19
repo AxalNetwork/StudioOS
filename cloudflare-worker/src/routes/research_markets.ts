@@ -11,7 +11,8 @@
  *                                            companies by headcount, its funds with their
  *                                            aggregates, and its signals (country, then region)
  *   GET /api/research/listed-companies       the listed companies: `signal_companies` and SEC EDGAR's
- *                                            (migration 404, D595), each labelled by source, paged
+ *                                            (migration 404, D595), each labelled by source, paged;
+ *                                            `in_both` counts the result's tickers held by both (D7172)
  *
  * Every read is signed-in only (`requireAuth`), and every count goes through
  * the crosswalk in `services/researchTaxonomy.ts`, so a company or fund is
@@ -917,6 +918,24 @@ function otherListings(text: string | null): Array<{ symbol: string; exchange: s
     .map(([symbol, exchange]) => ({ symbol, exchange: typeof exchange === 'string' ? exchange : null }));
 }
 
+/**
+ * D7172 (#7172, the ◇ of D7037): the tickers in the current search that are in
+ * both sources, across every page of the result, not only the page shown. The
+ * matched signal companies' symbols go in as one bound JSON array, and EDGAR's
+ * rows are held to the same search, so a ticker counts only when both of its
+ * rows are in this result. Nothing to count when EDGAR is left out or no signal
+ * company matched.
+ */
+export async function countInBoth(env: Env, edgarIn: boolean, q: string, symbols: string[]): Promise<number> {
+  if (!edgarIn || symbols.length === 0) return 0;
+  const r = await env.DB.prepare(
+    `SELECT COUNT(DISTINCT ticker) AS n FROM research_public_companies
+      WHERE (? = '' OR name LIKE '%' || ? || '%' OR ticker LIKE ? || '%')
+        AND ticker IN (SELECT value FROM json_each(?))`,
+  ).bind(q, q, q, JSON.stringify(symbols)).first<{ n: number }>();
+  return Number(r?.n ?? 0);
+}
+
 researchMarkets.get('/listed-companies', async (c) => {
   await requireAuth(c);
   const q = String(c.req.query('q') || '').trim().slice(0, 120);
@@ -982,8 +1001,12 @@ researchMarkets.get('/listed-companies', async (c) => {
   // bands), then EDGAR's rows, each in the chosen order.
   const signalPage = matched.slice(offset, offset + limit);
   let edgarPage: EdgarRow[];
+  let inBoth: number;
   try {
-    edgarPage = await place(Math.max(0, offset - matched.length), limit - signalPage.length);
+    [edgarPage, inBoth] = await Promise.all([
+      place(Math.max(0, offset - matched.length), limit - signalPage.length),
+      countInBoth(c.env, edgarIn, q, matched.map((r) => r.symbol)),
+    ]);
   } catch (e) {
     return unreadable(e);
   }
@@ -1003,6 +1026,10 @@ researchMarkets.get('/listed-companies', async (c) => {
       })),
     ],
     total: matched.length + edgarTotal,
+    // D7172 (#7172): how many tickers in THIS result, across all its pages,
+    // have a row from each source. Each such ticker is two rows of `total`.
+    // 0 when a source filter, a sector or a country leaves either source out.
+    in_both: inBoth,
     // Both stores, unfiltered, one row per source: the overview's Public count.
     store_total: stores.total,
     limit, offset, sort: sortKey, source: source || null,

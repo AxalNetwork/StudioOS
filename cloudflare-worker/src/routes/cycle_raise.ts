@@ -210,6 +210,7 @@ import { prospectBrief } from '../services/prospectBrief';
 import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
 import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
 import { addTypedEvidence, createPackLink, createReadinessLink, createPackPdf, createReadinessPdf, listPackLinks, revokePackLink, EvidenceShareError } from '../services/raiseEvidenceShare';
+import { createStatusLink, createStatusPdf, statusBody, type StatusDeps } from '../services/raiseStatusPage';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -1808,7 +1809,10 @@ cycleRaise.post('/evidence/items', async c => {
   catch (error) { return shareFailure(c, error); }
 });
 cycleRaise.get('/evidence/share-links', async c => {
-  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await listPackLinks(ctx)); }
+  try {
+    const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx;
+    return c.json(await listPackLinks(ctx, async () => (await statusBody(ctxOf(c, ctx.projectId), statusDeps(c, ctx.projectId))).hash));
+  }
   catch (error) { return shareFailure(c, error); }
 });
 cycleRaise.post('/evidence/share-links', async c => {
@@ -1827,6 +1831,20 @@ cycleRaise.post('/evidence/pdf-copies', async c => {
 });
 cycleRaise.post('/readiness/pdf-copies', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createReadinessPdf(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 part 4 (RA-31): the Raise status page, a one-page summary of the Overview, as a link or a PDF copy.
+// Listed and revoked with the links above; the reader's page is routes/status_share_public.ts.
+const statusDeps = (c: any, projectId: number): StatusDeps => ({
+  currentDeck: () => currentDeck(c.env, projectId),
+  roomCard: () => roomSummaryCard(c.env, projectId),
+});
+cycleRaise.post('/status/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createStatusLink(ctx, await evidenceBody(c), statusDeps(c, ctx.projectId)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/status/pdf-copies', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createStatusPdf(ctx, await evidenceBody(c), statusDeps(c, ctx.projectId)), 201); }
   catch (error) { return shareFailure(c, error); }
 });
 cycleRaise.post('/evidence/share-links/:uid/revoke', async c => {
