@@ -199,9 +199,13 @@ def verify_live_lock(account):
     token = os.environ.get('CLOUDFLARE_API_TOKEN')
     if not token:
         raise ValueError('Control-plane access is required to verify retention.')
+    if not re.fullmatch('[a-f0-9]{32}', account or ''):
+        raise ValueError('A valid Cloudflare account reference is required.')
     request = Request(f'https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/studioos-backups/lock',
                       headers={'Authorization': 'Bearer ' + token})
-    with urlopen(request, timeout=30) as response:
+    # The URL is a fixed https:// Cloudflare API address; only the 32-hex account checked above varies, so no
+    # file:// or other scheme can reach urlopen.
+    with urlopen(request, timeout=30) as response:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         result = json.load(response)
     if not result.get('success') or not lock_covers(result.get('result', {}).get('rules', [])):
         raise ValueError('A verified seven-year archive-prefix bucket lock is required before copying.')

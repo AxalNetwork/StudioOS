@@ -83,8 +83,10 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
 }
 
 /** Where a version's file lives in R2. */
-export const versionKey = (entity: GovernanceEntity, uid: string, version: number, type: string) =>
-  `governance/${entity}/${uid}/v${version}.${type === PDF ? 'pdf' : 'docx'}`;
+// D6651: a version file is write-once, so its key carries a fresh suffix: an upload whose row was not
+// recorded leaves its file unreferenced and can never block the next upload of the same version number.
+export const versionKey = (entity: GovernanceEntity, uid: string, version: number, type: string, nonce: string = crypto.randomUUID()) =>
+  `governance/${entity}/${uid}/v${version}-${nonce}.${type === PDF ? 'pdf' : 'docx'}`;
 
 /** One ownership relationship: who holds what share of the entity, as the Super Admin records it. */
 export type Ownership = { holder: string; interest: string | null; percent: number | null; note: string | null };

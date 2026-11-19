@@ -144,7 +144,6 @@ date cloudflare-worker/test/deck_batch_retry_d1600.test.ts
 date cloudflare-worker/test/deck_batch_sweep_4374.test.ts
 date cloudflare-worker/test/deck_coedit_d1577.test.ts
 date cloudflare-worker/test/deck_draft_outside_lab_d663.test.ts
-date cloudflare-worker/test/deck_ensembles_load_d1551.test.ts
 date cloudflare-worker/test/deck_export_render_3655.test.ts
 date cloudflare-worker/test/deck_grid_runbook_d1547.test.ts
 date cloudflare-worker/test/deck_image_takedown_4375.test.ts

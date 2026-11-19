@@ -28,10 +28,9 @@
  * the full recovery flow.
  */
 import type { Env } from '../types';
+import { putBackupRecord } from './recordStore';
 
-type R2BackupBucket = {
-  put(key: string, value: string | ArrayBuffer, opts?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
-};
+type R2BackupBucket = Pick<R2Bucket, 'put'>;
 
 type AnyKV = {
   list(opts?: { cursor?: string; limit?: number }): Promise<{ keys: { name: string; expiration?: number; metadata?: unknown }[]; list_complete: boolean; cursor?: string }>;
@@ -541,7 +540,10 @@ export async function snapshotKvNamespace(env: Env, name: string): Promise<{ key
   }
   const body = chunks.join('\n');
   const objectKey = `kv/${name}/${isoDateUTC()}.jsonl`;
-  await bucket.put(objectKey, body, { httpMetadata: { contentType: 'application/x-ndjson' } });
+  // D6651: a snapshot is a record, written once. A second run on the same UTC day keeps the first
+  // snapshot rather than replacing it.
+  const stored = await putBackupRecord(bucket, objectKey, body, { httpMetadata: { contentType: 'application/x-ndjson' } });
+  if (!stored.ok) console.warn(JSON.stringify({ event: 'kv_snapshot_kept', namespace: name, reason: 'record_exists' }));
   return { keys: count, objectKey };
 }
 

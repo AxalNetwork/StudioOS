@@ -1271,7 +1271,7 @@ const demand: ModuleSpec = {
     const date = d.prefix === 'signal' ? d.row.signal_date : d.prefix === 'revenue' ? d.row.received_on : String(d.row.created_at ?? '').slice(0, 10);
     const status = d.prefix === 'signal' ? STATUS[String(d.row.status)] ?? ['To confirm', 'amb'] : d.prefix === 'revenue' ? STATUS.confirmed : STATUS.counted;
     const bar = kind === 'waitlist' ? await waitlistBar(ctx) : null;
-    const amountReason = kind === 'need_to_have' || kind === 'waitlist' ? 'Amounts are for pre-sales and letters of intent only' : 'No amount recorded';
+    const amountReason = kind === 'need_to_have' || kind === 'waitlist' ? 'Waitlist and need-to-have signals do not carry amounts' : 'No amount recorded';
     return {
       title: joined(word, who),
       sub: joined(amount ? `${amount}${period ? ` ${period}` : ''}` : null, dMon(date) ? `recorded ${dMon(date)}` : null),
@@ -1363,9 +1363,11 @@ const demand: ModuleSpec = {
         key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
         form: { title: 'Edit signal', cta: 'Save', foot: 'Waitlist sign-ups count toward the bar you set.', fields: [
           { key: 'kind', label: 'Kind', kind: 'CH', value: d.row.kind,
-            options: opts([['need_to_have', 'Need-to-have mention'], ['waitlist', 'Waitlist sign-up'], ['pre_sale', 'Pre-sale'], ['loi', 'Letter of intent']]) },
+            options: opts([['need_to_have', 'Need-to-have mention'], ['waitlist', 'Waitlist sign-up'], ['pre_sale', 'Pre-sale'], ['loi', 'Letter of intent'], ['would_pay', 'Would pay']]) },
           { key: 'who', label: 'Who', kind: 'T', value: d.row.who ?? '', placeholder: '[Customer, lead or interviewee]' },
-          { key: 'amount_cents', label: 'Amount', kind: 'T', input: 'money', value: d.row.amount_cents ?? '', note: 'Pre-sales and letters of intent only.' },
+          { key: 'amount_cents', label: 'Amount', kind: 'T', input: 'money', value: d.row.amount_cents ?? '', note: 'Pre-sales, letters of intent and willingness to pay.' },
+          { key: 'currency', label: 'Currency', kind: 'T', value: d.row.currency ?? '' },
+          { key: 'period', label: 'Period', kind: 'CH', value: d.row.period ?? '', options: opts([['', 'Not recorded'], ['once', 'Once'], ['month', 'Monthly'], ['year', 'Yearly']]) },
           { key: 'signal_date', label: 'Date', kind: 'T', input: 'date', value: d.row.signal_date ?? '' },
           { key: 'status', label: 'Status', kind: 'CH', value: d.row.status, options: DEMAND_STATUSES.filter((s) => s !== 'counted').map((s) => ({ value: s, label: STATUS[s][0] })),
             note: 'To confirm: said, not yet in writing.' },

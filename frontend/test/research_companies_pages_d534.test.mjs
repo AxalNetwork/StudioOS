@@ -100,7 +100,8 @@ test('the results print the API total and the coverage counts, not the rows on t
 test('a missing value in a row reads Not recorded', () => {
   const data = page({ items: [row(1, { sector: null, country: null, founded_year: null })], total: 1 });
   const t = render(DirectoryResults, { state: 'ready', data, filters: { ...EMPTY_FILTERS }, onChange: noop, onRetry: noop });
-  assert.equal((t.match(/Not recorded/g) || []).length, 5, 'sector, country, founded, last round, employees');
+  // D7179 added the funding total column (D7045, RS-17 A).
+  assert.equal((t.match(/Not recorded/g) || []).length, 6, 'sector, country, founded, funding total, last round, employees');
 });
 
 test('loading shows no count; Unreadable shows no rows and no count', () => {
@@ -108,9 +109,10 @@ test('loading shows no count; Unreadable shows no rows and no count', () => {
   assert.match(loading, /Loading companies…/);
   assert.doesNotMatch(loading, /\d+ companies/);
   const bad = render(DirectoryResults, { state: 'unreadable', data: null, filters: { ...EMPTY_FILTERS }, onChange: noop, onRetry: noop });
-  assert.match(bad, /Read failed/);
+  // D7179 (RCD05): the Platform States word on screen, and Retry.
+  assert.match(bad, /Unavailable\s*The company directory did not answer/);
   assert.match(bad, /a failed read is not zero companies/);
-  assert.match(bad, /Try again/);
+  assert.match(bad, /Retry/);
   assert.doesNotMatch(bad, /of \d+ companies|0 companies/);
 });
 

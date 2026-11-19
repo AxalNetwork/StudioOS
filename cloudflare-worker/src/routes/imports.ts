@@ -31,6 +31,7 @@ import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { refuse, rowFailureSentence } from '../util/refusal';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { putRecord } from '../services/recordStore';
 
 const imports = new Hono<{ Bindings: Env }>();
 
@@ -252,7 +253,9 @@ async function maybeStoreRaw(env: Env, user: { id: number; role: string }, csv: 
   // refusal is the import's answer: nothing is imported or stored.
   const storage = await assertStorageRoom(env, { userId }, size, user);
   try {
-    await env.FILES.put(key, csv, { httpMetadata: { contentType: 'text/csv' } });
+    // D6651: the imported source CSV is a record, written once.
+    const stored = await putRecord(env.FILES, key, csv, { httpMetadata: { contentType: 'text/csv' } });
+    if (!stored.ok) return null;
   } catch { return null; }
   await noteStorageLanded(env, storage);
   return {key,size};

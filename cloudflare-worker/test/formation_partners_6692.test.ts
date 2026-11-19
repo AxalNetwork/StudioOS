@@ -188,7 +188,9 @@ test('4. cost_minor is never returned to a plain Admin; founder_price_minor is',
   assert.equal(p.founder_price_minor, 49_900);
   assert.equal(p.currency, 'GBP');
   assert.equal('cost_minor' in p, false, 'no cost_minor key at all, not a 0');
-  assert.equal(JSON.stringify(plain.body).includes('20000'), false, 'the cost appears nowhere in the body');
+  // Each uid is 32 random hex characters and can hold "20000" by chance; the cost may not appear anywhere else.
+  const outsideUids = JSON.stringify(plain.body).replace(/(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])/g, '<uid>');
+  assert.equal(outsideUids.includes('20000'), false, 'the cost appears nowhere in the body');
   assert.equal(plain.body.cost_visible, false);
   // A plain Admin's own write answers with the same read.
   const edited = await call(f, ADMIN, 'PATCH', `/${uid}/prices/${p.uid}`, { founder_price_minor: 45_000 });

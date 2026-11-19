@@ -31,6 +31,7 @@ from backend.app.models.entities import (
     ActivityLog, Deal, Reference, User, UserRole,
 )
 from backend.app.services.file_storage import get_storage, mint_signed_token
+from backend.app.services.log_safe import log_safe
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/references", tags=["Reference Checks"])
@@ -396,11 +397,12 @@ def _whisper_transcribe(data: bytes, content_type: str) -> dict:
         text_out = result if isinstance(result, str) else getattr(result, "text", str(result))
         return {"transcript": text_out.strip(), "ai_used": True, "fallback_reason": None}
     except Exception as exc:  # noqa: BLE001
-        logger.warning("whisper transcribe failed: %s", exc)
+        # The exception stays in the log; the caller gets a fixed sentence, never its text.
+        logger.warning("whisper transcribe failed: %s", log_safe(exc))
         return {
-            "transcript": f"[Transcription failed: {exc}]",
+            "transcript": "[Transcription failed: the speech service did not answer.]",
             "ai_used": False,
-            "fallback_reason": str(exc),
+            "fallback_reason": "transcription_failed",
         }
 
 

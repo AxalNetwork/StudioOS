@@ -27,6 +27,7 @@ from typing import Any, Optional
 from sqlmodel import Session
 
 from backend.app.models.entities import ActivityLog, User
+from backend.app.services.log_safe import log_safe
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ def log_audit(
             session.commit()
         except Exception:  # noqa: BLE001
             session.rollback()
-            logger.exception("audit log commit failed for action=%s target=%s", action, target_uid)
+            logger.exception("audit log commit failed for action=%s target=%s", log_safe(action), log_safe(target_uid))
     # Mirror to app log so structured log aggregation can pick it up too.
-    logger.info("AUDIT %s actor=%s target=%s meta=%s", action, actor_email, target_uid, payload.get("meta"))
+    logger.info("AUDIT %s actor=%s target=%s meta=%s", log_safe(action), log_safe(actor_email), log_safe(target_uid), log_safe(payload.get("meta"), 2000))
     return row
