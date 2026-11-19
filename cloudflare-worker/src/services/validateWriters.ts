@@ -322,7 +322,7 @@ export async function writeDemandSignal(env: Env, input: DemandSignalInput): Pro
   // D690 (#1692) — "pre-sales and letters of intent only" (CO:309): a
   // need-to-have mention or a waitlist sign-up names no amount.
   if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) {
-    throw new WriterError(400, 'An amount is for pre-sales and letters of intent only');
+    throw new WriterError(400, 'Waitlist and need-to-have signals do not carry amounts');
   }
   const currency = amount != null ? (String(input.currency ?? 'usd').trim().toLowerCase() || 'usd') : null;
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');
@@ -1289,7 +1289,7 @@ export async function updateDemandSignal(
     if (!Number.isInteger(n) || n <= 0) throw new WriterError(400, 'amount_cents must be a positive whole number, or omitted');
     amount = n;
   }
-  if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) throw new WriterError(400, 'An amount is for pre-sales and letters of intent only');
+  if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) throw new WriterError(400, 'Waitlist and need-to-have signals do not carry amounts');
   const currency = amount == null ? null
     : (String(input.currency === undefined ? (row.currency ?? 'usd') : (input.currency ?? 'usd')).trim().toLowerCase() || 'usd');
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');

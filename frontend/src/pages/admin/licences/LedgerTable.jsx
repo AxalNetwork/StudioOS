@@ -11,8 +11,8 @@
  */
 import React from 'react';
 import {
-  ATTENTION_FILTERS, NOT_INSTRUMENTED, NOT_ON_LEDGER, RENEWAL_WINDOWS, TERRITORY_NONE, attentionCell, notInstrumentedCell,
-  renewalCell, requestsCell, territoryCell,
+  ATTENTION_FILTERS, NEEDS, NEED_GROUPS, NOT_INSTRUMENTED, NOT_ON_LEDGER, RENEWAL_WINDOWS, TERRITORY_NONE, attentionCell,
+  notInstrumentedCell, renewalCell, requestsCell, territoryCell,
 } from '../licenceLedgerModel';
 import { STATUS_TONE, Chip } from './licenceShared';
 
@@ -76,27 +76,39 @@ export function CountsAndNeeds({ counts, countsUnavailable, onRetry, needs, chos
         <h2 className="text-[10px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">
           Needs HQ{scope ? ` · ${scope}` : ''}
         </h2>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {needs.map((n) => (n.state === 'value' ? (
-            <button
-              key={n.key} type="button" role="checkbox" aria-checked={chosen.includes(n.key)}
-              onClick={() => onToggle(n.key)} data-testid={`licence-need-${n.key}`}
-              className={`min-h-[28px] rounded-full border px-3 text-xs font-semibold ${
-                chosen.includes(n.key)
-                  ? 'border-indigo-300 bg-indigo-50 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
-                  : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
-              }`}
-            >
-              {n.label}
-            </button>
-          ) : (
-            <span
-              key={n.key} data-testid={`licence-need-${n.key}`} data-state={n.state}
-              className="inline-flex min-h-[28px] items-center rounded-full border border-dashed border-gray-300 px-3 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400"
-            >
-              {n.label}
-            </span>
-          )))}
+        {/* D5020 (L28): the items in three rows, Pricing, Legal and Operations; each chip is still a filter of the table. */}
+        <div className="mt-2 space-y-1.5">
+          {NEED_GROUPS.map(([group, word]) => {
+            const items = needs.filter((n) => (NEEDS.find((x) => x.key === n.key)?.group || 'operations') === group);
+            if (!items.length) return null;
+            return (
+              <div key={group} className="grid items-center gap-2 sm:grid-cols-[96px_minmax(0,1fr)]" data-testid={`licence-needs-group-${group}`}>
+                <span className="text-[10px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">{word}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {items.map((n) => (n.state === 'value' ? (
+                    <button
+                      key={n.key} type="button" role="checkbox" aria-checked={chosen.includes(n.key)}
+                      onClick={() => onToggle(n.key)} data-testid={`licence-need-${n.key}`}
+                      className={`min-h-[28px] rounded-full border px-3 text-xs font-semibold ${
+                        chosen.includes(n.key)
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
+                          : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      {n.label}
+                    </button>
+                  ) : (
+                    <span
+                      key={n.key} data-testid={`licence-need-${n.key}`} data-state={n.state}
+                      className="inline-flex min-h-[28px] items-center rounded-full border border-dashed border-gray-300 px-3 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400"
+                    >
+                      {n.label}
+                    </span>
+                  )))}
+                </div>
+              </div>
+            );
+          })}
         </div>
         <p className="mt-2 text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="licence-needs-not-instrumented">
           Not instrumented on the ledger yet: {NOT_INSTRUMENTED.join(' · ')}. Open a licence to see them.
@@ -169,7 +181,7 @@ const statusWord = (s) => String(s).replace('_', ' ');
  * (a plain click) and leaves a modified click to the browser, so every row's
  * link is a real deep link that opens in a new tab or is copied whole.
  */
-export function LedgerTable({ rows, reads, onOpen, onRetryRequests, footer }) {
+export function LedgerTable({ rows, reads, pricing, onOpen, onRetryRequests, footer }) {
   return (
     <section className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="licence-ledger">
       <div className="hidden md:block">
@@ -202,7 +214,7 @@ export function LedgerTable({ rows, reads, onOpen, onRetryRequests, footer }) {
                     )}
                   </td>
                   <td className="px-3 py-2.5"><NotOnLedger uid={l.uid} col="billing" href={`/admin/licences/${encodeURIComponent(l.uid)}/fee-invoices`} onOpen={onOpen} /></td>
-                  <td className="px-3 py-2.5"><StateTag c={attentionCell(l, read)} testId="licence-cell-attention" /></td>
+                  <td className="px-3 py-2.5"><StateTag c={attentionCell(l, read, pricing)} testId="licence-cell-attention" /></td>
                 </tr>
               );
             })}
@@ -220,7 +232,7 @@ export function LedgerTable({ rows, reads, onOpen, onRetryRequests, footer }) {
               <div className="min-w-0"><Identity l={l} onOpen={onOpen} stretch /></div>
               <div className="flex shrink-0 flex-col items-end gap-1 text-[12px]">
                 <Chip tone={STATUS_TONE[l.status]}>{statusWord(l.status)}</Chip>
-                <StateTag c={attentionCell(l, read)} />
+                <StateTag c={attentionCell(l, read, pricing)} />
               </div>
             </li>
           );

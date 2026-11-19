@@ -28,6 +28,7 @@
  */
 import { headerLine } from './folderFiles.mjs';
 import { stripComments } from './authInventory.mjs';
+import { hasWord, indexesOf, quotedAround } from './literalMatch.mjs';
 
 export const GENERATED = Object.freeze([
   'cloudflare-worker/src/routes/_registry.ts',
@@ -115,7 +116,7 @@ export function gatesIn(src) {
     .replace(/^\s*export\s*(?:type\s*)?\{[^}]*\}\s*from\s*(['"])[^'"]+\1\s*;?/gm, '');
   const found = [];
   for (const [gate, names] of GATES) {
-    const hit = names.some((n) => new RegExp(`\\b${n}\\b`).test(code)) || (gate === 'admin' && ADMIN_ROLE.test(code));
+    const hit = names.some((n) => hasWord(code, n)) || (gate === 'admin' && ADMIN_ROLE.test(code));
     if (hit) found.push(gate);
   }
   return found;
@@ -156,13 +157,13 @@ export function pathKeys(path) {
   return [m[1], m[1].replace(/\.(?:ts|js|jsx|mjs)$/, '')];
 }
 
-const esc = (t) => t.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+const QUOTES = `'"\``;
 
 /** Whether `src` names `path` by its path under `src/`, with or without its extension. */
 function names(src, path) {
   const [full, bare] = pathKeys(path);
   if (!full) return false;
-  return src.includes(full) || new RegExp(`${esc(bare)}['"\`]`).test(src);
+  return src.includes(full) || quotedAround(src, bare, { after: QUOTES });
 }
 
 /**
@@ -176,7 +177,7 @@ function helperNames(src, path) {
   if (names(src, path)) return true;
   const m = /^(?:cloudflare-worker|frontend)\/src\/(.+)\/([^/]+)$/.exec(path);
   if (!m || !src.includes(`src/${m[1]}`)) return false;
-  const quoted = (file) => new RegExp(`['"\`]${esc(file)}['"\`]`).test(src);
+  const quoted = (file) => quotedAround(src, `${file}`, { before: QUOTES, after: QUOTES });
   if (quoted(m[2])) return true;
   const split = /^([A-Za-z]\w*?)_\w+(\.\w+)$/.exec(m[2]);
   return Boolean(split && quoted(`${split[1]}${split[2]}`) && src.includes(`${split[1]}_\\w+`));
@@ -184,7 +185,17 @@ function helperNames(src, path) {
 
 /** The helper's import name, as a test imports it: `./_advisorRoutesSource.mjs` → `_advisorRoutesSource`. */
 const helperStem = (file) => file.split('/').pop().replace(/\.(?:mjs|ts|js)$/, '');
-const imports = (src, helper) => new RegExp(`['"]\\./${esc(helperStem(helper))}(?:\\.(?:mjs|ts|js))?['"]`).test(src);
+const IMPORT_TAIL = /(?:\.(?:mjs|ts|js))?['"]/y;
+/** Whether a test imports the helper: `'./stem'` or `"./stem.mjs"` (any of .mjs, .ts, .js). */
+const imports = (src, helper) => {
+  const needle = `./${helperStem(helper)}`;
+  for (const i of indexesOf(src, needle)) {
+    if (!`'"`.includes(src[i - 1] ?? '\u0000')) continue;
+    IMPORT_TAIL.lastIndex = i + needle.length;
+    if (IMPORT_TAIL.test(src)) return true;
+  }
+  return false;
+};
 
 /**
  * The test files that name `path`: directly, or by importing a shared helper

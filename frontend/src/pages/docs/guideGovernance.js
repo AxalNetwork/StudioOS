@@ -87,6 +87,16 @@ export function guideVerificationFor(anchor, opts) {
 }
 
 /** The admin column's word for staleness: never "current" or "stale" without an agreed window. */
+/**
+ * The sentence the Help signals page shows under its stale flags: the agreed window when there is one, and that none
+ * is recorded while REVIEW_WINDOW_DAYS is null (D7515), never an invented window.
+ */
+export function staleRuleSentence(windowDays = REVIEW_WINDOW_DAYS) {
+  return windowDays
+    ? `A guide is stale when its latest verified date is more than ${windowDays} days old.`
+    : 'Stale needs an agreed review window, which is not recorded yet.';
+}
+
 export function staleWord(verification) {
   const s = verification?.stale;
   if (s?.state === 'stale') return `stale · ${s.ageDays} days since verified`;

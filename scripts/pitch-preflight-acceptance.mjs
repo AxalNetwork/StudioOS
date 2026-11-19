@@ -71,6 +71,8 @@ await esbuild.build({
   alias: { react: join(ROOT, 'frontend/node_modules/react'), 'react-dom': join(ROOT, 'frontend/node_modules/react-dom') },
 });
 copyFileSync(join(ROOT, 'docs', css), join(OUT, 'app.css'));
+// OUT is this script's own output folder and the page is a fixed literal: nothing outside reaches the <script> tag.
+// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
 writeFileSync(join(OUT, 'index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="app.css"><title>Preflight acceptance</title></head><body class="bg-axal-ground dark:bg-gray-950"><div id="root"></div><script src="bundle.js"></script></body></html>`);
 
 const results = [];

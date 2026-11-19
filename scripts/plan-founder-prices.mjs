@@ -14,7 +14,7 @@ import { pricesForMetadata } from './lib/ownerPlanPrices.mjs';
 export const FOUNDER_PRICES = pricesForMetadata('tier');
 export const OWNER_PRICE_REASON = "Owner's price table, #3702";
 const checkedId = (value, prefix) => {
-  if (typeof value !== 'string' || !new RegExp(`^${prefix}_[A-Za-z0-9]+$`).test(value)) throw new Error(`Invalid ${prefix} identifier`);
+  if (typeof value !== 'string' || !value.startsWith(`${prefix}_`) || !/^[A-Za-z0-9]+$/.test(value.slice(prefix.length + 1))) throw new Error(`Invalid ${prefix} identifier`);
   return value;
 };
 
