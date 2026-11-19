@@ -36,6 +36,9 @@ export const INVESTOR_RAIL_OPTIONS = Object.freeze([
     source: { file: 'pages/investor/InvestorPortfolioCanvas.jsx', match: 'surface="portfolio/overview"' } },
   { page: 'Investor · Portfolio · Performance', key: 'draft:performance-note', label: 'Draft the note', kind: 'numbers', handler: 'draft',
     source: { file: 'pages/investor/InvestorPortfolioPerformance.jsx', match: 'surface="portfolio/performance"' } },
+  // D6888 (#6888): the statement sheet's covering-note proposal (D6217 PF-13a). Not a band: nothing is kept.
+  { page: 'Investor · Portfolio', key: 'draft:statement-cover-note', label: 'Propose a covering note', kind: 'numbers', handler: 'draft',
+    source: { file: 'pages/portfolio/StatementCoverNote.jsx', match: 'surface="portfolio/statement"' } },
   { page: 'Investor · Portfolio · Positions', key: 'draft:multiple-narrative', label: 'Draft the narrative', kind: 'numbers', handler: 'draft',
     source: { file: 'pages/investor/InvestorPortfolioPositions.jsx', match: 'surface="portfolio/positions"' } },
   { page: 'Investor · Portfolio · Updates', key: 'draft:updates-read', label: 'Draft the read', kind: 'synth', handler: 'draft',
@@ -67,7 +70,8 @@ export const RAIL_OPTION_HANDLERS = Object.freeze(['form', 'upload', 'draft', 't
 
 /**
  * Every file an investor board renders that could hold a model-running
- * control. The parity test reads each for `<ZoneDraft surface=…>` bands and
+ * control. The parity test reads each for `<ZoneDraft surface=…>` bands,
+ * a draft card that keeps nothing (`data-draft-surface=…`, D6888) and
  * `api.research.ask|upload|reindex(` calls; each one found must be a row.
  */
 export const INVESTOR_BOARD_FILES = Object.freeze([
@@ -75,6 +79,7 @@ export const INVESTOR_BOARD_FILES = Object.freeze([
   'pages/investor/deals/ScreeningZone.jsx',
   'pages/investor/deals/CommitZone.jsx', 'pages/investor/deals/ClosingZone.jsx',
   'pages/investor/InvestorPortfolioCanvas.jsx', 'pages/investor/InvestorPortfolioPositions.jsx',
+  'pages/portfolio/StatementCoverNote.jsx',
   'pages/PortfolioPerformancePage.jsx', 'pages/investor/InvestorPortfolioPerformance.jsx', 'pages/investor/InvestorPortfolioUpdates.jsx',
   'pages/investor/InvestorPortfolioValueAdd.jsx', 'pages/SpinoutLabLpWorkspacePage.jsx',
   'pages/investor/InvestorFundLanding.jsx', 'pages/investor/InvestorFundLPs.jsx',

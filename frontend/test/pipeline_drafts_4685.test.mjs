@@ -25,7 +25,6 @@ import PartnerRetainersZone from '../src/pages/partner/pipeline/RetainersZone.js
 
 const h = React.createElement;
 const RAW = 'raw-server-detail-4685';
-const tick = () => new Promise((r) => setTimeout(r, 0));
 const deferred = () => { let resolve; let reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 
 /** Stub `api` methods for one test and put every one back afterwards. */
@@ -533,7 +532,8 @@ test('Negotiations: a failed term save keeps the term editor and what was typed;
   const u = ui(m);
   try {
     await m.flush();
-    await u.press('Update');
+    // D5938: a negotiation's terms open in its sheet (PP05b), from the card's "Open terms".
+    await u.press('Open terms');
     await u.press('Edit');
     await u.type(termBoxes(m)[0], 'Payment terms: net 45');
     await u.press('Save term');
@@ -549,7 +549,9 @@ test('Negotiations: a failed term save keeps the term editor and what was typed;
   } finally { await m.unmount(); restore(); }
 });
 
-test('Negotiations: saving one card refreshes in the background; another card’s open term editor keeps its draft', async () => {
+// D5938: one negotiation's sheet is open at a time (PP05b), so the background
+// refresh is the one its own stage save starts, under a term still being typed.
+test('Negotiations: saving a stage refreshes in the background; the sheet’s open term editor keeps its draft', async () => {
   const reload = deferred();
   let reads = 0;
   const items = [negotiation(1, 'Acme site', [term(7, 'Payment terms')]), negotiation(2, 'Birch app')];
@@ -561,10 +563,9 @@ test('Negotiations: saving one card refreshes in the background; another card’
   const u = ui(m);
   try {
     await m.flush();
-    await u.press('Update', 0);
+    await u.press('Open terms', 0);
     await u.press('Edit');
     await u.type(termBoxes(m)[0], 'Half-typed clause');
-    await u.press('Update', 0); // card 2 (card 1 now reads "Hide")
     await u.press('Save');
     await m.flush();
     assert.equal(reads, 2);
@@ -586,7 +587,7 @@ test('Negotiations: a failed new term keeps the new-term form and its text', asy
   const u = ui(m);
   try {
     await m.flush();
-    await u.press('Update');
+    await u.press('Open terms');
     const addToggle = m.nodes().find((n) => n.tagName === 'BUTTON' && /^(Add a term|Add term|Add)$/.test(u.textOf(n).trim()) && !m.props(n).disabled);
     await act(async () => { m.props(addToggle).onClick({ stopPropagation() {} }); });
     await u.type(termBoxes(m)[0], 'Liability cap');

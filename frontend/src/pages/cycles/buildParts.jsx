@@ -13,9 +13,12 @@
  *
  * Each part renders inside its own boundary. One that throws reads
  * "could not be read" with Retry; the module and the other parts stay drawn.
+ * D4846 part 2 (#6032, BD14 A): that is D5129's Unavailable, the one shape
+ * Build's failed reads take, and it announces only after a Retry (ST-09), so
+ * a page whose parts fail on load does not shout.
  */
 import { Component } from 'react';
-import { Unreadable } from '../../ui/Honesty.jsx';
+import { DataState } from '../../ui/Honesty.jsx';
 import ToolsHistory from './ToolsHistory';
 import SolutionDesignFromCode from './SolutionDesignFromCode';
 import FoundingTeamFromCode from './FoundingTeamFromCode';
@@ -103,7 +106,7 @@ export class PartBoundary extends Component {
     if (!this.state.failed) return this.props.children;
     return (
       <div data-testid={`build-part-unreadable-${this.props.name}`}>
-        <Unreadable what="This part" claim="The rest of this page is current." onRetry={() => this.setState({ failed: false })} />
+        <DataState state="unavailable" what="This part" claim="The rest of this page is current." onRetry={() => this.setState({ failed: false })} announce="after-action" />
       </div>
     );
   }

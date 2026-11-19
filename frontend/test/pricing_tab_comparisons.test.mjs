@@ -105,5 +105,8 @@ test('Models reload links show model pricing without Compare plans', () => {
   const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: ['/pricing?for=models&__swreload=1'] }, React.createElement(PricingBody)));
   assert.doesNotMatch(html, /Compare plans|models-compare-/);
   assert.match(html, /class="axp-sec axp-models"/);
-  assert.match(html, /aria-selected="true" data-testid="pricing-tab-models"/);
+  const selected = html.match(/<button\b[^>]*data-testid="pricing-tab-models"[^>]*>/)?.[0];
+  assert.ok(selected, 'the Models tab exists');
+  assert.match(selected, /aria-selected="true"/);
+  assert.match(selected, /tabindex="0"/);
 });

@@ -33,7 +33,7 @@ import { holdsLicence } from '../services/accountLicences';
  * Gotchas for the rationale.
  */
 import { logAdminAction } from '../services/adminAudit';
-import { logCycleWrite } from '../services/cycleActivity';
+import { logCycleWrite, logCycleWriteStatement } from '../services/cycleActivity';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { projectInActiveCompany } from '../services/tenancyScope';
@@ -59,7 +59,7 @@ import {
   normPhrase,
   type PainGroupRow,
 } from '../services/painGroups';
-import { upsertPainAlias } from './_founder_validate_writes';
+import { upsertPainAlias, upsertPainAliasStatement } from './_founder_validate_writes';
 import { syncStripeForUser } from '../integrations/providers/stripe';
 // `/build/kpi`'s CSV importer (#176 FB5). The parser is a service so it can be
 // exercised without a database — every rejection reason is a unit test.
@@ -1044,6 +1044,73 @@ progress.post('/pain-groups/:projectId/assign', async (c) => {
 });
 
 // Rename a pain group. Body: { title }
+// D6006 (#6006, V17): Assign several phrases at once — the selection bar's "Assign to theme" and "New theme
+// from selected", and Eadwyn's grouping accepted as a set. Body:
+//   { phrases: string[], group_id }   — move every phrase into an existing theme
+//   { phrases: string[], new_title }  — create the theme and move every phrase into it
+// All the aliases land in one batch with one activity row, or none do. The same gate as Assign.
+export const MAX_BULK_ASSIGN = 100;
+progress.post('/pain-groups/:projectId/assign-many', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return refuse(c, 400, { code: 'invalid_project_id', message: 'That venture id is not valid.' });
+
+  const project = await loadProject(c, projectId, user);
+  if (!project) return refuse(c, 404, { code: 'project_not_found', message: 'Venture not found.' });
+  ensureCanEdit(project, user);
+
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const raw = body && Array.isArray(body.phrases) ? body.phrases : null;
+  if (!raw || raw.length === 0) return refuse(c, 400, { code: 'phrases_required', message: 'Choose at least one quote to assign.' });
+  if (raw.length > MAX_BULK_ASSIGN) return refuse(c, 400, { code: 'too_many_phrases', message: `Assign at most ${MAX_BULK_ASSIGN} quotes at once.` });
+  const byNorm = new Map<string, string>();
+  for (const p of raw) {
+    const display = (typeof p === 'string' ? p : '').trim().slice(0, MAX_PAIN_PHRASE);
+    const norm = normPhrase(display);
+    if (!display || !norm) return refuse(c, 400, { code: 'invalid_phrase', message: 'Every quote to assign needs its wording.' });
+    if (!byNorm.has(norm)) byNorm.set(norm, display);
+  }
+
+  await ensurePainGroupsSchema(c.env);
+  const newTitle = cleanPainTitle(body!.new_title);
+  const hasGroupId = Object.prototype.hasOwnProperty.call(body, 'group_id') && body!.group_id != null;
+  if (!newTitle === !hasGroupId) return refuse(c, 400, { code: 'target_required', message: 'Choose one theme, or name a new one.' });
+
+  let groupId: number;
+  let groupTitle: string;
+  if (newTitle) {
+    const nowIso = new Date().toISOString();
+    const sort = await nextPainSort(c.env, projectId);
+    const res = await c.env.DB.prepare(
+      `INSERT INTO pain_groups (project_id, title, sort_order, created_at, updated_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(projectId, newTitle, sort, nowIso, nowIso, user.id).run();
+    groupId = lastInsertId(res);
+    groupTitle = newTitle;
+  } else {
+    groupId = Number(body!.group_id);
+    if (!Number.isFinite(groupId)) return refuse(c, 400, { code: 'invalid_group_id', message: 'That theme id is not valid.' });
+    const g = await loadPainGroup(c.env, groupId);
+    if (!g || g.project_id !== projectId) return refuse(c, 404, { code: 'theme_not_found', message: 'Theme not found on this venture.' });
+    groupTitle = g.title;
+  }
+
+  const n = byNorm.size;
+  try {
+    await c.env.DB.batch([
+      ...[...byNorm.values()].map((display) => upsertPainAliasStatement(c.env, projectId, groupId, display)!),
+      logCycleWriteStatement(c.env, { projectId, userId: user.id, cycle: 'validate', module: 'problem-discovery',
+        entityId: groupId, action: newTitle ? 'pain_group_created' : 'pain_group_assigned',
+        summary: newTitle ? `${groupTitle} created with ${n} ${n === 1 ? 'quote' : 'quotes'}` : `${n} ${n === 1 ? 'quote' : 'quotes'} assigned to ${groupTitle}` }),
+    ]);
+  } catch (error) {
+    // The new theme would hold nothing; take it back so a retry does not leave an empty one behind.
+    if (newTitle) await c.env.DB.prepare('DELETE FROM pain_groups WHERE id = ? AND project_id = ?').bind(groupId, projectId).run();
+    return refuse(c, 503, { code: 'assign_failed', message: 'The quotes could not be assigned. Nothing was saved; try again.', raw: error });
+  }
+  return c.json({ ...(await getPainGroupsView(c.env, projectId)), assigned: n, group_id: groupId });
+});
+
 progress.patch('/pain-groups/:groupId', async (c) => {
   const user = await requireAuth(c);
   const groupId = Number(c.req.param('groupId'));

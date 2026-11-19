@@ -168,8 +168,9 @@ test('Research is given who you are wherever it is mounted, and the retired Sign
   // required `<SignalsPage>` inside `ResearchWorkspace`, because `/research/markets`
   // rendered the `market_intel_rows` sector feed. The `pr3` artboard is about a
   // different object — comparable RANGES for the firm's own service lines,
-  // attachable to a proposal — so that zone mounts `MarketZone` and the feed
-  // keeps its own route.
+  // attachable to a proposal — so that zone mounted `MarketZone` (the market
+  // directory since D593; `MarketZone` deleted in D6285) and the feed kept its
+  // own route.
   //
   // THE FINDING THAT PUT THIS TEST HERE IS STILL WORTH HOLDING, one route over.
   // `user` was dropped at the mount, so `mode` fell to founder for every role:

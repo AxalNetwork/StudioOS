@@ -141,7 +141,7 @@ test('the routes and the buttons: Present for everyone, Export only for a founde
   assert.match(studio, /<Link to=\{presentHref\(project\?\.id, current\.id\)\}[^>]*data-testid="pitch-studio-present">Present<\/Link>/);
   assert.match(studio, /\{ id: 'export', label: 'Export…', write: true \}/);
   assert.match(studio, /DECK_CARD_MENU\.filter\(\(it\) => !\(readOnly && it\.write\)\)/);
-  assert.match(studio, /\{sheet === 'export' && current && !readOnly \? <ExportDialog /);
+  assert.match(studio, /if \(sheet === 'export' && current && !readOnly\) return <ExportDialog /);
   const present = read('frontend/src/pages/raise/pitch/PitchPresent.jsx');
   const calls = [...present.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]).sort();
   assert.deepEqual([...new Set(calls)], ['deckGet', 'deckListVersions'], 'present only reads');

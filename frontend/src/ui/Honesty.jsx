@@ -331,13 +331,15 @@ export function DataState({
  *   rest      the sentence after ("The rest is current.")
  *   withheld  sentences for totals not shown ("Remaining is not shown while commitments cannot be read.")
  *   onRetry   Retry, only when an unavailable source is among them (a refusal is not retried)
+ *   lead      the bold words in place of "N of M sources unavailable · …" where a surface counts
+ *             its own things (Build's "5 of 6 modules read", D4846 part 2, #6032)
  */
-export function PartialBanner({ missing, of, sources = [], rest, withheld = [], onRetry, className = '', ...rest2 }) {
+export function PartialBanner({ missing, of, sources = [], rest, withheld = [], onRetry, lead: leadIn, className = '', ...rest2 }) {
   const counts = partialCounts(sources);
   const n = missing ?? counts.missing;
   const names = [...counts.unavailable, ...counts.refused].map((x) => x.name).filter(Boolean);
   const verb = counts.refused.length && !counts.unavailable.length ? 'refused' : counts.refused.length ? 'not read' : 'unavailable';
-  const lead = `${n}${of != null ? ` of ${of}` : ''} ${Number(of ?? n) === 1 ? 'source' : 'sources'} ${verb}${names.length ? ` · ${names.join(', ')}` : ''}.`;
+  const lead = leadIn ?? `${n}${of != null ? ` of ${of}` : ''} ${Number(of ?? n) === 1 ? 'source' : 'sources'} ${verb}${names.length ? ` · ${names.join(', ')}` : ''}.`;
   const canRetry = onRetry && (counts.unavailable.length > 0 || counts.missing === 0);
   const extra = Array.isArray(withheld) ? withheld : [withheld];
   return (

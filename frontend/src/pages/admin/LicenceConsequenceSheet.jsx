@@ -17,7 +17,7 @@
 import React, { useCallback, useId, useRef, useState } from 'react';
 import Sheet from '../../ui/Sheet';
 import { checkReason } from './licenceReasonModel';
-import { licenceConsequence } from './licenceConsequenceModel';
+import { CONSEQUENCE_QUESTIONS, licenceConsequence } from './licenceConsequenceModel';
 
 const TONE = {
   ok: 'bg-green-700 hover:bg-green-800',
@@ -49,7 +49,8 @@ function Question({ n, title, children, testId }) {
 }
 
 export function LicenceConsequenceSheet({ sheet, onDone }) {
-  const [text, setText] = useState('');
+  // D4819 part 21: a reason written elsewhere (a delegate request's) arrives as `initial`, still editable.
+  const [text, setText] = useState(() => String(sheet.reason.initial ?? ''));
   const fieldId = useId();
   const ruleId = useId();
   const field = useRef(null);
@@ -76,13 +77,13 @@ export function LicenceConsequenceSheet({ sheet, onDone }) {
       )}
     >
       <div className="flex flex-col gap-4">
-        <Question n="1" title="What will happen" testId="licence-consequence-happens">
+        <Question n="1" title={CONSEQUENCE_QUESTIONS[0]} testId="licence-consequence-happens">
           <Rows rows={sheet.happens} />
         </Question>
-        <Question n="2" title="What else it affects" testId="licence-consequence-affects">
+        <Question n="2" title={CONSEQUENCE_QUESTIONS[1]} testId="licence-consequence-affects">
           <Rows rows={sheet.affects} />
         </Question>
-        <Question n="3" title="Reason recorded" testId="licence-consequence-reason">
+        <Question n="3" title={CONSEQUENCE_QUESTIONS[2]} testId="licence-consequence-reason">
           {asks ? (
             <div>
               <label htmlFor={fieldId} className="block text-sm text-gray-800 dark:text-gray-200">
@@ -103,7 +104,7 @@ export function LicenceConsequenceSheet({ sheet, onDone }) {
             <p className="text-[13px] text-gray-700 dark:text-gray-300">{sheet.reason.statement}</p>
           )}
         </Question>
-        <Question n="4" title="Can it be undone?" testId="licence-consequence-undo">
+        <Question n="4" title={CONSEQUENCE_QUESTIONS[3]} testId="licence-consequence-undo">
           <p
             className={`rounded-md border px-2.5 py-2 text-[13px] ${sheet.undo.reversible
               ? 'border-gray-200 bg-gray-50 text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200'

@@ -257,7 +257,7 @@ r.post('/switches/:key', async (c) => {
   }
   const auditAction = thrown ? 'platform_switch_thrown' : 'platform_switch_released';
   let changed: boolean;
-  let recorded = true;
+  let recorded: boolean;
   let mirrored: boolean | null = null;
   try {
     // The change and its audit row in one batch: both or neither (D4703).
@@ -461,6 +461,9 @@ r.put('/take-rate', async (c) => {
 // Booking uid and amount only: no founder or advisor is named here. #5305 adds
 // the row's id (what the resolve below names), and for a resolved row who
 // resolved it (an operator, by name), when, and the reason they gave.
+// D5305: open rows newest recorded first, then resolved rows most recently
+// resolved first (the HQ list says so), so the 200-row read keeps the latest
+// resolutions rather than the latest-recorded ones.
 r.get('/advisory-refunds-due', async (c) => {
   await requireSuperAdmin(c);
   try {
@@ -471,7 +474,8 @@ r.get('/advisory-refunds-due', async (c) => {
               u.name AS resolved_by_name, r.resolution_reason AS resolution_reason
          FROM advisory_refunds_due r
          LEFT JOIN users u ON u.id = r.resolved_by
-        ORDER BY (r.resolved_at IS NOT NULL), r.created_at DESC LIMIT 200`,
+        ORDER BY (r.resolved_at IS NOT NULL), datetime(COALESCE(r.resolved_at, r.created_at)) DESC, r.id DESC
+        LIMIT 200`,
     ).all<Record<string, unknown>>();
     const items = rows.results || [];
     return c.json({ items, open: items.filter((r) => r.resolved_at == null).length });

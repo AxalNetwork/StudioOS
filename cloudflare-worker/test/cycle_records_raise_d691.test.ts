@@ -16,10 +16,8 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/cycle_records_raise_d691.test.ts
  */
-import { test } from 'node:test';
+import { test, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -28,21 +26,25 @@ import cycleRaise from '../src/routes/cycle_raise.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import { MODULES, TOOL_HREF, DATA_ROOM_ACCESS, fundFit, capIdOf, NEVER_EXPIRES } from '../src/services/raiseCycle.ts';
 import { saveScenario } from '../src/services/capTableWrites.ts';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { RAISE_RECORDS } from '../src/services/records/raise.ts';
 import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 
 const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
 const FOUNDER = 10, ADMIN = 30;
 const P = 1, P_OTHER = 2;
 
+// The fixtures are dated around October 2026 and the code under test reads the
+// clock in JS (`tierAdmits`, the Expired / overdue reads), so the clock is
+// pinned: file 12's access runs until 2026-11-30 and must read as live on any day.
+const NOW = new Date('2026-11-15T09:00:00.000Z');
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
+afterEach(() => mock.timers.reset());
+
 /** The baseline, then every post-cutoff migration in order, as cycle_records_build_d690.test.ts builds one. */
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   loadSchema(db);
@@ -698,11 +700,17 @@ test('1: each declared action runs its handler, writes its store and logs one ro
   assert.equal((db.prepare('SELECT r2_key FROM data_room_file_versions WHERE file_id = 12').get() as any).r2_key, 'k12');
   assert.equal(logged('data-room', 12).action, 'file_replaced');
   assert.equal((await act(db, 'data-room', 12, 'replace', {}, { files: room })).status, 400, 'no file');
+  // D6073: Remove moves the file to Trash for 30 days; nothing is deleted until the purge.
   await ok('data-room', 12, 'remove', undefined, room);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 12 AND removed_at IS NOT NULL'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions WHERE file_id = 12'), 1);
+  assert.deepEqual(room.deleted, [], 'nothing leaves storage on Remove');
+  assert.equal(logged('data-room', 12).action, 'file_removed');
+  const { purgeFile } = await import('../src/services/dataRoomTrash.ts');
+  assert.ok(await purgeFile({ DB: d1Over(db), FILES: room } as any, { project: { id: P, uid }, userId: FOUNDER, fileId: 12, reason: 'delete_now' }));
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 12'), 0);
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions WHERE file_id = 12'), 0);
-  assert.deepEqual(room.deleted, [now.r2_key], 'k12 lies outside the prefix and is never deleted');
-  assert.equal(logged('data-room', 12).action, 'file_removed');
+  assert.deepEqual(room.deleted.flat(), [now.r2_key], 'k12 lies outside the prefix and is never deleted');
   // A file removed between the route's ownedRow and the writer (a race) is 404, never ok with no record.
   const ctx = { env: { DB: d1Over(db), FILES: room }, projectId: P, project: { id: P, founder_id: 1001 }, user: { id: FOUNDER, role: 'founder' } } as any;
   const remove = (await RAISE_RECORDS['data-room'].actions(ctx, '12', {} as any)).find((a) => a.key === 'remove')!;

@@ -43,12 +43,15 @@ test('Deliverables: stale title edit stays open; explicit retry sends the retain
   try {
     await view.settle(); await view.press('Edit');
     await view.type('Title', 'My unsaved deck'); await view.type('Version', 'v2');
+    // #4709: the deliverable is sent, so the change is a correction with a reason.
+    await view.type('Why is it being corrected', 'Wrong deck attached');
     await view.press('Save'); await view.settle();
     announced(view);
     assert.equal(view.valueOf('Title'), 'My unsaved deck'); assert.equal(view.valueOf('Version'), 'v2');
     assert.equal(callsOf(calls, 'updatePartnerDeliverable').length, 1, 'no automatic overwrite');
     const first = callsOf(calls, 'updatePartnerDeliverable')[0];
     assert.equal(first[0], 401); assert.equal(first[1].expected_revision, READ);
+    assert.equal(first[1].correction_reason, 'Wrong deck attached', 'the correction carries its reason');
     await view.press('Keep my edits'); await view.settle();
     assert.deepEqual(callsOf(calls, 'updatePartnerDeliverable')[1], [401, { ...first[1], expected_revision: CURRENT }]);
   } finally { await view.unmount(); restoreApi(); }

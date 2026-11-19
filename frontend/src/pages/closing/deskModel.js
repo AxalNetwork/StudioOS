@@ -18,6 +18,7 @@
 import { DESK_PATH, STEPS, daysLeft, SOON_DAYS } from './closingModel.js';
 import { formatMinorOrCount } from '../../lib/money.js';
 import { closingPaperLifecycle } from '../../lib/contractLifecycle.js';
+import { routePreferenceWord } from '../deal/dealWorkModel.js';
 
 export { DESK_PATH, STEPS, SOON_DAYS };
 
@@ -155,6 +156,17 @@ export const lineStatus = (s) => LINE_STATUS[s] || 'Not recorded';
 export const ROUTES = Object.freeze(['direct', 'syndicate', 'axal_fund', 'third_party_fund']);
 export const ROUTE_WORD = Object.freeze({ direct: 'Direct', syndicate: 'Syndicate (SPV)', axal_fund: 'Axal VC fund', third_party_fund: 'Third-party fund' });
 export const routeWord = (r) => ROUTE_WORD[r] || null;
+/**
+ * D6195: what the investor said they would prefer, for Choose the route. A preference only:
+ * the route stays the one the Admin sets. A prospect line has no commitment, so says nothing.
+ */
+export function preferenceSentence(line) {
+  if (!line || line.commitment_id == null) return null;
+  const word = routePreferenceWord(line.route_preference);
+  return word
+    ? `The investor's preference: ${word}. A preference only; the route is the one you set.`
+    : 'The investor recorded no route preference.';
+}
 
 /** One closing's figures. Received sums received lines only; withdrawn lines count nowhere. */
 export function closingFigures(closing) {

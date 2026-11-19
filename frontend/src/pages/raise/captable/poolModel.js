@@ -184,7 +184,9 @@ export function grantRows(plan, record) {
   const exercises = recordedRows(record).filter((r) => r.kind === 'exercise');
   return plan.grants.map((g) => {
     const h = holders.get(g.holder_id);
-    const own = grants.filter((r) => r.holder?.holder_id === g.holder_id).sort((a, b) => String(b.issued_on || '').localeCompare(String(a.issued_on || '')));
+    // D6086: a row written with a grant names it; any other row takes the holder's latest grant, as before.
+    const own = g.issuance_uid ? grants.filter((r) => r.uid === g.issuance_uid)
+      : grants.filter((r) => g.holder_id != null && r.holder?.holder_id === g.holder_id).sort((a, b) => String(b.issued_on || '').localeCompare(String(a.issued_on || '')));
     const rec = own[0] || null;
     const exercised = exercises.filter((r) => r.holder?.holder_id === g.holder_id).reduce((s, r) => s + (num(r.shares) ?? 0), 0);
     const name = String(h?.name || rec?.holder?.name || '').trim();
@@ -199,13 +201,23 @@ export function grantRows(plan, record) {
       grantDate: rec ? day(rec.issued_on) : NOT_RECORDED,
       grantOn: rec?.issued_on || '',
       vesting: `${num(g.total_months) == null ? `Term ${NOT_RECORDED.toLowerCase()}` : `${g.total_months} months`} · ${num(g.cliff_months) == null ? `cliff ${NOT_RECORDED.toLowerCase()}` : num(g.cliff_months) === 0 ? 'no cliff' : `${g.cliff_months}-month cliff`} · from ${day(g.start_date)}`,
+      onGrant: Boolean(g.issuance_uid),
       vested: shares(g.vested_shares),
+      unvested: shares(g.unvested_shares),
+      vestedBasis: vestedBasis(g),
       ...(plan.elections ? { election: electionWord(plan.elections, g.holder_id) } : {}),
       exercise: exercised > 0 ? `Exercised ${shares(exercised)}` : 'Not exercised',
       document: rec?.document_ref ? documentWord(rec) : null,
       carta: g.source === 'connector_carta',
     };
   });
+}
+
+/** D6086: where a grant's Vested comes from, in words, or null when it is the stored count. */
+export function vestedBasis(g) {
+  if (g?.vested_basis === 'schedule') return `Worked out from the schedule on ${day(g.vested_as_of)}`;
+  if (g?.vested_basis === 'recorded' && g.source === 'connector_carta') return 'As Carta reports it';
+  return null;
 }
 
 /** The toolbar over the grants: a search, a role and a sort. */
@@ -225,6 +237,73 @@ export function vestedFoot(plan) {
   const n = Array.isArray(plan?.grants) ? plan.grants.length : 0;
   if (v == null || !n) return null;
   return `Vested ${shares(v)} adds up the ${n === 1 ? 'one row' : `${n} rows`}.`;
+}
+
+// ───────────────────────────────────────────────────────────── a grant's vesting (D6086)
+
+/** RA-27's presets. Custom leaves Months and Cliff months as typed. */
+export const VESTING_PRESETS = [
+  { key: '4y1c', label: '4 years, 1-year cliff', months: '48', cliff: '12' },
+  { key: '4y0c', label: '4 years, no cliff', months: '48', cliff: '0' },
+  { key: 'custom', label: 'Custom' },
+];
+export const VESTING_MONTHS_MAX = 600;
+export const VESTING_HELP = 'Worked out from the schedule typed above. It is not the record.';
+export const VESTING_BLANK = 'Leave Start blank to record the grant without a schedule.';
+export const emptyVesting = () => ({ preset: '4y1c', start: '', months: '48', cliff: '12' });
+
+const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const daysIn = (y, m) => [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+const whole = (v) => { const t = String(v ?? '').trim(); return /^\d+$/.test(t) ? Number(t) : null; };
+
+/** `n` months after an ISO day, on the same day of the month or the month's last day. */
+export function addMonths(iso, n) {
+  const m = ISO_DAY.exec(String(iso || ''));
+  if (!m) return null;
+  const at = Number(m[1]) * 12 + (Number(m[2]) - 1) + n;
+  const y = Math.floor(at / 12); const mo = (at % 12) + 1;
+  const d = Math.min(Number(m[3]), daysIn(y, mo));
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+const realDay = (iso) => { const m = ISO_DAY.exec(String(iso || '')); return !!m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= daysIn(Number(m[1]), Number(m[2])); };
+
+/**
+ * The schedule a grant's form posts (`{ start_date, total_months, cliff_months }`),
+ * nothing when Start is blank, or the sentence that says what is wrong. The
+ * Worker checks the same (`capTableRecord.ts`, D6086).
+ */
+export function vestingBody(vest) {
+  if (!vest || !String(vest.start || '').trim()) return { vesting: null, sentence: null };
+  if (!realDay(vest.start)) return { vesting: null, sentence: 'The vesting start is a date.' };
+  const months = whole(vest.months); const cliff = whole(vest.cliff);
+  if (months == null || months < 1 || months > VESTING_MONTHS_MAX) return { vesting: null, sentence: `Vesting runs for a whole number of months, 1 to ${VESTING_MONTHS_MAX}.` };
+  if (cliff == null) return { vesting: null, sentence: 'The cliff is a whole number of months, 0 for none.' };
+  if (cliff > months) return { vesting: null, sentence: `The cliff can’t be longer than the vesting: ${cliff} months is more than ${months}.` };
+  return { vesting: { start_date: vest.start, total_months: months, cliff_months: cliff }, sentence: null };
+}
+
+const pctOf = (part, total) => { const p = (part / total) * 100; return `${Number.isInteger(p) ? p : p.toFixed(1)}%`; };
+
+/**
+ * RA-27's Modelled preview of a schedule: when the cliff vests and when the
+ * last month does. Null until the schedule is whole; it is never the record.
+ */
+export function vestingPreview(vest) {
+  const { vesting: v } = vestingBody(vest);
+  if (!v) return null;
+  const end = day(addMonths(v.start_date, v.total_months));
+  if (v.cliff_months === v.total_months) return `All of it vests on ${end}`;
+  if (v.cliff_months === 0) return `Vests monthly from ${day(addMonths(v.start_date, 1))} to ${end}`;
+  return `${pctOf(v.cliff_months, v.total_months)} vests on ${day(addMonths(v.start_date, v.cliff_months))}, then monthly to ${end}`;
+}
+
+/** A schedule in words, as a proposal or a grant carries it: "4 years, 1-year cliff, from 1 Mar 2026". */
+export function vestingWords(v) {
+  if (!v) return 'No schedule';
+  const preset = VESTING_PRESETS.find((p) => p.months === String(v.total_months) && p.cliff === String(v.cliff_months));
+  const length = preset ? preset.label : `${v.total_months} months, ${v.cliff_months ? `${v.cliff_months}-month cliff` : 'no cliff'}`;
+  return `${length}, from ${day(v.start_date)}`;
 }
 
 /** CT5c: Carta is the record while connected, and its grants are read only here. */

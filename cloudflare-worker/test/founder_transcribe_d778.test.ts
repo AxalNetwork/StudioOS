@@ -32,7 +32,6 @@ import { withGuard } from './_guard_stub.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SQL = resolve(here, '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-d778-transcribe-0123456789';
 const FOUNDER = 1; const PID = 7; const IID = 31;
 const KEY = `validate-audio/interviews/${IID}.webm`;

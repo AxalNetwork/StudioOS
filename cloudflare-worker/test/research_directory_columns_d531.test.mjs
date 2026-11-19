@@ -84,8 +84,10 @@ const probesOf = (db) => ({
 
 test('D531: the repo now builds production\'s 37 columns for this table, and lacks exactly the 24 without 375', () => {
   // D531 compares the 2026-10-04 production snapshot. Migration 405 later adds
-  // sic_codes, so keep that later column out of this historical comparison.
-  const later = postCutoffMigrations(ROOT).filter((m) => m.name !== '405_research_company_directory_companies_house.sql');
+  // sic_codes, and D7175's adds website_verified_at, so keep those later
+  // columns out of this historical comparison.
+  const LATER = new Set(['405_research_company_directory_companies_house.sql', '202611180051_7175_competitor_subject_and_verified_website.sql']);
+  const later = postCutoffMigrations(ROOT).filter((m) => !LATER.has(m.name));
   assert.ok(later.some((m) => m.name === FILE), '375 is not among the migrations above the cutoff');
   const prod = only(columnsOf(productionShape()));
   assert.equal(prod.size, 37, '228 declares 13 columns and production added 24');

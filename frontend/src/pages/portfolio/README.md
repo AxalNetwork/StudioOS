@@ -49,9 +49,9 @@ own Retry; neither is a bar or a zero. The Overview's summary moved here as
 D4817 part 4 (canvas PF-04) draws Reports
 (`../investor/InvestorPortfolioUpdates.jsx` at `/portfolio/updates`) in the
 same frame (`tab="updates"`). The obligations inbox is one row per company in
-the reporting population (`obligationRowsOf`): its period, a Due cell that
-says no due date is recorded (`NO_DUE_DATE`) rather than counting overdue
-days, the last update received, the shared `ObligationStatus`, what is
+the reporting population (`obligationRowsOf`): its period, a Due cell with
+the Worker's due day or "Overdue by N days" (`dueOf`, D6204; Not recorded
+with the reason, `NO_DUE_DATE`, when the read gives none), the last update received, the shared `ObligationStatus`, what is
 missing against the required KPI set (`missingFor`, measured only against an
 update for the period, `periodCovers`) and the last chase (`lastChaseOf`). The
 report detail opens in the shared Sheet with each field's source and date
@@ -116,11 +116,27 @@ Activity; `company.css` holds their styles on the frame's tokens. The name is
 drawn only once an authorised read has named the company. Decision notes:
 `documentation/architecture/decisions/D4817-p6.md`.
 
+D6208 (#6208) adds the Overview table's Sector, Stage and Reporting filters
+and its sort (`filterRows`, `filterOptionsOf`, `sortRows`, `tableCaptionOf`
+in the model) and the header's Export on the Overview and on Performance.
+`PortfolioExport.jsx` draws Export, one button or a menu of choices, and
+writes only through `exportView` (`../../lib/csvExport.js`); the model's
+`companyExportOf`, `quarterExportOf` and `cohortExportOf` decide what each
+file holds, or why there is nothing to write. Decision notes:
+`documentation/architecture/decisions/D6208.md`.
 D6227 (#6227) turns Activity into one timeline: the Worker's joined read
 `GET /api/positions/:uid/activity` (client `../../lib/api/positionActivity.js`),
 drawn by `CompanyActivity` through `companyModel.js`' `activityOf`. A source
 the Worker reports as failed is named with its own Retry, never read as no
 activity. Decision notes: `documentation/architecture/decisions/D6227.md`.
+D6222 (#6222) adds the investor's private notes to the company Overview:
+`CompanyNotes.jsx` holds the read and its writes (`useCompanyNotes`, client
+`../../lib/api/portfolioNotes.js`, Worker `/api/portfolio-notes`) and
+draws the Notes card (add, edit, delete, each note with its dates), where
+What changed's "Save as my note" lands. A failed read is Unreadable with a
+Retry, never "no notes"; a failed save keeps the text with the sentence for
+the refusal's code (`NOTE_SENTENCES`). Decision notes:
+`documentation/architecture/decisions/D6222.md`.
 D4817 part 9 (addendum PFA03–PFA05, PFA10) rebuilds the company Reports'
 "Ask for this report" and "Waive this period". `reportAsk.js` holds the pure
 rules (the most pressing open period, its obligation facts, who may act from
@@ -142,3 +158,21 @@ through `PortfolioPreview.jsx`' `OffWrites`. `previewCompanyTabOf` names the
 company addresses, so `pageOwnsPreviewBanner` (and App.jsx's
 `PREVIEW_BANNER_COMPANY`) stand the shell's strip down there too. Decision
 notes: `documentation/architecture/decisions/D4817-p10.md`.
+
+D6867 (#6867, canvas D6217 PF-13) adds the shareable statement: a
+Statement action on Overview and Performance opens `StatementSheet.jsx` (the
+sheet: the quarter-end chooser, the preview strip, the mismatch note, the
+cover note, Download PDF and the downloaded confirmation; `statement.css`
+holds its styles on the frame's tokens). `statementModel.js` is its pure half
+(`statementDatesOf`, `previewOf`, `mismatchOf`, `fundedAfter`,
+`summaryRowsOf`, `positionRowsOf`, `statementOf`) and owns `METHODOLOGY`,
+which Performance draws and page 5 prints word for word. The PDF is
+`../../lib/portfolioStatementPdf.js`. Decision notes:
+`documentation/architecture/decisions/D6867.md`.
+D6888 (#6888, canvas D6217 PF-13a and PF-13h) adds Eadwyn's covering-note
+proposal for the statement: `StatementCoverNote.jsx` is the card (Copy, Edit,
+Discard, and "Eadwyn is unavailable. The statement does not need it." when
+Eadwyn is off), and `coverNoteModel.js` holds its words and what each answer
+reads as. It drafts on the press from the statement's own figures for the date
+and keeps nothing. The Statement sheet mounts it after #6867. Decision notes:
+`documentation/architecture/decisions/D6888.md`.

@@ -14,15 +14,15 @@ addresses here with DR24's notice.
 | File | What it is |
 |---|---|
 | `DataRoomTool.jsx` | The tool's tab bar (`DataRoomTabBar`), Home's tab bar and blocks (`DataRoomHomeNav`), and its tab pages (`DataRoomTabPage`): every tab reads the founder's room for the venture's uid and DR18's no-permission board on a refusal, then draws its own component. A file's lightbox is drawn over Files. |
-| `dataRoomModel.js` | Pure: the addresses, the seven tabs, the words, and the derivations from the room read that Files and Access draw. |
+| `dataRoomModel.js` | Pure: the addresses, the seven tabs, the words, and the derivations from the room read that Files and Access draw; Home's own primary, first use and set-up actions (D5081 part 4). |
 | `activityModel.js` | Pure (D1108): Activity's period, the chart and its table, the period before, by investor, the log's words (a link issued is never a read, a refusal never an open), its page count and the phone's seven days. |
 | `DataRoomActivity.jsx` | DR10, DR11 and DR22c: Activity from D1105's read, with the period, investor and event filters, the pages, View as table and Export (CSV). |
 | `checklistModel.js` | Pure (D1108): the twelve items in their areas, each state and the Worker's reason in words, file chips, what to do next; the proposals' and readiness figure's waits. |
-| `DataRoomChecklist.jsx` | DR12 and DR14: the checklist from D1105's read, links to Files and Upload, and Eadwyn's proposals as Not read here yet. |
+| `DataRoomChecklist.jsx` | DR12 and DR14: the checklist from D1105's read, links to Files and Upload, Eadwyn's proposals, and a card that links Fundraising readiness. |
 | `previewModel.js` | Pure (D1108): the grants to view as, and the room as one grant sees it, naming only what the preview read returns and counting the rest. |
 | `DataRoomPreview.jsx` | DR13 and DR13e: Preview from D1103's read, per grant; an ended grant's one sentence. |
 | `filesModel.js` | Pure (D1106): who can open a file (the investor rule, then each grant's folders), the tree and table, every dialog's words with who gains or loses, the upload queue, storage, and Home's blocks. |
-| `DataRoomHome.jsx` | DR1, Home's blocks: the counts, Needs you (with the open access requests from D1104's queue, D1284), who has access, what was added; the last ninety days say what they wait for. |
+| `DataRoomHome.jsx` | DR1, Home's blocks: the counts, Needs you (with the open access requests from D1104's queue, D1284), who has access, what was added, the last ninety days' door to Activity, and the diligence checklist's coverage from D1105's read (D5081 part 4); on first use, one card with its set-up actions. |
 | `DataRoomFiles.jsx` | DR2, Files: the folder tree, search, the table and the bulk bar (Move, Set gate, Set end date, Match to checklist, Remove, Clear). |
 | `DataRoomSearch.jsx` | #3938 part 2: search inside the files, on the room's own index; no model to pick. The founders' Index files for search; `shared` searches as an investor. Mounted at the top of Files. |
 | `DataRoomFile.jsx` | DR3 and DR15, one file's sheet (the shared `Sheet`, D1317) at `/raise/data-room/file/<id>`: who can open it now and why, its gate, what it answers, its versions with Make current, and the links issued and refusals. |
@@ -40,8 +40,12 @@ addresses here with DR24's notice.
 ## Where the tool lives
 
 The tool is the Data room module, not a page beside it. Home is CycleRoute's
-module page (coverage, opens and the Files records), with `DataRoomHomeNav`'s
-tabs and blocks above it. The tab words (`/files`, `/access`, `/requests`,
+module page, and since D5081 part 4 (#5081, RA-19) Home owns it: CycleRoute
+passes `owned`, so the page draws its header, `DataRoomHomeNav`'s tabs and
+blocks, and the module's own parts, with no generic Last 90 days card or Files
+records under them. Home reports the header's primary (Complete data room,
+`homeAction`) up through `onAction`, and each tab page draws the same action
+from its own room read. The tab words (`/files`, `/access`, `/requests`,
 `/activity`, `/checklist`, `/preview`) arrive on the module's record route,
 `/raise/:slug/:id`, and CycleRoute draws `DataRoomTabPage` for them instead of
 a record (`isDataRoomTab`). A file's sheet over Files is

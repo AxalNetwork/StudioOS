@@ -338,3 +338,58 @@ export const WAITS = Object.freeze({
   trajectory: 'The trajectory across model versions is not stored yet (part 5).',
   fairness: 'The quarterly fairness check by stage, sector, studio and connector use is not computed yet (part 3).',
 });
+
+/* ------------------------------------------------------------------ *
+ * D4815 part 51 (#5905, board DE05): the deal page's Scorecard tab
+ * ------------------------------------------------------------------ */
+
+/** DE05's Change column: no investor read carries a change since the last visit yet (#6173). */
+export const CHANGE_NOT_RECORDED = 'The scorecard read carries no change since your last visit.';
+
+const CONF_TITLE = Object.freeze({ high: 'High', medium: 'Medium', low: 'Low' });
+
+/**
+ * One scope as the shared score's cell (`ScopeScore`, D5900): the band and confidence the read
+ * sent, or the state's own word. The five states DE05 keeps apart are each their own kind:
+ * scored, not_enough (Not enough recorded), not_expected (Not expected yet), locked (the value
+ * before the NDA, drawn in the Value column) and unreadable. A scope never scored is its own word.
+ */
+export function scoreCellOf(s) {
+  const label = s?.label || 'Scope';
+  if (!s || s.state === 'not_read' || s.state === 'not_scored') return { kind: 'not_scored', word: NOT_SCORED, title: `${label}: ${NOT_SCORED}` };
+  if (s.state === 'unreadable') return { kind: 'unreadable', word: 'Unreadable', title: STATE_WORDS.scope_unreadable(label) };
+  if (s.state === 'not_expected') return { kind: 'not_expected', word: NOT_EXPECTED, title: `${label}: ${NOT_EXPECTED}` };
+  if (s.state !== 'scored' || !s.band || !s.confidence) return { kind: 'not_enough', word: NOT_ENOUGH, title: `${label}: ${NOT_ENOUGH}` };
+  const word = bandWord(s.band, s.key);
+  return { kind: 'scored', word, band: s.band, confidence: CONF_TITLE[s.confidence] || null, title: `${label}: ${word}, ${s.confidence} confidence` };
+}
+
+/** The Value column: the 0–100 value when the read sent one, Locked before the NDA, otherwise nothing. */
+export function valueOf(s, masked) {
+  if (s?.state !== 'scored') return { kind: 'none' };
+  if (masked) return { kind: 'locked', cell: { kind: 'locked', word: 'Locked', title: 'The value opens after you sign the NDA.' } };
+  return s.value == null ? { kind: 'none' } : { kind: 'value', text: String(Math.round(Number(s.value))) };
+}
+
+/**
+ * The Evidence column: what the scope's inputs rest on, from the grades the read sent (never a
+ * value). Before the NDA it opens later; a scope whose inputs the read did not carry says so.
+ */
+export function evidenceOf(s, masked) {
+  if (masked) return { state: 'after_nda', text: 'After the NDA' };
+  if (s?.state === 'not_expected') return { state: 'out', text: 'Not expected yet' };
+  if (!Array.isArray(s?.inputs)) return { state: 'not_read', text: 'Not read here' };
+  const mix = gradeMix(s.inputs);
+  const parts = GRADES.filter((g) => mix[g.key]).map((g) => `${mix[g.key]} ${g.label.toLowerCase()}`);
+  if (!parts.length) return { state: 'none', text: 'None recorded', mix };
+  return { state: 'graded', text: parts.join(' · '), mix };
+}
+
+/** The views on the Evidence tab that hold a scope's own context (D1151): Team, Market and Traction. */
+export const CONTEXT_VIEW = Object.freeze({ team: 'team', market: 'market', traction: 'traction' });
+
+/** D6168 (#6168): the scope an address names (`?scope=team`), when it is one of the eleven; otherwise none. */
+export function scopeParam(word) {
+  const key = String(word ?? '');
+  return SCOPES.some((s) => s.key === key) ? key : null;
+}

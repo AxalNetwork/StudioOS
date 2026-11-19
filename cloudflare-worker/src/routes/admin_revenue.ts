@@ -62,6 +62,12 @@
  * slowest external call; the page reads that endpoint separately so one
  * unreadable zone does not take the other four down with it.
  *
+ * D5950 — THE READ MODEL. `metrics` answers every Revenue metric in one envelope
+ * (services/revenueReadModel.ts): its source, period, currencies, last
+ * reconciliation, incomplete rows and coverage gap. Revenue per subsidiary
+ * (#5947) and AI margin per licence (#5948) are `not_available` with their
+ * issue named until those slices ship. The blocks above stay as they were.
+ *
  * Mounted at /api/admin/revenue BEFORE the catch-all /api/admin in index.ts.
  */
 import { Hono } from 'hono';
@@ -75,6 +81,7 @@ import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
 import { promoState } from '../services/promos';
 import { licenceFeeReceivables } from '../services/licenceFeeReceivables';
 import { subscriptionRevenue } from '../services/subscriptionRevenue';
+import { revenueReadModel } from '../services/revenueReadModel';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -163,6 +170,8 @@ export const SUMMARY_TEMPORAL = Object.freeze({
   // D5036: invoiced, collected, outstanding and void follow the quarter (by issue date); its receivable and overdue
   // list are as at today, and say so in their own `basis`.
   licence_invoices: 'period',
+  // D5950: every metric in the read model follows the quarter and carries its own `period`.
+  metrics: 'period',
 });
 
 r.get('/summary', async (c) => {
@@ -311,6 +320,10 @@ r.get('/summary', async (c) => {
 
   const subscriptions = await subscriptionRevenue(env, quarter);
 
+  // D5950 — the read model: one envelope per metric (source, period, currencies, last reconciled, incomplete rows,
+  // coverage gap). It reuses the two readers' results above, and each metric fails alone.
+  const model = await revenueReadModel(env, quarter, readAt, { subscriptions, licenceInvoices });
+
   return c.json({
     quarter,
     // D5039: the quarter today falls in, whether or not it was the one asked for, and when this was read.
@@ -323,6 +336,7 @@ r.get('/summary', async (c) => {
     token_cost: tokenCost,
     promos,
     usage_coverage: usageCoverage,
+    metrics: model.metrics,
 
     subscriptions,
     subscriptions_available: subscriptions.state === 'complete' || subscriptions.state === 'incomplete',

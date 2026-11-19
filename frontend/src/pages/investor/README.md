@@ -14,6 +14,11 @@ the generic route wrapper once a canvas has graduated.
   commitment for an investor on HQ only. It never draws a balance, and the
   account id lives in state only. `proofOfFundsModel.js` holds its words and
   rules, pure, and fills in the Worker's own consent and statement words.
+- `FundTermsForm.jsx` (D6235, #6235) is Create a fund record on the Fund
+  overview's no-fund state (FV1b, `POST /api/funds`) and Edit terms on the
+  fund page (`PATCH /api/funds/:id`) for the general partner of record. Its
+  rules and words are in `fundTermsModel.js`, pure, which reuses the admin
+  console's parsers in `../admin/fundAdmin/fundsModel.js`.
 - `PortfolioCompanyPage.jsx` (D1056, #2427) is the investor's page per
   portfolio company at `/portfolio/companies/:uid`, with Figures, Reports
   (`/reports`) and Terms (`/terms`). The header is the caller's own position
@@ -22,7 +27,9 @@ the generic route wrapper once a canvas has graduated.
   frozen figures of the reports received, the Reports timeline with Read, Ask
   and Waive, Terms read only, the reader (640 wide) and the holding notes. Its
   address rules live in `../cycles/reportingModel.js`; the reporting words and
-  sums in `portfolioReportsModel.js`, pure.
+  sums in `portfolioReportsModel.js`, pure. D6224 (#6224): Figures offers
+  "Download figures (CSV)", built in the browser from the same rows, with no
+  read of its own.
 - `PortfolioReports.jsx` (D1061, #2931) is RPT9 at the top of Portfolio ›
   Reports (`InvestorPortfolioUpdates.jsx`): four tiles and one row per company
   the investor signed into, from `GET /api/reporting/portfolio`, with filters
@@ -41,6 +48,11 @@ the generic route wrapper once a canvas has graduated.
   `GET /api/investor-profile/me`, with "Edit in Settings ›" to the My thesis
   card (`/account/security-privacy`), "No thesis set" when empty and
   "Your thesis could not be read · Try again" on a failed read.
+  D6129 (#6129) adds the profile's own chips and a struck-through Excludes group.
+- `investorHomeModel.js` (D6129, #6129) holds Investor Studio home v2's
+  rules, pure, with `today` handed in: Needs you's rows and order, Funds per
+  fund, Returns, Thesis fit's chips and Arrivals. Its modules are drawn by
+  `../studio/tiles/investorHomeModules.jsx`.
 - The seven Portfolio and Fund zone pages draw their header through
   `frontend/src/workspaces/ZoneHeader.jsx` inside a `ZonePrimaryScope` (D1424), so the zone's
   indigo primary (Chase all overdue, Log support, Add LP, New call) sits in the
@@ -83,6 +95,9 @@ the generic route wrapper once a canvas has graduated.
   registry and the rule for adding to it; a zone with no file there still falls
   through to the workspace, which serves the bucket root at `/deals` either
   way.
+- `FundOverviewParts.jsx`, `FundQuarterChart.jsx` and `fundOverviewModel.js`
+  (D6234, #6234) are the Fund overview's tiles, quarterly chart and pack gaps;
+  `FundHistoryPage.jsx` is a fund's quarterly history at `/funds/history`.
 
 `/network` and `/research` are role-branched on one route rather than
 split into two — see the comment above each `<Route>` in `App.jsx` before
@@ -237,4 +252,11 @@ The owner removed the AI side rail from `/spinout-lab/investor-workspace`
 zero-rail expectation is recorded in `NO_RAIL_ROUTES` for investors;
 other Investor boards retain their existing rails.
 
+`RoundCallIndex.jsx` (D6160, #6160) is the investor's round calls list at
+`/round-calls`, drawn inside `../../workspaces/investor/InvestorDealsRoutes.jsx`'
+shell (canvas DCA16, DCA17, DCA20, DCA21): each row names the company and
+shows the investor's own response or "No response recorded", with Coming
+soon, verification, empty and Unreadable states. Its words, filters and sort
+live in `roundCallsModel.js`, pure. A founder's `?project_id` list stays in
+`../founder/RoundCallPage.jsx`.
 `introCreditModel.js` (D6262) uses the introduction service's spendable balance and counterpart answer, preserving unknown versus recorded zero and preventing acceptance against an unread balance.

@@ -318,6 +318,15 @@ export async function sweepPlatformCapacity(env: Env, now: Date = new Date(), op
     console.warn('[section-incident-outbox] drain unavailable');
     incidentDelivery = 'unavailable';
   }
+  // D5984: off unless AXAL_SECTION_INCIDENT_GITHUB is 'enabled'; only then does it call GitHub.
+  if (env.AXAL_SECTION_INCIDENT_GITHUB) {
+    try {
+      const { syncSectionIncidentIssues } = await import('./sectionIncidentIssue');
+      await syncSectionIncidentIssues(env, now);
+    } catch {
+      console.warn('[section-incident-issue] pass unavailable');
+    }
+  }
   return { section_incident_delivery: incidentDelivery, ...(delivery ? { section_delivery: delivery } : {}), level: report.level, snapshot_rows: written, actions: actions.filter((a) => a.kind !== 'touch').length, notified };
 }
 

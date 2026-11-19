@@ -18,7 +18,8 @@ export const GROW_AREAS = Object.freeze([
  */
 export const GROW_MODULE_TITLES = Object.freeze({
   'team-expansion': 'Talent · Roles',
-  'partner-network': 'Partnerships · Partners',
+  // D6118 (#6118): Partnerships is one page now, partners and co-marketing, so it is not half of a pair.
+  'partner-network': 'Partnerships',
 });
 export const growArea = (key = '') => GROW_AREAS.find((a) => a.key === key || a.aliases.includes(key)) || null;
 /** A Grow module page's heading: its own title where it has one, else its area's name. */

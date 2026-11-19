@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Sign-in and Licence Access · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies · #7044 (4 of 6, part of #7040) · RS-16 A–C · continues Research v2 (#3701), reuses Sign In v2 (#6956) and the public Intelligence card (#6980)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Research Companies · from a public link to the exact company, through sign-in and setup, and only where a held licence allows</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The handoff into Research → Companies for someone arriving from the public Intelligence card, a filtered directory link or a shared company profile. The requested relative path and query travel through the existing sign-in (Sign In v2, unchanged), sign-up and any required account setup; before sign-in the screens name only the area, “Companies”, never the search or the company. After sign-in the page opens exactly as asked when a held licence admits it (Founder or Advisor, an active Spin-Out Lab, or an admin). Members with two licences follow #3704: no licence switcher, the sidebar is the union of held licences, and the route, the Research zone list, Markets cross-links and the actions all read the same held-licence rule. Actions shown are only the ones the member can use; a member without a qualifying licence gets a Refused boundary with existing destinations. States follow Platform States (D5129). Violet dashed ◇ tags mark proposed Worker behaviour; amber ⚑ tags mark owner decisions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · Halden Grid, Tidewater Systems, the funds, the members, maya.okafor@example.com and every figure are fictional; the artwork is the production asset</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Sign-in and Licence Access Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-16-00', 'Journey and rules', 'Three ways in, the existing sign-in, sign-up and setup, then admission by held licences: the exact page, Company not found, or Refused. The rules every step follows, the annotation key and the sizes.', [W('RCL00')]],
+      ['RS-16A-01', 'Entry · public card', 'The public Intelligence page, 02 Research, as #6980 draws it, with one addition: “Open Companies →” on the Companies card, to /research/companies.', [C('RCL01', 'Desktop 1440 · 02 Research', 1440, 619)]],
+      ['RS-16A-02', 'Entry · sign-in keeps the destination', 'The Sign In v2 card, unchanged, with the destination heading “Sign in to continue to Companies”. Then the Email chooser, the sent email and Create an account, each carrying only the generic label.', [F('RCL02', 'Sign in · desktop', 900), C('RCL02B', 'Chooser · link sent · create account', 1340, 537)]],
+      ['RS-16A-03', 'What travels and what shows', 'For each arrival: the path kept as next, what the public screen shows, and what never appears before sign-in. Where next is kept in code, and the new destination line.', [W('RCL03')]],
+      ['RS-16A-04', 'Required setup and return', 'Existing account setup (placeholder) with the destination kept; then signed in, “Your account is ready · Continue to Companies”, an expired link that keeps next, and a stale session.', [F('RCL04', 'Required setup · destination kept', 900), C('RCL04B', 'Signed in · setup finished · auth failed · stale session', 1760, 600)]],
+      ['RS-16B-05', 'Eligible member · exact page', 'A Founder reaches the exact company profile, then the exact filtered results, each with a Restored status. Founder actions: Add to research and Compare.', [F('RCL05', 'Founder · company profile', 1000), F('RCL05B', 'Founder · filtered results', 900)]],
+      ['RS-16B-06', 'Investor (primary) + Founder', 'The sidebar is the union of both licences. The held Founder licence opens Companies and its actions. Beside it: what main does today for the same member, and the proposal.', [F('RCL06', 'Company profile', 1000), C('RCL06B', 'Today on main · proposed', 1340, 399)]],
+      ['RS-16B-07', 'Partner (primary) + Advisor, and Advisor', 'Both read Companies without founder-only actions: no checkboxes, no Add to research, no Compare; fund names are text because Funds is founder-only.', [F('RCL07', 'Partner + Advisor · filtered results', 900), F('RCL08', 'Advisor · company profile', 1000)]],
+      ['RS-16B-08', 'No qualifying licence', 'A Refused boundary in the member’s own shell, naming the licences that open Companies and offering Markets, Licences and Home. Nothing of the requested company is shown. Partner only, and a support session.', [F('RCL09', 'Investor only', 900), C('RCL09B', 'Partner only · support session', 1340, 358)]],
+      ['RS-16B-09', 'States after admission', 'Loading, Company not found with a return to Companies, Unavailable with Retry, None for kept filters that match nothing, filters the Worker rejects, and Not recorded in a restored profile.', [C('RCL10', 'Platform States', 1340, 616)]],
+      ['RS-16B-10', 'Direct links and in-app links agree', 'From Markets the related companies are links for an Investor + Founder member; from Geographies an Investor-only member sees names as text.', [C('RCL11', 'Markets · Geographies', 1340, 381)]],
+      ['RS-16B-11', 'Who reaches what', 'Every case with its held licences, what Companies does, the actions shown and what main does today, with the active Lab and admin-preview annotations and the owner decisions.', [W('RCL12')]],
+      ['RS-16B-12', 'Tablet and dark', 'The restored company at 768, and at 1440 in dark.', [C('RCL13', 'Tablet 768', 768, 1024), F('RCL14', 'Dark · desktop', 1000)]],
+      ['RS-16C-13', 'Phone 390', 'The public card, the existing sign-in sheet with the destination, link sent, signed in, the restored company, an auth failure that keeps next, sign-up completion, a stale session, the refusal, and the restored company in dark.', [P('RCL15A', 'Public card'), P('RCL15B', 'Sign in · destination'), P('RCL15C', 'Link sent'), P('RCL15D', 'Signed in'), P('RCL15E', 'Restored company'), P('RCL15F', 'Auth failed · next kept'), P('RCL15G', 'Sign-up complete'), P('RCL15H', 'Stale session'), P('RCL15I', 'Refused'), P('RCL15J', 'Restored · dark')]],
+      ['RS-16C-14', 'Focus, Back and keyboard', 'Keyboard order, focus on arrival, return focus, Back, auth failure, sign-up completion, stale session, targets and contrast.', [W('RCL16')]],
+      ['RS-16-15', 'Handoff', 'What was checked on main, what needs the Worker, what is frontend only, the components and tokens to reuse, and the owner decisions.', [W('RCL17')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -124,7 +124,10 @@ test('Home is the module page with the tabs; a section is still its record page;
   const home = await mounted('/raise/use-of-funds?project_id=3');
   try {
     assert.ok(home.testIds().includes('cycle-module') && home.testIds().includes('uof-tabs'));
-    assert.ok(home.hrefs().includes('/raise/use-of-funds/runway/forecast?project_id=3'), 'the tool link keeps the venture (broken item 8)');
+    // D5081 (RA-14): the generic "Open the forecast" door under Home is gone with the rest of the generic layer;
+    // the forecast is Runway's, one tab away, and both links keep the venture (broken item 8; the test above).
+    assert.ok(home.hrefs().includes('/raise/use-of-funds/runway?project_id=3'), 'the Runway tab keeps the venture');
+    assert.ok(!home.testIds().includes('cycle-module-tool'), 'no generic tool door under the tool');
   } finally { await home.close(); }
   const row = await mounted('/raise/use-of-funds/product?project_id=3');
   try {

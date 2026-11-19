@@ -275,7 +275,11 @@ test('Offer to studios: off keeps every grant and counts them; on needs a publis
   assert.deepEqual([(await offer(db, 'spinout-lab', true)).body.code], ['no_change']);
   // The canvas's refusals.
   assert.equal((await offer(db, 'product-testing', true)).body.code, 'runs_at_hq');
-  assert.equal((await offer(db, 'investor-cohorts', true)).body.code, 'not_built');
+  const investorOffer = await offer(db, 'investor-cohorts', true);
+  assert.deepEqual([investorOffer.status, investorOffer.body.code], [409, 'not_grantable']);
+  assert.equal(one(db, "SELECT grantable FROM program_grant_defaults WHERE program_key = 'investor-cohorts'").grantable, 0);
+  db.exec("UPDATE programs SET status = 'not_built' WHERE key = 'investor-cohorts'");
+  assert.equal((await offer(db, 'investor-cohorts', true)).body.code, 'not_built', 'an explicit not-built status still takes precedence');
   assert.equal((await offer(db, 'ai-native-venture', true)).body.code, 'not_published', 'its draft says: when HQ publishes it');
   db.exec("INSERT INTO program_playbook_versions (program_key, version, published_at) VALUES ('ai-native-venture', 1, '2026-10-24T00:00:00Z')");
   assert.equal((await offer(db, 'ai-native-venture', true)).body.code, 'not_grantable', 'D982’s readiness still holds it');

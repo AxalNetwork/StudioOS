@@ -7,7 +7,8 @@ import { useState } from 'react';
  *
  * NOTHING RUNS ON MOUNT, AND NOTHING IS WRITTEN BUT BY ACCEPT. The press asks the Worker for a draft; the Worker
  * stores nothing. The draft shows with the records its [n] numbers cite. Accept hands the text to the page
- * (`onAccept`), which decides what Accept writes; Discard forgets it. A refusal (AI off, the budget, nothing
+ * (`onAccept`, given the text and the whole draft), which decides what Accept writes; Discard forgets it. `onAccept`
+ * may be async: a returned sentence (or a rejected write) keeps the draft and shows the sentence. A refusal (AI off, the budget, nothing
  * recorded) is the Worker's own sentence, shown beside the button.
  *
  * `acceptBlocked`: where Accept cannot write yet, the sentence that says why, in place of the button.
@@ -27,10 +28,14 @@ export default function FundDraftBand({ title, body, writes, run = 'Draft it', o
       setState({ busy: false, draft: null, error: sentence });
     }
   };
-  const accept = () => {
-    if (!state.draft || !onAccept) return;
-    const refusal = onAccept(state.draft.body.trim());
-    if (typeof refusal === 'string' && refusal) setState((s) => ({ ...s, error: refusal }));
+  const accept = async () => {
+    if (!state.draft || !onAccept || state.busy) return;
+    const draft = state.draft;
+    setState((s) => ({ ...s, busy: true, error: null }));
+    let refusal;
+    try { refusal = await onAccept(draft.body.trim(), draft); }
+    catch (failure) { refusal = failure?.message || 'The draft could not be kept. Nothing was written. Try again.'; }
+    if (typeof refusal === 'string' && refusal) setState({ busy: false, draft, error: refusal });
     else setState({ busy: false, draft: null, error: null });
   };
   return <article className="fd-card fd-draft" aria-label={title} data-testid={testId}>
@@ -44,7 +49,7 @@ export default function FundDraftBand({ title, body, writes, run = 'Draft it', o
       <h3>Drawn from</h3>
       <ol className="fd-draft-sources">{state.draft.sources.map((s) => <li key={s.n} value={s.n}>{s.label}{s.date ? ` · ${s.date}` : ''}</li>)}</ol>
       <div className="fd-actions">
-        {onAccept ? <button type="button" onClick={accept}>Accept</button> : acceptBlocked ? <p>{acceptBlocked}</p> : null}
+        {onAccept ? <button type="button" disabled={state.busy} onClick={accept}>{state.busy ? 'Keeping…' : 'Accept'}</button> : acceptBlocked ? <p>{acceptBlocked}</p> : null}
         <button type="button" onClick={() => setState({ busy: false, draft: null, error: null })}>Discard</button>
       </div>
     </>}

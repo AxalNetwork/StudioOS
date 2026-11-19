@@ -6,11 +6,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { sessionRowState } from '../src/lib/sessionRows.js';
 import { effectiveDisplayName } from '../src/lib/displayName.js';
+import { readAccountPage } from './_accountSource.mjs';
 
-const page = readFileSync(new URL('../src/pages/SettingsPage.jsx', import.meta.url), 'utf8');
+const page = readAccountPage();
 
 test('a session row is drawn from its status: only an active one offers Revoke; history says why it ended', () => {
   // Mutation checked: an expired or signed-out row drawn as a live device.

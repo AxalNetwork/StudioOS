@@ -55,6 +55,9 @@ import {
 } from './_partner_workspace_helpers';
 import { logActorAct } from '../services/actorLog';
 import { statusReportAccess } from '../services/statusReportAccess';
+import {
+  blockersAtSend, dateInput, decodeCursor, encodeCursor, linkInput, pageLimit, pageOfBook, refuse, textInput,
+} from '../services/deliveryHistory';
 
 const partnerDelivery = new Hono<{ Bindings: Env }>();
 
@@ -198,6 +201,16 @@ async function ownChild(
   return row;
 }
 
+/**
+ * #4709 (D4709) — ONE PAGE OF THE BOOK. Board and Health read every
+ * engagement, because their figures (needs attention, unrated, satisfaction)
+ * are about the whole book, and return one page of rows: newest first, the id
+ * breaking a tie, so a page boundary never repeats or skips one. The page
+ * size is the old fixed limit, so a book that fitted still comes back whole.
+ */
+const BOOK_PAGE = 200;
+const bookKey = (r: any): [string, number] => [String(r.created_at ?? ''), Number(r.engagement_id)];
+
 /** The current period label, from the server clock. */
 function currentPeriod(now = new Date()): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -234,6 +247,9 @@ function currentPeriod(now = new Date()): string {
 partnerDelivery.get('/board', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
+    // #4709: the board's figures are counted over the whole book; `items` is one page of it.
+    const cursor = decodeCursor(c.req.query('cursor'), 2);
+    const limit = pageLimit(c.req.query('limit'), BOOK_PAGE);
     const now = new Date();
     const period = currentPeriod(now);
     // Hours are logged by month and a retainer's hours are sold by ITS period
@@ -243,7 +259,7 @@ partnerDelivery.get('/board', async (c) => {
 
     const engagements = await c.env.DB.prepare(
       `SELECT e.id, e.uid, e.status, e.price, e.delivered_at, e.cancelled_at,
-              e.invoiced_at, e.invoice_id,
+              e.invoiced_at, e.invoice_id, e.created_at,
               n.title AS need_title, f.name AS founder_name,
               r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
               r.amount_cents, r.retained_hours, r.renews_at, r.ended_at
@@ -252,8 +268,7 @@ partnerDelivery.get('/board', async (c) => {
          LEFT JOIN founders f ON f.id = e.founder_id
          LEFT JOIN partner_retainers r ON r.engagement_id = e.id
         WHERE e.partner_id = ?
-        ORDER BY e.created_at DESC
-        LIMIT 200`,
+        ORDER BY e.created_at DESC, e.id DESC`,
     ).bind(partnerId).all<any>();
 
     // The same join-back-to-owner shape every read in this file uses: nothing
@@ -383,6 +398,7 @@ partnerDelivery.get('/board', async (c) => {
         engagement_id: id,
         engagement_uid: e.uid,
         status: e.status,
+        created_at: e.created_at ?? null,
         client: e.founder_name ?? null,
         scope: e.need_title ?? null,
         price: e.price === null || e.price === undefined ? null : Number(e.price),
@@ -448,8 +464,11 @@ partnerDelivery.get('/board', async (c) => {
     const embeddedLive = live.filter((i: any) => i.mode === 'embedded' && !i.cancelled_at);
     const embeddedPriced = embeddedLive.filter((i: any) => i.recurring_monthly_cents !== null);
     const embeddedCents = embeddedPriced.reduce((a: number, i: any) => a + i.recurring_monthly_cents, 0);
+    const paged = pageOfBook(items, bookKey, cursor, limit);
     return c.json({
-      items,
+      items: paged.rows,
+      // #4709: which page this is. Every figure below is over the whole book (`page.total` engagements).
+      page: paged.page,
       period,
       // The artboard's four tiles, each summed over the whole board rather than
       // any narrowed view, and each named for what it counts.
@@ -488,11 +507,13 @@ partnerDelivery.get('/board', async (c) => {
 partnerDelivery.get('/health', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
+    const cursor = decodeCursor(c.req.query('cursor'), 2);
+    const limit = pageLimit(c.req.query('limit'), BOOK_PAGE);
     const now = new Date();
     const period = currentPeriod(now);
 
     const engagements = await c.env.DB.prepare(
-      `SELECT e.id, e.uid, e.status, e.price, e.founder_id, e.delivered_at, e.cancelled_at,
+      `SELECT e.id, e.uid, e.status, e.price, e.founder_id, e.delivered_at, e.cancelled_at, e.created_at,
               n.title AS need_title, f.name AS founder_name,
               r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
               r.amount_cents, r.retained_hours, r.renews_at, r.ended_at
@@ -501,8 +522,7 @@ partnerDelivery.get('/health', async (c) => {
          LEFT JOIN founders f ON f.id = e.founder_id
          LEFT JOIN partner_retainers r ON r.engagement_id = e.id
         WHERE e.partner_id = ?
-        ORDER BY e.created_at DESC
-        LIMIT 200`,
+        ORDER BY e.created_at DESC, e.id DESC`,
     ).bind(partnerId).all<any>();
 
     // Four scoped reads rather than one per engagement — the same join-back-to
@@ -619,6 +639,7 @@ partnerDelivery.get('/health', async (c) => {
         engagement_id: Number(e.id),
         engagement_uid: e.uid,
         status: e.status,
+        created_at: e.created_at ?? null,
         // RETURNED SO "LIVE" MEANS SOMETHING. The strip's satisfaction rule
         // holds the firm-wide average back while any LIVE engagement is
         // unscored; without this column every cancelled engagement in the book
@@ -700,8 +721,10 @@ partnerDelivery.get('/health', async (c) => {
       ? withUtil.reduce((a: any, b: any) => (b.utilisation_pct < a.utilisation_pct ? b : a))
       : null;
 
+    const paged = pageOfBook(items, bookKey, cursor, limit);
     return c.json({
-      items,
+      items: paged.rows,
+      page: paged.page,
       period,
       read_tracking: readTracking,
       rated_count: rated,
@@ -806,7 +829,7 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
       }, 400);
     }
     const at = has('satisfaction_at')
-      ? trimOrNull(b.satisfaction_at, 40) : (current?.satisfaction_at ?? null);
+      ? dateInput(b.satisfaction_at, 'The date it was said') : (current?.satisfaction_at ?? null);
 
     // #5314 part 3 (D4822): the row the person was shown, or none. Omitted
     // keys above are merged from `current`, so the write is guarded on that
@@ -966,14 +989,15 @@ partnerDelivery.post('/engagements/:engagementId/milestones', async (c) => {
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const b = await body<any>(c);
-    const title = trimOrNull(b.title, 200);
+    const title = textInput(b.title, 200, 'The title');
     if (!title) return c.json({ detail: 'A milestone needs a title' }, 400);
+    // #4709: dates are checked before they are stored.
     const ins = await c.env.DB.prepare(
       `INSERT INTO engagement_milestones (uid, engagement_id, title, due_at, completed_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      newUid(), engagementId, title, trimOrNull(b.due_at, 40),
-      trimOrNull(b.completed_at, 40), nowIso(), nowIso(),
+      newUid(), engagementId, title, dateInput(b.due_at, 'The due date'),
+      dateInput(b.completed_at, 'The completed date'), nowIso(), nowIso(),
     ).run();
     const row = await c.env.DB.prepare('SELECT * FROM engagement_milestones WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<any>();
@@ -986,11 +1010,21 @@ partnerDelivery.post('/engagements/:engagementId/milestones', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/** #4709: a milestone's fields as sent, checked before the merge. */
+function milestoneInputs(raw: any): any {
+  const b = { ...(raw || {}) };
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+  if (has('title')) b.title = textInput(b.title, 200, 'The title');
+  if (has('due_at')) b.due_at = dateInput(b.due_at, 'The due date');
+  if (has('completed_at')) b.completed_at = dateInput(b.completed_at, 'The completed date');
+  return b;
+}
+
 partnerDelivery.patch('/milestones/:id', async (c) => {
   try {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    const b = await body<any>(c);
+    const b = milestoneInputs(await body<any>(c));
     let bad: string | null = null;
     const res = await patchCurrent({
       read: () => ownChild(c.env, partnerId, 'engagement_milestones', id, 'Milestone'),
@@ -1185,6 +1219,52 @@ function medianDaysToOpen(items: any[]): { value: number | null; opens: number }
   return { value: days.length % 2 ? days[mid] : (days[mid - 1] + days[mid]) / 2, opens: days.length };
 }
 
+/**
+ * #4709 (D4709) — each deliverable's corrections, oldest first: the values a
+ * change to a sent deliverable replaced, why, who made it and when.
+ */
+async function correctionsFor(env: Env, ids: number[]): Promise<Map<number, any[]>> {
+  const out = new Map<number, any[]>();
+  if (!ids.length) return out;
+  const rows = await env.DB.prepare(
+    `SELECT k.*, u.name AS corrected_by_name
+       FROM engagement_deliverable_corrections k
+       LEFT JOIN users u ON u.id = k.corrected_by
+      WHERE k.deliverable_id IN (SELECT value FROM json_each(?))
+      ORDER BY k.deliverable_id, k.id`,
+  ).bind(JSON.stringify(ids)).all<any>();
+  for (const k of rows.results || []) {
+    const key = Number(k.deliverable_id);
+    if (!out.has(key)) out.set(key, []);
+    out.get(key)!.push({
+      id: Number(k.id),
+      revision: Number(k.revision),
+      was: { title: k.title ?? null, version: k.version ?? null, link_url: k.link_url ?? null, sent_at: k.sent_at ?? null },
+      reason: k.reason,
+      corrected_by: Number(k.corrected_by),
+      corrected_by_name: k.corrected_by_name ?? null,
+      corrected_at: k.corrected_at,
+    });
+  }
+  return out;
+}
+
+const DELIVERABLE_SENT = {
+  detail: 'That deliverable was sent, so it is a record of what the client received. Say why it is being corrected; the values it replaces are kept.',
+  code: 'deliverable_sent',
+};
+
+/** The four fields a client was handed, checked and normalised as they are stored. */
+function deliverableInputs(b: any): Record<string, string | null> {
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+  const out: Record<string, string | null> = {};
+  if (has('title')) out.title = textInput(b.title, 200, 'The title');
+  if (has('version')) out.version = textInput(b.version, 60, 'The version');
+  if (has('link_url')) out.link_url = linkInput(b.link_url);
+  if (has('sent_at')) out.sent_at = dateInput(b.sent_at, 'The sent date');
+  return out;
+}
+
 function deliverableDto(r: any, tracking: ReadTracking) {
   return {
     id: Number(r.id),
@@ -1224,28 +1304,83 @@ function unopenedFlag(r: any, tracking: ReadTracking): boolean | null {
   return false;
 }
 
+/**
+ * #4709 (D4709) — THE LOG IS PAGED; ITS FIGURES ARE NOT. Rows come newest
+ * sent first, unsent after, the id breaking every tie, a page at a time
+ * (`?cursor=`, `?limit=` up to 300). Sent, unopened, not recorded and the
+ * median are counted over every deliverable in the book from a narrow read of
+ * the four columns they need, so a firm with more than one page of history
+ * gets the same figures as one without.
+ */
+const DELIVERABLE_PAGE = 300;
+
 partnerDelivery.get('/deliverables', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
-    const rows = await c.env.DB.prepare(
-      `SELECT d.*, e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
-         FROM engagement_deliverables d
-         JOIN engagements e ON e.id = d.engagement_id
-         LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN founders f ON f.id = e.founder_id
-        WHERE e.partner_id = ?
-        ORDER BY d.sent_at IS NULL, d.sent_at DESC
-        LIMIT 300`,
-    ).bind(partnerId).all<any>();
+    const cursor = decodeCursor(c.req.query('cursor'), 3);
+    const limit = pageLimit(c.req.query('limit'), DELIVERABLE_PAGE);
+    // Keyset on (unsent, sent_at, id): the cursor's first part is 1 for an
+    // unsent row. A bound comparison of the raw text, in the same order the
+    // ORDER BY sorts it, so the boundary is exact whatever format a row holds.
+    if (cursor && cursor[0] !== 0 && cursor[0] !== 1) {
+      throw refuse({ status: 400, code: 'bad_cursor', detail: 'That page link is no longer valid. Start again from the first page.' });
+    }
+    const unsent = cursor ? Number(cursor[0]) : null;
+    const [rows, book] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT d.*, e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
+           FROM engagement_deliverables d
+           JOIN engagements e ON e.id = d.engagement_id
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN founders f ON f.id = e.founder_id
+          WHERE e.partner_id = ?
+            AND (? IS NULL
+              OR (? = 0 AND d.sent_at IS NOT NULL AND (d.sent_at < ? OR (d.sent_at = ? AND d.id < ?)))
+              OR (? = 0 AND d.sent_at IS NULL)
+              OR (? = 1 AND d.sent_at IS NULL AND d.id < ?))
+          ORDER BY d.sent_at IS NULL, d.sent_at DESC, d.id DESC
+          LIMIT ?`,
+      ).bind(
+        partnerId, unsent, unsent, cursor?.[1] ?? null, cursor?.[1] ?? null, cursor?.[2] ?? null,
+        unsent, unsent, cursor?.[2] ?? null, limit + 1,
+      ).all<any>(),
+      c.env.DB.prepare(
+        `SELECT d.sent_at, d.opened_at, d.link_url, d.signed_off_at, e.founder_id
+           FROM engagement_deliverables d
+           JOIN engagements e ON e.id = d.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+    ]);
     const readTracking = await bookReadTracking(c.env, partnerId);
-    const items = (rows.results || []).map((r: any) => deliverableDto(r, readTracking));
-    const sent = items.filter((d: any) => d.sent_at);
-    const unopened = items.filter((d: any) => d.is_unopened === true);
+    const pageRows = (rows.results || []).slice(0, limit);
+    const more = (rows.results || []).length > limit;
+    const items = pageRows.map((r: any) => deliverableDto(r, readTracking));
+    const corrections = await correctionsFor(c.env, items.map((d: any) => d.id));
+    for (const d of items as any[]) d.corrections = corrections.get(d.id) || [];
+    const all = (book.results || []).map((r: any) => ({
+      sent_at: r.sent_at ?? null, opened_at: r.opened_at ?? null, link_url: r.link_url ?? null,
+      signed_off_at: r.signed_off_at ?? null, founder_id: r.founder_id ?? null,
+      days_since_sent: r.sent_at ? daysBetween(r.sent_at) : null,
+      read_state: readStateFor(r, readTracking),
+    }));
+    const recent = all.filter((d: any) => d.days_since_sent != null && d.days_since_sent <= 31);
+    const sent = all.filter((d: any) => d.sent_at);
+    const unopened = all.filter((d: any) => d.read_state === 'unopened');
     const unobserved = sent.filter((d: any) => d.read_state === 'not_recorded');
-    const median = medianDaysToOpen(items);
+    const median = medianDaysToOpen(all);
+    const last = pageRows[pageRows.length - 1];
     return c.json({
       items,
+      page: {
+        limit, returned: items.length, total: all.length,
+        next_cursor: more && last ? encodeCursor([last.sent_at == null ? 1 : 0, last.sent_at ?? null, Number(last.id)]) : null,
+        complete: !cursor && !more,
+      },
       sent_count: sent.length,
+      // #4709: the strip's other figures, over the book like the rest.
+      signed_off_count: all.filter((d: any) => d.signed_off_at).length,
+      shipped_31d_count: recent.length,
+      shipped_31d_clients: new Set(recent.map((d: any) => d.founder_id).filter((v: any) => v != null)).size,
       // NULL, NOT 0, while opens cannot be observed: zero would claim every
       // client opened everything, and the true count would claim they ignored it.
       unopened_count: readTracking.available ? unopened.length : null,
@@ -1294,16 +1429,18 @@ partnerDelivery.post('/engagements/:engagementId/deliverables', async (c) => {
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const b = await body<any>(c);
-    const title = trimOrNull(b.title, 200);
+    // #4709: a date that is not a date, or a link that is not http(s), is refused before it is stored.
+    const v = deliverableInputs(b);
+    const title = v.title ?? null;
     if (!title) return c.json({ detail: 'A deliverable needs a title' }, 400);
-    const sentAt = trimOrNull(b.sent_at, 40);
+    const sentAt = v.sent_at ?? null;
     const ins = await c.env.DB.prepare(
       `INSERT INTO engagement_deliverables
          (uid, engagement_id, title, version, link_url, sent_at, sent_by, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      newUid(), engagementId, title, trimOrNull(b.version, 60),
-      trimOrNull(b.link_url, 600), sentAt, sentAt ? user.id : null, nowIso(), nowIso(),
+      newUid(), engagementId, title, v.version ?? null,
+      v.link_url ?? null, sentAt, sentAt ? user.id : null, nowIso(), nowIso(),
     ).run();
     const row = await c.env.DB.prepare('SELECT * FROM engagement_deliverables WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<any>();
@@ -1315,32 +1452,66 @@ partnerDelivery.patch('/deliverables/:id', async (c) => {
   try {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    const b = await body<any>(c);
+    const raw = await body<any>(c);
+    // #4709: the fields are checked as sent, before any merge, so a stored
+    // value from before the checks never blocks an edit to another field.
+    const b = { ...raw, ...deliverableInputs(raw) };
+    const reason = textInput(raw.correction_reason, 500, 'The reason');
     let bad: string | null = null;
+    let sentRefused = false;
+    let corrected = false;
     const res = await patchCurrent({
       read: () => ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable'),
       body: b, fields: DELIVERABLE_FIELDS as unknown as string[],
-      write: (merged, cur) => {
+      write: async (merged, cur) => {
         const title = trimOrNull(merged.title, 200);
-        if (!title) { bad = 'A deliverable needs a title'; return Promise.resolve({ meta: { changes: 1 } }); }
-        const sentAt = trimOrNull(merged.sent_at, 40);
-        return c.env.DB.prepare(
+        if (!title) { bad = 'A deliverable needs a title'; return { meta: { changes: 1 } }; }
+        const next = {
+          title, version: trimOrNull(merged.version, 60), link_url: trimOrNull(merged.link_url, 600),
+          sent_at: trimOrNull(merged.sent_at, 40),
+        };
+        const update = c.env.DB.prepare(
           `UPDATE engagement_deliverables
               SET title = ?, version = ?, link_url = ?, sent_at = ?, sent_by = ?, updated_at = ?,
                   revision = revision + 1
             WHERE id = ? AND revision = ?`,
         ).bind(
-          title, trimOrNull(merged.version, 60), trimOrNull(merged.link_url, 600),
-          sentAt, sentAt ? (cur.sent_by ?? user.id) : null, nowIso(), id, Number(cur.revision),
-        ).run();
+          next.title, next.version, next.link_url,
+          next.sent_at, next.sent_at ? (cur.sent_by ?? user.id) : null, nowIso(), id, Number(cur.revision),
+        );
+        // #4709 (D4709) — A SENT DELIVERABLE IS NOT SILENTLY REWRITTEN. A
+        // change to what the client was handed needs a reason, and the values
+        // it replaces are kept beside the row in the same transaction: the
+        // correction is written only while the row is at the revision read.
+        const changed = (Object.keys(next) as Array<keyof typeof next>)
+          .some((k) => (next[k] ?? null) !== (cur[k] ?? null));
+        corrected = false;
+        if (!cur.sent_at || !changed) return update.run();
+        if (!reason) { sentRefused = true; return { meta: { changes: 1 } }; }
+        corrected = true;
+        const out = await c.env.DB.batch([
+          c.env.DB.prepare(
+            `INSERT INTO engagement_deliverable_corrections
+               (deliverable_id, revision, title, version, link_url, sent_at, reason, corrected_by, corrected_at)
+             SELECT id, revision, title, version, link_url, sent_at, ?, ?, ?
+               FROM engagement_deliverables WHERE id = ? AND revision = ?`,
+          ).bind(reason, user.id, nowIso(), id, Number(cur.revision)),
+          update,
+        ]);
+        return out[1];
       },
     });
     if (bad) return c.json({ detail: bad }, 400);
+    if (sentRefused) return c.json(DELIVERABLE_SENT, 409);
     if (!res.ok) return deliveryChanged(c, 'deliverable', res.current);
     const out = await c.env.DB.prepare('SELECT * FROM engagement_deliverables WHERE id = ?')
       .bind(id).first<any>();
-    await logActorAct(c.env, user, 'delivery_deliverable_edited', { deliverable_id: id, engagement_id: Number(out.engagement_id) });
-    return c.json(deliverableDto(out, await bookReadTracking(c.env, partnerId)));
+    await logActorAct(c.env, user, corrected ? 'delivery_deliverable_corrected' : 'delivery_deliverable_edited', {
+      deliverable_id: id, engagement_id: Number(out.engagement_id),
+    });
+    const dto: any = deliverableDto(out, await bookReadTracking(c.env, partnerId));
+    dto.corrections = (await correctionsFor(c.env, [id])).get(id) || [];
+    return c.json(dto);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1349,9 +1520,17 @@ partnerDelivery.delete('/deliverables/:id', async (c) => {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable');
+    // #4709: a sent deliverable is what the client received. It is corrected, never deleted.
+    if (row.sent_at) {
+      return c.json({
+        detail: 'That deliverable was sent, so deleting it would erase a record of what the client received. Correct it instead.',
+        code: 'deliverable_sent',
+      }, 409);
+    }
     // #5314 part 3: a delete states the revision the person was shown.
     if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'deliverable', row);
-    const del = await c.env.DB.prepare('DELETE FROM engagement_deliverables WHERE id = ? AND revision = ?')
+    // The delete repeats "unsent", so a send that landed since keeps the row.
+    const del = await c.env.DB.prepare('DELETE FROM engagement_deliverables WHERE id = ? AND revision = ? AND sent_at IS NULL')
       .bind(id, Number(row.revision)).run();
     if (!changedOne(del)) return deliveryChanged(c, 'deliverable');
     await logActorAct(c.env, user, 'delivery_deliverable_deleted', { deliverable_id: id, engagement_id: Number(row.engagement_id) });
@@ -1861,7 +2040,7 @@ partnerDelivery.post('/engagements/:engagementId/seats', async (c) => {
       newUid(), engagementId, holder.id,
       // Free text on purpose: what a client granted is their vocabulary.
       trimOrNull(b.scope, 400),
-      trimOrNull(b.granted_at, 40) || nowIso(), nowIso(), nowIso(),
+      dateInput(b.granted_at, 'The granted date') || nowIso(), nowIso(), nowIso(),
     ).run();
     const row = await c.env.DB.prepare('SELECT * FROM engagement_seats WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<any>();
@@ -2097,7 +2276,49 @@ function reportDto(r: any) {
     revision: Number(r.revision ?? 0),
     sent_revision: r.sent_revision == null ? null : Number(r.sent_revision),
     ...blockedSection(r),
+    ...atSendSection(r),
   };
+}
+
+/**
+ * #4709 (D4709) — THE BLOCKERS THAT WERE OPEN WHEN THE REPORT WAS SENT,
+ * recorded at the send. A report sent before that was recorded has none, and
+ * reads "Not recorded": what was open then was never written down, and
+ * today's blockers are not passed off as it. A draft has not been sent, so
+ * the question does not arise yet (null, no note).
+ */
+export function atSendSection(r: any) {
+  if (r?.state !== 'sent') return { blockers_at_send: null, blockers_at_send_recorded: false, blockers_at_send_note: null };
+  const list = blockersAtSend(r.blockers_at_send);
+  return list
+    ? { blockers_at_send: list, blockers_at_send_recorded: true, blockers_at_send_note: null }
+    : {
+      blockers_at_send: null,
+      blockers_at_send_recorded: false,
+      blockers_at_send_note: 'Not recorded: this report was sent before the open blockers were kept with it.',
+    };
+}
+
+/** #4709: each sent report's amendments, oldest first. */
+async function amendmentsFor(env: Env, ids: number[]): Promise<Map<number, any[]>> {
+  const out = new Map<number, any[]>();
+  if (!ids.length) return out;
+  const rows = await env.DB.prepare(
+    `SELECT a.id, a.report_id, a.note, a.amended_by, a.amended_at, u.name AS amended_by_name
+       FROM engagement_status_report_amendments a
+       LEFT JOIN users u ON u.id = a.amended_by
+      WHERE a.report_id IN (SELECT value FROM json_each(?))
+      ORDER BY a.report_id, a.id`,
+  ).bind(JSON.stringify(ids)).all<any>();
+  for (const a of rows.results || []) {
+    const key = Number(a.report_id);
+    if (!out.has(key)) out.set(key, []);
+    out.get(key)!.push({
+      id: Number(a.id), note: a.note, amended_by: Number(a.amended_by),
+      amended_by_name: a.amended_by_name ?? null, amended_at: a.amended_at,
+    });
+  }
+  return out;
 }
 
 /**
@@ -2126,19 +2347,56 @@ export function blockedSection(r: any) {
   };
 }
 
+/**
+ * #4709 (D4709) — THE FEED IS PAGED, newest period first and the id breaking
+ * a tie (`?cursor=`, `?limit=` up to 200). The strip's counts are over every
+ * report in the book, read narrowly, never over the page.
+ *
+ * WHICH BLOCKERS A ROW SHOWS. A draft has not been sent, so its blockers are
+ * the engagement's open ones, read live (`blockers_source: 'live'`). A sent
+ * report shows the blockers that were open when it was sent ('at_send'), or
+ * none and 'not_recorded' when it was sent before they were kept. Today's
+ * open blockers travel separately as `current_blockers`, labelled as now.
+ */
+const REPORT_PAGE = 200;
+
+function reportBlockers(r: any, live: any[]) {
+  if (r.state !== 'sent') return { blockers: live, blockers_source: 'live' as const };
+  const kept = blockersAtSend(r.blockers_at_send);
+  if (!kept) return { blockers: [], blockers_source: 'not_recorded' as const };
+  return {
+    blockers: kept.map((b) => ({ side: b.side, summary: b.summary, raised_at: b.raised_at })),
+    blockers_source: 'at_send' as const,
+  };
+}
+
 partnerDelivery.get('/status-reports', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
-    const rows = await c.env.DB.prepare(
-      `SELECT r.*, e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
-         FROM engagement_status_reports r
-         JOIN engagements e ON e.id = r.engagement_id
-         LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN founders f ON f.id = e.founder_id
-        WHERE e.partner_id = ?
-        ORDER BY r.period DESC, r.id DESC
-        LIMIT 200`,
-    ).bind(partnerId).all<any>();
+    const cursor = decodeCursor(c.req.query('cursor'), 2);
+    const limit = pageLimit(c.req.query('limit'), REPORT_PAGE);
+    if (cursor && typeof cursor[0] !== 'string') throw refuse({ status: 400, code: 'bad_cursor', detail: 'That page link is no longer valid. Start again from the first page.' });
+    const [rows, book] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT r.*, e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
+           FROM engagement_status_reports r
+           JOIN engagements e ON e.id = r.engagement_id
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN founders f ON f.id = e.founder_id
+          WHERE e.partner_id = ?
+            AND (? IS NULL OR r.period < ? OR (r.period = ? AND r.id < ?))
+          ORDER BY r.period DESC, r.id DESC
+          LIMIT ?`,
+      ).bind(
+        partnerId, cursor ? 1 : null, cursor?.[0] ?? null, cursor?.[0] ?? null, cursor?.[1] ?? null, limit + 1,
+      ).all<any>(),
+      c.env.DB.prepare(
+        `SELECT r.engagement_id, r.period, r.state, r.blockers_at_send
+           FROM engagement_status_reports r
+           JOIN engagements e ON e.id = r.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+    ]);
 
     // BLOCKERS ARE READ LIVE AND ATTACHED, NEVER STORED ON THE REPORT. The
     // compose endpoint has said so since it was written — "a prose copy would
@@ -2166,23 +2424,44 @@ partnerDelivery.get('/status-reports', async (c) => {
     }
 
     const period = currentPeriod();
-    const items = (rows.results || []).map((r: any) => ({
-      ...reportDto(r),
-      blockers: byEngagement.get(Number(r.engagement_id)) || [],
+    const pageRows = (rows.results || []).slice(0, limit);
+    const more = (rows.results || []).length > limit;
+    const amendments = await amendmentsFor(c.env, pageRows.map((r: any) => Number(r.id)));
+    const items = pageRows.map((r: any) => {
+      const live = byEngagement.get(Number(r.engagement_id)) || [];
+      return {
+        ...reportDto(r),
+        ...reportBlockers(r, live),
+        current_blockers: live,
+        amendments: amendments.get(Number(r.id)) || [],
+      };
+    });
+    // The strip, over the whole book.
+    const all = (book.results || []).map((r: any) => ({
+      state: r.state, period: r.period,
+      ...reportBlockers(r, byEngagement.get(Number(r.engagement_id)) || []),
     }));
+    const last = pageRows[pageRows.length - 1];
     return c.json({
       items,
+      page: {
+        limit, returned: items.length, total: all.length,
+        next_cursor: more && last ? encodeCursor([String(last.period), Number(last.id)]) : null,
+        complete: !cursor && !more,
+      },
       // THE CYCLE THE PAGE IS OPEN ON, so `This cycle` and `Archive` are two
       // ends of one comparison rather than two chips over a field the response
       // never sent. Without it both selected the whole list or none of it.
       period,
-      draft_count: items.filter((r: any) => r.state === 'draft').length,
-      sent_count: items.filter((r: any) => r.state === 'sent').length,
-      sent_this_cycle: items.filter((r: any) => r.state === 'sent' && r.period === period).length,
-      blocked_count: items.filter((r: any) => r.blockers.length > 0).length,
-      client_blocked_count: items.filter(
+      draft_count: all.filter((r: any) => r.state === 'draft').length,
+      sent_count: all.filter((r: any) => r.state === 'sent').length,
+      sent_this_cycle: all.filter((r: any) => r.state === 'sent' && r.period === period).length,
+      blocked_count: all.filter((r: any) => r.blockers.length > 0).length,
+      client_blocked_count: all.filter(
         (r: any) => r.blockers.some((b: any) => b.side === 'client'),
       ).length,
+      // Sent reports whose blockers at the send were never kept: not counted above, and not "nothing blocked".
+      blockers_not_recorded_count: all.filter((r: any) => r.blockers_source === 'not_recorded').length,
       // WHAT A REPORT CANNOT REPORT ABOUT ITSELF. A read time needs an open,
       // an open is the client's act, and no client-side surface exists to
       // record one — the same absence `engagement_deliverables.opened_at`
@@ -2219,10 +2498,15 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
 
     const readTracking = await bookReadTracking(c.env, partnerId);
     const [deliverables, blockers, milestones, existing] = await Promise.all([
+      // #4709: the period is filtered HERE, before any limit. The old read took
+      // the 50 newest sends and filtered them afterwards, so composing an
+      // earlier period on a busy engagement found nothing it had shipped.
+      // `substr(…, 1, 7)` is the same test the page used, `startsWith(period)`.
       c.env.DB.prepare(
         `SELECT title, version, sent_at, opened_at, link_url FROM engagement_deliverables
-          WHERE engagement_id = ? AND sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT 50`,
-      ).bind(engagementId).all<any>(),
+          WHERE engagement_id = ? AND sent_at IS NOT NULL AND substr(sent_at, 1, 7) = ?
+          ORDER BY sent_at DESC, id DESC`,
+      ).bind(engagementId, p.period).all<any>(),
       c.env.DB.prepare(
         `SELECT side, summary, raised_at FROM engagement_blockers
           WHERE engagement_id = ? AND cleared_at IS NULL ORDER BY raised_at`,
@@ -2245,7 +2529,6 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
       existing: existing ? reportDto(existing) : null,
       read_tracking: readTracking,
       shipped_from_log: (deliverables.results || [])
-        .filter((d: any) => String(d.sent_at).startsWith(p.period))
         .map((d: any) => ({
           title: d.title, version: d.version ?? null, sent_at: d.sent_at,
           // NULL where opens cannot be observed: false would read as "the
@@ -2399,12 +2682,19 @@ partnerDelivery.post('/status-reports/:id/send', async (c) => {
     // names the draft revision read above and records it as `sent_revision`;
     // an edit that landed since makes this write change nothing, so the text
     // checked for emptiness is the text the client receives.
+    // #4709 (D4709): the blockers open at this moment are kept with the report,
+    // in the same statement that sends it, so a later list shows what was
+    // blocked then rather than whatever is blocked now.
     const upd = await c.env.DB.prepare(
       `UPDATE engagement_status_reports
           SET state = 'sent', sent_at = ?, sent_by = ?, sent_revision = revision + 1,
+              blockers_at_send = (
+                SELECT json_group_array(json_object('side', side, 'summary', summary, 'raised_at', raised_at))
+                  FROM (SELECT side, summary, raised_at FROM engagement_blockers
+                         WHERE engagement_id = ? AND cleared_at IS NULL ORDER BY raised_at, id)),
               updated_at = ?, revision = revision + 1
         WHERE id = ? AND state = 'draft' AND revision = ?`,
-    ).bind(now, user.id, now, id, Number(row.revision)).run();
+    ).bind(now, user.id, Number(row.engagement_id), now, id, Number(row.revision)).run();
     if (!changedOne(upd)) {
       const cur = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
         .bind(id).first<any>();
@@ -2414,6 +2704,32 @@ partnerDelivery.post('/status-reports/:id/send', async (c) => {
       .bind(id).first<any>();
     await logActorAct(c.env, user, 'delivery_report_sent', { report_id: id, engagement_id: Number(out.engagement_id), revision: Number(out.sent_revision) });
     return c.json(reportDto(out));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * #4709 (D4709) — A CORRECTION TO A SENT REPORT IS ADDED, NEVER WRITTEN OVER
+ * IT. The report stays exactly as the client received it; the amendment says
+ * what was wrong, and carries who wrote it and when. A draft is edited, not
+ * amended.
+ */
+partnerDelivery.post('/status-reports/:id/amendments', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const row = await ownChild(c.env, partnerId, 'engagement_status_reports', id, 'Status report');
+    if (row.state !== 'sent') {
+      return c.json({ detail: 'That report has not been sent. Edit the draft instead.', code: 'report_draft' }, 409);
+    }
+    const b = await body<any>(c);
+    const note = textInput(b.note, 2000, 'The amendment');
+    if (!note) return c.json({ detail: 'Say what the amendment corrects.', code: 'empty_amendment' }, 400);
+    await c.env.DB.prepare(
+      `INSERT INTO engagement_status_report_amendments (report_id, note, amended_by, amended_at)
+       VALUES (?, ?, ?, ?)`,
+    ).bind(id, note, user.id, nowIso()).run();
+    await logActorAct(c.env, user, 'delivery_report_amended', { report_id: id, engagement_id: Number(row.engagement_id) });
+    return c.json({ ...reportDto(row), amendments: (await amendmentsFor(c.env, [id])).get(id) || [] });
   } catch (e) { return mapError(c, e); }
 });
 

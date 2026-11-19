@@ -180,20 +180,20 @@ test('F0: My funds is the list as it was, with its zone toolbar and filters', ()
 
 // ── F0: Add to my funds, then the dossier ──────────────────────────────────
 
-test('F0: the drawer offers "Add to my funds", and once the fund is on the list, "Open your dossier →"', () => {
+test('F0: the drawer offers "Save to shortlist" (D7167), and once the fund is on the list, "Open dossier →"', () => {
   const offer = drawerOf(withDrawer({ onAdd() {} }));
-  const add = offer.match(/<button[^>]*>Add to my funds<\/button>/)?.[0];
-  assert.ok(add, 'the drawer has no "Add to my funds" button');
+  const add = offer.match(/<button[^>]*>Save to shortlist<\/button>/)?.[0];
+  assert.ok(add, 'the drawer has no "Save to shortlist" button');
   assert.doesNotMatch(add, /\sdisabled=""/);
-  assert.doesNotMatch(offer, /Add to my list|Open your dossier/);
+  assert.doesNotMatch(offer, /Add to my funds|Open dossier/);
 
   const there = drawerOf(withDrawer({ onAdd() {}, isAdded: () => true, dossierOf: (x) => (x.uid === 'zeta' ? 'rf 7/x' : null) }));
-  assert.match(there, /<a[^>]*href="\/research\/funds\/rf%207%2Fx"[^>]*>Open your dossier →<\/a>/);
-  assert.doesNotMatch(there, /Add to my funds|On your list/, 'the link takes the button’s place');
+  assert.match(there, /<a[^>]*href="\/research\/funds\/rf%207%2Fx"[^>]*>Open dossier →<\/a>/);
+  assert.doesNotMatch(there, /Save to shortlist|Saved to shortlist|On your shortlist/, 'the link takes the button’s place');
 
   const page = withDrawer({ isAdded: () => true });
   const rows = renderedText(page.slice(page.indexOf('<tbody'), page.indexOf('</tbody>')));
-  assert.match(rows, /^Zeta Deep TechIn My funds/, 'the row says where the fund now is');
+  assert.match(rows, /^Zeta Deep TechSaved to shortlist/, 'the row says where the fund now is');
 });
 
 test('F0: an add says how it went in that fund’s drawer, and only there', () => {
@@ -207,11 +207,11 @@ test('F0: an add says how it went in that fund’s drawer, and only there', () =
 
 test('F0: while the founder’s list is unread or unreadable, no add is offered that could duplicate a row', () => {
   const unread = drawerOf(withDrawer({ onAdd() {}, listState: 'unreadable' }));
-  assert.match(renderedText(unread), /Unreadable Your list could not be read, so this cannot tell whether the fund is on it\./);
-  assert.doesNotMatch(unread, />Add to my funds</);
+  assert.match(renderedText(unread), /Unavailable Your shortlist could not be read, so this cannot tell whether the fund is on it\./);
+  assert.doesNotMatch(unread, />Save to shortlist</);
   const pending = drawerOf(withDrawer({ onAdd() {}, listState: 'loading' }));
-  assert.match(pending, /<button[^>]*disabled=""[^>]*>Checking your list…<\/button>/);
-  assert.doesNotMatch(pending, />Add to my funds</);
+  assert.match(pending, /<button[^>]*disabled=""[^>]*>Checking your shortlist…<\/button>/);
+  assert.doesNotMatch(pending, />Save to shortlist</);
   // A dossier already known still opens.
   const known = drawerOf(withDrawer({ listState: 'unreadable', dossierOf: () => 'rf_1' }));
   assert.match(known, /href="\/research\/funds\/rf_1"/);
@@ -220,27 +220,32 @@ test('F0: while the founder’s list is unread or unreadable, no add is offered 
 });
 
 test('F0: the row the POST returns is kept, so the dossier opens before the list reloads', () => {
+  // D7168: keyed by catalogue uid (the Worker's `catalogue_links`), never by a
+  // normalised name — "Atlas A-I" and "Atlas AI" are two vehicles.
   const map = zone.dossierMap(
-    [{ uid: 'rf_1', name: 'Alpha Ventures' }, { uid: 'rf_2', name: 'alpha-ventures' }],
-    { zetadeeptech: 'rf_9', alphaventures: 'rf_stale' },
+    [{ uid: 'rf_1', catalogue_uid: 'atlas-a-i' }, { uid: 'rf_2', catalogue_uid: 'atlasai' }, { uid: 'rf_3', catalogue_uid: 'atlas-a-i' }],
+    { zetadeeptech: 'rf_9', 'atlas-a-i': 'rf_stale' },
   );
-  assert.equal(map.get('alphaventures'), 'rf_1', 'the list as read wins, and its first row of a name');
+  assert.equal(map.get('atlas-a-i'), 'rf_1', 'the list as read wins, and its first row of a catalogue uid');
+  assert.equal(map.get('atlasai'), 'rf_2', 'a vehicle whose name normalises the same opens its own entry');
   assert.equal(map.get('zetadeeptech'), 'rf_9', 'a row the POST created is a dossier before the reload answers');
   assert.equal(zone.dossierMap(undefined).size, 0);
+  assert.equal(zone.dossierMap([{ uid: 'rf_4', catalogue_uid: null }]).size, 0, 'a legacy entry is never in the map');
   const add = ZONE.slice(ZONE.indexOf('const addDirectoryFund'), ZONE.indexOf('const choose'));
   assert.match(add, /const row = await api\.research\.fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null, catalogue_uid: fund\.uid \}\);/);
-  assert.match(add, /if \(row\?\.uid\) setCreated\(\(rows\) => \(\{ \.\.\.rows, \[normalizeFundName\(fund\.name\)\]: row\.uid \}\)\);/);
+  assert.match(add, /if \(row\?\.uid\) setCreated\(\(rows\) => \(\{ \.\.\.rows, \[fund\.uid\]: row\.uid \}\)\);/);
   assert.match(add, /if \(!fund \|\| listState !== 'ok' \|\|/);
   // D4613: an add an earlier request already made says so.
-  assert.match(add, /text: row\?\.existing \? `\$\{fund\.name\} is already on My funds\.` : `\$\{fund\.name\} added to My funds\.`/);
-  assert.match(ZONE, /const dossiers = useMemo\(\(\) => dossierMap\(items, created\), \[items, created\]\);/);
-  assert.match(ZONE, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\} busy=\{directoryBusy\}\s+dossierOf=\{dossierOf\} listState=\{listState\} notice=\{directoryNote\} onTotal=\{setDirectoryTotal\}/);
+  assert.match(add, /text: row\?\.existing \? `\$\{fund\.name\} is already on your shortlist\.` : `\$\{fund\.name\} saved to your shortlist\.`/);
+  assert.match(ZONE, /const dossiers = useMemo\(\(\) => dossierMap\(links, created\), \[links, created\]\);/);
+  assert.doesNotMatch(ZONE, /normalizeFundName/, 'a name match is back');
+  assert.match(ZONE, /<FundDirectory isAdded=\{isAdded\} onAdd=\{addDirectoryFund\} busy=\{directoryBusy\}\s+dossierOf=\{dossierOf\} listState=\{listState\} notice=\{directoryNote\} onTotal=\{setDirectoryTotal\}/);
 });
 
-test('F0: the catalog profile says "Add to my funds", and its way back is the Directory tab', () => {
+test('F0: the catalog profile says "Save to shortlist" (D7167), and its way back (D7166) is the Directory tab', () => {
   const fund = { loading: false, error: null, status: 200, data: { item: ZETA, reports: [], reports_status: 'ok', source_boundary: 'Reported snapshots only.' } };
   const out = html(h(catalog.FundCatalogView, { fund, list: { loading: false, error: null, existing: null }, onAdd() {} }));
-  assert.match(out, /<button[^>]*>(<svg[\s\S]*?<\/svg>)? Add to my funds<\/button>/);
+  assert.match(out, /<button[^>]*>(<svg[\s\S]*?<\/svg>)? Save to shortlist<\/button>/);
   assert.match(out, /<a[^>]*href="\/research\/funds\?view=directory"[^>]*>[\s\S]*?Fund directory<\/a>/);
   // The company page's "See all N in Funds" counts directory funds, so it lands on the directory too.
   const company = read('frontend/src/pages/research/CompanyProfile.jsx');
@@ -264,7 +269,7 @@ test('F1: "Where the money is" is the overview’s own money section, drawn once
   assert.match(t, /research_fund_directory · 2,616 funds · as of 2026-10-04/);
 });
 
-test('F1: loading draws no figure; a failed read says Unreadable and draws no zero', () => {
+test('F1: loading draws no figure; a failed read says Unavailable (D7167) and draws no zero', () => {
   const loading = html(h(zone.MoneyBandView, { state: { phase: 'loading' } }));
   assert.match(loading, /data-state="loading"/);
   assert.match(loading, /aria-busy="true"/);
@@ -279,7 +284,7 @@ test('F1: loading draws no figure; a failed read says Unreadable and draws no ze
     const out = html(h(zone.MoneyBandView, { state, onRetry() {} }));
     const t = renderedText(out);
     assert.match(out, /data-state="unreadable"/, JSON.stringify(state));
-    assert.match(t, /Unreadable/);
+    assert.match(t, /Unavailable/);
     assert.match(t, /a failed read is not a directory with no funds/);
     assert.match(out, /<button[^>]*>Try again<\/button>/);
     assert.doesNotMatch(t, /\d/, `an unreadable band drew a figure: ${JSON.stringify(state)}`);
@@ -293,7 +298,7 @@ test('F1: a money section with nothing recorded says Not recorded with its reaso
   assert.doesNotMatch(t, /\d/);
 });
 
-test('F1: the band sits above the directory’s search and list, read through the existing overview method', () => {
+test('F1: the band sits below the directory’s results, in the disclosure, read through the existing overview method', () => {
   const out = html(h(directory.FundDirectoryView, {
     query: directoryRead.EMPTY_QUERY, onQuery() {}, search: '', onSearch() {}, facets: null, selected: null,
     onSelect() {}, onClose() {}, result: { loading: false, error: null, data: DATA },
@@ -303,7 +308,10 @@ test('F1: the band sits above the directory’s search and list, read through th
   const band = out.indexOf('data-testid="band-probe"');
   const search = out.indexOf('id="fd-q"');
   const list = out.indexOf('data-testid="fund-directory-results"');
-  assert.ok(cover > 0 && band > cover && search > band && list > search, 'the band is not between the coverage card and the search');
+  // D7166 (RFD-02): results first; coverage and the band move into the disclosure below them.
+  const disclosure = out.indexOf('data-testid="fund-directory-disclosure"');
+  assert.ok(search > 0 && list > search && disclosure > list && cover > disclosure && band > cover,
+    'search, then results, then the disclosure with coverage and the band');
   assert.match(ZONE, /import \{ researchOverviewApi \} from '\.\.\/\.\.\/lib\/api\/researchOverview\.js';/);
   assert.match(ZONE, /import \{ Money \} from '\.\/ResearchOverviewPanel';/);
   assert.match(ZONE, /export function MoneyBand\(\{ load = researchOverviewApi\.get \}\)/);
@@ -406,29 +414,30 @@ test('a save note is the { ok, text } SaveNote reads, so "Added." and a failed s
   const setRead = ZONE.slice(ZONE.indexOf('const setRead = async'), ZONE.indexOf('const add = async'));
   assert.match(setRead, /setRowNote\(\{ ok: false, text: e\?\.detail \|\| e\?\.message \|\| 'That did not save\.' \}\)/);
   assert.doesNotMatch(setRead, /setSaved\(/);
-  const profiles = ZONE.slice(ZONE.indexOf('Fund profiles'), ZONE.indexOf('Fund profiles') + 400);
+  const profiles = ZONE.slice(ZONE.indexOf('Your saved funds</h3>'), ZONE.indexOf('Your saved funds</h3>') + 900);
   assert.match(profiles, /<SaveNote note=\{rowNote\} \/>/);
 });
 
 test('the zone heading gets the props ZoneHeading reads, so its line and its route-in pill render', () => {
   const heading = ZONE.slice(ZONE.indexOf('<ZoneHeading'), ZONE.indexOf('<FundStat', ZONE.indexOf('<ZoneHeading')));
-  assert.match(heading, /\bblurb="Thesis in their words/);
+  assert.match(heading, /\bblurb="Your private shortlist\. Stage fit, route in and status are three separate reads/);
   assert.match(heading, /\baction=\{data \? <Pill/);
   assert.doesNotMatch(heading, /\b(sub|right)=/);
 });
 
-test('a stat tile draws no figure while loading, and a failed read is Unreadable, never Not recorded', () => {
+test('a stat tile draws no figure while loading, and a failed read is Unavailable (D7167), never Not recorded', () => {
   const { FundStat } = zone;
   assert.equal(typeof FundStat, 'function', 'FundStat is not exported');
   const out = (props) => renderToStaticMarkup(React.createElement(FundStat, { label: 'Researched', note: 'funds on file', ...props }));
   const loading = out({ value: undefined, phase: 'loading' });
   assert.match(loading, /aria-label="Loading"/);
-  assert.doesNotMatch(loading, /Not recorded|Unreadable/);
+  assert.doesNotMatch(loading, /Not recorded|Unavailable/);
   const failed = out({ value: undefined, phase: 'unreadable' });
-  assert.match(failed, /Unreadable/);
+  assert.match(failed, /Unavailable/);
   assert.doesNotMatch(failed, /Not recorded/);
   assert.match(out({ value: null, phase: 'ok' }), /Not recorded/);
   assert.match(out({ value: 4, phase: 'ok' }), />4</);
   // The zone passes the list's own state to every tile.
-  assert.equal((ZONE.match(/<FundStat\b[^>]*?phase=\{listState\}/gs) || []).length, 4);
+  // D7168: five tiles — Researched, Right stage, Whole-round test, Allocation test, Passed.
+  assert.equal((ZONE.match(/<FundStat\b[^>]*?phase=\{listState\}/gs) || []).length, 5);
 });

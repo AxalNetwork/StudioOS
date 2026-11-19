@@ -12,9 +12,12 @@ import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { catalogueForm, currentVersion, versionByNumber } from '../src/services/formationCatalogue.ts';
 
+// D6690: the seed migration writes and publishes version 1 in every database. These cases build
+// their own versions, so they load the schema as it stood before the seed.
+const SEED = 202611161600;
 function db() {
   const d = new DatabaseSync(':memory:', SCHEMA_OPTIONS);
-  loadSchema(d);
+  loadSchema(d, { below: SEED });
   return d;
 }
 const run = (d: DatabaseSync, sql: string, ...p: unknown[]) => d.prepare(sql).run(...(p as any[]));

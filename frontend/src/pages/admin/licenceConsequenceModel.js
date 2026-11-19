@@ -15,6 +15,12 @@
  */
 import { REASON_MAX } from './licenceReasonModel';
 
+/**
+ * The four questions every sheet answers, in order (L17). D4819 part 5 (#5931): the New licence Issue step asks
+ * the same four, so they are named once here.
+ */
+export const CONSEQUENCE_QUESTIONS = Object.freeze(['What will happen', 'What else it affects', 'Reason recorded', 'Can it be undone?']);
+
 /** The lifecycle actions, in the order More lists them. */
 export const LIFECYCLE_ACTIONS = Object.freeze(['activate', 'reinstate', 'renew', 'suspend', 'terminate']);
 
@@ -166,6 +172,144 @@ export function licenceConsequence(action, l, reads = {}) {
       reason: { min: 1, max: REASON_MAX, question: 'Why is this licence being terminated? Its administrators read this.' },
       undo: { reversible: false, text: 'This cannot be undone. A terminated licence cannot be reactivated.' },
     };
+    // D4819 part 21 (#5928, L18): the other writes the canvas names go through the same sheet. `reads.target`
+    // carries what the write is about (the account, the invoice, the agreement, the attempt).
+    case 'addAdmin': {
+      const t = reads.target || {};
+      const who = String(t.email || '').trim() || 'This account';
+      const ref = l?.licence_ref || name;
+      return {
+        title: 'Add an administrator', confirm: 'Add administrator', tone: 'warn',
+        happens: [
+          { text: `${who} becomes a ${t.adminRole === 'delegate' ? 'delegate' : 'principal'} administrator of ${ref}`, note: 'The account is given the admin role and bound to this licence in one step.' },
+          ...(l?.status === 'suspended' ? [{ text: 'This licence is suspended; the appointment still takes effect now' }] : []),
+        ],
+        affects: [
+          { text: 'Its holder is told' },
+          { text: 'An account that held a member licence keeps it' },
+        ],
+        reason: { min: 10, max: REASON_MAX, question: 'Why this account? It is recorded in the licence history and the audit log.', initial: t.initial || '' },
+        undo: { reversible: true, text: 'Undoing it is two steps: remove the administrator, then detach the account.' },
+      };
+    }
+    case 'removeAdmin': {
+      const a = reads.target || {};
+      const who = a.name || a.email || 'This administrator';
+      return {
+        title: `Remove ${who}`, confirm: 'Remove administrator', tone: 'danger',
+        happens: [
+          { text: `${who} loses the admin role now`, note: `They can no longer administer ${l?.licence_ref || name}.` },
+          { text: 'The account stays bound to this licence until you detach it', note: 'Detach is the second step, offered once the role is gone.' },
+        ],
+        affects: [
+          { text: 'Its holder is told' },
+          { text: 'An account holding the Super Admin elevation is refused, and nothing changes' },
+        ],
+        reason: { min: 10, max: REASON_MAX, question: 'Why is this administrator being removed? It is recorded in the audit log.' },
+        undo: { reversible: true, text: 'The account can be appointed again with Add administrator.' },
+      };
+    }
+    case 'issueInvoice': {
+      const t = reads.target || {};
+      return {
+        title: `Issue a fee invoice for ${name}`, confirm: 'Issue invoice', tone: 'warn',
+        happens: [
+          { text: t.amount ? `An invoice for ${t.amount} is issued` : 'An invoice is issued from the ledger’s annual fee', note: 'For the licence year that holds today. A year already invoiced is refused.' },
+        ],
+        affects: [
+          { text: 'It is issued with a reference and a PDF, as the record is now', note: 'A later fee change applies from the next licence year, not to this invoice.' },
+          { text: 'The audit log records who issued it' },
+        ],
+        reason: { min: null, statement: 'No reason is recorded. The audit log records who issued it, the amount and when.' },
+        undo: { reversible: true, text: 'An invoice with nothing paid on it can be voided, with a reason. It is never deleted.' },
+      };
+    }
+    case 'voidInvoice': {
+      const inv = reads.target || {};
+      const ref = inv.reference || 'this invoice';
+      return {
+        title: `Void ${ref}`, confirm: 'Void invoice', tone: 'danger',
+        happens: [
+          { text: `${ref} is voided`, note: 'Only an invoice with nothing paid on it can be voided.' },
+        ],
+        affects: [
+          { text: 'It stays on the list, marked void, with the reason' },
+          { text: 'The audit log records who voided it' },
+        ],
+        reason: { min: 10, max: REASON_MAX, question: 'Why is this invoice void? It is shown beside the invoice and recorded.' },
+        undo: { reversible: false, text: 'A void invoice cannot be restored.' },
+      };
+    }
+    case 'sendAgreement': {
+      const k = reads.target || {};
+      return {
+        title: `Send the agreement for ${name}`, confirm: 'Send for signature', tone: 'warn',
+        happens: [
+          { text: `${k.label || 'The agreement'} is sent for signature` },
+        ],
+        affects: [
+          { text: 'The signer receives it to sign' },
+          { text: 'History records that it was sent', note: 'A pending signature does not block activation.' },
+        ],
+        reason: { min: null, statement: 'No reason is recorded. History records who sent it, and when.' },
+        undo: { reversible: true, text: 'A sent agreement is not recalled from here; a new version can be drafted and sent.' },
+      };
+    }
+    case 'deploy': return {
+      title: `Deploy the branch for ${name}`, confirm: 'Deploy branch', tone: 'warn',
+      happens: [
+        { text: 'A branch is provisioned for this licence', note: 'HQ starts the provisioning run; it finishes on its own.' },
+      ],
+      affects: [
+        { text: 'Its hostname is claimed for this licence' },
+        { text: 'The branch receives the licence copy once it runs' },
+      ],
+      reason: { min: null, statement: 'No reason is recorded. The deployment record keeps who started it, and when.' },
+      undo: { reversible: false, text: 'A deployed branch is not removed from here.' },
+    };
+    case 'retryDeploy': {
+      const a = reads.target || {};
+      return {
+        title: 'Retry the deployment', confirm: 'Retry deployment', tone: 'warn',
+        happens: [
+          { text: `A new attempt replaces failed attempt ${a.attempt_no ?? ''}`.trim(), note: 'Sent twice, it starts once.' },
+        ],
+        affects: [
+          { text: 'The branch is provisioned again', note: branchNote(l) },
+        ],
+        reason: { min: null, statement: 'No reason is recorded. The attempts list records each try.' },
+        undo: { reversible: true, text: 'A retry that fails can be retried or reconciled again.' },
+      };
+    }
+    case 'reconcileDeploy': return {
+      title: 'Reconcile the deployment', confirm: 'Reconcile', tone: 'ok',
+      happens: [
+        { text: 'HQ reads what the provisioning run did, and records it', note: 'Reconcile never starts a run.' },
+      ],
+      affects: [
+        { text: 'The current attempt’s state is updated from that read' },
+      ],
+      reason: { min: null, statement: 'No reason is recorded. It only reads, and records what it found.' },
+      undo: { reversible: true, text: 'Nothing is changed but the recorded state, which the next read can correct.' },
+    };
+    case 'syncRetry': return {
+      title: `Retry branch sync for ${name}`, confirm: 'Retry branch sync', tone: 'ok',
+      happens: [
+        { text: 'HQ sends the licence’s current copy to its branch now', note: 'HQ’s own record does not change; it numbers the copy and records what the branch answers.' },
+      ],
+      affects: [
+        { text: 'The branch is sent the copy', note: branchNote(l) },
+        { text: 'HQ’s own hourly re-send carries on either way' },
+      ],
+      reason: { min: null, statement: 'No reason is recorded. The audit log records who retried it, the revision sent and how it ended.' },
+      undo: { reversible: true, text: 'It only re-sends what HQ already holds.' },
+    };
     default: return null;
   }
 }
+
+/** D4819 part 21 (#5928): every write that goes through the sheet, the nine L18 names first. */
+export const SHEET_ACTIONS = Object.freeze([
+  'addAdmin', 'removeAdmin', 'issueInvoice', 'voidInvoice', 'sendAgreement', 'deploy', 'retryDeploy', 'reconcileDeploy', 'syncRetry',
+  ...LIFECYCLE_ACTIONS,
+]);

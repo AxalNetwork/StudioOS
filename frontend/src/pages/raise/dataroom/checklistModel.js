@@ -17,7 +17,7 @@
  * before it runs. An empty list is "No proposals"; a failed read says so and
  * is never an empty list.
  * THE READINESS FIGURE the canvas draws ("Data room [7] of 10") has no read
- * that carries it to this page, so it says so and links Fundraising readiness.
+ * that carries it to this page, so the card links Fundraising readiness, which draws it.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -26,7 +26,9 @@ import { aiTokens } from '../pitch/newDeckModel.js';
 export const PROPOSALS_NOTE = 'Eadwyn reads file and folder names only, never a file. Each proposal changes one thing when you accept it: a checklist match or a folder. A gap is a note. Nothing here deletes a file or changes who can open it.';
 export const PROPOSALS_EMPTY = 'No proposals';
 export const PROPOSALS_UNREADABLE = 'Proposals could not be read';
-export const READINESS_WAIT = 'Not read here yet. Fundraising readiness scores the data room; its figure is not carried to this page.';
+// D5081 part 4 (#5081): the readiness score is Fundraising readiness's own page; this card names it and links there,
+// with no implementation-stage words.
+export const READINESS_WAIT = 'Fundraising readiness scores the data room as one of its areas, with what would raise it.';
 export const READINESS_PATH = '/raise/fundraising-readiness';
 export const MATCH_NOTE = 'Matching changes nothing about who can open a file.';
 

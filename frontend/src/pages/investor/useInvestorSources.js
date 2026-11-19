@@ -19,9 +19,23 @@ import { api } from '../../lib/api';
 import { fundNoticesApi } from '../../lib/api/fundNotices.js';
 import { fundBookletsApi } from '../../lib/api/fundBooklets.js';
 import { reportError } from '../../lib/log';
+import { dealFlowApi } from '../../lib/api/dealFlow.js';
+import { dealViewsApi } from '../../lib/api/dealViews.js';
 import { INVESTOR_AGENDA_KINDS } from '../studio/studioAgenda';
+import { FIT_SHOWN, liveDeals } from './investorHomeModel';
 
-export function useInvestorSources({ previewing = false, client = api, noticesClient = fundNoticesApi, bookletClient = fundBookletsApi } = {}) {
+/**
+ * D6129 (#6129): Thesis fit's one source is the flow and then the fit read for
+ * its first six live deals, so a failure of either is the module's alone.
+ */
+export async function readDeals(flowClient = dealFlowApi, fitClient = dealViewsApi) {
+  const flow = await flowClient.flow();
+  const ids = liveDeals(flow).slice(0, FIT_SHOWN).map((d) => Number(d.deal_id));
+  const fit = ids.length ? await fitClient.fit(ids) : { items: [] };
+  return { flow, fit };
+}
+
+export function useInvestorSources({ previewing = false, client = api, noticesClient = fundNoticesApi, bookletClient = fundBookletsApi, flowClient = dealFlowApi, fitClient = dealViewsApi } = {}) {
   const [records, setRecords] = useState({ portfolio: undefined, events: undefined });
   const [failures, setFailures] = useState({});
   const alive = useRef(true);
@@ -36,7 +50,11 @@ export function useInvestorSources({ previewing = false, client = api, noticesCl
     notices: () => noticesClient.mine(),
     trust: () => client.trustMe(),
     booklet: () => bookletClient.mine().catch(error => { if (error?.status === 404) return null; throw error; }),
-  }), [client, noticesClient, bookletClient]);
+    // D6129: Needs you's inbox row, Arrivals' founder updates, and Thesis fit's flow and fit reads.
+    inbox: () => client.notificationsUnreadCount(),
+    updates: () => client.portfolioUpdatesLatest(),
+    deals: () => readDeals(flowClient, fitClient),
+  }), [client, noticesClient, bookletClient, flowClient, fitClient]);
 
   const read = useCallback((key) => {
     const mine = (sequence.current[key] || 0) + 1;

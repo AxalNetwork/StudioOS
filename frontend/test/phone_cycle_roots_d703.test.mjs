@@ -385,6 +385,8 @@ test('14: the root has no md: rule and reads no width of its own; every light cl
 async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] } = {}) {
   // Grow V2 is a lazy cycle-owned overview on both widths (#4862).
   if (cycle === 'grow') await import('../src/pages/cycles/GrowOverview.jsx');
+  // Build V2 is a lazy cycle-owned overview too (D6028, #6028); below 1024px it draws the phone root.
+  if (cycle === 'build') await import('../src/pages/cycles/BuildOverview.jsx');
   resetStores();
   const restore = installDocument();
   const unstub = stubReads();
@@ -406,6 +408,11 @@ async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] 
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const ids = () => walk(container).map((n) => pr(n)['data-testid']).filter(Boolean);
+  // A lazy step (`/build`'s overview, D6028) resolves its import through the loader's hooks thread, which a
+  // busy runner can hold past six ticks; wait for its skeleton to go (bounded), never assert on the skeleton.
+  for (let i = 0; i < 200 && ids().includes('cycle-step-loading'); i += 1) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+  }
   return {
     reads, ids, all: (id) => ids().filter((x) => x === id),
     async unmount() { await act(async () => root.unmount()); globalThis.fetch = fetchBefore; globalThis.matchMedia = media; unstub(); restore(); resetStores(); },
@@ -438,7 +445,8 @@ for (const cycle of Object.keys(READS)) {
         assert.equal(desk.all('grow-overview-v2').length, 1);
         assert.ok(ids.includes('grow-attention') && !ids.includes('cycle-overview'));
       } else {
-        assert.ok(ids.includes('cycle-overview'), 'the desktop overview');
+        // D6028 (#6028): Build's desktop overview is its own (BD1), mounted through `def.Overview`.
+        assert.ok(ids.includes(cycle === 'build' ? 'build-overview-v2' : 'cycle-overview'), 'the desktop overview');
         assert.equal(ids.includes(ALSO_IN_ID[cycle]), ALSO[cycle].length > 0, '"Also in", where the map lists pages');
       }
       assert.ok(!ids.includes('phone-root') && !ids.includes('phone-focus'), 'no root at 1024px');
@@ -465,14 +473,16 @@ test('14 (PR 1): ValidatePhoneFocus is gone; the route\'s phone branch reads use
   assert.throws(() => readFileSync('frontend/src/pages/cycles/ValidatePhoneFocus.jsx', 'utf8'), /ENOENT/);
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.doesNotMatch(route, /ValidatePhoneFocus/);
-  assert.match(route, /const phone = usePhoneWidth\(\);/);
+  // D4846 part 2 (#6032, BD14 B): a cycle whose def names `tabletPages` (Build) keeps its desktop pages from 768px.
+  assert.match(route, /const tablet = useTabletWidth\(def\?\.tabletPages === true\);\n\s+const phone = usePhoneWidth\(\) && !tablet;/);
   assert.match(route, /body = def\?\.Overview \?/, 'a cycle-owned overview can serve both widths');
   assert.match(route, /<\/> : phone \? \(\n\s+<PhoneCycleRoot /, 'other cycles retain their phone root below 1024px');
   const overview = readFileSync('frontend/src/pages/cycles/CycleOverview.jsx', 'utf8');
   const header = overview.slice(overview.indexOf('export function CycleHeader'), overview.indexOf('export default function'));
   assert.ok(header.length > 0);
   assert.doesNotMatch(header, /\bmd:/, 'the header switches at lg, with the route');
-  assert.match(header, /hidden flex-wrap gap-1\.5 lg:flex/);
+  // D6029 (#6029): the desktop tabs still switch at lg, unless the sidebar lists the cycle's pages (Build, BD23).
+  assert.match(header, /hidden flex-wrap gap-1\.5 \$\{sidebarLists \? '' : 'lg:flex '\}items-center/);
   assert.match(header, /px-3\.5 lg:hidden/);
   for (const f of ['CycleRoute.jsx', 'CycleOverview.jsx', 'PhoneCycleRoot.jsx', 'validatePhone.js']) {
     assert.doesNotMatch(readFileSync(`frontend/src/pages/cycles/${f}`, 'utf8'), /matchMedia|innerWidth/, f);

@@ -353,7 +353,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 69 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 44 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 45 more
 
 ### `@cf/deepseek-ai/deepseek-v4.1-flash-1017`
 
@@ -475,7 +475,7 @@ chat: Southeast Asian language conversations and regional market copy.
 
 chat: Interactive explanations, evidence summaries and planning drafts.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate · Verdict"`; and 7 more
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate · Verdict"`; and 8 more
 - Record a Session: **gap**, `#3721`
 - Build: **wired**, `BU2 on "Founder · Build · Founding team"`; `BU2 on "Founder · Build · Operating systems"`; `BU2 on "Founder · Build · Product roadmap"`; `BU2 on "Founder · Build · Solution design"`; and 1 more
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise"`; and 21 more
@@ -576,7 +576,7 @@ chat: Short summaries, labels and lightweight record explanations.
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 77 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 73 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 74 more
 
 ### `@cf/ai4bharat/indictrans2-en-indic-1B`
 
@@ -795,7 +795,7 @@ voice: Read prepared session prompts and conversational replies aloud.
 
 chat: Investor narratives, distribution copy and multilingual summaries.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `ST2 on "Founder · Validate · Ideal customer profile"`; and 2 more
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `ST2 on "Founder · Validate · Ideal customer profile"`; and 3 more
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `railMatrix.json option draft:build/plan`
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `EM1 on "Founder · Raise · Investor narrative"`; `NE1 on "Founder · Raise · Capital relationships"`; and 19 more

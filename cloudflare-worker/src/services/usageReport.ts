@@ -14,10 +14,11 @@
  * stream's COST travels in `estimate_basis`, which HQ already stores and
  * already refuses to sum as revenue.
  *
- * WHAT DOES NOT TRAVEL, stated so nobody looks for it. Each stream's `reason`
- * sentence is sent and dropped: migration 260 has no column for it, and HQ's
- * statement draw writes its own reason for a reported NULL stream from the
- * stored `estimate_basis`, or a generic "reported as unmeasurable".
+ * D5947: A STREAM THE BRANCH CAN MEASURE ARRIVES WITH ITS FIGURE. Subscriptions
+ * are totalled from the branch's own financial ledger, in the rows' own
+ * currency. Every figure also carries its `state`, its `reason`, the `source`
+ * it was read from and `source_as_of`, when the branch read it; HQ stores all
+ * four (migration 202611161359). Before D5947 the reason was sent and dropped.
  *
  * TWO QUARTERS, NOT ONE. A run on 1 October reports Q4, which has barely
  * started, and Q3, which has just closed — so the last figure a quarter gets
@@ -125,6 +126,10 @@ export async function pushUsageReport(
         ...(s.is_estimate ? { is_estimate: true } : {}),
         ...(s.estimate_basis ? { estimate_basis: s.estimate_basis } : {}),
         ...(s.reason ? { reason: s.reason } : {}),
+        // D5947: where the figure came from and how far it can be trusted travel with it.
+        state: s.state,
+        source: s.source,
+        source_as_of: s.source_as_of,
       }));
     } catch (e) {
       periods.push({

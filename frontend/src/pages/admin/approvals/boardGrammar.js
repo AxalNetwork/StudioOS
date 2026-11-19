@@ -16,7 +16,7 @@ import { assigneeOf } from './inboxModel';
 const nf = (n) => Number(n).toLocaleString('en-US');
 
 /** Each board's lane key on the inbox. */
-export const BOARD_LANE = { 'product-testers': 'product_testers', 'co-marketing': 'comarketing', 'wellbeing-experts': 'wellbeing_experts' };
+export const BOARD_LANE = { 'product-testers': 'product_testers', 'co-marketing': 'comarketing', 'wellbeing-experts': 'wellbeing_experts', 'best-fit': 'best_fit' };
 
 /** The inbox pages an owner read follows, at 25 a page. */
 export const OWNER_PAGES = 8;

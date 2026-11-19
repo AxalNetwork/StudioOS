@@ -27,10 +27,18 @@
  * governed flows (D5039 part 2, `revenue/StatementActionFlow.jsx`); the
  * dispute entry (D514), the ceiling editor (D228) and the refund (D224, behind
  * the step-up) are today's controls in the sections that own them.
+ *
+ * D5305 (#5305) — a seventh read, Super Admin only: advisory refunds due
+ * (`GET /api/admin/platform/advisory-refunds-due`), drawn in Billing
+ * exceptions with its "Mark refunded…" sheet, which records a refund made in
+ * Stripe and moves no money. Another admin never reads it and sees no block.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { adminStatementActionsApi } from '../../lib/api/adminStatementActions';
+import { adminAdvisoryRefundsDueApi } from '../../lib/api/adminAdvisoryRefundsDue.js';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import { reportError } from '../../lib/log';
 import { RailFrame, WorkerRail, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
@@ -40,6 +48,8 @@ import { AiEconomicsSection, RevenueStreams, RevenueTrend } from './revenue/Reve
 import { ReceivablesSection, StatementDrawer } from './revenue/Receivables';
 import { SubsidiariesSection } from './revenue/Subsidiaries';
 import { BillingExceptions } from './revenue/BillingExceptions';
+import { MarkRefundedSheet } from './revenue/AdvisoryRefundsDue';
+import { HIDDEN, withRefundsDue } from './revenue/advisoryRefundsModel';
 // D5037: the refund is looked up and reviewed before money moves; the Worker refuses one without a review.
 import RefundReviewFlow from '../../components/RefundReviewFlow.jsx';
 import { PromotionsSection } from './revenue/Promotions';
@@ -81,6 +91,11 @@ export default function RevenuePage() {
   const [ceilings, setCeilings] = useState(null);
   // H21 (D224) — the refunds HQ issued, from their audit rows. Its own read.
   const [refunds, setRefunds] = useState(null);
+  // D5305: advisory refunds due. HIDDEN unless the viewer is a Super Admin.
+  const { user } = useAuth() || {};
+  const superAdmin = isSuperAdminUser(user);
+  const [advisoryRefunds, setAdvisoryRefunds] = useState(superAdmin ? null : HIDDEN);
+  const [marking, setMarking] = useState(null); // the advisory refund row whose sheet is open
   // The drawers: the coverage source to open at (`''` for the top), and the open statement.
   const [coverageAt, setCoverageAt] = useState(null);
   const [statementUid, setStatementUid] = useState(null);
@@ -133,6 +148,15 @@ export default function RevenuePage() {
       setRefunds(UNAVAILABLE);
     });
   }, []);
+  const loadAdvisoryRefunds = useCallback((quiet = false) => {
+    if (!superAdmin) { setAdvisoryRefunds(HIDDEN); return; }
+    if (!quiet) setAdvisoryRefunds(null);
+    adminAdvisoryRefundsDueApi.list().then(setAdvisoryRefunds, (e) => {
+      if (e?.status === 403) { setAdvisoryRefunds(HIDDEN); return; }
+      reportError('hq-revenue-advisory-refunds', e);
+      setAdvisoryRefunds(UNAVAILABLE);
+    });
+  }, [superAdmin]);
   const saveCeiling = useCallback(async (uid, body) => {
     const r = await api.promoCeilingSet(uid, body);
     loadCeilings();
@@ -156,6 +180,7 @@ export default function RevenuePage() {
   useEffect(() => {
     load(null); loadDisputes(); loadStatements(); loadCeilings(); loadRefunds();
   }, [load, loadDisputes, loadStatements, loadCeilings, loadRefunds]);
+  useEffect(() => { loadAdvisoryRefunds(); }, [loadAdvisoryRefunds]);
   // The period's own statements, once a period is known and each time it changes.
   useEffect(() => { loadPeriodStatements(period); }, [period, loadPeriodStatements]);
 
@@ -166,6 +191,7 @@ export default function RevenuePage() {
   };
   const reloadAll = () => {
     load(period); loadDisputes(); loadStatements(); loadPeriodStatements(period); loadCeilings(); loadRefunds();
+    loadAdvisoryRefunds();
   };
 
   const ready = isReady(data);
@@ -179,9 +205,9 @@ export default function RevenuePage() {
     () => coverageSources({ summary: data, statements, disputes, refunds, ceilings, period: shownPeriod }),
     [data, statements, disputes, refunds, ceilings, shownPeriod],
   );
-  const attention = attentionItems({
+  const attention = withRefundsDue(attentionItems({
     summary: data, statements, disputes, ceilings, period: shownPeriod, currentPeriod, nowMs, licenceUid: scope,
-  });
+  }), advisoryRefunds);
   const openStatement = statementUid && isReady(statements) && statements.available
     ? (statements.items || []).find((s) => s.uid === statementUid) || null
     : null;
@@ -283,6 +309,9 @@ export default function RevenuePage() {
           onRetryDisputes={loadDisputes}
           onWhy={why}
           refundForm={<RefundReviewFlow onDone={loadRefunds} />}
+          advisoryRefunds={advisoryRefunds}
+          onRetryAdvisoryRefunds={() => loadAdvisoryRefunds()}
+          onMarkAdvisoryRefund={setMarking}
         />
         <PromotionsSection
           summary={data}
@@ -305,6 +334,17 @@ export default function RevenuePage() {
           readAt={ready ? data.read_at : null}
           onClose={() => setCoverageAt(null)}
           onReload={reloadAll}
+        />
+      )}
+      {marking && (
+        <MarkRefundedSheet
+          key={marking.id}
+          row={marking}
+          operatorName={user?.name || null}
+          resolve={adminAdvisoryRefundsDueApi.resolve}
+          onResolved={() => loadAdvisoryRefunds(true)}
+          onRefresh={() => loadAdvisoryRefunds()}
+          onClose={() => setMarking(null)}
         />
       )}
       {openStatement && (

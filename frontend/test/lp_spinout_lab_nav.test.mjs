@@ -146,8 +146,13 @@ test('every sales-page CTA routes into the LP workspace — the CTA flow is real
 
 test('sales-page claims are centralized, and shared figures come from the fund model', () => {
   assert.match(salesPage, /from '\.\.\/lib\/spinoutInvestorContent'/, 'the page renders the content module, not inline copy');
-  assert.match(content, /import \{ FUND, PROGRAM, THESIS \} from '\.\/spinoutFundModel'/,
+  assert.match(content, /import \{ FUND, THESIS \} from '\.\/spinoutFundModel'/,
     'numbers also stated by the workspace/brief must come from the single fund model');
+  // #5513: program outcome figures are never fixed in the content module or the fund model.
+  assert.doesNotMatch(content, /\bPROGRAM\b|PROOF_STUDIO_STATIC/, 'no fixed program track record');
+  const proofBlock = content.slice(content.indexOf('export const PROOF_STUDIO = ['), content.indexOf('];', content.indexOf('export const PROOF_STUDIO = [')));
+  assert.ok(proofBlock.length > 0, 'the studio-proof tiles are defined');
+  assert.doesNotMatch(proofBlock, /\bv:|\b\d+%|\bof \d+ graduates/, 'no fixed outcome figure in the studio-proof tiles');
   assert.match(content, /headline: THESIS\.headline/, 'the hero headline is the shared thesis sentence');
 });
 
@@ -168,7 +173,7 @@ test('the sales page overlays live fund metrics with the workspace fallback sema
 /* ------------------------------------------- shell and router cannot drift */
 
 test('both the shell and the router resolve the active role through the shared helper', () => {
-  assert.match(app, /import \{ resolveActiveRole, resolveHeldLicences \} from '\.\/lib\/activeRole'/);
+  assert.match(app, /import \{ researchRoleFor, resolveActiveRole, resolveHeldLicences \} from '\.\/lib\/activeRole'/);
   const calls = app.match(/resolveActiveRole\(\{/g) || [];
   assert.equal(
     calls.length,
@@ -227,9 +232,12 @@ test('each studio-proof tile falls back independently, not the whole page at onc
   // there means "no denominator"), so the page picks per TILE. An all-or-
   // nothing merge would either hide live numbers it has or print fallbacks as
   // though they were measured.
-  assert.match(salesPage, /const pick = \(liveValue, format, staticTile\)/);
-  const picks = salesPage.match(/pick\(liveProgram\?\./g) || [];
-  assert.equal(picks.length, 5, `the five previously-static tiles are now live-capable (found ${picks.length})`);
+  // #5513: a tile with no live value reads Not recorded (or Unreadable), never a fixed figure.
+  assert.match(salesPage, /const tile = \(t\) => \{/);
+  assert.match(salesPage, /\? \{ \.\.\.t, v: fmt\(t\.unit, Number\(n\)\), live: true \}\s*: \{ \.\.\.t, v: missing, live: false \}/);
+  const tiles = salesPage.match(/tile\(PROOF_STUDIO\[\d\]\)/g) || [];
+  assert.equal(tiles.length, 5, `the five studio tiles each read the program block (found ${tiles.length})`);
+  assert.match(salesPage, /const P = programFigures\(/, 'the hero proof and studio tiles share the brief\'s program figures');
 });
 
 test('the studio-proof caption counts live tiles rather than claiming all or none', () => {
@@ -262,4 +270,9 @@ test('accreditation gates submission on the client too', () => {
 test('the access ladder reads the application, and the workspace feeds it one', () => {
   assert.match(workspace, /lpAccessState\(portal, application\)/);
   assert.match(workspace, /spinoutLab\.lpApplication\(\)/);
+});
+
+test('D6138: the workspace keeps the application commitment slider and removes the allocation control and promise', () => {
+  assert.match(workspace, /type="range"[\s\S]*?aria-label="Target commitment"/);
+  assert.doesNotMatch(workspace, /allocation (rights|preferences?|window)|allocationOpen|allocOpen/i);
 });

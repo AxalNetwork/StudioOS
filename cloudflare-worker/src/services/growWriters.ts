@@ -21,6 +21,7 @@ import { APPLICATION_STAGES, MARKET_PARTS, type GrowSlug } from './growCycle';
 import { calendarDay } from './growKpis';
 import { mintDownloadToken } from './signedDownload';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
+import { onCompanyTeam } from './obligationOwner';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null; extra: Record<string, unknown> | null;
@@ -129,6 +130,18 @@ async function roadmapItem(env: Env, pid: number, ref: unknown): Promise<{ ref: 
 
 const flag = (v: unknown) => (v === true || v === 1 || v === '1' ? 1 : 0);
 
+/** D6865 (#6865): where a feedback item came from. A row written before migration 202611161128 has none. */
+export const FEEDBACK_ORIGINS = ['inbox_reply', 'interview', 'notion', 'posthog_survey', 'typed'] as const;
+
+/** D6865: the asker's contacts record in this venture, by uid; another venture's or a missing one is a 404. NULL clears. */
+async function contactOf(env: Env, pid: number, raw: unknown): Promise<string | null> {
+  if (raw == null || raw === '') return null;
+  const uid = str(raw, 64);
+  const row = uid ? await env.DB.prepare('SELECT uid FROM contacts WHERE uid = ? AND project_id = ?').bind(uid, pid).first<{ uid: string }>() : null;
+  if (!row) throw new Refused(404, 'That customer or prospect is not on this venture', 'contact_uid');
+  return String(row.uid);
+}
+
 export async function addFeedback(
   env: Env, pid: number, user: User, b: Body, options: { sourceProposalId?: number | null } = {},
 ): Promise<{ uid: string }> {
@@ -140,6 +153,9 @@ export async function addFeedback(
   const sourceProposalId = Number.isSafeInteger(options.sourceProposalId) && Number(options.sourceProposalId) > 0
     ? Number(options.sourceProposalId) : null;
   const id = sourceProposalId == null ? newUid() : `posthog-proposal-${sourceProposalId}`;
+  // D6865: a PostHog proposal is a survey answer; a body that names no origin was typed.
+  const origin = oneOf(b.origin, FEEDBACK_ORIGINS, 'origin') ?? (sourceProposalId != null ? 'posthog_survey' : 'typed');
+  const contactUid = await contactOf(env, pid, b.contact_uid);
   if (sourceProposalId != null) {
     const existing = await env.DB.prepare('SELECT uid FROM product_feedback WHERE uid = ? AND project_id = ?')
       .bind(id, pid).first<{ uid: string }>();
@@ -147,19 +163,21 @@ export async function addFeedback(
   }
   await env.DB.prepare(
     `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label,
-       notify_on_ship, status, shipped_on, created_by, updated_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       notify_on_ship, status, shipped_on, created_by, updated_by, contact_uid, origin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(id, pid, text, source, str(b.from_name, 200), email(b.from_email, 'from_email'), str(b.from_company, 200), str(b.theme, 80),
     item?.ref ?? null, item?.label ?? str(b.roadmap_item_label, 200), flag(b.notify_on_ship),
-    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id).run();
+    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id, contactUid, origin).run();
   await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: id, action: 'grow_feedback_logged', summary: 'Feedback logged' });
   return { uid: id };
 }
 
 export async function updateFeedback(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string; status: string }> {
   const row = await owned<Row & { id: number; status: string }>(env,
-    `SELECT id, body, source, status, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label, notify_on_ship
+    `SELECT id, body, source, status, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label, notify_on_ship, contact_uid
        FROM product_feedback WHERE uid = ? AND project_id = ?`, uid, pid);
+  // D6865: Link to a customer or prospect, or unlink with null; the typed name is kept either way.
+  const contactUid = has(b, 'contact_uid') ? await contactOf(env, pid, b.contact_uid) : (row.contact_uid as string | null);
   const status = has(b, 'status') ? oneOf(b.status, FEEDBACK_STATUS, 'status', true)! : row.status;
   let text = row.body;
   if (has(b, 'body')) { text = str(b.body, 4000); if (!text) throw new Refused(400, 'Feedback says something', 'body'); }
@@ -171,12 +189,12 @@ export async function updateFeedback(env: Env, pid: number, user: User, uid: str
   } else if (has(b, 'roadmap_item_label')) label = str(b.roadmap_item_label, 200);
   await env.DB.prepare(
     `UPDATE product_feedback SET body = ?, source = ?, status = ?, from_name = ?, from_email = ?, from_company = ?, theme = ?,
-       roadmap_item_ref = ?, roadmap_item_label = ?, notify_on_ship = ?,
+       roadmap_item_ref = ?, roadmap_item_label = ?, notify_on_ship = ?, contact_uid = ?,
        shipped_on = CASE WHEN ? = 'shipped' AND status <> 'shipped' THEN ? ELSE shipped_on END, updated_by = ?, updated_at = ? WHERE id = ?`,
   ).bind(text, has(b, 'source') ? oneOf(b.source, FEEDBACK_SOURCES, 'source', true) : row.source, status,
     has(b, 'from_name') ? str(b.from_name, 200) : row.from_name, has(b, 'from_email') ? email(b.from_email, 'from_email') : row.from_email,
     has(b, 'from_company') ? str(b.from_company, 200) : row.from_company, has(b, 'theme') ? str(b.theme, 80) : row.theme,
-    ref, label, has(b, 'notify_on_ship') ? flag(b.notify_on_ship) : row.notify_on_ship,
+    ref, label, has(b, 'notify_on_ship') ? flag(b.notify_on_ship) : row.notify_on_ship, contactUid,
     status, nowIso().slice(0, 10), user.id, nowIso(), row.id).run();
   await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: uid, action: 'grow_feedback_updated', summary: 'Feedback updated' });
   return { uid, status };
@@ -703,7 +721,9 @@ export async function updateMarket(env: Env, pid: number, user: User, uid: strin
 
 export const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'culture', 'tax', 'other'] as const;
 export const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up', 'overdue', 'snoozed'] as const;
-const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'other', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
+// D6872 (#6872, owner answer B): compliance and other are stored as two event types, so one of each can fall on the
+// same day (UNIQUE(project_id, event_type, due_date)) and each reads back its own kind.
+const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'compliance', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
 /** Repeats, as the form says it, to `compliance_events.recurrence` (decision 1). */
 export const REPEATS = { once: 'one_time', monthly: 'monthly', quarterly: 'quarterly', yearly: 'annual' } as const;
 export const REPEATS_OF: Record<string, keyof typeof REPEATS> = { one_time: 'once', monthly: 'monthly', quarterly: 'quarterly', annual: 'yearly' };
@@ -712,6 +732,7 @@ export function obligationKind(event: Row): string {
   if (event.kind) return String(event.kind);
   if (event.event_type === 'board_meeting') return 'governance';
   if (event.event_type === 'risk' || event.event_type === 'culture') return String(event.event_type);
+  // D6872: a kind-less `compliance` or `other` row (Calendar, or older than D6872) reads as compliance, as before.
   return 'compliance';
 }
 
@@ -748,6 +769,16 @@ function remindDays(v: unknown): string | null {
   return unique.length ? JSON.stringify(unique) : null;
 }
 
+/** D6790: an obligation's owner is picked from the company team; '' or null names nobody. */
+async function obligationOwner(env: Env, pid: number, value: unknown): Promise<number | null> {
+  if (value == null || value === '') return null;
+  const id = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0 || !(await onCompanyTeam(env, pid, id))) {
+    throw new Refused(400, 'Choose someone on the company team', 'owner_user_id');
+  }
+  return id;
+}
+
 /** `source` is `manual` for a typed obligation; D1095's Calendar proposal writes `google_calendar`. */
 export async function addObligation(env: Env, pid: number, user: User, b: Body, source: 'manual' | 'google_calendar' = 'manual'): Promise<{ id: number }> {
   const title = str(b.title, 200);
@@ -757,6 +788,8 @@ export async function addObligation(env: Env, pid: number, user: User, b: Body, 
   const repeats = oneOf(b.repeats, Object.keys(REPEATS) as Array<keyof typeof REPEATS>, 'repeats') ?? 'once';
   const remind = remindDays(b.remind_days);
   const completion = obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status'));
+  // D6790: a picked team member is the owner; the typed name is kept only for callers that still send one.
+  const ownerId = await obligationOwner(env, pid, b.owner_user_id);
   const entity = await env.DB.prepare(
     'SELECT e.id, e.jurisdiction FROM projects p JOIN entities e ON e.id = p.entity_id WHERE p.id = ?',
   ).bind(pid).first<{ id: number; jurisdiction: string | null }>();
@@ -767,7 +800,7 @@ export async function addObligation(env: Env, pid: number, user: User, b: Body, 
         completion_status, recurrence, source, kind, owner_name, owner_user_id, created_by_user_id, created_by,
         completed_at, completed_by_user_id, remind_days_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(pid, entity?.id ?? null, entity?.jurisdiction || 'Unspecified', OBLIGATION_EVENTS[kind], title, due,
-      completion, REPEATS[repeats], source, kind, str(b.owner_name, 120), null, user.id, user.id,
+      completion, REPEATS[repeats], source, kind, ownerId == null ? str(b.owner_name, 120) : null, ownerId, user.id, user.id,
       completion === 'completed' ? nowIso() : null, completion === 'completed' ? user.id : null, remind).run();
     id = ins.meta.last_row_id;
   } catch (error) { obligationClash(error, kind, due); }
@@ -776,9 +809,9 @@ export async function addObligation(env: Env, pid: number, user: User, b: Body, 
 }
 
 export async function updateObligation(env: Env, pid: number, user: User, id: number, b: Body): Promise<{ id: number }> {
-  const row = await owned<Row & { id: number; completion_status: string; owner_name: string | null; due_date: string; title: string;
+  const row = await owned<Row & { id: number; completion_status: string; owner_name: string | null; owner_user_id: number | null; due_date: string; title: string;
     completed_at: string | null; completed_by_user_id: number | null; reminders_sent_json: string; recurrence: string; remind_days_json: string | null }>(env,
-    `SELECT id, title, kind, event_type, completion_status, owner_name, due_date, completed_at, completed_by_user_id, reminders_sent_json,
+    `SELECT id, title, kind, event_type, completion_status, owner_name, owner_user_id, due_date, completed_at, completed_by_user_id, reminders_sent_json,
             recurrence, remind_days_json FROM compliance_events WHERE id = ? AND project_id = ?`, id, pid);
   const due = b.due_at === undefined ? row.due_date : obligationDue(b.due_at);
   const completion = b.status === undefined ? row.completion_status : obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status', true));
@@ -789,12 +822,16 @@ export async function updateObligation(env: Env, pid: number, user: User, id: nu
   const kind = has(b, 'kind') ? oneOf(b.kind, OBLIGATION_KINDS, 'kind', true)! : null;
   const recurrence = has(b, 'repeats') ? REPEATS[oneOf(b.repeats, Object.keys(REPEATS) as Array<keyof typeof REPEATS>, 'repeats', true)!] : row.recurrence;
   const remind = has(b, 'remind_days') ? remindDays(b.remind_days) : row.remind_days_json;
+  // D6790: picking a team member replaces a typed name; picking nobody keeps a name typed before #6790.
+  const ownerId = has(b, 'owner_user_id') ? await obligationOwner(env, pid, b.owner_user_id) : row.owner_user_id;
+  const ownerName = has(b, 'owner_user_id') ? (ownerId == null ? row.owner_name : null)
+    : b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120);
   try {
     await env.DB.prepare(
-      `UPDATE compliance_events SET title = ?, kind = ?, event_type = ?, completion_status = ?, owner_name = ?, due_date = ?, completed_at = ?,
+      `UPDATE compliance_events SET title = ?, kind = ?, event_type = ?, completion_status = ?, owner_name = ?, owner_user_id = ?, due_date = ?, completed_at = ?,
         completed_by_user_id = ?, reminders_sent_json = ?, recurrence = ?, remind_days_json = ?, updated_at = ? WHERE id = ?`,
     ).bind(title, kind ?? row.kind ?? null, kind ? OBLIGATION_EVENTS[kind] : row.event_type, completion,
-      b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120), due, completedAt, completedBy,
+      ownerName, ownerId, due, completedAt, completedBy,
       due !== row.due_date || remind !== row.remind_days_json ? '[]' : row.reminders_sent_json, recurrence, remind, nowIso(), row.id).run();
   } catch (error) { obligationClash(error, kind ?? obligationKind(row), due); }
   await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: row.id, action: 'grow_obligation_updated', summary: 'Obligation updated' });
@@ -868,13 +905,36 @@ export async function removeObligation(env: Env, pid: number, user: Pick<User, '
 }
 
 export async function setChecklistItem(env: Env, pid: number, user: User, key: string, done: boolean) {
+  // D6789: a tick by hand says the item applies, so it clears a Not applicable mark.
   await env.DB.prepare(
     `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, updated_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(project_id, item_key) DO UPDATE SET done_at = excluded.done_at, done_by = excluded.done_by, updated_at = excluded.updated_at`,
+     ON CONFLICT(project_id, item_key) DO UPDATE SET done_at = excluded.done_at, done_by = excluded.done_by, updated_at = excluded.updated_at,
+       not_applicable_at = CASE WHEN excluded.done_at IS NOT NULL THEN NULL ELSE durability_checklist.not_applicable_at END,
+       not_applicable_by = CASE WHEN excluded.done_at IS NOT NULL THEN NULL ELSE durability_checklist.not_applicable_by END`,
   ).bind(pid, key, done ? nowIso() : null, done ? user.id : null, nowIso()).run();
   await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key, action: done ? 'grow_checklist_done' : 'grow_checklist_undone',
     summary: done ? 'Checklist item ticked' : 'Checklist item unticked' });
   return { key, done };
+}
+
+/**
+ * D6789 (#6789): mark a durability checklist item Not applicable, or clear the mark. The mark records who and
+ * when, clears a tick by hand, and takes the item out of the score. The route refuses an item the Spin-Out Lab
+ * ticked: the Lab says it applies.
+ */
+export async function setChecklistNotApplicable(env: Env, pid: number, user: User, key: string, notApplicable: boolean) {
+  const at = nowIso();
+  await env.DB.prepare(
+    `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, not_applicable_at, not_applicable_by, updated_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)
+     ON CONFLICT(project_id, item_key) DO UPDATE SET not_applicable_at = excluded.not_applicable_at, not_applicable_by = excluded.not_applicable_by,
+       done_at = CASE WHEN excluded.not_applicable_at IS NOT NULL THEN NULL ELSE durability_checklist.done_at END,
+       done_by = CASE WHEN excluded.not_applicable_at IS NOT NULL THEN NULL ELSE durability_checklist.done_by END,
+       updated_at = excluded.updated_at`,
+  ).bind(pid, key, notApplicable ? at : null, notApplicable ? user.id : null, at).run();
+  await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key,
+    action: notApplicable ? 'grow_checklist_not_applicable' : 'grow_checklist_applies',
+    summary: notApplicable ? 'Checklist item marked not applicable' : 'Checklist item applies again' });
+  return { key, not_applicable: notApplicable };
 }
 
 // ── The records' actions (#1698) ────────────────────────────────────────────
@@ -960,6 +1020,51 @@ export async function addPartnerDeal(env: Env, pid: number, user: User, partnerU
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_added', summary: 'Deal added' })),
   ]);
   return { uid: id };
+}
+
+/**
+ * D6114 (#6114): a deal of this partner, by its uid. The deal's partner must be
+ * the partner named and that partner the venture's, so a deal of another
+ * partner, or of another venture's, is a 404 before anything is written.
+ */
+async function partnerDeal(env: Env, pid: number, partnerUid: string, dealUid: unknown) {
+  if (typeof dealUid !== 'string' || !dealUid) throw new Refused(404, 'Not found', 'deal');
+  const row = await env.DB.prepare(
+    `SELECT d.id, d.customer, d.closed_on, d.amount_cents, d.currency FROM growth_partner_deals d JOIN growth_partners p ON p.id = d.partner_id
+      WHERE d.uid = ? AND p.uid = ? AND p.project_id = ?`,
+  ).bind(dealUid, partnerUid, pid).first<{ id: number; customer: string; closed_on: string | null; amount_cents: number | null; currency: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'deal');
+  return row;
+}
+
+/**
+ * D6114 (#6114): a deal's edit. Only the keys the body sends change; an amount
+ * keeps its currency unless the body names another, and an amount cleared
+ * clears its currency. Logged on the partner; the customer is never named.
+ */
+export async function updatePartnerDeal(env: Env, pid: number, user: User, partnerUid: string, dealUid: unknown, b: Body) {
+  const d = await partnerDeal(env, pid, partnerUid, dealUid);
+  let customer = d.customer;
+  if (has(b, 'customer')) { customer = str(b.customer, 200) ?? ''; if (!customer) throw new Refused(400, 'A deal names its customer', 'customer'); }
+  const closed = has(b, 'closed_on') ? day(b.closed_on, 'closed_on') : d.closed_on;
+  const amount = has(b, 'amount_cents') ? centsOrNull(b.amount_cents, 'amount_cents') : d.amount_cents;
+  const currency = currencyFor(amount, has(b, 'currency') ? b.currency : d.currency, 'currency');
+  await env.DB.batch([
+    env.DB.prepare("UPDATE growth_partner_deals SET customer = ?, closed_on = ?, amount_cents = ?, currency = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(customer, closed, amount, currency, d.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_updated', summary: 'Deal updated' })),
+  ]);
+  return { uid: String(dealUid) };
+}
+
+/** D6114 (#6114): removes a deal of this partner, logged on the partner without the customer. */
+export async function removePartnerDeal(env: Env, pid: number, user: User, partnerUid: string, dealUid: unknown) {
+  const d = await partnerDeal(env, pid, partnerUid, dealUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM growth_partner_deals WHERE id = ?').bind(d.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_removed', summary: 'Deal removed' })),
+  ]);
+  return { uid: String(dealUid), deleted: true as const };
 }
 
 export async function addEntryStep(env: Env, pid: number, user: User, marketUid: string, b: Body) {
@@ -1054,6 +1159,44 @@ export async function addAgendaItem(env: Env, pid: number, user: User, eventId: 
   return { uid: id };
 }
 
+/**
+ * D6114 (#6114): an agenda item of this obligation, by its uid. The item's
+ * obligation must be the one named and that obligation the venture's, so an
+ * item of another obligation, or of another venture's, is a 404.
+ */
+async function agendaItem(env: Env, pid: number, eventId: number, itemUid: unknown) {
+  if (typeof itemUid !== 'string' || !itemUid || !Number.isSafeInteger(eventId)) throw new Refused(404, 'Not found', 'item');
+  const row = await env.DB.prepare(
+    `SELECT a.id, a.text, a.owner_name FROM obligation_agenda_items a JOIN compliance_events e ON e.id = a.event_id
+      WHERE a.uid = ? AND e.id = ? AND e.project_id = ?`,
+  ).bind(itemUid, eventId, pid).first<{ id: number; text: string; owner_name: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'item');
+  return row;
+}
+
+/** D6114 (#6114): an agenda item's edit; only the sent keys change. Logged on the obligation, never the item's text. */
+export async function updateAgendaItem(env: Env, pid: number, user: User, eventId: number, itemUid: unknown, b: Body) {
+  const a = await agendaItem(env, pid, eventId, itemUid);
+  let text = a.text;
+  if (has(b, 'text')) { text = str(b.text, 300) ?? ''; if (!text) throw new Refused(400, 'An agenda item says what is discussed', 'text'); }
+  const owner = has(b, 'owner_name') ? str(b.owner_name, 120) : a.owner_name;
+  await env.DB.batch([
+    env.DB.prepare("UPDATE obligation_agenda_items SET text = ?, owner_name = ?, updated_at = datetime('now') WHERE id = ?").bind(text, owner, a.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: eventId, action: 'grow_agenda_updated', summary: 'Agenda item updated' })),
+  ]);
+  return { uid: String(itemUid) };
+}
+
+/** D6114 (#6114): removes an agenda item of this obligation, logged on the obligation. */
+export async function removeAgendaItem(env: Env, pid: number, user: User, eventId: number, itemUid: unknown) {
+  const a = await agendaItem(env, pid, eventId, itemUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM obligation_agenda_items WHERE id = ?').bind(a.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: eventId, action: 'grow_agenda_removed', summary: 'Agenda item removed' })),
+  ]);
+  return { uid: String(itemUid), deleted: true as const };
+}
+
 /** The month length each repeat moves an obligation by (decision 2); a one-time obligation is completed instead. */
 const REPEAT_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, annual: 12 };
 
@@ -1081,12 +1224,31 @@ export const minutesPrefix = (pid: number) => `grow-minutes/${pid}/`;
  * obligation is completed instead. A clash with another obligation of the
  * same kind on the new date answers 409 and writes nothing.
  */
+/** D6788: plain-text lines in the form, or explicit text/passed_on entries in JSON; never truncate a resolution. */
+export function boardResolutions(raw: unknown, heldOn: string, passedOn: unknown = undefined): Array<{ text: string; passed_on: string }> {
+  if (raw == null || raw === '') return [];
+  const entries = typeof raw === 'string' ? raw.replace(/\r\n?/g, '\n').split('\n').map(text => text.trim()).filter(Boolean) : raw;
+  if (!Array.isArray(entries) || entries.length > 20) throw new Refused(400, 'Record up to 20 resolutions, one per line.', 'resolutions');
+  const defaultDate = day(passedOn, 'resolutions_passed_on') ?? heldOn;
+  return entries.map(entry => {
+    const item = typeof entry === 'string' ? { text: entry, passed_on: defaultDate } : entry;
+    if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.text !== 'string' || !item.text.trim() || item.text.trim().length > 2000) {
+      throw new Refused(400, 'Each resolution is 1 to 2000 characters of text.', 'resolutions');
+    }
+    return { text: item.text.trim(), passed_on: day(item.passed_on, 'resolutions_passed_on') ?? defaultDate };
+  });
+}
+
 export async function markHeld(env: Env, pid: number, user: User, eventId: number, b: Body & { minutes?: unknown }) {
   const e = await owned<Row & { id: number; due_date: string; recurrence: string }>(env,
     'SELECT id, kind, event_type, due_date, recurrence FROM compliance_events WHERE id = ? AND project_id = ?', eventId, pid);
   const heldOn = day(b.held_on, 'held_on');
   if (!heldOn) throw new Refused(400, 'When was it held?', 'held_on');
+  const resolutions = boardResolutions(b.resolutions, heldOn, b.resolutions_passed_on);
+  if (resolutions.length && e.event_type !== 'board_meeting') throw new Refused(400, 'Resolutions belong to a board meeting.', 'resolutions');
+  const citation = oneOf(b.cite_minutes, ['yes', 'no'] as const, 'cite_minutes') === 'yes';
   const file = b.minutes && typeof b.minutes === 'object' && 'arrayBuffer' in (b.minutes as object) ? b.minutes as File : null;
+  if (citation && resolutions.length && !file) throw new Refused(400, 'Upload the minutes to cite them, or choose No.', 'cite_minutes');
   let key: string | null = null;
   let storage: StorageTicket | null = null;
   if (file) {
@@ -1106,6 +1268,10 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
   const statements = [
     env.DB.prepare('INSERT INTO obligation_occurrences (uid, event_id, held_on, minutes_file_key, size_bytes, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .bind(occurrence, e.id, heldOn, key, key ? file!.size : null, str(b.notes, 2000), user.id),
+    // D6788: occurrence, resolutions, schedule and activity commit in the same D1 transaction.
+    ...resolutions.map(resolution => env.DB.prepare(`INSERT INTO board_resolutions
+      (uid, event_id, occurrence_uid, held_on, text, passed_on, recorded_by, minutes_file_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(newUid(), e.id, occurrence, heldOn, resolution.text, resolution.passed_on, user.id, citation ? key : null)),
     months
       ? env.DB.prepare("UPDATE compliance_events SET due_date = ?, reminders_sent_json = '[]', updated_at = ? WHERE id = ?").bind(next, at, e.id)
       : env.DB.prepare("UPDATE compliance_events SET completion_status = 'completed', completed_at = ?, completed_by_user_id = ?, updated_at = ? WHERE id = ?")
@@ -1118,7 +1284,7 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
     obligationClash(error, obligationKind(e), next);
   }
   if (storage) await noteStorageLanded(env, storage);
-  return { id: e.id, occurrence, due_at: next, status: months ? 'pending' : 'completed' };
+  return { id: e.id, occurrence, due_at: next, status: months ? 'pending' : 'completed', resolutions_recorded: resolutions.length };
 }
 
 /** Open minutes: one signed download, for a key under this venture's own prefix only; anything else is a 404. */

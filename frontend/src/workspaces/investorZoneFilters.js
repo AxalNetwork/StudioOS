@@ -64,23 +64,15 @@ const NO_OFFER_ON_THIS_DESK =
 // `/network/organizations` (D6258). An organisation on this zone is the
 // counterpart's OWN company, which `GET /api/partnernet/relationships` has
 // returned as `other.company` since D572 part 3: the company the other person
-// links on their account, read at query time. Nothing is stored on the
-// relationship. That makes `All` a live chip, and leaves two labels that would
-// have to say what KIND of firm a company is to you, which nothing records.
+// links on their account, read at query time. Co-investors narrows to
+// companies with a co-investor contact.
 //
 // `Portfolio` would need the company tied to a deal you invested in; the
 // company is a name read off another person's account, and this page never
-// loads your deals. `Co-investors` is a live chip one zone up, where
-// `relationship_type = 'co_investor'` selects PEOPLE. Here it would have to
-// select firms, and a tie's type describes the person, not the company they
-// link, so calling a firm a co-investor because one person at it is would be a
-// guess printed as a fact.
+// loads your deals.
 const NO_PORTFOLIO_LINK =
   'a company here is the name the other person links on their own account, and nothing ties it to a deal you invested in; this page never loads your deals';
 const NO_PORTFOLIO_LINK_HOVER = 'Nothing ties these companies to your investments yet.';
-const NO_FIRM_KIND =
-  'a tie’s type describes the person, not the company they link, so a company cannot be called a co-investor because one person at it is';
-const NO_FIRM_KIND_HOVER = 'A tie’s type describes the person, not their company.';
 // The other two name records that are real and are kept somewhere this page
 // never opens: it loads the relationship book, the network summary and the
 // introductions desk, and nothing else. `limited_partners` is keyed on
@@ -134,6 +126,8 @@ export const INVESTOR_ZONE_FILTERS = {
   // tracked, so there is no notice state to filter lines by.
   'funds/calls': [
     { canvas: 'Call 3', label: 'Current call', key: 'latest' },
+    // D6238: every numbered call as one row (number, issued, due, amount,
+    // collected, outstanding, lines behind), each opening its own page.
     { canvas: 'All calls', key: 'all' },
     { canvas: 'Outstanding', key: 'outstanding' },
     { canvas: 'Notices', unbuilt: 'an in-app notice is logged for each LP account when a call is issued, but no letter is kept and no delivery is tracked, so there is no notice state to filter by', hover: 'Call notices are logged, but their delivery is not tracked, so there is nothing to filter.' },
@@ -313,7 +307,7 @@ export const INVESTOR_ZONE_FILTERS = {
   'network/organizations': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Portfolio', unbuilt: NO_PORTFOLIO_LINK, hover: NO_PORTFOLIO_LINK_HOVER },
-    { canvas: 'Co-investors', unbuilt: NO_FIRM_KIND, hover: NO_FIRM_KIND_HOVER },
+    { canvas: 'Co-investors', key: 'co_investors' },
     { canvas: 'LPs', unbuilt: KEPT_IN_ANOTHER_STORE },
     { canvas: 'Passed', unbuilt: KEPT_IN_ANOTHER_STORE },
   ],
@@ -341,11 +335,13 @@ export const INVESTOR_ZONE_FILTERS = {
   'research/ask': [
     { canvas: 'All sessions', key: 'all' },
     { canvas: 'Saved', key: 'saved' },
-    {
-      canvas: 'Cited in a memo',
-      unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
-    },
+    // D6272: `Cited in a memo` is gone. No store can select it — a citation
+    // names a passage and carries no memo — so it was a control that could
+    // only refuse. `Show cleared` takes its place: the sessions Clear history
+    // hid (owner, #6274 question 4 B), read back by the Worker's `cleared`
+    // scope with Restore beside them.
     { canvas: 'Discarded', key: 'discarded' },
+    { canvas: 'Show cleared', key: 'cleared' },
   ],
   // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
   // THE WORD SUGGESTS. Its own artboard code reads
@@ -382,13 +378,14 @@ export const INVESTOR_ZONE_FILTERS = {
   'research/benchmarking': [
     { canvas: 'Peer set', key: 'comparison', label: 'Compared' },
     { canvas: 'Metrics', key: 'all' },
+    { canvas: 'No read yet', key: 'unread' },
     {
       canvas: 'Saved',
       unbuilt: 'a benchmark row has no draft state; the form writes a finished row on submit, so every metric on this page is saved',
     },
     {
       canvas: 'Export',
-      unbuilt: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn', hover: 'Export is an action, not a view — it sits in the other half of this row.',
+      unbuilt: 'the action row has the CSV download and it follows the current filter and sort', hover: 'Use Export in the action row to download this view.',
     },
   ],
   'research/markets': [

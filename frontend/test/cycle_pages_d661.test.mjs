@@ -153,7 +153,7 @@ test('the module read query, the count, the pages, the cells and the links a rea
   assert.equal(safeHref('/validate/x'), '/validate/x');
   for (const bad of ['//evil.test', 'https://evil.test', 'javascript:alert(1)', 'validate', null]) assert.equal(safeHref(bad), null, String(bad));
   assert.deepEqual(cycleTabs('build', [{ slug: 'founding-team', name: 'Founding team' }], 'founding-team').map((t) => [t.name, t.href, t.active]),
-    [['Overview', '/build', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Tools history is its second tab (#1597)');
+    [['Overview', '/build', false], ['Plan', '/build/plan', false], ['Progress', '/build/plan/progress', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Plan and Progress lead (D6029), then its Tools history (#1597)');
 });
 
 test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module page keep `?project_id=`', () => {
@@ -204,9 +204,10 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
     { key: 'board_cadence', label: 'Board meeting cadence agreed', done: false, source: null, done_at: null },
   ] }));
   assert.match(text(list), /Durability checklist 2 of 3 done/);
-  assert.match(text(list), /Tax ID \(EIN\) received Done · Spin-Out Lab · 2026-09-01/);
-  assert.match(text(list), /Key-person cover set up Done · typed/);
-  assert.match(text(list), /Board meeting cadence agreed Not done/);
+  // D6122 (GR-24): how each item was ticked, or how it will be.
+  assert.match(text(list), /Tax ID \(EIN\) received , done Spin-Out Lab · 1 Sept? 2026/);
+  assert.match(text(list), /Key-person cover set up , done By hand/);
+  assert.match(text(list), /Board meeting cadence agreed , open Open · Tick by hand/);
   assert.equal(html(h(DurabilityChecklist, { items: null })), '', 'nothing to list draws nothing');
   const route = cycleRouteText();
   // D686 §5.1: Share an update opens at /grow/update over the page; a sent
@@ -394,7 +395,8 @@ test('the five card states (variant=states and variant=new), each with its sente
   const fresh = text(html(h(FigureTile, { fig: figure('p', 'Pain themes', null, 'count', { delta_30d: null }) })));
   assert.match(fresh, /Pain themes Not recorded nothing recorded yet/);
   assert.doesNotMatch(html(h(FigureTile, { fig: figure('p', 'Pain themes', 2, 'count', { spark: [1, 2] }) })), /<svg/, 'a two-point sparkline is not drawn');
-  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Stripe could not be read/);
+  // D4846 part 2 (#6032): the failed source says Unavailable (D5129's chip) before naming it, in muted ink, not red.
+  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Unavailable Stripe could not be read/);
 });
 
 test('the overview while loading and when the whole read fails', () => {
@@ -418,7 +420,9 @@ test('EVERY MODULE RENDERS FROM THE SHARED READ: all 26 module pages, with their
       assert.ok(t.includes(`What ${name} shows.`) && t.includes(`${name} · at a glance`) && !t.includes(`Next: Next step for ${name}.`), name);
       assert.ok(t.includes(`${name} one`) && t.includes(`${name} two`), `${name} lists its records`);
       const currentLabel = cycle === 'grow' ? ({ 'product-improvement': 'Customers', distribution: 'Distribution', 'revenue-and-traction': 'Focus', 'team-expansion': 'Talent', 'partner-network': 'Partnerships', 'market-expansion': 'Markets', 'durable-company-building': 'Company' }[c.slug] || name) : name;
-      assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
+      // D6029 (BD23): Build's desktop module switcher is the sidebar, so its page marks the module in the picker.
+      if (cycle === 'build') assert.match(out, new RegExp(`<option value="${c.slug}" selected="">`), `${name} is the picked module`);
+      else assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
       n += 1;
     }
   }

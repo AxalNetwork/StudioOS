@@ -21,7 +21,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
@@ -36,7 +36,6 @@ import { loadSchema } from './_schema_once.mjs';
 
 const DIR = 'cloudflare-worker/sql/migrations';
 const NAMES = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF);
-const MIGRATIONS = NAMES.map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const SECRET = 'synthetic-deck-card-blobs-d1539-secret-'.repeat(2);
 const FOUNDER = 1, OTHER = 2, P = 10, LEGACY = 100;
 

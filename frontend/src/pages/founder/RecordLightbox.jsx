@@ -26,6 +26,7 @@ import {
 } from './recordSetup.js';
 import { clearRecordDraft, readRecordDraft, saveRecordDraft } from './recordDraft.js';
 import { useAuth } from '../../hooks/useAuthSync';
+import InterviewGuide from '../cycles/InterviewGuide.jsx';
 
 /**
  * Validate › Record a session (D685 §5.5, #1587), as a lightbox over the page
@@ -288,6 +289,8 @@ export default function RecordLightbox({
   const [minutes, setMinutes] = useState(draft?.minutes || 30);
   const supportsOutputs = typeof sessions.outputs === 'function';
   const [outputs, setOutputs] = useState(['customer-research', 'pain-points', 'icp-fit']);
+  // D6008 (#6008): the venture's interview guide, opened on demand so the setup reads nothing extra.
+  const [guideOpen, setGuideOpen] = useState(false);
   const [outputsLoaded, setOutputsLoaded] = useState(false);
   const [outputQuote, setOutputQuote] = useState(undefined);
   const [outputIssue, setOutputIssue] = useState('');
@@ -884,6 +887,14 @@ export default function RecordLightbox({
                 )}
           <p className="m-0 text-[11.5px] text-axal-faint" data-testid="record-points-note">{fields.points ? 'The hypotheses you pick appear in the Talking points drawer while you record.' : NOT_STORED}</p>
         </Section>
+
+        {projectId && (
+          <Section title="Interview guide" testId="record-guide">
+            {guideOpen ? <InterviewGuide projectId={projectId} />
+              : <button type="button" onClick={() => setGuideOpen(true)} className="min-h-11 self-start rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 sm:min-h-8 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800" data-testid="record-guide-open">Open the interview guide</button>}
+            <p className="m-0 text-[11.5px] text-axal-faint">A copy is taken onto the interview when you open the guide while recording.</p>
+          </Section>
+        )}
 
         {m.audio && botJoins && (
           <Section title="Transcript" testId="record-transcript">

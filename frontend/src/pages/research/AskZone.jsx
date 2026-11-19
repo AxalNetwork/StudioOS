@@ -61,7 +61,9 @@ const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
  */
 // #4610: four scopes, four server reads. `discarded` joined them — it was a
 // client-side filter over `all`'s window and so could not see past it.
-const SCOPES = new Set(['session', 'all', 'saved', 'discarded']);
+// D6272: `cleared` is the fifth — the sessions Clear history hid, read back by
+// the investor's `Show cleared` filter. `all` and `session` leave them out.
+const SCOPES = new Set(['session', 'all', 'saved', 'discarded', 'cleared']);
 
 /**
  * The stat strip, per licence, because the four artboards ask for DIFFERENT
@@ -312,6 +314,37 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     }
   };
 
+  // D6272 (owner, #6274 question 4 B): Clear history HIDES the caller's
+  // sessions and nothing is deleted, so it needs no confirm step — Restore
+  // undoes it. The next question starts a fresh thread.
+  const clearHistory = async () => {
+    setError('');
+    try {
+      const r = await api.research.askClearHistory();
+      const n = Number(r?.cleared || 0);
+      setAnnounce(n
+        ? `Cleared ${n} session${n === 1 ? '' : 's'}. Nothing was deleted: Show cleared brings ${n === 1 ? 'it' : 'them'} back.`
+        : 'There was nothing to clear.');
+      setView('session');
+      await loadThread('session', '');
+    } catch {
+      setError('Your history could not be cleared right now. Nothing was changed.');
+    }
+  };
+
+  const restoreHistory = async () => {
+    setError('');
+    try {
+      const r = await api.research.askRestoreHistory();
+      const n = Number(r?.restored || 0);
+      setAnnounce(n ? `Restored ${n} session${n === 1 ? '' : 's'} to your history.` : 'There was nothing to restore.');
+      setView('all');
+      await loadThread('all', '');
+    } catch {
+      setError('Your cleared history could not be restored right now. Nothing was changed.');
+    }
+  };
+
   const toggleSaved = async (item) => {
     setSavingUid(item.uid);
     try {
@@ -416,7 +449,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
              both are controls that cannot act, which is the same rule the
              Library applies to a client's document. With rows they are back,
              unchanged. */
-          actions={visible.length ? zoneActions(visible, { newSession, savedAnswers: () => setView('saved') }) : []}
+          actions={visible.length ? zoneActions(visible, { newSession, clearHistory, savedAnswers: () => setView('saved') }) : []}
         />
       )}
       <ZoneHeading
@@ -598,6 +631,22 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             now, and an empty scope is an empty READ — `all` is itself zero —
             so the guard admits those two, or the Archived tab with nothing
             archived would render no body at all. */}
+        {/* D6272: the cleared view says what it holds and offers Restore. */}
+        {view === 'cleared' && !thread.loading && !thread.error ? (
+          <div className="flex flex-wrap items-center gap-2" data-testid="ask-cleared-bar">
+            <p className="text-[12.5px] leading-relaxed text-gray-700 dark:text-gray-300">
+              {all.length
+                ? 'These sessions were cleared from your history. Nothing in them was deleted.'
+                : 'No cleared sessions.'}
+            </p>
+            {all.length ? (
+              <button type="button" className={buttonClass} onClick={restoreHistory} data-testid="ask-restore-history">
+                Restore to history
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {!thread.loading && !thread.error && visible.length === 0
           && (all.length > 0 || view === 'discarded' || view === 'saved') ? (
           <Card className="border-dashed p-4">

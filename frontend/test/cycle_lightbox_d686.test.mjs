@@ -236,7 +236,7 @@ test('the three action routes are literal routes with their guard and `lightbox`
     assert.doesNotMatch(line, /<Navigate/);
     assert.ok(at < app.indexOf(`<Route path="${slug}"`), `${path} is declared before ${slug}`);
   }
-  for (const [path, to, hash] of [['/build/tools', '/build/operating-systems', '#tools'], ['/raise/calls', '/raise/capital-relationships/calls', ''], ['/grow/updates', '/grow/reporting', '']]) {
+  for (const path of ['/build/tools', '/raise/calls', '/grow/updates']) {
     assert.equal(app.includes(`<Route path="${path}"`), false);
   }
   assert.match(app, /export function HistoryRedirect\(\{ to, hash \}\) \{\s*const location = useLocation\(\);\s*return <Navigate replace to=\{\{ pathname: to, search: location\.search, hash \}\} \/>;/);
@@ -282,8 +282,10 @@ const cards = (cycle) => MODULES[cycle].map((m) => ({ slug: m.slug, name: m.name
 
 test('history: Validate has none; other histories require module tabs and appear once', () => {
   assert.deepEqual(cycleTabs('validate', cards('validate'), null, '?project_id=7').slice(0, 2).map((t) => [t.name, t.href]), [['Overview', '/validate?project_id=7'], ['Problem discovery', '/validate/problem-discovery?project_id=7']]);
-  // #1598 and #1599: Raise's Calls and Grow's Updates sections shipped, so their histories are live.
-  for (const [c, key] of [['raise', 'calls'], ['grow', 'reporting']]) {
+  // #1599: Grow's history is live. D5081 part 5 (#5081, RA-12): Raise's Calls is Capital relationships' own tab, not a history.
+  assert.equal(CYCLES.raise.history, undefined);
+  assert.equal(cycleTabs('raise', cards('raise')).some((t) => t.key === 'calls'), false, 'Raise draws no Calls peer tab');
+  for (const [c, key] of [['grow', 'reporting']]) {
     assert.equal(CYCLES[c].history.live, true, `${c} is live`);
     assert.equal(cycleTabs(c, cards(c)).some((t) => t.key === key), true, `${c} draws its history`);
   }
@@ -291,29 +293,29 @@ test('history: Validate has none; other histories require module tabs and appear
   assert.deepEqual(cycleTabs('build', [{ slug: 'x', name: 'Tools' }]).filter((t) => t.name === 'Tools').length, 1, 'never twice');
 });
 
-test('Build\'s Tools is live now its section ships (#1597): second, on Operating systems\' #tools, keeping the venture', () => {
+test('Build\'s Tools is live now its section ships (#1597): after Plan and Progress (D6029), on Operating systems\' #tools, keeping the venture', () => {
   assert.equal(CYCLES.build.history.live, true);
   const tabs = cycleTabs('build', cards('build'), 'operating-systems', '?project_id=7');
-  assert.deepEqual([tabs[1].key, tabs[1].name, tabs[1].href, tabs[1].active], ['tools', 'Tools', '/build/operating-systems?project_id=7#tools', false]);
+  // D6029 (BD23): Plan and Progress lead, after Overview; Tools follows them, fourth.
+  assert.deepEqual([tabs[3].key, tabs[3].name, tabs[3].href, tabs[3].active], ['tools', 'Tools', '/build/operating-systems?project_id=7#tools', false]);
   assert.equal(tabs.filter((t) => t.name === 'Tools').length, 1);
   assert.equal(tabs.find((t) => t.key === 'operating-systems').active, true, 'the module tab keeps aria-current');
   assert.match(read('frontend/src/pages/cycles/ToolsHistory.jsx'), /<section id="tools"/, 'the hash lands on the section');
 });
 
 test('a live history keeps ?project_id= and its hash, and is never current outside Validate', () => {
-  const saved = CYCLES.raise.history.live;
-  CYCLES.raise.history.live = true;
-  try {
-    const tabs = cycleTabs('raise', cards('raise'), 'capital-relationships', '?project_id=7');
-    // D1261 (#2430): Evidence leads, after Overview; Calls follows it.
-    assert.deepEqual([tabs[1].name, tabs[1].href, tabs[1].active], ['Evidence', '/raise/evidence?project_id=7', false]);
-    assert.deepEqual([tabs[2].name, tabs[2].href, tabs[2].active], ['Calls', '/raise/capital-relationships/calls?project_id=7', false]);
-    assert.equal(tabs.find((t) => t.key === 'capital-relationships').active, true, 'the module tab keeps aria-current');
-    const out = renderToStaticMarkup(h(MemoryRouter, null, h(CycleHeader, { cycle: 'raise', cards: cards('raise'), active: 'capital-relationships', search: '?project_id=7' })));
-    const values = [...out.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
-    assert.equal(new Set(values).size, values.length, 'the phone select has one value per tab');
-    assert.match(out, /<option value="calls">Calls<\/option>/);
-  } finally { CYCLES.raise.history.live = saved; }
+  // Build's Tools carries the rule now Raise has no history tab (D5081 part 5).
+  const tabs = cycleTabs('build', cards('build'), 'operating-systems', '?project_id=7');
+  const tools = tabs.find((t) => t.key === 'tools');
+  assert.deepEqual([tools.href, tools.active], ['/build/operating-systems?project_id=7#tools', false]);
+  // D1261 (#2430): Evidence leads Raise, after Overview; the modules follow it, and Calls is not among them.
+  const raise = cycleTabs('raise', cards('raise'), 'capital-relationships', '?project_id=7');
+  assert.deepEqual([raise[1].name, raise[1].href, raise[1].active], ['Evidence', '/raise/evidence?project_id=7', false]);
+  assert.equal(raise.find((t) => t.key === 'capital-relationships').active, true, 'the module tab keeps aria-current');
+  const out = renderToStaticMarkup(h(MemoryRouter, null, h(CycleHeader, { cycle: 'raise', cards: cards('raise'), active: 'capital-relationships', search: '?project_id=7' })));
+  const values = [...out.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(new Set(values).size, values.length, 'the phone select has one value per tab');
+  assert.doesNotMatch(out, /<option value="calls">/);
 });
 
 test('every live history path is a static route in App.jsx or a module of its cycle', () => {

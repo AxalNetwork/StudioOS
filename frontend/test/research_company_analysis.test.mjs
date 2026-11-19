@@ -15,7 +15,14 @@ import {
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 const CANVAS = read('../../design/canvases/integrated/Pages · Company analysis.dc.html');
-const page = read('../src/pages/research/CompanyAnalysis.jsx');
+// D7176: the dossier's section headings live in its draft module, beside the page.
+const page = read('../src/pages/research/CompanyAnalysis.jsx') + read('../src/pages/research/companyAnalysisDraft.js');
+// D7176 (canvas D7042) supersedes these labels of canvas 90eb4cf2: the page renders the newer canvas's words.
+const SUPERSEDED = {
+  'Re-run': 'Rerun discovery',
+  Markdown: 'Markdown (.md)',
+  'Re-run replaces discovered rows and keeps origin=manual.': 'A rerun replaces nothing until you accept its changes',
+};
 const app = read('../src/App.jsx');
 const component = read('../src/components/CompetitorAnalysis.jsx');
 const candidate = read('../src/pages/research/CompanyCandidate.jsx');
@@ -47,7 +54,7 @@ test('the page renders every element the canvas draws', () => {
     'What this page will not do',
     'Nothing here is a relationship, a headcount, or a comparable.',
     'Re-run replaces discovered rows and keeps origin=manual.',
-  ]) bothEnds(s, s.replace('Gaps &amp;', 'Gaps &').replace('editable · max 200', 'editable, max 200'));
+  ]) bothEnds(s, SUPERSEDED[s] ?? s.replace('Gaps &amp;', 'Gaps &').replace('editable · max 200', 'editable, max 200'));
   // The inputs row, the tiles and the table's columns.
   for (const k of ['Market', 'Customer', 'Geography', 'Depth', 'Known competitors']) {
     assert.ok(CANVAS.includes(`k:'${k}'`), k);
@@ -64,7 +71,9 @@ test('the model label is not called a recommendation', () => {
   assert.ok(CANVAS.includes('Recommended next actions'));
   assert.doesNotMatch(page, /Recommend/);
   assert.doesNotMatch(component, /Recommended next actions/);
-  assert.match(page, /Next steps the run listed/);
+  // D7175 (canvas D7041): the run's next steps are drawn as questions, apart from findings.
+  assert.match(page, /Suggested research questions/);
+  assert.doesNotMatch(page, /Next steps the run listed/);
 });
 
 test('three states, three shapes: a failed read, a failed run, a finished run', () => {
@@ -136,7 +145,7 @@ test('a save never sends the candidate set, so a blank relevance is never writte
 });
 
 test('the page is routed for the list’s licences and the list links to it', () => {
-  assert.match(app, /path="\/research\/companies\/:id" element=\{guard\(labRoles\(\['admin', 'founder', 'advisor'\]\), <CompanyAnalysis /);
+  assert.match(app, /path="\/research\/companies\/:id" element=\{guard\(labRoles\(\['admin', 'founder', 'advisor'\], \{ preview: false \}\), <CompanyAnalysis /);
   // The zone's saved list is a link, and it is the branch `linkToDossier`
   // takes — the text of a Link in a dead arm would prove nothing.
   assert.match(component, /linkToDossier \? \(\s*\/\/[^\n]*\n\s*<Link key=\{a\.id\} to=\{`\/research\/companies\/\$\{encodeURIComponent\(a\.id\)\}`\}/);

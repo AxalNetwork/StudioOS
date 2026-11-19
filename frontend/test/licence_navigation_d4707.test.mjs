@@ -130,7 +130,8 @@ test('no licence write asks with window.prompt or window.confirm any more', () =
   }
   // D4819 part 11 (#5922): Remove… (the demote) asks through the Access model, which states its
   // consequence first and keeps demoteAdmin's own minimum; licence_access_d5922 checks the words.
-  assert.ok(PAGE.includes('await ask(removeAdminAsk(licence, a))'), 'demoteAdmin');
+  // D4819 part 21 (#5928): add and remove go through the one consequence sheet.
+  assert.ok(PAGE.includes("await ask('removeAdmin', licence, { target: a })"), 'demoteAdmin');
   // D4819 part 4 (#5927): suspend and terminate ask through the consequence sheet.
   assert.ok(PAGE.includes('await askConsequence(action, d, reads)'));
 });

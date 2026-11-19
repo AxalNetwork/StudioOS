@@ -7,14 +7,18 @@ import { cyclesWrite } from '../../../lib/api/cycles';
 import ShareUpdateLightbox from '../../founder/ShareUpdateLightbox';
 import { distributionPrimary } from '../distribution/distributionModel.js';
 import DurabilityChecklist from '../DurabilityChecklist';
+import DurableDueStrip from '../DurableDueStrip';
 import GrowFromMercury from '../GrowFromMercury';
+import GrowFromTiktok from '../GrowFromTiktok';
 import { DurableFromGoogle, RevenueFromGoogle } from '../GrowFromGoogle';
 import FromNotion from '../FromNotion';
 import { ImprovementPosthog, RevenuePosthog } from '../GrowPosthog';
 import UpdateAskReplies from '../UpdateAskReplies';
 import FeedbackThemes from '../FeedbackThemes';
+import FeedbackLoop from '../FeedbackLoop';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
+import PartnershipsCoMarketing from '../PartnershipsCoMarketing';
 import { lazyStep } from '../lazyStep.jsx';
 import { growModuleTitle } from '../growOverviewModel';
 
@@ -25,6 +29,8 @@ const GrowOverview = lazyStep(() => import('../GrowOverview'));
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
 const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
+// D5866 (#5866): the founder's own TikTok, after From Mercury, anchored at #from-tiktok.
+const fromTiktok = (slug, data, ctx) => <GrowFromTiktok slug={slug} part={data?.parts?.from_tiktok} projectId={ctx.projectId} reload={ctx.reload} />;
 
 /**
  * Grow's read (#1488, D664) carries its own shapes, so it has an adapter
@@ -47,11 +53,17 @@ const grow = {
   tools: toFnMap({
     'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
     'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
-    // #6109: the pair's other half. Partnerships reads the co-marketing pitches and attributions.
-    'partner-network': (q) => ({ label: 'Open Partnerships: pitches and attributions', href: `/grow/partnerships${q}` }),
     'durable-company-building': () => ({ label: 'Open compliance in Calendar', href: '/calendar?layer=compliance' }),
   }),
   add: toFnMap({}),
+  // D6122 (#6122, GR-21): Company's due strip above the obligations, filtering them by window.
+  aboveRecords: toFnMap({
+    // D6118 (GR-09): the Mercury-sourced partner proposal sits on top of the partner table.
+    'partner-network': (data, ctx) => fromMercury('partner-network', data, ctx),
+    'durable-company-building': (data, ctx) => (
+      <DurableDueStrip counts={data?.parts?.due_counts} on={data?.parts?.due_on} query={ctx.query} onQuery={ctx.onQuery} search={ctx.search} />
+    ),
+  }),
   fills: { 'product-improvement': 'feedback_theme' },
   // The Grow desk's AI band (ZoneDraft, D424) on the module it reads: the
   // applicant ranking on Team expansion. D4493 retired Distribution's
@@ -69,9 +81,12 @@ const grow = {
   parts: toFnMap({
     // D686 §5.8: the Updates history (#updates) above the checklist.
     'durable-company-building': (data, ctx) => (<>
-      <UpdatesHistory updates={data?.parts?.updates} reason={data?.parts?.updates_reason} onShare={ctx.openAction} />
+      {/* D6122 (GR-21): the last five, and where the next one is written. */}
+      <UpdatesHistory updates={data?.parts?.updates} reason={data?.parts?.updates_reason} onShare={ctx.openAction}
+        limit={5} more={{ text: 'Write the update in Reporting →', href: `/grow/reporting${ctx.projectId ? `?project_id=${ctx.projectId}` : ''}` }} />
       <DurabilityChecklist items={data?.parts?.checklist}
-        onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined} />
+        onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined}
+        onNotApplicable={ctx.projectId ? (key, na) => cyclesWrite.grow.checklistNotApplicable(ctx.projectId, key, na).then(ctx.reload) : undefined} />
       {fromMercury('durable-company-building', data, ctx)}
       {/* D1095 (#2960): Calendar events tagged #board or #filing, each an obligation proposal. */}
       <DurableFromGoogle projectId={ctx.projectId} />
@@ -81,25 +96,33 @@ const grow = {
       {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
       <CalendarWeek projectId={ctx.projectId} />
       {fromMercury('distribution', data, ctx)}
+      {fromTiktok('distribution', data, ctx)}
       <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
     </>),
     // D1090 (#2955): a feedback database in Notion, as product feedback.
     // D6098 (#6098): Rename or merge a theme; `parts.themes` reaches writers only.
+    // D6865 (#6865): the counts strip, a theme's weight and Close the loop (GR-21, GR-23, GR-26).
     'product-improvement': (data, ctx) => (<>
+      <FeedbackLoop counts={data?.parts?.counts} themes={data?.parts?.themes} projectId={ctx.projectId}
+        api={cyclesWrite.grow} reload={ctx.reload} />
       <FeedbackThemes themes={data?.parts?.themes}
         onRename={ctx.projectId ? (body) => cyclesWrite.grow.feedbackTheme(ctx.projectId, body).then((out) => { ctx.reload(); return out; }) : undefined} />
       <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />
       {/* D1608 (#3731): survey scores and feedback from the founder's PostHog. */}
       <ImprovementPosthog projectId={ctx.projectId} />
     </>),
+    // D6118 (#6118, GR-09): Partnerships is one page. Co-marketing (pitches and attributions) is drawn
+    // under the partner table; the Mercury proposal is above it (`aboveRecords`).
     'partner-network': (data, ctx) => (<>
       <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
-      {fromMercury('partner-network', data, ctx)}
+      <PartnershipsCoMarketing projectId={ctx.projectId} />
     </>),
     // D840 part 3 (#2348): the founder's own Mercury, anchored at #from-mercury.
     // D1095 (#2960): then a metrics Sheet's figures, From Google.
     'revenue-and-traction': (data, ctx) => (<>
       {fromMercury('revenue-and-traction', data, ctx)}
+      {/* D5866: Audience on TikTok, beside revenue and never inside MRR, the ledger or a KPI. */}
+      {fromTiktok('revenue-and-traction', data, ctx)}
       <RevenueFromGoogle projectId={ctx.projectId} />
       {/* D1608 (#3731): PostHog's metrics and product retention, apart from revenue retention. */}
       <RevenuePosthog projectId={ctx.projectId} />

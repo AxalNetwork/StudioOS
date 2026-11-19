@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { partnerDeliveryHistoryApi } from '../../../lib/api/partnerDeliveryHistory';
 import { ZoneBody, NoPartnerProfile, StatedLimit, isNoPartnerProfile } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import EngagementLifecycle from './EngagementLifecycle';
+import { HistoryPager, useMorePages } from './historyPages';
 import EngagementSheet from './EngagementSheet';
 import HealthPill from './HealthPill';
 import MyTasks from '../../work/MyTasks.jsx';
@@ -85,6 +87,9 @@ const PRIMARY_BUTTON = 'inline-flex min-h-[44px] items-center rounded-lg bg-[#7c
 // orders them Attention first and names them as the v2 canvas does, each with its count.
 const V2_CHIPS = [['Needs attention', 'attention', 'Attention'], ['All', 'all', 'All'], ['Project', 'project', 'Projects'], ['Embedded', 'embedded', 'Embedded']];
 
+const boardKey = (r) => r.engagement_id;
+const fetchBoardPage = (o) => partnerDeliveryHistoryApi.partnerDeliveryBoardPage(o);
+
 export default function PartnerDeliveryBoardZone() {
   // `error` is a failed FIRST read (the zone's own error state); `refreshError` a failed later read, which keeps the board.
   const [state, setState] = useState({ loading: true, refreshing: false, error: '', refreshError: '', data: null, readAt: null });
@@ -109,9 +114,13 @@ export default function PartnerDeliveryBoardZone() {
   useEffect(() => { load(); }, [load]);
 
   const d = state.data;
-  const items = useMemo(() => (Array.isArray(d?.items) ? d.items : []), [d]);
+  // #4709: the read is the board's first page (the newest 200); Load more adds the rest.
+  const more = useMorePages(d, fetchBoardPage, boardKey);
+  const items = Array.isArray(more?.items) ? more.items : [];
   const current = view ?? defaultView(items);
-  const counts = boardCounts(items);
+  // The chips count the rows loaded; `All` is the book's, and the pager says
+  // when the loaded rows are not all of it.
+  const counts = { ...boardCounts(items), ...(typeof more.page?.total === 'number' ? { all: more.page.total } : {}) };
   const visible = items.filter((row) => matchesView(row, current, query));
   const primary = primaryAction(items);
   const selectedKey = params.get('engagement');
@@ -251,6 +260,9 @@ export default function PartnerDeliveryBoardZone() {
               </article>
             ))}
           </div>
+
+          <HistoryPager page={more.page} shown={items.length} noun="engagements"
+            loadingMore={more.loadingMore} moreError={more.moreError} onMore={more.loadMore} />
 
           {visible.length === 0 && (
             <p className="text-[14px] text-[#6b6577] dark:text-gray-400">

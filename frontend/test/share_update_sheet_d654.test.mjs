@@ -324,7 +324,7 @@ test('D686: the Opened states, and module links keep the venture once the Worker
   assert.equal(recipientState({ opened_at: '2026-11-04T08:00:00Z' }), 'Opened 4 Nov');
   assert.equal(recipientState({}), 'Not opened');
   assert.equal(moduleHref('customers', null), '/grow/distribution');
-  assert.equal(moduleHref('partnerships', 7), '/grow/partner-network?project_id=7');
+  assert.equal(moduleHref('partnerships', 7), '/grow/partnerships?project_id=7'); // D6118: one Partnerships page
   assert.equal(moduleHref('capital', null), '/raise/capital-relationships');
   assert.equal(moduleHref('nowhere', 7), null);
 });
@@ -408,7 +408,8 @@ test('D686: the Updates history: rows, links only with href, the Ask again pill,
   assert.match(ssr(React.createElement(UpdatesHistory, { updates: [], onShare: () => {} })), /No update shared yet[\s\S]*>Share an update</);
   assert.equal(ssr(React.createElement(UpdatesHistory, {})), '');
   const route = cycleRouteText();
-  assert.match(route, /<UpdatesHistory updates=\{data\?\.parts\?\.updates\} reason=\{data\?\.parts\?\.updates_reason\} onShare=\{ctx\.openAction\} \/>\s*<DurabilityChecklist/);
+  // D6122 (GR-21): the last five, with Write the update in Reporting, then the checklist.
+  assert.match(route, /<UpdatesHistory updates=\{data\?\.parts\?\.updates\} reason=\{data\?\.parts\?\.updates_reason\} onShare=\{ctx\.openAction\}\s*limit=\{5\} more=\{\{ text: 'Write the update in Reporting →'.*\}\} \/>\s*<DurabilityChecklist/);
 });
 
 test('D686: Distribution and Partner network draw "From update asks" with a Lead or Partner pill', () => {

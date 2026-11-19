@@ -407,6 +407,18 @@ export function discoverParams({ limit, from, to, q, format, price, topic } = {}
   return p;
 }
 
+/*
+ * Where an event comes from (ME5, #5869, D3724 §gaps 7). The Worker puts
+ * `source` on every event it shapes; today that is always `axal`, because the
+ * owner decided Axal events only (D1487, question 1). The card reads the
+ * field: an event with no `source`, or one this list does not know, shows no
+ * badge rather than a guessed one.
+ */
+export const SOURCE_LABELS = Object.freeze({ axal: 'Axal' });
+export const sourceLabel = (event) => (typeof event?.source === 'string' && Object.hasOwn(SOURCE_LABELS, event.source) ? SOURCE_LABELS[event.source] : null);
+/** ME5: events from outside Axal are not offered, and the chip says so. */
+export const EXTERNAL_EVENTS = Object.freeze({ label: 'External events', state: 'Not enabled', note: 'Axal’s own events only.' });
+
 export const FORMATS = [{ key: '', label: 'Any format' }, { key: 'virtual', label: 'Online' }, { key: 'in_person', label: 'In person' }, { key: 'hybrid', label: 'Hybrid' }];
 export const PRICES = [{ key: '', label: 'Any price' }, { key: 'free', label: 'Free' }, { key: 'paid', label: 'Paid' }];
 

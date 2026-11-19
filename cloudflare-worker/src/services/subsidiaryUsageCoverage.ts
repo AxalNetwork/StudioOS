@@ -2,10 +2,13 @@
  * How far HQ's usage-report ledger answers "revenue per subsidiary" (D456).
  *
  * `subsidiary_usage_reports` holds what each branch SAID about a quarter — not
- * a revenue total HQ can sum. Every stream today arrives with `gross_cents`
- * null (D266), and reporting "unmeasurable" is a truer state than "not
- * reported". This read names, per licence, whether the current quarter was
- * reported and whether any stream carried a measurable amount — never a total.
+ * a revenue total HQ can sum. Since D5947 a branch reports a measured figure
+ * for a stream its own database can total (subscriptions, from its financial
+ * ledger) and NULL with a state for the rest; a branch receiving no Stripe
+ * webhooks still reports every stream unmeasured. This read names, per
+ * licence, whether the quarter was reported and WHICH streams carried a
+ * measurable amount, with each stream's state, source and as-of time — never
+ * a total, and never an amount added across streams or currencies.
  */
 import type { Env } from '../types';
 import { quarterKey } from './statements';
@@ -18,7 +21,23 @@ export type LicenceUsageCoverage = {
   reported: boolean;
   streams_reported: number;
   streams_measurable: number;
+  /** D5947 — the streams that carried an amount, by name. */
+  measurable_streams: string[];
+  /** D5947 — every reported stream with what the branch said about it. No amount: this is coverage. */
+  streams: UsageStreamCoverage[];
   reported_at: string | null;
+};
+
+export type UsageStreamCoverage = {
+  stream: string;
+  measurable: boolean;
+  /** The figure's own currency; meaningless when `measurable` is false. */
+  currency: string;
+  /** NULL when a build before D5947 reported the row (migration 202611161359). */
+  state: string | null;
+  reason: string | null;
+  source: string | null;
+  source_as_of: string | null;
 };
 
 export type SubsidiaryUsageCoverage =
@@ -31,10 +50,18 @@ export type SubsidiaryUsageCoverage =
   }
   | { available: false; reason: string };
 
+/** Kept, word for word, for a period in which no licence reported a measurable stream (D266). */
 export const REVENUE_PER_SUBSIDIARY_REASON =
   'Each branch reports its quarter to HQ every morning (D266), and every stream in that report '
   + 'arrives unmeasured: branch databases record no revenue amounts, so there is no figure to total '
   + 'or show per subsidiary.';
+
+/** D5947 — once any licence reported a measured stream, the sentence above is no longer true. */
+export const REVENUE_PER_SUBSIDIARY_PARTLY_MEASURED_REASON =
+  'Each branch reports its quarter to HQ every morning (D266). A stream is measured only where the '
+  + 'branch\'s own database records amounts (subscriptions, from its financial ledger, D5947); each '
+  + 'licence names the streams that were, and the rest arrive unmeasured. No figure is totalled across '
+  + 'streams, subsidiaries or currencies.';
 
 /** MTD at platform scope inherits the same absence — nothing attributes spend to a licence. */
 export const MTD_REVENUE_REASON =
@@ -57,12 +84,13 @@ export async function subsidiaryUsageCoverage(
         ORDER BY licence_ref`,
     ).all<{ uid: string; licence_ref: string; brand_name: string }>();
 
+    // `*`, not a column list: the D5947 columns are read when the migration has run and are
+    // NULL (a pre-D5947 report) when it has not, rather than failing the whole coverage read.
     const reports = await env.DB.prepare(
-      `SELECT licence_uid, stream, gross_cents, reported_at
-         FROM subsidiary_usage_reports
-        WHERE period = ?`,
+      `SELECT * FROM subsidiary_usage_reports WHERE period = ? ORDER BY licence_uid, stream`,
     ).bind(period).all<{
-      licence_uid: string; stream: string; gross_cents: number | null; reported_at: string;
+      licence_uid: string; stream: string; gross_cents: number | null; currency: string | null; reported_at: string;
+      state?: string | null; reason?: string | null; source?: string | null; source_as_of?: string | null;
     }>();
 
     const byLicence = new Map<string, typeof reports.results>();
@@ -76,7 +104,17 @@ export async function subsidiaryUsageCoverage(
     const by_licence: LicenceUsageCoverage[] = (licences.results || []).map((l) => {
       const rows = byLicence.get(String(l.uid)) || [];
       const streamsReported = rows.length;
-      const streamsMeasurable = rows.filter((r) => r.gross_cents !== null).length;
+      const streams: UsageStreamCoverage[] = rows.map((r) => ({
+        stream: String(r.stream),
+        measurable: r.gross_cents !== null,
+        currency: String(r.currency ?? ''),
+        state: r.state ?? null,
+        reason: r.reason ?? null,
+        source: r.source ?? null,
+        source_as_of: r.source_as_of ?? null,
+      }));
+      const measurableStreams = streams.filter((x) => x.measurable).map((x) => x.stream);
+      const streamsMeasurable = measurableStreams.length;
       const reportedAt = rows.length
         ? rows.map((r) => r.reported_at).sort().slice(-1)[0]
         : null;
@@ -87,6 +125,8 @@ export async function subsidiaryUsageCoverage(
         reported: streamsReported > 0,
         streams_reported: streamsReported,
         streams_measurable: streamsMeasurable,
+        measurable_streams: measurableStreams,
+        streams,
         reported_at: reportedAt,
       };
     });
@@ -95,7 +135,9 @@ export async function subsidiaryUsageCoverage(
       available: true,
       period,
       by_licence,
-      revenue_reason: REVENUE_PER_SUBSIDIARY_REASON,
+      revenue_reason: by_licence.some((l) => l.streams_measurable > 0)
+        ? REVENUE_PER_SUBSIDIARY_PARTLY_MEASURED_REASON
+        : REVENUE_PER_SUBSIDIARY_REASON,
     };
   } catch {
     return {
@@ -129,5 +171,8 @@ export function revenueAbsenceReason(
   if (row.streams_measurable === 0) {
     return `Report received for ${coverage.period}; every stream arrived unmeasured, because this branch's database records no revenue amounts.`;
   }
-  return REVENUE_PER_SUBSIDIARY_REASON;
+  // D5947: this licence measured something, so "every stream arrived unmeasured" would be false here.
+  const rest = row.streams_reported > row.streams_measurable ? '; the other streams arrived unmeasured' : '';
+  return `Report received for ${coverage.period}; measured: ${row.measurable_streams.join(', ')}. `
+    + `Each figure is in its own currency and none is totalled${rest}.`;
 }

@@ -7,7 +7,8 @@
  * (`tiktok_grow_5863.test.ts` holds the three to each other).
  *
  * Part 1 (#5291) built the sign-in, which lands nothing. Part 2a (`services/tiktok/grow.ts`) built the first two.
- * The "Add TikTok as a channel" proposal and the Updates line wait for their own parts.
+ * Part 2b (#5864) built the "Add TikTok as a channel" proposal, which is computed from local data and calls nothing.
+ * The Updates line waits for its own part.
  *
  * No side effects and no imports: the registry and the pages may read it.
  */
@@ -37,7 +38,7 @@ export const TIKTOK_FEED_LIST: readonly TikTokFeed[] = Object.freeze(([
     calls: Object.freeze(['/v2/video/list/']),
   },
   {
-    key: 'channel', module: 'distribution', kind: 'proposal', built: false, decision: 'D2401',
+    key: 'channel', module: 'distribution', kind: 'proposal', built: true, decision: 'D5864',
     what: 'Add TikTok as a Distribution channel, only when you accept',
     calls: Object.freeze([]),
   },

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import WorkspaceShell from '../workspaces/WorkspaceShell';
 import WorkerRail from '../ui/WorkerRail';
@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { readableFund, useFundReport } from '../hooks/useFundReport';
 import { fundDraftsApi } from '../lib/api/fundDrafts.js';
 import FundDraftBand from './FundDraftBand';
+import { EditTermsCard } from './investor/FundTermsForm';
 import { fundFactsEditHref } from './admin/fundAdmin/fundAdminModel';
 import './fundPage.css';
 
@@ -28,7 +29,8 @@ export function periodIssue(period) {
  * a manager (can_manage, so `requireFundGp` passed: the GP of record on the institutional tier, or an admin)
  * gets the fund's working zones, each opened on this fund with `?fund=`; an LP gets their own commitment and
  * statements; everyone who can read the fund gets its performance (#6245, owner answer C: LPs and GPs both).
- * Editing fund facts is the admin console's dialog; a GP who is not an admin has no edit page, so it says so.
+ * An admin edits fund facts in the admin console's dialog; a GP of record who is not an admin edits the terms
+ * here (#6235), with Edit terms.
  */
 export function fundHandoffs(page, role) {
   const id = page.fund.id;
@@ -42,7 +44,7 @@ export function fundHandoffs(page, role) {
   links.push({ to: '/funds/performance', label: 'Fund performance', testid: 'link-fund-performance' });
   const edit = !page.can_manage ? null : role === 'admin'
     ? { to: fundFactsEditHref(id), label: 'Edit fund facts', testid: 'link-fund-edit-facts' }
-    : { unavailable: 'Edit fund facts: Not available. Fund facts are edited in Fund administration, which is for Axal admins.' };
+    : { action: 'Edit terms', testid: 'button-fund-edit-terms' };
   return { links, edit };
 }
 export function FundReadState({ reading }) {
@@ -56,6 +58,31 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
   const reading = supplied || resource;
   const page = !reading.loading && !reading.error && readableFund(reading.data) ? reading.data : null;
   const [download, setDownload] = useState({ busy: false, error: null });
+  // #6235: Edit terms is open, and the line after a save (the page read again).
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
+  // #6252 (D6252, Q1 answer A): the newest kept brief, read for whoever can manage the fund.
+  const [note, setNote] = useState({ loading: false, note: null, error: null });
+  const manageId = page?.can_manage ? page.fund.id : null;
+  useEffect(() => {
+    if (!manageId) return undefined;
+    let live = true;
+    setNote({ loading: true, note: null, error: null });
+    fundDraftsApi.briefNote(manageId).then(
+      (r) => { if (live) setNote({ loading: false, note: r?.note ?? null, error: null }); },
+      () => { if (live) setNote({ loading: false, note: null, error: 'Unreadable: the fund note could not be read.' }); },
+    );
+    return () => { live = false; };
+  }, [manageId]);
+  const keepBrief = async (_text, draft) => {
+    try {
+      const r = await fundDraftsApi.keepBrief(page.fund.id, draft);
+      setNote({ loading: false, note: r?.note ?? null, error: null });
+      return null;
+    } catch (failure) {
+      return [403, 404, 409, 422, 503].includes(failure?.status) && failure?.message ? failure.message : 'The brief could not be kept. Nothing was written. Try again.';
+    }
+  };
   const openLpa = async () => {
     setDownload({ busy: true, error: null });
     try { await api.downloadFundLpa(page.fund.id); setDownload({ busy: false, error: null }); }
@@ -86,18 +113,32 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
       {page.can_manage && <FundDraftBand testId="fund-brief-band" title="Fund brief" run="Draft the brief"
         body="Draft a one-paragraph description of this fund from its recorded facts."
         writes="Accept writes a note. It changes no fund record."
-        onRun={() => fundDraftsApi.brief(page.fund.id)}
-        acceptBlocked="Keeping the brief as a note is not built yet: where fund notes are stored is waiting on a decision (#6252). Nothing has been written." />}
-      <FundHandoffs page={page} role={role} />
+        onRun={() => fundDraftsApi.brief(page.fund.id)} onAccept={keepBrief} />}
+      {page.can_manage && <FundNote reading={note} />}
+      {editing && <EditTermsCard fundId={page.fund.id} onClose={() => setEditing(false)}
+        onSaved={() => { setEditing(false); setSaved(true); reading.reload?.(); }} />}
+      {saved && !editing && <p className="fd-saved" role="status" data-testid="text-fund-terms-saved">Terms saved. The page shows them as recorded.</p>}
+      <FundHandoffs page={page} role={role} onEdit={() => { setSaved(false); setEditing(true); }} editing={editing} />
     </>}
   </WorkspaceShell></div>;
 }
-function FundHandoffs({ page, role }) {
+function FundNote({ reading }) {
+  if (reading.loading) return null;
+  if (reading.error) return <article className="fd-card" data-testid="fund-note"><h2>Fund brief · kept</h2><p role="alert">{reading.error}</p></article>;
+  const n = reading.note;
+  if (!n) return null;
+  return <article className="fd-card" data-testid="fund-note"><h2>Fund brief · kept</h2>
+    <p className="fd-draft-body">{n.body}</p>
+    <small>Kept by <Recorded value={n.author?.name} reason="The author's name is not recorded." /> · <Recorded value={n.created_at} reason="The date is not recorded." /></small>
+    {Array.isArray(n.sources) ? n.sources.length > 0 && <><h3>Drawn from</h3><ol className="fd-draft-sources">{n.sources.map((s) => <li key={s.n} value={s.n}>{s.label}{s.date ? ` · ${s.date}` : ''}</li>)}</ol></> : <p><b>Not recorded</b><small>The note's sources could not be read.</small></p>}
+  </article>;
+}
+function FundHandoffs({ page, role, onEdit, editing = false }) {
   const { links, edit } = fundHandoffs(page, role);
   return <nav className="fd-actions" aria-label="Next steps for this fund">
     {links.map(link => <Link key={link.testid} to={link.to} data-testid={link.testid}>{link.label}</Link>)}
     {edit?.to && <Link to={edit.to} data-testid={edit.testid}>{edit.label}</Link>}
-    {edit?.unavailable && <span className="fd-unavailable" data-testid="text-fund-edit-unavailable">{edit.unavailable}</span>}
+    {edit?.action && <button type="button" onClick={onEdit} disabled={editing} data-testid={edit.testid}>{edit.action}</button>}
   </nav>;
 }
 // #6247: the status is drawn as a pill, as the canvas draws it (fd-page, ops-data.js); a missing one stays Not recorded.

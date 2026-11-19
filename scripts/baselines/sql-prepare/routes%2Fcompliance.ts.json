@@ -1,4 +1,5 @@
 {
+  "EVENTS_WITH_OWNER @ routes/compliance.ts": 4,
   "updates.join(', ') @ routes/compliance.ts": 1,
   "where @ routes/compliance.ts": 1
 }

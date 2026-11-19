@@ -5,6 +5,9 @@
  *   GET /overview?project=:pid
  *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7], focus, meter, index }
  *       (D692: the phone's parts, in the shape all four cycles share; services/cycleFocus.ts)
+ *       D6045 (#6045): + `stage`, `primary_action { key, label, href, rule }` (null for staff), the Pitch
+ *       card's `pitch_state` and `investor_activity` (services/raiseJourney.ts); a source that could not
+ *       be read makes the fields it feeds `{ state: 'unreadable', reason }`, never a guessed stage.
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module: { slug, name, records_title }, card: Card,
  *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? }, parts? }
@@ -202,9 +205,12 @@ import {
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
+import { journeyUnreadable, raiseJourney } from '../services/raiseJourney';
 import { prospectBrief } from '../services/prospectBrief';
 import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
 import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
+import { addTypedEvidence, createPackLink, createReadinessLink, createPackPdf, createReadinessPdf, listPackLinks, revokePackLink, EvidenceShareError } from '../services/raiseEvidenceShare';
+import { createStatusLink, createStatusPdf, statusBody, type StatusDeps } from '../services/raiseStatusPage';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -362,19 +368,28 @@ cycleRaise.get('/overview', async (c) => {
   const ctx = ctxOf(c, s.projectId);
   // D1610 W5: the Cap table card says which plan records it.
   const withPlan = (cs: Card[]) => cs.map((card) => (card.slug === 'cap-table' ? { ...card, plan: capTablePlan(s.user) } : card));
-  if (capitalStaff(s.user)) {
-    const [figs, cs, steps, tools] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
+  // D6045: the stage, the primary action, the Pitch card's state and investor activity, from recorded state.
+  // Staff read counts only (no investor names) and are offered no action.
+  const staff = capitalStaff(s.user);
+  const journeyRead = raiseJourney(ctx, { currentDeck: () => currentDeck(c.env, s.projectId) }, { names: !staff, act: !staff })
+    .catch((e) => { console.warn('[cycle_raise] journey unreadable:', (e as Error)?.message); return journeyUnreadable(!staff); });
+  const withPitch = (cs: Card[], j: Awaited<typeof journeyRead>) =>
+    cs.map((card) => (card.slug === 'pitch-deck' ? { ...card, pitch_state: j.pitch_state } : card));
+  if (staff) {
+    const [figs, cs, steps, tools, j] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
       m.slug === 'capital-relationships' ? capitalSummaryCard(c.env, s.projectId)
-        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx)]);
-    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: withPlan(cs), next_steps: steps, connectors: tools });
+        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx), journeyRead]);
+    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: withPitch(withPlan(cs), j), next_steps: steps, connectors: tools,
+      stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity });
   }
   // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
   // The other six cards are built as `cards()` builds them.
   const owner = isRoomOwner(s);
   const cardsRead = owner ? cards(ctx)
     : Promise.all(MODULES.map((m) => (m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))));
-  const [figs, cs, steps, tools] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx)]);
-  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: withPlan(cs), next_steps: steps, connectors: tools, ...(await raisePhone(ctx, figs, cs)) });
+  const [figs, cs, steps, tools, j] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx), journeyRead]);
+  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: withPitch(withPlan(cs), j), next_steps: steps, connectors: tools, ...(await raisePhone(ctx, figs, cs)),
+    stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity });
 });
 
 cycleRaise.get('/modules/:slug', async (c) => {
@@ -420,10 +435,13 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (pmf) parts.pmf = pmf;
   // D909 (#2693): Home's tiles, Needs you and the Versions tab. It fails on its own, never the module.
   if (slug === 'investor-narrative') {
-    parts.narrative = await narrativeHome(ctx, sectionOfField).catch((e) => {
+    const home = await narrativeHome(ctx, sectionOfField).catch((e) => {
       console.warn('[cycle_raise] narrative part unreadable:', (e as Error)?.message);
       return { state: 'unreadable', reason: 'The narrative versions could not be read' };
     });
+    // D5074 part 7: the caller's narrative map rides with the part, so the overview card and the cycle's New version
+    // dialog draw from the map the writes refuse from (part 3), never from the account.
+    parts.narrative = { ...home, capabilities: narrativeCapabilities(await narrativeStanding(c, s.user, s.projectId)) };
   }
   // The Mercury part fails on its own: an owner check that cannot be read shows no part, never a failed module.
   // D882: the founder with no usable sign-in reads how to connect, never an empty figure.
@@ -1701,7 +1719,7 @@ cycleRaise.delete('/google/facts/:id', async (c) => {
 });
 
 // D1263: the evidence paths use scope(), then active-company and founder-only decision gates.
-async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
+export async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
   c.header('Cache-Control', 'no-store');
   const s = await scope(c);
   if (s instanceof Response) return s;
@@ -1712,7 +1730,7 @@ async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceConte
   if (write && !ctx.founder) throw new RaiseEvidenceError('forbidden', 403);
   return ctx;
 }
-function evidenceFailure(c: any, error: unknown) {
+export function evidenceFailure(c: any, error: unknown) {
   if (error instanceof RaiseEvidenceError) return c.json({ error: error.code, message: error.sentence }, error.status);
   return c.json({ error: 'evidence_unreadable', message: 'Evidence could not be read or saved. Try again.' }, 503);
 }
@@ -1780,6 +1798,58 @@ cycleRaise.delete('/evidence/claims/:id/note', async c => {
 cycleRaise.delete('/evidence/claims/:id/link', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c), true)); }
   catch (error) { return evidenceFailure(c, error); }
+});
+// D6864 (#6864, canvas D6054 RA-27/RA-29/RA-32): evidence added by hand, and packs shared outside Axal as links.
+// Founder-only; nothing here sends anything. The reader's public page is routes/evidence_share_public.ts.
+function shareFailure(c: any, error: unknown) {
+  return error instanceof EvidenceShareError ? c.json({ error: error.code, message: error.sentence }, error.status) : evidenceFailure(c, error);
+}
+cycleRaise.post('/evidence/items', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await addTypedEvidence(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.get('/evidence/share-links', async c => {
+  try {
+    const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx;
+    return c.json(await listPackLinks(ctx, async () => (await statusBody(ctxOf(c, ctx.projectId), statusDeps(c, ctx.projectId))).hash));
+  }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/evidence/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createPackLink(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 (#6897, RA-30): the readiness snapshot as a link. Listed and revoked with the pack links above.
+cycleRaise.post('/readiness/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createReadinessLink(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 part 2 (RA-28 C, RA-30 B): the same content as a PDF copy; listed on Shared links, never stoppable.
+cycleRaise.post('/evidence/pdf-copies', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createPackPdf(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/readiness/pdf-copies', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createReadinessPdf(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 part 4 (RA-31): the Raise status page, a one-page summary of the Overview, as a link or a PDF copy.
+// Listed and revoked with the links above; the reader's page is routes/status_share_public.ts.
+const statusDeps = (c: any, projectId: number): StatusDeps => ({
+  currentDeck: () => currentDeck(c.env, projectId),
+  roomCard: () => roomSummaryCard(c.env, projectId),
+});
+cycleRaise.post('/status/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createStatusLink(ctx, await evidenceBody(c), statusDeps(c, ctx.projectId)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/status/pdf-copies', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createStatusPdf(ctx, await evidenceBody(c), statusDeps(c, ctx.projectId)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/evidence/share-links/:uid/revoke', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await revokePackLink(ctx, c.req.param('uid'))); }
+  catch (error) { return shareFailure(c, error); }
 });
 
 export default cycleRaise;

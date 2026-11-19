@@ -23,6 +23,7 @@ process.env.TZ = 'America/Los_Angeles';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readAccountPage } from './_accountSource.mjs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createElement as h } from 'react';
@@ -556,7 +557,7 @@ test('following: empty, unreadable and loading', () => {
 // --- Wiring: the page, the route, and the Worker routes behind each method ---
 
 test('SettingsPage lists the canvas sections in its order, and mounts each section', () => {
-  const page = read('frontend/src/pages/SettingsPage.jsx');
+  const page = readAccountPage();
   const block = page.slice(page.indexOf('const SECTIONS = ['), page.indexOf('];', page.indexOf('const SECTIONS = [')));
   const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
   // D642 (#1435) — the Usage canvas's acNav puts Usage after Billing and orders.
@@ -584,7 +585,7 @@ test('the notification matrix reads its own route, says when it cannot, and puts
   // SettingsPage.jsx cannot be imported under node (lib/stripe.js reads
   // import.meta.env at load), so the matrix is pinned in its source, as D333's
   // tests pin its locks.
-  const page = read('frontend/src/pages/SettingsPage.jsx');
+  const page = readAccountPage();
   const m = page.slice(page.indexOf('function NotificationsSection('), page.indexOf('// Task #55 — per-role public-profile field map'));
   assert.ok(m.length > 2000, 'could not read NotificationsSection');
   assert.match(m, /const read = useAccountRead\(\(\) => api\.getNotificationPrefs\(\)\);/);

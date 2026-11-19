@@ -14,8 +14,9 @@
  * changes, and for a gate, an end date, a move or a folder's NDA, which
  * investors gain or lose the file. Nothing is changed by a browser pop-up.
  *
- * NOTHING HERE IS A ZERO FOR A MISSING VALUE. A Trash and the last ninety
- * days have no store yet; each says so. Storage left is Usage › Storage's own
+ * NOTHING HERE IS A ZERO FOR A MISSING VALUE. The last ninety days have no
+ * store yet, and say so; Trash (D6073) is its own read, and a figure it does
+ * not hold reads Not recorded. Storage left is Usage › Storage's own
  * read (D6074): a figure it could not read is Unreadable, one it does not
  * hold is Not recorded, never 0.
  */
@@ -184,7 +185,7 @@ export function folderChoices(room) {
 
 const many = (files) => (files.length === 1 ? files[0].name : `${files.length} files`);
 
-export const OWNER_ONLY = 'Only the venture’s owner changes a gate or removes a file. You can still move, rename and match files.';
+export const OWNER_ONLY = 'Only the venture’s owner changes a gate or removes a file. You can still move, rename and match files, and restore from Trash.';
 
 /** Moving keeps each file's own gate; a grant limited to folders may gain or lose it. */
 export function moveCopy(room, files, folderUid, now = Date.now()) {
@@ -225,16 +226,74 @@ export function matchCopy(files, label) {
 }
 
 /**
- * Remove. There is no Trash yet: owner question 8 chose a 30-day Trash, and no
- * store keeps a removed file, so the dialog says the file goes now.
+ * Remove (DR28, D6073): the files go to Trash for 30 days (owner answer 8 of
+ * D1101). Investors stop seeing them at once; Restore brings each back with its
+ * folder, gate and versions until the day named here.
  */
-export function removeCopy(files, earlier = null) {
+export const TRASH_DAYS = 30;
+export function removeCopy(files, earlier = null, { room = null, now = Date.now() } = {}) {
   const versions = earlier == null ? ' and every earlier version' : earlier ? ` and its ${earlier} earlier version${earlier === 1 ? '' : 's'}` : '';
+  const them = files.length === 1 ? 'it' : 'them';
+  const byId = folderIndex(room);
+  const folders = [...new Set(files.map((f) => byId.get(Number(f.folder_id))?.name || 'Top level'))];
   return {
     title: `Remove ${many(files)}?`,
-    body: `Remove ${many(files)}${versions}? Investors stop seeing ${files.length === 1 ? 'it' : 'them'} now. Copies already saved are not recalled.`,
-    trash: 'There is no Trash yet. The owner chose a 30-day Trash (question 8), but nothing keeps a removed file today, so this deletes it.',
-    action: 'Remove',
+    body: `Moves ${many(files)}${versions} to Trash for ${TRASH_DAYS} days. Investors stop seeing ${them} now. Copies already saved are not recalled.`,
+    facts: [
+      { k: 'Folder', v: folders.length === 1 ? folders[0] : `${folders.length} folders` },
+      { k: 'Restorable until', v: day(new Date(now + TRASH_DAYS * DAY_MS).toISOString()) },
+    ],
+    trash: `Restore brings ${them} back with ${files.length === 1 ? 'its' : 'their'} folder, gate and versions. After ${TRASH_DAYS} days ${them === 'it' ? 'it is' : 'they are'} deleted for good.`,
+    action: 'Move to Trash',
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Trash (DR28, D6073)
+ * ------------------------------------------------------------------ */
+
+export const TRASH_NOTE = `Removed files stay here for ${TRASH_DAYS} days, then they are deleted. Investors cannot see them.`;
+export const TRASH_EMPTY = { title: 'Trash is empty.', sub: `Removed files stay here for ${TRASH_DAYS} days.` };
+export const TRASH_UNREADABLE = 'Trash could not be read. Files still work. Nothing in Trash was changed.';
+export const DRIVE_TRASH = 'Restoring keeps it here; Google Drive will not copy it again. Until you restore it, a copy you deleted stays deleted, even when Google’s file changes.';
+
+/** The foot under the list: what Restore keeps, and who deletes now. */
+export const trashFoot = (canDeleteNow) => 'Restore brings back the file’s folder, gate, tier, versions and checklist match. A file whose folder was deleted returns to Top level and says so. '
+  + (canDeleteNow ? 'Only you, the room’s owner, can Delete now.' : 'Co-founders restore; only the room’s owner can Delete now.');
+
+/** The Trash read as rows. A day, a remover or days left nobody recorded says so. */
+export function trashRows(read) {
+  return (read?.items || []).map((t) => ({
+    uid: t.uid, name: t.name,
+    folder: t.folder || 'Top level',
+    returns: t.folder_gone ? 'returns to Top level' : '',
+    removed: t.removed_at ? day(t.removed_at) : NOT_RECORDED,
+    by: t.removed_by_name || NOT_RECORDED,
+    left: Number.isSafeInteger(t.days_left) ? `${t.days_left} day${t.days_left === 1 ? '' : 's'} left` : NOT_RECORDED,
+    days: Number.isSafeInteger(t.days_left) ? t.days_left : null,
+    versions: Number.isSafeInteger(t.earlier_versions) ? t.earlier_versions : null,
+    drive: t.source_ref === 'google_drive',
+  }));
+}
+
+/** The line after a Restore: where the file is now. */
+export const restoredLine = (name, out) => (out?.returned_to_top_level
+  ? `${name} is back, at the top level: its folder was deleted.`
+  : `${name} is back in its folder, with its gate and versions.`);
+/** A Restore that did not go through: the file is still in Trash. */
+export const restoreFailed = (row) => `Restore did not go through. ${row.name} is still in Trash${row.days == null ? '' : ` with ${row.left}`}.`;
+
+/** Delete now, in two steps (Scope, then Review), and the result line. */
+export function deleteNowCopy(row) {
+  const v = row.versions == null ? 'Its earlier versions go with it.' : row.versions ? `Its ${row.versions} earlier version${row.versions === 1 ? '' : 's'} go${row.versions === 1 ? 'es' : ''} with it.` : 'It has no earlier version.';
+  return {
+    scope: { title: `Delete ${row.name} now?`, body: `Delete now: ${row.name} from Trash. One file. ${v}`, action: 'Continue' },
+    review: {
+      title: `Delete ${row.name} now?`,
+      body: `This cannot be undone. The file and its versions are deleted now${row.days == null ? '' : ` instead of in ${row.days} day${row.days === 1 ? '' : 's'}`}. Restore will no longer be offered.`,
+      action: 'Delete now',
+    },
+    done: (left) => `Deleted. ${row.name} and its versions are gone.${Number.isSafeInteger(left) ? ` Trash holds ${left} file${left === 1 ? '' : 's'}.` : ''}`,
   };
 }
 

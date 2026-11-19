@@ -18,9 +18,9 @@ import { statusOf, timeLine, visibilityWord, hostAction } from './myEventsModel'
 import { CARD, EventLine, viewerZone } from './MyEventsCard';
 import { hostedPath, ticketPath } from './eventDrawersModel';
 import {
-  CALENDAR_KINDS, EMPTY, FORMATS, TOPICS, HOST_DEFAULTS, HOST_SORT, HOST_STATUS, HOST_VISIBILITY, HOST_WHEN, PAST_FILTERS, PRICES, SUBSCRIBE,
+  CALENDAR_KINDS, EMPTY, EXTERNAL_EVENTS, FORMATS, TOPICS, HOST_DEFAULTS, HOST_SORT, HOST_STATUS, HOST_VISIBILITY, HOST_WHEN, PAST_FILTERS, PRICES, SUBSCRIBE,
   dayChips, dayLabel, discoverMonths, discoverParams, discoverRow, freeForMe, hostCounts, hostMenu, hostingView, invitationDialog, monthCells, monthTitle,
-  pageOf, pastAll, pastChart, pastView, pastYears, placeMenu, registerDialog, shiftMonth, subscribeLine, topicLabel, typeChips, typeLabel,
+  pageOf, pastAll, pastChart, pastView, pastYears, placeMenu, registerDialog, shiftMonth, sourceLabel, subscribeLine, topicLabel, typeChips, typeLabel,
 } from './myEventsTabsModel';
 
 export { CARD, EventLine } from './MyEventsCard';
@@ -47,6 +47,19 @@ const KIND_DOT = { going: 'bg-axal-violet dark:bg-[#a78bfa]', hosting: 'bg-[#0ea
 
 export function Pill({ tone = 'muted', children, testId }) {
   return <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${TONES[tone] || TONES.muted}`} data-testid={testId}>{children}</span>;
+}
+
+/**
+ * ME5 (#5869): the event's source as a small badge, drawn from its `source`
+ * field. An event with no `source` draws nothing: no badge is guessed.
+ */
+export function SourceBadge({ event }) {
+  const label = sourceLabel(event);
+  if (!label) return null;
+  return (
+    <span className="inline-flex min-h-[18px] w-fit items-center rounded-[5px] border border-axal-hairline bg-white px-[7px] text-[10.5px] font-extrabold tracking-[.04em] text-axal-muted dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+      data-testid="my-events-source-badge" data-source={event.source}>{label}</span>
+  );
 }
 
 /** MEV15: a card that is reading, its lines as grey bars. */
@@ -555,7 +568,7 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
             <div className="grid gap-2.5 md:grid-cols-2 lg:grid-cols-4">
               {suggested.slice(0, 4).map((ev) => (
                 <Link key={ev.id} to={`/events/${ev.slug || ev.id}`} className={`${CARD} flex flex-col gap-1 p-3 hover:border-axal-violet`} data-testid="my-events-discover-suggested">
-                  <span className={`text-[13px] font-bold ${INK}`}>{ev.title}</span>
+                  <span className="flex flex-wrap items-center gap-1.5"><span className={`text-[13px] font-bold ${INK}`}>{ev.title}</span><SourceBadge event={ev} /></span>
                   <span className={`text-[11.5px] ${MUTED}`}>{timeLine(ev, zone)}</span>
                   {ev.suggestion_reason ? <Pill tone="info">{ev.suggestion_reason}</Pill> : null}
                 </Link>
@@ -587,7 +600,12 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
         <Select label="Format" value={format} onChange={(v) => { setFormat(v); reset(); }} options={FORMATS} testId="my-events-discover-format" />
         <Select label="Price" value={price} onChange={(v) => { setPrice(v); reset(); }} options={PRICES} testId="my-events-discover-price" />
         <Chip on={mine} onClick={() => { setMine(!mine); reset(); }} testId="my-events-discover-free">Free for me</Chip>
+        {/* ME5: events from outside Axal are not offered (D1487, question 1); the chip says so and does nothing. */}
+        <span role="note" title={EXTERNAL_EVENTS.state} aria-label={`${EXTERNAL_EVENTS.label}: ${EXTERNAL_EVENTS.state}. ${EXTERNAL_EVENTS.note}`}
+          className="inline-flex min-h-[28px] items-center whitespace-nowrap rounded-full border border-dashed border-axal-hairline px-3 text-[12px] font-semibold text-axal-muted opacity-75 dark:border-gray-700 dark:text-gray-400"
+          data-testid="my-events-discover-external">{EXTERNAL_EVENTS.label} · {EXTERNAL_EVENTS.state}</span>
       </div>
+      <p className={`m-0 text-[11.5px] ${MUTED}`} data-testid="my-events-discover-axal-only">{EXTERNAL_EVENTS.note}</p>
       {read.status === 'ready' && read.total != null && read.total > read.events.length ? (
         <p className={`m-0 text-[12px] ${MUTED}`} data-testid="my-events-discover-capped">{win.title} has {read.total} events; the first {read.events.length} are listed and counted here. Search to narrow them.</p>
       ) : null}
@@ -601,7 +619,7 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
                 return (
                   <div key={ev.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="my-events-discover-row">
                     <EventLine event={ev} sub={ev.summary || null}>
-                      <span className="mt-1 flex flex-wrap items-center gap-2"><Pill>{typeLabel(ev.type)}</Pill>{row.pill ? <Pill tone="info">{row.pill}</Pill> : null}</span>
+                      <span className="mt-1 flex flex-wrap items-center gap-2"><Pill>{typeLabel(ev.type)}</Pill><SourceBadge event={ev} />{row.pill ? <Pill tone="info">{row.pill}</Pill> : null}</span>
                     </EventLine>
                     <span className="flex flex-col items-end gap-1">
                       <span className={`font-mono text-[12.5px] font-bold ${row.muted ? MUTED : INK}`} data-testid="my-events-discover-price-line">{row.price}</span>

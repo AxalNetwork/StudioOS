@@ -10,6 +10,14 @@ its data, passes it in, and does only what these functions allow.
 | File | What it holds |
 | --- | --- |
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
+| `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
+| `ejection.mjs` | The ejection handler's sweep: one GraphQL read of the 100 most recently updated PRs, the CI evidence, labels, one comment, and `enqueuePullRequest`. |
+| `keeper-plan.mjs` | The branch keeper's plan (#6474): which conflicted PRs a sweep may merge main into, and today's reserved pushes. Pure. |
+| `keeper-merge.mjs` | The branch keeper's merge: git with hooks, filters and LFS off, main's merge rules only, the plain-versus-union comparison and the README duplicate check. |
+| `keeper.mjs` | The branch keeper's entry point (`plan`, `apply`): reads, re-reads, merges, pushes, labels and comments. |
+| `resolve-rules.mjs` | The conflict resolver's rules (#6475), pure: `gate()` and `afterStage()` before any model call, `checkResolution()` (both sides' added lines kept, no test dropped, no skip added, only the conflicted files), the verify commands and today's reservations. |
+| `resolve.mjs` | The conflict resolver's entry point (`plan`, `apply`): stages the merge, builds the model task, then re-checks the patch and the resolution with main's code and pushes a normal merge commit, or hands back. |
+| `model/` | The model runner (#6473): task validation and caps, the read-and-edit tools, the provider loop, the patch checks and the three SDK adapters, called by `.github/workflows/landing-bot-model.yml`. [Its README](model/README.md). |
 | `workflowGuard.mjs` | The test helper every bot workflow's test calls: `assertWorkflow(path)` fails when the workflow passes the App token to a dispatch call, dispatches a workflow outside `dispatchable`, or names an App or model secret outside the `landing-bot` and `repair` environments. |
 
 The tests are `frontend/test/landing_bot_core_6467.test.mjs`. They live there because `npm run test:frontend`
@@ -17,13 +25,13 @@ runs that folder, and adding a glob here would mean editing `package.json`, whic
 
 ## The limits
 
-- **Attempts:** at most 2 per PR per kind. The series counts the App's commits on the branch (a commit naming the
-  App as author or committer, with a `Landing-Bot-Kind:` trailer) and completed bot workflow runs on heads since the
-  owning session's newest commit. A bot commit never starts a new series; a session commit does. Comments are never
-  read for counting.
+- **Attempts:** at most 2 per PR per kind, for the PR's whole life (owner, 2026-11-15: no commit restarts the count,
+  a session's included). Counted from the App's commits on the branch (a commit naming the App as author or committer,
+  with a `Landing-Bot-Kind:` trailer) and completed bot workflow runs on the PR, whatever their head. Comments are
+  never read for counting.
 - **Per PR in any 24 hours, across kinds:** 4 bot commits and 2 model runs.
 - **Main repair:** 2 attempts per failure fingerprint (job plus test), whatever the commit.
-- **Daily caps** since 00:00 UTC: `LANDING_BOT_DAILY_MODEL_RUNS` (per provider call), `LANDING_BOT_DAILY_PUSHES`,
+- **Daily caps** since 00:00 UTC: `LANDING_BOT_DAILY_MODEL_RUNS` (per model run, whatever its rounds and account fallbacks; owner, 2026-11-17), `LANDING_BOT_DAILY_PUSHES`,
   `LANDING_BOT_DAILY_REQUEUES`. An unset cap is 0.
 - **Breakers:** main's newest completed push run of CI failed; an open `[alert] main is red`, `[alert] the Actions
   queue is backed up` or `[alert] merge queue stalled`; for the refresh, fresh queued CI runs above
@@ -54,3 +62,98 @@ Configure the GitHub Actions environment `landing-bot` to accept deployments fro
 Run the named T0 rehearsal with `gh workflow run landing-feeder.yml --ref main -f pr=NUMBER`, after #6469 is on main and the admission checks are satisfied. Check the job summary and link the native queue entry and its successful combined-commit CI run to #6481. To pause future admissions, unset `LANDING_BOT_ENABLED`.
 
 The workflow uploads the exact selected PR numbers and SHAs before requesting the write token, rechecks each candidate, and requests normal queue entry with GitHub's expected-head guard. An uncertain response stops the sweep. Check the PR timeline before taking any action on that entry.
+
+## The branch keeper
+
+`.github/workflows/landing-bot-keeper.yml` (#6474) runs on every push to `main`, every 15 minutes, or by dispatch
+with one PR. A PR is merged only when it is all of:
+- `CONFLICTING`;
+- not in the merge queue: the queue reports its own conflicts, and #6476 handles them;
+- quiet for `LANDING_BOT_QUIET_MIN` minutes (default 30);
+- not handed back since its last push;
+- passing `eligible()`, `attempts()` and `budget()`.
+
+A PR that is only behind is left to the queue.
+
+**The merge.** It runs on a partial clone with hooks, filters, LFS and submodules off. `$GIT_DIR/info/attributes`
+sets `merge=text` on every path, then repeats main's merge rules, so a PR cannot add a merge rule. The merge runs
+twice, with and without the rules. Only `README.md` files may differ between the two runs, and each one must pass
+`../lib/readmeUnion.mjs`.
+
+**What happens next:**
+- A clean merge is pushed as a normal merge commit with a `Landing-Bot-Kind: keeper` trailer. If the head moved,
+  the push fails, which is intended.
+- If GitHub refuses the push because main's changes include a workflow file, the keeper tries the update-branch
+  API. If that fails too, it hands the PR back. Each run's summary counts these refusals.
+- A real conflict is labelled `conflict` and listed in the sticky comment, and the resolver is asked.
+- A conflict in a file `pathGuard()` refuses, or a refused union, is handed back with `needs-session`.
+
+**Daily pushes.** The plan uploads a reservation artifact before any push, and pushes only if the upload
+succeeded. The next run counts today's reservations against `LANDING_BOT_DAILY_PUSHES`.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_KEEPER_PER_SWEEP` | PRs merged per run. Unset is 0. Dispatch mode always takes the one named PR. |
+| `LANDING_BOT_DAILY_PUSHES` | Bot pushes per UTC day across all kinds. Unset is 0. |
+| `LANDING_BOT_QUIET_MIN` | Minutes a head must stay unchanged first; unset is 30. |
+
+## The conflict resolver
+
+`.github/workflows/landing-bot-conflict.yml` (#6475) is dispatched by the branch keeper with one PR number, when
+merging main leaves a real conflict. A model resolves the conflicted files only; it must keep both sides. Three jobs:
+
+- **`plan`** (`landing-bot` environment, a read-only token, an App token that reads metadata only, to learn the
+  bot's login). It calls no model. In order:
+  1. `gate()`: `eligible()`, `attempts()` (at most 2 resolver runs per PR, counted from the run names
+     `Conflict resolver for #<n>` and the bot's `Landing-Bot-Kind: conflict` commits) and `budget()`.
+  2. It stages the merge on a partial clone (`model/stage.mjs`, the keeper's git settings and main's merge rules
+     only) and runs `afterStage()`: no conflict where one side deleted or renamed the file, every conflicted file
+     clears `pathGuard()` (so no test, fixture, baseline, auth or money path ever reaches a model), and the conflict
+     is within `LANDING_BOT_MAX_CONFLICT_FILES` and `LANDING_BOT_MAX_CONFLICT_LINES`.
+  3. It builds the model task: the conflicted files as the only allowed files; each file's base, PR and main
+     versions and both changes' descriptions as data; and the verify commands (the three installs, the worker
+     typecheck or the frontend build for the side touched, and up to four tests that import a conflicted file).
+  4. It reserves today's model run and push in an artifact before the model is called.
+  A bot that is off, a PR labelled `bot:off` and an open breaker stop quietly. Anything else hands the PR back.
+- **`resolve`** is the model runner (#6473) in merge mode. It has no GitHub write.
+- **`apply`** (`landing-bot` environment, the App token, no model key, runs no PR code, scripts from main):
+  1. re-reads the PR (head, `bot:off`, mode, breakers);
+  2. stages the same merge at the same two commits;
+  3. re-checks the patch against the conflicted files' hashes;
+  4. runs `checkResolution()`;
+  5. commits a normal merge commit (`Landing-Bot-Kind: conflict`, `Landing-Bot-Provider: <provider>`);
+  6. re-reads once more, and pushes, never forced.
+  Then it removes `conflict`, labels `bot:resolved` and posts the resolution diff in the sticky comment. A head
+  that moved stops it quietly. Any other refusal is `giveUp()`: `needs-session` and one comment.
+
+**The owner lands every model-resolved pull request** (owner, 2026-11-16, on #6475). The feeder and the ejection
+handler never queue one.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_MAX_CONFLICT_FILES` | The most conflicted files a model is asked to resolve. Unset is 0: none. |
+| `LANDING_BOT_MAX_CONFLICT_LINES` | The most lines inside conflict blocks, across those files. Unset is 0: none. |
+| `LANDING_BOT_DAILY_MODEL_RUNS` | Resolver runs that may call a model per UTC day. Unset is 0. |
+
+Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`.
+
+## The ejection handler
+
+`.github/workflows/landing-bot-ejection.yml` (#6476) sweeps every 10 minutes. The #4571 guard forbids
+`workflow_run`, and a `pull_request` trigger would run a PR's own copy of the workflow. It classifies each new
+ejection, then:
+- **conflict:** asks the branch keeper; once the keeper's merge has cleared the conflict, the entry may be
+  restored;
+- **own failure:** labels `ejected` and asks red-PR repair (#5622) once it exists;
+- **timeout, manual, unknown:** labels `ejected` only;
+- **cascade, flake, infrastructure:** restores the entry on the same head (`enqueuePullRequest` with
+  `expectedHeadOid`), but only when all of these hold:
+  - a person queued it, or enabled auto-merge, and every later commit is a no-model merge of main;
+  - every check is green on that head;
+  - the PR passes `eligible()` and the breakers;
+  - `[alert] merge queue stalled` is not open;
+  - this PR has had fewer than 2 re-queues in 24 hours;
+  - the repository is under `LANDING_BOT_DAILY_REQUEUES`;
+  - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
+
+Otherwise it labels `ejected` with the reasons. One sticky comment says which.

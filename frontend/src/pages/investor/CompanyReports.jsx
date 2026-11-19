@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { reportingApi } from '../../lib/api/reporting';
+import { closingsApi } from '../../lib/api/closings';
 import { Unreadable, usePhoneWidth } from '../../ui';
 import { recordOf } from '../portfolio/reportAsk';
 import { CARD, H2, LINK, MUTED, Pill } from './PortfolioReports';
 import {
-  FIGURE_KEYS, HOLDING_NOTES, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
+  FIGURE_KEYS, HOLDING_NOTES, TERMS_COPY_WORDS, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
+  whatChangedSource, whatChangedText,
 } from './portfolioReportsModel';
 import Sheet from '../../ui/Sheet.jsx';
 import ReportPrintButton from '../cycles/reporting/printing/ReportPrintButton.jsx';
+import { figuresCsv, figuresCsvName } from './portfolioReportsModel';
 
 /**
  * D1061 (#2931) — the company page's blocks (RPT10, RPT11, RPT13): Figures as
@@ -89,6 +92,33 @@ function SmallChart({ s }) {
   );
 }
 
+/**
+ * D6224 (#6224): "Download figures (CSV)" — the reports already on the page,
+ * as a file built in the browser (no read). A failure says so and leaves the
+ * page as it was.
+ */
+function FiguresDownload({ reports }) {
+  const [failed, setFailed] = useState(false);
+  const download = () => {
+    setFailed(false);
+    try {
+      const blob = new Blob(['\uFEFF', figuresCsv(reports)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = figuresCsvName();
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { setFailed(true); }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="company-figures-download">
+      <button type="button" className={BTN} onClick={download} data-testid="button-download-figures">Download figures (CSV)</button>
+      <span className={MUTED}>Every figure as reported, with its source. A gap reads “Not recorded” with its reason.</span>
+      {failed ? <p role="alert" className="m-0 w-full text-[12px] text-amber-800 dark:text-amber-300" data-testid="company-figures-download-failed">The figures could not be downloaded. Nothing on this page changed. Try again.</p> : null}
+    </div>
+  );
+}
+
 function FigureCard({ s }) {
   const [table, setTable] = useState(false);
   return (
@@ -108,8 +138,31 @@ function FigureCard({ s }) {
   );
 }
 
+/**
+ * D6222 (#6222): "Save as my note" on What changed. `onSave(body)` writes the
+ * note (the Overview's notes store) and throws on a refusal; the Overview then
+ * keeps the text in the Notes box with the reason. Only the investor reads it.
+ */
+function SaveChanges({ text, source, onSave }) {
+  const [state, setState] = useState('idle');
+  const save = async () => {
+    setState('saving');
+    try { await onSave({ body: text, ...(source || {}) }); setState('saved'); } catch { setState('failed'); }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="company-what-changed-save">
+      <button type="button" className={BTN} disabled={state === 'saving' || state === 'saved'} onClick={save} data-testid="button-save-what-changed">
+        {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved to your notes' : 'Save as my note'}
+      </button>
+      <span className={MUTED} data-testid="company-what-changed-save-status">
+        {state === 'saved' ? 'Saved to Your notes below. Only you can read it.' : state === 'failed' ? 'Not saved. The text is kept in Your notes below with the reason.' : 'Saved notes are private: the company and other investors never see them.'}
+      </span>
+    </div>
+  );
+}
+
 /** Figures (RPT10): read from the frozen figures of each report received (D1061), which records no open. */
-export function FiguresTab({ uid, periods }) {
+export function FiguresTab({ uid, periods, onSaveNote = null }) {
   const [state, setState] = useState({ status: 'loading', reports: [] });
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -135,6 +188,7 @@ export function FiguresTab({ uid, periods }) {
           <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block w-4 border-t border-dashed border-gray-400 dark:border-gray-500" />No figure in a report (dashed)</li>
           <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full border-2 border-violet-600 dark:border-violet-400" />Corrected (ring)</li>
         </ul>
+        <FiguresDownload reports={state.reports} />
       </section>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="company-figure-grid">{FIGURE_KEYS.map((k) => <FigureCard key={k} s={seriesOf(state.reports, k)} />)}</div>
       <section className={CARD} data-testid="company-what-changed">
@@ -145,7 +199,7 @@ export function FiguresTab({ uid, periods }) {
             {changes.map((c) => <li key={c.key} className="text-[12.5px]"><b className="text-axal-ink dark:text-gray-100">{c.text}</b><div className="text-axal-muted dark:text-gray-400">{c.sub}</div></li>)}
           </ul>
         ) : <p className={MUTED} data-testid="company-what-changed-none">No figure changed between the last two reports you received, or only one has arrived.</p>}
-        <p className={MUTED} data-testid="company-what-changed-note">Saving this as your own note waits for a notes store; nothing here is saved or sent.</p>
+        {changes.length && onSaveNote ? <SaveChanges text={whatChangedText(changes)} source={whatChangedSource(state.reports)} onSave={onSaveNote} /> : null}
       </section>
     </div>
   );
@@ -317,6 +371,54 @@ export function Timeline({ company, onChanged, onAct = null, canAct = true }) {
 
 // ───────────────────────────────────────────────────────────── RPT10t: Terms
 
+/** D6223: hands a fetched blob to the browser as a file; the page itself never navigates. */
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * D6223 (#6223): the duty's document pill. With a signed copy the caller may
+ * open, it downloads that copy through the existing scoped e-sign read
+ * (D6199's `signedCopyBlob`); otherwise it stays a plain pill and says why.
+ */
+function DutyDocument({ row }) {
+  const [state, setState] = useState('idle');
+  const text = `${row.document}${row.clause ? ` ${row.clause}` : ''}`;
+  if (row.copy.state !== 'available') {
+    return (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Pill pill={{ tone: 'neutral', text }} testId={`company-term-doc-${row.uid}`} />
+        <span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid={`company-term-copy-${row.uid}`}>{TERMS_COPY_WORDS[row.copy.state] || TERMS_COPY_WORDS.not_recorded}</span>
+      </span>
+    );
+  }
+  const download = async () => {
+    setState('pending');
+    try {
+      const { blob, filename } = await closingsApi.signedCopyBlob(row.copy.envelopeId);
+      saveBlob(blob, filename);
+      setState('idle');
+    } catch { setState('failed'); }
+  };
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <button type="button" disabled={state === 'pending'} onClick={download} data-testid={`company-term-doc-${row.uid}`}
+        aria-label={`Download your signed copy: ${text}`}
+        className="inline-flex min-h-[28px] w-fit items-center rounded-full border border-axal-violet/40 bg-white px-2 py-0.5 text-[11px] font-bold text-axal-violet underline hover:border-axal-violet disabled:opacity-50 max-sm:min-h-11 dark:border-violet-400/50 dark:bg-gray-900 dark:text-violet-300 dark:hover:border-violet-300">
+        {state === 'pending' ? 'Downloading…' : `${text} · Download signed copy`}
+      </button>
+      {state === 'failed' ? <span role="alert" className="text-[12px] text-amber-900 dark:text-amber-200" data-testid={`company-term-copy-${row.uid}`}>{TERMS_COPY_WORDS.failed}</span> : null}
+    </span>
+  );
+}
+
 export function TermsCard({ company }) {
   const rows = termsRows(company);
   return (
@@ -329,10 +431,10 @@ export function TermsCard({ company }) {
           <span className="text-[12px] text-axal-muted dark:text-gray-400">{[d.rule, d.figures].filter(Boolean).join(' · ')}</span>
           <span className="flex flex-wrap gap-1.5">
             <Pill pill={{ tone: d.signed ? 'ok' : 'neutral', text: d.signed ? 'Signed document' : 'From the closing’s template' }} />
-            <Pill pill={{ tone: 'neutral', text: `${d.document}${d.clause ? ` ${d.clause}` : ''}` }} />
             {d.defaulted ? <Pill pill={{ tone: 'late', text: 'Default, not in the paper' }} /> : null}
             {d.route ? <Pill pill={{ tone: 'neutral', text: d.route }} /> : null}
           </span>
+          <DutyDocument row={d} />
         </div>
       ))}
     </section>

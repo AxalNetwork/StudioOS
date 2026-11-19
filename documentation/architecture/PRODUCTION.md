@@ -162,8 +162,10 @@ A grant older than a raised session floor is also refused on every tool call (`g
 - [ ] `MEET_BOT_GOOGLE_EMAIL`, `MEET_BOT_GOOGLE_PASSWORD`, `MEET_BOT_GOOGLE_TOTP` – Eadwyn AI's own Google Workspace account (D3678, #3678), so the meeting bot joins Google Meet signed in rather than as an anonymous guest. The account is `eadwyn@axal.vc`, used only for joining calls, with 2-Step Verification on an authenticator app; its display name is what hosts see ("Eadwyn AI (Axal VC)"). `MEET_BOT_GOOGLE_TOTP` is the authenticator's **setup key** (the base32 text Google shows under "Can't scan it?"), never a backup code. Set all three on the **site** Worker only (`npx wrangler secret put MEET_BOT_GOOGLE_EMAIL --config wrangler.toml --env production`, and the same for the other two); the bot host never holds them. A running Meet bot fetches the email and password over its signed callback while it is joining, and a fresh six-digit code each time Google asks; the TOTP key never leaves the site Worker. With any of the three missing, the bot keeps today's guest join. A failed sign-in stops the run with `failure_detail` `platform_blocked@signin_rejected`, `…@signin_challenged`, `…@signin_code_refused`, `…@signin_no_code_method`, `…@signin_unknown_page`, `…@signin_unavailable` or `…@signin_not_kept`; "Diagnose Eadwyn AI" shows the same code with its fix, and its config row says `bot_account: set` or `missing`. Rotation: change the password or re-enrol the authenticator on the account, then put the new values; a run already joining finishes on the old ones.
 - [ ] `STREAM_WEBHOOK_SECRET`, `STREAM_API_TOKEN` – Learning video on Cloudflare Stream (D4176, #4176). The `STREAM` binding is in `wrangler.toml` (`[stream]` and `[env.production.stream]`); until Stream is on for the account (owner step A on #1008) every Stream route answers 503 `stream_unavailable` and items play from R2 or their link as before. `STREAM_WEBHOOK_SECRET` is the secret Stream returns when the webhook `https://app.axal.vc/api/learning/stream/webhook` is registered (owner step B); unset, the webhook answers 503 and Stream retries. `STREAM_API_TOKEN` (Stream: Edit) with `CLOUDFLARE_ACCOUNT_ID` lets the tus route take files over 200 MB; unset, that route answers 503 `stream_tus_unavailable` and only files up to 200 MB upload. The same token lets members' players read a ready caption's WebVTT (`GET /api/learning/items/:uid/captions/:lang`, #4178, D4178) for the click-to-seek transcript; unset, that route answers 503 `stream_captions_unavailable` and the transcript is the plain text. Set each with `npx wrangler secret put <NAME> --config wrangler.toml --env production`. Never logged.
 - [ ] `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` – outbound email.
+- [ ] `MAGIC_INSERT_CANARY_EMAIL` — dedicated synthetic sign-in mailbox on the HQ Worker. The production release sets it from the existing GitHub `MAGIC_PROBE_EMAIL` secret. Clearing that source disables scheduled sends on the next HQ release.
 - [ ] `STRIPE_ATLAS_API_KEY`, `STRIPE_WEBHOOK_SECRET` – spin-out incorporation.
 - [ ] `AI_PROVIDER_ANTHROPIC_KEY` – the platform's Anthropic API key for model-provider runs (D851, `services/aiProviders.ts`). Used only while the wrangler var `AI_PROVIDER_ANTHROPIC` is exactly `"on"` (unset is off). It is not `ANTHROPIC_API_KEY`, which stays dev-only (Task #31). Never stored in D1 and never logged. Set it with `npx wrangler secret put AI_PROVIDER_ANTHROPIC_KEY --config wrangler.toml --env production`.
+- [ ] `AGENT_AI_GATEWAY_TOKEN` – the `agents` AI Gateway's Run token, sent as `cf-aig-authorization` on the agent model accounts' provider-native calls (D7073-p2, `services/agents/agentAccounts.ts`). The provider keys are not Worker secrets: `agent-gateway-keys.yml` stores them on the gateway by alias. Unset: a run the engine starts is refused `accounts_unconfigured`. Never logged. Set it with `npx wrangler secret put AGENT_AI_GATEWAY_TOKEN --config wrangler.toml --env production`.
 - [ ] `AI_PROVIDER_BRIA` – a wrangler var, not a secret (D1534, #3778 phase 2): the deck's background removal (Bria RMBG 2.0 on the Workers AI binding, billed per image from AI Gateway credits). Off unless exactly `"on"`. Set it only after the owner's steps on #1008: AI Gateway prepaid credits bought, and Bria's 10-day sub-processor notice sent (DPA §6.1). No key: the binding carries the account.
 - [ ] `AI_PROVIDER_PRUNA` – a wrangler var, not a secret (D4316, #4316): the deck's Upscale (Pruna P-Image-Upscale on the Workers AI binding, billed per image from AI Gateway credits, about $0.005 an image). Its own switch: `AI_PROVIDER_BRIA` never turns it on, and it never turns Bria on. Off unless exactly `"on"`. Set it only after Pruna's 10-day sub-processor notice is sent (#1008), and after checking the per-image price in the Cloudflare dashboard against the `0.005` in `services/ai/catalogue.ts`. No key: the binding carries the account.
 - [ ] AI token packs (D755). Packs are made on HQ, never as a variable:
@@ -240,10 +242,27 @@ private registries, destination checks, canary receipts and rollback.
 - [ ] `CF_OBSERVER_SECRET` — a separate random 32+ character secret for private
       `/status` reads. Only the independent observer receives this credential.
 
+- [ ] `WORKGRAPH_INGEST_TOKEN` – the HQ WorkGraph snapshot ingest (D5580 part 4, #5580). The hourly `pr-overlap.yml` job posts its advisory snapshot to `POST /api/admin/workgraph/snapshots` with this value as a bearer token, compared in constant time. Generate 48+ random characters (`openssl rand -hex 32`) and set the **same** value in two places: the Worker (`npx wrangler secret put WORKGRAPH_INGEST_TOKEN --config wrangler.toml --env production`) and the GitHub Actions secret of the same name (below). Unset on the Worker, the ingest answers 503 `workgraph_ingest_not_configured`; unset in Actions, the job skips the post with a notice. Either way the snapshot stays in the run's artifact, and `GET /api/admin/workgraph/in-flight` (Super Admin) says no scan has been posted. Rotation: put the new value in both places; a post between the two answers 401 and the next hourly run succeeds. Rollback: delete the Worker secret. Never logged.
+
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
 - [ ] `CLOUDFLARE_ACCOUNT_ID`
 - [ ] `SLACK_DEPLOY_WEBHOOK_URL` – optional, failure notifications.
+- [ ] D6428 file recovery (disabled until counsel/#6650 approval):
+      `FILE_RECOVERY_SOURCE_ACCESS_KEY_ID` and
+      `FILE_RECOVERY_SOURCE_SECRET_ACCESS_KEY` are a read-only S3 credential
+      for `studioos-files`; `FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID` and
+      `FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY` are a separate archive
+      read/write credential for `studioos-backups`. The existing
+      `CLOUDFLARE_API_TOKEN` must also be able to read that bucket's lock rules
+      for the metadata-only retention preflight. Do not provision or enable
+      live copying from this checklist alone: the `FILE_RECOVERY_REGISTRY`
+      repository variable must name the approved record-class registry and
+      `FILE_RECOVERY_ENABLED` remains off until its retention basis and exact
+      prefix lock are verified. Live restore additionally awaits #6654's
+      suppression adapter. See `documentation/operations/INCIDENT_RESPONSE.md`
+      § Backups & Recovery. No values are recorded here.
+- [ ] `WORKGRAPH_INGEST_TOKEN` – optional, the same value as the Worker secret of that name (above); `pr-overlap.yml` posts each hourly snapshot with it (D5580 part 4).
 - [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
       independent receiver's observer secret. It is neither the Slack token nor
       the ingress secret. The observer remains off until `CF_HEARTBEAT_ENABLED`
@@ -256,6 +275,8 @@ D5676: the disabled independent archive observer needs separate writer (`ARCHIVE
 D5673: the disabled Cloudflare metadata reconciler requires a separately scoped `CF_OBSERVER_READ_TOKEN` (Workers Scripts Read) and `CF_SOURCE_POLL=on` only after owner approval; never reuse the script-edit token. Neither is provisioned by its source PR.
 
 D5675: the preview bot canary requires a distinct `MEETING_BOT_PREVIEW_SECRET` on the preview host and in the protected deploy workflow. It derives separate operator/callback/receipt keys and is never a production bot secret. Configure the host's `PREVIEW_CANARY_ORIGIN`, explicit preview audience and enable flag only after #5671's private preview route is verified. The workflow uses `MEETING_BOT_PREVIEW_ORIGIN` and `MEETING_BOT_PREVIEW_ROUTE_VERIFIED` owner variables. Missing values stop normal promotion. Keep all values out of issues and logs; see D5675 for first activation and emergency rollback. No secret or flag was changed by this implementation.
+
+D2403: a founder's own X connection uses a second HQ-owned "founders" X app, never HQ's posting app (`X_CLIENT_ID`). Its client goes under `X_FOUNDERS_CLIENT_ID` and `X_FOUNDERS_CLIENT_SECRET`, set as Worker secrets or from HQ › Integration keys (key `x`); until both are set the connector reads as not set up. Register `/api/integrations/oauth/x/callback` on that app with X.
 
 ## 5. Post-deploy checklist
 
@@ -366,19 +387,37 @@ before it can dispatch. Do not share HQ's secret with a branch.
    SDK JWT expiry follows the run deadline, capped at two hours, subject to
    Zoom's 30-minute minimum. The container receives a derived run-only key;
    it never receives the master secret or long-lived SDK/OAuth credentials.
-4. After merge and owner verification, set the Actions variable
-   `MEETING_BOT_DEPLOY_ENABLED=true`, then manually dispatch
-   `meeting-bot-deploy.yml` on main. It builds/tests the image before deploying
-   only the preview and production bot hosts, in that order. Later main changes
-   under `meeting-bot/` or the bundled shared helpers trigger it.
-   Disabling this variable freezes bot deployments without affecting the site.
-5. After both production and preview hosts exist, run
+4. To pause automatic and manual bot releases, set the repository Actions variable
+   `MEETING_BOT_DEPLOY_ENABLED=false`. This skips new deploy jobs. Check Actions
+   separately for a job already running.
+5. Confirm the private preview observer and response owner, including #5671's
+   preview failure and recovery delivery. In Cloudflare, select
+   `studioos-meeting-bot-preview` and verify that its Container application and
+   `MEETING_BOT_CONTAINER` namespace belong to preview. Under **Settings →
+   Domains & Routes**, enable and verify the preview Worker's own workers.dev
+   route. Copy its exact HTTPS origin of the form
+   `https://studioos-meeting-bot-preview.<account-subdomain>.workers.dev`.
+   The canary sends its synthetic callback back to this same Worker.
+6. Generate a dedicated random signing key of at least 32 characters. Using
+   secret-entry fields, save the same value as `MEETING_BOT_PREVIEW_SECRET`
+   on the preview Worker and in the repository's **Settings → Secrets and
+   variables → Actions → Secrets**. Under **Variables**, set
+   `MEETING_BOT_PREVIEW_ORIGIN` to the copied origin with no trailing slash and
+   `MEETING_BOT_PREVIEW_ROUTE_VERIFIED=true` after the owner verifies step 5.
+7. Set `MEETING_BOT_DEPLOY_ENABLED=true`. In **Actions → Meeting bot deploy →
+   Run workflow**, select the current `main`. If a newer commit supersedes
+   the candidate, dispatch again from the current `main`. Confirm that the
+   `meeting-bot-preview-result` artifact records the run's exact SHA,
+   `state: pass`, `stage: complete`, `cleaned: true` and an image digest.
+   Check that production promotion then succeeded for that SHA. See
+   [D5675](decisions/D5675.md) for the owner-controlled rollback procedure.
+8. After both production and preview hosts exist, run
    `node scripts/configure-meeting-bot-binding.mjs` to review the full site
    config and matching HQ-only architecture catalogue entry, then use
    `--write` in a follow-up owner PR. Run the full build/drift suite, including
    binding parity, branch isolation and topology, before normal site deployment. This adds all three
    remote bindings together; absent bindings keep `botConfigured` false.
-6. Record first deployment and remaining live checks on #1008. No production
+9. Record first deployment and remaining live checks on #1008. No production
    bot deployment was performed by this implementation. First deployment,
    container sandbox compatibility, D886 §7 memory/CPU/size and two-hour soak,
    and real calls remain owner follow-up, not implementation prerequisites.

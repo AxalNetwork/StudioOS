@@ -12,7 +12,16 @@
  * What the check does demand: every file in an opted-in folder has a header
  * comment (`headerLine` returns null otherwise), so the list it generates is
  * never a row of blanks.
+ *
+ * #6465 — a README may also declare, in itself, that it takes no hand-written
+ * per-file rows: `INDEX_GENERATED` (the list comes from the files: source
+ * headers, and a Markdown file's first heading, as in `decisions/README.md`)
+ * or `INDEX_NONE` (the README describes the folder and its rule, no rows).
+ * `perFileRows` finds the rows such a README must not carry. `folderListing`
+ * is the one helper here that reads the disk: the files a block lists.
  */
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export const FILES_BEGIN = '<!-- files:begin -->';
 export const FILES_END = '<!-- files:end -->';
@@ -72,12 +81,24 @@ export function headerLine(text) {
   return null;
 }
 
+/** A Markdown file's first line when it is a heading (`## D6465 — title (#6465)`), its `#`s dropped; else null. */
+export function headingLine(text) {
+  const first = String(text ?? '').split('\n').find((l) => l.trim() !== '');
+  const m = first ? /^#{1,6}\s+(\S.*)$/.exec(first.trim()) : null;
+  if (!m) return null;
+  const line = m[1].trim();
+  return line.length > MAX ? `${line.slice(0, MAX - 1).trimEnd()}…` : line;
+}
+
+/** What a list row says about a file: a Markdown file's heading, any other file's header comment. */
+export const describe = (name, text) => (/\.md$/.test(name) ? headingLine(text) : headerLine(text));
+
 const cell = (s) => String(s).replace(/\|/g, '\\|');
 
-/** The block's text for these files, sorted by name: `{ name, text }` each, `text` the file's contents. */
+/** The block's text for these files, sorted by name (D999 before D1000): `{ name, text }` each, `text` the file's contents. */
 export function renderList(files) {
-  const rows = [...files].sort((a, b) => a.name.localeCompare(b.name))
-    .map((f) => `| \`${f.name}\` | ${cell(headerLine(f.text) ?? '')} |`);
+  const rows = [...files].sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }))
+    .map((f) => `| \`${f.name}\` | ${cell(describe(f.name, f.text) ?? '')} |`);
   return ['', '| File | What it is |', '| --- | --- |', ...rows, ''].join('\n');
 }
 
@@ -101,3 +122,48 @@ export function withBlock(readme, content) {
 
 /** Whether a block holds a list: anything but blank lines. */
 export const blockHoldsList = (content) => String(content ?? '').trim() !== '';
+
+// ── #6465: a README that declares it takes no per-file rows ──────────────────
+export const INDEX_GENERATED = '<!-- index: generated -->';
+export const INDEX_NONE = '<!-- index: none -->';
+
+/**
+ * The README's own declaration: 'generated', 'none', null when it has neither
+ * (it behaves as before #6465), or 'both' when it has the two (an error).
+ */
+export function indexMode(readme) {
+  const src = String(readme ?? '');
+  const gen = src.includes(INDEX_GENERATED);
+  const none = src.includes(INDEX_NONE);
+  return gen && none ? 'both' : gen ? 'generated' : none ? 'none' : null;
+}
+
+/**
+ * The files a generated list names. An unmarked README with a block lists
+ * source files (`listedFile`); one marked `index: generated` also lists the
+ * folder's Markdown files but its README, described by their first heading.
+ */
+export function folderListing(abs, mode = null) {
+  const keep = (n) => listedFile(n) || (mode === 'generated' && /\.md$/.test(n) && n !== 'README.md');
+  return readdirSync(abs, { withFileTypes: true }).filter((e) => e.isFile() && keep(e.name))
+    .map((e) => ({ name: e.name, text: readFileSync(join(abs, e.name), 'utf8') }));
+}
+
+/**
+ * The hand-written per-file rows in a README, outside its generated block: a
+ * table row whose first cell is one backticked name of a file in `names` (the
+ * folder's own files). `{ line, name }` each, `line` 1-based. A row naming a
+ * subfolder, or anything that is not one of the folder's files, is not one.
+ */
+export function perFileRows(readme, names) {
+  const files = new Set(names);
+  const src = String(readme ?? '');
+  const block = findBlock(src);
+  const outside = block && !block.broken ? withBlock(src, '') : src;
+  const out = [];
+  outside.split('\n').forEach((raw, i) => {
+    const m = /^\s*\|\s*`([^`]+)`\s*\|/.exec(raw);
+    if (m && files.has(m[1])) out.push({ line: i + 1, name: m[1] });
+  });
+  return out;
+}

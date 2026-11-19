@@ -38,7 +38,7 @@ const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/sche
 const sqlOf = (file: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${file}`), 'utf8');
 const TODAY = new Date().toISOString().slice(0, 10);
 const ago = (n: number) => daysBefore(TODAY, n);
-const FOUNDER = 10, OTHER = 20;
+const FOUNDER = 10, OTHER = 20, GUS = 21;
 const P = 1;
 
 function fixture() {
@@ -405,13 +405,18 @@ async function growFixture() {
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(migDdl('125')); db.exec(migFile('437'));
   db.exec(migFile('443'));
+  db.exec(migFile('202611161116')); // D6789: durability_checklist's Not applicable mark.
   db.exec(migFile('462'));
+  db.exec(migFile('202611161128_6865')); // D6865: the feedback's contact link and origin
   db.exec(sqlOf('202611041912_growth_channel_details.sql'));
   db.exec(migFile('507'));
   // D6107: PostHog's link and tracked metrics, so the Visit stage reads its real store (no link here: not connected).
   db.exec(tableFromBaseline(BASELINE, 'integrations'));
   db.exec(migFile('657')); db.exec(migFile('755')); db.exec(sqlOf('202611151917_6107_posthog_visits_role.sql'));
   db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(FOUNDER, 'founder', 1001, 'Fay', 'fay@example.test');
+  // D6790: an obligation's owner is picked from the company team, so Fay and Gus are on company 70's.
+  db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(GUS, 'founder', null, 'Gus', 'gus@example.test');
+  db.exec(`INSERT INTO user_company_links (company_id, user_id) VALUES (70, ${FOUNDER}), (70, ${GUS})`);
   db.prepare(`INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, 'p7', 'Venture', 1001, 70)`).run(GP);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any;
   await ensureProjectMetricsSchema(env);
@@ -694,7 +699,7 @@ test('D661: every Grow table has a value source for each column, and its filter 
   assert.deepEqual((await rowBy('market-expansion', (c) => c.market === 'France')).Readiness,
     { text: 'Not recorded: Regulation, Partners, Cost to enter not scored', tone: 'muted' });
   assert.deepEqual(await rowBy('durable-company-building', (c) => c.obligation === 'Annual filing'),
-    { Obligation: 'Annual filing', Kind: 'Compliance', Due: dayFrom(40), Owner: { text: 'No owner', tone: 'warn' }, State: { text: 'Upcoming', tone: 'v3' } });
+    { Obligation: 'Annual filing', Kind: 'Compliance', Due: dayFrom(40), Owner: { text: 'No owner named', tone: 'warn' }, State: { text: 'Upcoming', tone: 'v3' }, Repeats: 'Once' });
   const durable = adaptModule('grow', 'durable-company-building', (await growCall(f, 'GET', `/modules/durable-company-building?project=${GP}`)).body);
   assert.ok(Array.isArray(durable.parts?.checklist) && durable.parts.checklist.some((i: any) => i.key === 'key_person_cover' && i.done), 'the checklist part comes through');
 });
@@ -892,7 +897,8 @@ const SAMPLES: Record<string, Record<string, Record<string, unknown>>> = {
     'team-expansion': { title: 'Founding engineer', team: 'Engineering', type: 'fractional', target_start: dayFrom(60), band: '90,000–120,000', equity: '0.5', post_to: [] },
     'partner-network': { name: 'Initech', type: 'agency', stage: 'terms', terms_kind: 'rev_share', amount: '20%' },
     'market-expansion': { name: 'Portugal', state: 'considering', parts: ['demand'], demand_score: '7', demand_source: 'Waitlist by country' },
-    'durable-company-building': { title: 'Annual report', kind: 'compliance', due_at: dayFrom(20), owner_name: 'Fay' },
+    // D6790: the owner listbox's team comes from form-options, which this harness does not load, so the Add names no one; its Edit picks Gus.
+    'durable-company-building': { title: 'Annual report', kind: 'compliance', due_at: dayFrom(20) },
   },
 };
 // Build's canvas forms (D695 #1656 PR 3b) need #1792's stores, so their bodies,
@@ -934,7 +940,7 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
   const portugal = await growRow('market-expansion', (r) => r.name === 'Portugal');
   assert.deepEqual([portugal.demand_score, portugal.demand_source, portugal.regulation_score, portugal.readiness], [7, 'Waitlist by country', null, null], 'an unscored part stays null, never 0');
   const annual = await growRow('durable-company-building', (r) => r.title === 'Annual report');
-  assert.deepEqual([annual.kind, annual.owner_name, annual.status, String(annual.due_at).slice(0, 10)], ['compliance', 'Fay', 'upcoming', dayFrom(20)]);
+  assert.deepEqual([annual.kind, annual.owner, annual.status, String(annual.due_at).slice(0, 10)], ['compliance', null, 'upcoming', dayFrom(20)]);
   // The checklist tick, and its undo.
   await w.grow.checklist(GP, 'board_cadence', true);
   let parts = (await growCall(grow, 'GET', `/modules/durable-company-building?project=${GP}`)).body.parts.checklist;
@@ -1012,7 +1018,7 @@ const EDITED: Record<string, Record<string, string>> = {
   'team-expansion': { team: 'Product' },
   'partner-network': { stage: 'signed', type: 'reseller', terms: 'Net 30' },
   'market-expansion': { decision: 'enter', regulation_score: '5', regulation_source: 'Counsel memo' },
-  'durable-company-building': { status: 'done', owner_name: 'Gus', due_at: dayFrom(5) },
+  'durable-company-building': { status: 'done', owner_user_id: String(GUS), due_at: dayFrom(5) },
 };
 
 test('D661: every Grow Edit form starts from its row, and the change reads back with nothing else moved', async () => {
@@ -1053,7 +1059,7 @@ test('D661: every Grow Edit form starts from its row, and the change reads back 
   assert.deepEqual([mk.decision, mk.demand_score, mk.demand_source, mk.regulation_score, mk.regulation_source, mk.partners_score],
     ['enter', 7, 'Waitlist by country', 5, 'Counsel memo', null], 'a scored part keeps its score; an unscored one stays null');
   const ob = await raw('durable-company-building');
-  assert.deepEqual([ob.title, ob.status, ob.owner_name, String(ob.due_at).slice(0, 10)], ['Annual report', 'done', 'Gus', dayFrom(5)]);
+  assert.deepEqual([ob.title, ob.status, ob.owner, String(ob.due_at).slice(0, 10)], ['Annual report', 'done', 'Gus', dayFrom(5)]);
 });
 
 // Build's Edits (D695 #1656 PR 3b) open from their records; `cycle_forms_d695.test.ts` runs them.

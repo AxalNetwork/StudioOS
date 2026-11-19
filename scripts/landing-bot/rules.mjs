@@ -183,8 +183,8 @@ const commitTime = (c) => time(c?.commit?.committer?.date ?? c?.committedAt ?? c
  * How many attempts a kind has had on this PR, and whether one more is allowed.
  *
  * Counted from what a session cannot rewrite: the bot App's commits on the branch and completed runs of the bot
- * workflows. The series starts at the owning session's newest commit: a commit that names the App as author or
- * committer never resets it, so a head changed by a bot commit stays in the same series. Comments are never read,
+ * workflows. The limit is for the PR's whole life (owner, 2026-11-15, #6467 B): no commit restarts the count, the
+ * session's own included, so a PR the bot has tried twice for a kind waits for a person. Comments are never read,
  * so deleting or forging the sticky comment changes nothing. Main repair is counted per failure fingerprint (job
  * plus test) across every commit, not per PR.
  *
@@ -209,15 +209,12 @@ export function attempts(pr, kind, data = {}) {
   }
 
   if (!pr || !isInt(pr.number)) return { allowed: false, used: null, limit: MAX_ATTEMPTS, reasons: ['no pull request'] };
-  let start = 0;
-  commits.forEach((c, i) => { if (!isBotCommit(c, botLogin)) start = i; });
-  const tail = commits.slice(start);
-  const tailShas = new Set(tail.map((c) => c?.sha).filter(Boolean));
+  // Every completed run of this kind on this PR, whatever its head, and every bot commit of this kind on the branch.
   const mine = completed.filter((r) => r.pr === pr.number);
-  const runsInSeries = mine.filter((r) => r.kind === kind && tailShas.has(r.head_sha)).length;
-  const commitsInSeries = tail.filter((c) => isBotCommit(c, botLogin) && trailerKind(c) === kind).length;
-  const used = Math.max(runsInSeries, commitsInSeries);
-  if (used >= MAX_ATTEMPTS) reasons.push(`${used} ${kind} attempts since the session's last commit, the most is ${MAX_ATTEMPTS}`);
+  const runsOnPr = mine.filter((r) => r.kind === kind).length;
+  const botCommitsOfKind = commits.filter((c) => isBotCommit(c, botLogin) && trailerKind(c) === kind).length;
+  const used = Math.max(runsOnPr, botCommitsOfKind);
+  if (used >= MAX_ATTEMPTS) reasons.push(`${used} ${kind} attempts on this pull request, the most is ${MAX_ATTEMPTS}`);
 
   const dayAgo = now - DAY_MS;
   const botCommitsToday = commits.filter((c) => isBotCommit(c, botLogin) && (commitTime(c) ?? now) >= dayAgo).length;
@@ -230,8 +227,12 @@ export function attempts(pr, kind, data = {}) {
 }
 
 /**
- * The repository's daily caps, since 00:00 UTC. Model runs are counted per provider call from run artifacts.
- * @param usage { now, modelCalls: [{ at }] | null, pushes: [{ at }] | null, requeues: [{ at }] | null }
+ * The repository's daily caps, since 00:00 UTC.
+ * LANDING_BOT_DAILY_MODEL_RUNS counts model RUNS (owner, 2026-11-17): one unit per run, however many rounds or
+ * account fallbacks (primary Claude, Claude 2, Claude 3, Codex) it used. The runner's per-run caps (turns, minutes,
+ * rounds in task.mjs's HARD) bound what one run can spend. `modelRuns` holds one entry per run; `modelCalls` is the
+ * old name for the same list.
+ * @param usage { now, modelRuns: [{ at }] | null, pushes: [{ at }] | null, requeues: [{ at }] | null }
  */
 export function budget(kind, env = {}, usage = {}) {
   const k = kindOf(kind);
@@ -248,7 +249,7 @@ export function budget(kind, env = {}, usage = {}) {
     const used = list.filter((e) => (time(e?.at) ?? now) >= since).length;
     if (used >= cap) reasons.push(`${variable}: ${used} of ${cap} used today`);
   };
-  check(k.model, usage.modelCalls, 'LANDING_BOT_DAILY_MODEL_RUNS');
+  check(k.model, usage.modelRuns ?? usage.modelCalls, 'LANDING_BOT_DAILY_MODEL_RUNS');
   check(k.push, usage.pushes, 'LANDING_BOT_DAILY_PUSHES');
   check(k.requeue, usage.requeues, 'LANDING_BOT_DAILY_REQUEUES');
   return { allowed: reasons.length === 0, reasons };
@@ -271,7 +272,8 @@ export const PROTECTED = Object.freeze([
 
 /**
  * Which of a bot's intended writes are refused. Every path (and a rename's old path) must clear PROTECTED and must
- * not be T2 under merge-policy.mjs, which also rates every existing test T2. No files at all is refused.
+ * not be T2 under merge-policy.mjs. It is called without a diff, and an existing test with no diff to read is T2
+ * there (D6679), so a bot never edits an existing test. No files at all is refused.
  * @param files [{ path, previousPath?, status? }] status as git's letter; default M (an edit)
  */
 export function pathGuard(files) {

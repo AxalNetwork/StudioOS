@@ -63,7 +63,7 @@ export function adaptRecords(cycle, slug, records) {
     ...records,
     cols,
     rows,
-    filters: records.filters ?? def.filters,
+    filters: typeof def.mapFilters === 'function' ? def.mapFilters(records.filters ?? def.filters) : records.filters ?? def.filters,
     sorts: records.sorts ?? def.sorts,
   };
 }

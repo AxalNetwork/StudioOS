@@ -214,37 +214,31 @@ test('the daily sweep expires the artifacts whose term ended today', () => onOne
 }));
 
 test('no access-control gate compares a bare timestamp column', () => {
-  // The behavioural tests above cover six gates. Seven more read the same four
-  // columns from other routes, and one of them going back to the bare form is
-  // the same defect in a place no fixture would catch — so the shape is pinned
-  // across every file that gates on these two columns.
-  const FILES = [
-    'routes/auth.ts', 'routes/auth_passkey.ts', 'routes/advisor_grants.ts',
-    // #4715: the advisor gate moved to routes/advisors_engagements.ts.
-    'routes/advisors_engagements.ts', 'routes/data_room.ts', 'routes/research.ts',
-    'routes/market_intel.ts', 'services/trust.ts',
-    // D4631 part 2: the data room's two NDA reads moved into the shared rule.
-    'services/dealAccess.ts',
-    // D4570-p7: brief notes moved here from research.ts (D4574-p8) and now gate on grant expiry.
-    'routes/research_client_prep.ts',
-  ];
-  // A bare column on either side of a comparison against the clock. The
-  // negative lookbehind lets `datetime(expires_at)` through and nothing else.
+  // Each gated file keeps the normalisation for the expiry columns it uses.
+  // Adding another safe gate (for example D6072's re-share check) must not
+  // invalidate this test by changing a global occurrence count. The behavioural
+  // tests above still execute the real predicates against both timestamp formats.
+  const GATES: Record<string, string[]> = {
+    'routes/auth.ts': ['expires_at'],
+    'routes/auth_passkey.ts': ['expires_at'],
+    'routes/advisor_grants.ts': ['expires_at', 'g.expires_at'],
+    'routes/advisors_engagements.ts': ['g.expires_at'],
+    'routes/data_room.ts': ['expires_at', 'g.expires_at', 'n.valid_until'],
+    'routes/research.ts': ['expires_at', 'g.expires_at', 'k.expires_at'],
+    'routes/market_intel.ts': ['valid_until'],
+    'services/trust.ts': ['expires_at', 'valid_until'],
+    'services/dealAccess.ts': ['n.valid_until'],
+    'routes/research_client_prep.ts': ['g.expires_at'],
+  };
+  // A bare expiry column compared to the clock retains the original defect.
   const BARE = /(?<!datetime\()\b[a-z_]*\.?(?:expires_at|valid_until)\s*[<>]=?\s*(?:CURRENT_TIMESTAMP|datetime\('now'\))/;
-  for (const f of FILES) {
-    const hit = BARE.exec(src(f));
-    assert.equal(hit, null, `${f} compares a bare timestamp column: ${hit?.[0]}`);
+  for (const [file, columns] of Object.entries(GATES)) {
+    const source = src(file);
+    const hit = BARE.exec(source);
+    assert.equal(hit, null, `${file} compares a bare timestamp column: ${hit?.[0]}`);
+    for (const column of columns) {
+      assert.match(source, new RegExp('datetime\\(' + column.replaceAll('.', '\\.') + '\\)'),
+        `${file} no longer normalises ${column}`);
+    }
   }
-  // And the fix is actually present, so this test cannot pass by the files
-  // having lost their gates altogether.
-  const wrapped = FILES.reduce((n, f) => n + (src(f).match(/datetime\([a-z_]*\.?(?:expires_at|valid_until)\)/g) || []).length, 0);
-  // D891 adds research's current room-grant expiry check to #2461's
-  // project-founder NDA gates. D1102 adds the active/expired grant summary,
-  // and D1104 the founder's NDA route's live-grant check in data_room.ts:
-  // D4631 keeps the two shared NDA reads by founder and project. D4672 adds the open proof-consent request.
-  // D4570-p7 adds six: a share reads only through a live advisor grant (readableDoc, the library list's
-  // two columns), the brief draft's and brief notes' grant lookups, and the grant revoke's other-grant guard.
-  // #6267 adds one: the deal page's NDA status read moved from deal_workroom.ts (not listed) into
-  // services/dealAccess.ts as ventureNdaStatus, normalised as it was.
-  assert.equal(wrapped, 26, `expected 26 normalised comparisons across the gated files, found ${wrapped}`);
 });

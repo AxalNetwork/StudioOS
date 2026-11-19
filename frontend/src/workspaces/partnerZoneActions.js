@@ -299,13 +299,19 @@ export const PARTNER_ZONE_ACTIONS = {
   // which stopped being the whole story when the directory's readings card got
   // the record form back: it opens that form on the first reading past ninety
   // days, or the first service line never read, and records nothing itself.
-  // (`MarketZone` supplied a handler for it that this table never named.)
+  // (The unmounted `MarketZone` body, deleted by D6285, supplied a handler for
+  // it that this table never named.)
   // `Attach to proposal` STAYS PROSE: a reading attaches from its own page,
   // and nothing on this one carries a reading or a sector onto a proposal.
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); New market research is drawn and disabled:
+  // a research project opens for the founder licence only. Re-run stale (D593)
+  // stays; Attach to proposal and Export are replaced.
   'research/markets': [
     { label: 'Re-run stale', kind: 'handler', handler: 'reRunStale' },
-    { label: 'Attach to proposal', unbuilt: 'nothing carries a sector onto a proposal' },
-    { label: 'Export', kind: 'export' },
+    { label: 'Export view', kind: 'export' },
+    { label: 'New market research', unbuilt: 'research projects open for the founder licence only; this licence has none to start' },
   ],
   // BOTH OPS ARE THE PAGE'S OWN NOW. `Add document` said "the add-document form
   // below takes a file or a link" — true of the form and not of the op, which

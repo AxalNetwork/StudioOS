@@ -1,5 +1,7 @@
+import GrowProposalDestinations from './GrowProposalDestinations';
+import Lightbox from '../../ui/Lightbox';
 import { ConnectorMark } from '../../ui/FillMark.jsx';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cyclesWrite } from '../../lib/api/cycles';
 import { mercurySyncSentence, mercuryView, monthLabel } from './growFromMercury';
 import ConnectMercury from './ConnectMercury';
@@ -22,9 +24,20 @@ import ConnectMercury from './ConnectMercury';
  * figure, and the next sync leaves it deleted. Anyone outside the founder's
  * company sees only the sentence that the figures are the team's.
  */
-export default function GrowFromMercury({ slug, part, projectId, reload }) {
+export default function GrowFromMercury(props) {
+  return <VentureMercury key={props.projectId} {...props} />;
+}
+
+function VentureMercury({ slug, part, projectId, reload: onReload }) {
+  const alive = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+  const reload = (...args) => { if (alive.current) onReload?.(...args); };
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
+  const [accepting,setAccepting]=useState(null),[revision,setRevision]=useState(0);
   const [syncNotice, setSyncNotice] = useState('');
   const view = mercuryView(part);
   if (view.empty) return null;
@@ -33,6 +46,7 @@ export default function GrowFromMercury({ slug, part, projectId, reload }) {
     if (key === 'sync') setSyncNotice('');
     try {
       const result = await fn();
+      setRevision(n => n + 1);
       if (key === 'sync') {
         setSyncNotice(mercurySyncSentence(result?.counts));
         reload?.({ keepParts: true });
@@ -102,11 +116,11 @@ export default function GrowFromMercury({ slug, part, projectId, reload }) {
           {view.proposals.map((p) => (
             <li key={p.id} className="flex flex-col gap-1 rounded-lg border border-axal-hairline px-3 py-2 dark:border-gray-800" data-testid={`mercury-proposal-${p.id}`}>
               <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{p.sentence || p.company}</p>
-              <span className={FAINT}>{p.linked || 'Proposed by Mercury'}{p.source ? ` · ${p.source}` : ''}</span>
+              <span className={FAINT}>{p.state==='accepted'&&p.uid?<a className="underline" href={`/grow/partner-network/${encodeURIComponent(p.uid)}?project_id=${projectId}`}>{p.linked}</a>:p.linked || 'Proposed by Mercury'}{p.source ? ` · ${p.source}` : ''}</span>
               {p.state === 'pending' && view.canDecide && projectId && (
                 <div className="flex gap-2 pt-1">
                   <button type="button" disabled={busy != null} data-testid={`mercury-accept-${p.id}`}
-                    onClick={() => act(p.id, () => cyclesWrite.grow.acceptMercuryPartner(projectId, p.id), 'That proposal could not be accepted.')}
+                    onClick={() => setAccepting(p)}
                     className="rounded-md bg-axal-violet px-3 py-1 text-[12px] font-bold text-white transition-colors hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50">{busy === p.id ? 'Saving…' : 'Accept'}</button>
                   <button type="button" disabled={busy != null} data-testid={`mercury-dismiss-${p.id}`}
                     onClick={() => act(p.id, () => cyclesWrite.grow.dismissMercuryPartner(projectId, p.id), 'That proposal could not be dismissed.')}
@@ -117,6 +131,11 @@ export default function GrowFromMercury({ slug, part, projectId, reload }) {
           ))}
         </ul>
       )}
+      {slug==='partner-network'&&projectId?<GrowProposalDestinations projectId={projectId} source="mercury" revision={revision} onChanged={reload} canUndo={view.canDecide}/>:null}
+      {accepting?<Lightbox title="Add this Mercury proposal to Partner network?" label="Add this Mercury proposal to Partner network?" onClose={()=>{if(busy===null)setAccepting(null);}} width={480} phone="sheet" footer={<div className="flex justify-end gap-2"><button type="button" disabled={busy!==null} onClick={()=>setAccepting(null)} className="min-h-11 px-3">Cancel</button><button type="button" disabled={busy!==null} className="min-h-11 rounded-md bg-axal-violet px-3 text-white" onClick={()=>act(accepting.id,async()=>{await cyclesWrite.grow.acceptMercuryPartner(projectId,accepting.id);setAccepting(null);},'That proposal could not be accepted.')} data-testid="mercury-accept-confirm">Add the partner</button></div>}>
+        <p className="text-sm">Accept creates a partner named {accepting.company} in Partner network and links this Mercury payment. Your bank account is unchanged. You can undo while the new record is unchanged.</p>
+        {error?<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>:null}
+      </Lightbox>:null}
       {syncNotice && <p role="status" className={MUTED} data-testid="mercury-sync-note">{syncNotice}</p>}
       {error && <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid="mercury-error">{error}</p>}
     </section>

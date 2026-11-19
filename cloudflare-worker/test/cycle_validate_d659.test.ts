@@ -589,9 +589,16 @@ test('D659: problem discovery records filter by severity and say what links to a
   assert.deepEqual(m.body.records.rows, [
     // One mention in the last 30 days, one in the 30 before: no change.
     { id: 1, theme: 'Dispatch', mentions: 2, severity: 'severe', trend: 0, supports: ['H1'],
-      icp_count: 0, need_count: 1, fit_unrecorded_count: 2, last_mention_at: ago(2), wordings: ['Slow dispatch'] },
+      icp_count: 0, need_count: 1, fit_unrecorded_count: 2, last_mention_at: ago(2), wordings: ['Slow dispatch'],
+      // D6006 (#6006, V17): the rank and why, sources beside mentions, and the claims it supports and contradicts.
+      grouped: true, rank: 1, rank_reason: 'Most mentions · mostly Severe',
+      sources: { interviews: 2, people: 2, organisations: null, people_unrecorded: 0, organisations_unrecorded: 2 },
+      phrases: 2, supporting: 1, contradicting: 0, contradicts: null },
     { id: null, theme: 'Paper forms', mentions: 1, severity: null, trend: 1, supports: null,
-      icp_count: 0, need_count: 0, fit_unrecorded_count: 1, last_mention_at: ago(2), wordings: ['Paper forms'] },
+      icp_count: 0, need_count: 0, fit_unrecorded_count: 1, last_mention_at: ago(2), wordings: ['Paper forms'],
+      grouped: false, rank: 2, rank_reason: '1 mention',
+      sources: { interviews: 1, people: 1, organisations: null, people_unrecorded: 0, organisations_unrecorded: 1 },
+      phrases: 1, supporting: 0, contradicting: 0, contradicts: null },
   ]);
   m = await call(db, FOUNDER, 'GET', `/modules/problem-discovery?project=${P}&filter=severity:not_recorded`);
   assert.deepEqual(m.body.records.rows.map((x: any) => x.theme), ['Paper forms']);

@@ -21,6 +21,19 @@
  *                        note. The investor is notified. An answered request is
  *                        not reopened (409).
  *
+ * D6909 (#6909) adds, over the same store (migration 202611161239_6909):
+ *   POST   /             optional evidence (owner answer A on D6228): a link
+ *                        (`evidence_url`, http or https) or one file
+ *                        (multipart `evidence_file`: PDF, PNG, JPEG or WebP, at
+ *                        most 10 MB), never both. JSON stays accepted unchanged.
+ *   GET    /queue        HQ's queue: every open request across companies,
+ *                        oldest first, each with the company's latest mark, so
+ *                        Record a mark can be prefilled. Admin only.
+ *   GET    /:uid/evidence  the stored file, to the investor who asked or an
+ *                        admin. Anyone else reads 404, as for an unknown uid.
+ * Evidence is written with the request and never changed (the migration's
+ * trigger refuses it).
+ *
  * A request never writes a mark. Recording one stays the admin write
  * `POST /api/positions/:projectUid/marks`.
  */
@@ -38,17 +51,51 @@ export const MARK_REQUEST_KINDS = ['mark', 'correction', 'follow_on'] as const;
 const KINDS: ReadonlySet<string> = new Set(MARK_REQUEST_KINDS);
 const KIND_WORDS: Record<string, string> = { mark: 'a mark', correction: 'a mark correction', follow_on: 'a follow-on round' };
 const REASON_MAX = 2000;
+/** D6909: evidence a request may carry. */
+export const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
+export const EVIDENCE_PREFIX = 'mark-request-evidence/';
+const EVIDENCE_MIME: Record<string, string> = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+const URL_MAX = 2000;
+
+/** A link the investor gives as evidence: http or https, no credentials, at most 2,000 characters. Null when it is not one. */
+export function evidenceUrl(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const raw = v.trim();
+  if (!raw || raw.length > URL_MAX) return null;
+  let u: URL;
+  try { u = new URL(raw); } catch { return null; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  if (u.username || u.password) return null;
+  return u.toString().length > URL_MAX ? null : u.toString();
+}
+
+type Ask = { project_uid: unknown; kind: unknown; reason: unknown; evidence_url: unknown; file: File | null };
+/** The request's fields, from JSON (D6205) or a multipart form (D6909, with a file). */
+async function readAsk(c: any): Promise<Ask> {
+  const type = String(c.req.header('content-type') || '').toLowerCase();
+  if (type.startsWith('multipart/form-data')) {
+    const form = await c.req.formData().catch(() => null);
+    const f = form?.get('evidence_file');
+    const file = f && typeof f === 'object' && typeof (f as File).arrayBuffer === 'function' ? f as File : null;
+    const field = (k: string) => { const x = form?.get(k); return typeof x === 'string' ? x : undefined; };
+    return { project_uid: field('project_uid'), kind: field('kind'), reason: field('reason'), evidence_url: field('evidence_url'), file };
+  }
+  const body = await c.req.json().catch(() => ({} as any));
+  return { project_uid: body?.project_uid, kind: body?.kind, reason: body?.reason, evidence_url: body?.evidence_url, file: null };
+}
 
 /** The open request of one investor on one company. Every reader gets these columns; `requester` is added for an admin only. */
 const OPEN_ONE = `SELECT q.uid, q.kind, q.reason, q.state, q.created_at, q.resolved_at, q.resolved_mark_uid,
-            q.resolution_note, q.requester_user_id, p.uid AS project_uid, p.name AS project_name,
+            q.resolution_note, q.requester_user_id, q.evidence_url, q.evidence_file_name, q.evidence_file_size,
+            q.evidence_file_mime, p.uid AS project_uid, p.name AS project_name,
             u.name AS requester_name
        FROM portfolio_mark_requests q
        JOIN projects p ON p.id = q.project_id
        LEFT JOIN users u ON u.id = q.requester_user_id
       WHERE q.project_id = ? AND q.requester_user_id = ? AND q.state = 'open'`;
 const BY_UID = `SELECT q.uid, q.kind, q.reason, q.state, q.created_at, q.resolved_at, q.resolved_mark_uid,
-            q.resolution_note, q.requester_user_id, p.uid AS project_uid, p.name AS project_name,
+            q.resolution_note, q.requester_user_id, q.evidence_url, q.evidence_file_name, q.evidence_file_size,
+            q.evidence_file_mime, p.uid AS project_uid, p.name AS project_name,
             u.name AS requester_name
        FROM portfolio_mark_requests q
        JOIN projects p ON p.id = q.project_id
@@ -56,13 +103,27 @@ const BY_UID = `SELECT q.uid, q.kind, q.reason, q.state, q.created_at, q.resolve
       WHERE q.uid = ?`;
 /** `?1` a requester id or NULL (every requester), `?2` a state or NULL, `?3` a company uid or NULL (D6205 part 2: the admin position sheet reads one company's). */
 const LIST = `SELECT q.uid, q.kind, q.reason, q.state, q.created_at, q.resolved_at, q.resolved_mark_uid,
-            q.resolution_note, q.requester_user_id, p.uid AS project_uid, p.name AS project_name,
+            q.resolution_note, q.requester_user_id, q.evidence_url, q.evidence_file_name, q.evidence_file_size,
+            q.evidence_file_mime, p.uid AS project_uid, p.name AS project_name,
             u.name AS requester_name
        FROM portfolio_mark_requests q
        JOIN projects p ON p.id = q.project_id
        LEFT JOIN users u ON u.id = q.requester_user_id
       WHERE (?1 IS NULL OR q.requester_user_id = ?1) AND (?2 IS NULL OR q.state = ?2) AND (?3 IS NULL OR p.uid = ?3)
       ORDER BY q.created_at DESC, q.id DESC LIMIT 500`;
+
+/** D6909: the request's evidence as the reader sees it; a file is opened through its own route, never by its key. */
+function evidenceOf(row: any) {
+  if (row.evidence_url) return { kind: 'link' as const, url: String(row.evidence_url) };
+  if (row.evidence_file_name) {
+    return {
+      kind: 'file' as const, name: String(row.evidence_file_name),
+      size_bytes: row.evidence_file_size == null ? null : Number(row.evidence_file_size),
+      mime: row.evidence_file_mime ?? null, href: `/api/mark-requests/${row.uid}/evidence`,
+    };
+  }
+  return null;
+}
 
 function project(row: any, admin: boolean) {
   const out: Record<string, unknown> = {
@@ -76,12 +137,16 @@ function project(row: any, admin: boolean) {
     resolved_at: row.resolved_at ?? null,
     resolved_mark_uid: row.resolved_mark_uid ?? null,
     resolution_note: row.resolution_note ?? null,
+    evidence: evidenceOf(row),
   };
   if (admin) out.requester = { id: Number(row.requester_user_id), name: row.requester_name ?? null };
   return out;
 }
 
 const isAdminUser = (u: User) => u.role === 'admin';
+/** D6909: a request's evidence is read by the investor who asked, or by HQ. */
+const canRequesterOrHqRead = (u: User, row: { requester_user_id: unknown }) =>
+  isAdminUser(u) || Number(row.requester_user_id) === Number(u.id);
 
 /** Every active admin, told once each. A failed notice never fails the request. */
 async function notifyHq(env: Env, title: string, body: string) {
@@ -99,14 +164,28 @@ r.post('/', async (c) => {
     const user = await requireAuth(c);
     // An admin records marks; asking is the investor's act.
     if (isAdminUser(user) || !canViewLpData(user)) return c.json({ detail: 'Only an investor can request a mark.', code: 'investor_only' }, 403);
-    const body = await c.req.json().catch(() => ({} as any));
-    const kind = String(body?.kind ?? '');
+    const body = await readAsk(c);
+    const kind = String(body.kind ?? '');
     if (!KINDS.has(kind)) return c.json({ detail: `kind must be one of: ${MARK_REQUEST_KINDS.join(', ')}`, code: 'bad_kind' }, 400);
-    const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
     if (!reason) return c.json({ detail: 'Say what is wrong or missing.', code: 'reason_required' }, 400);
     if (reason.length > REASON_MAX) return c.json({ detail: `The reason is at most ${REASON_MAX} characters.`, code: 'reason_too_long' }, 400);
+    // D6909: optional evidence, a link or a file, never both. Checked before anything is stored.
+    const urlGiven = typeof body.evidence_url === 'string' && body.evidence_url.trim() !== '';
+    const link = urlGiven ? evidenceUrl(body.evidence_url) : null;
+    if (urlGiven && !link) return c.json({ detail: 'The evidence link must be an http or https address of at most 2,000 characters.', code: 'bad_evidence_url' }, 400);
+    const file = body.file;
+    if (file && link) return c.json({ detail: 'Give a link or a file as evidence, not both.', code: 'one_evidence' }, 400);
+    let ext: string | null = null;
+    if (file) {
+      ext = EVIDENCE_MIME[String(file.type || '').toLowerCase()] ?? null;
+      if (!ext) return c.json({ detail: 'Evidence must be a PDF, PNG, JPEG or WebP file.', code: 'evidence_type' }, 415);
+      if (!file.size) return c.json({ detail: 'The file is empty.', code: 'evidence_empty' }, 400);
+      if (file.size > EVIDENCE_MAX_BYTES) return c.json({ detail: 'Evidence files are at most 10 MB.', code: 'evidence_too_large' }, 413);
+      if (!c.env.FILES) return c.json({ detail: 'File storage is not available; send a link instead.', code: 'storage_unavailable' }, 503);
+    }
     const proj = await c.env.DB.prepare('SELECT id, uid, name FROM projects WHERE uid = ? AND deleted_at IS NULL')
-      .bind(String(body?.project_uid ?? '')).first<{ id: number; uid: string; name: string }>();
+      .bind(String(body.project_uid ?? '')).first<{ id: number; uid: string; name: string }>();
     // Not found and not held answer alike, so a request does not confirm a company exists.
     const held = proj ? await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user)) : [];
     if (!proj || !held || !held.includes(Number(proj.id))) {
@@ -117,12 +196,26 @@ r.post('/', async (c) => {
     if (open) return c.json({ detail: 'You already have an open request for this company.', code: 'request_open', request: project(open, false) }, 409);
     const uid = newUid();
     const now = nowIso();
+    let fileKey: string | null = null;
+    let fileName: string | null = null;
+    if (file && ext) {
+      fileKey = `${EVIDENCE_PREFIX}${proj.id}/${uid}.${ext}`;
+      fileName = String(file.name || `evidence.${ext}`).replace(/[\r\n"\\/]/g, '').trim().slice(0, 200) || `evidence.${ext}`;
+      await c.env.FILES!.put(fileKey, await file.arrayBuffer(), {
+        httpMetadata: { contentType: String(file.type).toLowerCase() },
+        customMetadata: { request_uid: uid, user_id: String(user.id) },
+      });
+    }
     try {
       await c.env.DB.prepare(
-        `INSERT INTO portfolio_mark_requests (uid, project_id, requester_user_id, kind, reason, state, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`,
-      ).bind(uid, proj.id, user.id, kind, reason, now, now).run();
+        `INSERT INTO portfolio_mark_requests (uid, project_id, requester_user_id, kind, reason, state, created_at, updated_at,
+                                              evidence_url, evidence_file_key, evidence_file_name, evidence_file_size, evidence_file_mime)
+         VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(uid, proj.id, user.id, kind, reason, now, now, link, fileKey, fileName,
+        fileKey ? file!.size : null, fileKey ? String(file!.type).toLowerCase() : null).run();
     } catch (e) {
+      // The row was not written: the stored file has nothing pointing at it.
+      if (fileKey) { try { await c.env.FILES?.delete(fileKey); } catch { console.warn('[mark_requests] orphan_evidence_not_deleted'); } }
       // Two submits at once: the partial unique index keeps one; the other is the 409 above.
       if (/UNIQUE constraint failed/i.test(String((e as Error)?.message || ''))) {
         const again = await c.env.DB.prepare(OPEN_ONE)
@@ -149,6 +242,61 @@ r.get('/', async (c) => {
     const projectUid = c.req.query('project_uid') || null;
     const rows = await c.env.DB.prepare(LIST).bind(admin ? null : user.id, stateOk ? state : null, projectUid).all<any>();
     return c.json({ items: (rows.results || []).map((x) => project(x, admin)), scope: admin ? 'all_requests' : 'own_requests' });
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /api/mark-requests/queue — D6909: HQ's queue, every open request across companies, oldest first.
+// Each row carries the company's latest mark (or null), so Record a mark can be prefilled from the request.
+const QUEUE = `WITH latest AS (
+         SELECT project_id, uid, as_of_date, fmv, basis,
+                ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY as_of_date DESC, id DESC) AS rn
+           FROM portfolio_marks)
+       SELECT q.uid, q.kind, q.reason, q.state, q.created_at, q.resolved_at, q.resolved_mark_uid,
+              q.resolution_note, q.requester_user_id, q.evidence_url, q.evidence_file_name, q.evidence_file_size,
+              q.evidence_file_mime, p.uid AS project_uid, p.name AS project_name, u.name AS requester_name,
+              m.uid AS mark_uid, m.as_of_date AS mark_as_of, m.fmv AS mark_fmv, m.basis AS mark_basis
+         FROM portfolio_mark_requests q
+         JOIN projects p ON p.id = q.project_id
+         LEFT JOIN users u ON u.id = q.requester_user_id
+         LEFT JOIN latest m ON m.project_id = q.project_id AND m.rn = 1
+        WHERE q.state = 'open'
+        ORDER BY q.created_at ASC, q.id ASC LIMIT 500`;
+r.get('/queue', async (c) => {
+  try {
+    await requireAdmin(c);
+    const rows = await c.env.DB.prepare(QUEUE).all<any>();
+    return c.json({
+      items: (rows.results || []).map((x) => ({
+        ...project(x, true),
+        latest_mark: x.mark_uid ? { uid: x.mark_uid, as_of_date: x.mark_as_of, fmv: x.mark_fmv == null ? null : Number(x.mark_fmv), basis: x.mark_basis } : null,
+      })),
+      order: 'oldest_first',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /api/mark-requests/:uid/evidence — D6909: the stored evidence file, to the investor who asked or an admin.
+r.get('/:uid/evidence', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const row = await c.env.DB.prepare(
+      'SELECT requester_user_id, evidence_file_key, evidence_file_name, evidence_file_mime FROM portfolio_mark_requests WHERE uid = ?',
+    ).bind(c.req.param('uid')).first<any>();
+    // Someone else's request reads as no request, so a uid confirms nothing.
+    if (!row || !canRequesterOrHqRead(user, row)) return c.json({ detail: 'Not found' }, 404);
+    if (!row.evidence_file_key) return c.json({ detail: 'This request carries no file.', code: 'no_evidence_file' }, 404);
+    if (!c.env.FILES) return c.json({ detail: 'File storage is not available.', code: 'storage_unavailable' }, 503);
+    const obj = await c.env.FILES.get(String(row.evidence_file_key));
+    if (!obj) return c.json({ detail: 'The evidence file cannot be read.', code: 'evidence_unreadable' }, 404);
+    const name = String(row.evidence_file_name || 'evidence').replace(/[^\w.\- ]/g, '_');
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': String(row.evidence_file_mime || 'application/octet-stream'),
+        'Content-Disposition': `attachment; filename="${name}"`,
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'private, no-store',
+      },
+    });
   } catch (e) { return mapError(c, e); }
 });
 

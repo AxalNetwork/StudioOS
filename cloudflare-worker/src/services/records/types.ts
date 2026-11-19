@@ -61,7 +61,9 @@ export type RecordField = {
   key: string;
   label: string;
   kind: 'T' | 'CH' | 'CK';
-  input?: 'date' | 'money' | 'email' | 'file';
+  input?: 'date' | 'money' | 'email' | 'file' | 'textarea';
+  /** D6788: bound the existing text-area renderer for board resolutions. */
+  max?: number;
   placeholder?: string;
   value?: unknown;
   options?: Array<{ value: string; label: string }>;
@@ -175,6 +177,8 @@ export type Store =
   | 'grow_kpis' | 'obligation_occurrences'
   // D6113 (#6113): an entry step, by its uid, through its market.
   | 'market_entry_steps'
+  // D6114 (#6114): a partner's deal and an obligation's agenda item, by uid, through their parent.
+  | 'growth_partner_deals' | 'obligation_agenda_items'
   // D690 (S18-B, #1694): Build's records, then the rows its sections name.
   | 'mvp_features' | 'mvp_must_haves' | 'roadmap_okrs' | 'cap_table_founders'
   | 'build_filings' | 'build_systems'

@@ -13,6 +13,10 @@ import { buildModuleExportApi } from '../../../lib/api/buildModuleExport.js';
 import MvpSummary from '../MvpSummary';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
+import { lazyStep } from '../lazyStep.jsx';
+
+// D6028 (#6028, BD1, BD2): Build Overview V2, behind its own lazy boundary.
+const BuildOverview = lazyStep(() => import('../BuildOverview'));
 
 /**
  * Build's read (#1475, D662) is already in D661's shape (chart specs,
@@ -26,6 +30,7 @@ import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
  * the pages that edit them today.
  */
 const build = {
+  Overview: BuildOverview,
   modules: MODULES.build,
   // THE ONE PLACE A STARTUP IS CREATED. `/projects` is retired and the Build
   // desk inherited the only `api.createProject` caller; sixteen links,
@@ -41,6 +46,9 @@ const build = {
   // records, and that region carries Connect a tool as "Connect or manage tools".
   modulePrimary: false,
   sourcesRegion: true,
+  // D4846 part 2 (#6032, BD14 B): from 768px to 1023px Build draws its desktop pages laid out for a tablet,
+  // not the phone page (`ui/phone/tabletTier.js`).
+  tabletPages: true,
   // D5077 (BD21): each module's own Eadwyn asks and rail sentence (buildEadwyn.js).
   asks: BUILD_ASKS,
   railNotes: BUILD_RAIL_NOTES,

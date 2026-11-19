@@ -109,10 +109,14 @@ test('the report shows each new row, labelled, and the collector reads the queue
   const cli = readFileSync(new URL('../../scripts/ci-scorecard.mjs', import.meta.url), 'utf8');
   assert.match(cli, /actions\/workflows\/ci\.yml\/runs\?event=merge_group/);
   assert.match(cli, /actions\/runs\?head_sha=\$\{sha\}&event=pull_request/);
-  const cap = Number(/const cap = (\d+);/.exec(cli)[1]);
-  const { jobs, prs } = JSON.parse(/const budget = (\{[^}]+\});/.exec(cli)[1].replace(/(\w+):/g, '"$1":'));
+  // D5973 part 2: the cap and phase lines live in one object, BUDGET; ci_scorecard_candidates_5973 holds its arithmetic.
+  const { cap, jobsUntil, timelinesUntil, timelinePages, queuePages, queueCiRuns } = m.BUDGET;
+  assert.match(cli, /actions\/workflows\/ci\.yml\/runs\?event=merge_group&created=\$\{created\}`, BUDGET\.queuePages,/);
+  assert.equal(queuePages, 5);
+  assert.equal(queueCiRuns, 74);
+  assert.equal(timelinePages, 3);
   // Timelines take up to three pages and one head listing; the tracker comment up to ten pages and one write.
-  assert.ok(jobs < prs && prs + 4 + 11 <= cap, `${jobs} < ${prs}, ${prs} + 15 <= ${cap}`);
+  assert.ok(jobsUntil < timelinesUntil && timelinesUntil - 1 + 4 + 11 <= cap, `${jobsUntil} < ${timelinesUntil}, ${timelinesUntil} + 14 <= ${cap}`);
 });
 
 test('every required workflow exists and runs on pull_request', () => {

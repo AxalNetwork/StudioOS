@@ -201,7 +201,7 @@ export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin
     all[(to + all.length) % all.length]?.focus?.();
   };
   const content = (
-    <div id={menu} role="menu" aria-label="More" className="flex min-w-[210px] flex-col rounded-[12px] border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="admin-page-more-menu">
+    <div id={menu} role="menu" aria-label="More" className="flex min-w-[210px] flex-col rounded-[12px] border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid={`${testId}-menu`}>
       <MenuClose.Provider value={close}>{children}</MenuClose.Provider>
     </div>
   );
@@ -209,7 +209,7 @@ export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin
     <div ref={wrap} className={`relative ${className ?? `col-start-2 justify-self-end ${hasCrumb ? 'row-start-2' : 'row-start-1'}`}`} onKeyDown={onKey}>
       <button ref={button} type="button" aria-label="More" aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className="grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10" data-testid={testId}>⋯</button>
       {open ? phone ? (
-        <Lightbox label="More" phone="sheet" onClose={() => close(true)} returnFocusTo={button} testId="admin-page-more-sheet">
+        <Lightbox label="More" phone="sheet" onClose={() => close(true)} returnFocusTo={button} testId={`${testId}-sheet`}>
           {content}
         </Lightbox>
       ) : <div className="absolute right-0 top-full z-30 mt-1.5">{content}</div> : null}

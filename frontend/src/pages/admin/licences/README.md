@@ -57,6 +57,10 @@ unchanged when it was split.
 - `UserLicenceDetail.jsx` — D5060 part 3: one user licence at `/admin/licences/registry/user/:uid` (L37, L37B):
   Overview, Programs, Agreement, Billing (only with commercial terms) and History. Its model is
   `../licenceRegistryModel.js`.
+- `NewLicenceSteps.jsx` — D4819 part 5 (#5931): New licence steps 1 and 3 to 6 (boards L41 to L47), the cards
+  L21's frame places in its card slot (`NewLicenceStep`). Its rules are `newLicenceModel.js`, in this folder.
+- `newLicenceModel.js` — D4819 part 5: what each New licence step sends, where a refusal lands, the review's groups
+  and the Issue step's four questions.
 
 The models these read stay beside the page in `../`: `licenceNavModel.js`
 (sections, tabs and selection), `licenceOverviewModel.js` (the header's and
@@ -69,3 +73,5 @@ amendment, effects and conflict, D4819), `licenceReasonModel.js` and `LicenceRea
 by `LicenceDetail.jsx`. Tests that read the page as text read every file here
 through `frontend/test/_licencePage.mjs`, so moving code between these files
 does not break them.
+
+- `AgreementReplacement.jsx` — D6562: L09 comparison and five-field readiness, L10 frozen text/hash preview, and the send-readiness predicate. ContractStep integration awaits #5920's ownership handoff.

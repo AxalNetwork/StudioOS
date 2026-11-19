@@ -45,7 +45,7 @@ const SURFACES = [
   'frontend/src/pages/PricingPage.jsx',
   'cloudflare-worker/src/routes/billing.ts',
   'frontend/src/components/PaywallModal.jsx',
-  'frontend/src/pages/SettingsPage.jsx',
+  'frontend/src/pages/account/BillingSection.jsx',
   'cloudflare-worker/src/middleware/requireTier.ts',
   'cloudflare-worker/src/middleware/requireInvestorTier.ts',
   'frontend/src/lib/sitePricing.js',
@@ -130,8 +130,8 @@ test('the paywall is the catalogue, and carries no price', () => {
 });
 
 test('Billing names its plans from the paywall\'s table and reads its prices, never types them', () => {
-  const src = code(read('frontend/src/pages/SettingsPage.jsx'));
-  assert.match(src, /import \{ FREE, priceText, usePlansRead \} from '\.\.\/lib\/planPrices';/);
+  const src = code(read('frontend/src/pages/account/BillingSection.jsx'));
+  assert.match(src, /import \{ FREE, priceText, usePlansRead \} from '\.\.\/\.\.\/lib\/planPrices';/);
   assert.match(src, /professional: `\$\{TIER_PLANS\.professional\.label\} — \$\{priceText\(prices, TIER_PLANS\.professional\.key, billingCycle === 'yearly' \? 'year' : 'month'\)\}`/);
   assert.match(src, /growth: `\$\{TIER_PLANS\.growth\.label\} — \$\{priceText\(prices, TIER_PLANS\.growth\.key\)\}`/);
   assert.doesNotMatch(src, /\bprice: '/, 'a persona plan types a price');

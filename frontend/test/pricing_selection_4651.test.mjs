@@ -189,11 +189,11 @@ test('an advisor is not asked for a pitch; each audience has its own entry copy'
     assert.equal(m.by('register-step-spinout'), undefined, 'the Spin-Out Lab is a founder step only');
     assert.match(text(m.by('register-plan-price')), /\$49 \/ month per licence · billed every month/);
   } finally { await m.close(); }
-  for (const [lane, want, never] of [['advisor', /Create your Advisor account/, /Submit your pitch/], ['investor', /Investor|Open your LP|Join the Partner/, /Advisor account/], ['founder', /Submit your pitch/, /Advisor account/]]) {
+  for (const [lane, want, never] of [['advisor', /Create your Advisor account/, /Submit your pitch/], ['investor', /Create your investor account/, /Advisor account|Open your LP/], ['founder', /Create your founder account/, /Advisor account|Submit your pitch/]]) {
     const v = await mountRegister(`?lane=${lane}`, { read: READ });
     try {
       const t = v.text();
-      if (lane !== 'investor') assert.match(t, want, lane);
+      assert.match(t, want, lane); // #6983 (X1): the investor lane has its own heading now
       assert.doesNotMatch(t, never, lane);
       assert.equal(v.by('register-plan'), undefined, 'no plan chosen, no selection drawn');
       assert.ok(v.by('register-steps'), 'the steps are still said');

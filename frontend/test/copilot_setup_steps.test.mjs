@@ -161,12 +161,13 @@ test('the job relies on no key GitHub ignores for Copilot, and stays under its 5
   assert.ok(Number(timeout) >= 1 && Number(timeout) <= 59, `timeout-minutes is ${timeout}; GitHub caps this job at 59`);
 });
 
-test('suite setup actions use the same pins here; per-run artifact downloads stay in CI', () => {
+test('suite setup actions use the same pins here; per-run artifact downloads and uploads stay in CI', () => {
   const suite = suiteJob();
   const allSuiteUses = suite.steps.map((s) => s.uses).filter(Boolean);
   for (const uses of allSuiteUses) assert.match(uses, /@[a-f0-9]{40}$/);
   // The plan belongs to a CI run; Copilot setup only mirrors its environment.
-  const suiteUses = allSuiteUses.filter((u) => actionOf(u) !== 'actions/download-artifact');
+  // D5608: so does the upload of a part's test traces.
+  const suiteUses = allSuiteUses.filter((u) => !['actions/download-artifact', 'actions/upload-artifact'].includes(actionOf(u)));
   const setupUses = stepsOf(setupJobs.get(JOB)).map((s) => s.uses).filter(Boolean);
   // A floor, so the comparison cannot pass on two empty lists if the parser
   // stops finding `uses:` lines.

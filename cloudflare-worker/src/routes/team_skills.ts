@@ -46,12 +46,24 @@
  *                                        `not_found` (skill or company), 422 `base_not_hq`, 403 `not_editor`, 400
  *                                        `fork_reason_invalid` | `version_invalid`, 422 `version_not_published`, 409
  *                                        `base_retired` | `base_suspended` | `slug_taken`, and `checkDraft`'s codes.
+ *   POST /skills/:uid/rebase             D4538 part 5 (#5965): explicit per-conflict choices write a draft on a newer
+ *                                        Axal version; published history and pins stay unchanged. See D4538-p5.
  *   GET  /skills/:uid/base               a company skill's lineage: null for a standalone skill; else the exact base
  *                                        version's parts, the HQ skill's current version, `base_update_available`
  *                                        (a newer published HQ version, never applied), and a per-field three-way
  *                                        comparison (old base, new base, the company's latest) naming conflicts.
  *   PATCH /skills/:uid on an extension   its tools stay within its base version's (422 `tool_not_in_base`).
  *   Every card carries `based_on: { skill_uid, version } | null`.
+ *
+ * D4538 part 6 (#5967): task-to-skill discovery for an agent the caller manages (SKILL_DISCOVERY_CONTRACT.md).
+ *   POST /skills/discover                { task, output_kind?, agent_uid, taxonomy_focus?, workflow_context: null, limit? }:
+ *                                        `services/agents/skillDiscovery.ts`'s answer, `recommend` | `ambiguous` |
+ *                                        `no_suitable_skill`, all 200. The agent's role, company and tool grants come
+ *                                        from its row. 404 `not_found` unless the caller can manage the agent; 400
+ *                                        `body_invalid`, `field_not_accepted` { field } (a role, tools or a record),
+ *                                        `agent_uid_invalid`, `workflow_context_invalid` (until #4535), `task_invalid`,
+ *                                        `output_kind_invalid`, `taxonomy_focus_invalid`, `limit_invalid`; 409
+ *                                        `agent_removed`. Reads only: no link, pin or event is written.
  *
  * GATES.
  *  - Read: an HQ skill is readable by every member; a company skill only by
@@ -105,6 +117,7 @@ import {
   ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, linksOf, logSkillsChanged, peopleAxes, skillsChange, teamUserIds, toolLabel, versionTags,
   type AttachCode, type Blocked,
 } from '../services/agents/skillLinks';
+import { checkDiscoveryRequest, discoverSkills, type DiscoverySkill } from '../services/agents/skillDiscovery';
 
 type C = Context<{ Bindings: Env }>;
 type SkillRow = {
@@ -595,7 +608,7 @@ const partKey = (p: Parts, f: PartField) => JSON.stringify(f === 'tags' ? p.tags
 /**
  * D4538's three-way comparison, field by field: the base the company forked from, the HQ skill's newest published
  * version, and the company's latest. A field is a `conflict` when both sides changed it and differently. Read only:
- * nothing is merged here (rebase and fork-again are not built, D4538-p2.md).
+ * nothing is merged here. The rebase route below applies explicit choices to a draft (D4538 part 5).
  */
 function threeWay(oldBase: Parts, newBase: Parts | null, company: Parts) {
   return PART_FIELDS.map((field) => {
@@ -649,6 +662,91 @@ router.post('/skills/:uid/extend', async (c) => {
     skill: await cardOf(c.env, s, user, tax, company.company_name),
     base: { uid: base.uid, name: base.name, version, current_version: base.current_version },
   }, 201);
+});
+
+/** D4538 part 5 (#5965), SK-20: Keep mine / Take Axal / Edit by hand, never an implicit conflict merge. */
+router.post('/skills/:uid/rebase', async (c) => {
+  const user = await requireAuth(c);
+  const s = await skillByUid(c.env, c.req.param('uid'));
+  if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
+  if (isAdmin(user) || !(await mayWrite(c.env, s, user))) return say(c, 403, 'not_editor', 'Only the company\'s editors can rebase its skills.');
+  if (s.scope !== 'company' || !s.based_on_skill_uid || s.based_on_version == null) return say(c, 422, 'not_extension', 'Only a company extension has an Axal base to update.');
+  if (s.status === 'retired') return say(c, 409, 'retired', 'A retired skill cannot be rebased.');
+  const company = await c.env.DB.prepare('SELECT archived_at FROM company_profiles WHERE id = ?').bind(s.company_id).first<{ archived_at: string | null }>();
+  if (!company || company.archived_at) return say(c, 409, 'company_archived', 'An archived company is read-only.');
+  const b = await readBody(c);
+  if (!b) return say(c, 400, 'body_invalid', 'Send the rebase choices as a JSON object.');
+  if (!Number.isSafeInteger(b.version) || b.version < 1) return say(c, 400, 'version_invalid', 'Name the newest published Axal version shown in the comparison.');
+  if (typeof b.expected_draft_hash !== 'string' || !/^[a-f0-9]{64}$/.test(b.expected_draft_hash)) return say(c, 400, 'draft_hash_invalid', 'Send the draft_hash you loaded as expected_draft_hash.');
+  if (!b.resolutions || typeof b.resolutions !== 'object' || Array.isArray(b.resolutions)) return say(c, 400, 'resolutions_invalid', 'Send an object with one choice per conflicting part.');
+  const snap = await draftSnapshot(c.env, s.id);
+  if (!snap) return noSkill(c);
+  if (b.expected_draft_hash !== await draftHash(snap.parts)) return draftConflict(c, snap);
+  const base = await baseOf(c.env, s).catch(() => null);
+  if (!base?.version) return say(c, 409, 'base_unreadable', 'The original Axal base could not be read. Nothing was saved.');
+  if (base.row.status === 'retired') return say(c, 409, 'base_retired', 'This Axal skill is retired, so it cannot be rebased.');
+  if (base.row.current_version <= s.based_on_version) return say(c, 409, 'no_base_update', 'There is no newer Axal version to rebase onto.');
+  if (b.version !== base.row.current_version) return say(c, 409, 'rebase_conflict', 'The Axal comparison changed. Reload it before choosing again.');
+  const newest = await versionOf(c.env, base.row.id, b.version).catch(() => null);
+  if (!newest) return say(c, 409, 'base_unreadable', 'The newer Axal version could not be read. Nothing was saved.');
+  if (await skillRunRefusal(c.env, base.row.id, b.version)) return say(c, 409, 'base_suspended', 'The newer Axal version is suspended, so it cannot be rebased.');
+  // Match GET /base: published company definition, else draft. Never substitute a draft for unreadable history.
+  const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version).catch(() => null) : null;
+  if (s.current_version > 0 && !current) return say(c, 409, 'company_version_unreadable', 'Your published company version could not be read. Nothing was saved.');
+  const mine = current ? versionParts(current) : snap.parts;
+  const theirs = versionParts(newest);
+  const fields = threeWay(versionParts(base.version), theirs, mine);
+  const resolutions = b.resolutions as Record<string, { choice?: unknown; value?: unknown } | null>;
+  for (const part of Object.keys(resolutions)) {
+    if (!fields.some(f => f.field === part && f.conflict)) return say(c, 400, 'resolution_invalid', 'Only a conflicting part needs a choice.', { part });
+  }
+  const merged: Record<string, unknown> = { slug: s.slug };
+  for (const f of fields) {
+    if (!f.conflict) { merged[f.field] = f.base_changed ? theirs[f.field] : mine[f.field]; continue; }
+    const r = resolutions[f.field];
+    if (r === undefined) return say(c, 422, 'conflict_unresolved', 'Choose what the new draft keeps for this conflicting part.', { part: f.field });
+    if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.choice !== 'string' || !['mine', 'axal', 'edit'].includes(r.choice) ||
+        (r.choice === 'edit' ? !Object.hasOwn(r, 'value') : Object.hasOwn(r, 'value'))) return say(c, 400, 'resolution_invalid', 'Choose mine, axal or edit with a value.', { part: f.field });
+    merged[f.field] = r.choice === 'mine' ? mine[f.field] : r.choice === 'axal' ? theirs[f.field] : r.value;
+  }
+  const tax = await taxonomy(c.env);
+  const checked = checkDraft(merged, { taxonomy: tax.slugs, roleKeys: ROLE_KEYS });
+  if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
+  const d = checked.draft;
+  const outside = d.tools.find(t => !theirs.tools.includes(t));
+  if (outside) return say(c, 422, 'tool_not_in_base', `${toolLabel(outside)} is not a tool of the newer Axal base.`, { part: 'tools', tool: { key: outside, label: toolLabel(outside) } });
+  try {
+    await c.env.DB.batch([
+      draftGuard(c.env, s.id, snap.snapshot),
+      // The draft, lineage and comparison must still be the exact ones read above. An absent row also aborts.
+      c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM agent_skills s JOIN agent_skills b ON b.uid = s.based_on_skill_uid AND b.scope = 'hq'
+          JOIN company_profiles c ON c.id = s.company_id
+        WHERE s.id = ? AND s.scope = 'company' AND s.company_id = ? AND s.status = ? AND s.current_version = ?
+          AND s.based_on_skill_uid = ? AND s.based_on_version = ? AND b.current_version = ? AND b.status = ? AND c.archived_at IS NULL
+          AND (s.current_version = 0 OR EXISTS (SELECT 1 FROM agent_skill_versions v WHERE v.skill_id = s.id AND v.version = s.current_version))
+          AND EXISTS (SELECT 1 FROM agent_skill_versions v WHERE v.skill_id = b.id AND v.version = s.based_on_version)
+          AND EXISTS (SELECT 1 FROM agent_skill_versions v WHERE v.skill_id = b.id AND v.version = b.current_version)
+          AND NOT EXISTS (SELECT 1 FROM agent_skill_moderation m WHERE m.skill_id = b.id AND m.action = 'suspend'
+            AND (m.cleared_at IS NULL OR (m.cleared_how = 'republished' AND m.version >= b.current_version)))
+      ) THEN 1 ELSE json('rebase_conflict') END AS unchanged`)
+        .bind(s.id, s.company_id, s.status, s.current_version, s.based_on_skill_uid, s.based_on_version, b.version, base.row.status),
+      c.env.DB.prepare(`UPDATE agent_skills SET name = ?, purpose = ?, steps_json = ?, allowed_tools_json = ?, output_kind = ?,
+        based_on_version = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .bind(d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, b.version, user.id, s.id),
+      ...writeDraftStatements(c.env, s.id, d),
+    ]);
+  } catch (e) {
+    const now = await draftSnapshot(c.env, s.id);
+    if (now && now.snapshot !== snap.snapshot) return draftConflict(c, now);
+    if (/malformed JSON|rebase_conflict/i.test(String(e))) return say(c, 409, 'rebase_conflict', 'The comparison changed while saving. Nothing was saved; reload it.');
+    throw e;
+  }
+  await auditDraft(c.env, user, s, 'saved', await draftHash(snap.parts), await draftHash(d), {
+    rebase: { from: { skill_uid: s.based_on_skill_uid, version: s.based_on_version }, to: { skill_uid: base.row.uid, version: b.version },
+      company_version: current?.version ?? null, choices: Object.fromEntries(Object.entries(resolutions).map(([part, r]) => [part, r!.choice])) },
+  });
+  return c.json({ skill: await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, ''), base: { uid: base.row.uid, version: b.version } });
 });
 
 router.get('/skills/:uid/base', async (c) => {
@@ -805,6 +903,88 @@ router.put('/agents/:uid/skills', async (c) => {
   // D4534: who added, re-pinned or removed which skills.
   await logSkillsChanged(c.env, a.id, user.id, skillsChange(before, await linksOf(c.env, a.id)));
   return c.json({ can_manage: true, ...(await agentSkillsDto(c.env, a)) });
+});
+
+// ── Skill discovery (D4538 part 6, #5967) ───────────────────────────────────
+
+/** The request's keys (SKILL_DISCOVERY_CONTRACT.md). Anything else, such as a role, tools or a record, is refused. */
+const DISCOVER_KEYS = new Set(['task', 'output_kind', 'agent_uid', 'taxonomy_focus', 'workflow_context', 'limit']);
+const discoverWords: Record<string, string> = {
+  task_invalid: 'Describe the task in 1 to 500 characters.',
+  output_kind_invalid: 'The output kind is brief, draft or record_change.',
+  taxonomy_focus_invalid: 'Name at most 3 skills from the /studio taxonomy.',
+  limit_invalid: 'Ask for 1 to 10 skills.',
+};
+
+/**
+ * The catalogue as discovery reads it: every HQ skill and the agent's company's skills, each described by its
+ * current published version (a never-published draft by its draft, with no roles or tags: the gate stops it at
+ * `version_not_published`). `readable` is the caller's read gate (`mayRead`), `suspended` the run gate
+ * (`skillRunRefusal`) at that version, asked only of skills HQ ever suspended. Reads only.
+ */
+async function discoveryCatalogue(env: Env, user: User, companyId: number | null): Promise<DiscoverySkill[]> {
+  type Row = SkillRow & {
+    v_version: number | null; v_name: string | null; v_purpose: string | null; v_steps_json: string | null; v_tools_json: string | null;
+    v_output_kind: OutputKind | null; v_taxonomy_json: string | null; v_roles_json: string | null;
+  };
+  const rows = await all<Row>(env,
+    `SELECT s.*, v.version AS v_version, v.name AS v_name, v.purpose AS v_purpose, v.steps_json AS v_steps_json,
+            v.allowed_tools_json AS v_tools_json, v.output_kind AS v_output_kind, v.taxonomy_json AS v_taxonomy_json, v.roles_json AS v_roles_json
+       FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
+      WHERE s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?) ORDER BY s.id`, companyId ?? -1);
+  const everSuspended = new Set((await all<{ skill_id: number }>(env,
+    `SELECT DISTINCT m.skill_id FROM agent_skill_moderation m JOIN agent_skills s ON s.id = m.skill_id
+      WHERE m.action = 'suspend' AND (s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?))`, companyId ?? -1)).map((r) => r.skill_id));
+  const out: DiscoverySkill[] = [];
+  for (const s of rows) {
+    const published = s.v_version != null && s.current_version > 0;
+    out.push({
+      uid: s.uid, scope: s.scope, company: s.company_id, status: s.status,
+      readable: await mayRead(env, s, user),
+      version: published ? s.current_version : null,
+      suspended: published && everSuspended.has(s.id) && !!(await skillRunRefusal(env, s.id, s.current_version)),
+      name: published ? s.v_name ?? s.name : s.name,
+      purpose: published ? s.v_purpose ?? s.purpose : s.purpose,
+      steps: parse(published ? s.v_steps_json : s.steps_json, [] as string[]),
+      roles: published ? parse(s.v_roles_json, [] as string[]) : [],
+      tools: parse(published ? s.v_tools_json : s.allowed_tools_json, [] as string[]),
+      output_kind: (published ? s.v_output_kind : null) ?? s.output_kind,
+      taxonomy: published ? parse(s.v_taxonomy_json, [] as Tag[]) : [],
+    });
+  }
+  return out;
+}
+
+/**
+ * POST /skills/discover — the contract's request, answered with `discoverSkills` (D4538 part 4) for an agent the
+ * caller manages. The agent's role, company and tool grants come from its row; the body carries only the task and
+ * the agent's uid. Reads only: nothing is attached, pinned or logged. `no_suitable_skill` and `ambiguous` are 200.
+ */
+router.post('/skills/discover', async (c) => {
+  const user = await requireAuth(c);
+  const b = await readBody(c);
+  if (!b) return say(c, 400, 'body_invalid', 'Send the task and the agent as a JSON object.');
+  const extra = Object.keys(b).find((k) => !DISCOVER_KEYS.has(k));
+  if (extra !== undefined) {
+    return say(c, 400, 'field_not_accepted', 'Send only the task, the agent, and the optional output kind, taxonomy focus and limit. The agent\'s role and tools are read from the agent.', { field: extra });
+  }
+  if (typeof b.agent_uid !== 'string' || !/^[a-f0-9]{32}$/.test(b.agent_uid)) return say(c, 400, 'agent_uid_invalid', 'Name the agent by its uid.');
+  // Reserved for #4535: a workflow step's identity, once it is stable.
+  if (b.workflow_context != null) return say(c, 400, 'workflow_context_invalid', 'Workflow context is not accepted yet; send null.');
+  const checked = checkDiscoveryRequest(b);
+  if (!checked.ok) return say(c, 400, checked.code, discoverWords[checked.code] ?? 'The request is not valid.');
+  if (checked.request.taxonomy_focus.length) {
+    const tax = await taxonomy(c.env);
+    if (!checked.request.taxonomy_focus.every((slug) => tax.slugs.has(slug))) return say(c, 400, 'taxonomy_focus_invalid', discoverWords.taxonomy_focus_invalid);
+  }
+  // Only the agent's managers get an answer; anyone else is told what another company's agent tells them.
+  const a = await agentByUid(c.env, b.agent_uid);
+  const scope = a && await scopeOfAgent(c.env, a);
+  if (!a || !scope || !(await canRead(c.env, scope, user)) || !(await canManage(c.env, scope, user))) return say(c, 404, 'not_found', 'There is no such agent.');
+  if (a.status === 'removed') return say(c, 409, 'agent_removed', 'This agent was removed.');
+  const companyId = await agentCompanyId(c.env, a);
+  const agent = { role: a.role_key, company: companyId, tools: grantsOf(a.tool_grants_json).map((g) => g.tool) };
+  return c.json(discoverSkills(checked.request, agent, await discoveryCatalogue(c.env, user, companyId)));
 });
 
 // ── Run cost (D4121, #4121) ─────────────────────────────────────────────────

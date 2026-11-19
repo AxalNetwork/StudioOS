@@ -34,7 +34,6 @@ const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
 
 const CANVAS = raw('design/canvases/integrated/Pages · Partner Delivery.dc.html');
-const zoneRaw = raw('frontend/src/pages/partner/delivery/BoardZone.jsx');
 const zone = read('frontend/src/pages/partner/delivery/BoardZone.jsx');
 const worker = raw('cloudflare-worker/src/routes/partner_delivery.ts');
 const filters = read('frontend/src/workspaces/partnerZoneFilters.js');
@@ -294,7 +293,8 @@ test('the read is scoped, mounted where the SPA calls it, and the draft is told 
   // whole-handler search was satisfied by any of them while the engagements
   // query returned every firm's rows — an escape this suite's own mutation run
   // caught.
-  const engSelect = between(BOARD, 'SELECT e.id, e.uid, e.status', 'LIMIT 200');
+  // #4709: the read has no LIMIT any more (the whole book, paged in the handler); its ORDER BY closes it.
+  const engSelect = between(BOARD, 'SELECT e.id, e.uid, e.status', 'ORDER BY e.created_at DESC, e.id DESC');
   assert.ok(engSelect.includes('WHERE e.partner_id = ?'),
     'the board’s engagement read is no longer scoped to the caller’s firm');
   // MOUNTED AT `/api/partner/delivery`, beside its five siblings. The first

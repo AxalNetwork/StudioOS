@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Profiles Peers and Evidence · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies · Research v2 RS-18 · #7046 (Research Companies 6/6, part of #7040)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Research Companies · a company profile with inspectable, dated evidence, sector peers with their rule, and candidate signals on every width</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Research v2 canvas (RS-04 B company profile, RS-02 B evidence, Not recorded) in the Research shell: company/project switcher top-left, Research zones in the sidebar, no licence switcher, and Eadwyn as the one shared rail (#5130), which reads and proposes only. A directory company (▣, outlined) and an analysis candidate (◎, violet) are told apart on every board. The profile leads with recorded identity, sector, country, official site when known, the record source and the actions this member has; unknown optional fields are grouped. Each metric shows its value, unit or currency, publisher, observation date and update date; an unknown observation date never borrows the update date. The four evidence collections (funding rounds, employment observations, financial statements, field citations) are records you can open, and one failed collection can be retried alone. “Sector peers” print their matching rule; “Direct competitor” and “Adjacent competitor” appear only inside an analysis that names its subject, with a rationale and sources. On the candidate, company signals are kept apart from sector and country context. Platform States (D5129): Value, None, Not recorded, Unavailable with Retry, Refused, Partial, each with its own word and glyph. Violet dashed ◇ tags mark Worker work (#7046); the amber ⚑ tag marks the owner pick, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · Halden Grid, Kestrel Robotics, Brightwell Storage, Tidewater Systems, every bracketed company, investor and publisher, and every figure ($24.0M funding = $18.0M + $6.0M, NOK 38.4M revenue, 64 employees, 11 sector peers) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Profiles Peers and Evidence Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-18 A', 'Profile', 'Two directory companies. Halden Grid is a Wikidata identity (website, country, founded, sector label) enriched by separately sourced metrics: each card shows value, currency, publisher, Observed and Updated, and Funding total reads Observed: Not recorded ◇ instead of borrowing the update date. Kestrel Robotics is a sparse Companies House record: no website, tracked sector Not recorded, seven metrics grouped as one Not recorded line, and all four evidence collections read with 0 records (None). Set up competitor analysis → opens the analysis setup with the same company as its subject ◇.', [F('RCP01B', 'Halden Grid · Wikidata identity + sourced metrics', 1470), F('RCP01', 'Kestrel Robotics · sparse Companies House record', 1300), C('RCP01C', 'The profile CTA lands in the analysis setup', 1280, 440)]],
+      ['RS-18 B', 'Evidence and peers', 'The four evidence collections as tables of records, each read on its own, with publisher, dates, verification and a recorded zero (Debt NOK 0). Inspect opens a record drawer that separates Observed from Updated and lists the supporting records from two publishers. Sector peers print the rule the Worker uses (same label, same country first, then by name, 8 of 11). Direct and Adjacent appear only inside an analysis with a subject, rationale and sources; the candidate page splits its own signals from sector and country context.', [F('RCP02', 'Evidence · four collections', 1240), F('RCP02B', 'Inspect · Funding total drawer', 900), F('RCP03', 'Sector peers with the matching rule', 1000), C('RCP03B', 'An analysis with a subject · Direct / Adjacent with rationale', 1280, 300), F('RCP04', 'Analysis candidate · Sources and Signals', 1220)]],
+      ['RS-18 C', 'Phone 390', 'Profile with a 48 px primary and 44 px actions; evidence as disclosures with record cards, one collection Unavailable with its own Retry while the rest stay usable; peer cards; the candidate with Sources and Signals tabs, company signals apart from context; the evidence sheet, which returns focus to Inspect evidence.', [P('RCP05A', 'Profile'), P('RCP05B', 'Evidence disclosures · one collection failed'), P('RCP05C', 'Sector peer cards'), P('RCP05D', 'Candidate · Signals'), P('RCP05E', 'Evidence sheet')]],
+      ['RS-18 D', 'Tablet 768', 'One column, Eadwyn behind a button, metric and peer cards two across, no table wider than the screen. The candidate keeps Sources and Signals as tabs.', [C('RCP06', 'Profile · 768', 768, 1440), C('RCP06B', 'Candidate · 768', 768, 980)]],
+      ['RS-18 E', 'States', 'Loading, the whole read Unavailable, Not found, one collection Unavailable with Retry for that collection, None (true empty), Not recorded (no sector label), Partial provenance, Refused (Funds links, Add/Compare by role, signed out), and the candidate with no source, no signal and no directory link. Then the four absences side by side: blank field, recorded zero, unknown observation date, unreadable collection.', [C('RCP07', 'States', 1440, 780), C('RCP07B', 'Four absences side by side', 1440, 215)]],
+      ['RS-18 F', 'Dark', 'The main desktop profile and the phone profile on the dark tokens (#0B1220 / #111827, violet #A78BFA). Chips and states keep their words and shapes.', [F('RCP08', 'Profile · dark', 1470), P('RCP08P', 'Phone profile · dark')]],
+      ['RS-18 G', 'Prototype links and focus', 'How the frames link, what each control opens, where focus goes after, and the keyboard order of the profile and the candidate.', [W('RCP09')]],
+      ['RS-18 H', 'Handoff', 'What main does today, what is preserved, Worker changes (◇ #7046), the owner pick (⚑, A drawn), frontend-only work, components and their data, accessibility.', [W('RCPH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -21,6 +21,39 @@ import { describeOutcome, outcomeFromError } from '../../../lib/mutationOutcome'
  * Steps 3 + 4                                                         *
  * ------------------------------------------------------------------ */
 
+/**
+ * D4819 part 5 (#5931) — the four seat fields, controlled, shared by `SeatEditor` here and New licence step 3
+ * (`NewLicenceSteps.jsx`). `errors` is keyed `seat_<type>`; an error is shown on its field's own line and tied to
+ * it with `aria-describedby`. Without `idPrefix` the fields render exactly as `SeatEditor` always drew them.
+ */
+export function SeatFields({ seats, onChange, errors = {}, idPrefix = null }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {SEAT_TYPES.map((t) => {
+        const id = idPrefix ? `${idPrefix}-${t.k}` : undefined;
+        const err = errors[`seat_${t.k}`];
+        return (
+          <div key={t.k}>
+            <label htmlFor={id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-gray-700 dark:text-gray-300">{t.label}</span>
+              <input
+                id={id} type="number" min="0" inputMode="numeric"
+                className={`w-24 rounded-md border px-2 py-1 text-sm max-md:min-h-[44px] ${err ? 'border-red-600 dark:border-red-400' : 'border-gray-300 dark:border-gray-700'}`}
+                value={seats[t.k]}
+                aria-invalid={err ? 'true' : undefined}
+                aria-describedby={err && id ? `${id}-e` : undefined}
+                data-testid={idPrefix ? `${idPrefix}-${t.k}` : undefined}
+                onChange={(e) => onChange(t.k, e.target.value)}
+              />
+            </label>
+            {err && id ? <small id={`${id}-e`} className="mt-1 block text-xs text-red-700 dark:text-red-300"><span aria-hidden="true">✕ </span>{err}</small> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const CELL_TONE = {
   value: 'text-gray-900 dark:text-gray-100',
   not_recorded: 'italic text-gray-500 dark:text-gray-400',
@@ -114,19 +147,7 @@ export function SeatEditor({ licence, onSaved }) {
 
   return (
     <div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {SEAT_TYPES.map((t) => (
-          <label key={t.k} className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-gray-700 dark:text-gray-300">{t.label}</span>
-            <input
-              type="number" min="0"
-              className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
-              value={seats[t.k]}
-              onChange={(e) => setSeats((s) => ({ ...s, [t.k]: e.target.value }))}
-            />
-          </label>
-        ))}
-      </div>
+      <SeatFields seats={seats} onChange={(k, v) => setSeats((s) => ({ ...s, [k]: v }))} />
       <p className="mt-2 text-sm text-gray-600">{n0(total)} seats licensed.</p>
       <p className="mt-1 text-[11px] text-gray-500">
         Seats used is not shown: it needs every account to name its licence, and none does yet.

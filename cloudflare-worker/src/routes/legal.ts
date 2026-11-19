@@ -31,6 +31,7 @@ import {
   totalEquityPct,
 } from '../services/cofounderAgreement';
 import { refuse } from '../util/refusal';
+import { canEdit } from '../services/companyAccess';
 import { listPositions, recordParties, recordPosition } from '../services/cofounderAgreementParties';
 
 const legal = new Hono<{ Bindings: Env }>();
@@ -143,7 +144,40 @@ legal.get('/name-check', async (c) => {
 // Concise stub bodies for jurisdiction-specific docs. The richer drafts
 // live in the FastAPI backend; this worker variant keeps prod parity so
 // the wizard never silently fails for the user.
-const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
+/**
+ * Each jurisdiction's next steps after the documents (the wizard's handoff). D6690: exported so the
+ * catalogue's version 1 seed is generated from it (`scripts/build-formation-seed.mjs`); the text is
+ * unchanged. Delaware C-Corp has none.
+ */
+export const HANDOFF_NEXT_STEPS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  us_wy_ccorp: [
+    'File Articles of Incorporation with the Wyoming Secretary of State (https://wyobiz.wyo.gov)',
+    'Appoint a Wyoming registered agent',
+    'Apply for an EIN with the IRS once the state approves the filing',
+  ],
+  uk_ltd: [
+    'File IN01 on Companies House (https://www.gov.uk/limited-company-formation)',
+    'Register for Corporation Tax with HMRC within 3 months',
+    'Open a UK business bank account',
+  ],
+  sg_pte: [
+    'Submit incorporation via ACRA BizFile+ (https://www.bizfile.gov.sg)',
+    'Engage a Singapore-resident director (or nominee director service)',
+    'Appoint a company secretary within 6 months',
+  ],
+  ee_oy: [
+    "Apply for e-Residency (https://e-resident.gov.ee) if you don't already have it",
+    'Engage a Company Service Provider for the registered address',
+    'File the OÜ via the Estonian Business Register e-portal',
+  ],
+  us_de_llc: [
+    'File the Certificate of Formation with the Delaware Division of Corporations',
+    'Apply for an EIN via IRS Form SS-4 (kit included)',
+    'Open a US business bank account',
+  ],
+});
+
+export const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
   certificate_of_incorporation_de: { title: 'Certificate of Incorporation (Delaware C-Corp)' },
   articles_of_incorporation_wy: { title: 'Articles of Incorporation (Wyoming C-Corp)' },
   bylaws: { title: 'Corporate Bylaws' },
@@ -167,7 +201,7 @@ const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
 // the D1 template store holds a counsel-approved, active body
 // (`templates/legal/LEGAL_REVIEW.md`). Until then the wizard lists them under
 // `pending_counsel` and writes no document row.
-const COUNSEL_REQUIRED_TEMPLATES = new Set(['articles_of_incorporation_wy']);
+export const COUNSEL_REQUIRED_TEMPLATES = new Set(['articles_of_incorporation_wy']);
 
 // Map our template keys → existing documenttype enum values (anything
 // not in the enum is stored as 'other' with the real key in
@@ -304,38 +338,7 @@ legal.post('/incorporate/wizard', async (c) => {
   }
 
   // D6683: no Atlas handoff (D4677 removed the call; no jurisdiction is atlas_supported).
-  const handoff: any = { type: 'documents_only', next_steps: [] };
-  if (j.id === 'us_wy_ccorp') {
-    handoff.next_steps = [
-      'File Articles of Incorporation with the Wyoming Secretary of State (https://wyobiz.wyo.gov)',
-      'Appoint a Wyoming registered agent',
-      'Apply for an EIN with the IRS once the state approves the filing',
-    ];
-  } else if (j.id === 'uk_ltd') {
-    handoff.next_steps = [
-      'File IN01 on Companies House (https://www.gov.uk/limited-company-formation)',
-      'Register for Corporation Tax with HMRC within 3 months',
-      'Open a UK business bank account',
-    ];
-  } else if (j.id === 'sg_pte') {
-    handoff.next_steps = [
-      'Submit incorporation via ACRA BizFile+ (https://www.bizfile.gov.sg)',
-      'Engage a Singapore-resident director (or nominee director service)',
-      'Appoint a company secretary within 6 months',
-    ];
-  } else if (j.id === 'ee_oy') {
-    handoff.next_steps = [
-      "Apply for e-Residency (https://e-resident.gov.ee) if you don't already have it",
-      'Engage a Company Service Provider for the registered address',
-      'File the OÜ via the Estonian Business Register e-portal',
-    ];
-  } else if (j.id === 'us_de_llc') {
-    handoff.next_steps = [
-      'File the Certificate of Formation with the Delaware Division of Corporations',
-      'Apply for an EIN via IRS Form SS-4 (kit included)',
-      'Open a US business bank account',
-    ];
-  }
+  const handoff: any = { type: 'documents_only', next_steps: [...(HANDOFF_NEXT_STEPS[j.id] ?? [])] };
 
   await sql.end();
 
@@ -398,11 +401,28 @@ const JURISDICTION_COSTS: Record<string, number> = {
   ee_oy: 20000,
 };
 
+
+/**
+ * D6687 (#6687): an order's subject. With `company_uid`, the company itself: one the caller may
+ * edit as its Admin (`companyAccess.canEdit`), not archived; no venture. Otherwise the venture
+ * (`project_id`), read and gated by the route as before. Both at once is refused.
+ */
+async function companySubject(c: any, user: any, companyUid: unknown): Promise<{ id: number } | Response> {
+  if (typeof companyUid !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(companyUid)) {
+    return c.json({ error: 'company_uid is not a company' }, 400);
+  }
+  const co = await c.env.DB.prepare('SELECT id, archived_at FROM company_profiles WHERE uid = ?').bind(companyUid).first() as { id: number; archived_at: string | null } | null;
+  if (!co || co.archived_at) return c.json({ error: 'Company not found' }, 404);
+  if (!(await canEdit(c.env, { id: Number(co.id) }, user))) return c.json({ error: 'Forbidden: only an Admin of this company can order its incorporation' }, 403);
+  return { id: Number(co.id) };
+}
+
 legal.post('/incorporate/checkout', async (c) => {
   const user = await requireAuth(c);
   await ensureIncorporationsSchema(c.env);
   const body = await c.req.json<{
-    project_id: number;
+    project_id?: number | null;
+    company_uid?: string | null;
     jurisdiction_id: string;
     company_name: string;
     registered_agent_name?: string | null;
@@ -412,11 +432,20 @@ legal.post('/incorporate/checkout', async (c) => {
   const j = JURISDICTIONS.find((x) => x.id === body.jurisdiction_id);
   if (!j) return c.json({ error: `Unknown jurisdiction: ${body.jurisdiction_id}` }, 400);
   if (!body.company_name?.trim()) return c.json({ error: 'company_name is required' }, 400);
+  if (body.company_uid != null && body.project_id != null) return c.json({ error: 'Order for a venture or for a company, not both' }, 400);
 
+  // D6687: a company as the subject, gated as its Admin; no venture is read.
+  let project: any = null;
+  let subjectCompanyId: number | null = null;
+  if (body.company_uid != null) {
+    const subject = await companySubject(c, user, body.company_uid);
+    if (subject instanceof Response) return subject;
+    subjectCompanyId = subject.id;
+  } else {
   const sql = getSQL(c.env);
   const projRows = await sql`SELECT id, name, founder_id, entity_id, company_id FROM projects WHERE id = ${body.project_id}`;
   if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
-  const project = projRows[0] as any;
+  project = projRows[0] as any;
 
   // Ownership: admin/partner OR founder-owns-project. Investors blocked.
   if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
@@ -432,6 +461,7 @@ legal.post('/incorporate/checkout', async (c) => {
   }
 
   await sql.end();
+  }
 
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
   const stripeKey = c.env.STRIPE_SECRET_KEY;
@@ -457,7 +487,8 @@ legal.post('/incorporate/checkout', async (c) => {
       const devSessionId = `dev_session_${user.id}_${Date.now()}`;
       const incId = await createPendingIncorporation(c.env, {
         user_id: user.id,
-        project_id: project.id,
+        project_id: project?.id ?? null,
+        subject_company_id: subjectCompanyId,
         jurisdiction_id: j.id,
         company_name: body.company_name.trim(),
         registered_agent_name: body.registered_agent_name ?? null,
@@ -503,7 +534,8 @@ legal.post('/incorporate/checkout', async (c) => {
     const session = await stripeCall<{ url: string; id: string; amount_total?: number }>(c.env, '/checkout/sessions', params, { moneyKind: 'marketplace' });
     const incId = await createPendingIncorporation(c.env, {
       user_id: user.id,
-      project_id: project.id,
+      project_id: project?.id ?? null,
+      subject_company_id: subjectCompanyId,
       jurisdiction_id: j.id,
       company_name: body.company_name.trim(),
       registered_agent_name: body.registered_agent_name ?? null,
@@ -607,7 +639,8 @@ legal.post('/incorporation/order', async (c) => {
   const user = await requireAuth(c);
   await ensureIncorporationsSchema(c.env);
   const body = await c.req.json<{
-    project_id: number;
+    project_id?: number | null;
+    company_uid?: string | null;
     jurisdiction_id: string;
     company_name: string;
     registered_agent_name?: string | null;
@@ -618,11 +651,20 @@ legal.post('/incorporation/order', async (c) => {
   if (!j) return c.json({ error: `Unknown jurisdiction: ${body.jurisdiction_id}` }, 400);
   const companyName = body.company_name?.trim();
   if (!companyName) return c.json({ error: 'company_name is required' }, 400);
+  if (body.company_uid != null && body.project_id != null) return c.json({ error: 'Order for a venture or for a company, not both' }, 400);
 
+  // D6687: a company as the subject, gated as its Admin; no venture is read.
+  let project: any = null;
+  let subjectCompanyId: number | null = null;
+  if (body.company_uid != null) {
+    const subject = await companySubject(c, user, body.company_uid);
+    if (subject instanceof Response) return subject;
+    subjectCompanyId = subject.id;
+  } else {
   const sql = getSQL(c.env);
   const projRows = await sql`SELECT id, name, founder_id, company_id FROM projects WHERE id = ${body.project_id}`;
   if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
-  const project = projRows[0] as any;
+  project = projRows[0] as any;
   // Ownership: admin/partner OR founder-owns-project. Investors blocked.
   if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
@@ -636,13 +678,15 @@ legal.post('/incorporation/order', async (c) => {
       }
   }
   await sql.end();
+  }
 
   const resolved = await resolveIncorporationPrice(c.env, j.id);
   const raOffer = await resolveRegisteredAgentOffer(c.env);
 
   const buildOrderArgs = (amount_cents: number, currency: string) => ({
     user_id: user.id,
-    project_id: project.id,
+    project_id: project?.id ?? null,
+    subject_company_id: subjectCompanyId,
     jurisdiction_id: j.id,
     company_name: companyName,
     registered_agent_name: body.registered_agent_name ?? null,
@@ -825,6 +869,9 @@ legal.get('/incorporate/status', async (c) => {
     // D1415 Part 3 (#3855): the company the filing linked or created, from the order itself, never from the
     // project's company now (a venture moved later keeps showing the order's company). Null until linked.
     company_uid: await orderCompanyUid(c.env, Number(row.id)),
+    // D6687: the company the order is for, when its subject is a company (set when placed).
+    subject_company_uid: row.subject_company_id == null ? null
+      : ((await c.env.DB.prepare('SELECT uid FROM company_profiles WHERE id = ?').bind(row.subject_company_id).first<{ uid: string }>())?.uid ?? null),
   });
 });
 
@@ -837,8 +884,9 @@ legal.get('/incorporate/orders', async (c) => {
   await ensureIncorporationsSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT i.id, i.project_id, i.status, i.jurisdiction_id, i.company_name, i.amount_cents, i.currency, i.paid_at, i.created_at,
-            i.packet_document_id, i.packet_ready_at, i.filed_on, cp.uid AS company_uid
+            i.packet_document_id, i.packet_ready_at, i.filed_on, cp.uid AS company_uid, sc.uid AS subject_company_uid
      FROM incorporations i LEFT JOIN company_profiles cp ON cp.id = i.company_id
+     LEFT JOIN company_profiles sc ON sc.id = i.subject_company_id
      WHERE i.user_id = ? AND i.status != 'pending_payment'
      ORDER BY i.created_at DESC
      LIMIT 20`,

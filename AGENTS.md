@@ -215,6 +215,9 @@ over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
 When main is green again, let PRs revalidate as they merge through the queue.
 Do not press "Update branch" on every PR at once.
 
+Fetch and merge your own branch before you push to it: the landing bot may have
+added a merge commit from main (#6474).
+
 While `[alert] the Actions queue is backed up` is open, the same backpressure
 applies to everything that is not a fix for a PR's own failure:
 
@@ -255,8 +258,11 @@ twice within a few lines (D1279). So:
   decision or issue it belongs to. The list is generated from it and never
   committed; `node scripts/check-folder-docs.mjs --write` shows it locally, and
   `--clean` empties it before you stage the README (#4104).
-- Elsewhere, add one row per new file or folder, at the end of its table. Never
-  rewrite another feature's row or paragraph in a task PR.
+- Elsewhere, add one row per new file or folder, at the end of its table,
+  unless the README carries `<!-- index: generated -->` or `<!-- index: none -->`
+  (`documentation/architecture/decisions/README.md` does): such a README takes
+  no row, and the check fails one (#6465). Never rewrite another feature's row
+  or paragraph in a task PR.
 - A feature's notes go in its decision file, not in a shared README.
 - If rule 4 fails after a merge, keep the newer version and delete the other.
 

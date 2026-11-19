@@ -156,7 +156,11 @@ export async function callReminderMaterial(env: Env, userId: number, scope: stri
             COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER)) AS owed_cents,
             COALESCE((SELECT SUM(r.amount_cents) FROM capital_call_receipts r WHERE r.capital_call_id = cc.id), 0) AS received_cents,
             COALESCE(u.name, lp.name) AS lp_name, f.name AS fund_name,
-            fc.call_number, fc.purpose, fc.due_date AS call_due_date
+            fc.call_number,
+            -- D6238: the purpose as last corrected, else as issued.
+            COALESCE((SELECT a.new_value FROM fund_capital_call_amendments a
+                       WHERE a.fund_call_id = fc.id AND a.kind = 'purpose' ORDER BY a.id DESC LIMIT 1), fc.purpose) AS purpose,
+            fc.due_date AS call_due_date
        FROM capital_calls cc
        JOIN limited_partners lp ON lp.id = cc.limited_partner_id
        JOIN vc_funds f ON f.id = lp.fund_id

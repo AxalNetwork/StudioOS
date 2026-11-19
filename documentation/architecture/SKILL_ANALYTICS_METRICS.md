@@ -12,7 +12,7 @@ The proposal acceptance board of #3851 (`services/agents/evaluation.ts`: accepta
 
 `GET /api/admin/ai-agents/skills` (Super Admin only, `requireSuperAdmin`) returns `coverage` next to `skills`. It is computed by `services/agents/skillCoverage.ts` from two aggregate reads, a fixed number whatever the catalogue's size or the page asked for.
 
-The counts are always the whole catalogue's: a `?page=` read pages `skills`, never `coverage`. A company's own analytics are not served yet. When they are, they read only that company's rows, behind `canEditAsMember`.
+The counts are always the whole catalogue's: a `?page=` read pages `skills`, never `coverage`. Only the validated filters in § Filters narrow them (D5970). A company's own analytics are not served yet. When they are, they read only that company's rows, behind `canEditAsMember`.
 
 ## Catalogue and coverage (served now)
 
@@ -37,7 +37,7 @@ The counts are always the whole catalogue's: a `?page=` read pages `skills`, nev
 | `adoption.links`, `agents` | `agent_skill_links` on HQ skills, agents not `removed` | — | now | — | always; **adoption, not usage** | HQ |
 | `adoption.pinned_behind_current` | links whose `version` < the skill's `current_version` | — | now | `adoption.links` | always | HQ |
 | `adoption.published_without_links` | published HQ skills no active agent pins | — | now | published HQ skills | always; not "unused", which needs runs | HQ |
-| `overlap` | — | — | — | — | `{ available: false }`: suggestions are not computed yet. When they are, they are labelled suggestions, never duplicates | HQ |
+| `overlap` | `agent_skills`, current `agent_skill_versions` | unordered pair of immutable versions | current published catalogue | pairs sharing a primary tag, output kind and role | `{ available: false }` when the read fails or the filtered population exceeds 250; an observed empty scan returns no suggestions | HQ |
 | `executions` | — | — | — | — | `{ available: false }` until #4667 gives a reliable run status | HQ |
 
 Definitions that matter:
@@ -133,10 +133,45 @@ Version adoption lag is served now as `adoption.pinned_behind_current`.
 
 ## Filters
 
-The served block takes no filters yet; it is the whole catalogue now. When the usage measures land, the issue's filters apply to them:
-- a bounded date range;
-- taxonomy category and tag;
-- role;
-- scope (HQ, or a company the caller administers, checked server-side and never taken from the client);
-- status, skill uid and version;
-- model.
+Served now (D5970, #5970). `GET /api/admin/ai-agents/skills` takes optional query parameters that narrow `coverage` and `published_evaluation`. They never narrow the paged `skills` list. A read with none of them is the read it was before: same reads, same blocks, and no `filters` key.
+
+| Parameter | Value | Checked against | `coverage` | `published_evaluation` |
+|---|---|---|---|---|
+| `scope` | `hq` | the only scope this route serves; anything else is `scope_not_served` | yes | yes (already HQ only) |
+| `status` | `draft`, `published` or `retired` | `agent_skills.status` | yes | yes (the block holds published skills only, so another status matches nothing) |
+| `uid` | 32 lower-case hex characters | format; a well-formed uid with no skill matches nothing | yes | yes |
+| `version` | a whole number from 1 | format; matches the skill's **current** version | yes | yes |
+| `category` | a radar axis slug (`RADAR_AXES`) | the taxonomy's categories | yes | yes |
+| `tag` | a taxonomy skill slug | the active rows of `skills` | yes | yes |
+| `role` | a catalogue role key (`ROLES`) | the catalogue | yes | yes |
+| `model` | a model id | the model catalogue's chat models, a deprecated one included | no (coverage has no model) | yes |
+| `from`, `to` | `YYYY-MM-DD`, UTC, both or neither | real calendar dates, `from` ≤ `to`, at most **366 days** counting both ends | no (coverage is now, not a period) | yes |
+
+How each one matches:
+- **Skill terms** (`scope`, `status`, `uid`, `version`, `category`, `tag`, `role`) keep the HQ skills they match. Role, tag and category read the skill's **current published version**, the one coverage counts: a skill matches a role or tag its current version lists, and a category when any tag of that version is in it. A skill with no published version matches none of the three.
+- **Model** keeps that model's rows of the published history, and narrows each version's required models to it, so `required` counts that model's units only.
+- **The window** is on evaluation `run_at`: from the `from` day's `00:00:00` inclusive to the day after `to` at `00:00:00` exclusive. A row at `to` `23:59:59` is in; a row at the next midnight is out. It is applied in SQL before the latest row per unit is chosen, so the result counted is the latest one **inside** the window. The regression baselines (`prior`, the previous version's rows) are read inside it too. A unit with no row in the window is missing; a version with none is not evaluated.
+
+What a filtered read serves:
+- **Counts that were read** are counted over the matched skills only. A filter that matches nothing reads observed zeros, never the unfiltered figures.
+- **Measures that need a row** (`results`, `regressions`, `freshness`, `identity`) read `{ available: false }` when no matched version has a row, as they do unfiltered.
+- **Measures a filter cannot narrow** read `{ available: false, reason }`:
+  - `coverage.by_scope.company`: a company skill's tags and roles are never read, so no filter can match it;
+  - `coverage.sources`: the source library files are not filtered;
+  - `coverage.drafts.without_current_evaluation`: computed on the unfiltered full list only;
+  - `published_evaluation.campaign`: a campaign's progress is the whole catalogue's.
+- **`filters`**, beside the blocks, says what was applied: `applied` (each value as given), `window` (`since`, `until`, `days`, `max_days`), and for `coverage`, `published_evaluation` and `skills` the parameters each `applied` and those `not_applicable` to it.
+
+Refusals are `400` with the code in `error` and a sentence in `message`. None falls back to "all".
+- `filter_unknown`: a parameter that is not a filter (`page` is allowed).
+- `filter_repeated`: a filter given more than once.
+- `scope_not_served`, `status_unknown`, `category_unknown`, `tag_unknown`, `role_unknown`, `model_unknown`: a value not in its list. An empty value is unknown too.
+- `uid_malformed`, `version_malformed`: a malformed value.
+- `window_incomplete`: only one of `from` and `to`.
+- `window_malformed`: not a calendar date.
+- `window_reversed`: `to` before `from`.
+- `window_too_long`: over 366 days.
+
+The filters are matched in memory over the coverage and evaluation populations. Model and window are bound parameters of the history read. Overlap reuses the filtered catalogue population and reads its version metadata in one bounded query. Model and window do not apply to overlap. The scan returns up to 20 possible overlaps, with the full suggestion count and the number of rows skipped for missing metadata. See [D4536 part 3](decisions/D4536-p3.md) for the scoring rule.
+
+Not yet: a company administrator's read of their own company's analytics (a company scope, checked server-side and never taken from the client), and the filters on the usage measures, which wait on #4667.

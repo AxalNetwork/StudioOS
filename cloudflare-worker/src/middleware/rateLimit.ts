@@ -41,6 +41,11 @@ export const PROJECT_INVITE_RESEND = /^\/api\/projects\/\d+\/invitations\/\d+\/r
 // the word, and `[^/]+` rather than `.+` so it cannot span a segment.
 export const COMPANY_INVITE_SEND = /^\/api\/company\/[^/]+\/invitations(\/[^/]+\/resend)?$/;
 
+// D6052 (#6052): Contacts' one invite path, `POST /api/contacts/invite`, which mails an invitation to a
+// typed address or to a raise prospect. It joins the company invitations' reasoning: an outbound-mail route
+// on the generic fail-open bucket is a relay.
+export const CONTACT_INVITE_SEND = /^\/api\/contacts\/invite\/?$/;
+
 // The e-sign routes that mail a signed PDF onward: POST
 // `/api/legal/esign/<id>/forward` (and the `/api/esign` remount index.ts warns
 // against). D410 opened forwarding to the envelope's sender as well as its
@@ -52,6 +57,9 @@ export const ESIGN_FORWARD = /^\/api\/(legal\/)?esign\/\d+\/forward$/;
 // signing link again, and POST `/:id/void` is a write on a legal record. Both
 // join origination and forwarding in `esign_send`. Same anchoring as above.
 export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$/;
+// D6197: a signer's own "send me my link again" (POST `/:id/resend`) mails an
+// Axal-branded link too, so it joins `esign_send`. Same anchoring as above.
+export const ESIGN_SIGNER_RESEND = /^\/api\/(legal\/)?esign\/\d+\/resend$/;
 
 // D691 — the deck share link's signup (routes/deck_share_actions.ts), mounted
 // under /api/decks. Exported so the test executes the pattern itself.
@@ -59,6 +67,9 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 // D5791 (#5791): an investor's attached walkthrough on their share link, its
 // takes and each take's file (routes/deck_share_walkthrough.ts).
 export const DECK_SHARE_WALKTHROUGH = /^\/api\/decks\/share\/[^/]+\/walkthrough(?:\/[0-9a-f-]{36}\/media)?$/;
+// D6864 (#6864): the public evidence-pack read, and D6897's readiness snapshot read on the same link store. Each open
+// consumes one of the link's views, so a tight per-IP bucket.
+export const EVIDENCE_SHARE_READ = /^\/api\/share\/(?:evidence|readiness|status)\/[^/]+$/;
 // D1502 part 2 (#3753): starting a deck generation run. A run holds the
 // member's allowance for its whole quote, so a script starting runs in a loop
 // would lock it up; A3's area routes (#3764) and the one-click build (#3768)
@@ -193,7 +204,7 @@ const BUCKETS: Bucket[] = [
     name: 'esign_send',
     limit: 10,
     windowSec: 3600,
-    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send' || ESIGN_FORWARD.test(p) || ESIGN_SENDER_ACTION.test(p)),
+    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send' || ESIGN_FORWARD.test(p) || ESIGN_SENDER_ACTION.test(p) || ESIGN_SIGNER_RESEND.test(p)),
     scope: 'user',
     failClosed: true,
   },
@@ -214,6 +225,16 @@ const BUCKETS: Bucket[] = [
     limit: 10,
     windowSec: 3600,
     test: (p, m) => m === 'POST' && COMPANY_INVITE_SEND.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  // D6052 (#6052): Contacts' invitations, a founder's own and a raise prospect's. 20 an hour per founder,
+  // fail-closed; a prospect also waits a day between sent invitations (services/prospectInvites.ts).
+  {
+    name: 'contact_invite_send',
+    limit: 20,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && CONTACT_INVITE_SEND.test(p),
     scope: 'user',
     failClosed: true,
   },
@@ -325,6 +346,15 @@ const BUCKETS: Bucket[] = [
     limit: 120,
     windowSec: 60,
     test: (p, m) => m === 'GET' && DECK_SHARE_WALKTHROUGH.test(p),
+    scope: 'ip',
+  },
+  // D6864 (#6864) — the public evidence pack a founder shared outside Axal: per IP and fail-open like the
+  // other public reads. 30 a minute is far above a person reading one pack and keeps a guessed-token sweep slow.
+  {
+    name: 'evidence_share_read',
+    limit: 30,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && EVIDENCE_SHARE_READ.test(p),
     scope: 'ip',
   },
   // 60 requests/min per user — default

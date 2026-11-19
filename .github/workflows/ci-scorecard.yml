@@ -14,7 +14,8 @@ concurrency:
 jobs:
   scorecard:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # D6479: the landing reads add up to LANDING_BUDGET.cap GET requests.
+    timeout-minutes: 15
     permissions:
       contents: read
       actions: read
@@ -24,10 +25,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: scripts
+          # D6479: the landing rows import scripts/landing-bot/rules.mjs, which reads merge-control's path rating.
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
       - run: node scripts/ci-scorecard.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          CI_SCORECARD_ROWS: ${{ runner.temp }}/ci-scorecard-candidates.json
+          # D6479: the daily model-run cap the landing section reports against (unset is 0).
+          LANDING_BOT_DAILY_MODEL_RUNS: ${{ vars.LANDING_BOT_DAILY_MODEL_RUNS }}
+      # D5973: one row per merge-group head SHA with its classified outcome.
+      - name: Keep the candidate rows
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-scorecard-candidates
+          path: ${{ runner.temp }}/ci-scorecard-candidates.json
+          if-no-files-found: warn
+          retention-days: 30

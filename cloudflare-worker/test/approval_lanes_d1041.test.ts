@@ -321,6 +321,8 @@ test('every lane says who it tells and where it is decided; the gaps are named, 
       articles: 'The author', testing_programs: 'The partner', tickets: 'The member', notices: 'The studio', support: 'The studio',
       // D1132: the Product testers routes email the member; a program request's answer rings the studio's bell.
       product_testers: 'The member', grants: 'The studio',
+      // D5886: a confirmed or cancelled Best-Fit consultation tells the member in app.
+      best_fit: 'The member, in app',
     },
   );
   assert.equal(by.kyb.decidedOn, 'KYC & KYB › Businesses');

@@ -12,6 +12,18 @@ import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
 import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
+import { RestoredStatus } from '../pages/research/CompaniesAccess.jsx';
+
+export function benchmarkingExportView(rows) {
+  return {
+    scope: null,
+    zone: 'benchmarking',
+    header: ['Metric', 'Ours', 'Peer', 'Peer source', 'Sample size', 'As of', 'Read'],
+    rows,
+    cells: (b) => [b.metric, b.our_value, b.peer_value, b.peer_source, b.peer_sample_size, b.peer_as_of, b.reading]
+      .map((value) => typeof value === 'string' && /^\s*[=+@-]/u.test(value) ? `'${value}` : value),
+  };
+}
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -52,8 +64,9 @@ import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
  * `'founder'` for every role on this route — no advisor ordering, no advisor
  * strip, no `advisor_note`. That was fixed, and then the zone turned out to be
  * about a different object altogether: the `pr3` artboard's comparable RANGES
- * for the firm's own service lines, not sector signals. `MarketZone` is that
- * page; the feed kept `/signals` until D670 retired it. `CompetitorAnalysisPage` had the same
+ * for the firm's own service lines, not sector signals. `MarketDirectoryZone`'s
+ * readings card is that page now (D593; the older `MarketZone` body, unmounted,
+ * was deleted by D6285); the feed kept `/signals` until D670 retired it. `CompetitorAnalysisPage` had the same
  * swallowed-props defect and keeps its fix — `Companies` takes a `chromeless`
  * flag that is deliberately not `embedded` (see `components/CompetitorAnalysis.jsx`).
  *
@@ -201,17 +214,15 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       // signals themselves.
       // `handlers` carries the page's own ops (D593): the partner row's
       // `Re-run stale` opens the directory's record-a-reading form.
+      // D7172: the first argument is the active tab's export as the page states it
+      // ("Export this page · N rows", "Export filtered markets · N rows").
+      // The header row's Export runs it; it used to write the first 100
+      // markets read, unfiltered, on either tab.
       return (
         <Suspense fallback={<Loading />}>
           <MarketDirectoryZone
             role={role}
-            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/markets', { handlers, view: {
-              scope: null,
-              zone: 'markets',
-              header: ['Market', 'Companies (taxonomy count)', 'Tracked sector', 'Slug'],
-              rows,
-              cells: (x) => [x.name, x.supplied_count, x.mi_sector || 'Not mapped', x.slug],
-            } })}
+            zoneActions={(scoped, handlers) => zoneActionsFor(role, 'research/markets', { handlers, view: { scoped } })}
           />
         </Suspense>
       );
@@ -306,13 +317,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           <BenchmarkingZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/benchmarking', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/benchmarking', { view: {
-            scope: null,
-            zone: 'benchmarking',
-            header: ['Metric', 'Ours', 'Peer', 'Peer source', 'Sample size', 'As of', 'Read'],
-            rows,
-            cells: (b) => [b.metric, b.our_value, b.peer_value, b.peer_source, b.peer_sample_size, b.peer_as_of, b.reading],
-          } })} />
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/benchmarking', { handlers, view: benchmarkingExportView(rows) })} />
         </Suspense>
       );
     }
@@ -370,7 +375,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   // D392 — AN ENTRY MAY NAME THE LICENCES IT IS TRUE FOR. `markets` is: the
   // saved deep-dive it names is what the founder canvas draws, while the
   // partner and advisor canvases draw comparable readings, which is what
-  // `MarketZone` is. D495 — the investor canvas draws theses, so the investor
+  // `MarketDirectoryZone`'s readings card holds. D495 — the investor canvas draws theses, so the investor
   // has an entry of its own (`markets:investor`).
   const gap = !isRoot && slug ? storeGapFor(slug, role) : null;
 
@@ -445,6 +450,8 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           />
         </div>
       )}
+      {/* D7178 (#7044, RCL05B): the directory sign-in returned to says so once. */}
+      {slug === 'companies' && <RestoredStatus path={`${location.pathname}${location.search}`} filters={!!location.search} />}
       {body}
     </WorkspaceShell>
   );

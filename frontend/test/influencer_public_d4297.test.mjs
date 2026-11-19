@@ -252,7 +252,7 @@ test('/influencers signed out: the tiers from the read, the earn line from the r
   const down = await mounted('/influencers', worker({ tiers: () => response({ error: 'tiers_unreadable' }, 503) }));
   try {
     assert.match(down.textOf('influencers-tiers-unread'), /could not be read.*not the same as having none/);
-    assert.match(down.textOf('influencers-earn'), /A share of each subscription/, 'no rate is guessed');
+    assert.equal(down.textOf('influencers-earn'), 'Rates unavailable. See the tiers below.', 'no rate is guessed (D6993)');
   } finally { await down.close(); }
 });
 

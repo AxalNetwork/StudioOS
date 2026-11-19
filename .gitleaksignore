@@ -298,3 +298,30 @@ e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_ac
 # #5791: the share-walkthrough frontend test used a base64-looking placeholder share token (synthetic, never a
 # credential). The fixture now uses 'synthetic-share-token-5791-not-a-jwt'. Scope this to the original finding.
 19ffa0d4df299a7c7523026e7c5e6aa8261c61ce:frontend/test/share_walkthrough_d5791.test.mjs:generic-api-key:32
+# #7073: false positives. scripts/agent-gateway-keys.mjs lists the names of the
+# Actions secrets it reads (the second and third Claude account slots); no value
+# is in the file. Scoped to these two findings in the commit that added them.
+# The third entry is this comment's first wording, which quoted those names.
+# The slot table's property is now `envName`, so the merge queue's squashed
+# commit carries no such line; these entries cover the PR's own history only.
+5ca473a6086e9d4ecaa257b0010d64a1d8af2fb6:scripts/agent-gateway-keys.mjs:generic-api-key:31
+5ca473a6086e9d4ecaa257b0010d64a1d8af2fb6:scripts/agent-gateway-keys.mjs:generic-api-key:32
+001f03c99dbcf6014f12be5d932daa8a814fbe89:.gitleaksignore:generic-api-key:302
+# #6008: the interview-guide Worker test signed its session JWT with a synthetic fixture string (never a
+# credential). The fixture now uses 'test'.repeat(16). Scope this to the original finding.
+808d70152f4a4e77727fb5f6e93cb2cfacc065a2:cloudflare-worker/test/interview_guide_6008.test.ts:generic-api-key:13
+# #6473: the synthetic GitHub token literal in the model runner's env-leak test
+# (frontend/test/landing_bot_model_6473.test.mjs) reached this branch in the
+# #7092 merge commit. It was never a token. Same finding as #7088's entry.
+e1bdd3a4037ef7238fd171c04e6110ca7aff8643:frontend/test/landing_bot_model_6473.test.mjs:generic-api-key:177
+# #6473: a synthetic GitHub token literal in the landing bot model runner's
+# env-leak test (frontend/test/landing_bot_model_6473.test.mjs), which checks
+# that no environment value reaches a log or artifact. It was never a token
+# for anything. Scoped to this one finding, as D334's entry is. The fixture
+# now builds the value at run time, so the merge queue's squashed commit holds
+# no literal; this entry covers the PR's own history only.
+ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.test.mjs:generic-api-key:177
+# 4d6854891e (#7256) first wrote the privacy test's synthetic marker as a
+# literal; 62a7171032 assembles it at run time, so the squashed commit holds
+# no literal; this entry covers the PR's own history only.
+4d6854891ea6194cea00a2d89559e6f863ebc6db:cloudflare-worker/test/error_privacy_7256.test.ts:generic-api-key:18

@@ -3,6 +3,7 @@ import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';
 import { COHORT_TZ } from '../cohortTiming';
 import { projectInActiveCompany } from '../tenancyScope';
+import { ownerShown } from '../obligationOwner';
 
 export const READ_ONLY_KINDS: ReadonlySet<string> = new Set(['interview_call', 'cohort_date', 'compliance_due', 'deal_closing']);
 export type SourceKind = 'interview_call' | 'cohort_date' | 'compliance_due' | 'deal_closing';
@@ -96,9 +97,10 @@ export async function complianceDueEvents(
 ): Promise<SourceEvent[]> {
   const rows = results(await env.DB.prepare(
     `SELECT e.id, e.uid, e.title, e.due_date, e.description, e.project_id, e.completion_status,
-            e.event_type, e.jurisdiction, e.recurrence, e.source, e.owner_name, p.company_id,
+            e.event_type, e.jurisdiction, e.recurrence, e.source, e.owner_name, o.name AS owner_user_name, p.company_id,
             c.uid AS company_uid, c.company_name, 0 AS company_task
        FROM compliance_events e JOIN projects p ON p.id = e.project_id AND p.deleted_at IS NULL
+       LEFT JOIN users o ON o.id = e.owner_user_id
        JOIN users u ON u.id = ? AND u.founder_id = p.founder_id AND u.role = 'founder'
         AND u.is_active = 1 AND u.deletion_requested_at IS NULL
        LEFT JOIN company_profiles c ON c.id = p.company_id
@@ -108,9 +110,10 @@ export async function complianceDueEvents(
      UNION ALL
      -- D1614 CO4 (#3976): a company-level task, for the people with a seat on its company.
      SELECT e.id, e.uid, e.title, e.due_date, e.description, NULL, e.completion_status,
-            e.event_type, e.jurisdiction, e.recurrence, e.source, e.owner_name, e.company_id,
+            e.event_type, e.jurisdiction, e.recurrence, e.source, e.owner_name, o.name, e.company_id,
             c.uid, c.company_name, 1
        FROM compliance_events e JOIN company_profiles c ON c.id = e.company_id AND c.archived_at IS NULL
+       LEFT JOIN users o ON o.id = e.owner_user_id
        JOIN user_company_links l ON l.company_id = e.company_id AND l.user_id = ?
       WHERE e.project_id IS NULL
         AND (e.completion_status <> 'completed' OR ? = 1)
@@ -126,7 +129,8 @@ export async function complianceDueEvents(
       const compliance: ComplianceFacts = {
         state, due_date: String(r.due_date).slice(0, 10),
         event_type: r.event_type ?? null, jurisdiction: r.jurisdiction ?? null, recurrence: r.recurrence ?? null,
-        owner: typeof r.owner_name === 'string' && r.owner_name.trim() ? r.owner_name.trim() : null,
+        // D6790: the same owner Grow shows — the picked team member, else the name typed before #6790.
+        owner: ownerShown(r.owner_user_name, r.owner_name),
         source: r.source ?? null,
         company: r.company_uid ? { uid: String(r.company_uid), name: String(r.company_name ?? '') } : null,
         company_task: Number(r.company_task) === 1,

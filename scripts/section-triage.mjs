@@ -6,18 +6,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { githubApi } from './claim.mjs';
+import { cases, countMilestone, filedCount, issueDraft, issueKeyInput, milestoneReceipt, milestoneComment } from './lib/sectionIncidentIssue.mjs';
 
 const repo = 'AxalNetwork/StudioOS';
 const orchestrationOwner = 'guillaumelauzier';
 const exampleEpisode = '00000000-0000-4000-8000-000000000000';
-// The fixed cases: one source file and one regression test each. Also the
-// allowlist of scripts/lib/sectionDraftGate.mjs (D5985), which imports it.
-export const cases = new Map([
-  ['learning-discovery', Object.freeze({ section: 'all-learning', name: 'Learning discovery list rendering',
-    file: 'frontend/src/pages/learning/LearningHome.jsx', test: 'frontend/test/learning_discovery_4648.test.mjs' })],
-  ['help-guide-placement', Object.freeze({ section: 'all-help-center', name: 'Help Center guide placement',
-    file: 'frontend/src/pages/docs/guidePlacement.js', test: 'frontend/test/help_placement_d626.test.mjs' })],
-]);
+// The fixed cases live with the shared public template (D5984); re-exported for
+// scripts/lib/sectionDraftGate.mjs (D5985), which imports them from here.
+export { cases };
 
 export function prepare(input) {
   const fields = ['case', 'episode', 'count', 'revision', 'source', 'classification'];
@@ -31,15 +27,10 @@ export function prepare(input) {
     || typeof input.revision !== 'string' || !/^[0-9a-f]{40}$/.test(input.revision)
     || !Number.isSafeInteger(input.count) || input.count < 1 || input.count > 1000000)
     throw new Error('Invalid episode UUID, source revision or cumulative count');
-  const key = createHash('sha256').update(repo + '/ordinary-ui/v1/' + input.case + '/' + input.episode).digest('hex');
-  const marker = '<!-- axal-section-incident:v1:' + key + ' -->';
-  const source = 'https://github.com/' + repo + '/blob/' + input.revision + '/';
-  const body = [spec.name + ' failed in a controlled reproduction.',
-    'Section: ' + spec.section + '. Cumulative observations at filing: ' + input.count + '.',
-    '[Source at the observed revision](' + source + spec.file + ') · [Regression test](' + source + spec.test + ')',
-    'S01 triages the incident and authorizes any slot task. Recovery requires a verified release and healthy evidence.', marker].join('\n\n');
-  return { key, marker, spec, revision: input.revision, count: input.count,
-    issue: { title: 'UI regression: ' + spec.name, body, labels: ['bug', 'frontend', 'observability'] } };
+  const key = createHash('sha256').update(issueKeyInput(repo, input.case, input.episode)).digest('hex');
+  const draft = issueDraft({ repo, caseId: input.case, key, count: input.count, revision: input.revision });
+  return { key, marker: draft.marker, spec, revision: input.revision, count: input.count,
+    issue: { title: draft.title, body: draft.body, labels: draft.labels } };
 }
 
 export function openLedger(path) {
@@ -151,14 +142,14 @@ export async function triage({ input, db, api, actor, owner, linkIssue, workOrde
     }
   } else {
     // Updates are cumulative threshold observations, never raw event increments. No edits to human-authored text.
-    const initial = Number(/Cumulative observations at filing: (\d+)\./.exec(issue.body)?.[1]);
+    const initial = filedCount(issue.body);
     if (!Number.isSafeInteger(initial) || initial < 1) throw new Error('Initial observation receipt missing');
-    const bucket = 2 ** Math.floor(Math.log2(plan.count));
+    const bucket = countMilestone(plan.count);
     if (bucket > initial) {
-      const receipt = '<!-- axal-section-count:v1:' + key + ':' + bucket + ' -->';
+      const receipt = milestoneReceipt(key, bucket);
       const won = db.prepare('INSERT OR IGNORE INTO milestones(key,bucket,actor) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM milestones WHERE key=? AND bucket>=?)').run(key, bucket, actor, key, bucket).changes;
       if (won) {
-        try { await api('POST', 'issues/' + issue.number + '/comments', { body: 'Cumulative observations reached at least ' + bucket + '.\n\n' + receipt }); }
+        try { await api('POST', 'issues/' + issue.number + '/comments', { body: milestoneComment(key, bucket) }); }
         catch (error) {
           if ([401, 403, 422, 429].includes(error.status)) db.prepare('DELETE FROM milestones WHERE key=? AND bucket=?').run(key,bucket);
           throw error;

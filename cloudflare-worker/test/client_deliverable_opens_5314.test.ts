@@ -71,6 +71,8 @@ function freshDb({ instrumented = true }: { instrumented?: boolean } = {}) {
   db.exec(migration('208_partner_delivery_stores'));
   db.exec(migration('202611072115_delivery_revisions'));
   if (instrumented) db.exec(migration('202611110731_5314_deliverable_client_opens'));
+  // #4709: blockers kept at send, report amendments and deliverable corrections.
+  db.exec(migration('202611152339_4709_delivery_history'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, founder_id, name, email) VALUES (?,?,?,?,?,?)');
   u.run(PARTNER_USER, 'partner', 1, null, 'Ours', 'ours@example.com');

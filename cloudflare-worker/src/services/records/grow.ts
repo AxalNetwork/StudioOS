@@ -36,10 +36,11 @@ import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
   TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
-  markHeld, obligationKind, obligationState, openMinutes, removeEntryStep, removeMarket, removeObligation, removePartner, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
-  updateEntryStep, updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
+  markHeld, obligationKind, obligationState, openMinutes, removeAgendaItem, removeEntryStep, removeMarket, removeObligation, removePartner, removePartnerDeal, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
+  updateAgendaItem, updateEntryStep, updateFeedback, updateMarket, updateObligation, updatePartner, updatePartnerDeal, updateRole,
 } from '../growWriters';
-import { dayList, reminderLabel } from '../growDaily';
+import { dayList, reminderAssignee, reminderLabel } from '../growDaily';
+import { companyTeam, onCompanyTeam, ownerShown } from '../obligationOwner';
 import { partnerRevenueSource, setPartnerRevenue } from '../growWriters';
 import { parseMinor, plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
 import type {
@@ -208,7 +209,14 @@ async function roadmapItems(env: Env, projectId: number): Promise<Array<{ value:
 export const addToRoadmapHref = (projectId: number, theme: string) =>
   `/build/product-roadmap/new?project_id=${projectId}&feedback_theme=${encodeURIComponent(theme)}`;
 
-const FEEDBACK_EDIT = ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship'] as const;
+const FEEDBACK_EDIT = ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship', 'contact_uid'] as const;
+
+const capital = (v: unknown) => { const t = String(v ?? '').replace(/_/g, ' '); return t ? t[0].toUpperCase() + t.slice(1) : t; };
+
+/** D6865: the feedback origins (migration 202611161128) as the canvas words them. */
+const ORIGIN_LABEL: Record<string, string> = {
+  inbox_reply: 'Inbox reply', interview: 'Interview', notion: 'Notion', posthog_survey: 'PostHog survey', typed: 'Typed',
+};
 
 const productImprovement = spec('product_feedback', 'product-improvement', GROW_OLD_ROWS['product-improvement'], async (rc, id) => {
   const f = await rc.env.DB.prepare('SELECT * FROM product_feedback WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
@@ -231,6 +239,8 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
       fact('Theme', f.theme, 'No theme yet'),
       fact('Roadmap item', f.roadmap_item_label, 'Not linked to a roadmap item'),
       fact('Status', label(f.status), ''),
+      // D6865 (#6865): where it came from; a row older than the column reads Not recorded.
+      fact('Origin', f.origin ? ORIGIN_LABEL[String(f.origin)] ?? String(f.origin) : null, 'Not recorded'),
     ],
     createdBy: f.created_by, createdAt: f.created_at,
   }, { f, byStatus });
@@ -259,6 +269,14 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
     const rows: Row[] = [];
     const who = joined(f.from_name, f.from_company);
     rows.push(who ? { a: who, b: 'Customers →', href: `/grow/customers?project_id=${rc.projectId}` } : notRecorded('Customer', 'No customer named on this feedback'));
+    // D6865 (#6865): the linked customer or prospect record (GR-22); a typed name with none reads Not linked.
+    const rec = f.contact_uid
+      ? await rc.env.DB.prepare('SELECT name, audience, status FROM contacts WHERE uid = ? AND project_id = ?').bind(f.contact_uid, rc.projectId)
+        .first<{ name: string | null; audience: string; status: string }>()
+      : null;
+    rows.push(rec
+      ? { a: 'Record', b: joined(rec.name, `${capital(rec.audience)} · ${capital(rec.status)}`) ?? 'Linked', tone: 'ok' }
+      : { a: 'Record', b: 'Not linked', c: 'Link to a customer or prospect with Edit', tone: 'grey' });
     if (!f.from_company) rows.push(notRecorded('Plan', 'No company named on this feedback'));
     else {
       const since = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
@@ -274,6 +292,11 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
   const uid = id;
   const themes = await feedbackThemes(rc.env, rc.projectId);
   const items = await roadmapItems(rc.env, rc.projectId);
+  // D6865 (#6865): Link to a customer or prospect, from the venture's own contacts (newest first, at most 200).
+  const people = ((await rc.env.DB.prepare(
+    'SELECT uid, name, email, audience FROM contacts WHERE project_id = ? ORDER BY COALESCE(last_activity_at, created_at) DESC, id DESC LIMIT 200',
+  ).bind(rc.projectId).all<{ uid: string; name: string | null; email: string; audience: string }>()).results || [])
+    .map((p) => ({ value: String(p.uid), label: [p.name || p.email, p.name ? p.email : null, capital(p.audience)].filter(Boolean).join(' · ') }));
   const actions: RecordAction[] = [{
     key: 'change-theme', label: 'Change theme', kind: 'form',
     form: { title: 'Change theme', cta: 'Save', foot: 'A theme groups feedback that asks for the same thing.', fields: [
@@ -306,6 +329,8 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
       { key: 'from_name', label: 'From', kind: 'T', value: f.from_name ?? '', placeholder: '[Name]' },
       { key: 'from_email', label: 'Email', kind: 'T', input: 'email', value: f.from_email ?? '' },
       { key: 'from_company', label: 'Company', kind: 'T', value: f.from_company ?? '' },
+      { key: 'contact_uid', label: 'Customer or prospect record', kind: 'CH', value: f.contact_uid ?? '',
+        options: [{ value: '', label: 'Not linked' }, ...people] },
       { key: 'theme', label: 'Theme', kind: 'T', value: f.theme ?? '' },
       { key: 'roadmap_item_ref', label: 'Roadmap item', kind: 'CH', value: f.roadmap_item_ref ?? '', options: [{ value: '', label: 'None yet' }, ...items] },
       { key: 'status', label: 'Status', kind: 'CH', value: f.status, options: opts(FEEDBACK_STATUS, LABEL) },
@@ -779,6 +804,12 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
   return { teams: teams.map((t) => ({ value: t, label: t })), types: opts(ROLE_TYPES, LABEL) };
 });
 
+/** D6114 (#6114): a deal's and an agenda item's Edit send these keys only; each row is checked in its own store, then against its parent by the writer. */
+const DEAL_EDIT = ['customer', 'closed_on', 'amount_cents', 'currency'] as const;
+const AGENDA_EDIT = ['text', 'owner_name'] as const;
+const dealRef = (body: Body): Array<{ store: Store; id: string | number }> => [{ store: 'growth_partner_deals', id: refOf(field(body, 'deal')) }];
+const agendaRef = (body: Body): Array<{ store: Store; id: string | number }> => [{ store: 'obligation_agenda_items', id: refOf(field(body, 'item')) }];
+
 // ── Partner network — id: the partner's uid ─────────────────────────────────
 
 /** "Rev-share 20%", "Services fee · $4,000"; the old free text when no terms are typed (decision 7). */
@@ -830,12 +861,20 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
   section('deals', 'Deals sourced', async (rc, _id, record) => {
     const { g } = loadedOf(record);
     const res = await rc.env.DB.prepare(
-      'SELECT customer, closed_on, amount_cents, currency FROM growth_partner_deals WHERE partner_id = ? ORDER BY COALESCE(closed_on, created_at) DESC, id DESC LIMIT 20',
+      'SELECT uid, customer, closed_on, amount_cents, currency FROM growth_partner_deals WHERE partner_id = ? ORDER BY COALESCE(closed_on, created_at) DESC, id DESC LIMIT 20',
     ).bind(g.id).all<Any>();
     const writer = await isWriter(rc);
     // A deal's customer is a third party: named for writers, counted for everyone else.
-    return { rows: (res.results || []).map((d) => ({ a: writer ? String(d.customer) : 'A deal', b: dMon(d.closed_on) ?? '', c: money(d.amount_cents, d.currency) ?? '' })),
-      empty: 'No deal recorded.', action: 'add-deal' };
+    // D6114 (#6114): a writer's row names its deal by uid, with Edit (its own values) and Remove.
+    return { rows: (res.results || []).map((d) => {
+      const row: Row = { a: writer ? String(d.customer) : 'A deal', b: dMon(d.closed_on) ?? '', c: money(d.amount_cents, d.currency) ?? '' };
+      if (!writer) return row;
+      const deal = { deal: String(d.uid) };
+      return { ...row, actions: [
+        { key: 'edit-deal', body: deal, values: { customer: String(d.customer), closed_on: d.closed_on ?? '', amount_cents: d.amount_cents ?? '', currency: d.currency ?? '' } },
+        { key: 'remove-deal', body: deal },
+      ] };
+    }), empty: 'No deal recorded.', action: 'add-deal' };
   }),
   // D6112 (#6112): each month's partner-sourced revenue with where it came from; a month no one entered has no row.
   section('revenue', 'Revenue by month', async (rc, _id, record) => {
@@ -886,6 +925,22 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
       { key: 'currency', label: 'Currency', kind: 'T', placeholder: 'usd' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await addPartnerDeal(c.env, c.projectId, userOf(c), id, plain(body)) })),
+  }, {
+    key: 'edit-deal', label: 'Edit', kind: 'form', row_only: true,
+    references: dealRef,
+    form: { title: 'Edit deal', cta: 'Save', fields: [
+      { key: 'customer', label: 'Customer', kind: 'T', required: true },
+      { key: 'closed_on', label: 'Closed on', kind: 'T', input: 'date' },
+      { key: 'amount_cents', label: 'Amount', kind: 'T', input: 'money' },
+      { key: 'currency', label: 'Currency', kind: 'T', placeholder: 'usd' },
+    ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true,
+      record: await updatePartnerDeal(c.env, c.projectId, userOf(c), id, field(body, 'deal'), pick(body, DEAL_EDIT)) })),
+  }, {
+    key: 'remove-deal', label: 'Remove', kind: 'write', tone: 'danger', row_only: true,
+    confirm: { title: 'Remove this deal?', body: 'It leaves the deals this partner sourced. Activity keeps a line that a deal was removed, without the customer.', cta: 'Remove' },
+    references: dealRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removePartnerDeal(c.env, c.projectId, userOf(c), id, field(body, 'deal')) })),
   }, {
     key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
     form: { title: 'Edit partner', cta: 'Save', foot: 'Terms are a percentage or an amount, not both.', fields: [
@@ -1014,7 +1069,7 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     references: stepRef,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step')) })),
   }, {
-    key: 'localisation-check', label: 'Tick a localisation check', kind: 'write',
+    key: 'localisation-check', label: 'Tick a localisation check', kind: 'write', row_only: true,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setLocalisation(c.env, c.projectId, userOf(c), id, plain(body)) })),
   }, {
     key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
@@ -1039,30 +1094,47 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
 // ── Durable company-building — id: the obligation's id ──────────────────────
 
 export const REMIND_PRESETS = [30, 14, 7, 1, 0] as const;
-const OBLIGATION_EDIT = ['title', 'kind', 'due_at', 'owner_name', 'repeats', 'status'] as const;
+// D6790: the owner is picked from the company team (`owner_user_id`); `owner_name` stays for older callers.
+const OBLIGATION_EDIT = ['title', 'kind', 'due_at', 'owner_user_id', 'owner_name', 'repeats', 'status'] as const;
+/** D6790 (GR-23): the owner listbox — the company team, and "No one yet" to name nobody. */
+const ownerChoices = (team: Array<{ value: string; label: string }>) => [{ value: '', label: 'No one yet' }, ...team];
 
 const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_ROWS['durable-company-building'], async (rc, id) => {
-  const e = await rc.env.DB.prepare('SELECT * FROM compliance_events WHERE id = ? AND project_id = ?').bind(Number(id), rc.projectId).first<Any>();
+  const e = await rc.env.DB.prepare(
+    'SELECT e.*, o.name AS owner_user_name FROM compliance_events e LEFT JOIN users o ON o.id = e.owner_user_id WHERE e.id = ? AND e.project_id = ?',
+  ).bind(Number(id), rc.projectId).first<Any>();
   if (!e) throw vanished();
+  const hasResolutions = e.event_type === 'board_meeting' || !!await rc.env.DB.prepare('SELECT 1 FROM board_resolutions WHERE event_id = ? LIMIT 1').bind(Number(id)).first();
+  // D6790: the owner every surface shows, and whether the picked one is still on the company team.
+  const owner = ownerShown(e.owner_user_name, e.owner_name);
+  e.owner_on_team = e.owner_user_id != null && await onCompanyTeam(rc.env, rc.projectId, Number(e.owner_user_id)) ? 1 : 0;
   const kind = obligationKind(e);
   const state = obligationState(e.completion_status, kind, String(e.due_date), new Date().toISOString().slice(0, 10));
   const repeats = REPEATS_OF[String(e.recurrence)] ?? null;
   return keep({
     title: String(e.title),
-    sub: joined(label(kind), `due ${dMon(e.due_date) ?? e.due_date}`, e.owner_name),
+    sub: joined(label(kind), `due ${dMon(e.due_date) ?? e.due_date}`, owner),
     pills: [pill(state), ...(repeats ? [{ text: label(repeats), tone: 'grey' }] : [])],
     facts: [
       fact('Kind', label(kind), ''),
       fact('Due', e.due_date, ''),
-      fact('Owner', e.owner_name, 'No owner named'),
+      // D6790: an ownerless obligation offers Pick owner in place of the reason.
+      { ...fact('Owner', owner, 'No owner named'), ...(owner ? {} : { action: 'pick-owner' }) },
       fact('Repeats', repeats ? label(repeats) : null, 'Repeat not recorded'),
     ],
     createdBy: e.created_by_user_id, createdAt: e.created_at,
-  }, { e, kind, state, repeats });
+  }, { e, kind, state, repeats, hasResolutions, owner });
 }, [
   section('agenda', 'Agenda', async (rc, id) => {
-    const res = await rc.env.DB.prepare('SELECT text, owner_name FROM obligation_agenda_items WHERE event_id = ? ORDER BY id LIMIT 30').bind(Number(id)).all<Any>();
-    return { rows: (res.results || []).map((a) => ({ a: String(a.text), b: a.owner_name ?? '' })), empty: 'No agenda item yet.', action: 'add-agenda' };
+    const res = await rc.env.DB.prepare('SELECT uid, text, owner_name FROM obligation_agenda_items WHERE event_id = ? ORDER BY id LIMIT 30').bind(Number(id)).all<Any>();
+    // D6114 (#6114): each item names itself by uid, so Edit and Remove address it (a reader's rows lose their actions).
+    return { rows: (res.results || []).map((a) => {
+      const item = { item: String(a.uid) };
+      return { a: String(a.text), b: a.owner_name ?? '', actions: [
+        { key: 'edit-agenda', body: item, values: { text: String(a.text), owner_name: a.owner_name ?? '' } },
+        { key: 'remove-agenda', body: item },
+      ] };
+    }), empty: 'No agenda item yet.', action: 'add-agenda' };
   }),
   section('past-meetings', 'Past meetings', async (rc, id) => {
     const res = await rc.env.DB.prepare(
@@ -1073,20 +1145,42 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       ...(o.minutes_file_key ? { action: { key: 'open-minutes', body: { occurrence: o.id } } } : {}),
     })), empty: 'Not held yet.' };
   }),
+  section('resolutions', 'Resolutions', async (rc, id) => {
+    // D6788: LEFT JOIN keeps held meetings with none. No minutes object key leaves the Worker.
+    const result = await rc.env.DB.prepare(`SELECT o.id AS occurrence_id, o.held_on, r.text, r.passed_on,
+        r.minutes_file_key IS NOT NULL AS cites_minutes, u.name AS recorded_by
+      FROM obligation_occurrences o LEFT JOIN board_resolutions r ON r.occurrence_uid = o.uid AND r.event_id = o.event_id
+      LEFT JOIN users u ON u.id = r.recorded_by
+      WHERE o.event_id = ? ORDER BY o.held_on DESC, o.id DESC, r.passed_on DESC, r.id DESC`)
+      .bind(Number(id)).all<{ occurrence_id: number; held_on: string; text: string | null; passed_on: string | null; cites_minutes: number; recorded_by: string | null }>();
+    return { rows: (result.results ?? []).map(r => r.text == null
+      ? { a: `Meeting held ${r.held_on}`, b: 'None recorded' }
+      : { a: r.text, b: `Held ${r.held_on} · Passed ${r.passed_on} · Recorded by ${r.recorded_by ?? 'Not recorded'}`, c: r.cites_minutes ? 'Minutes cited' : '',
+        ...(r.cites_minutes ? { action: { key: 'open-minutes', body: { occurrence: r.occurrence_id } } } : {}) }), empty: 'None recorded' };
+  }, { when: (_id, record) => loadedOf(record).hasResolutions, note: 'By held meeting, newest first.' }),
   section('reminders', 'Reminders', async (_rc, _id, record) => {
     const { e } = loadedOf(record);
     const sent = dayList(e.reminders_sent_json);
-    return { rows: dayList(e.remind_days_json).sort((a, b) => b - a).map((n) => ({ a: reminderLabel(n), c: sent.includes(n) ? 'Sent' : 'On', tone: sent.includes(n) ? 'grey' : 'ok' })),
+    const days = dayList(e.remind_days_json).sort((a, b) => b - a);
+    // D6790: the step names who it reminds, as the daily run decides it (`reminderAssignee`).
+    const assignee = reminderAssignee(e);
+    const to = assignee.to === 'owner' ? ownerShown(e.owner_user_name, null) ?? 'Unnamed member' : 'The founder';
+    return { rows: [...days.map((n) => ({ a: reminderLabel(n), c: sent.includes(n) ? 'Sent' : 'On', tone: sent.includes(n) ? 'grey' : 'ok' })),
+      ...(days.length ? [{ a: 'Goes to', b: to }] : [])],
       empty: 'No reminder set.' };
   }, { side: true }),
   section('documents', 'Documents', async (rc, id) => {
     const minutes = await rc.env.DB.prepare('SELECT COUNT(*) AS n FROM obligation_occurrences WHERE event_id = ? AND minutes_file_key IS NOT NULL')
       .bind(Number(id)).first<{ n: number }>();
-    // No resolution store (decision 10): minutes count the occurrences with a stored file.
-    return { rows: [{ a: 'Minutes', b: `${Number(minutes?.n ?? 0)} stored` }, notRecorded('Resolutions', 'No resolution store')] };
+    return { rows: [{ a: 'Minutes', b: `${Number(minutes?.n ?? 0)} stored` }] };
   }, { side: true }),
 ], async (rc, id, record): Promise<RecordAction[]> => {
-  const { e, kind, repeats } = loadedOf(record);
+  const { e, kind, repeats, owner } = loadedOf(record);
+  const members = await companyTeam(rc.env, rc.projectId);
+  const team = ownerChoices(members);
+  // D6790: a name typed before #6790 stays until someone on the team is picked.
+  const typedNote = e.owner_user_id == null && ownerShown(null, e.owner_name)
+    ? `Typed before owners were picked from the team: ${ownerShown(null, e.owner_name)}. It stays until you pick someone.` : undefined;
   const hasMinutes = await rc.env.DB.prepare('SELECT 1 FROM obligation_occurrences WHERE event_id = ? AND minutes_file_key IS NOT NULL LIMIT 1').bind(Number(id)).first();
   const actions: RecordAction[] = [{
     key: 'mark-held', label: 'Mark held', kind: 'form', tone: 'primary',
@@ -1096,9 +1190,15 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
         { key: 'held_on', label: 'Held on', kind: 'T', input: 'date', required: true },
         { key: 'notes', label: 'Notes', kind: 'T' },
         { key: 'minutes', label: 'Minutes', kind: 'T', input: 'file', note: 'PDF or DOCX, up to 20 MB.' },
+        ...(e.event_type === 'board_meeting' ? [
+          { key: 'resolutions', label: 'Resolutions', kind: 'T' as const, input: 'textarea' as const, max: 40019, note: 'One resolution per line, up to 20. Each can have up to 2000 characters. Leave blank when none were passed.' },
+          { key: 'resolutions_passed_on', label: 'Resolutions passed on', kind: 'T' as const, input: 'date' as const, note: 'Defaults to Held on when left blank.' },
+          { key: 'cite_minutes', label: 'Cite uploaded minutes for these resolutions', kind: 'CH' as const, value: 'no', options: [{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }] },
+        ] : []),
       ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await markHeld(c.env, c.projectId, userOf(c), Number(id), {
       held_on: field(body, 'held_on'), notes: field(body, 'notes'), minutes: field(body, 'minutes'),
+      resolutions: field(body, 'resolutions'), resolutions_passed_on: field(body, 'resolutions_passed_on'), cite_minutes: field(body, 'cite_minutes'),
     }) })),
   }, {
     key: 'add-agenda', label: 'Add agenda item', kind: 'form',
@@ -1107,10 +1207,24 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       { key: 'owner_name', label: 'Owner', kind: 'T' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await addAgendaItem(c.env, c.projectId, userOf(c), Number(id), plain(body)) })),
+  }, {
+    key: 'edit-agenda', label: 'Edit', kind: 'form', row_only: true,
+    references: agendaRef,
+    form: { title: 'Edit agenda item', cta: 'Save', fields: [
+      { key: 'text', label: 'Item', kind: 'T', required: true },
+      { key: 'owner_name', label: 'Owner', kind: 'T' },
+    ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true,
+      record: await updateAgendaItem(c.env, c.projectId, userOf(c), Number(id), field(body, 'item'), pick(body, AGENDA_EDIT)) })),
+  }, {
+    key: 'remove-agenda', label: 'Remove', kind: 'write', tone: 'danger', row_only: true,
+    confirm: { title: 'Remove this agenda item?', body: 'It leaves the agenda. Activity keeps a line that an item was removed.', cta: 'Remove' },
+    references: agendaRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeAgendaItem(c.env, c.projectId, userOf(c), Number(id), field(body, 'item')) })),
   }];
   if (hasMinutes) {
     actions.push({
-      key: 'open-minutes', label: 'Open minutes', kind: 'write',
+      key: 'open-minutes', label: 'Open minutes', kind: 'write', row_only: true,
       // The occurrence is checked in its own store, then against this obligation by the writer.
       references: (body) => [{ store: 'obligation_occurrences', id: refOf(field(body, 'occurrence')) }],
       execute: (c, _id, body) => refusing(async () => ({ ok: true, ...(await openMinutes(c.env, c.projectId, userOf(c), Number(id), Number(field(body, 'occurrence')))) })),
@@ -1122,7 +1236,8 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       { key: 'title', label: 'Obligation', kind: 'T', value: e.title, required: true },
       { key: 'kind', label: 'Kind', kind: 'CH', value: kind, options: opts(OBLIGATION_KINDS, LABEL) },
       { key: 'due_at', label: 'Due', kind: 'T', input: 'date', value: e.due_date, required: true },
-      { key: 'owner_name', label: 'Owner', kind: 'T', value: e.owner_name ?? '' },
+      { key: 'owner_user_id', label: 'Owner', kind: 'CH', value: e.owner_user_id == null ? '' : String(e.owner_user_id), options: team,
+        ...(typedNote ? { note: typedNote } : {}) },
       { key: 'repeats', label: 'Repeats', kind: 'CH', value: repeats ?? 'once', options: opts(Object.keys(REPEATS), LABEL) },
       { key: 'remind_days', label: 'Remind', kind: 'CK', value: dayList(e.remind_days_json).map(String),
         options: REMIND_PRESETS.map((n) => ({ value: String(n), label: reminderLabel(n) })), note: 'At most three.' },
@@ -1136,11 +1251,26 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       if (remind !== undefined) b.remind_days = (Array.isArray(remind) ? remind : remind == null || remind === '' ? [] : [remind]).map(Number);
       return { ok: true, record: await updateObligation(c.env, c.projectId, userOf(c), Number(id), b) };
     }),
-  }, remove(`Remove ${e.title}?`, 'For an obligation added by mistake: it leaves the list, its card and its counts, with its agenda. One that has been held stays; mark it done instead.',
+  });
+  if (!owner) {
+    // D6790 (GR-23): Pick owner, drawn from the Owner fact of an ownerless obligation, opens the same listbox.
+    actions.push({
+      key: 'pick-owner', label: 'Pick owner', kind: 'form', row_only: true,
+      form: { title: 'Pick owner', cta: 'Save',
+        sub: members.length ? 'Someone on the company team. Its reminders then go to them.'
+          : 'No one is on the company team yet, so there is no one to pick. Add people to the company first.',
+        fields: [{ key: 'owner_user_id', label: 'Owner', kind: 'CH', value: '', options: members, required: true }] },
+      execute: (c, _id, body) => refusing(async () => ({ ok: true,
+        record: await updateObligation(c.env, c.projectId, userOf(c), Number(id), { owner_user_id: field(body, 'owner_user_id') ?? null }) })),
+    });
+  }
+  actions.push(remove(`Remove ${e.title}?`, 'For an obligation added by mistake: it leaves the list, its card and its counts, with its agenda. One that has been held stays; mark it done instead.',
     (c) => removeObligation(c.env, c.projectId, userOf(c), Number(id))));
   return actions;
-}, async () => ({
+}, async (rc) => ({
   kinds: opts(OBLIGATION_KINDS, LABEL),
+  // D6790: the Add and Edit owner listbox, the company team.
+  owners: await companyTeam(rc.env, rc.projectId),
   repeats: opts(Object.keys(REPEATS), LABEL),
   remind_presets: REMIND_PRESETS.map((n) => ({ value: String(n), label: reminderLabel(n) })),
 }));

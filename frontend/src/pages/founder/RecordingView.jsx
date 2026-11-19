@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pause, Play, Square, Flag, ListChecks, X, Captions, CaptionsOff, MicOff, MonitorUp, Mic } from 'lucide-react';
+import { Pause, Play, Square, Flag, ListChecks, X, Captions, CaptionsOff, MicOff, MonitorUp, Mic, MessageCircleQuestion } from 'lucide-react';
+import RecordingGuide from './RecordingGuide.jsx';
 import RingViz from '../../components/discovery/RingViz';
 import { NO_SOUND_MS } from '../../lib/interviewCapture';
 import { STAGES, elapsedMs, processingProgress, stageIndex } from '../../lib/activeRecording';
@@ -274,6 +275,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
   const exitRef = useRef(null);
   const stopRef = useRef(null);
   const drawerBtn = useRef(null);
+  const [guideOpen, setGuideOpen] = useState(false); // D6008: the interview guide's copy for this interview
   const l = layers(st, { reduced });
   const s = st?.session || {};
   const dark = theme === 'dark';
@@ -428,6 +430,9 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
           <button type="button" data-testid="button-mark" className={ROUND_PLAIN} onClick={() => actions.mark?.()} disabled={l.paused} aria-label="Mark this moment"><Flag size={18} />Mark</button>
           <button ref={stopRef} type="button" data-testid="button-stop" className={`${ROUND} border-red-600 bg-red-600 text-white hover:bg-red-700 dark:border-red-500 dark:bg-red-500 dark:hover:bg-red-600`} onClick={() => actions.askStop?.()} aria-label="Stop and process this session"><Square size={18} />Stop</button>
           <button ref={drawerBtn} type="button" data-testid="button-drawer" className={ROUND_PLAIN} onClick={() => actions.toggleDrawer?.()} aria-label="Talking points" aria-expanded={l.drawer} aria-controls="recording-points"><ListChecks size={18} />Points</button>
+          {st?.interview?.id != null && s.project_id != null && (
+            <button type="button" data-testid="button-guide" className={ROUND_PLAIN} onClick={() => setGuideOpen((v) => !v)} aria-label="Interview guide" aria-expanded={guideOpen}><MessageCircleQuestion size={18} />Guide</button>
+          )}
           {s.live_model && !l.budget && (
             <button type="button" data-testid="button-toggle-live" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-[#2a2140] dark:text-gray-200 dark:hover:bg-[#1c1230]" onClick={() => actions.toggleLive?.()}
               aria-label={liveOn ? 'Hide live transcript' : 'Show live transcript'} title={liveOn ? 'Hide live transcript' : 'Show live transcript'}>
@@ -438,6 +443,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
       )}
 
       {l.drawer && <PointsDrawer points={st?.points || []} onTick={actions.tick ? (id, on) => actions.tick(id, on) : null} error={st?.pointError || null} onClose={() => actions.toggleDrawer?.(false)} returnTo={drawerBtn} />}
+      {guideOpen && <RecordingGuide projectId={s.project_id} interviewId={st?.interview?.id} onClose={() => setGuideOpen(false)} />}
       {l.confirm && <StopConfirm onKeep={() => actions.cancelStop?.()} onStop={(opts) => actions.confirmStop?.(opts)} onDiscard={() => actions.discard?.()} returnTo={stopRef} ai={ai} />}
     </div>
   );

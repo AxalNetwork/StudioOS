@@ -47,6 +47,8 @@ const PROFILES = {
     // comment is here because the symmetry is the tempting wrong guess. Since
     // D704 that folder mounts no zone: `FounderValidateWorkspace` is deleted.
     pages: ['frontend/src/pages/founder', 'frontend/src/pages/research', 'frontend/src/workspaces'],
+    // D6118 (#6118): `grow/partnerships` is mounted by Partnerships' co-marketing part, a cycle page part.
+    extra: ['frontend/src/pages/cycles/PartnershipsCoMarketing.jsx'],
     call: 'founderZoneActions',
     canvas: /^Pages · Founder /,
     buckets: /^(validate|build|grow|network|raise|research)\//,
@@ -136,7 +138,12 @@ const PROFILES = {
     // `logInterview` and `exportInterviews` (interviews), `exportPainMap`
     // (pain map), `newHypothesis` and `linkPain` (hypotheses), `exportSummary`
     // (verdict). Each has its home on a module page or record (#1659, #1704).
-    handlers: 10,
+    // 10 → 11 (D7171 part 2): `research/markets`'s `New market research`. Its
+    // `Export view` is the builder's export (D7172's scoped export), not a handler.
+    handlers: 11,
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
+    offCanvas: { 'research/markets': ['Export view', 'New market research'] },
     // NOTHING IS EXCLUDED BUT VALIDATE'S RETIRED ZONES. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
@@ -173,7 +180,10 @@ const PROFILES = {
     // ever be a disabled button. The investor asks instead (Ask HQ in the
     // mark-history Sheet). Each label here must still be on its artboard and
     // must not be in the table.
-    withheld: { 'portfolio/positions': ['Add follow-on'] },
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'portfolio/positions': ['Add follow-on'], 'research/markets': ['New deep-dive', 'Export', 'Cite in a memo'] },
+    // #6276 adds a visible-row CSV beside the original canvas controls.
+    offCanvas: { 'research/benchmarking': ['Export'], 'research/markets': ['Export view', 'Edit thesis'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -182,7 +192,7 @@ const PROFILES = {
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
     // is stored to export" was true until migration 312's receipts (D371).
     // 14 since D1243: `deals/pipeline`'s Export left with its zone.
-    exports: 14,
+    exports: 15,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -243,7 +253,21 @@ const PROFILES = {
     // drafts and issues a period at `/funds/:fundId/reporting/new`.
     // EIGHTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
     // stores the log and the page draws it; the op scrolls to that card.
-    handlers: 18,
+    // D6637: the network picker is now supplied by its page.
+    // NINETEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
+    // hide over delete on #6274 (question 4 B); the Worker stamps `cleared_at`
+    // and `Show cleared` reads it back.
+    // D6276 also supplies New benchmark from the page.
+    //
+    // TWENTY-FIRST: `funds/calls`'s `Send reminders` (#6238, D6238) — it opens
+    // the call's chase: one Eadwyn draft per line behind, each logged as sent
+    // only when the GP confirms it.
+    //
+    // TWENTY-SECOND: `network/relationships`'s `Add person` (D6636) — the
+    // network picker is now supplied by its page.
+    // TWENTY-THIRD: `network/introductions`'s `Offer one` (D6637), supplied by its page.
+    // TWENTY-FOURTH: `research/markets`'s `Edit thesis` (D7171 part 2).
+    handlers: 24,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -360,7 +384,9 @@ const PROFILES = {
     // D1424 (#3700): labels the profiles canvas adds that no `Pages · …` artboard
     // draws. Each is listed by zone, so the canvas-order check still pins the
     // rest of the row exactly and this list cannot grow by accident.
-    offCanvas: { 'delivery/status-reports': ['New report'] },
+    offCanvas: { 'delivery/status-reports': ['New report'], 'research/markets': ['Export view', 'New market research'] },
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['Attach to proposal', 'Export'] },
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.
@@ -413,6 +439,15 @@ const PROFILES = {
     // ops come from the backlog file, by route rather than by directory. See
     // the `alsoZones` block in `canvasOps` for why the whole file is not swept.
     alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
+    // #4832 (D4832): Sessions' header is the Practice v2 canvas's (PX-05),
+    // written as `hdr('Sessions', '…', 'Block time', 'Share booking link')`, so
+    // its ops are that call's string arguments after the title and the blurb.
+    v2Ops: [['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions', { args: true }]],
+    // `Export to calendar` stays on the page off the v2 canvas: an .ics of the
+    // tab's sessions, built in the browser (D4832).
+    // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
+    withheld: { 'research/markets': ['Re-run stale', 'Add source', 'Export'] },
+    offCanvas: { 'practice/sessions': ['Export to calendar'], 'research/markets': ['Export view', 'New market research'] },
     buckets: /^(expertise|network|research|practice)\//,
     // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
     // TWO HAVE MOVED APART. PR1, PR2 and PR3 each drew exactly two ops, one of
@@ -458,7 +493,8 @@ const PROFILES = {
     // (#4681) — Profile's `Preview as founder` and Proof's `Public preview`
     // said no public profile page existed, and `/advisors/:uid` does; both
     // are the page's `openPublicPreview`. Two gaps became two handlers.
-    handlers: 13,
+    // FOURTEEN: #4832 (D4832) — Sessions' `Share booking link` (PX-05).
+    handlers: 14,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -812,12 +848,15 @@ function canvasOps(profile) {
   // #5935 (D4838): A ZONE A V2 CANVAS REDREW. Its section builder passes the
   // header's buttons to `hdr(…)` before `+ zones(…)`, so the ops are read from
   // that call, and they override the older artboard's row for the same route.
-  for (const [zone, file, section] of profile.v2Ops || []) {
+  for (const [zone, file, section, { args = false } = {}] of profile.v2Ops || []) {
     const src = read(file);
     const at = src.indexOf(`const ${section} = () => hdr(`);
     assert.ok(at >= 0, `${file} has no ${section} section builder`);
-    const call = src.slice(at, src.indexOf('+ zones(', at));
-    const ops = [...call.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
+    // #4832 (D4832): a header written as string arguments (`hdr(title, blurb,
+    // primary, secondary)`) names its ops from the third argument on.
+    const ops = args
+      ? [...callText(src, src.indexOf('hdr(', at)).matchAll(/'([^']*)'/g)].map((m) => m[1].trim()).slice(2)
+      : [...src.slice(at, src.indexOf('+ zones(', at)).matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
     assert.ok(ops.length, `${file}'s ${section} header parsed with no ops`);
     out[zone] = ops;
   }
@@ -1451,7 +1490,7 @@ test('a gap note describes the screen, never a capability the API already has', 
   assert.match(table, /\{ label: 'New call', kind: 'handler', handler: 'newCall', primary: true \}/,
     'New call is neither a handler nor a stated gap — it is unaccounted for');
   const page = read('frontend/src/pages/investor/InvestorFundCalls.jsx');
-  assert.match(page, /handlers: \{ newCall \}/, 'the Calls page does not supply the New call handler');
+  assert.match(page, /handlers: \{ newCall, sendReminders \}/, 'the Calls page does not supply the New call and Send reminders handlers');
   assert.match(api, /\n  fundsCapitalCallV2:/, 'api.js no longer declares fundsCapitalCallV2');
   assert.match(api, /\n  fundsCallPreview:/, 'api.js no longer declares the preview the form reads first');
   assert.ok(worker.includes("post('/:id/capital-call'"), "funds.ts no longer serves post('/:id/capital-call'");
@@ -1465,15 +1504,11 @@ test('a gap note describes the screen, never a capability the API already has', 
     'the call job no longer writes through the ledger, so the queued path and the form can disagree');
   assert.doesNotMatch(handler, /SET deployed_capital = deployed_capital \+/,
     'the call job bumps deployed_capital again, which double-counts against the receipts');
-  // The zone's one remaining gap must not deny what exists either: a notice IS
-  // logged per LP account when a call is issued, so "nothing sends" or "no
-  // notice is stored" would be this test's original error in a new place.
-  const at = table.indexOf("'funds/calls'");
-  const entry = table.slice(at, table.indexOf('],', at));
-  const reminders = entry.match(/\{ label: 'Send reminders', unbuilt: '([^']*)'/);
-  assert.ok(reminders, "funds/calls' Send reminders is no longer a stated gap — if it was wired, assert the handler");
-  assert.doesNotMatch(reminders[1], /nothing on this desk sends|no (call )?notice is (stored|sent|logged)/i,
-    `Send reminders denies the notice the call already logs: "${reminders[1]}"`);
+  // D6238 (#6238): Send reminders was the zone's last gap and is wired: it
+  // opens the chase, which drafts and logs, and sends nothing itself.
+  assert.match(table, /\{ label: 'Send reminders', kind: 'handler', handler: 'sendReminders' \}/,
+    "funds/calls' Send reminders is neither a handler nor a stated gap");
+  assert.match(page, /export function ReminderQueue\(/, 'the chase Send reminders opens is gone');
 });
 
 test('the shared surfaces dispatch on the role, and refuse an unknown one', () => {
@@ -1613,8 +1648,11 @@ test('the label says the export is of this view, because it is', () => {
   const builder = read('frontend/src/workspaces/zoneActionBuilder.js');
   assert.match(builder, /label: `\$\{item\.label\} · this view`/,
     'the export button no longer says which rows it covers');
-  assert.match(read('frontend/src/lib/csvExport.js'), /\$\{list\.length\}-rows/,
-    'the filename no longer carries the row count');
+  // D7172: the name is built by `exportFileName`, which a page that says
+  // "Downloaded" also reads; `exportView` hands it the count it writes.
+  const csv = read('frontend/src/lib/csvExport.js');
+  assert.match(csv, /\$\{count\}-rows/, 'the filename no longer carries the row count');
+  assert.match(csv, /exportFileName\(\{ scope, zone, count: list\.length \}\)/, 'the count in the filename is not the rows written');
   // An export over rows that have not LOADED is the one control that stays and
   // goes quiet: the store and the writer both exist, so it renders disabled
   // rather than vanishing like an unbuilt op.
@@ -1700,7 +1738,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasOps(profile);
     const table = tableEntries(SRC);
     const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
-    assert.equal(primaries.length, { founder: 0, investor: 7, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
+    assert.equal(primaries.length, { founder: 0, investor: 8, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
     for (const e of primaries) {
       const zone = e.zone;
       // `canvas:` is the artboard's word where the rendered label differs.

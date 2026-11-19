@@ -23,20 +23,37 @@
 
 /** The four cycles, in the sidebar's order. `question` and `outcome` are the canvas's words. */
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
+import { BUILD_DESTINATIONS, BUILD_OUTCOMES } from './buildNav.js';
 
 export const CYCLES = {
   validate: { key: 'validate', name: 'Validate', question: 'Is this worth building?', outcome: 'Research → Insights → Evidence', action: 'Record a session' },
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
+    // D6029 (BD23): Plan and Progress are Build-level pages, after Overview and before Tools.
+    lead: BUILD_DESTINATIONS,
+    // Tools keeps this address until #5078 makes it one page.
     history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: true } },
   raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Build your deck',
-    // D1221 (#2458): Raise's history is Calls for Capital, Capital relationships' Calls tab.
-    history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships/calls', hash: '', live: true },
-    // D1261 (#2430): Evidence is Raise's own tab, after Overview and before Calls.
+    // D1221 (#2458) made Calls for Capital Raise's history tab. D5081 part 5 (#5081, RA-12): Calls, Commitments and
+    // Closing live inside Capital relationships, so Calls is that tool's own tab (`/raise/capital-relationships/calls`,
+    // unchanged) and no longer a peer of the Raise modules.
+    // D1261 (#2430): Evidence is Raise's own tab, after Overview.
     lead: { key: 'evidence', name: 'Evidence', path: '/raise/evidence' } },
   grow: { key: 'grow', name: 'Grow', question: 'How does this venture become larger and more enduring?', outcome: 'From Traction → Impact', action: 'Share an update',
     // D1056 (#2427): Grow's history is the Reporting desk, its own page, in place of Updates.
     history: { key: 'reporting', name: 'Reporting', path: '/grow/reporting', hash: '', live: true } },
 };
+
+/**
+ * D6029 (#6029, BD23): each Build module's subtitle, the founder outcome it serves (BD23's "After" column),
+ * in place of a line describing its records.
+ */
+export const BUILD_MODULE_OUTCOMES = BUILD_OUTCOMES;
+
+/** A module page's subtitle: Build's outcome line (BD23); elsewhere its caption and how to move between modules. */
+export function moduleSubtitle(cycle, slug, caption) {
+  if (cycle === 'build' && BUILD_MODULE_OUTCOMES[slug]) return BUILD_MODULE_OUTCOMES[slug];
+  return [caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ');
+}
 
 export const CARD_STATES = ['ok', 'empty', 'too_little', 'not_recorded', 'unreadable'];
 
@@ -277,7 +294,9 @@ export function cellView(cell) {
   const links = Array.isArray(cell.links)
     ? cell.links.filter((l) => l && l.text != null && l.text !== '').map((l) => ({ text: String(l.text), href: safeHref(l.href) }))
     : [];
-  return { text: String(cell.text), tone: TONES.includes(cell.tone) ? cell.tone : null, href: safeHref(cell.href), ...(links.length ? { links } : {}) };
+  // #6006: `note`, one line or several, is drawn small under the value (a theme's sources and why it ranks there).
+  const note = (Array.isArray(cell.note) ? cell.note : [cell.note]).filter((n) => typeof n === 'string' && n !== '');
+  return { text: String(cell.text), tone: TONES.includes(cell.tone) ? cell.tone : null, href: safeHref(cell.href), ...(links.length ? { links } : {}), ...(note.length ? { note } : {}) };
 }
 
 /** #6030: a filter option with its count when the read sends one ("Pain linked · 4"). */
@@ -310,9 +329,42 @@ export function cycleTabs(cycle, cards, active = null, search = '', { back = nul
   const history = hist?.live && cardTabs.length && !cardTabs.some((t) => t.name === hist.name)
     ? [{ key: hist.key, name: hist.name, href: `${hist.path}${s}${hist.hash}`, active: active === hist.key }]
     : [];
-  const lead = CYCLES[cycle]?.lead;
-  const leading = lead && cardTabs.length ? [{ key: lead.key, name: lead.name, href: `${lead.path}${s}`, active: active === lead.key }] : [];
+  // A cycle's lead pages come after Overview: Raise's Evidence (D1261), Build's Plan and Progress (D6029).
+  const leads = [].concat(CYCLES[cycle]?.lead || []);
+  const leading = cardTabs.length ? leads.map((lead) => ({ key: lead.key, name: lead.name, href: `${lead.path}${s}`, active: active === lead.key })) : [];
   return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }].concat(leading, history, cardTabs);
+}
+
+/**
+ * D5081 part 5 (#5081, RA-12) — Raise's one navigation: four stages as headings over the modules, with no new
+ * route. A stage names tab keys; Overview leads with no heading, and a module the read sends that no stage names
+ * is drawn after the stages under no heading, so a new module is never dropped.
+ */
+export const RAISE_STAGES = [
+  { label: 'Prepare', keys: ['evidence', 'fundraising-readiness'] },
+  { label: 'Build the story', keys: ['investor-narrative', 'pitch-deck'] },
+  { label: 'Prepare diligence', keys: ['data-room', 'cap-table', 'use-of-funds'] },
+  { label: 'Run the raise', keys: ['capital-relationships'] },
+];
+
+/**
+ * A cycle's tabs as headed groups: `[{ label, tabs }]`, with `label` '' for a group drawn without a heading. Only
+ * Raise has stages (RA-12); every other cycle is one group with no heading, so its tabs are drawn as before. A stage
+ * none of whose modules came back is left out rather than drawn empty.
+ */
+export function cycleTabGroups(cycle, tabs) {
+  const list = Array.isArray(tabs) ? tabs : [];
+  if (cycle !== 'raise') return [{ label: '', tabs: list }];
+  const staged = new Set(RAISE_STAGES.flatMap((g) => g.keys));
+  const byKey = new Map(list.map((t) => [t.key, t]));
+  const groups = [{ label: '', tabs: list.filter((t) => !t.key) }];
+  for (const g of RAISE_STAGES) {
+    const inStage = g.keys.map((k) => byKey.get(k)).filter(Boolean);
+    if (inStage.length) groups.push({ label: g.label, tabs: inStage });
+  }
+  const rest = list.filter((t) => t.key && !staged.has(t.key));
+  if (rest.length) groups.push({ label: '', tabs: rest });
+  return groups.filter((g) => g.tabs.length);
 }
 
 /**
@@ -348,4 +400,14 @@ export function isPlainClick(e) {
 export function linkEvidenceAction(row, first, open) {
   if (row?.keys?.evidence !== 'none' || typeof open !== 'function') return null;
   return { text: 'Link evidence', label: `Link evidence to ${first && !first.nr ? first.text : 'this feature'}`, onClick: open };
+}
+
+/**
+ * D6790 (#6790, GR-23): an obligation with no owner offers "Pick owner" in
+ * place of Edit. It opens the same Edit (the same PATCH), focused on the
+ * owner listbox of the company team. Any other row: null.
+ */
+export function pickOwnerAction(row, first, open) {
+  if (row?.keys?.owner !== 'none' || typeof open !== 'function') return null;
+  return { text: 'Pick owner', label: `Pick an owner for ${first && !first.nr ? first.text : 'this obligation'}`, onClick: open };
 }

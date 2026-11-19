@@ -31,7 +31,9 @@ import { CYCLE_NAMES, ROOT_ACTION_PATHS, phoneFocus, phoneIndex, rootMeter, then
 /** A plain tap on the cycle's own action route opens it through `openAction`, as the desktop button does. */
 const plainTap = (e) => !e.defaultPrevented && (e.button ?? 0) === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '' }) {
+// D6028 (#6028, BD2): `after` is drawn between the focus and the index (Build's Needs attention), and
+// `planLine` replaces the plan row's line with the plan's own counts.
+export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '', after = null, planLine = null }) {
   const name = CYCLE_NAMES[cycle] || cycle;
   const overview = `${name} · Overview`;
   // D4602 (#4602, BD2): Build's tabs sit above every state, so the plan is reachable while the overview loads or fails.
@@ -79,7 +81,7 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
 
   // D4602 (#4602, BD2): Build's phone root names its plan, one tap away, with the venture.
   const planRow = cycle === 'build'
-    ? [{ key: 'build-plan', title: 'Build Plan', description: DOOR_LINE, to: planHref('plan', search), testid: 'phone-index-build-plan' }]
+    ? [{ key: 'build-plan', title: 'Build Plan', description: planLine || DOOR_LINE, to: planHref('plan', search), testid: 'phone-index-build-plan' }]
     : [];
   const groups = [{
     label: `Everything else in ${name}`,
@@ -142,8 +144,9 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
           )}
         </section>
       )}
+      {after}
       {/* PhoneRows draws its own 22px gutter; the body already has one. */}
-      <div className={`-mx-[22px] ${focus ? 'mt-[26px]' : ''}`.trim()}>
+      <div className={`-mx-[22px] ${focus || after ? 'mt-[26px]' : ''}`.trim()}>
         <PhoneRows groups={groups} />
       </div>
     </div>

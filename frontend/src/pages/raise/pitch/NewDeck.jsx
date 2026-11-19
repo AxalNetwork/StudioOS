@@ -251,11 +251,11 @@ function Flow({ projectId, q, navigate, params, setParams }) {
 
   return (
     <OnePage ctx={ctx} projectId={projectId} q={q} sources={sources} items={items} versions={versionList} methods={methods} recommended={recommended}
-      outlineProposal={proposal} onLanded={landed} />
+      outlineProposal={proposal} onLanded={landed} manual={params.get('start') === 'manual'} />
   );
 }
 
-function OnePage({ ctx, projectId, q, sources, items, versions, methods, recommended, outlineProposal, onLanded }) {
+function OnePage({ ctx, projectId, q, sources, items, versions, methods, recommended, outlineProposal, onLanded, manual }) {
   // The brief the context read gives (#3877's inferred, else the fast path): the page starts from it.
   const initial = useMemo(() => fastBrief(ctx), [ctx]);
   const o = outlineProposal?.outline || null;
@@ -361,14 +361,14 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
 
   return (
     <div className="flex flex-col gap-4" data-testid="pitch-new-page">
-      <OneClickBuild projectId={projectId} q="" ctx={ctx} as="section" testId="pitch-new-fast" title={ONE_CLICK_TITLE} line={ONE_CLICK_LINE}
+      {!manual && <OneClickBuild projectId={projectId} q="" ctx={ctx} as="section" testId="pitch-new-fast" title={ONE_CLICK_TITLE} line={ONE_CLICK_LINE}
         brief={audience && length ? { audience, length, label, cards: standard.length || null, why: null, round_ref: ctx?.round?.uid ?? null } : null} exclude={exclude} onBuilt={onLanded}>
         {sources.status !== 'idle' ? (
           <div className="max-w-[420px]" data-testid="pitch-new-fast-coverage">
             <CoverageMeter coverage={sources.data?.coverage} status={sources.status} size="S" onRetry={sources.retry} />
           </div>
         ) : null}
-      </OneClickBuild>
+      </OneClickBuild>}
       <Refusal refusal={refusal} />
 
       <section className={`${CARD} flex flex-col gap-3 p-4`} aria-labelledby="pitch-new-audience-title" data-testid="pitch-new-audience">

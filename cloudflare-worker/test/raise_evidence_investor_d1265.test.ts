@@ -2,7 +2,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -12,7 +11,6 @@ import { buildCandidates, acceptItem, setSharing, linkClaim, evidenceAudience, i
 import { investorPage } from '../src/services/roundCalls.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true }); loadSchema(db);
   const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all().map((r: any) => r.sql); db.close(); return ddl;

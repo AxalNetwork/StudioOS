@@ -10,7 +10,7 @@
  * line says the date it speaks for. A Worker `detail` never reaches the page:
  * a refusal is read by its `code`.
  */
-import { day } from './portfolioModel';
+import { day, daysBetween } from './portfolioModel';
 
 export const REQUEST_KINDS = Object.freeze([
   { value: 'mark', label: 'Record a current mark' },
@@ -50,10 +50,12 @@ export function requestStatusOf(req) {
   }
   if (req.state === 'resolved' || req.state === 'declined') {
     const date = day(req.resolved_at);
-    const word = req.state === 'resolved' ? 'Resolved' : 'Declined';
+    // D6909 (PRM21): a resolved request reads Answered, and says a mark was recorded when it links one.
+    const markUid = req.resolved_mark_uid || null;
+    const word = req.state === 'resolved' ? (markUid ? 'Answered · mark recorded' : 'Answered') : 'Declined';
     return {
       state: req.state, label: date ? `${word} · ${date}` : word, date, kind, reason: req.reason || null,
-      markUid: req.resolved_mark_uid || null, note: req.resolution_note || null,
+      markUid, note: req.resolution_note || null,
     };
   }
   return null;
@@ -136,4 +138,142 @@ export function answerRefusalWords(err) {
     case 'note_required': return 'Say how the request was answered.';
     default: return 'The answer could not be saved. Nothing was changed; try again.';
   }
+}
+
+/* ------------------------------------------------- D6909 part 2 (PRM20–PRM23)
+ * Request a mark as Prepare → Review → Confirm → Receipt, with optional
+ * evidence, the investor's requests for one company, and HQ's queue across
+ * companies. The evidence rules are the Worker's own (routes/mark_requests.ts),
+ * so the sheet never offers a request it would refuse.
+ */
+
+export const REQUEST_STEPS = Object.freeze(['Prepare', 'Review', 'Confirm', 'Receipt']);
+export const DECLINE_STEPS = Object.freeze(['Scope', 'Review', 'Result']);
+export const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
+export const EVIDENCE_TYPES = Object.freeze(['application/pdf', 'image/png', 'image/jpeg', 'image/webp']);
+export const EVIDENCE_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp';
+const EVIDENCE_EXT = /\.(pdf|png|jpe?g|webp)$/i;
+export const URL_MAX = 2000;
+
+/** A link as evidence: http or https, no credentials, at most 2,000 characters. Null when it is not one. */
+export function evidenceLink(value) {
+  const text = String(value || '').trim();
+  if (!text || text.length > URL_MAX) return null;
+  let u;
+  try { u = new URL(text); } catch { return null; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  if (u.username || u.password) return null;
+  return u.toString();
+}
+
+/** The draft's evidence problem: null when none is given or it is usable, else the sentence. */
+export function evidenceProblem({ link, file } = {}) {
+  const hasLink = Boolean(String(link || '').trim());
+  if (hasLink && file) return 'Give a link or a file, not both.';
+  if (hasLink && !evidenceLink(link)) return 'The link must be an http or https address of at most 2,000 characters.';
+  if (file) {
+    const typed = EVIDENCE_TYPES.includes(String(file.type || '').toLowerCase()) || EVIDENCE_EXT.test(String(file.name || ''));
+    if (!typed) return 'Evidence must be a PDF, PNG, JPEG or WebP file.';
+    if (!(Number(file.size) > 0)) return 'The file is empty.';
+    if (Number(file.size) > EVIDENCE_MAX_BYTES) return 'Evidence files are at most 10 MB.';
+  }
+  return null;
+}
+
+/** File size in words: `[2.4 MB]`, `[820 KB]`. Null when not a size. */
+export function sizeWords(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/** A stored request's evidence in words, or null for none. The storage key is never handed out. */
+export function evidenceWords(evidence) {
+  if (!evidence || typeof evidence !== 'object') return null;
+  if (evidence.kind === 'link' && evidence.url) return evidence.url;
+  if (evidence.kind === 'file') {
+    const size = sizeWords(evidence.size_bytes);
+    return `${evidence.name || 'File'}${size ? ` · ${size}` : ''}`;
+  }
+  return null;
+}
+
+/** The draft's evidence in words, for Review and Confirm. */
+export function draftEvidenceWords({ link, file } = {}) {
+  if (file) { const size = sizeWords(file.size); return `${file.name || 'File'}${size ? ` · ${size}` : ''}`; }
+  const url = evidenceLink(link);
+  return url || 'None';
+}
+
+/** Everything that stops Prepare from moving to Review: null when it can. */
+export function prepareProblem(draft) {
+  return draftProblem(draft) || evidenceProblem(draft);
+}
+
+/** One company's requests, newest first: what the mark-history Sheet lists. */
+export function companyRequests(items, projectUid) {
+  return (Array.isArray(items) ? items : [])
+    .filter((it) => it && it.uid && it.project_uid === projectUid)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+}
+
+/** "3 requests · 1 open", never a count that hides an unread list. */
+export function requestCountWords(list) {
+  const n = list.length;
+  const open = list.filter((r) => r.state === 'open').length;
+  return `${n} request${n === 1 ? '' : 's'} · ${open} open`;
+}
+
+/** HQ's queue as rows: oldest first as the Worker sent it, each with its age in days on `today`. */
+export function queueRows(items, today) {
+  return (Array.isArray(items) ? items : []).filter((it) => it && it.uid && it.state === 'open').map((it) => {
+    const age = daysBetween(it.created_at, today);
+    return {
+      uid: it.uid, projectUid: it.project_uid, company: it.project_name || 'Company not recorded',
+      requester: requesterOf(it), kind: kindLabel(it.kind) || 'Request', reason: it.reason || '',
+      evidence: evidenceWords(it.evidence), hasFile: Boolean(it.evidence && it.evidence.kind === 'file'),
+      // Only an http or https link becomes an address; anything else is shown as text.
+      href: it.evidence && it.evidence.kind === 'link' ? evidenceLink(it.evidence.url) : null,
+      requestedOn: day(it.created_at), age: age == null ? null : `${Math.max(0, age)} d`,
+      latestMark: it.latest_mark && it.latest_mark.uid ? `${day(it.latest_mark.as_of_date) || 'Date not recorded'}` : null,
+    };
+  });
+}
+
+/** What a decline needs before it can go to Review: null when it can, else the sentence. */
+export function declineProblem(note) {
+  return answerProblem({ state: 'declined', note });
+}
+
+// ---------------------------------------------------------------------------
+// D6909 part 3 (#6909, PRM22 B/C, PRM18 header): Record a mark from the queue
+// answers that request; the request's state shows in the mark-history header.
+// ---------------------------------------------------------------------------
+
+/** The line above the mark's write flow when HQ opened it from a queue row (PRM22 B). */
+export function answeringLine(row) {
+  if (!row) return null;
+  const when = row.requestedOn ? ` · requested ${row.requestedOn}` : '';
+  return `Answers the request from ${row.requester || 'an investor'} · ${row.kind || 'Request'}${when}`;
+}
+
+/**
+ * What the receipt says about the request once the mark is saved (PRM22 C). `outcome` is
+ * 'answered', 'failed' or null (not tried). A failed answer never hides the mark: it was saved.
+ */
+export function answeredWords(outcome, row) {
+  if (!row || !outcome) return null;
+  const who = row.requester || 'the investor';
+  if (outcome === 'answered') return `Request from ${who} answered with this mark. They see Answered · mark recorded.`;
+  return `The mark is saved, but the request from ${who} was not answered. Resolve it below with this mark.`;
+}
+
+/** The mark-history header chip (PRM18): a glyph and a word for each state, never colour alone. */
+export function headerChip(req) {
+  const s = requestStatusOf(req);
+  if (!s) return null;
+  const glyph = s.state === 'requested' ? '◷' : s.state === 'resolved' ? '✓' : '✕';
+  const tone = s.state === 'requested' ? 'is-pending' : s.state === 'resolved' ? 'is-ok' : 'is-none';
+  return { glyph, tone, label: s.label, note: s.state === 'declined' ? s.note : null };
 }

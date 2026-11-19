@@ -25,7 +25,9 @@ test('A6 normalizes both relationship envelopes and reads only approved endpoint
   // #5310 (D5310): the NW1 overview's reads, each its own source so one failure never blanks the page.
   for (const call of ["contactsBookApi.book('', 1)", 'contactsBookApi.followUpsDue(3)', 'relationshipsApi.summary()',
     "relationshipsApi.introRequests({ status: 'pending' })", "relationshipsApi.introRequests({ status: 'accepted' })",
-    "relationshipsApi.introRequests({ status: 'made' })", "api.introPropositions({ status: 'pending' })", 'api.contactsList()']) {
+    "relationshipsApi.introRequests({ status: 'made' })", "api.introPropositions({ status: 'pending' })", 'api.contactsList()',
+    // D5310-p5: the recorded-events read (D6557) behind Recent network activity.
+    'relationshipsApi.activity(ACTIVITY_LIMIT)']) {
     assert.ok(desk.includes(call), call);
   }
   // NW1's curated matches accept and decline (one credit, gated on a read balance); nothing else writes.

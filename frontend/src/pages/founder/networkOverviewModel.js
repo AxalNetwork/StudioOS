@@ -43,7 +43,7 @@ export function daysBetween(fromIso, now = Date.now()) {
 }
 const day = (iso) => (iso ? String(iso).slice(0, 10) : null);
 
-/** The four tiles. Each is `{ key, label, state, value, sub, href? }`; `state` is the read's. */
+/** The four tiles. Each is `{ key, label, state, value, sub, href?, mark? }`; `state` is the read's. */
 export function overviewTiles({ book, followUps, summary, pending, accepted }) {
   const tile = (key, label, read, value, sub, href) => {
     if (!read || read.status === 'loading') return { key, label, state: 'loading', value: null, sub: null, href };
@@ -57,10 +57,13 @@ export function overviewTiles({ book, followUps, summary, pending, accepted }) {
   const acc = has(accepted) ? (n(accepted.data?.totals?.sent) ?? 0) + (n(accepted.data?.totals?.received) ?? 0) : null;
   const active = waiting === null || acc === null ? null : waiting + acc;
   const activeRead = !has(pending) ? pending : !has(accepted) ? accepted : (pending.status === 'stale' || accepted.status === 'stale' ? { ...pending, status: 'stale' } : pending);
+  // NW1 and NW8 mark a tile that asks for something (canvas `.k.att`): an amber edge and a glyph,
+  // never colour alone. Only a read count above zero is marked: an unread or loading tile has no value.
+  const mark = (t, glyph) => (t.value > 0 ? { ...t, mark: glyph } : t);
   return [
     tile('connections', 'Connections', book, total, total === null ? null : `${total === 1 ? 'person' : 'people'} in your relationship book`, '/network/relationships'),
-    tile('attention', 'Needs attention', followUps, overdue, overdue === null ? null : `follow-up${overdue === 1 ? '' : 's'} past their due date`),
-    tile('decide', 'Awaiting my action', summary, decide, decide === null ? null : `team request${decide === 1 ? '' : 's'} asking you to decide`),
+    mark(tile('attention', 'Needs attention', followUps, overdue, overdue === null ? null : `follow-up${overdue === 1 ? '' : 's'} past their due date`), '◷'),
+    mark(tile('decide', 'Awaiting my action', summary, decide, decide === null ? null : `team request${decide === 1 ? '' : 's'} asking you to decide`), '!'),
     tile('active', 'Active introductions', activeRead, active, active === null ? null : `${waiting} waiting · ${acc} accepted, not yet made`),
   ];
 }
@@ -179,8 +182,41 @@ export function sharingLine(summary) {
 
 /** The relationship strength note (NW1, NW5): the platform records no strength score. */
 export const STRENGTH_NOT_RECORDED = 'Relationship strength: Not recorded. The platform stores follow-ups, notes and introductions, not a strength score, so none is shown.';
-/** NW1's activity feed: no single read assembles it yet (D5310, Backend required: #6557). */
-export const ACTIVITY_NOT_RECORDED = 'Not recorded. No single read assembles follow-ups completed, introductions and imports into one list yet, so none is shown here. Each is in its own zone.';
+/**
+ * NW1's Recent network activity (D5310-p5), from `GET /api/relationships/activity` (D6557):
+ * `{ events, sources, complete }`. Each event is a recorded action and its time, newest first;
+ * an import adds the count it created. The read names no person, so no row does.
+ *
+ * A source the read could not reach is named, never left out: a list with one source unreadable
+ * says which, and a list that is empty because a source failed is not "nothing recorded".
+ */
+export const ACTIVITY_LIMIT = 5;
+const ACTIVITY_SOURCES = { follow_ups: 'Follow-ups', introductions: 'Introductions', imports: 'Imports', duplicate_reviews: 'Duplicate reviews' };
+const ACTIVITY_GLYPH = {
+  follow_up_completed: '✓', intro_accepted: '✓', intro_made: '✓✓', intro_requested: '→', intro_declined: '×',
+  contacts_imported: '⇩', duplicate_merged: '⇄', duplicate_kept_both: '⇄', duplicate_dismissed: '⇄',
+};
+export function activityView(read) {
+  if (!read || read.status === 'loading') return { state: 'loading', rows: [], unread: [] };
+  if (!has(read)) return { state: 'unreadable', rows: [], unread: [] };
+  const d = read.data || {};
+  const unread = Object.entries(d.sources || {}).filter(([, v]) => v?.state !== 'readable').map(([k]) => ACTIVITY_SOURCES[k] || k);
+  const rows = (Array.isArray(d.events) ? d.events : []).slice(0, ACTIVITY_LIMIT).map((e, i) => {
+    const count = Number.isFinite(Number(e.label_parts?.count)) && e.kind === 'contacts_imported' ? Number(e.label_parts.count) : null;
+    return {
+      key: `${e.kind}-${e.at}-${i}`,
+      glyph: ACTIVITY_GLYPH[e.kind] || '•',
+      tone: e.kind === 'intro_declined' ? 'off' : /completed|accepted|made/.test(e.kind) ? 'ok' : 'plain',
+      action: e.label_parts?.action || NOT_RECORDED,
+      detail: count == null ? null : `${count} added`,
+      at: String(e.at || '').replace('T', ' ').slice(0, 16),
+    };
+  });
+  if (d.complete === false && !unread.length) unread.push('One source');
+  const state = rows.length ? (read.status === 'stale' ? 'stale' : 'ready') : unread.length ? 'partial-empty' : 'empty';
+  return { state, rows, unread };
+}
+export const ACTIVITY_EMPTY = 'No recorded activity yet. Completed follow-ups, introductions, imports and duplicate reviews appear here as they are recorded.';
 /** NW1.2 step 2: the book has no hand-added writer yet (D5310, Backend required: #6558). */
 export const ADD_PERSON_UNBUILT = 'Adding a person by hand is not built yet: your book is filled by importing today.';
 
