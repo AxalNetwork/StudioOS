@@ -56,6 +56,7 @@ import { MyFundsQueryError, catalogueHolder, fundIdentity, listMyFunds, parseMyF
 import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkDetail, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
 import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, EVIDENCE_PARTS, getCompany, getCompanyPart, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
+import { admitsCompanies, refuseCompanies } from '../services/researchCompaniesAccess';
 import { DirectoryQueryError, citeSource, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { SOURCE_WITHDRAWN_MESSAGE, withdrawnSourceOf } from '../services/researchFundProfile';
 import { scopedDecisions } from './ic';
@@ -4113,7 +4114,8 @@ const MARKET_SECTOR_ALIASES: Record<string, string[]> = {
 };
 
 research.get('/company-directory', async (c) => {
-  await requireAuth(c);
+  // D7178: a held Founder or Advisor licence, an active Lab, or an admin; anyone else is refused (403).
+  if (!admitsCompanies(await requireAuth(c))) return refuseCompanies(c);
   const sectorKey = String(c.req.query('sector') || '').trim().slice(0, 120).toLowerCase();
   const sectorLabel = sectorKey.replace(/-/g, ' ');
   const sectorTerms = sectorKey ? [...new Set(MARKET_SECTOR_ALIASES[sectorKey] || [sectorLabel])].filter(Boolean) : [];
@@ -4139,7 +4141,8 @@ research.get('/company-directory', async (c) => {
 // D7180: `?part=<collection>` reads one evidence collection on its own, so its
 // Retry does not re-read the company.
 research.get('/company-directory/:uid', async (c) => {
-  await requireAuth(c);
+  // D7178: the directory's rule, checked before the record is read, so a refusal never says whether it exists.
+  if (!admitsCompanies(await requireAuth(c))) return refuseCompanies(c);
   const part = c.req.query('part');
   if (part != null && !EVIDENCE_PARTS.includes(part)) {
     return c.json({ detail: `part must be one of ${EVIDENCE_PARTS.join(', ')}`, field: 'part' }, 400);

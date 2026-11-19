@@ -6,6 +6,7 @@ import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
 import { rememberLabVenture } from './labVenture.js';
 import { readAllPages } from './pagedRead.js';
+import { sessionEndedRedirectFor } from './pendingNext.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, so unrelated features stop colliding in this file.
@@ -668,7 +669,9 @@ export async function request(path, options = {}) {
           // even though we're about to leave the page; this is what makes a
           // silent "session expired → /login" redirect debuggable in prod.
           reportError('api:session-expired-redirect', new Error(`401 on ${path}; redirecting ${currentPath} → /login`));
-          window.location.href = '/login';
+          // D7178 (#7044, RCL04B): an area that keeps its destination (Companies, Grow, Learning) goes to
+          // `/login?next=<this page>&ended=1`, through the route guard's own sanitiser; every other page to `/login`.
+          window.location.href = sessionEndedRedirectFor(window.location);
         }
         throw new Error('Session expired');
       }

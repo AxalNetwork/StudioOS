@@ -12,6 +12,7 @@ import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
 import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
+import { RestoredStatus } from '../pages/research/CompaniesAccess.jsx';
 
 export function benchmarkingExportView(rows) {
   return {
@@ -449,6 +450,8 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           />
         </div>
       )}
+      {/* D7178 (#7044, RCL05B): the directory sign-in returned to says so once. */}
+      {slug === 'companies' && <RestoredStatus path={`${location.pathname}${location.search}`} filters={!!location.search} />}
       {body}
     </WorkspaceShell>
   );
