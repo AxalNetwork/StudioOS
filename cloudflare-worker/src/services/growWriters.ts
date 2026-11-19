@@ -1022,6 +1022,51 @@ export async function addPartnerDeal(env: Env, pid: number, user: User, partnerU
   return { uid: id };
 }
 
+/**
+ * D6114 (#6114): a deal of this partner, by its uid. The deal's partner must be
+ * the partner named and that partner the venture's, so a deal of another
+ * partner, or of another venture's, is a 404 before anything is written.
+ */
+async function partnerDeal(env: Env, pid: number, partnerUid: string, dealUid: unknown) {
+  if (typeof dealUid !== 'string' || !dealUid) throw new Refused(404, 'Not found', 'deal');
+  const row = await env.DB.prepare(
+    `SELECT d.id, d.customer, d.closed_on, d.amount_cents, d.currency FROM growth_partner_deals d JOIN growth_partners p ON p.id = d.partner_id
+      WHERE d.uid = ? AND p.uid = ? AND p.project_id = ?`,
+  ).bind(dealUid, partnerUid, pid).first<{ id: number; customer: string; closed_on: string | null; amount_cents: number | null; currency: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'deal');
+  return row;
+}
+
+/**
+ * D6114 (#6114): a deal's edit. Only the keys the body sends change; an amount
+ * keeps its currency unless the body names another, and an amount cleared
+ * clears its currency. Logged on the partner; the customer is never named.
+ */
+export async function updatePartnerDeal(env: Env, pid: number, user: User, partnerUid: string, dealUid: unknown, b: Body) {
+  const d = await partnerDeal(env, pid, partnerUid, dealUid);
+  let customer = d.customer;
+  if (has(b, 'customer')) { customer = str(b.customer, 200) ?? ''; if (!customer) throw new Refused(400, 'A deal names its customer', 'customer'); }
+  const closed = has(b, 'closed_on') ? day(b.closed_on, 'closed_on') : d.closed_on;
+  const amount = has(b, 'amount_cents') ? centsOrNull(b.amount_cents, 'amount_cents') : d.amount_cents;
+  const currency = currencyFor(amount, has(b, 'currency') ? b.currency : d.currency, 'currency');
+  await env.DB.batch([
+    env.DB.prepare("UPDATE growth_partner_deals SET customer = ?, closed_on = ?, amount_cents = ?, currency = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(customer, closed, amount, currency, d.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_updated', summary: 'Deal updated' })),
+  ]);
+  return { uid: String(dealUid) };
+}
+
+/** D6114 (#6114): removes a deal of this partner, logged on the partner without the customer. */
+export async function removePartnerDeal(env: Env, pid: number, user: User, partnerUid: string, dealUid: unknown) {
+  const d = await partnerDeal(env, pid, partnerUid, dealUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM growth_partner_deals WHERE id = ?').bind(d.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_removed', summary: 'Deal removed' })),
+  ]);
+  return { uid: String(dealUid), deleted: true as const };
+}
+
 export async function addEntryStep(env: Env, pid: number, user: User, marketUid: string, b: Body) {
   const m = await owned<{ id: number }>(env, 'SELECT id FROM markets WHERE uid = ? AND project_id = ?', marketUid, pid);
   const text = str(b.text, 300);
@@ -1112,6 +1157,44 @@ export async function addAgendaItem(env: Env, pid: number, user: User, eventId: 
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: e.id, action: 'grow_agenda_added', summary: 'Agenda item added' })),
   ]);
   return { uid: id };
+}
+
+/**
+ * D6114 (#6114): an agenda item of this obligation, by its uid. The item's
+ * obligation must be the one named and that obligation the venture's, so an
+ * item of another obligation, or of another venture's, is a 404.
+ */
+async function agendaItem(env: Env, pid: number, eventId: number, itemUid: unknown) {
+  if (typeof itemUid !== 'string' || !itemUid || !Number.isSafeInteger(eventId)) throw new Refused(404, 'Not found', 'item');
+  const row = await env.DB.prepare(
+    `SELECT a.id, a.text, a.owner_name FROM obligation_agenda_items a JOIN compliance_events e ON e.id = a.event_id
+      WHERE a.uid = ? AND e.id = ? AND e.project_id = ?`,
+  ).bind(itemUid, eventId, pid).first<{ id: number; text: string; owner_name: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'item');
+  return row;
+}
+
+/** D6114 (#6114): an agenda item's edit; only the sent keys change. Logged on the obligation, never the item's text. */
+export async function updateAgendaItem(env: Env, pid: number, user: User, eventId: number, itemUid: unknown, b: Body) {
+  const a = await agendaItem(env, pid, eventId, itemUid);
+  let text = a.text;
+  if (has(b, 'text')) { text = str(b.text, 300) ?? ''; if (!text) throw new Refused(400, 'An agenda item says what is discussed', 'text'); }
+  const owner = has(b, 'owner_name') ? str(b.owner_name, 120) : a.owner_name;
+  await env.DB.batch([
+    env.DB.prepare("UPDATE obligation_agenda_items SET text = ?, owner_name = ?, updated_at = datetime('now') WHERE id = ?").bind(text, owner, a.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: eventId, action: 'grow_agenda_updated', summary: 'Agenda item updated' })),
+  ]);
+  return { uid: String(itemUid) };
+}
+
+/** D6114 (#6114): removes an agenda item of this obligation, logged on the obligation. */
+export async function removeAgendaItem(env: Env, pid: number, user: User, eventId: number, itemUid: unknown) {
+  const a = await agendaItem(env, pid, eventId, itemUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM obligation_agenda_items WHERE id = ?').bind(a.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: eventId, action: 'grow_agenda_removed', summary: 'Agenda item removed' })),
+  ]);
+  return { uid: String(itemUid), deleted: true as const };
 }
 
 /** The month length each repeat moves an obligation by (decision 2); a one-time obligation is completed instead. */

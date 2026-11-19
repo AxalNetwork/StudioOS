@@ -25,7 +25,7 @@
 // its why-now and thesis, because the signals store has no "what a founder
 // could build" or confidence column for this page to read.
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { Card, DataState } from '../../ui';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
@@ -40,6 +40,7 @@ import { directoryHref } from './fundDirectoryRead';
 import { formatMinorOrCount } from '../../lib/money';
 import ResearchActions from './ResearchActions.jsx';
 import { canAddToResearch } from './researchComparisons.js';
+import { RestoredStatus } from './CompaniesAccess.jsx';
 import { EVIDENCE_COLLECTIONS, UNSOURCED, collectionState, notRecordedFields, replaceCollection } from './companyProfileRead.js';
 import { EvidenceDrawer, EvidenceSection, KeyMetrics, KindBadge, NotRecordedGroup, SectorPeers } from './CompanyEvidence.jsx';
 
@@ -237,6 +238,7 @@ export function CompanyHeader({ item, tracked, research = null }) {
 
 export default function CompanyProfile({ role }) {
   const { uid } = useParams();
+  const { pathname, search } = useLocation();
   const links = useResearchLinks(role);
   const company = useRead(() => researchCompaniesApi.get(uid), [uid]);
   const tracked = company.data?.tracked_sector;
@@ -278,7 +280,12 @@ export default function CompanyProfile({ role }) {
   );
   if (company.loading) return <div data-testid="company-profile" className="space-y-4">{back}<Card><Loading what="the company" /></Card></div>;
   if (company.error?.status === 404) {
-    return <div data-testid="company-profile" className="space-y-4">{back}<Card variant="dashed"><h1 className="text-sm font-extrabold">Company not found</h1><p className="mt-1 text-[12px] text-axal-muted">No directory company has this id.</p></Card></div>;
+    // D7178 (RCL10): admitted, but the record is gone. A way back, not a dead end.
+    return <div data-testid="company-profile" className="space-y-4">{back}<Card variant="dashed"><h1 className="text-sm font-extrabold">Company not found</h1><p className="mt-1 text-[12px] text-axal-muted">No directory company has this id. It may have been removed or merged.</p><Link to={results.href} className="mt-3 inline-flex min-h-[44px] items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep">Back to Companies</Link></Card></div>;
+  }
+  // D7178: the Worker refuses an account Companies is not open to (403). A refusal is an answer, not a failed read.
+  if (company.error?.status === 403) {
+    return <div data-testid="company-profile" className="space-y-4">{back}<Card><DataState state="refused" what="This company" reason="Companies is open to Founder and Advisor licences." /></Card></div>;
   }
   if (company.error || !company.data) return <div data-testid="company-profile" className="space-y-4">{back}<Unreadable what="The company directory" onRetry={company.retry} /></div>;
 
@@ -288,6 +295,7 @@ export default function CompanyProfile({ role }) {
   const counts = { peers: d.peers?.status === 'ok' ? d.peers.total : null, evidence: evidenceTotal };
   return (
     <div data-testid="company-profile" className="space-y-6">
+      <RestoredStatus path={`${pathname}${search}`} />
       <nav aria-label="Breadcrumb" className="text-[12px] text-axal-muted"><Link to={results.href} state={{ via: 'breadcrumb' }} className="underline">Companies</Link> / <span className="text-axal-ink dark:text-gray-100">{d.item.name}</span></nav>
       {back}
       <CompanyHeader item={d.item} tracked={tracked}

@@ -239,14 +239,15 @@ They are fixed by D4566 and D7147.
 | Credential | Holds | Lives in | Lifetime |
 | --- | --- | --- | --- |
 | **Provisioning token** | An account-owned Cloudflare API token with Workers Scripts Admin, D1 Edit, Workers KV Storage Edit, Queues Edit and Workers R2 Storage Edit. **No zone permission.** Creating a Worker needs product-level Workers Admin. | The owner's shell only | One run. Revoke it at step 11. |
-| **Staging token** | An account-owned token with Workers Editor scoped to **Specified Workers: `studioos-preview`** and D1 Edit. Scope D1 Edit to `studioos-db-preview` if the dashboard offers per-database scope. **No zone permission** and no Workers Admin. | The GitHub environment `staging`, secret `CLOUDFLARE_API_TOKEN` | Until rotated |
+| **Staging token** | An account-owned token with Workers Editor scoped to **Specified Workers: `studioos-preview`** and D1 Edit. D1 Edit **scoped to `studioos-db-preview` only** (owner decision, D7147-p3). **No zone permission** and no Workers Admin. | The GitHub environment `staging`, secret `CLOUDFLARE_API_TOKEN` | Until rotated |
 | `CLOUDFLARE_ACCOUNT_ID` | The account id | The `staging` environment secret | — |
 
 The staging token cannot create a Worker. It cannot deploy or change
 `studioos`, because it is scoped to one Worker. It cannot attach a custom
-domain, because it has no zone permission. **One gap remains:** if D1 Edit can
-only be granted for the whole product, this token can write to `studioos-db`.
-The owner decides whether to accept that (open question 3). The `staging`
+domain, because it has no zone permission. **It must not reach `studioos-db`:**
+the owner requires the D1 grant scoped to the one staging database (D7147-p3).
+If the token dashboard offers D1 Edit only for the whole account, stop at step
+11 and report it on #7147; do not install a product-wide token. The `staging`
 environment is restricted to `main` and holds no production secret.
 
 ## Provisioning runbook
@@ -329,15 +330,28 @@ write creates the dataset.
 
 ### Step 5: write the ids (a reviewed PR)
 
-Open one PR that changes `wrangler.toml` `[env.preview]` ids only. It
-replaces the four `REPLACE_WITH_PREVIEW_…` values with `D1_ID` and the three
-KV ids from steps 1 and 2. Namespace and database ids are public configuration
-(D681). The same PR:
+Write the four ids with the writer, not by hand (D7147-p3). It replaces the
+four `REPLACE_WITH_PREVIEW_…` values in `[env.preview]` and nothing else,
+checks each id's format, refuses an id production uses or a repeated KV id,
+and refuses any result the static isolation check rejects. With
+`--workers-subdomain` it also corrects `APP_URL` and `EXTRA_DEV_ORIGINS` to the
+real `studioos-preview.<subdomain>.workers.dev` host (open question 4); the
+subdomain is on the dashboard's Workers overview, or `wrangler whoami`.
 
-- makes `--static` refuse a placeholder in `[env.preview]` (#7147: "`--static`
-  stops accepting placeholders once the ids are real");
-- updates `cloudflare-worker/test/preview_isolation_4566.test.mjs`, which
-  today expects the four placeholders.
+```bash
+cd "$ROOT" && git switch -c agent/<you>/7147-staging-ids origin/main
+node scripts/staging-write-ids.mjs --d1 "$D1_ID" \
+  --kv-tokens <studioos-preview-tokens id> --kv-rate-limits <studioos-preview-rate-limits id> \
+  --kv-oauth <studioos-preview-oauth id> --workers-subdomain <subdomain>
+node scripts/check-preview-isolation.mjs --static   # prints "ids provisioned"
+git diff --stat                                      # wrangler.toml only
+```
+
+Namespace and database ids are public configuration (D681). The PR needs no
+other file: `--static` already refuses a half-written set, so once the ids are
+real a placeholder cannot come back without all four (a tear-down), and
+`cloudflare-worker/test/preview_isolation_4566.test.mjs` accepts either
+consistent state.
 
 Steps 6 to 10 run from `main` after it merges.
 
@@ -469,13 +483,15 @@ arrive in a new step-5 PR.
    to be refused at upload. `MEETING_BOT` is `"off"` in preview, and the guards
    refuse a preview with no binding if it is switched on. The meeting-bot
    preview host stays out of #7147's scope.
-3. **The D1 scope of the staging token.** Accept product-level D1 Edit if
-   per-database scope is not offered, or require it.
+3. **The D1 scope of the staging token. Settled, 2026-11-18: require
+   single-database scope** (D7147-p3). Product-level D1 Edit is not accepted;
+   if it is the only grant offered, step 11 stops and reports.
 4. **The preview host vars.** `APP_URL` and `EXTRA_DEV_ORIGINS` in
    `[env.preview.vars]` name `https://studioos-preview.workers.dev`. A
    workers.dev host is `studioos-preview.<account subdomain>.workers.dev`, so
-   the vars name a host that does not exist. Should the step-5 PR correct them?
-   They are vars, not ids.
+   the vars name a host that does not exist. The step-5 writer corrects them
+   when given `--workers-subdomain`; leave the flag off to keep them as they
+   are. They are vars, not ids.
 
 ## Related
 

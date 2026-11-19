@@ -184,7 +184,6 @@ const ALLOW = [
     "frontend/src/pages/research/FundDossier.jsx": 2,
     "frontend/src/pages/research/FundsZone.jsx": 1,
     "frontend/src/pages/research/myFundsRead.js": 1,
-    "frontend/src/pages/research/marketReadingRead.js": 5,
     "frontend/src/pages/wellbeing/wellbeingModel.js": 1,
     "cloudflare-worker/src/routes/admin_network_reads.ts": 1,
     "cloudflare-worker/src/routes/admin_partner_firms.ts": 1,
