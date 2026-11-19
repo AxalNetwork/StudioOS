@@ -371,3 +371,4 @@ catalogue version only in the fixture.
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `research_global_funds_7585.test.ts` | D7585: historical preservation, original verification dates, independent source citation, competing manager identities, country filters and in-memory guard mutations for the next worldwide import. |

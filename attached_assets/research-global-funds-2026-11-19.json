@@ -1,0 +1,2212 @@
+{
+  "schema_version": 1,
+  "source": {
+    "name": "Axal VC verified global fund managers (2026-11-19)",
+    "title": "Axal VC worldwide fund-manager evidence, 19 November 2026",
+    "published_url": "https://github.com/AxalNetwork/StudioOS/blob/main/attached_assets/research-global-funds-2026-11-19.json",
+    "checked_on": "2026-11-19"
+  },
+  "baseline": {
+    "commit": "21911073a3a357955079f4c0c539f280902fed5c",
+    "served_rows": 2301,
+    "previous_import": 7326,
+    "pending_import_pr": 7337,
+    "pending_import_head": "fc6c1e9f7d163364c0af4592a2b333ebe0e3ca9f",
+    "pending_manifest_path": "data/research-funds/global-managers-2026-11-18.json"
+  },
+  "methodology": [
+    "One candidate per investment manager or independently branded investment platform. A specific fund vehicle is recorded as a relationship or activity event rather than counted again.",
+    "Primary evidence consists of manager sites, issuer-authored announcements, official registries, and institutional-investor or government disclosures. Every candidate includes direct evidence URLs.",
+    "Candidates were compared with served baseline names, declared fund-number manager keys, UIDs, official and legacy domains, former brands, and named vehicles. Regional research batches received an independent cross-review.",
+    "Existing records excluded by source-visibility rules do not become evidence for a candidate. Such candidates were researched independently from retained primary sources.",
+    "Research groups organize this workbook and are neither headquarters claims nor exclusive investment mandates. Investment geography is recorded separately.",
+    "Headquarters are populated only when explicitly designated in retained evidence. Source publication dates are retained where known. Office addresses, legal domiciles, parent locations and investment markets are not substituted for headquarters.",
+    "A manager-level profile, portfolio, or fund-close announcement does not establish that a fund is currently fundraising or accepting new investments. No fund-size, vintage, ticket-size or performance fields are inferred.",
+    "Null geography or headquarters means not established by the reviewed sources, not that the firm lacks a geographic focus or headquarters.",
+    "The second research batch was reconciled against both merged directory records and the pending #7325 import. Manager/platform overlaps are excluded from this increment, including named vehicle links and former names.",
+    "Each record keeps the actual date its primary evidence was checked; the compilation date is not substituted for older per-record dates.",
+    "Research summaries in this evidence file describe manager/platform mandates; the database import leaves vehicle financial, vintage, stage, sector and investment-country facts unrecorded.",
+    "Singapore nVentures is matched only by qualified identity and its official domain; its bare brand is ambiguous with NVIDIA NVentures.",
+    "A second independent review checked the 17 new candidates against the served migration baseline, previous 73 candidates and pending 605-row manifest."
+  ],
+  "funds": [
+    {
+      "uid": "axal-baicapital",
+      "name": "BAI Capital",
+      "website": "https://www.bai-cap.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "baicapital",
+        "bertelsmannasiainvestments"
+      ],
+      "hosts": [
+        "bai-cap.com"
+      ],
+      "source_url": "https://www.bai-cap.com/about.html",
+      "evidence_urls": [
+        "https://www.bai-cap.com/about.html"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Formerly Bertelsmann Asia Investments. The team conducted independent fundraising at the end of 2020, attracting external institutional investors. This source does not establish a date of ownership independence.",
+      "research_group": "Asia",
+      "focus_summary": "Early- to growth-stage investment across retail, consumer and services, media and content innovation, industrial technology and software, and frontier technologies.",
+      "geography_summary": "China-focused venture investor supporting portfolio companies in China and international markets.",
+      "field_sources": {
+        "identity": "https://www.bai-cap.com/about.html",
+        "aliases": "https://www.bai-cap.com/about.html",
+        "focus": "https://www.bai-cap.com/about.html",
+        "geography": "https://www.bai-cap.com/about.html"
+      },
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "name": "Beta.Ventures",
+      "website": "https://beta.ventures/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "betaventures"
+      ],
+      "hosts": [
+        "beta.ventures"
+      ],
+      "source_url": "https://beta.ventures/",
+      "evidence_urls": [
+        "https://beta.ventures/",
+        "https://beta.ventures/our-investments/"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Official homepage explicitly identifies a venture-capital firm and investment portfolio. New York and Lagos are described as bases, not formally designated headquarters. Beta.Vestors is a named subsidiary and is not separately added. Distinct from served Beta Boom, Betaworks Ventures, Bloomberg Beta and betacluster Ventures. No formal round range is invented from the product-development language. No served, prior73 or pending605 match found.",
+      "focus_summary": "Technology-led ventures, with support from product idea through launch and subsequent company development; emphasis on revenue and profit growth. Exact financing-round limits are not specified.",
+      "geography_summary": "African companies with international scaling potential; the official portfolio includes businesses operating across multiple African markets.",
+      "activity_evidence": null,
+      "related_vehicles": [],
+      "uid": "axal-betaventures",
+      "research_group": "Africa",
+      "hq_source_published_on": null,
+      "field_sources": {
+        "identity": "https://beta.ventures/",
+        "focus": "https://beta.ventures/",
+        "geography": "https://beta.ventures/",
+        "hq": null
+      }
+    },
+    {
+      "uid": "axal-bicyclecapital",
+      "name": "Bicycle Capital",
+      "website": "https://bicycle.capital/",
+      "hq": "USA / Brazil",
+      "hq_countries": [
+        "US",
+        "BR"
+      ],
+      "aliases": [
+        "bicyclecapital",
+        "bicyclei",
+        "bicyclelacgrowthfund",
+        "bicyclemanagementcompany"
+      ],
+      "hosts": [
+        "bicycle.capital"
+      ],
+      "source_url": "https://idbinvest.org/en/news-media/idb-invest-partners-bicycle-capital-boost-growth-financing-tech-firms-latin-america-and",
+      "evidence_urls": [
+        "https://idbinvest.org/en/news-media/idb-invest-partners-bicycle-capital-boost-growth-financing-tech-firms-latin-america-and",
+        "https://bicycle.capital/"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Official manager homepage verifies identity. Primary institutional investor IDB Invest identifies Bicycle Management Company, L.P. as manager of Bicycle I, L.P., and explicitly states dual headquarters in Miami and São Paulo. This is growth equity/private equity for technology companies, so it should not be classified as a seed-only venture manager. No served baseline match found. The headquarters and first-fund stage evidence is from the IDB Invest announcement dated September 30, 2025.",
+      "research_group": "Latin America",
+      "focus_summary": "Early-growth and growth-stage technology companies; the first fund is described as investing from Series B to IPO.",
+      "geography_summary": "Latin America and the Caribbean.",
+      "field_sources": {
+        "identity": "https://bicycle.capital/",
+        "focus": "https://idbinvest.org/en/news-media/idb-invest-partners-bicycle-capital-boost-growth-financing-tech-firms-latin-america-and",
+        "geography": "https://idbinvest.org/en/news-media/idb-invest-partners-bicycle-capital-boost-growth-financing-tech-firms-latin-america-and",
+        "hq": "https://idbinvest.org/en/news-media/idb-invest-partners-bicycle-capital-boost-growth-financing-tech-firms-latin-america-and"
+      },
+      "activity_evidence": {
+        "url": "https://idbinvest.org/en/news-media/idb-invest-partners-bicycle-capital-boost-growth-financing-tech-firms-latin-america-and",
+        "date": "2025-09-30",
+        "description": "IDB Invest announced its equity commitment to Bicycle I, L.P."
+      },
+      "hq_source_published_on": "2025-09-30",
+      "related_vehicles": []
+    },
+    {
+      "uid": "axal-brandoncapital",
+      "name": "Brandon Capital",
+      "website": "https://brandoncapital.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "brandonbiocatalyst",
+        "brandoncapital",
+        "brandoncapitalpartners",
+        "medicalresearchcommercialisationfund",
+        "mrcf"
+      ],
+      "hosts": [
+        "brandoncapital.vc"
+      ],
+      "source_url": "https://brandoncapital.vc/who-we-are/",
+      "evidence_urls": [
+        "https://brandoncapital.vc/who-we-are/",
+        "https://brandoncapital.vc/",
+        "https://brandoncapital.vc/2022/03/09/medical-research-commercialisation-fund-mrcf-renamed-brandon-biocatalyst/"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Brandon manages Brandon BioCatalyst, formerly Medical Research Commercialisation Fund/MRCF. These are linked managed vehicles/collaborations, not separate manager additions. Office presence in Australia, New Zealand, UK and US is not treated as HQ.",
+      "research_group": "Oceania",
+      "focus_summary": "Life-sciences venture capital, including early biomedical discovery commercialization, seed and venture financing.",
+      "geography_summary": "Australasian life-science focus; Brandon BioCatalyst specifically supports research commercialization in Australia and New Zealand.",
+      "field_sources": null,
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": [
+        "Brandon BioCatalyst",
+        "Medical Research Commercialisation Fund",
+        "MRCF"
+      ]
+    },
+    {
+      "name": "BuenTrip Ventures",
+      "website": "https://www.buentrip.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "buentripventures",
+        "buentrip"
+      ],
+      "hosts": [
+        "buentrip.vc"
+      ],
+      "source_url": "https://www.buentrip.vc/strategy",
+      "evidence_urls": [
+        "https://www.buentrip.vc/",
+        "https://www.buentrip.vc/strategy"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Official strategy explicitly describes first-check investment in pre-seed and seed B2B software businesses. Included for direct venture investment, not solely its accelerator or ecosystem-building programme. Ecuador association and event context are not used as an HQ designation. No served, prior73 or pending605 match found, including BuenTrip spelling variants.",
+      "focus_summary": "Pre-seed and seed B2B software companies, often as a first investor, with founder and operating support.",
+      "geography_summary": "Latin America and Latin American founders abroad.",
+      "activity_evidence": null,
+      "related_vehicles": [],
+      "uid": "axal-buentripventures",
+      "research_group": "Latin America",
+      "hq_source_published_on": null,
+      "field_sources": {
+        "identity": "https://www.buentrip.vc/strategy",
+        "focus": "https://www.buentrip.vc/strategy",
+        "geography": "https://www.buentrip.vc/strategy",
+        "hq": null
+      }
+    },
+    {
+      "uid": "axal-canary",
+      "name": "Canary",
+      "website": "https://www.canary.com.br/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "canary"
+      ],
+      "hosts": [
+        "canary.com.br"
+      ],
+      "source_url": "https://www.canary.com.br/about-us/",
+      "evidence_urls": [
+        "https://www.canary.com.br/about-us/",
+        "https://www.canary.com.br/"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Official about page identifies an operator-led venture fund. Shared founder links with another manager do not make Canary and Atlantico the same entity. No explicit headquarters designation in reviewed pages. No served baseline match found.",
+      "research_group": "Latin America",
+      "focus_summary": "Early-stage venture capital, including inception and first institutional backing.",
+      "geography_summary": "Latin America.",
+      "field_sources": null,
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "uid": "axal-dolmafundmanagement",
+      "name": "Dolma Fund Management",
+      "website": "https://dolmaimpact.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "dolmafundmanagement",
+        "dolmaimpactfund",
+        "dolmaimpactfundi",
+        "dolmaimpactfundii"
+      ],
+      "hosts": [
+        "dolmaimpact.com"
+      ],
+      "source_url": "https://dolmaimpact.com/investment-criteria/",
+      "evidence_urls": [
+        "https://dolmaimpact.com/",
+        "https://dolmaimpact.com/investment-criteria/"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "The official site identifies Dolma Fund Management as the Mauritius FSC-regulated CIS manager of Dolma Impact Fund I and II. Record the manager once and keep those vehicles as relationships. Do not equate the separate Dolma charitable foundation with the investment manager or infer headquarters from the Mauritius contact address.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Impact and growth capital for revenue-generating companies, with significant minority ownership. Core sectors are technology, healthcare, and renewable energy; additional sectors include agribusiness, education, logistics, and manufacturing.",
+      "geography_summary": "Companies in Nepal or with a significant operational presence in Nepal.",
+      "field_sources": {
+        "identity": "https://dolmaimpact.com/investment-criteria/",
+        "focus": "https://dolmaimpact.com/investment-criteria/",
+        "geography": "https://dolmaimpact.com/investment-criteria/",
+        "legal_manager_and_vehicles": "https://dolmaimpact.com/investment-criteria/"
+      },
+      "activity_evidence": null,
+      "related_vehicles": [
+        "Dolma Impact Fund I",
+        "Dolma Impact Fund II"
+      ],
+      "hq_source_published_on": null
+    },
+    {
+      "name": "Epakon Capital",
+      "website": "https://epakon.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "epakoncapital",
+        "epakon"
+      ],
+      "hosts": [
+        "epakon.com"
+      ],
+      "source_url": "https://epakon.com/",
+      "evidence_urls": [
+        "https://epakon.com/",
+        "https://epakon.com/?source=publication_recirc-----7df7f464cdf1----1----------------------------"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Primary homepage content retrieved through official-site search explicitly identifies the investment stage, geography, partners and portfolio. Direct text extraction of the JavaScript site returned no readable lines; the indexed official URL with a source parameter supplied the mandate text. The clean domain is the proposed public website. Venezuelan portfolio and team connections are not substituted for headquarters. No served, prior73 or pending605 match found.",
+      "focus_summary": "Pre-seed and seed investment, with fintech and AI emphasized while retaining a broader founder-led selection approach.",
+      "geography_summary": "United States and Latin America, explicitly labeled in the official homepage's founder section.",
+      "activity_evidence": null,
+      "related_vehicles": [],
+      "uid": "axal-epakoncapital",
+      "research_group": "Latin America / United States",
+      "hq_source_published_on": null,
+      "field_sources": {
+        "identity": "https://epakon.com/",
+        "focus": "https://epakon.com/",
+        "geography": "https://epakon.com/",
+        "hq": null
+      }
+    },
+    {
+      "uid": "axal-i2iventures",
+      "name": "i2i Ventures",
+      "website": "https://www.i2iventures.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "i2iventures",
+        "i2iventuresgpllc",
+        "i2iventurecapitalfund",
+        "i2iventurecapitalfundi",
+        "i2iventurecapitalfundilp"
+      ],
+      "hosts": [
+        "i2iventures.com"
+      ],
+      "source_url": "https://www.i2iventures.com/",
+      "evidence_urls": [
+        "https://www.i2iventures.com/",
+        "https://disclosures.ifc.org/project-detail/SII/48436/isc-i2i-ventures"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "IFC identifies i2i Ventures GP LLC as manager of i2i Venture Capital Fund I LP. Invest2Innovate is a separate sister entity providing ecosystem support and research, not a manager alias. The fund's Delaware domicile does not establish a US headquarters.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Sector-agnostic pre-seed and seed venture investments with hands-on support for technology startups.",
+      "geography_summary": "Pakistan, including companies with a direct connection to Pakistan.",
+      "field_sources": {
+        "identity": "https://www.i2iventures.com/",
+        "legal_manager_and_vehicle": "https://disclosures.ifc.org/project-detail/SII/48436/isc-i2i-ventures",
+        "focus": "https://www.i2iventures.com/",
+        "geography": "https://disclosures.ifc.org/project-detail/SII/48436/isc-i2i-ventures",
+        "sister_entity_boundary": "https://www.i2iventures.com/"
+      },
+      "activity_evidence": {
+        "url": "https://disclosures.ifc.org/project-detail/SII/48436/isc-i2i-ventures",
+        "date": "2024-09-27",
+        "description": "IFC's disclosure records its investment in i2i Venture Capital Fund I LP as invested on this date; this is an LP commitment event, not evidence of current fundraising."
+      },
+      "related_vehicles": [
+        "i2i Venture Capital Fund I LP"
+      ],
+      "hq_source_published_on": null
+    },
+    {
+      "name": "Impacta VC",
+      "website": "https://www.impacta.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "impactavc",
+        "impacta",
+        "impactavcfund"
+      ],
+      "hosts": [
+        "impacta.vc"
+      ],
+      "source_url": "https://www.impacta.vc/why-how",
+      "evidence_urls": [
+        "https://www.impacta.vc/why-how"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Official page explicitly labels the thesis as Impacta VC Fund I and distinguishes investment steps from founder programmes. Its exclusion of Brazil is preserved, rather than broadening the mandate to all Latin America. Distinct from pending IMPAQTO Capital at impaqtocapital.com. No explicit HQ designation found. No served, prior73 or pending605 match found.",
+      "focus_summary": "Pre-seed and seed impact investing, including lead investments and follow-ons, in businesses with measurable, scalable social or environmental benefits.",
+      "geography_summary": "Latin America excluding Brazil, as stated in the Fund I thesis.",
+      "activity_evidence": null,
+      "related_vehicles": [
+        "Impacta VC Fund I"
+      ],
+      "uid": "axal-impactavc",
+      "research_group": "Latin America",
+      "hq_source_published_on": null,
+      "field_sources": {
+        "identity": "https://www.impacta.vc/why-how",
+        "focus": "https://www.impacta.vc/why-how",
+        "geography": "https://www.impacta.vc/why-how",
+        "hq": null
+      }
+    },
+    {
+      "uid": "axal-indusvalleycapital",
+      "name": "Indus Valley Capital",
+      "website": "https://www.indus.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "indusvalleycapital"
+      ],
+      "hosts": [
+        "indus.vc"
+      ],
+      "source_url": "https://www.indus.vc/",
+      "evidence_urls": [
+        "https://www.indus.vc/"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "One manager record. The official site supports the early-stage and sector-agnostic mandate; it does not explicitly designate headquarters.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Early-stage venture investing across sectors, often providing a startup's first funding.",
+      "geography_summary": "Pakistani founders and the Pakistan startup ecosystem.",
+      "field_sources": {
+        "identity": "https://www.indus.vc/",
+        "focus": "https://www.indus.vc/",
+        "geography": "https://www.indus.vc/"
+      },
+      "activity_evidence": null,
+      "related_vehicles": [],
+      "hq_source_published_on": null
+    },
+    {
+      "uid": "axal-insitorpartners",
+      "name": "Insitor Partners",
+      "website": "https://www.insitorpartners.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "insitor",
+        "insitorpartners",
+        "insitorpartnerspteltd",
+        "insitorfund",
+        "insitorseedpilot",
+        "insitorimpactasiafund",
+        "insitorimpactasiafundi",
+        "insitorimpactasiafundii"
+      ],
+      "hosts": [
+        "insitorpartners.com",
+        "insitorfunds.com"
+      ],
+      "source_url": "https://www.insitorpartners.com/ourwork",
+      "evidence_urls": [
+        "https://www.insitorpartners.com/ourwork",
+        "https://eservices.mas.gov.sg/fid/institution/detail/218749-INSITOR-PARTNERS-PTE-LTD"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "MAS identifies Insitor Partners Pte. Ltd. as a Singapore-incorporated venture capital fund manager. Its official history distinguishes the manager from Insitor Seed Pilot and Insitor Impact Asia Funds I and II. Office openings and incorporation country are not used as headquarters evidence.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Early-stage impact venture investments in startups, with participation in subsequent rounds, flexible investment structures, and hands-on support.",
+      "geography_summary": "Insitor Impact Asia Fund II targets Cambodia, India, and Pakistan. The earlier Insitor Impact Asia Fund also included Myanmar.",
+      "field_sources": {
+        "identity": "https://www.insitorpartners.com/ourwork",
+        "legal_manager": "https://eservices.mas.gov.sg/fid/institution/detail/218749-INSITOR-PARTNERS-PTE-LTD",
+        "focus": "https://www.insitorpartners.com/ourwork",
+        "geography": "https://www.insitorpartners.com/ourwork",
+        "related_vehicles": "https://www.insitorpartners.com/ourwork"
+      },
+      "activity_evidence": null,
+      "related_vehicles": [
+        "Insitor Seed Pilot",
+        "Insitor Impact Asia Fund",
+        "Insitor Impact Asia Fund II"
+      ],
+      "hq_source_published_on": null
+    },
+    {
+      "name": "Kamay Ventures",
+      "website": "https://www.kamayventures.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "kamayventures",
+        "kamay"
+      ],
+      "hosts": [
+        "kamayventures.com"
+      ],
+      "source_url": "https://www.kamayventures.com/",
+      "evidence_urls": [
+        "https://www.kamayventures.com/",
+        "https://kamaycode.com/en/basesycondiciones",
+        "https://www.iadb.org/en/project/RG-Q0066"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Current official homepage explicitly identifies a multi-corporate venture fund, direct portfolio and Seed/Pre-Series-A investing. Kamay Code's official terms identify Coca-Cola Latin America, Grupo Arcor and Grupo Bimbo as LPs; these corporate sponsors are not treated as equivalent manager aliases. IDB's project record independently corroborates venture investment activity. Ecosystem city list is not an HQ designation. No served, prior73 or pending605 match found; Overboost was also checked as a historical relationship lead.",
+      "focus_summary": "Seed and pre-Series A ventures serving the consumer-goods value chain, including AI, financial infrastructure, data, operating efficiency, supply chains and energy.",
+      "geography_summary": "Latin America.",
+      "activity_evidence": null,
+      "related_vehicles": [],
+      "uid": "axal-kamayventures",
+      "research_group": "Latin America",
+      "hq_source_published_on": null,
+      "field_sources": {
+        "identity": "https://www.kamayventures.com/",
+        "focus": "https://www.kamayventures.com/",
+        "geography": "https://www.kamayventures.com/",
+        "hq": null
+      }
+    },
+    {
+      "name": "Kayyak Ventures",
+      "website": "https://www.kayyakventures.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "kayyakventures",
+        "kayyak"
+      ],
+      "hosts": [
+        "kayyakventures.com"
+      ],
+      "source_url": "https://www.kayyakventures.com/",
+      "evidence_urls": [
+        "https://www.kayyakventures.com/",
+        "https://acvc.cl/en/miembros/kayyak/"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Official investment philosophy explicitly names Seed, Series A and Series B and the geographic remit. The Chilean venture association's member profile corroborates the manager and KAYYAK II LP vehicle. Chilean association membership is not converted into an HQ claim. No served, prior73 or pending605 match found under manager or fund names.",
+      "focus_summary": "Seed, Series A and Series B investments in mission-driven companies, generally with revenues and attractive unit economics; social and environmental challenges feature in the stated philosophy.",
+      "geography_summary": "Primarily Latin America; also businesses led by Latin American founders in the United States and Europe.",
+      "activity_evidence": null,
+      "related_vehicles": [
+        "KAYYAK II LP"
+      ],
+      "uid": "axal-kayyakventures",
+      "research_group": "Latin America",
+      "hq_source_published_on": null,
+      "field_sources": {
+        "identity": "https://www.kayyakventures.com/",
+        "focus": "https://www.kayyakventures.com/",
+        "geography": "https://www.kayyakventures.com/",
+        "hq": null
+      }
+    },
+    {
+      "uid": "axal-latitud",
+      "name": "Latitud",
+      "website": "https://latitud.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "latitud"
+      ],
+      "hosts": [
+        "latitud.com"
+      ],
+      "source_url": "https://latitud.com/",
+      "evidence_urls": [
+        "https://latitud.com/",
+        "https://latitud.com/fellowship"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Actual investor as well as a fellowship operator: homepage identifies its own pre-seed checks, and fellowship page describes equity investment using a SAFE. Thus this is not included solely as an educational network. Formal country eligibility is not asserted from the founder-community description. Distinct from the served UK manager Latitude at latitudeventures.vc. No served baseline match found.",
+      "research_group": "Latin America",
+      "focus_summary": "Very early technology investing, including pre-company ideation and pre-seed checks, with founder support.",
+      "geography_summary": "Latin American founder ecosystem with global investor connections; reviewed pages do not define an exclusive country-by-country investment eligibility list.",
+      "field_sources": null,
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "uid": "axal-mcsventures",
+      "name": "MCS Ventures",
+      "website": "https://mcsventures.mn/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "mcsventures",
+        "mcsventuresllc"
+      ],
+      "hosts": [
+        "mcsventures.mn"
+      ],
+      "source_url": "https://mcsventures.mn/about",
+      "evidence_urls": [
+        "https://mcsventures.mn/about",
+        "https://mcsventures.mn/mstars"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "MCS Ventures LLC is the investment arm of MCS Group. MStars is a program within this platform, not an additional manager. The Ulaanbaatar contact address is not explicitly designated headquarters.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Corporate venture investments in technology startups and digital-lifestyle businesses, with operational and growth support.",
+      "geography_summary": "Mongolia's startup ecosystem. Global growth ambitions are described, but no broader investment-country mandate is inferred.",
+      "field_sources": {
+        "identity": "https://mcsventures.mn/about",
+        "focus": "https://mcsventures.mn/about",
+        "geography": "https://mcsventures.mn/about",
+        "program_boundary": "https://mcsventures.mn/mstars"
+      },
+      "activity_evidence": null,
+      "related_vehicles": [],
+      "hq_source_published_on": null
+    },
+    {
+      "uid": "axal-mekongstrategiccapital",
+      "name": "Mekong Strategic Capital",
+      "website": "https://www.mekongstrategic.com/",
+      "hq": "Cambodia",
+      "hq_countries": [
+        "KH"
+      ],
+      "aliases": [
+        "mekongstrategiccapital",
+        "mekongstrategicpartners",
+        "mekongstrategicventures",
+        "smartaxiatadigitalinnovationfund",
+        "sadif",
+        "angkorgrowthinvestments"
+      ],
+      "hosts": [
+        "mekongstrategic.com"
+      ],
+      "source_url": "https://www.mekongstrategic.com/investment-management",
+      "evidence_urls": [
+        "https://www.mekongstrategic.com/",
+        "https://www.mekongstrategic.com/about-us",
+        "https://www.mekongstrategic.com/investment-management",
+        "https://www.mekongstrategic.com/sadif",
+        "https://www.mekongstrategic.com/msv-successfully-exits-nham24"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Mekong Strategic Ventures is part of Mekong Strategic Capital and the general partner/manager of Smart Axiata Digital Innovation Fund (SADIF). Smart Axiata is an LP, not a manager alias. Angkor Growth Investments is another platform fund. The official About page still uses Mekong Strategic Partners in its careers text, so that name is retained as a legacy deduplication key; no rebrand date is asserted.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Investment management across financial services, technology, renewable energy, infrastructure, and real estate. Its venture platform manages SADIF, which has invested in early-stage and growth-stage digital companies.",
+      "geography_summary": "Greater Mekong region; SADIF specifically invests in Cambodian digital companies.",
+      "field_sources": {
+        "identity": "https://www.mekongstrategic.com/",
+        "focus": "https://www.mekongstrategic.com/investment-management",
+        "geography": "https://www.mekongstrategic.com/investment-management",
+        "hq": "https://www.mekongstrategic.com/",
+        "venture_manager_boundary": "https://www.mekongstrategic.com/sadif",
+        "related_vehicles": "https://www.mekongstrategic.com/investment-management",
+        "legacy_name": "https://www.mekongstrategic.com/about-us"
+      },
+      "activity_evidence": {
+        "url": "https://www.mekongstrategic.com/msv-successfully-exits-nham24",
+        "date": "2024-12-30",
+        "description": "Official announcement of the sale of SADIF's equity stake in Nham24 to Grab, with Mekong Strategic Ventures named as general partner."
+      },
+      "related_vehicles": [
+        "Smart Axiata Digital Innovation Fund (SADIF)",
+        "Angkor Growth Investments"
+      ],
+      "hq_source_published_on": null
+    },
+    {
+      "uid": "axal-n47",
+      "name": "N47",
+      "website": "https://www.n47.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "n47",
+        "next47"
+      ],
+      "hosts": [
+        "n47.com",
+        "next47.com"
+      ],
+      "source_url": "https://www.n47.com/",
+      "evidence_urls": [
+        "https://www.n47.com/",
+        "https://next47.com/",
+        "https://www.n47.com/legal"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Prior next47.com redirects directly to current N47 website. Legal page identifies N47 GmbH and affiliates. Do not infer headquarters from legal entity domicile or location pages.",
+      "research_group": "North America / Europe",
+      "focus_summary": "Product-led venture investing; official portfolio labels initial partnerships at Series A, B and C across applications, infrastructure and systems.",
+      "geography_summary": null,
+      "field_sources": null,
+      "activity_evidence": {
+        "url": "https://www.n47.com/",
+        "date": "2026-10-21",
+        "description": "Dated homepage portfolio item: leading Longeye Series A."
+      },
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "uid": "axal-novoholdings",
+      "name": "Novo Holdings",
+      "website": "https://novoholdings.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "novoas",
+        "novoholdings",
+        "novoholdingsas",
+        "novoventures"
+      ],
+      "hosts": [
+        "novoholdings.com",
+        "novoholdings.dk"
+      ],
+      "source_url": "https://novoholdings.com/investments",
+      "evidence_urls": [
+        "https://novoholdings.com/investments",
+        "https://novoholdings.com/investments/seed-investments",
+        "https://assets.novoholdings.dk/novo-holdings-2024-annual-report.pdf"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Annual report establishes former Novo A/S name and that Novo Ventures became the Venture Investments business. Novo Holdings owns the investment mandate; Novo Ventures (US) and other subsidiaries provide consultancy services per website footer. Broader non-VC activities are disclosed; no HQ inferred from offices. Current canonical domain is novoholdings.com; novoholdings.dk is retained only for legacy identity matching.",
+      "research_group": "North America / Europe",
+      "focus_summary": "Diversified investment company with direct life-science Seed Investments and Venture Investments, alongside growth, principal, public-market and other strategies.",
+      "geography_summary": "The investment overview identifies North America, Europe and Asia; Seed Investments specifically focuses on building life-science companies in the Nordic region.",
+      "field_sources": {
+        "identity": "https://novoholdings.com/",
+        "focus": "https://novoholdings.com/investments",
+        "geography": [
+          "https://novoholdings.com/investments",
+          "https://novoholdings.com/investments/seed-investments"
+        ]
+      },
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "uid": "axal-nventuressingapore",
+      "name": "nVentures (Singapore)",
+      "website": "https://nventures.sg/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "nventuressingapore",
+        "nventurespteltd"
+      ],
+      "hosts": [
+        "nventures.sg"
+      ],
+      "source_url": "https://nventures.sg/fund-ii/",
+      "evidence_urls": [
+        "https://nventures.sg/",
+        "https://nventures.sg/fund-i/",
+        "https://nventures.sg/fund-ii/",
+        "https://nventures.sg/about-us/",
+        "https://nventures.sg/invest-sri-lanka-startups/",
+        "https://eservices.mas.gov.sg/fid/institution/detail/239624-NVENTURES-PTE-LTD"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "The MAS directory identifies NVENTURES PTE. LTD. as a Singapore-incorporated venture capital fund manager, with Ashok Kumar Verma as Founding Partner/CEO; the official team page identifies Ashok Verma. This is the nventures.sg manager, distinct from NVIDIA's NVentures. Singapore incorporation and office information are not treated as an explicit headquarters designation. Bare nventures and unqualified numbered-fund keys are intentionally excluded from cross-manager matching because they do not distinguish this manager from NVIDIA; related vehicles remain scoped to the official Singapore domain.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Pre-seed and seed venture investing in B2B enterprise technology, including fintech and regtech; the first fund focused on B2B fintech.",
+      "geography_summary": "South Asia and Southeast Asia, including Sri Lankan founders building businesses with regional or global potential.",
+      "field_sources": {
+        "identity": "https://nventures.sg/about-us/",
+        "legal_manager": "https://eservices.mas.gov.sg/fid/institution/detail/239624-NVENTURES-PTE-LTD",
+        "focus": "https://nventures.sg/fund-ii/",
+        "geography": "https://nventures.sg/fund-ii/",
+        "sri_lanka_focus": "https://nventures.sg/invest-sri-lanka-startups/",
+        "related_vehicles": "https://nventures.sg/fund-i/"
+      },
+      "activity_evidence": null,
+      "related_vehicles": [
+        "nVentures Fund I",
+        "nVentures Fund II"
+      ],
+      "hq_source_published_on": null
+    },
+    {
+      "uid": "axal-obormanagement",
+      "name": "OBOR Management",
+      "website": "https://obor.asia/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "obormanagement",
+        "obormanagementcoltd",
+        "oborasia",
+        "oborcapital",
+        "axsventures"
+      ],
+      "hosts": [
+        "obor.asia",
+        "oborcapital.com"
+      ],
+      "source_url": "https://obor.asia/",
+      "evidence_urls": [
+        "https://obor.asia/",
+        "https://obor.asia/investment",
+        "https://oborcapital.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "The official group site distinguishes OBOR Management, its regulated fund manager, from OBOR Capital, the original investment vehicle, and OBOR Advisory, a separate consulting business. OBOR Capital and AXS Ventures are related vehicles, not additional manager entries. oborcapital.com redirects to the current obor.asia platform. Portfolio-company headquarters on the investment page are not the manager's headquarters.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Impact investment management spanning early-stage equity and sustainable infrastructure. Its current stated approach focuses on renewable energy, climate-smart agriculture, forest preservation, infrastructure, and water, including impact-linked loans convertible to equity.",
+      "geography_summary": "Cambodia, Laos, Vietnam, and Indonesia in the current investment approach.",
+      "field_sources": {
+        "identity": "https://obor.asia/",
+        "focus": "https://obor.asia/investment",
+        "geography": "https://obor.asia/investment",
+        "related_vehicles": "https://obor.asia/investment",
+        "entity_boundary": "https://obor.asia/"
+      },
+      "activity_evidence": null,
+      "related_vehicles": [
+        "OBOR Capital",
+        "AXS Ventures"
+      ],
+      "hq_source_published_on": null
+    },
+    {
+      "uid": "axal-onetowatch",
+      "name": "One to Watch",
+      "website": "https://www.onetowatch.nl/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "onetowatch",
+        "onetowatchsmefund",
+        "onetowatchorefund",
+        "onetowatchoffgridrenewableenergyfund"
+      ],
+      "hosts": [
+        "onetowatch.nl"
+      ],
+      "source_url": "https://www.onetowatch.nl/investment-management/",
+      "evidence_urls": [
+        "https://www.onetowatch.nl/investment-management/",
+        "https://www.onetowatch.nl/funds/sme-fund/",
+        "https://www.onetowatch.nl/funds/off-grid-renewable-energy-fund-ore/"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "One platform record for One to Watch, abbreviated OTW on its official site, with its SME and renewable-energy vehicles recorded as relationships. The official investment criteria emphasize proven businesses and stable financial performance; no pre-seed or seed mandate is inferred. Netherlands and Nepal contact addresses do not establish headquarters.",
+      "research_group": "Asia-Pacific",
+      "focus_summary": "Impact investment management providing growth capital to SMEs with proven business models. Its sector-agnostic SME Fund addresses market gaps and basic needs; its Off-grid Renewable Energy Fund supports energy-service businesses.",
+      "geography_summary": "The SME Fund describes investments in Nepal. The Off-grid Renewable Energy Fund expressly targets Nepal and Bangladesh.",
+      "field_sources": {
+        "identity": "https://www.onetowatch.nl/investment-management/",
+        "focus": "https://www.onetowatch.nl/investment-management/",
+        "sme_vehicle_and_geography": "https://www.onetowatch.nl/funds/sme-fund/",
+        "renewable_energy_vehicle_and_geography": "https://www.onetowatch.nl/funds/off-grid-renewable-energy-fund-ore/"
+      },
+      "activity_evidence": null,
+      "related_vehicles": [
+        "One to Watch SME Fund",
+        "One to Watch Off-grid Renewable Energy Fund (ORE)"
+      ],
+      "hq_source_published_on": null
+    },
+    {
+      "uid": "axal-onevc",
+      "name": "ONEVC",
+      "website": "https://onevc.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "onevc"
+      ],
+      "hosts": [
+        "onevc.vc"
+      ],
+      "source_url": "https://onevc.vc/",
+      "evidence_urls": [
+        "https://onevc.vc/"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Official homepage explicitly identifies seed-stage venture investing across Latin America. Distinguished from Version One Ventures, Type One Ventures, StageOne, SquareOne and System.One. No explicit headquarters designation was recorded. No served baseline match found.",
+      "research_group": "Latin America",
+      "focus_summary": "Seed-stage venture capital.",
+      "geography_summary": "Latin America.",
+      "field_sources": null,
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "uid": "axal-prosperity7ventures",
+      "name": "Prosperity7 Ventures",
+      "website": "https://www.prosperity7vc.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "prosperity7",
+        "prosperity7ventures"
+      ],
+      "hosts": [
+        "prosperity7vc.com"
+      ],
+      "source_url": "https://www.prosperity7vc.com/about/",
+      "evidence_urls": [
+        "https://www.prosperity7vc.com/about/",
+        "https://www.prosperity7vc.com/"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Official about page identifies this as the diversified venture program of Aramco Ventures. It is recorded as a distinct branded investment platform, not as an alias for every Aramco investment arm. Aramco Ventures has a withheld baseline entry but no served match was found. Dhahran, China and US office listings do not establish headquarters.",
+      "research_group": "MENA",
+      "focus_summary": "Diversified technology venture capital; stated areas include enterprise, financial and industrial technologies, blockchain, medtech and healthcare.",
+      "geography_summary": "Global investment remit.",
+      "field_sources": null,
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "name": "Rally Cap",
+      "website": "https://rallycap.vc/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "rallycap",
+        "rallycapvc",
+        "ralicap"
+      ],
+      "hosts": [
+        "rallycap.vc"
+      ],
+      "source_url": "https://rallycap.vc/",
+      "evidence_urls": [
+        "https://rallycap.vc/",
+        "https://rallycap.vc/rc-fintech",
+        "https://rallycap.vc/rc-global-0",
+        "https://rallycap.vc/rc-fintech/rally-cap-fund-1"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Current homepage uses Rally Cap; linked RC Global 1 page also uses RaliCap, establishing the identity connection on the official site. It operates named investment funds as well as a collective. Current global fintech mandate is distinguished from the earlier emerging-market B2B infrastructure strategy. Founder biography's former Lateral Capital role does not make the managers identical. San Francisco footer is not labeled headquarters. No served, prior73 or pending605 match found; historical Rally Cap Ventures wording was also checked.",
+      "focus_summary": "First-check fintech investing at inception; current thesis highlights financial applications built with stablecoins, real-time payments and AI. Earlier RC Global 1 focused on B2B fintech infrastructure.",
+      "geography_summary": "Global. The earlier emerging-market strategy explicitly referenced Mexico City, Lagos, Cairo and Karachi; the current homepage is broader and is not limited to those markets.",
+      "activity_evidence": null,
+      "related_vehicles": [
+        "RC Global 0",
+        "RC Global 1",
+        "Rally Cap Fund 1"
+      ],
+      "uid": "axal-rallycap",
+      "research_group": "Africa / Latin America / Global",
+      "hq_source_published_on": null,
+      "field_sources": {
+        "identity": "https://rallycap.vc/",
+        "focus": "https://rallycap.vc/",
+        "geography": "https://rallycap.vc/",
+        "hq": null
+      }
+    },
+    {
+      "name": "ShEquity Partners",
+      "website": "https://shequity.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "shequitypartners",
+        "shequity",
+        "shequityclimatefund",
+        "shequityfund"
+      ],
+      "hosts": [
+        "shequity.com"
+      ],
+      "source_url": "https://shequity.com/shequity-unveils-final-10-smes-for-its-gender-smart-climate-technical-assistance-facility/",
+      "evidence_urls": [
+        "https://shequity.com/",
+        "https://shequity.com/shequity-unveils-final-10-smes-for-its-gender-smart-climate-technical-assistance-facility/",
+        "https://shequity.com/contact-us/",
+        "https://shequity.com/reports/ShEquity-Impact-Report-2022.pdf"
+      ],
+      "checked_on": "2026-11-19",
+      "notes": "Official May 2026 announcement explicitly identifies ShEquity Partners and its ShEquity Climate Fund L.P., distinguishing direct investment from the separate technical-assistance facility. Current strategy is early growth and climate-focused; the 2022 report's seed-to-Series-A description is historical, not imposed as the current mandate. Mauritius contact address is not an explicit HQ designation. Initial direct extraction timed out; the May 2026 official announcement was subsequently retrieved directly and independently verified. No served, prior73 or pending605 match found.",
+      "focus_summary": "Early-growth investment in gender-smart green SMEs with scalable climate solutions, covering areas such as circular economy, clean transport, renewable energy, sustainable agriculture, water and climate technology.",
+      "geography_summary": "Africa; current official materials emphasize underserved markets and include Ghana technical-assistance activity. That programme location is not treated as an exclusive investment mandate.",
+      "activity_evidence": null,
+      "related_vehicles": [
+        "ShEquity Climate Fund L.P.",
+        "ShEquity Fund I L.P."
+      ],
+      "uid": "axal-shequitypartners",
+      "research_group": "Africa",
+      "hq_source_published_on": null,
+      "field_sources": {
+        "identity": "https://shequity.com/shequity-unveils-final-10-smes-for-its-gender-smart-climate-technical-assistance-facility/",
+        "focus": "https://shequity.com/shequity-unveils-final-10-smes-for-its-gender-smart-climate-technical-assistance-facility/",
+        "geography": "https://shequity.com/shequity-unveils-final-10-smes-for-its-gender-smart-climate-technical-assistance-facility/",
+        "hq": null
+      }
+    },
+    {
+      "uid": "axal-smilegateinvestment",
+      "name": "Smilegate Investment",
+      "website": "https://www.smilegateinvestment.com/en/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "mvpventurecapital",
+        "smilegateinvestment"
+      ],
+      "hosts": [
+        "smilegateinvestment.com"
+      ],
+      "source_url": "https://www.smilegateinvestment.com/en/company.html",
+      "evidence_urls": [
+        "https://www.smilegateinvestment.com/en/company.html",
+        "https://www.smilegate.com/ch/business/investment.do"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Official company history identifies its 1999 launch as MVP Venture Capital. The manager has VC and other strategies; keep strategy distinctions clear.",
+      "research_group": "Asia",
+      "focus_summary": "Venture capital, content investments and growth-capital/private-equity strategies.",
+      "geography_summary": "Korean innovation with support for global-market growth; no exclusive geographic mandate recorded.",
+      "field_sources": {
+        "identity": "https://www.smilegateinvestment.com/en/company.html",
+        "aliases": "https://www.smilegateinvestment.com/en/company.html",
+        "focus": "https://www.smilegateinvestment.com/en/company.html",
+        "geography": "https://www.smilegate.com/ch/business/investment.do"
+      },
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "uid": "axal-spventures",
+      "name": "SP Ventures",
+      "website": "https://spventures.com.br/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "spventures"
+      ],
+      "hosts": [
+        "spventures.com.br"
+      ],
+      "source_url": "https://spventures.com.br/",
+      "evidence_urls": [
+        "https://spventures.com.br/",
+        "https://www.spventures.com.br/"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Current site emphasizes the intersection of food security and climate. Search-indexed older official homepage explicitly described early-stage investing across Latin America, but exact round boundaries are not recorded as current. Existing spventures baseline entry is withheld, so this independently verified row is net new to served results. Not TSP Ventures. No headquarters inferred from Brazilian address or domain.",
+      "research_group": "Latin America",
+      "focus_summary": "Venture capital in agriculture, food technology and climate solutions; early-stage description is evidenced in an older indexed official homepage.",
+      "geography_summary": "Latin America.",
+      "field_sources": null,
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": []
+    },
+    {
+      "uid": "axal-uniseed",
+      "name": "Uniseed",
+      "website": "https://www.uniseed.com/",
+      "hq": null,
+      "hq_countries": [],
+      "aliases": [
+        "uniseed",
+        "uniseedcommercialisationfund",
+        "uniseedventurefund"
+      ],
+      "hosts": [
+        "uniseed.com"
+      ],
+      "source_url": "https://www.uniseed.com/",
+      "evidence_urls": [
+        "https://www.uniseed.com/",
+        "https://www.uniseed.com/terms-conditions"
+      ],
+      "checked_on": "2026-11-18",
+      "notes": "Primary site says all backed companies originate in partner institutions. Includes direct venture investment, not just university grant activity. No explicit HQ recorded.",
+      "research_group": "Oceania",
+      "focus_summary": "Early-stage deep-tech and life-sciences research commercialization investor, with Commercialisation and Venture funds.",
+      "geography_summary": "Research spinouts from Uniseed's Australian university and research partners; connects portfolio companies to global markets.",
+      "field_sources": null,
+      "activity_evidence": null,
+      "hq_source_published_on": null,
+      "related_vehicles": [
+        "Uniseed Commercialisation Fund",
+        "Uniseed Venture Fund"
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "name": "2040 Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Punakaiki Fund"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "216 Capital",
+      "website": "https://216capital.vc/",
+      "reason": "Already in pending605. Official pages verify early-stage cross-sector technology and international investment footprint; Tunisia regulator identifies 216 Capital Ventures as manager of Fund I and Fund II.",
+      "evidence_urls": [
+        "https://216capital.vc/",
+        "https://216capital.vc/our-stories/216-capital-empowering-global-innovation/show",
+        "https://www.cmf.tn/sites/default/files/pdfs/cmf/acteurs/liste_fonds_22052026.pdf"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "216 Capital"
+      ]
+    },
+    {
+      "name": "3one4 Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "3one4 Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "5Y Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "5Y Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Algebra Ventures",
+      "decision": "already_represented",
+      "reason": "Already represented in served directory as Algebra Ventures I; manager-only withheld record is not a new served identity.",
+      "matched_served_uids": [
+        "algebraventuresi"
+      ],
+      "evidence_urls": [
+        "https://algebraventures.com/"
+      ]
+    },
+    {
+      "name": "Anchorless Bangladesh",
+      "website": "https://www.anchorless.vc/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://www.anchorless.vc/",
+      "evidence_urls": [
+        "https://www.anchorless.vc/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Anchorless Bangladesh"
+      ]
+    },
+    {
+      "name": "ANRI",
+      "decision": "review_required",
+      "reason": "AMED government materials substantiate the early-stage VC, but the current official website returned mostly animated text. Held until current mandate and identity details can be captured.",
+      "matched_served_uids": [],
+      "evidence_urls": [
+        "https://anri.vc/en",
+        "https://www.amed.go.jp/en/program/list/19/02/005_Capital.html",
+        "https://www.amed.go.jp/content/000149486.pdf"
+      ]
+    },
+    {
+      "name": "AppWorks",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "AppWorks"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Astella",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Astella"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Athera Venture Partners",
+      "decision": "review_required",
+      "reason": "Official history identifies Inventus India, four continuous funds and Fund II. Served Inventus Capital Partners II is tagged India, US, and predates the separate geographic platforms. Hold until the legacy shared vehicle and current manager relationship are resolved; do not count as net-new coverage.",
+      "matched_served_uids": [
+        "inventuscapitalpartnersii"
+      ],
+      "evidence_urls": [
+        "https://www.atheravp.com/about",
+        "https://www.atheravp.com/investor-relations"
+      ]
+    },
+    {
+      "name": "Atinum Investment",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Atinum Investment"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Atlantico",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Atlantico"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Bain Capital Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Bain Capital Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Basil Technology Partners",
+      "website": "https://www.basilpartners.com/",
+      "reason": "Official announcement says the merger with Capital Square Partners completed in June 2023. Do not add Basil as a separate current manager; research the combined CSP platform separately if needed.",
+      "source_url": "https://www.basilpartners.com/capital-square-partners-and-basil-technology-partners-announce-completion-of-merger.html",
+      "evidence_urls": [
+        "https://www.basilpartners.com/capital-square-partners-and-basil-technology-partners-announce-completion-of-merger.html"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "exclude_merged_predecessor"
+    },
+    {
+      "name": "Battery Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Battery Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "BDC Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "BDC Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "BECO Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "BECO Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "BMW i Ventures",
+      "decision": "already_represented",
+      "reason": "Current manager name and official host already represented by served funds II and III.",
+      "matched_served_uids": [
+        "bmwiventures-ii",
+        "bmwiventures-iii"
+      ],
+      "evidence_urls": [
+        "https://www.bmwiventures.com/about-us"
+      ]
+    },
+    {
+      "name": "Bosch Ventures",
+      "decision": "already_represented",
+      "reason": "Current Bosch Ventures brand and former Robert Bosch Venture Capital vehicles already served.",
+      "matched_served_uids": [
+        "boschventures-vi",
+        "robertboschventurecapital-iii",
+        "robertboschventurecapital-iv",
+        "robertboschventurecapital-v"
+      ],
+      "evidence_urls": [
+        "https://bosch.ventures/investment-strategy/",
+        "https://www.bosch-presse.de/pressportal/de/media/dam_images/pi12144_en.pdf"
+      ]
+    },
+    {
+      "name": "BOV Capital",
+      "website": "https://www.bovcapital.com/",
+      "reason": "The official site could not be read during verification. Current mandate and legacy Blue Ocean Ventures identity were not established with sufficient primary evidence.",
+      "source_url": "https://www.bovcapital.com/",
+      "evidence_urls": [
+        "https://www.bovcapital.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "review_required"
+    },
+    {
+      "name": "Canaan",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Canaan"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "CapitalG",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "CapitalG"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Carao Ventures",
+      "website": "https://www.caraov.com/",
+      "reason": "Already in pending605; official FAQ independently confirms regional and stage focus and Carao Ventures Fund I.",
+      "evidence_urls": [
+        "https://www.caraov.com/faqs"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Carao Ventures"
+      ]
+    },
+    {
+      "name": "Cathay AfricInvest Innovation Fund",
+      "decision": "review_required",
+      "reason": "Named joint vehicle requires a manager/platform boundary review. Cathay Innovation is already served through multiple vehicles, and no retained primary source in this pass establishes whether a separately listed JV manager would be appropriate. Not counted as a new manager and not asserted to be a definite duplicate.",
+      "matched_served_uids": [],
+      "evidence_urls": []
+    },
+    {
+      "name": "Chui Ventures",
+      "website": "https://chuivc.com/",
+      "reason": "Already in pending605; official pages independently confirm an African seed-stage, sector-agnostic venture investor and its Fund I relationship.",
+      "evidence_urls": [
+        "https://chuivc.com/about/",
+        "https://chuivc.com/newsroom/chui-ventures-closes-fund-i-to-drive-jobs-and-gender-inclusive-growth-in-africa/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Chui Ventures"
+      ]
+    },
+    {
+      "name": "Cocoon Capital",
+      "website": "https://cocooncap.com/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://cocooncap.com/",
+      "evidence_urls": [
+        "https://cocooncap.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Cocoon Capital"
+      ]
+    },
+    {
+      "name": "Coral Capital",
+      "decision": "already_represented",
+      "reason": "Official formation announcement identifies the 500 Startups Japan team and continuity with the original fund. That predecessor's Fund I is served, so a manager-level addition would duplicate existing coverage.",
+      "matched_served_uids": [
+        "500startupsjapani"
+      ],
+      "evidence_urls": [
+        "https://coralcap.co/2019/03/announcing-coral-capital/?lang=en",
+        "https://coralcap.co/team/"
+      ]
+    },
+    {
+      "name": "COTU",
+      "decision": "already_represented",
+      "reason": "Already represented in served directory as COTU Ventures II. Current official website uses COTU; cotu.vc redirects to cotu.com. Website correction may be useful separately, but this is not a new manager.",
+      "matched_served_uids": [
+        "cotuventuresii"
+      ],
+      "evidence_urls": [
+        "https://www.cotu.com/"
+      ]
+    },
+    {
+      "name": "CRV",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "CRV"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Cuantico VP",
+      "website": "https://www.cuanticovp.com/",
+      "reason": "Current official website describes venture intelligence, media distribution and network services for funds, LPs and family offices. Direct fund management or a proprietary venture investment mandate was not established; not added as a manager.",
+      "evidence_urls": [
+        "https://www.cuanticovp.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "not_confirmed_investment_manager"
+    },
+    {
+      "name": "DisrupTech Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "DisrupTech Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "DOMO.VC",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "DOMO.VC"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Do Ventures",
+      "website": "https://doventures.vc/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://doventures.vc/",
+      "evidence_urls": [
+        "https://doventures.vc/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Do Ventures"
+      ]
+    },
+    {
+      "name": "DSC Investment",
+      "decision": "review_required",
+      "reason": "KRX company filing confirms the Korean venture investor, but manager site retrieval timed out. Held for current official mandate and activity verification.",
+      "matched_served_uids": [],
+      "evidence_urls": [
+        "https://kind.krx.co.kr/external/2025/03/19/001337/20250319005803/11011.htm",
+        "https://www.dscinvestment.com/"
+      ]
+    },
+    {
+      "name": "Elevation Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Elevation Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Emerging Markets Entrepreneurs",
+      "website": "https://www.eme.asia/",
+      "reason": "Official site returned 404. Industry-association and portfolio-owner pages establish historical identity, but current identity and activity remain insufficiently verified.",
+      "source_url": "https://www.eme.asia/",
+      "evidence_urls": [
+        "https://www.eme.asia/",
+        "https://mpevca.org/emerging-markets-entrepreneurs/",
+        "https://www.umj-ikeya.com/our-portfolio"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "review_required"
+    },
+    {
+      "name": "Enza Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Enza Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Equator",
+      "website": "https://equator.vc/",
+      "reason": "Already in pending605. Official pages independently confirm Seed/Series-A climate investing in Sub-Saharan Africa and separate investment decisions from sister organisation Factor E.",
+      "evidence_urls": [
+        "https://equator.vc/about",
+        "https://equator.vc/investment-pillars"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Equator"
+      ]
+    },
+    {
+      "name": "EWA Capital",
+      "website": "https://ewa.capital/",
+      "reason": "IFC confirms EWA Ventures Fund II and identifies ewa.capital, but the current manager site is under construction. ColCapital's 2021 publication identifies the predecessor Mountain Nazca Colombia; pending605 already contains Nazca. Confirm the historical branch/spinout boundary and current manager identity before counting a separate addition.",
+      "evidence_urls": [
+        "https://ewa.capital/",
+        "https://disclosures.ifc.org/project-detail/SII/44857/iscewa-ii-project",
+        "https://cdn.connectovirtual.com/colcapital/documentacion/AnuarioColCapital2021.pdf"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "review_required"
+    },
+    {
+      "name": "First Circle Capital",
+      "website": "https://www.firstcircle.capital/",
+      "reason": "Already in pending605 manifest; independently corroborated by official mandate page.",
+      "evidence_urls": [
+        "https://www.firstcircle.capital/about",
+        "https://disclosures.ifc.org/project-detail/SII/50963/isc-first-circle"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "First Circle Capital"
+      ]
+    },
+    {
+      "name": "Folklore Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Folklore Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Foxmont Capital Partners",
+      "website": "https://foxmontcapital.com/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://foxmontcapital.com/",
+      "evidence_urls": [
+        "https://foxmontcapital.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Foxmont Capital Partners"
+      ]
+    },
+    {
+      "name": "Gaorong Ventures",
+      "decision": "review_required",
+      "reason": "Current official website establishes the brand but its captured content is too sparse to substantiate detailed focus. Possible Banyan Capital predecessor overlaps served Banyan Capital IV; do not count without a primary-source identity chain.",
+      "matched_served_uids": [
+        "banyancapitaliv"
+      ],
+      "evidence_urls": [
+        "https://www.gaorongvc.com/",
+        "https://fms.gaorongvc.com/"
+      ]
+    },
+    {
+      "name": "GD1",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "GD1"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Genesia Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Genesia Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Granite Asia",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Granite Asia"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "GV",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "GV"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "HSG",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "HSG"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Ibtikar Fund",
+      "website": "https://ibtikarfund.com/",
+      "reason": "Already in pending605; also has a withheld baseline record. Independently verified Palestinian-founder mandate and Seed-to-Series-A strategy on official page.",
+      "evidence_urls": [
+        "https://ibtikarfund.com/2021/about-us/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Ibtikar Fund"
+      ]
+    },
+    {
+      "name": "IMM Investment",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "IMM Investment"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Impact46",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Impact46"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "iThink VC",
+      "website": "https://www.ithink.vc/en/",
+      "reason": "Already in pending605; current official homepage independently confirms pre-seed/seed technology investing with Paraguay, Peru, Ecuador, Bolivia and Uruguay named focus markets.",
+      "evidence_urls": [
+        "https://www.ithink.vc/en/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "iThink VC"
+      ]
+    },
+    {
+      "name": "IVP",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "IVP"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "JIC Venture Growth Investments",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "JIC Venture Growth Investments"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Kalys Ventures",
+      "reason": "Official LinkedIn describes the investment business, but kalysvc.co timed out and its www variant could not be accessed. A working official website and current mandate should be confirmed before import.",
+      "evidence_urls": [
+        "https://fr.linkedin.com/company/kalys-ventures"
+      ],
+      "attempted_urls": [
+        "https://kalysvc.co/",
+        "https://www.kalysvc.co/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "review_required"
+    },
+    {
+      "name": "KB Investment",
+      "decision": "review_required",
+      "reason": "Parent annual report and industry directory establish the entity, but the official manager site timed out. Held for direct current-strategy verification.",
+      "matched_served_uids": [],
+      "evidence_urls": [
+        "https://www.kbfg.com/common/jsp/fileDownUtil.jsp?filepath=%2Fdata%2Fannual_report%2F2024+KB_ar_full+version.pdf",
+        "https://www.kbic.co.kr/"
+      ]
+    },
+    {
+      "name": "Kleiner Perkins",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Kleiner Perkins"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Korea Investment Partners",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Korea Investment Partners"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "LoftyInc Capital",
+      "website": "https://loftyinc.vc/",
+      "reason": "Already in pending605; official Alpha Fund announcement verifies LoftyInc Capital Management and fund relationship.",
+      "evidence_urls": [
+        "https://loftyinc.vc/loftyinc-capital-announces-43m-first-close-of-its-new-pan-african-seed-fund/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "LoftyInc Capital"
+      ]
+    },
+    {
+      "name": "M12",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "M12"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Mayfield",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Mayfield"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Menlo Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Menlo Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Merak Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Merak Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Middle East Venture Partners (MEVP)",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Middle East Venture Partners"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Morro Ventures",
+      "website": "https://morroventures.com/",
+      "reason": "Already in pending605; official about and Fund I pages identify the venture platform and Advent-Morro Equity Partners parent relationship.",
+      "evidence_urls": [
+        "https://morroventures.com/morro-about-us/",
+        "https://morroventures.com/morro-fund-i/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Morro Ventures"
+      ]
+    },
+    {
+      "name": "Movac",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Movac"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "New Enterprise Associates",
+      "decision": "review_required",
+      "reason": "The served row combines Swedish NEA Partners Fund III identity with the US New Enterprise Associates host. Swedish official website explicitly lists NEA III at neapartners.se. Name, fund and geography indicate a different manager; reconcile the existing URL collision before counting NEA as a clean addition.",
+      "matched_served_uids": [
+        "neapartners-iii"
+      ],
+      "evidence_urls": [
+        "https://www.nea.com/about",
+        "https://neapartners.se/investments/",
+        "https://neapartners.se/om-nea/"
+      ]
+    },
+    {
+      "name": "NGP Capital",
+      "decision": "already_represented",
+      "reason": "Same official host as served Nokia Growth Partners IV; former-name relationship corroborated on official site.",
+      "matched_served_uids": [
+        "nokiagrowthpartners-iv"
+      ],
+      "evidence_urls": [
+        "https://www.ngpcap.com/contact",
+        "https://www.ngpcap.com/insights/nokia-commits-further-250-million-in-venture-funding-for-mobile-ecosystem"
+      ]
+    },
+    {
+      "name": "Norwest",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Norwest"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Nuwa Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Nuwa Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "NXTP",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "NXTP"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "OneVentures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "OneVentures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Oraseya Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Oraseya Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Outlierz Ventures",
+      "website": "https://www.outlierzventures.com/",
+      "reason": "Already in pending605; official thesis independently confirms pre-seed, seed and pre-Series-A investing in Morocco, Egypt, Nigeria and Kenya, plus African diaspora founders globally.",
+      "evidence_urls": [
+        "https://www.outlierzventures.com/learn-more"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Outlierz Ventures"
+      ]
+    },
+    {
+      "name": "P1 Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "P1 Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Pacific Channel",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Pacific Channel"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Prime Venture Partners",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Prime Venture Partners"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Qiming Venture Partners",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Qiming Venture Partners"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Quest Ventures",
+      "website": "https://www.questventures.com/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://www.questventures.com/",
+      "evidence_urls": [
+        "https://www.questventures.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Quest Ventures"
+      ]
+    },
+    {
+      "name": "Rampersand",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Rampersand"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Rasmal Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Rasmal Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Redpoint Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Redpoint Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Renew Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Renew Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Salesforce Ventures",
+      "decision": "already_represented",
+      "reason": "Served Salesforce-branded named venture vehicles already cover this manager, including an explicit Salesforce Ventures Canadian Trailblazer record.",
+      "matched_served_uids": [
+        "salesforceappexchangefundi",
+        "salesforceeuropetrailblazerfund-ii",
+        "salesforceventurescanadiantrailblazerfundi"
+      ],
+      "evidence_urls": [
+        "https://salesforceventures.com/about/"
+      ]
+    },
+    {
+      "name": "Salkantay Ventures",
+      "website": "https://www.salkantay.vc/",
+      "reason": "Already in pending605; official homepage independently confirms pre-seed through Series A and Spanish-speaking Latin America.",
+      "evidence_urls": [
+        "https://www.salkantay.vc/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Salkantay Ventures"
+      ]
+    },
+    {
+      "name": "Sarmayacar",
+      "website": "https://www.sarmayacar.com/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://www.sarmayacar.com/",
+      "evidence_urls": [
+        "https://www.sarmayacar.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Sarmayacar"
+      ]
+    },
+    {
+      "name": "Saviu Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Saviu Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "SBI Investment (Japan)",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "SBI Investment"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "SBVA",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "SBVA"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Source Code Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Source Code Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Spiral Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Spiral Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Startup Bangladesh",
+      "website": "https://startupbangladesh.gov.bd/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://startupbangladesh.gov.bd/",
+      "evidence_urls": [
+        "https://startupbangladesh.gov.bd/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Startup Bangladesh"
+      ]
+    },
+    {
+      "name": "Stellaris Venture Partners",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Stellaris Venture Partners"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Taiwania Capital",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Taiwania Capital"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Titanium Ventures",
+      "decision": "review_required",
+      "reason": "The served row names Titanium VC Fund I in Russia, while current ti.vc identifies Titanium Ventures, the rebranded Telstra Ventures. The host collision and inconsistent identity/geography require reconciliation. Do not count as either a confirmed same-manager duplicate or a clean addition yet.",
+      "matched_served_uids": [
+        "titaniumvc-i"
+      ],
+      "evidence_urls": [
+        "https://ti.vc/introducing-titanium-ventures-a-new-era-in-venture-capital/",
+        "https://ti.vc/news/rebranded-from-telstra-ventures-to-titanium-ventures/",
+        "https://ti.vc/wp-content/uploads/2024/06/Telstra-Ventures-Rebrands-to-Titanium-Venture-Press-Release.pdf"
+      ]
+    },
+    {
+      "name": "Touchstone Partners",
+      "website": "https://touchstone.vc/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://touchstone.vc/",
+      "evidence_urls": [
+        "https://touchstone.vc/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Touchstone Partners"
+      ]
+    },
+    {
+      "name": "Upload Ventures",
+      "decision": "review_required",
+      "reason": "Current official landing page is titled '14B · UVP · Upstream' and distinguishes early-stage, growth-stage, and VC/growth links. It does not provide enough primary identity continuity to assume a simple Upload rebrand or create three separate managers.",
+      "matched_served_uids": [],
+      "evidence_urls": [
+        "https://www.upload.ventures/"
+      ]
+    },
+    {
+      "name": "UTEC",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "UTEC"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "VentureSouq",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "VentureSouq"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Verod-Kepple Africa Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Verod-Kepple Africa Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "VinaCapital Ventures",
+      "website": "https://ventures.vinacapital.com/",
+      "reason": "Same manager name and official website host already appear in the pending issue #7325 / PR #7337 manifest.",
+      "source_url": "https://ventures.vinacapital.com/",
+      "evidence_urls": [
+        "https://ventures.vinacapital.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "VinaCapital Ventures"
+      ]
+    },
+    {
+      "name": "Wa’ed Ventures",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Wa'ed Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Wavemaker Partners",
+      "decision": "covered_by_pending_import",
+      "pending_pr": 7337,
+      "pending_names": [
+        "Wavemaker Ventures"
+      ],
+      "reason": "An independently researched matching manager/platform is already proposed in PR #7337; excluded from this separate increment."
+    },
+    {
+      "name": "Witamax / Wita Ventures",
+      "reason": "Official LinkedIn describes Witamax funds and Wita Ventures as a GP arm, but witaventures.com returned 404 and witamax.com was inaccessible. Manager versus vehicle identity and a usable canonical official website need further primary verification before import.",
+      "evidence_urls": [
+        "https://www.linkedin.com/company/witamax/"
+      ],
+      "attempted_urls": [
+        "https://witaventures.com/",
+        "https://witamax.com/"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "review_required"
+    },
+    {
+      "name": "Zayn VC",
+      "website": "https://zayn.vc/",
+      "reason": "Current primary indexed site supports the Pakistan venture manager, but the legacy Zayn Capital VC boundary is not yet established by a readable manager-authored source. Do not alias the separately branded Zayn Capital debt/advisory platform or zayncapital.com.",
+      "source_url": "https://zayn.vc/",
+      "evidence_urls": [
+        "https://zayn.vc/",
+        "https://zayn.vc/team",
+        "https://bre.beaconhouse.net/team/faisal-aftab/",
+        "https://www.zayncapital.com/home"
+      ],
+      "checked_on": "2026-11-19",
+      "decision": "review_required"
+    }
+  ],
+  "country_additions": [
+    {
+      "code": "KH",
+      "name": "Cambodia",
+      "region": "Asia"
+    }
+  ],
+  "hq_overrides": [
+    {
+      "raw": "Cambodia",
+      "targets": [
+        "KH"
+      ]
+    }
+  ],
+  "counts": {
+    "candidate_managers": 29,
+    "previously_researched_additional_managers": 12,
+    "newly_researched_additional_managers": 17,
+    "supported_hq_records": 2,
+    "unknown_hq_records": 27,
+    "evidence_urls": 71
+  }
+}
