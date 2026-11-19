@@ -174,14 +174,14 @@ test('a circle card draws the row\'s own fields: no cadence, no seats', () => {
   assert.match(pub, /City \/ region circles · Lisbon/);
   assert.match(pub, /ax-n2-chip-green">Public</);
   assert.match(pub, />1 member</);
-  assert.match(pub, /href="\/register\?intent=circle&amp;circle=lisbon"[^>]*>Join</, 'join goes where it went before');
+  assert.match(pub, /href="\/contact\?topic=circle"[^>]*>Join</, 'join opens the contact form on its Circle topic (#6987)');
   assert.doesNotMatch(pub, /seat|cadence|Fortnightly|Monthly ·/i);
 
   const priv = render(React.createElement(circles.CircleCard, {
     c: { id: 8, name: 'Another', type: 'founder', access: 'private', members: 0 },
   }));
   assert.match(priv, /ax-chip-quiet">Invite-only</);
-  assert.match(priv, /href="\/register\?intent=circle&amp;circle=8"[^>]*>Request access</);
+  assert.match(priv, /href="\/contact\?topic=circle"[^>]*>Request access</);
   assert.doesNotMatch(priv, /members?</, 'a zero count is not drawn');
 });
 

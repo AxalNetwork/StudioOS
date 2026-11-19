@@ -176,37 +176,50 @@ const noop = () => {};
 const RECORD = { form: null, opened: 0, busy: false, note: null, onOpen: noop, onChange: noop, onCancel: noop, onSave: noop };
 
 test('the readings card offers "Record a reading" once the list is read, and the form asks what the Worker requires', () => {
-  assert.match(words(html(h(directory.Readings, { readings: ready(LIST), record: RECORD }))), /Your market readings Record a reading →/);
+  // D7174 (D7039 RMP-01): Record a reading is the card's one primary, beside Export CSV.
+  assert.match(words(html(h(directory.Readings, { readings: ready(LIST), record: RECORD }))),
+    /Your market readings Comparable ranges you entered, each with its run date and age\. Newest per service line\. Export CSV Record a reading/);
   // An empty list has been read too: a first reading needs no service line.
-  assert.match(words(html(h(directory.Readings, { readings: ready({ items: [] }), record: RECORD }))), /Record a reading →/);
+  assert.match(words(html(h(directory.Readings, { readings: ready({ items: [] }), record: RECORD }))), /Record a reading/);
   // Not before the list is read, and not over a failed read.
   assert.doesNotMatch(words(html(h(directory.Readings, { readings: loading, record: RECORD }))), /Record a reading/);
   assert.doesNotMatch(words(html(h(directory.Readings, { readings: unreadable, record: RECORD }))), /Record a reading/);
 
   const form = directory.readingForm(null, '2026-10-06');
   const open = html(h(directory.Readings, { readings: ready(LIST), record: { ...RECORD, form } }));
-  for (const field of ['Service line', 'What it prices', 'Low (USD)', 'High (USD)', 'Comparables', 'Run date']) {
+  for (const field of ['Service line', 'What it prices', 'Scope', 'Low (USD)', 'High (USD)', 'Comparables', 'Run date']) {
     assert.ok(open.includes(`aria-label="${field}"`), field);
   }
   assert.match(open, /<option value="o-brand">Brand refresh<\/option>/);
   assert.match(open, /<option value="o-retainer">Retainer<\/option>/, 'a service line never read is offered');
   assert.match(open, /value="2026-10-06"/, 'the run date starts at today');
-  assert.match(words(open), /How many engagements the range came from\. Refused if 0\. Record this reading/);
+  assert.match(words(open), /How many engagements the range came from\. Refused if 0\./);
+  assert.match(words(open), /Record this reading Cancel/);
 });
 
 test('a form the Worker would refuse is refused first, in the reading page\'s words', () => {
   const ok = { offering_uid: '', metric: 'Design system build', low: '38,000', high: '$62,000', n: '11', ran_at: '2026-10-01' };
   assert.deepEqual(directory.readingPayload(ok), { payload: {
     metric: 'Design system build', range_low_cents: 3800000, range_high_cents: 6200000, comparable_count: 11, ran_at: '2026-10-01',
+    scope: null,
   } });
+  // D7174: the scope travels, trimmed; blank is none.
+  assert.equal(directory.readingPayload({ ...ok, scope: '  One update  ' }).payload.scope, 'One update');
   assert.equal(directory.readingPayload({ ...ok, offering_uid: 'o-brand', metric: 'Brand refresh' }).payload.offering_uid, 'o-brand');
   assert.ok(directory.readingPayload({ ...ok, high: '38000' }).payload, 'low equal to high reads forward');
   assert.equal(directory.readingPayload({ ...ok, low: '62000', high: '38000' }).error,
     'High is below low. Nothing is saved until the range reads forward.');
-  assert.equal(directory.readingPayload({ ...ok, n: '0' }).error, 'How many engagements the range came from. Refused if 0.');
+  assert.equal(directory.readingPayload({ ...ok, n: '0' }).error,
+    'How many engagements the range came from: a whole number, 1 or more. Refused if 0.');
   assert.equal(directory.readingPayload({ ...ok, ran_at: '' }).error, 'A reading needs the date you ran it.');
   assert.equal(directory.readingPayload({ ...ok, metric: '  ' }).error, 'Name what the range prices.');
-  assert.equal(directory.readingPayload({ ...ok, low: '' }).error, 'Enter the low and the high.');
+  // D7174 (D7039 RMP-08): each correction names its own field.
+  assert.equal(directory.readingPayload({ ...ok, low: '' }).error, 'Enter the low. A range needs both ends.');
+  assert.deepEqual(directory.readingPayload({ ...ok, high: '' }).errors, { high: 'Enter the high. A range needs both ends.' });
+  assert.deepEqual(directory.readingPayload({ ...ok, low: '99.505' }).errors,
+    { low: 'Use dollars and cents: two digits after the point at most. 99.505 is not rounded for you.' });
+  assert.deepEqual(Object.keys(directory.readingPayload({ low: '9', high: '1', n: '0', ran_at: '', metric: '' }).errors),
+    ['metric', 'row', 'n', 'ran_at']);
 });
 
 test('a save opens the new reading at /research/markets/<uid>; a refused form sends nothing', async () => {
@@ -237,18 +250,56 @@ test('a save opens the new reading at /research/markets/<uid>; a refused form se
 });
 
 test('each reading shows its run date, its age and its band', () => {
-  const t = words(html(h(directory.Readings, { readings: ready(LIST) })));
-  assert.ok(t.includes(`Brand refresh run ${LIST.items[0].ran_at} · 120 d old Stale`), t);
-  assert.ok(t.includes(`Fractional seat run ${LIST.items[2].ran_at} · 10 d old Current`), t);
-  assert.doesNotMatch(t, /Retainer/, 'a service line never read is not a reading');
+  // D7174 (D7039 RMP-01): the range to the cent, the count, the scope, the
+  // run date and the age as a word and a shape.
+  const priced = { items: [
+    { ...LIST.items[0], range_low_cents: 9950, range_high_cents: 9999, scope: 'One update' },
+    LIST.items[1],
+    { ...LIST.items[2], range_low_cents: 0, range_high_cents: 0 },
+  ] };
+  const t = words(html(h(directory.Readings, { readings: ready(priced) })));
+  assert.ok(t.includes(`Brand refresh Service line · scope: One update $99.50 – $99.99 7 ${LIST.items[0].ran_at} ◷ Stale 120 d Open ›`), t);
+  // A true zero is a value; a service line never read is No reading yet, never $0.
+  assert.ok(t.includes(`Fractional seat Not a service line · scope: Not recorded $0.00 – $0.00 4 ${LIST.items[2].ran_at} ✓ Current 10 d`), t);
+  assert.ok(t.includes('Retainer Service line · in your catalog No reading yet Not recorded Not recorded Nothing to age'), t);
+  // The phone cards carry the same facts.
+  assert.ok(t.includes(`Brand refresh $99.50 – $99.99 7 comparables · ${LIST.items[0].ran_at} ◷ Stale Scope: One update`), t);
 });
 
-test('the partner row\'s Re-run stale opens the form on the stale reading; Attach to proposal stays unbuilt', () => {
+test('the readings export writes the cents as typed, and an empty cell for Not recorded', () => {
+  const saved = [];
+  const items = [
+    { uid: 'r-1', offering_uid: 'o-1', metric: 'Investor-update edit · per update', scope: 'One update, one round',
+      range_low_cents: 9950, range_high_cents: 9999, comparable_count: 7, ran_at: daysAgo(0) },
+    { uid: 'r-2', offering_uid: null, metric: 'Intro call', scope: null, range_low_cents: 0, range_high_cents: 0, comparable_count: 9, ran_at: daysAgo(27) },
+    { uid: null, offering_uid: 'o-2', metric: 'Board-pack preparation', ran_at: null, comparable_count: null },
+  ];
+  assert.equal(directory.exportReadings(items, (...a) => { saved.push(a); return true; }), true);
+  const [name, header, rows] = saved[0];
+  assert.match(name, /^market-readings-3-rows-\d{4}-\d{2}-\d{2}\.csv$/);
+  assert.deepEqual(header, ['metric', 'service_line', 'scope', 'low_usd', 'high_usd', 'comparables', 'ran_at', 'age_days', 'age']);
+  assert.deepEqual(rows[0], ['Investor-update edit · per update', 'yes', 'One update, one round', '99.50', '99.99', 7, daysAgo(0), 0, 'current']);
+  assert.deepEqual(rows[1], ['Intro call', 'no', null, '0.00', '0.00', 9, daysAgo(27), 27, 'current']);
+  assert.deepEqual(rows[2], ['Board-pack preparation', 'yes', null, null, null, null, null, null, 'not_recorded']);
+  assert.equal(directory.exportReadings([], () => true), false, 'nothing loaded is no file');
+  // The button is offered once the list is read and holds a row.
+  assert.match(words(html(h(directory.Readings, { readings: ready({ items }) }))), /Export CSV/);
+  assert.doesNotMatch(words(html(h(directory.Readings, { readings: ready({ items: [] }) }))), /Export CSV/);
+});
+
+test('an investor\'s Markets view draws no readings card and reads none (D6273 Q2)', () => {
+  const src = codeOnly(read('frontend/src/pages/research/MarketDirectoryZone.jsx'));
+  assert.match(src, /const showReadings = role !== 'investor';/);
+  assert.match(src, /useRead\(\(\) => \(showReadings \? api\.research\.marketReadings\(\) : Promise\.resolve\(\{ items: \[\] \}\)\), role\)/);
+  assert.match(src, /\{showReadings \? \(\s*<Readings/);
+});
+
+test('the partner row\'s Re-run stale opens the form on the stale reading; the unbuilt ops gave way to the D7036 header', () => {
   const ops = PARTNER_ZONE_ACTIONS['research/markets'];
   assert.deepEqual(ops.find((o) => o.label === 'Re-run stale'), { label: 'Re-run stale', kind: 'handler', handler: 'reRunStale' });
-  assert.ok(ops.find((o) => o.label === 'Attach to proposal').unbuilt, 'nothing on this page attaches a reading');
-  // The advisor's AR3 op re-runs sourced sector figures, which no store holds.
-  assert.ok(ADVISOR_ZONE_ACTIONS['research/markets'].find((o) => o.label === 'Re-run stale').unbuilt);
+  // D7171 part 2: Export view and New market research replace the unbuilt ops (D7036 RMD-01).
+  assert.equal(ops.find((o) => o.label === 'Attach to proposal'), undefined);
+  assert.equal(ADVISOR_ZONE_ACTIONS['research/markets'].find((o) => o.label === 'Re-run stale'), undefined);
 
   // Stale first, then a service line never read, else nothing.
   assert.equal(directory.nextToRerun(LIST.items).uid, 'r-old');
@@ -256,7 +307,7 @@ test('the partner row\'s Re-run stale opens the form on the stale reading; Attac
   assert.equal(directory.nextToRerun([LIST.items[2]]), null);
   // The re-run keeps what it prices and its count, and blanks the dollars.
   assert.deepEqual(directory.readingForm(directory.nextToRerun(LIST.items), '2026-10-06'),
-    { offering_uid: 'o-brand', metric: 'Brand refresh', n: '7', low: '', high: '', ran_at: '2026-10-06' });
+    { offering_uid: 'o-brand', metric: 'Brand refresh', scope: '', n: '7', low: '', high: '', ran_at: '2026-10-06' });
 
   let clicked = 0;
   const row = partnerZoneActions('research/markets', {

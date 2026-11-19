@@ -12,7 +12,10 @@
 //   page       GET  /portfolio-updates/:uid/page   the sent update; a recipient sees
 //              what their audience may read
 //   reply      POST /portfolio-updates/asks/:askUid/replies
-//   askAgain   POST /portfolio-updates/asks/:askUid/ask-again
+//   askAgain   POST /portfolio-updates/asks/:askUid/ask-again   a reminder round
+//              (D4645-p2); `{ request_key }` lets a repeat of a lost press find
+//              its round, `{ reminder_uid }` resumes and reconciles a round,
+//              `{ resend_ambiguous: true }` re-sends the unconfirmed ones
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -31,5 +34,5 @@ export const shareUpdateApi = {
   send: (uid) => request(`/portfolio-updates/${enc(uid)}/send`, { method: 'POST' }),
   page: (uid) => request(`/portfolio-updates/${enc(uid)}/page`),
   reply: (askUid, data) => request(`/portfolio-updates/asks/${enc(askUid)}/replies`, { method: 'POST', body: JSON.stringify(data) }),
-  askAgain: (askUid) => request(`/portfolio-updates/asks/${enc(askUid)}/ask-again`, { method: 'POST' }),
+  askAgain: (askUid, body = {}) => request(`/portfolio-updates/asks/${enc(askUid)}/ask-again`, { method: 'POST', body: JSON.stringify(body) }),
 };
