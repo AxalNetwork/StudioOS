@@ -27,7 +27,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ALICE, BOB, CAROL, CI, CTX, DAVE, ERIN, NOBODY, OTHER_CTX, SAM, approve, approvedManifest, allCalls, attestAll, clock, components,
+  ALICE, AUTH, BOB, CAROL, CI, CTX, DAVE, ERIN, NOBODY, OTHER_CTX, SAM, approve, approvedManifest, allCalls, attestAll, clock, components,
   count, decision, headOf, hex, newLine, providers, publish, published, revise, type W, world,
 } from './_work_graph_release_world_5585.ts';
 import { advanceHead, tombstoneRevision } from '../src/services/workGraphRevisions.ts';
@@ -238,9 +238,11 @@ test('5. effects queued when a takedown lands are withheld; a send in flight is 
   assert.equal(count(w2, `SELECT COUNT(*) AS n FROM work_graph_integrity_events WHERE action = 'effect_enqueued' AND detail_json LIKE '%takedown_race%'`), 1);
   await deliverEffect(w2.env, h, retract[0].id);
   assert.deepEqual(deliveries(w2).filter((x) => x.op === 'retract').map((x) => [x.target, x.outcome]), [['stream', 'retracted']]);
-  // Without a takedown the same confirmation queues nothing.
+  // Without an applied takedown (a refused one does not count) the same confirmation queues nothing.
   const w3 = world();
   const r3 = await published(w3);
+  const refused = await takedownRelease(w3.env, CTX, takedown(r3.m.manifestUid, r3.m.digest, r3.c.line, 'td-refused', { actor: NOBODY }));
+  assert.equal(!refused.ok && refused.code, 'no_authority');
   await deliverEffect(w3.env, releaseEffectHandlers(providers()), r3.effectIds[1]);
   assert.equal(effects(w3, RELEASE_RETRACT_KIND).length, 0);
 });
@@ -295,7 +297,8 @@ test('7. takedown refusals are recorded; a replay returns the first; a second ta
   await refuse({ component: { revisionUid: 'wgr_nope', digest: c.p.deck.digest } }, 'unknown_reference');
   await refuse({ actor: NOBODY }, 'no_authority');
   await refuse({ actor: DAVE, authority: 'counsel' }, 'no_authority'); // claims an authority he does not hold
-  await refuse({ actor: SAM, authority: 'auditor' }, 'no_authority'); // an authority no profile or takedown accepts
+  // An authority the person holds but no profile or takedown accepts.
+  await refuse({ actor: SAM, authority: 'auditor' }, 'no_authority', { ...CTX, authorities: new Map([...AUTH, [16, ['security_officer', 'auditor']]]) });
   await refuse({}, 'wrong_tenant', OTHER_CTX);
   const refused = w.db.prepare(`SELECT refusal_code, actor_user_id, tenant_id FROM work_graph_release_takedowns WHERE outcome = 'refused' ORDER BY id`).all() as any[];
   assert.deepEqual(refused.map((x) => x.refusal_code), ['person_required', 'revoked_author', 'stale_approval', 'stale_approval', 'unknown_reference', 'no_authority', 'no_authority', 'no_authority', 'wrong_tenant']);
@@ -337,8 +340,6 @@ test('8. re-pointing to the earlier manifest is a forward re-pin that needs its 
   const unpub = await approvedManifest(w, c.line, { ...c.p, deck: deck2 }, 'm-unpub', c.p.evidence.rev);
   r = await repinRelease(w.env, CTX, { lineAssetUid: c.line, targetManifestUid: unpub.manifestUid, author: ALICE, idempotencyKey: 'rp-unpub' });
   assert.equal(!r.ok && r.code, 'not_published');
-  r = await repinRelease(w.env, OTHER_CTX, { lineAssetUid: c.line, targetManifestUid: m.manifestUid, author: ALICE, idempotencyKey: 'rp-x' });
-  assert.equal(!r.ok && r.code, 'wrong_tenant');
 
   // The re-pin: a NEW manifest on the current head, pinning the earlier component revisions.
   const rp = await repinRelease(w.env, CTX, { lineAssetUid: c.line, targetManifestUid: m.manifestUid, author: ALICE, idempotencyKey: 'rp' });
@@ -346,6 +347,13 @@ test('8. re-pointing to the earlier manifest is a forward re-pin that needs its 
   assert.equal(rp.baseManifestUid, m2.manifestUid);
   assert.equal(rp.repinOf, m.manifestUid);
   assert.notEqual(rp.digest, m.digest);
+  const rpBody = JSON.parse((w.db.prepare('SELECT body_json AS b FROM work_graph_release_manifests WHERE manifest_uid = ?').get(rp.manifestUid) as any).b);
+  assert.deepEqual([rpBody.base, rpBody.repin], [m2.manifestUid, m.manifestUid]);
+  // Another tenant is refused, even with the key of this tenant's re-pin.
+  for (const key of ['rp', 'rp-x']) {
+    r = await repinRelease(w.env, OTHER_CTX, { lineAssetUid: c.line, targetManifestUid: m.manifestUid, author: ALICE, idempotencyKey: key });
+    assert.equal(!r.ok && r.code, 'wrong_tenant');
+  }
   const again = await repinRelease(w.env, CTX, { lineAssetUid: c.line, targetManifestUid: m.manifestUid, author: ALICE, idempotencyKey: 'rp' });
   assert.ok(again.ok && again.replayed && again.manifestUid === rp.manifestUid);
   const clash = await repinRelease(w.env, CTX, { lineAssetUid: c.line, targetManifestUid: unpub.manifestUid, author: ALICE, idempotencyKey: 'rp' });
