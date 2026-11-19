@@ -371,3 +371,6 @@ catalogue version only in the fixture.
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+
+| `research_recording_7587.test.mjs` | D7587: real Workers requests prove an abandoned bootstrap cannot strand the next request, with per-binding readiness. |
+| `research_email_7587.test.ts` | D7587: elevated HQ interview mail context, ordinary-admin and branch refusal, transcript exclusion and no invented address. |

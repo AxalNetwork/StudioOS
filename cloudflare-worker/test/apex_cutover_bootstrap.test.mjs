@@ -61,38 +61,17 @@ test('static, health, and verified anonymous public reads bypass blocking role-s
   );
 });
 
-test('cold-isolate role-schema repairs are single-flight, per database', async () => {
+test('role-schema readiness remains per database and in-flight I/O is never shared across requests', async () => {
   const index = await read('src/index.ts');
   const exploring = await read('src/services/exploringSchema.ts');
-
-  // UPDATED FOR #204, AND STRENGTHENED RATHER THAN REPOINTED. The three latches
-  // used to be `let _xSchemaBootstrap: Promise<void> | null = null` — module
-  // state, so ONE ISOLATE SERVING TWO BINDINGS would hand a request on database
-  // B the promise of a rebuild that ran against database A, and B would be told
-  // its users-table CHECK had been relaxed when nothing had touched it. The
-  // single-flight property this test has always defended is still asserted; the
-  // `WeakMap` line below is the new half, and it is the one that would have
-  // failed before this change.
-  for (const [source, latch] of [
-    [index, 'INVESTOR_SCHEMA_IN_FLIGHT'],
-    [index, 'ADVISOR_SCHEMA_IN_FLIGHT'],
-    [exploring, 'IN_FLIGHT'],
-  ]) {
-    assert.match(source, new RegExp(`const ${latch} = new WeakMap<object, Promise<void>>\\(\\);`),
-      `${latch} must be keyed on the binding, never a module-level let`);
-    assert.match(source, new RegExp(`const pending = ${latch}\\.get\\(key\\);`));
-    assert.match(source, /if \(pending\) return pending;/);
-    assert.match(source, new RegExp(`${latch}\\.set\\(key, started\\);`));
-    assert.match(source, new RegExp(`${latch}\\.delete\\(key\\);`));
-  }
-  // And the readiness latch beside each of them, for the same reason.
+  // D7587: sharing a pending promise by binding stranded recording Start when
+  // its creating request ended. research_recording_7587 drives that lifecycle
+  // in workerd; this guard keeps every readiness latch scoped to its database.
   for (const [source, ready] of [
-    [index, 'INVESTOR_SCHEMA_READY'],
-    [index, 'ADVISOR_SCHEMA_READY'],
-    [exploring, 'READY'],
-  ]) {
-    assert.match(source, new RegExp(`const ${ready} = new WeakMap<object, boolean>\\(\\);`));
-  }
+    [index, 'INVESTOR_SCHEMA_READY'], [index, 'ADVISOR_SCHEMA_READY'], [exploring, 'READY'],
+  ]) assert.match(source, new RegExp(`const ${ready} = new WeakMap<object, boolean>\\(\\);`));
+  assert.doesNotMatch(index, /(?:INVESTOR|ADVISOR)_SCHEMA_IN_FLIGHT/);
+  assert.doesNotMatch(exploring, /const IN_FLIGHT/);
 });
 
 test('public production reads never run lazy schema DDL', async () => {

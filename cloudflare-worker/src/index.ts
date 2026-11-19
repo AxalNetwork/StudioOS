@@ -1881,18 +1881,12 @@ import { pruneCardBlobs } from './services/decks/cardBlobs';
 // fetch entry point because workers have no startup hook; the cold-start
 // penalty is one cheap PRAGMA + two CREATE/ALTER ... IF NOT EXISTS calls.
 const INVESTOR_SCHEMA_READY = new WeakMap<object, boolean>();
-const INVESTOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
 async function ensureInvestorSchema(env: Env): Promise<void> {
   const key = bindingKey(env);
   if (INVESTOR_SCHEMA_READY.get(key)) return;
-  // A cold isolate can receive several requests before its first D1 operation
-  // settles. Share the migration work inside that isolate rather than issuing
-  // overlapping CREATE/ALTER/rebuild statements for every concurrent request —
-  // per DATABASE, so a second binding is not handed the first one's promise and
-  // told a users-table rebuild it never saw has already happened (#204).
-  const pending = INVESTOR_SCHEMA_IN_FLIGHT.get(key);
-  if (pending) return pending;
-  const started = (async () => {
+  // D7587: keep only completed readiness across requests. An in-flight D1
+  // promise belongs to its creating request and can be stranded when that
+  // request ends; another request must run its own idempotent safety net.
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
@@ -1941,12 +1935,7 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     if (investorRebuildOk) INVESTOR_SCHEMA_READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
-  } finally {
-    INVESTOR_SCHEMA_IN_FLIGHT.delete(key);
   }
-  })();
-  INVESTOR_SCHEMA_IN_FLIGHT.set(key, started);
-  return started;
 }
 
 // Task #74 — Mentor→Advisor rename. Idempotent, runs at most once per isolate.
@@ -1957,16 +1946,12 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
 // existence-checked + try/catch so a partially-migrated prod DB can never abort
 // the boot path.
 const ADVISOR_SCHEMA_READY = new WeakMap<object, boolean>();
-const ADVISOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
 async function ensureAdvisorSchema(env: Env): Promise<void> {
   const key = bindingKey(env);
   if (ADVISOR_SCHEMA_READY.get(key)) return;
-  // See ensureInvestorSchema: concurrent first requests must not race the
-  // live-DDL migration path against each other, and the coalescing is per
-  // database so two bindings cannot share one rebuild.
-  const pending = ADVISOR_SCHEMA_IN_FLIGHT.get(key);
-  if (pending) return pending;
-  const started = (async () => {
+  // D7587: keep only completed readiness across requests. An in-flight D1
+  // promise belongs to its creating request and can be stranded when that
+  // request ends; another request must run its own idempotent safety net.
   try {
     // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
     // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
@@ -2019,12 +2004,7 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
     if (advisorRebuildOk) ADVISOR_SCHEMA_READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
-  } finally {
-    ADVISOR_SCHEMA_IN_FLIGHT.delete(key);
   }
-  })();
-  ADVISOR_SCHEMA_IN_FLIGHT.set(key, started);
-  return started;
 }
 
 /**
