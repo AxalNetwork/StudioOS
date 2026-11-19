@@ -19,6 +19,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { performance } from 'node:perf_hooks';
 import { DIRTY_LINE, SAVE_FIRST, exportableCards, sentLine } from '../src/pages/raise/pitch/preflightUiModel.js';
 import { DECK, mountEditor } from './_pitch_editor_mount.mjs';
 
@@ -42,9 +43,9 @@ async function pressExport(m) {
   if (m.by('pitch-export-dialog')) await exportChecked(m);
 }
 async function until(m, ready) {
-  const deadline = Date.now() + 5000;
+  const deadline = performance.now() + 5000;
   while (!ready()) {
-    if (Date.now() >= deadline) throw new Error('The export check did not reach its expected state');
+    if (performance.now() >= deadline) throw new Error('The export check did not reach its expected state');
     await m.settle();
   }
 }
