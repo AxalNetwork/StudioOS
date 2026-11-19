@@ -22,7 +22,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { helpCenterApi } from '../../lib/api/helpCenter';
 import { reportError } from '../../lib/log';
-import { guideReviewFor, guideVerificationFor, staleWord, contentReviewItems, REVIEW_WINDOW_DAYS } from './guideGovernance';
+import { guideReviewFor, guideVerificationFor, staleWord, contentReviewItems, staleRuleSentence } from './guideGovernance';
 import { guideLinkFlags, linkFlagLine, searchMissesView } from './v2/helpV2';
 import {
   MISSING_MAX, POPULAR_ASKED, POPULAR_DAYS, adminFeedbackView, answeredLine, feedbackFrom, guideHref,
@@ -422,9 +422,7 @@ export function GuideAnswersAdminView({ read, onRetry, all, onAll, sections = []
               ))}
             </ul>
             <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              Broken links are checked against the guides as written. {REVIEW_WINDOW_DAYS
-                ? `A guide is stale when its latest verified date is more than ${REVIEW_WINDOW_DAYS} days old.`
-                : 'Stale needs an agreed review window, which is not recorded yet.'}
+              Broken links are checked against the guides as written. {staleRuleSentence()}
             </p>
           </section>
 

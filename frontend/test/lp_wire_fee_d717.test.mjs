@@ -237,7 +237,7 @@ test("the statement's words are the Worker's own", () => {
 });
 
 test('the section is mounted under My commitment, and nothing is stored in the browser', () => {
-  const page = read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx');
+  const page = read('frontend/src/pages/investor/fund/FundParticipationSection.jsx');
   const a = page.indexOf('<MyCommitment portal={portal}');
   const b = page.indexOf('<FeeStatements portal={portal}');
   assert.ok(a > 0 && b > a, 'FeeStatements does not follow MyCommitment');
