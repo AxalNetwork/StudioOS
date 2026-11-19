@@ -408,6 +408,16 @@ const BUCKETS: Bucket[] = [
     test: (p, m) => m === 'POST' && p === '/api/auth/google/popup',
     scope: 'ip',
   },
+  // D6957 — Apple's form_post return. Each accepted POST is an outbound code
+  // exchange with Apple, so it gets google_popup's ceiling and, like every
+  // sign-in path, fails open. Exact path and POST only.
+  {
+    name: 'apple_callback',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/auth/apple/callback',
+    scope: 'ip',
+  },
   // D691 — a deck share link's signup. Unauthenticated, and every accepted
   // POST creates a user (plus an activity_logs and an onboarding_progress
   // row) for whoever holds a live share token, and a link with no expiry and
@@ -630,6 +640,8 @@ const RATE_LIMIT_EXEMPT = [
   '/api/auth/verify',
   '/api/auth/me',
   '/api/auth/google/config',
+  // D6957: env only, as Google's /config is.
+  '/api/auth/apple/config',
   '/api/monitoring/metrics',
   '/api/monitoring/rate-limits',
 ];
