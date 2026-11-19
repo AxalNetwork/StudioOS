@@ -27,6 +27,9 @@
  *                 unfiltered answer must never pass for a filtered one.
  *   size_band     one of SIZE_BANDS (half-open euro bands), on the EuroTech list
  *                 only, like size_min/max; it cannot be combined with them.
+ *                 `none` (D7166 part 2, RFD-02's "Show them") is the other
+ *                 side of a size filter: every match with no size in the
+ *                 asked `size_currency`, the rows `size_not_comparable` counts.
  *   vintage       one `fund_year`, or `none`; not combined with vintage_from/to.
  *   `none`        for `hq_country`, `focus` and `vintage`: the field is empty
  *                 (NULL or blank) on the row — not recorded, which is a different
@@ -69,6 +72,7 @@
  */
 import type { Env } from '../types';
 import { loadOverrides, mapFundFocus, mapFundHq } from './researchTaxonomy';
+import { fundProfile } from './researchFundProfile';
 
 /** The source whose sizes are euros (`fund_size_cents` = euro cents). */
 export const EUR_SOURCE = 'EuroTech VC Funds (public spreadsheet)';
@@ -236,8 +240,8 @@ export function parseDirectoryQuery(get: (k: string) => string | undefined): Dir
   const sort = (get('sort') ?? 'name').trim() || 'name';
   if (!Object.hasOwn(SORTS, sort)) throw new DirectoryQueryError('sort', `sort must be one of ${Object.keys(SORTS).join(', ')}`);
   const band = (get('size_band') ?? '').trim();
-  if (band && !SIZE_BANDS.some((b) => b.value === band)) {
-    throw new DirectoryQueryError('size_band', `size_band must be one of ${SIZE_BANDS.map((b) => b.value).join(', ')}`);
+  if (band && band !== 'none' && !SIZE_BANDS.some((b) => b.value === band)) {
+    throw new DirectoryQueryError('size_band', `size_band must be one of ${SIZE_BANDS.map((b) => b.value).join(', ')}, none`);
   }
   const ccy = (get('size_currency') ?? '').trim().toUpperCase() || 'EUR';
   if (!(SIZE_CURRENCIES as readonly string[]).includes(ccy)) {
@@ -366,6 +370,12 @@ function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null
   if (q.focus && omit !== 'focus') {
     if (q.focus === 'none') where.push(`TRIM(COALESCE(sector_focus, '')) = ''`);
     else { where.push(`sector_focus IN (SELECT value FROM json_each(?))`); binds.push(r.focus); }
+  }
+  if (q.size_band === 'none' && omit !== 'size') {
+    // D7166 part 2: the matches a size filter leaves out — no size in the asked currency's list
+    // (no amount, another currency, or a currency not recorded), as `sizeFacet` counts them.
+    where.push(`(COALESCE(source_name, '') <> ? OR fund_size_cents IS NULL)`);
+    binds.push(currencySource(q.size_currency ?? 'EUR'));
   }
   const band = q.size_band ? SIZE_BANDS.find((b) => b.value === q.size_band) ?? null : null;
   const lo = band ? band.min : (q.size_min != null ? q.size_min * 100 : null);
@@ -622,7 +632,10 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
 /** `getFund`'s answer: `removed` alone for a list taken down, else the fund. */
 interface FundAnswer {
   removed?: ReturnType<typeof citeSource>;
-  item?: ReturnType<typeof presentCited>;
+  /** D7167: the item carries its dated provenance and the four proposed fields. */
+  item?: ReturnType<typeof presentCited> & Pick<Awaited<ReturnType<typeof fundProfile>>, 'provenance' | 'proposed'>;
+  /** D7167: the vehicle-labelled history (services/researchFundProfile.ts). */
+  history?: Awaited<ReturnType<typeof fundProfile>>['history'];
   reports?: Record<string, unknown>[];
   reports_status?: 'ok' | 'unreadable';
   reports_reason?: string;
@@ -637,6 +650,9 @@ interface FundAnswer {
  *
  * A fund of a list taken down (D597) answers `{ removed }`: the list, its
  * publisher and why — never the fund's own fields.
+ *
+ * D7167: the item also carries its dated `provenance` and the four `proposed`
+ * fields, and the answer a vehicle-labelled `history` (services/researchFundProfile.ts).
  */
 export async function getFund(env: Env, uid: string, movedFrom: string | null = null): Promise<FundAnswer | null> {
   const [row, reviews] = await Promise.all([
@@ -668,8 +684,10 @@ export async function getFund(env: Env, uid: string, movedFrom: string | null = 
       fund_size_cents: currency ? x.fund_size_cents : null,
       size_currency: currency && x.fund_size_cents != null ? currency : null,
     }));
-    return { item: presentCited(row, reviews), reports, reports_status: 'ok' as const, moved_from: movedFrom };
+    const profile = await fundProfile(env, row, reviews);
+    return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports, reports_status: 'ok' as const, moved_from: movedFrom };
   } catch {
-    return { item: presentCited(row, reviews), reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable', moved_from: movedFrom };
+    const profile = await fundProfile(env, row, reviews);
+    return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports: [], reports_status: 'unreadable' as const, reports_reason: 'Unreadable', moved_from: movedFrom };
   }
 }

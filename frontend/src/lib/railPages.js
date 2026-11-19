@@ -501,7 +501,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/spinout-lab/brief', roles: [], why: 'The public Spin-Out Lab brief.' },
   { route: '/advisors/:uid', roles: [], why: 'An advisor’s public profile.' },
   { route: '/b/*', roles: [], why: 'A public booking page.' },
-  { route: '/attest/:token', roles: [], why: 'A consent link a guest opens.' },
+  { route: '/attest/:token', railCount: 0, roles: [], why: 'A consent link a guest opens; the page draws no rail (D4825).' },
   { route: '/attest/partner/:token', roles: [], why: 'A partner’s consent link a guest opens.' },
   { route: '/join/:token', roles: [], why: 'A branch invitation a guest opens.' },
   { route: '/share/captable/venture/:token', roles: [], why: 'A cap table venture link a guest opens, at its level (D1019 §6, D1026).' },

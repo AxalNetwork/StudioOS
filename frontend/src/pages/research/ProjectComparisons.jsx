@@ -15,14 +15,26 @@
  *
  * WHAT IS NOT, and says so: "Research status" and "Sources" per column have no
  * store, so they are not rows; nothing is scored, ranked or summed.
+ *
+ * D7177 (#7177, canvas D7043 boards RS-15 C to RS-15 E) — Table and By
+ * attribute: the table on a desktop; on a tablet the same table keeps its
+ * attribute column and pages the companies three at a time (never a
+ * half-visible column); By attribute reads one attribute across every
+ * company with a stepper, the phone's default, with By company (one card
+ * per column) beside it. A cell the Worker could not read is Unreadable with
+ * Retry, never Not recorded; a source with no web address is printed, not
+ * linked. A comparison the old one-by-one save left short (fewer than two
+ * columns) or doubled is flagged "Saved part-way" (D7043 ⚑, option A): the
+ * member completes it or deletes it, and nothing is merged or removed.
  */
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { BTN_PRIMARY } from '../hq/security/ActionDialog.jsx';
 import { researchProjectComparisonsApi } from '../../lib/api/researchProjectComparisons.js';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import { KIND_WORDS, comparisonError, comparisonsView, subjectHref } from './researchComparisons.js';
+import { columnPage, partWay, stepAttribute } from './comparisonSave.js';
 
 const CARD = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
 const SECONDARY = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-3 text-[12.5px] font-bold text-axal-ink hover:bg-axal-ground disabled:opacity-50 sm:min-h-[32px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
@@ -34,18 +46,30 @@ const FAILURE = 'text-[12.5px] font-semibold text-red-700 dark:text-red-300';
 const LINK = 'text-violet-700 underline hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-200';
 
 /** One value: the text and what sits under it, or the reason it is not shown. */
-function Value({ c, testid }) {
+function Value({ c, testid, onRetry }) {
   if (c.state === 'recorded') {
     return (
       <div data-testid={testid}>
         <span className="font-semibold text-axal-ink dark:text-gray-100">{c.text}</span>
         {c.detail ? <span className="block text-[11.5px] text-axal-muted dark:text-gray-400">{c.detail}</span> : null}
-        <span className={`block ${FAINT}`}>{c.sourceUrl ? <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="underline">{c.source}</a> : c.source}</span>
+        <span className={`block ${FAINT}`}>{c.sourceUrl ? <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="underline">{c.source}<span className="sr-only"> (opens source)</span><span aria-hidden="true"> ↗</span></a> : c.source}</span>
       </div>
     );
   }
   if (c.state === 'not_recorded') return <span data-testid={testid} className="italic text-gray-500 dark:text-gray-400" title={c.reason}>{c.text}<span className="sr-only"> ({c.reason})</span></span>;
-  if (c.state === 'unreadable') return <span data-testid={testid} className="font-semibold text-red-700 dark:text-red-300">Unreadable</span>;
+  if (c.state === 'unreadable') {
+    // D7167: a failed read says Unavailable; D7177: a value held in a form that cannot be read says Unreadable, with why.
+    const failedRead = /^Unavailable/.test(c.reason || '');
+    const word = failedRead ? 'Unavailable' : 'Unreadable';
+    const why = c.reason && c.reason !== word ? c.reason.replace(/^(Unreadable|Unavailable):\s*/, '') : null;
+    return (
+      <span data-testid={testid} className="flex flex-col items-start gap-0.5">
+        <span className="font-semibold text-red-700 dark:text-red-300">{failedRead ? <span aria-hidden="true">! </span> : null}{word}</span>
+        {why ? <span className="text-[11px] text-axal-muted dark:text-gray-400">{why}</span> : null}
+        {onRetry ? <button type="button" className="text-[11.5px] font-bold text-violet-700 underline dark:text-violet-300" onClick={onRetry}>Retry</button> : null}
+      </span>
+    );
+  }
   return <span data-testid={testid} className={FAINT}>Not shown<span className="sr-only"> ({c.reason})</span></span>;
 }
 
@@ -115,8 +139,60 @@ function AddColumn({ projectUid, set, onChanged, onClose }) {
   );
 }
 
-function ComparisonCard({ projectUid, set, archived, onChanged }) {
+/** RS-15 C/D: one attribute across every column, with a stepper that names the next and previous attribute. */
+function ByAttribute({ set, attr, onStep, onPick, onRetry, scope }) {
+  const row = set.rows[attr];
+  if (!row) return null;
+  const n = set.rows.length;
+  const prev = set.rows[stepAttribute(attr, -1, n)].label;
+  const next = set.rows[stepAttribute(attr, 1, n)].label;
+  const STEP = 'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+  return (
+    <div className="flex flex-col gap-2" data-testid={`comparison-attribute-${scope}-${set.uid}`}>
+      <div className="flex items-center gap-2">
+        <button type="button" className={STEP} onClick={() => onStep(-1)} aria-label={`Previous attribute: ${prev}`} data-testid={`button-attr-prev-${scope}-${set.uid}`}>‹</button>
+        <label htmlFor={`attr-${scope}-${set.uid}`} className="sr-only">Attribute</label>
+        <select id={`attr-${scope}-${set.uid}`} value={attr} onChange={(e) => onPick(Number(e.target.value))}
+          className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-axal-hairline bg-white px-3 text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" data-testid={`select-attr-${scope}-${set.uid}`}>
+          {set.rows.map((r, i) => <option key={r.key} value={i}>{r.label} · {i + 1} of {n}</option>)}
+        </select>
+        <button type="button" className={STEP} onClick={() => onStep(1)} aria-label={`Next attribute: ${next}`} data-testid={`button-attr-next-${scope}-${set.uid}`}>›</button>
+      </div>
+      <ul className="flex flex-col divide-y divide-axal-hairline rounded-lg border border-axal-hairline dark:divide-gray-800 dark:border-gray-700" aria-label={`${row.label} for each column`}>
+        {set.members.map((m, i) => (
+          <li key={m.uid} className="flex flex-col gap-1 px-3 py-2.5 text-[12.5px]" data-testid={`attr-row-${scope}-${set.uid}-${m.uid}`}>
+            <Link to={m.href} className={`font-extrabold ${LINK}`}>{m.name}</Link>
+            {m.note ? <span className="text-[11.5px] text-amber-800 dark:text-amber-300">{m.note}</span> : <Value c={row.cells[i]} onRetry={onRetry} />}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const SEG = 'min-h-[40px] flex-1 rounded-md px-3 text-[12.5px] font-bold sm:min-h-[32px] sm:flex-none';
+const segOn = (on) => (on ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-800 dark:text-white' : 'text-axal-muted dark:text-gray-400');
+/** A two-way layout switch, as radios. */
+function Segmented({ label, value, options, onChange, className = '', testId }) {
+  return (
+    <div role="radiogroup" aria-label={label} className={`flex rounded-lg border border-axal-hairline bg-axal-ground p-0.5 dark:border-gray-700 dark:bg-gray-950 ${className}`} data-testid={testId}>
+      {options.map(([key, text]) => (
+        <button key={key} type="button" role="radio" aria-checked={value === key ? 'true' : 'false'} className={`${SEG} ${segOn(value === key)}`}
+          onClick={() => onChange(key)} data-testid={`${testId}-${key}`}>{text}</button>
+      ))}
+    </div>
+  );
+}
+
+function ComparisonCard({ projectUid, set, archived, onChanged, flag }) {
   const words = KIND_WORDS[set.kind];
+  // D7177: Table or By attribute from a tablet up; By attribute or By company on a phone.
+  const [layout, setLayout] = useState('table');
+  const [phoneLayout, setPhoneLayout] = useState('attribute');
+  const [attr, setAttr] = useState(0);
+  const [page, setPage] = useState(0);
+  const pager = columnPage(set.members.length, page);
+  const step = (by) => setAttr((a) => stepAttribute(a, by, set.rows.length));
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(set.title);
@@ -143,8 +219,8 @@ function ComparisonCard({ projectUid, set, archived, onChanged }) {
           </form>
         ) : (
           <div className="min-w-0">
-            <h2 id={`cmp-${set.uid}`} className={H2}>{set.title}</h2>
-            <span className={FAINT}>{words.title} · as of each source’s date · no composite score</span>
+            <h2 id={`cmp-${set.uid}`} tabIndex={-1} className={`${H2} focus:outline-none`}>{set.title}</h2>
+            <span className={FAINT}>{set.members.length} {set.members.length === 1 ? 'column' : 'columns'} · {words.title} · as of each source’s date · no composite score</span>
           </div>
         )}
         {!archived && !renaming ? (
@@ -165,18 +241,37 @@ function ComparisonCard({ projectUid, set, archived, onChanged }) {
           </div>
         </div>
       ) : null}
+      {flag ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200" data-testid={`partway-${set.uid}`}>
+          <b>Saved part-way.</b> {flag.text.replace(/^Saved part-way: /, '')}
+        </p>
+      ) : null}
       {failure ? <p role="alert" className={FAILURE}>{failure}</p> : null}
       {adding && !archived ? <AddColumn projectUid={projectUid} set={set} onChanged={onChanged} onClose={() => setAdding(false)} /> : null}
       {!set.members.length ? <p className={MUTED} data-testid={`comparison-empty-${set.uid}`}>No {words.many} in this comparison. {archived ? '' : `${words.add} to begin.`}</p> : (
         <>
-          <div className="hidden overflow-x-auto sm:block">
-            <table className="w-full min-w-[560px] text-left text-[12.5px]" data-testid={`comparison-table-${set.uid}`}>
-              <caption className="sr-only">{set.title}: each value with its source and date</caption>
+          <div className="hidden flex-wrap items-center justify-between gap-2 sm:flex">
+            <Segmented label="Layout" value={layout} options={[['table', 'Table'], ['attribute', 'By attribute']]} onChange={setLayout} testId={`layout-${set.uid}`} />
+            {layout === 'table' && pager.pages > 1 ? (
+              <div className="flex items-center gap-2 lg:hidden" data-testid={`column-pager-${set.uid}`}>
+                <span className={MUTED}>{words.title} {pager.from + 1}–{pager.to} of {set.members.length}</span>
+                <button type="button" className={`${SECONDARY} w-11`} disabled={pager.page === 0} onClick={() => setPage(pager.page - 1)}
+                  aria-label={`Previous ${words.many}`} data-testid={`button-columns-prev-${set.uid}`}>‹</button>
+                <button type="button" className={`${SECONDARY} w-11`} disabled={pager.page >= pager.pages - 1} onClick={() => setPage(pager.page + 1)}
+                  aria-label={`Next ${words.many}: ${set.members.slice(pager.to, pager.to + 3).map((m) => m.name).join(', ')}`} data-testid={`button-columns-next-${set.uid}`}>›</button>
+              </div>
+            ) : null}
+          </div>
+          {layout === 'attribute' ? <div className="hidden sm:block"><ByAttribute scope="wide" set={set} attr={attr} onStep={step} onPick={setAttr} onRetry={onChanged} /></div> : null}
+          <div className={layout === 'table' ? 'hidden overflow-x-auto sm:block' : 'hidden'}>
+            {/* One table: from 1024px every column; on a tablet the attribute column and the current page of three. */}
+            <table className="w-full text-left text-[12.5px] lg:min-w-[560px]" data-testid={`comparison-table-${set.uid}`}>
+              <caption className="sr-only">{set.title}: {set.rows.length} attributes for {set.members.length} {words.many}, each value with its source and date</caption>
               <thead>
                 <tr className="border-b border-axal-hairline dark:border-gray-800">
                   <th scope="col" className="px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide text-axal-muted dark:text-gray-400">Attribute</th>
-                  {set.members.map((m) => (
-                    <th key={m.uid} scope="col" className="px-3 py-2 align-top">
+                  {set.members.map((m, i) => (
+                    <th key={m.uid} scope="col" className={`px-3 py-2 align-top ${i < pager.from || i >= pager.to ? 'sm:hidden lg:table-cell' : ''}`}>
                       <span className="flex items-start justify-between gap-2">
                         <Link to={m.href} className={`font-extrabold ${LINK}`}>{m.name}</Link>
                         {!archived ? (
@@ -193,14 +288,20 @@ function ComparisonCard({ projectUid, set, archived, onChanged }) {
                 {set.rows.map((r) => (
                   <tr key={r.key} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800">
                     <th scope="row" className="px-3 py-2 font-bold text-axal-muted dark:text-gray-400">{r.label}</th>
-                    {r.cells.map((c, i) => <td key={set.members[i].uid} className="px-3 py-2"><Value c={c} testid={`cell-${set.uid}-${r.key}-${set.members[i].uid}`} /></td>)}
+                    {r.cells.map((c, i) => (
+                      <td key={set.members[i].uid} className={`px-3 py-2 ${i < pager.from || i >= pager.to ? 'sm:hidden lg:table-cell' : ''}`}>
+                        <Value c={c} testid={`cell-${set.uid}-${r.key}-${set.members[i].uid}`} onRetry={onChanged} />
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {/* Phone (RS-10's rule): a table becomes cards, one per column, each value with its attribute. */}
-          <ul className="flex flex-col gap-2 sm:hidden" data-testid={`comparison-cards-${set.uid}`}>
+          {/* Phone: By attribute (RS-15 D) reads one attribute across every column with no panning; By company keeps RS-10's cards. */}
+          <Segmented label="Layout" value={phoneLayout} options={[['attribute', 'By attribute'], ['company', 'By company']]} onChange={setPhoneLayout} className="sm:hidden" testId={`phone-layout-${set.uid}`} />
+          {phoneLayout === 'attribute' ? <div className="sm:hidden"><ByAttribute scope="phone" set={set} attr={attr} onStep={step} onPick={setAttr} onRetry={onChanged} /></div> : null}
+          <ul className={phoneLayout === 'company' ? 'flex flex-col gap-2 sm:hidden' : 'hidden'} data-testid={`comparison-cards-${set.uid}`}>
             {set.members.map((m, i) => (
               <li key={m.uid} className="flex flex-col gap-2 rounded-lg border border-axal-hairline p-3 dark:border-gray-700">
                 <div className="flex items-start justify-between gap-2">
@@ -209,7 +310,7 @@ function ComparisonCard({ projectUid, set, archived, onChanged }) {
                 </div>
                 {m.note ? <span className="text-[11.5px] text-amber-800 dark:text-amber-300">{m.note}</span> : null}
                 <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[12.5px]">
-                  {set.rows.map((r) => <React.Fragment key={r.key}><dt className="font-bold text-axal-muted dark:text-gray-400">{r.label}</dt><dd><Value c={r.cells[i]} /></dd></React.Fragment>)}
+                  {set.rows.map((r) => <React.Fragment key={r.key}><dt className="font-bold text-axal-muted dark:text-gray-400">{r.label}</dt><dd><Value c={r.cells[i]} onRetry={onChanged} /></dd></React.Fragment>)}
                 </dl>
               </li>
             ))}
@@ -317,6 +418,16 @@ function Subjects({ projectUid, view, archived, onChanged }) {
 
 export function ProjectComparisons({ projectUid, read, retry, archived, onChanged }) {
   const view = comparisonsView(read);
+  const { hash } = useLocation();
+  const flags = view.state === 'ok' ? partWay(view.comparisons) : new Map();
+  // "Open the comparison →" lands here with #comparison-<uid>: focus moves to that comparison's heading.
+  const target = view.state === 'ok' && hash.startsWith('#comparison-') ? decodeURIComponent(hash.slice('#comparison-'.length)) : null;
+  useEffect(() => {
+    if (!target || typeof document === 'undefined') return;
+    const el = document.getElementById(`cmp-${target}`);
+    el?.focus?.();
+    el?.scrollIntoView?.({ block: 'start' });
+  }, [target]);
   if (view.state === 'loading') return <p className={MUTED} role="status" data-testid="comparisons-loading">Reading the comparisons…</p>;
   if (view.state === 'unreadable') {
     return (
@@ -331,11 +442,12 @@ export function ProjectComparisons({ projectUid, read, retry, archived, onChange
     <div className="flex flex-col gap-4" data-testid="project-comparisons-tab">
       <Subjects projectUid={projectUid} view={view} archived={archived} onChanged={onChanged} />
       {view.comparisons.length ? view.comparisons.map((set) => (
-        <ComparisonCard key={set.uid} projectUid={projectUid} set={set} archived={archived} onChanged={onChanged} />
+        <ComparisonCard key={set.uid} projectUid={projectUid} set={set} archived={archived} onChanged={onChanged} flag={flags.get(set.uid) || null} />
       )) : (
         <section className={CARD} data-testid="comparisons-empty">
           <strong className="text-axal-ink dark:text-white">No comparisons yet</strong>
-          <p className={MUTED}>Tick two or more companies or funds above and press Compare, or select them in Companies and press Compare there.</p>
+          <p className={MUTED}>Tick two or more companies or funds above and press Compare, or select 2 to 6 companies in Companies and press Compare there.</p>
+          {!archived ? <Link className={`${SECONDARY} self-start`} to="/research/companies">Open Companies</Link> : null}
         </section>
       )}
     </div>

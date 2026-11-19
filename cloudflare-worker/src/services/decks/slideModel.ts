@@ -506,6 +506,8 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   // D1500: the card's uid (assigned over the whole deck by `assignCardUids`), whether it is hidden, its section and decor.
   if (typeof s?.uid === 'string' && ID.test(s.uid)) out.uid = s.uid;
   if (s?.hidden === true) out.hidden = true;
+  // D6066 (#6060): the founders' "intentionally qualitative" mark, kept only when true, so an unmarked card hashes as it did.
+  if (s?.qualitative === true) out.qualitative = true;
   const section = str(s?.section, SECTION_MAX);
   if (section) out.section = section;
   // D1533 (#3777): the decor in its layer order, bottom first; an item that claims a block's kind is not decor.

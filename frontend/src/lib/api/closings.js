@@ -36,6 +36,11 @@ export const closingsApi = {
    * D6199: the investor's own signed copy, by the envelope id their closing read gives (`for_investor.summary[].signed_copy`).
    * routes/esign.ts `GET /api/legal/esign/:id/document`, scoped to the caller's own envelopes. Returns the blob; the caller saves it.
    */
+  /**
+   * D6197: the caller's own signing link, emailed to them again. routes/esign.ts `POST /api/legal/esign/:id/resend`,
+   * for the caller's own pending row only, once an hour. The answer never carries the link: it goes to the inbox.
+   */
+  resendSigningLink: (envelopeId) => post(`/legal/esign/${encodeURIComponent(envelopeId)}/resend`),
   signedCopyBlob: async (envelopeId) => {
     const token = localStorage.getItem('token');
     const res = await fetch(`/api/legal/esign/${encodeURIComponent(envelopeId)}/document`, {

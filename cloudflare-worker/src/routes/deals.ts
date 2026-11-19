@@ -1581,8 +1581,8 @@ deals.post('/:id/transfers', async (c) => {
   return c.json({ item: withFirm(row) }, 201);
 });
 
-/** The checklist a deal's closing runs on, with its items — or null. */
-async function closingChecklistForDeal(env: any, dealId: number): Promise<any> {
+/** The checklist a deal's closing runs on, with its items — or null. D6157: the closing overview reads it too. */
+export async function closingChecklistForDeal(env: any, dealId: number): Promise<any> {
   const list = await env.DB.prepare(
     'SELECT * FROM deal_closing_checklists WHERE deal_id = ?'
   ).bind(dealId).first();
