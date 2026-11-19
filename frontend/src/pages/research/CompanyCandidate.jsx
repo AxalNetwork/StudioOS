@@ -8,6 +8,8 @@ import { companyHref } from '../../lib/companyDirectoryView.js';
 import { useRailOption } from '../../ui/railCrumbs';
 import { railPressHeaders } from '../../lib/railPage.js';
 import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
+import CandidateSignals from './CandidateSignals.jsx';
+import { KindBadge } from './CompanyEvidence.jsx';
 import {
   categoryLabel,
   detailRows,
@@ -296,6 +298,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <KindBadge kind="candidate" />
                     <label className="block">
                       <span className="sr-only">Category</span>
                       <select
@@ -507,22 +510,8 @@ export default function CompanyCandidate({ role = 'founder' }) {
               )}
             </Card>
 
-            {signals.length > 0 && (
-              <Card className="hidden md:block">
-                <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Signals</div>
-                <div className="mt-2.5 grid gap-2">
-                  {signals.map((g) => (
-                    <div key={g.id || `${g.signal_type}-${g.label}`} className="flex flex-wrap items-baseline gap-2">
-                      <Pill tone={kindTone(g.signal_type)}>{g.signal_type}</Pill>
-                      <span className="text-[12.5px] text-axal-ink">
-                        <strong>{g.label}</strong>
-                        {g.detail ? ` — ${g.detail}` : ''}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
+            {/* D7180: Signals on every width, company signals apart from sector and country context. */}
+            <CandidateSignals name={candidate.name} signals={signals} directoryUid={candidate.directory_uid || null} />
 
             <Card>
               <div className="flex flex-wrap items-center justify-between gap-3">

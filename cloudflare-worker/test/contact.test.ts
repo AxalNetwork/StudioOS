@@ -130,9 +130,44 @@ test('a submission that cannot be stored is refused, not dropped', async () => {
 // optional link, and no subject.
 // ---------------------------------------------------------------------------
 
-test('D680: the intents are the three canvas pills plus Licence', () => {
-  assert.deepEqual(Object.keys(CONTACT_INTENTS), ['lab', 'invest', 'advise', 'licence']);
-  assert.deepEqual(Object.values(CONTACT_INTENTS), ['Spin-Out Lab', 'Investing / LP', 'Advising', 'Licence']);
+test('D680, #6987: the intents are the canvas\'s three, Licence, and the four owner decision Q1 added', () => {
+  assert.deepEqual(Object.keys(CONTACT_INTENTS), ['lab', 'invest', 'advise', 'licence', 'partners', 'directory', 'circle', 'general']);
+  assert.deepEqual(Object.values(CONTACT_INTENTS), [
+    'Spin-Out Lab', 'Investing / LP', 'Advising', 'Licence', 'Operating Partners', 'Directory', 'Circle', 'General',
+  ]);
+});
+
+test('#6987: each new intent is accepted, stored and emailed to its mailbox', async () => {
+  const cases: Array<[string, string, string]> = [
+    ['partners', 'Operating Partners', 'network@axal.vc'],
+    ['directory', 'Directory', 'network@axal.vc'],
+    ['circle', 'Circle', 'network@axal.vc'],
+    ['general', 'General', 'founders@axal.vc'],
+  ];
+  for (const [intent, label, to] of cases) {
+    const { res, json, rows, calls } = await submit({ ...ENQUIRY, intent });
+    assert.equal(res.status, 200, `${intent} is accepted`);
+    assert.equal(json.ok, true);
+    assert.equal(rows.length, 1, `${intent} is stored`);
+    assert.equal(rows[0].intent, intent);
+    assert.equal(rows[0].subject, `${label} — Analytical Engines`);
+    const mails = mailsSent(calls);
+    assert.equal(mails.length, 1);
+    assert.equal(recipient(mails[0]), to, `${intent} goes to ${to}`);
+    assert.ok(parts(mails[0])[0].includes(`Intent: ${label}`), `the email names ${label}`);
+  }
+});
+
+test('#6987: a licence or any other enquiry may be sent without a company or project name', async () => {
+  for (const intent of ['licence', 'general', 'circle']) {
+    // `undefined` is left out of the JSON body: no company field at all.
+    const { res, json, rows } = await submit({ ...ENQUIRY, company: undefined, intent });
+    assert.equal(res.status, 200, `${intent} without a company is accepted`);
+    assert.equal(json.ok, true);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].company, null);
+    assert.equal(rows[0].subject, `${CONTACT_INTENTS[intent]} — Ada Lovelace`, 'the subject falls back to the name');
+  }
 });
 
 test('D680: an intent outside the set is refused before anything is stored', async () => {
@@ -204,6 +239,10 @@ test('D680: each submission is emailed to its intent\'s mailbox, with the fields
     invest: 'guillaume.lauzier@axal.vc',
     advise: 'network@axal.vc',
     licence: 'network@axal.vc',
+    partners: 'network@axal.vc',
+    directory: 'network@axal.vc',
+    circle: 'network@axal.vc',
+    general: 'founders@axal.vc',
   });
   const cases: Array<[Record<string, unknown>, string]> = [
     [{ ...ENQUIRY, intent: 'lab' }, 'founders@axal.vc'],

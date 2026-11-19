@@ -139,7 +139,7 @@ function safeNextPath() {
  * generic page.
  */
 function signInContext() {
-  try { return signInContextFor(safeNextPath()); } catch { return null; }
+  try { return signInContextFor(safeNextPath(), window.location.search); } catch { return null; }
 }
 
 /** The step this load opens: a magic-link return opens its retry view. */
@@ -1002,6 +1002,11 @@ export default function LoginPage() {
         {context && (
           <p className="signin-sub" data-testid="login-destination">
             {context.area.what} {context.area.who}
+          </p>
+        )}
+        {context?.ended && (
+          <p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] leading-relaxed text-sky-900" data-testid="login-session-ended">
+            {context.ended}
           </p>
         )}
         {banners}

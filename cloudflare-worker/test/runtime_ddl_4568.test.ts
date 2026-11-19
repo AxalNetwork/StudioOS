@@ -24,6 +24,7 @@ import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts'
 import { d1Over } from './_d1_sqlite.mjs';
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 import { COHORT_SCHEMA, ensureCohortAppSchema, runCohortApplicationsTick } from '../src/services/cohortApplications.ts';
+import { ensureInvestorSchema } from '../src/util/usersRoleRebuild.ts';
 import { inventory, ratchet } from '../../scripts/lib/runtimeDdl.mjs';
 
 afterAll(() => removeMigratedDatabases());
@@ -44,7 +45,10 @@ function isolate(db: DatabaseSync) {
     api.runSync = () => st.runSync();
     return api;
   };
-  const DB = { prepare: (sql: string) => wrap(sql, base.prepare(sql)), batch: (s: any[]) => base.batch(s), exec: (s: string) => base.exec(s) };
+  const DB = { prepare: (sql: string) => wrap(sql, base.prepare(sql)), batch: (s: any[]) => base.batch(s), exec: (s: string) => {
+    if (/^\s*ALTER\b/i.test(s)) log.alters.push(s);
+    return base.exec(s);
+  } };
   return { env: { DB, ENVIRONMENT: 'development' } as any, log };
 }
 
@@ -151,5 +155,49 @@ test('#4568 R2-04: the ratchet refuses growth, a new blind file and a stale entr
     assert.deepEqual(ratchet(inv, without).grown.map((g: any) => g.file), [someFile], 'a blind file not on record is refused');
     assert.deepEqual(ratchet(inv, { ...baseline, 'cloudflare-worker/src/gone.ts': 3 }).shrunk.map((s: any) => s.file), ['cloudflare-worker/src/gone.ts'], 'a stale entry must be lowered');
     assert.ok(inv.totals.blind_declared >= 300, 'most blind ALTERs are for columns a migration already declares');
+  } finally { db.close(); }
+});
+
+
+test('#5343 investor bootstrap does not ALTER a migrated database on fresh bindings', async () => {
+  const db = migratedDatabase();
+  try {
+    for (let i = 0; i < 3; i++) {
+      const { env, log } = isolate(db);
+      await ensureInvestorSchema(env);
+      const statements = log.statements;
+      await ensureInvestorSchema(env);
+      assert.equal(log.statements, statements);
+      assert.deepEqual(log.alters, []);
+      assert.deepEqual(log.errors, []);
+    }
+  } finally { db.close(); }
+});
+
+test('#5343 investor bootstrap retries a missing users table and handles concurrent cold starts', async () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const first = isolate(db);
+    await assert.rejects(ensureInvestorSchema(first.env), { message: 'investor_schema_not_ready' });
+    await assert.rejects(ensureInvestorSchema(first.env), { message: 'investor_schema_not_ready' });
+    assert.equal(first.log.alters.length, 2, 'each call retries the failed ADD');
+    db.exec(`
+      CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, role TEXT CHECK (role IN ('partner', 'founder')));
+      CREATE TABLE limited_partners (user_id INTEGER, email TEXT);
+      INSERT INTO users (id, email, role) VALUES (1, 'member@example.test', 'partner');
+      INSERT INTO limited_partners (user_id) VALUES (1);
+    `);
+    const second = isolate(db);
+    await Promise.all([ensureInvestorSchema(first.env), ensureInvestorSchema(second.env)]);
+    const user = db.prepare('SELECT role, investor_id FROM users WHERE id = 1').get();
+    assert.equal(user?.role, 'investor');
+    assert.equal(user?.investor_id, 1);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM investors').get()?.n, 1);
+    for (const failure of second.log.errors) assert.match(failure, /duplicate column/i);
+
+    const fresh = isolate(db);
+    await ensureInvestorSchema(fresh.env);
+    assert.deepEqual(fresh.log.alters, []);
+    assert.deepEqual(fresh.log.errors, []);
   } finally { db.close(); }
 });
