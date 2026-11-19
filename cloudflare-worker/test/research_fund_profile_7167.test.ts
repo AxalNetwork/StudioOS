@@ -4,7 +4,8 @@
  * the vehicle-labelled history, and the distinct `source_withdrawn` refusal.
  *
  * Real SQLite: the fund directory and its reports as migration 378 declares
- * them, 406's sources table, research_funds (216 and its catalogue uid), the
+ * them, 406's sources table, research_funds (216, its catalogue uid and
+ * D7168's identity and allocation columns), the
  * project comparisons (5157) and this issue's migration, run whole.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/research_fund_profile_7167.test.ts
@@ -41,11 +42,14 @@ function fixture() {
   db.exec(sql('migrations/202611092035_research_projects.sql'));
   db.exec(sql('migrations/216_research_funds.sql'));
   db.exec(sql('migrations/202611092035_research_fund_catalogue_uid.sql'));
+  db.exec(sql('migrations/202611180053_7168_research_fund_identity_allocation.sql'));
   const m378 = sql('migrations/378_research_fund_directory_rebuild.sql');
   db.exec(m378.match(/CREATE TABLE IF NOT EXISTS research_fund_directory \(.*?\);/)![0]);
   db.exec(m378.match(/CREATE TABLE IF NOT EXISTS research_fund_directory_reports \(.*?\);/)![0]);
   db.exec(sql('migrations/406_research_fund_sources.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_sources \([\s\S]*?\n\);/)![0]);
   db.exec(sql('migrations/202611130634_5157_research_project_comparisons.sql'));
+  // D7177: a comparison save records its request id.
+  db.exec(sql('migrations/202611180051_7177_research_comparison_request_id.sql'));
   db.exec(sql(M7167));
   db.exec(`INSERT INTO users (id,email,name,role) VALUES (${OWNER},'owner@example.test','Owner','founder')`);
   db.exec(`INSERT INTO research_fund_sources (source_name,title,publisher,published_url,terms_status,evidence,verdict,verdict_reason,reviewed_on) VALUES
