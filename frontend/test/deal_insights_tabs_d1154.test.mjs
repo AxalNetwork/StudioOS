@@ -299,7 +299,7 @@ test('Traction: the gap month drawn as a gap and tabled as Not reported, never $
     assert.ok(v.textOf('deal-traction-row-burn-2026-03').includes('$0'), 'a recorded zero is a zero');
     assert.ok(v.textOf('deal-traction-row-customers-2025-11').includes(NOT_REPORTED));
     assert.equal(v.hrefOf('deal-traction-evidence-link'), '/deals/4/evidence');
-    assert.deepEqual(v.ids().filter((id) => /^deal-traction-scorecard-[a-z_]+$/.test(id) && !/-(score|value|coverage|open|retry)-|-scorecard-(unreadable|masked)$/.test(id)),
+    assert.deepEqual(v.ids().filter((id) => /^deal-traction-scorecard-[a-z_]+$/.test(id) && !/(?:-(?:score|value|coverage|open|retry)-)|(?:-scorecard-(?:unreadable|masked)$)/.test(id)),
       ['deal-traction-scorecard-traction', 'deal-traction-scorecard-financial'], 'Traction and Financial');
   } finally { await v.close(); }
 });

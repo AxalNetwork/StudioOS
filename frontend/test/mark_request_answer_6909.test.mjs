@@ -29,15 +29,10 @@ const DETAIL = {
   marks: [{ uid: 'm1', as_of_date: '2026-03-31', fmv: 2400000, basis: 'round_price', event: 'Priced round' }],
   distributions: [{ uid: 'd1', distribution_date: '2026-05-01', amount: 900000, kind: 'secondary' }],
 };
-const MOVED = { ...DETAIL, marks: [{ uid: 'm2', as_of_date: '2026-09-30', fmv: 2250000, basis: 'gp_estimate' }, ...DETAIL.marks] };
 const LIST = { items: [{ project_id: 1, project: PROJECT, total_invested: 1500000, rounds: 1, latest_ownership_pct: 6.2, latest_round: 'Seed' }] };
 const STORED_MARK = {
   id: 41, uid: 'mk-7f3a', fund_id: null, project_id: 1, as_of_date: '2026-09-30', fmv: 2100000, post_money: null,
   event: 'Down round', basis: 'gp_estimate', source: 'Q3 board pack', note: null, created_by: 1, created_at: '2026-11-14T14:44:09.120Z',
-};
-const STORED_DIST = {
-  id: 9, uid: 'ds-31c0', fund_id: null, project_id: 1, distribution_date: '2026-11-05', amount: 150000, kind: 'exit',
-  note: 'Partial exit', created_by: 1, created_at: '2026-11-14T15:02:00Z',
 };
 
 /** The Worker: `detail` answers each company read in turn (the last repeats); `post` answers the write. */
