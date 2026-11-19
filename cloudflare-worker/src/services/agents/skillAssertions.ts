@@ -303,6 +303,8 @@ const PATH = /^[a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)+$/i;
 // D7700 (#7700): resolve a stable passage only inside the selected reader document.
 const PASSAGE = /^data_room_passage:([a-f0-9]{32}):(\d{1,4})$/i;
 const citationRef = (value: string) => PATH.test(value) || PASSAGE.test(value);
+// A malformed tag in this explicit namespace is still a citation to reject.
+const citationLike = (value: string) => citationRef(value) || value.toLowerCase().startsWith('data_room_passage:');
 
 
 /** Whether `path` names something the records hold: the longest read key that prefixes it, then keys and indexes. */
@@ -345,7 +347,7 @@ export function citations(p: string): string[] {
     const inner = m[1] ?? m[2];
     const prefixed = m[2] != null || /^\s*sources?\s*:/.test(inner);
     const pieces = inner.replace(/^\s*sources?\s*:/, '').split(',').map((x) => x.trim()).filter(Boolean);
-    if (prefixed || (pieces.length && pieces.every((x) => citationRef(x)))) out.push(...pieces);
+    if (prefixed || (pieces.length && pieces.every((x) => citationLike(x)))) out.push(...pieces);
   }
   return out;
 }

@@ -73,3 +73,14 @@ test('a sequence not held by the selected document is refused', () => {
 test('a malformed passage reference is refused', () => {
   assert.equal(checkEvidence({ cite: ['data_room_passage:invalid:1'] }, records()).ok, false);
 });
+
+test('a malformed output passage reference is refused even beside a valid citation', () => {
+  const c = checkCase({ name: 'Malformed output source', input: { records: records() }, expect: {
+    output: 'brief', must_include: [], must_say_not_recorded: [], must_not_include: [], evidence: { cite: [REF] },
+  } });
+  assert.ok(c.ok);
+  if (!c.ok) return;
+  const output = `Instrument [${REF}]`;
+  assert.equal(judge(c.expect, output, c.input).result, 'pass');
+  assert.match(judge(c.expect, output + '\nInstrument [data_room_passage:invalid:1]', c.input).detail ?? '', /records do not hold/);
+});
