@@ -379,6 +379,26 @@ function viewOf(stages: SignerRow[], states: Map<string, string>): StageView[] {
   });
 }
 
+/**
+ * D6197 (#6197): the caller's own stage, when the caller signs one: its
+ * position, its state as the stages read it, and the numeric id of the
+ * envelope sent to them (null before it is sent). The room needs that id for
+ * the two routes a signer has on their own envelope: `POST /:id/resend` (their
+ * link again, by email) and `GET /:id/document` (their executed copy). Both
+ * are scoped to the caller by those routes; this only names the id. A reader
+ * who signs no stage (an admin, the founder of a paper with no company stage)
+ * gets null. Never a token.
+ */
+async function yourStage(env: Env, caller: Caller, stages: SignerRow[], view: StageView[]) {
+  const own = stages.find((s) => s.user_id != null && Number(s.user_id) === Number(caller.id));
+  if (!own) return null;
+  const row = own.envelope_uuid
+    ? await env.DB.prepare('SELECT id FROM esign_envelopes WHERE envelope_uuid = ?').bind(own.envelope_uuid).first<{ id: number }>()
+    : null;
+  const v = view.find((x) => x.position === own.position);
+  return { position: own.position, role: own.role, state: v?.state ?? 'waiting', envelope_id: row ? Number(row.id) : null };
+}
+
 /** One staged envelope's status per signer, and the closing line it belongs to. */
 export async function readStaged(env: Env, caller: Caller, uid: string) {
   const staged = await stagedByUid(env, uid);
@@ -387,6 +407,7 @@ export async function readStaged(env: Env, caller: Caller, uid: string) {
   const states = await envelopeStates(env, stages.map((s) => s.envelope_uuid).filter((u): u is string => !!u));
   const view = viewOf(stages, states);
   return {
+    you: await yourStage(env, caller, stages, view),
     uid: staged.uid,
     title: staged.title,
     document_type: staged.document_type,

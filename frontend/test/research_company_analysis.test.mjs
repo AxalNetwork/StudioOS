@@ -71,7 +71,9 @@ test('the model label is not called a recommendation', () => {
   assert.ok(CANVAS.includes('Recommended next actions'));
   assert.doesNotMatch(page, /Recommend/);
   assert.doesNotMatch(component, /Recommended next actions/);
-  assert.match(page, /Next steps the run listed/);
+  // D7175 (canvas D7041): the run's next steps are drawn as questions, apart from findings.
+  assert.match(page, /Suggested research questions/);
+  assert.doesNotMatch(page, /Next steps the run listed/);
 });
 
 test('three states, three shapes: a failed read, a failed run, a finished run', () => {
@@ -143,7 +145,7 @@ test('a save never sends the candidate set, so a blank relevance is never writte
 });
 
 test('the page is routed for the list’s licences and the list links to it', () => {
-  assert.match(app, /path="\/research\/companies\/:id" element=\{guard\(labRoles\(\['admin', 'founder', 'advisor'\]\), <CompanyAnalysis /);
+  assert.match(app, /path="\/research\/companies\/:id" element=\{guard\(labRoles\(\['admin', 'founder', 'advisor'\], \{ preview: false \}\), <CompanyAnalysis /);
   // The zone's saved list is a link, and it is the branch `linkToDossier`
   // takes — the text of a Link in a dead arm would prove nothing.
   assert.match(component, /linkToDossier \? \(\s*\/\/[^\n]*\n\s*<Link key=\{a\.id\} to=\{`\/research\/companies\/\$\{encodeURIComponent\(a\.id\)\}`\}/);

@@ -103,7 +103,7 @@ test('#5343 batch 1: a database missing the columns gets them once; the next iso
     const first = isolate(db);
     await all(first.env);
     const added = (t: string) => first.log.alters.filter((a) => a.includes(` ${t} `)).length;
-    assert.deepEqual([added('users'), added('notifications'), added('notifications_inbox'), added('ai_usage_logs')], [1, 1, 4, 10]);
+    assert.deepEqual([added('users'), added('notifications'), added('notifications_inbox'), added('ai_usage_logs')], [1, 1, 4, 11]);
     assert.ok(columns(db, 'users').includes('last_active_at'));
     assert.ok(columns(db, 'notifications').includes('dedupe_key'));
     for (const c of ['category', 'severity', 'cta_url', 'template_key']) assert.ok(columns(db, 'notifications_inbox').includes(c), c);

@@ -141,7 +141,9 @@ test('the page is padded for the foot bar wherever the bar is drawn (below 1024p
 
 test('Market\'s competitors: cards below md, the table from md, never a table scrolled sideways', () => {
   const src = read('frontend/src/pages/deal/DealInsightTabs.jsx');
-  const block = src.slice(src.indexOf('<Card title="Competitors"'), src.indexOf('The founder tracks no competitors.'));
+  // D6164 part 2: the cards and the table moved into `Competitors`, which adds search and sort (DE24).
+  const block = src.slice(src.indexOf('function Competitors('), src.indexOf('function CompanyMarkets('));
+  assert.ok(block.length > 0, 'the Competitors component is found');
   assert.match(block, /<ul className="[^"]*\bmd:hidden\b[^"]*" data-testid="deal-market-competitor-cards">/);
   assert.match(block, /<div className="hidden md:block">\s*<table className="w-full border-collapse/);
   assert.doesNotMatch(block, /overflow-x-auto|min-w-\[/, 'no sideways scroll, no minimum width');

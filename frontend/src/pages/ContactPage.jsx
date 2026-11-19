@@ -28,31 +28,58 @@ import './site/contact.css';
 const TURNSTILE_SITE_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_TURNSTILE_SITE_KEY) || '';
 
-/** The canvas's three intents, keyed as `contact.ts`'s CONTACT_INTENTS keys them. */
+/**
+ * The eight intents, keyed as `contact.ts`'s CONTACT_INTENTS keys them and in
+ * its order: the canvas's three, Licence, and the four owner decision Q1
+ * added (#6987, tracker #6976). Every pill is always drawn; Licence used to
+ * appear only under `?topic=licence` (D680, revised 2026-11-18).
+ */
 export const INTENTS = [
   { value: 'lab', label: 'Spin-Out Lab' },
   { value: 'invest', label: 'Investing / LP' },
   { value: 'advise', label: 'Advising' },
+  { value: 'licence', label: 'Licence' },
+  { value: 'partners', label: 'Operating Partners' },
+  { value: 'directory', label: 'Directory' },
+  { value: 'circle', label: 'Circle' },
+  { value: 'general', label: 'General' },
 ];
 
-/**
- * The fourth intent. The Administrators page's "Request a licence" links to
- * `/contact?topic=licence`; the pill is drawn only then, so a visitor who came
- * for anything else sees the canvas's three (D680).
- */
-export const LICENCE_INTENT = { value: 'licence', label: 'Licence' };
+/** Where an unknown `?topic=` lands (#6987). */
+export const FALLBACK_INTENT = 'general';
 
-export function intentsFor(topic) {
-  return topic === 'licence' ? [...INTENTS, LICENCE_INTENT] : INTENTS;
+/**
+ * The pill pressed on arrival: the one `?topic=` names, so "Apply to advise"
+ * lands on Advising (#6986) and "Register interest in a circle" on Circle.
+ * No topic keeps the canvas's default, Spin-Out Lab; a topic that names no
+ * pill selects General (#6987).
+ */
+export function initialIntent(topic) {
+  if (!topic) return INTENTS[0].value;
+  return INTENTS.some((i) => i.value === topic) ? topic : FALLBACK_INTENT;
 }
 
 /**
- * The pill pressed on arrival: the one `?topic=` names (`lab`, `invest`,
- * `advise` or `licence`), so "Apply to advise" lands on Advising (#6986).
- * Any other value keeps the canvas's default.
+ * The question under the pills, per intent. PROVISIONAL until the WEB-03
+ * canvas (#6982) supplies each topic's wording: Spin-Out Lab keeps the
+ * canvas's text, and every other topic shares one neutral line. Do not add
+ * per-topic copy here before that canvas lands.
  */
-export function initialIntent(topic) {
-  return intentsFor(topic).some((i) => i.value === topic) ? topic : INTENTS[0].value;
+const NEUTRAL_QUESTION = { label: 'Your question', placeholder: 'What would you like to ask us?' };
+export const QUESTIONS = {
+  lab: {
+    label: 'What you are building',
+    placeholder: 'What are you building, and what is the hardest unresolved question in it right now?',
+  },
+};
+
+export function questionFor(intent) {
+  return Object.prototype.hasOwnProperty.call(QUESTIONS, intent) ? QUESTIONS[intent] : NEUTRAL_QUESTION;
+}
+
+/** The company or project name is asked for only of a Spin-Out Lab enquiry (#6987). */
+export function companyRequired(intent) {
+  return intent === 'lab';
 }
 
 /**
@@ -105,7 +132,6 @@ const REFUSALS = {
 export default function ContactPage() {
   const [params] = useSearchParams();
   const topic = params.get('topic');
-  const intents = intentsFor(topic);
   const cohort = openCohortCopy();
 
   // The pressed pill belongs to the topic it was pressed under: a link that
@@ -113,6 +139,8 @@ export default function ContactPage() {
   const [picked, setPicked] = useState({ topic, value: initialIntent(topic) });
   const intent = picked.topic === topic ? picked.value : initialIntent(topic);
   const setIntent = (value) => setPicked({ topic, value });
+  const question = questionFor(intent);
+  const companyLabel = companyRequired(intent) ? 'Company or project name' : 'Company or project name (optional)';
   const [form, setForm] = useState(EMPTY);
   const [status, setStatus] = useState({ state: 'idle', error: '', reference: '', intent: '' });
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -235,7 +263,7 @@ export default function ContactPage() {
             ) : (
               <form className="ax-contact-form" onSubmit={submit} aria-labelledby="ax-contact-k">
                 <div id="ax-contact-k" className="ax-lbl-q ax-contact-k">Application enquiry</div>
-                <FilterPills options={intents} value={intent} onChange={setIntent} label="What the enquiry is about" />
+                <FilterPills options={INTENTS} value={intent} onChange={setIntent} label="What the enquiry is about" />
 
                 <label className="ax-vh" htmlFor="ax-contact-name">Full name</label>
                 <input
@@ -261,15 +289,15 @@ export default function ContactPage() {
                   value={form.email}
                   onChange={update('email')}
                 />
-                <label className="ax-vh" htmlFor="ax-contact-company">Company or project name</label>
+                <label className="ax-vh" htmlFor="ax-contact-company">{companyLabel}</label>
                 <input
                   id="ax-contact-company"
                   className="ax-contact-input"
                   type="text"
-                  required
+                  required={companyRequired(intent)}
                   maxLength={200}
                   autoComplete="organization"
-                  placeholder="Company or project name"
+                  placeholder={companyLabel}
                   value={form.company}
                   onChange={update('company')}
                 />
@@ -285,7 +313,7 @@ export default function ContactPage() {
                   value={form.link}
                   onChange={update('link')}
                 />
-                <label className="ax-vh" htmlFor="ax-contact-about">What you are building</label>
+                <label className="ax-vh" htmlFor="ax-contact-about">{question.label}</label>
                 <textarea
                   id="ax-contact-about"
                   className="ax-contact-input"
@@ -293,7 +321,7 @@ export default function ContactPage() {
                   minLength={10}
                   maxLength={5000}
                   rows={4}
-                  placeholder="What are you building, and what is the hardest unresolved question in it right now?"
+                  placeholder={question.placeholder}
                   value={form.about}
                   onChange={update('about')}
                 />

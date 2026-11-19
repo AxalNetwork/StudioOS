@@ -81,68 +81,29 @@ const SECTORS = {
 const MD = MARKETS.items;
 
 // ---- M1: the markets index ---------------------------------------------------
+//
+// D7171 (#7171, canvas D7036, owner answer Q2 A) replaced the grouped list
+// with a flat, paged table, grouping kept as the `group=1` toggle: its tests
+// are `research_markets_directory_7171.test.mjs`. What M1 still holds here: a
+// market opens its tracked sector's page, an unmapped one its own, and the
+// zone never writes a tracked sector's name itself.
 
-test('M1: a sector group opens /research/markets/sector/<slug>; the unmapped group opens nothing', () => {
-  const markup = html(h(directory.PrivatePanel, { markets: ready(MARKETS) }));
-  assert.deepEqual(opens(markup), ['/research/markets/sector/fintech-defi']);
-  assert.match(markup, /Open sector<span class="sr-only"> Fintech \/ DeFi<\/span> →/,
-    'each link names its sector to a screen reader');
-  // The note that the link waited on #1139 is gone with the wait.
+test('M1: a mapped market opens its tracked sector; an unmapped one opens its own page, "Not mapped yet"', async () => {
+  const { DirectoryBody } = await import('../src/pages/research/MarketDirectory.jsx');
+  const { readMarketQuery } = await import('../src/pages/research/marketDirectoryQuery.js');
+  const view = readMarketQuery(new URLSearchParams('view=cards'));
+  const markup = html(h(DirectoryBody, { markets: ready({ ...MARKETS, directory_total: 3, offset: 0 }), view, onPatch: () => {} }));
+  assert.match(markup, /href="\/research\/markets\/sector\/fintech-defi\?market=fintech&amp;from=view%3Dcards%26open%3Dfintech"/);
+  assert.match(markup, /href="\/research\/markets\/sector\/fashion\?from=view%3Dcards%26open%3Dfashion"/);
+  assert.match(words(markup), /Fashion Not mapped yet · no tracked sector/);
   assert.doesNotMatch(read('frontend/src/pages/research/MarketDirectoryZone.jsx'), /the link lands with it/);
 });
 
-test('M1: every tracked sector the Worker names is a group; one with no market says so and still opens', () => {
-  const markup = html(h(directory.PrivatePanel, { markets: ready(MARKETS), sectors: ready(SECTORS) }));
-  const t = words(markup);
-  assert.match(t, /Fintech \/ DeFi 2 markets · 910 companies/);
-  assert.match(t, /Agentic B2B No market is mapped to this sector yet Open sector Agentic B2B →/);
-  assert.match(t, /Quantum Infrastructure No market is mapped to this sector yet Open sector Quantum Infrastructure →/);
-  assert.deepEqual(opens(markup), [
-    '/research/markets/sector/fintech-defi',
-    '/research/markets/sector/agentic-b2b',
-    '/research/markets/sector/quantum-infrastructure',
-  ]);
-  // Sectors with markets, then sectors without, then the unmapped markets.
-  assert.ok(t.indexOf('Fintech / DeFi 2 markets') < t.indexOf('Agentic B2B No market'));
-  assert.ok(t.indexOf('Quantum Infrastructure No market') < t.indexOf('Not mapped yet'));
-});
-
-test('M1: "no market is mapped" is said only over the whole list, and a failed sector read says so', () => {
-  assert.deepEqual(directory.groupMarkets(MD, SECTORS.items).map((g) => [g.name, g.slug, g.markets.length]), [
-    ['Fintech / DeFi', 'fintech-defi', 2],
-    ['Agentic B2B', 'agentic-b2b', 0],
-    ['Quantum Infrastructure', 'quantum-infrastructure', 0],
-    ['Not mapped yet', null, 1],
-  ]);
-  // A read that held fewer markets than it counted cannot say a sector has none.
-  const partial = words(html(h(directory.PrivatePanel, { markets: ready({ ...MARKETS, total: 90 }), sectors: ready(SECTORS) })));
-  assert.doesNotMatch(partial, /No market is mapped/);
-  assert.match(partial, /Fintech \/ DeFi 2 markets/);
-  // A failed read of the sectors is not "no market", and it leaves the groups the markets name.
-  const failed = words(html(h(directory.PrivatePanel, { markets: ready(MARKETS), sectors: unreadable })));
-  assert.match(failed, /The tracked sectors could not be read\. The groups below are only the sectors a market maps to/);
-  assert.doesNotMatch(failed, /No market is mapped/);
-  assert.match(failed, /Fintech \/ DeFi 2 markets · 910 companies/);
-  // A 404 on the list route has not said there are no sectors either.
-  assert.match(words(html(h(directory.PrivatePanel, { markets: ready(MARKETS), sectors: { status: 'not_found', data: null } }))),
-    /The tracked sectors could not be read/);
-  assert.match(words(html(h(directory.PrivatePanel, { markets: ready(MARKETS), sectors: loading }))), /Loading the tracked sectors/);
-});
-
-test('M1: the tracked sectors are the Worker\'s list, read by the mounted page, never written in it', () => {
+test('M1: the zone never writes a tracked sector\'s name itself', () => {
   const src = codeOnly(read('frontend/src/pages/research/MarketDirectoryZone.jsx'));
-  assert.match(src, /useRead\(\(\) => researchSectorsApi\.list\(\)\)/);
-  assert.match(src, /<PrivatePanel markets=\{\{ \.\.\.markets, reload: reloadMarkets \}\} sectors=\{\{ \.\.\.sectors, reload: reloadSectors \}\} \/>/);
   for (const name of ['AI Infrastructure', 'Agentic B2B', 'Quantum Infrastructure', 'Vertical SaaS', 'Climate Intelligence']) {
     assert.ok(!src.includes(name), `the page writes the sector "${name}" itself`);
   }
-});
-
-test('M1: the markets no sector claims are "Not mapped yet"', () => {
-  assert.equal(directory.UNMAPPED_LABEL, 'Not mapped yet');
-  const t = words(html(h(directory.PrivatePanel, { markets: ready(MARKETS) })));
-  assert.match(t, /Not mapped yet 1 markets · no index applies/);
-  assert.doesNotMatch(t, /Not mapped to a tracked sector/);
 });
 
 // ---- M2, M3: the detail pages sit in the Research shell ---------------------
@@ -215,37 +176,50 @@ const noop = () => {};
 const RECORD = { form: null, opened: 0, busy: false, note: null, onOpen: noop, onChange: noop, onCancel: noop, onSave: noop };
 
 test('the readings card offers "Record a reading" once the list is read, and the form asks what the Worker requires', () => {
-  assert.match(words(html(h(directory.Readings, { readings: ready(LIST), record: RECORD }))), /Your market readings Record a reading →/);
+  // D7174 (D7039 RMP-01): Record a reading is the card's one primary, beside Export CSV.
+  assert.match(words(html(h(directory.Readings, { readings: ready(LIST), record: RECORD }))),
+    /Your market readings Comparable ranges you entered, each with its run date and age\. Newest per service line\. Export CSV Record a reading/);
   // An empty list has been read too: a first reading needs no service line.
-  assert.match(words(html(h(directory.Readings, { readings: ready({ items: [] }), record: RECORD }))), /Record a reading →/);
+  assert.match(words(html(h(directory.Readings, { readings: ready({ items: [] }), record: RECORD }))), /Record a reading/);
   // Not before the list is read, and not over a failed read.
   assert.doesNotMatch(words(html(h(directory.Readings, { readings: loading, record: RECORD }))), /Record a reading/);
   assert.doesNotMatch(words(html(h(directory.Readings, { readings: unreadable, record: RECORD }))), /Record a reading/);
 
   const form = directory.readingForm(null, '2026-10-06');
   const open = html(h(directory.Readings, { readings: ready(LIST), record: { ...RECORD, form } }));
-  for (const field of ['Service line', 'What it prices', 'Low (USD)', 'High (USD)', 'Comparables', 'Run date']) {
+  for (const field of ['Service line', 'What it prices', 'Scope', 'Low (USD)', 'High (USD)', 'Comparables', 'Run date']) {
     assert.ok(open.includes(`aria-label="${field}"`), field);
   }
   assert.match(open, /<option value="o-brand">Brand refresh<\/option>/);
   assert.match(open, /<option value="o-retainer">Retainer<\/option>/, 'a service line never read is offered');
   assert.match(open, /value="2026-10-06"/, 'the run date starts at today');
-  assert.match(words(open), /How many engagements the range came from\. Refused if 0\. Record this reading/);
+  assert.match(words(open), /How many engagements the range came from\. Refused if 0\./);
+  assert.match(words(open), /Record this reading Cancel/);
 });
 
 test('a form the Worker would refuse is refused first, in the reading page\'s words', () => {
   const ok = { offering_uid: '', metric: 'Design system build', low: '38,000', high: '$62,000', n: '11', ran_at: '2026-10-01' };
   assert.deepEqual(directory.readingPayload(ok), { payload: {
     metric: 'Design system build', range_low_cents: 3800000, range_high_cents: 6200000, comparable_count: 11, ran_at: '2026-10-01',
+    scope: null,
   } });
+  // D7174: the scope travels, trimmed; blank is none.
+  assert.equal(directory.readingPayload({ ...ok, scope: '  One update  ' }).payload.scope, 'One update');
   assert.equal(directory.readingPayload({ ...ok, offering_uid: 'o-brand', metric: 'Brand refresh' }).payload.offering_uid, 'o-brand');
   assert.ok(directory.readingPayload({ ...ok, high: '38000' }).payload, 'low equal to high reads forward');
   assert.equal(directory.readingPayload({ ...ok, low: '62000', high: '38000' }).error,
     'High is below low. Nothing is saved until the range reads forward.');
-  assert.equal(directory.readingPayload({ ...ok, n: '0' }).error, 'How many engagements the range came from. Refused if 0.');
+  assert.equal(directory.readingPayload({ ...ok, n: '0' }).error,
+    'How many engagements the range came from: a whole number, 1 or more. Refused if 0.');
   assert.equal(directory.readingPayload({ ...ok, ran_at: '' }).error, 'A reading needs the date you ran it.');
   assert.equal(directory.readingPayload({ ...ok, metric: '  ' }).error, 'Name what the range prices.');
-  assert.equal(directory.readingPayload({ ...ok, low: '' }).error, 'Enter the low and the high.');
+  // D7174 (D7039 RMP-08): each correction names its own field.
+  assert.equal(directory.readingPayload({ ...ok, low: '' }).error, 'Enter the low. A range needs both ends.');
+  assert.deepEqual(directory.readingPayload({ ...ok, high: '' }).errors, { high: 'Enter the high. A range needs both ends.' });
+  assert.deepEqual(directory.readingPayload({ ...ok, low: '99.505' }).errors,
+    { low: 'Use dollars and cents: two digits after the point at most. 99.505 is not rounded for you.' });
+  assert.deepEqual(Object.keys(directory.readingPayload({ low: '9', high: '1', n: '0', ran_at: '', metric: '' }).errors),
+    ['metric', 'row', 'n', 'ran_at']);
 });
 
 test('a save opens the new reading at /research/markets/<uid>; a refused form sends nothing', async () => {
@@ -276,10 +250,48 @@ test('a save opens the new reading at /research/markets/<uid>; a refused form se
 });
 
 test('each reading shows its run date, its age and its band', () => {
-  const t = words(html(h(directory.Readings, { readings: ready(LIST) })));
-  assert.ok(t.includes(`Brand refresh run ${LIST.items[0].ran_at} · 120 d old Stale`), t);
-  assert.ok(t.includes(`Fractional seat run ${LIST.items[2].ran_at} · 10 d old Current`), t);
-  assert.doesNotMatch(t, /Retainer/, 'a service line never read is not a reading');
+  // D7174 (D7039 RMP-01): the range to the cent, the count, the scope, the
+  // run date and the age as a word and a shape.
+  const priced = { items: [
+    { ...LIST.items[0], range_low_cents: 9950, range_high_cents: 9999, scope: 'One update' },
+    LIST.items[1],
+    { ...LIST.items[2], range_low_cents: 0, range_high_cents: 0 },
+  ] };
+  const t = words(html(h(directory.Readings, { readings: ready(priced) })));
+  assert.ok(t.includes(`Brand refresh Service line · scope: One update $99.50 – $99.99 7 ${LIST.items[0].ran_at} ◷ Stale 120 d Open ›`), t);
+  // A true zero is a value; a service line never read is No reading yet, never $0.
+  assert.ok(t.includes(`Fractional seat Not a service line · scope: Not recorded $0.00 – $0.00 4 ${LIST.items[2].ran_at} ✓ Current 10 d`), t);
+  assert.ok(t.includes('Retainer Service line · in your catalog No reading yet Not recorded Not recorded Nothing to age'), t);
+  // The phone cards carry the same facts.
+  assert.ok(t.includes(`Brand refresh $99.50 – $99.99 7 comparables · ${LIST.items[0].ran_at} ◷ Stale Scope: One update`), t);
+});
+
+test('the readings export writes the cents as typed, and an empty cell for Not recorded', () => {
+  const saved = [];
+  const items = [
+    { uid: 'r-1', offering_uid: 'o-1', metric: 'Investor-update edit · per update', scope: 'One update, one round',
+      range_low_cents: 9950, range_high_cents: 9999, comparable_count: 7, ran_at: daysAgo(0) },
+    { uid: 'r-2', offering_uid: null, metric: 'Intro call', scope: null, range_low_cents: 0, range_high_cents: 0, comparable_count: 9, ran_at: daysAgo(27) },
+    { uid: null, offering_uid: 'o-2', metric: 'Board-pack preparation', ran_at: null, comparable_count: null },
+  ];
+  assert.equal(directory.exportReadings(items, (...a) => { saved.push(a); return true; }), true);
+  const [name, header, rows] = saved[0];
+  assert.match(name, /^market-readings-3-rows-\d{4}-\d{2}-\d{2}\.csv$/);
+  assert.deepEqual(header, ['metric', 'service_line', 'scope', 'low_usd', 'high_usd', 'comparables', 'ran_at', 'age_days', 'age']);
+  assert.deepEqual(rows[0], ['Investor-update edit · per update', 'yes', 'One update, one round', '99.50', '99.99', 7, daysAgo(0), 0, 'current']);
+  assert.deepEqual(rows[1], ['Intro call', 'no', null, '0.00', '0.00', 9, daysAgo(27), 27, 'current']);
+  assert.deepEqual(rows[2], ['Board-pack preparation', 'yes', null, null, null, null, null, null, 'not_recorded']);
+  assert.equal(directory.exportReadings([], () => true), false, 'nothing loaded is no file');
+  // The button is offered once the list is read and holds a row.
+  assert.match(words(html(h(directory.Readings, { readings: ready({ items }) }))), /Export CSV/);
+  assert.doesNotMatch(words(html(h(directory.Readings, { readings: ready({ items: [] }) }))), /Export CSV/);
+});
+
+test('an investor\'s Markets view draws no readings card and reads none (D6273 Q2)', () => {
+  const src = codeOnly(read('frontend/src/pages/research/MarketDirectoryZone.jsx'));
+  assert.match(src, /const showReadings = role !== 'investor';/);
+  assert.match(src, /useRead\(\(\) => \(showReadings \? api\.research\.marketReadings\(\) : Promise\.resolve\(\{ items: \[\] \}\)\), role\)/);
+  assert.match(src, /\{showReadings \? \(\s*<Readings/);
 });
 
 test('the partner row\'s Re-run stale opens the form on the stale reading; Attach to proposal stays unbuilt', () => {
@@ -295,7 +307,7 @@ test('the partner row\'s Re-run stale opens the form on the stale reading; Attac
   assert.equal(directory.nextToRerun([LIST.items[2]]), null);
   // The re-run keeps what it prices and its count, and blanks the dollars.
   assert.deepEqual(directory.readingForm(directory.nextToRerun(LIST.items), '2026-10-06'),
-    { offering_uid: 'o-brand', metric: 'Brand refresh', n: '7', low: '', high: '', ran_at: '2026-10-06' });
+    { offering_uid: 'o-brand', metric: 'Brand refresh', scope: '', n: '7', low: '', high: '', ran_at: '2026-10-06' });
 
   let clicked = 0;
   const row = partnerZoneActions('research/markets', {
@@ -309,7 +321,7 @@ test('the partner row\'s Re-run stale opens the form on the stale reading; Attac
   // The page that renders the zone supplies it, through the workspace.
   assert.deepEqual(unsuppliedHandlers().filter((b) => b.zone === 'research/markets'), []);
   assert.match(codeOnly(read('frontend/src/workspaces/ResearchWorkspace.jsx')),
-    /zoneActions=\{\(rows, handlers\) => zoneActionsFor\(role, 'research\/markets', \{ handlers, view:/);
+    /zoneActions=\{\(scoped, handlers\) => zoneActionsFor\(role, 'research\/markets', \{ handlers, view:/);
 });
 
 test('copy that described the page without its form or its directory says what is there', () => {

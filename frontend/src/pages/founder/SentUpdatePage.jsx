@@ -12,6 +12,12 @@ import { ASK_LABELS, metricText, periodTitle } from './ShareUpdateSheet';
  * item in, who the update was sent to and who opened it, and "Ask again" on an
  * ask with no reply after 14 days.
  *
+ * Each ask carries its latest reminder round (D4645-p2): how many recipients it
+ * reserved, how many have an in-app reminder recorded, and how many are still
+ * waiting, not confirmed, not delivered or no longer due. "Check delivery"
+ * resumes and reconciles that round; it never re-sends a reminder whose outcome
+ * is unknown unless the author asks for exactly that.
+ *
  * A RECIPIENT sees what their audience may read — the Worker decides it: the
  * Axal network gets the asks only unless the founder included the metrics —
  * and answers an ask in place. Opening the page records the open.
@@ -100,6 +106,64 @@ export function recipientState(r) {
   return r.opened_at ? `Opened ${dayMon(r.opened_at) || String(r.opened_at).slice(0, 10)}` : 'Not opened';
 }
 
+const count = (n) => Number.isSafeInteger(n) && n >= 0;
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * One line for an ask's latest reminder round, from the Worker's recorded
+ * progress: "Asked again 18 Nov · 2 recipients · 1 in their inbox · 1 not
+ * confirmed". Null when there is no round or its counts are not numbers.
+ */
+export function reminderLine(r) {
+  if (!r || ![r.recipients, r.notified, r.failed, r.unconfirmed, r.pending, r.skipped].every(count)) return null;
+  const when = dayMon(r.asked_again_at);
+  const parts = [`Asked again${when ? ` ${when}` : ''}`, plural(r.recipients, 'recipient'), `${r.notified} in their inbox`];
+  if (r.pending) parts.push(`${r.pending} waiting`);
+  if (r.unconfirmed) parts.push(`${r.unconfirmed} not confirmed`);
+  if (r.failed) parts.push(`${r.failed} not delivered`);
+  if (r.skipped) parts.push(`${r.skipped} no longer due`);
+  return parts.join(' · ');
+}
+
+/** Whether "Check delivery" has anything to do: work left, or a failure that stopped before sending. */
+export function reminderOpen(r) {
+  return !!r && (r.settled === false || (r.states?.failed ?? 0) > 0);
+}
+
+/** What the author is told after a reminder request answered. */
+export function reminderOutcome(res) {
+  if (!res || ![res.recipients, res.notified, res.failed].every(count)) return 'Reminder delivery counts are unavailable.';
+  const out = [`Recipients: ${res.recipients}. In-app reminders recorded: ${res.notified}. Failed: ${res.failed}.`];
+  if (count(res.pending) && res.pending) out.push(`Still waiting: ${res.pending}.`);
+  if (count(res.unconfirmed) && res.unconfirmed) {
+    out.push(`Not confirmed: ${res.unconfirmed}. Check delivery looks for them in the inbox; nothing is sent to them again unless you choose to.`);
+  }
+  if (count(res.skipped) && res.skipped) out.push(`No longer due: ${res.skipped} (a reply, a new version or a changed recipient).`);
+  return out.join(' ');
+}
+
+/** A key for one press, so a repeat of a request whose answer was lost finds the same round. */
+export function reminderKey() {
+  const c = typeof globalThis !== 'undefined' ? globalThis.crypto : null;
+  if (c?.randomUUID) return c.randomUUID();
+  return `k-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/**
+ * One reminder press: the request, and — when its answer is lost (no status,
+ * or a server error) — one repeat with the same key, which the Worker answers
+ * with the original round rather than a second one.
+ */
+export async function pressAskAgain(api, askUid, body = {}) {
+  const key = body.reminder_uid ? undefined : reminderKey();
+  const send = () => api.askAgain(askUid, key ? { ...body, request_key: key } : body);
+  try { return await send(); }
+  catch (e) {
+    if (e?.status && e.status < 500) throw e;
+    return send();
+  }
+}
+
 const ROW = 'flex items-start justify-between gap-3 border-b border-axal-hairline py-2.5 text-[12.5px] dark:border-gray-800';
 const LINK = 'text-[12.5px] font-bold text-violet-700 dark:text-violet-300';
 const PRIMARY = 'rounded-lg bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50 dark:bg-violet-600';
@@ -131,7 +195,7 @@ function ReplyForm({ ask, onReply }) {
 }
 
 /** The page body from props alone. `data` is the Worker's `/page` answer. */
-export function SentUpdateView({ data, onReply = null, onAskAgain = null, reminderBusy = false, initial = {} }) {
+export function SentUpdateView({ data, onReply = null, onAskAgain = null, onCheckReminder = null, reminderBusy = false, initial = {} }) {
   const author = Array.isArray(data.recipients);
   const metrics = Array.isArray(data.metrics) ? data.metrics : null;
   const [q, setQ] = useState(initial.q || '');
@@ -206,11 +270,29 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null, remind
                   </span>
                 </div>
               )}
+              {author && reminderLine(a.reminder) && (
+                <div className={ROW} data-testid="sent-reminder">
+                  <span className="text-axal-muted">{reminderLine(a.reminder)}</span>
+                  {reminderOpen(a.reminder) && onCheckReminder && (
+                    <span className="flex flex-wrap items-center gap-2">
+                      <button type="button" className={CONTROL} disabled={reminderBusy} onClick={() => onCheckReminder(a.uid, a.reminder.reminder_uid)}>Check delivery</button>
+                      {a.reminder.unconfirmed > 0 && (
+                        <button type="button" className={CONTROL} disabled={reminderBusy} title="Someone whose reminder may already have arrived could get it twice."
+                          onClick={() => onCheckReminder(a.uid, a.reminder.reminder_uid, true)}>Send the unconfirmed again</button>
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
               {!author && onReply && <ReplyForm ask={a} onReply={onReply} />}
             </li>
           );
         })}</ul>
         {author && <p className="mt-2 text-[11.5px] text-axal-faint">Each reply became an item in the module that asked, unless it says why not.</p>}
+        {author && (data.asks || []).some((a) => a.reminder) && (
+          <p className="mt-1 text-[11.5px] text-axal-faint" data-testid="sent-reminder-guarantee">A reminder reaches each recipient once per round in the in-app inbox. Email and push follow each person's notification settings and are not guaranteed exactly once.</p>
+        )}
+        {author && data.reminders_readable === false && <p className="mt-1 text-[11.5px] text-axal-faint">Reminder progress: Unreadable.</p>}
       </Card>}
       {author && filter !== 'replies' && (
         <Card padding="lg">
@@ -249,17 +331,13 @@ export default function SentUpdatePage() {
     catch (e) { setState({ loading: false, error: e?.status === 404 ? 'This update was not found.' : (e?.message || 'Unreadable'), data: null }); }
   }, [uid]);
   useEffect(() => { load(); }, [load]);
-  const askAgain = async (askUid) => {
+  const remind = async (askUid, body) => {
     if (sending.current) return;
     sending.current = true;
     setReminderBusy(true);
     setReminder(null);
     try {
-      const { recipients, notified, failed } = await shareUpdateApi.askAgain(askUid);
-      const measured = [recipients, notified, failed].every(count => Number.isSafeInteger(count) && count >= 0);
-      setReminder(measured
-        ? `Recipients: ${recipients}. In-app reminders recorded: ${notified}. Failed: ${failed}.`
-        : 'Reminder delivery counts are unavailable.');
+      setReminder(reminderOutcome(await pressAskAgain(shareUpdateApi, askUid, body)));
     } catch (error) {
       setReminder(error?.status === 409
         ? 'This ask is no longer eligible for a reminder. Check the refreshed update.'
@@ -270,12 +348,14 @@ export default function SentUpdatePage() {
       sending.current = false;
     }
   };
+  const askAgain = (askUid) => remind(askUid, {});
+  const checkReminder = (askUid, reminderUid, resend = false) => remind(askUid, { reminder_uid: reminderUid, ...(resend ? { resend_ambiguous: true } : {}) });
   return (
     <main className="mx-auto max-w-3xl p-4">
       {state.loading && <p className="text-[12.5px] text-axal-muted">Loading this update…</p>}
       {state.error && <Card padding="lg"><p className="text-[12.5px]">{state.error}</p></Card>}
       {reminder && <p role="status" className="mb-3 text-sm">{reminder}</p>}
-      {state.data && <SentUpdateView data={state.data} onReply={shareUpdateApi.reply} onAskAgain={askAgain} reminderBusy={reminderBusy} />}
+      {state.data && <SentUpdateView data={state.data} onReply={shareUpdateApi.reply} onAskAgain={askAgain} onCheckReminder={checkReminder} reminderBusy={reminderBusy} />}
     </main>
   );
 }

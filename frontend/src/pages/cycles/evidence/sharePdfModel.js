@@ -111,6 +111,7 @@ export function packPdfModel(pack) {
 /** What a PDF copy on Shared links shares, in the canvas's words. */
 export function copyShares(copy) {
   if (copy?.output === 'readiness') return `Readiness snapshot · ${copy.item_count ?? NR} areas`;
+  if (copy?.output === 'status') return `Raise status · ${copy.item_count ?? NR} materials`;
   const n = copy?.item_count;
   const items = Number.isInteger(n) ? `${n} ${n === 1 ? 'item' : 'items'}` : NR;
   return `Evidence pack · ${items} · ${copy?.reader === 'after_nda' ? 'after NDA' : 'before NDA'}`;

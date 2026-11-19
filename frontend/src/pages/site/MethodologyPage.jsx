@@ -4,8 +4,9 @@ import SitePage from '../../components/site/SitePage';
 import { ButtonLink } from '../../components/site/SiteBlocks';
 import {
   METHOD_STAGES, METHOD_DIMENSIONS, METHOD_LOOP, METHOD_LINKS, METHOD_DISCIPLINES,
-  METHOD_FIGURES, DISCIPLINE_FIGURES, LAB_WEEKS, METHOD_RECORD, METHOD_USERS, METHOD_ROLES,
+  METHOD_FIGURES, DISCIPLINE_FIGURES, LAB_WEEK_TONES, METHOD_RECORD, METHOD_USERS, METHOD_ROLES,
 } from '../../lib/siteMethod';
+import { LAB_WEEKS } from '../../lib/spinoutLab';
 import './method.css';
 
 /**
@@ -290,7 +291,7 @@ function Stages() {
       <div className="ax-m-wrap ax-m-sec">
         <div className="ax-m-2 ax-m-head2">
           <div>
-            <div className="ax-m-eyebrow">Four stages</div>
+            <div className="ax-m-eyebrow">The company lifecycle · four stages</div>
             <h2 id="m-stages-h" className="ax-m-h2">From opportunity to enduring company.</h2>
           </div>
           <p className="ax-m-side">
@@ -329,11 +330,12 @@ function LabInMotion() {
           <div>
             <div className="ax-m-eyebrow is-light">The 28-day Spin-Out Lab</div>
             <h2 id="m-lab-h" className="ax-m-h2">The methodology in motion.</h2>
-            <p className="ax-m-lab-sub">A 28-day venture sprint through all four stages.</p>
+            <p className="ax-m-lab-sub">A 28-day venture sprint, in four weeks of its own.</p>
           </div>
           <p className="ax-m-lede is-light ax-m-flat">
             The Spin-Out Lab is the concentrated expression of the Axal method. It gives founders a defined period, a
-            shared operating system, and a clear set of decisions. Each week maps to one stage.
+            shared operating system, and a clear set of decisions. Its four weeks are the Lab&rsquo;s, not the four
+            lifecycle stages above.
           </p>
         </div>
         <div className="ax-m-block">
@@ -341,16 +343,14 @@ function LabInMotion() {
         </div>
         <div className="ax-m-k is-light ax-m-days"><span>Day 1</span><span>Day 28</span></div>
         <ol className="ax-m-4 ax-m-weeks">
-          {LAB_WEEKS.map((w) => (
+          {LAB_WEEKS.map((w, wi) => (
             <li key={w.n} className="ax-m-week">
               <div className="ax-m-week-bar" aria-hidden="true">
-                {Array.from({ length: 7 }, (_, i) => <span key={i} style={{ background: w.tone }} />)}
+                {Array.from({ length: 7 }, (_, i) => <span key={i} style={{ background: LAB_WEEK_TONES[wi] }} />)}
               </div>
               <div className="ax-m-k is-light ax-m-week-n">{w.n}</div>
-              <h3 className="ax-m-week-t">{w.t}</h3>
-              <ul className="ax-m-bullets is-light">
-                {w.items.map((i) => <li key={i} style={{ '--ax-m-dot': w.tone }}>{i}</li>)}
-              </ul>
+              <h3 className="ax-m-week-t">{w.name}</h3>
+              <p className="ax-m-lede is-light ax-m-flat">{w.desc}</p>
             </li>
           ))}
         </ol>

@@ -4,12 +4,13 @@
  * POST /api/contact   { name, email, message, subject?, intent?, company?, link?,
  *                       kind?, hp?, turnstileToken? }
  *   - kind ∈ {'contact','support'} (default 'contact')
- *   - intent (D680) is one of CONTACT_INTENTS — the enquiry pills on /contact
- *     (Spin-Out Lab, Investing / LP, Advising, and Licence, which the
- *     Administrators page's "Request a licence" preselects). Anything else is
- *     400 {code:'invalid_intent'}. With an intent, `subject` may be left out:
- *     it is derived as "<intent label> — <company or name>".
- *   - company (D680) is optional free text, up to 200 characters.
+ *   - intent (D680) is one of CONTACT_INTENTS — the eight enquiry pills on
+ *     /contact (Spin-Out Lab, Investing / LP, Advising, Licence, and since
+ *     #6987 Operating Partners, Directory, Circle and General). Anything else
+ *     is 400 {code:'invalid_intent'}. With an intent, `subject` may be left
+ *     out: it is derived as "<intent label> — <company or name>".
+ *   - company (D680) is optional free text, up to 200 characters, for every
+ *     intent: a licence or any other enquiry may be sent without one.
  *   - link (D680) is optional; when given it must be an http(s) URL of at most
  *     500 characters, else 400 {code:'invalid_link'}. It is never truncated:
  *     a cut URL is a different URL.
@@ -66,19 +67,30 @@ export const CONTACT_INTENTS: Record<string, string> = {
   invest: 'Investing / LP',
   advise: 'Advising',
   licence: 'Licence',
+  // #6987, owner decision Q1 on #6976.
+  partners: 'Operating Partners',
+  directory: 'Directory',
+  circle: 'Circle',
+  general: 'General',
 };
 
 /**
  * D680 — who reads each enquiry: the canvas's three addresses (its CONTACT
  * view's `contactRoutes`). Investing goes to investor relations; advising and
  * licences to the network desk; the Lab, a support request and a submission
- * with no intent to the founders' desk.
+ * with no intent to the founders' desk. #6987 (owner decision Q1, #6976):
+ * Operating Partners, Directory and Circle go to the network desk, General to
+ * the founders' desk.
  */
 export const CONTACT_MAILBOX: Record<string, string> = {
   lab: 'founders@axal.vc',
   invest: 'guillaume.lauzier@axal.vc',
   advise: 'network@axal.vc',
   licence: 'network@axal.vc',
+  partners: 'network@axal.vc',
+  directory: 'network@axal.vc',
+  circle: 'network@axal.vc',
+  general: 'founders@axal.vc',
 };
 export const DEFAULT_CONTACT_MAILBOX = 'founders@axal.vc';
 

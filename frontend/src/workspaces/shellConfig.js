@@ -357,6 +357,9 @@ export const SHELLS = {
           { slug: 'outcomes', label: 'Outcomes', archetype: A.COLLECTION },
         ] },
       { kind: 'bucket', label: 'Expertise', prefix: '/expertise', tagline: 'Package what I know',
+        // D4828 (EX-04): the section nav, Overview first; below 1024px Thinking
+        // and Visibility fold under "More ▾", each target 44px (`ZoneNav.jsx`).
+        row: { overview: 'Overview', scroll: true, more: ['thinking', 'visibility'] },
         zones: [
           { slug: 'profile', label: 'Profile', archetype: A.COLLECTION },
           { slug: 'services', label: 'Services', archetype: A.LEDGER },

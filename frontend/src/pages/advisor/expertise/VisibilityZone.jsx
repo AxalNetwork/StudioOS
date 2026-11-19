@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import { MoreRows, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from './kit';
+import { StateChip } from '../../../ui';
 import { usePagedList } from './pages';
 
 /**
@@ -53,11 +54,15 @@ export function statusLine(byStatus) {
   return parts.length ? parts.join(' · ') : null;
 }
 
+// D4828 (#4828, EX-14): one block that did not answer is #5129's Unavailable,
+// said by word with its own Try again, in that block's place. Never a 0 and
+// never Not recorded: the store may hold a value nobody could read.
 function BlockUnreadable({ what, onRetry, testid }) {
   return (
-    <p role="status" className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid={testid}>
-      {what} could not be read ·{' '}
-      <button type="button" className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300" onClick={onRetry}>Try again</button>
+    <p className="m-0 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] text-axal-muted dark:text-gray-400" data-platform-state="unavailable" data-testid={testid}>
+      <StateChip kind="unavailable" />
+      <span>{what} could not be read ·</span>
+      <button type="button" className="inline-flex min-h-[44px] items-center font-semibold text-emerald-700 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 dark:text-emerald-300 lg:min-h-0" onClick={onRetry}>Try again</button>
     </p>
   );
 }
@@ -94,9 +99,9 @@ export function visibilityActions(data) {
 function Tile({ label, testid, children, note }) {
   return (
     <Card className="px-3 py-2.5" data-testid={testid}>
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{label}</div>
       {children}
-      {note ? <div className="mt-1 text-[11px] leading-snug text-axal-faint">{note}</div> : null}
+      {note ? <div className="mt-1 text-[11px] leading-snug text-axal-muted">{note}</div> : null}
     </Card>
   );
 }
@@ -124,14 +129,14 @@ export function VisibilityView({ data, onRetry, more = null }) {
             : <div className="mt-1 text-lg font-extrabold tabular-nums">{requestsTotal}</div>}
         </Tile>
         <Card className="px-3 py-2.5" data-testid="advisor-visibility-talks">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Talk reach</div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">Talk reach</div>
           <div className="mt-1.5"><Unrecorded /></div>
-          <div className="mt-1 text-[11px] leading-snug text-axal-faint">{TALK_REACH_NOTE}</div>
+          <div className="mt-1 text-[11px] leading-snug text-axal-muted">{TALK_REACH_NOTE}</div>
         </Card>
         <Card className="px-3 py-2.5" data-testid="advisor-visibility-views">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Profile views</div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">Profile views</div>
           <div className="mt-1.5"><Unrecorded /></div>
-          <div className="mt-1 text-[11px] leading-snug text-axal-faint">{data?.views_note}</div>
+          <div className="mt-1 text-[11px] leading-snug text-axal-muted">{data?.views_note}</div>
         </Card>
       </div>
 
@@ -152,7 +157,7 @@ export function VisibilityView({ data, onRetry, more = null }) {
       <Card className="p-4" data-testid="advisor-visibility-writing">
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <span className="text-sm font-extrabold tracking-tight">Articles by opens</span>
-          <span className="text-[11px] text-axal-faint">Since each was published</span>
+          <span className="text-[11px] text-axal-muted">Since each was published</span>
         </div>
         {writing === null ? (
           <BlockUnreadable what="Your writing" onRetry={onRetry} testid="advisor-visibility-writing-unreadable" />
@@ -169,23 +174,23 @@ export function VisibilityView({ data, onRetry, more = null }) {
               </li>
             ))}
             {writing.others?.count > 0 ? (
-              <li className="flex items-baseline justify-between gap-4 py-2 text-axal-faint" data-testid="advisor-visibility-article-others">
+              <li className="flex items-baseline justify-between gap-4 py-2 text-axal-muted" data-testid="advisor-visibility-article-others">
                 <span className="text-[12.5px]">{plural(writing.others.count, 'other piece', 'other pieces')}</span>
                 <span className="shrink-0 text-[12px] tabular-nums">{plural(writing.others.opens, 'open', 'opens')}</span>
               </li>
             ) : null}
           </ul>
         )}
-        {writing !== null ? <p className="m-0 mt-2 text-[11px] leading-snug text-axal-faint">{writing.opens_note} {writing.requests_note}</p> : null}
+        {writing !== null ? <p className="m-0 mt-2 text-[11px] leading-snug text-axal-muted">{writing.opens_note} {writing.requests_note}</p> : null}
       </Card>
 
       <Card className="p-4" data-testid="advisor-visibility-surfaces">
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <span className="text-sm font-extrabold tracking-tight">Booking links</span>
-          <span className="text-[11px] text-axal-faint">Last {days} days</span>
+          <span className="text-[11px] text-axal-muted">Last {days} days</span>
         </div>
         {surfaces !== null && requestsLine(data?.requests, days) ? (
-          <p className="m-0 mb-2 text-[11.5px] text-axal-faint" data-testid="advisor-visibility-requests-total">{requestsLine(data.requests, days)}</p>
+          <p className="m-0 mb-2 text-[11.5px] text-axal-muted" data-testid="advisor-visibility-requests-total">{requestsLine(data.requests, days)}</p>
         ) : null}
         {surfaces === null ? (
           <BlockUnreadable what="Your booking links" onRetry={onRetry} testid="advisor-visibility-surfaces-unreadable" />
@@ -197,10 +202,10 @@ export function VisibilityView({ data, onRetry, more = null }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="break-all text-[12.5px] font-semibold">{s.name}</span>
                     {s.kind === 'booking_link' && s.is_active === false ? <Pill tone="neutral">Paused</Pill> : null}
-                    {s.audience ? <span className="text-[11px] text-axal-faint">{s.audience}</span> : null}
+                    {s.audience ? <span className="text-[11px] text-axal-muted">{s.audience}</span> : null}
                   </div>
-                  {statusLine(s.by_status) ? <div className="mt-0.5 text-[11px] text-axal-faint">{statusLine(s.by_status)}</div> : null}
-                  {s.note ? <div className="mt-0.5 text-[11px] text-axal-faint">{s.note}</div> : null}
+                  {statusLine(s.by_status) ? <div className="mt-0.5 text-[11px] text-axal-muted">{statusLine(s.by_status)}</div> : null}
+                  {s.note ? <div className="mt-0.5 text-[11px] text-axal-muted">{s.note}</div> : null}
                 </div>
                 <div className="shrink-0 text-right text-[12px] font-semibold tabular-nums text-axal-muted dark:text-gray-300">
                   {s.requests != null && Number.isFinite(Number(s.requests)) ? `${s.requests} ${Number(s.requests) === 1 ? 'request' : 'requests'}` : <Unrecorded />}
@@ -218,11 +223,11 @@ export function VisibilityView({ data, onRetry, more = null }) {
           <ul className="mt-2 divide-y divide-axal-hairline border-t border-axal-hairline" data-testid="advisor-visibility-unlinked">
             {unlinked.items.map((t) => (
               <li key={t.uid} className="flex flex-wrap items-center justify-between gap-2 py-2.5" data-testid="advisor-visibility-unlinked-row">
-                <span className="text-[12.5px] font-semibold">{t.name} <span className="font-normal text-axal-faint">· No booking link yet</span></span>
+                <span className="text-[12.5px] font-semibold">{t.name} <span className="font-normal text-axal-muted">· No booking link yet</span></span>
                 <Link to={ADD_BOOKING_LINK_HREF} className="text-[12px] font-semibold text-emerald-700 hover:underline dark:text-emerald-300">Add booking link</Link>
               </li>
             ))}
-            {unlinked.more ? <li className="py-2 text-[11.5px] text-axal-faint">More session types have no booking link. See them under Practice › Sessions.</li> : null}
+            {unlinked.more ? <li className="py-2 text-[11.5px] text-axal-muted">More session types have no booking link. See them under Practice › Sessions.</li> : null}
           </ul>
         ) : null}
       </Card>
@@ -267,7 +272,7 @@ export default function VisibilityZone() {
               <button
                 key={d} type="button" role="radio" aria-checked={days === d} onClick={() => setDays(d)}
                 data-testid={`advisor-visibility-window-${d}`}
-                className={`min-h-[32px] rounded-full border px-3 text-[12px] font-semibold ${days === d
+                className={`min-h-[44px] rounded-full border px-3 text-[12px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 lg:min-h-[32px] ${days === d
                   ? 'border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200'
                   : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-300'}`}
               >
@@ -277,7 +282,7 @@ export default function VisibilityZone() {
           </div>
         )}
       />
-      <ZoneBody loading={state.loading} error={state.error} onRetry={load} isEmpty={false}>
+      <ZoneBody loading={state.loading} error={state.error} onRetry={load} isEmpty={false} what="Your visibility">
         <VisibilityView data={data} onRetry={load} more={list} />
         <StatedLimit title="Nothing is added up">
           Opens and booking requests come from different records, so they are never one reach figure,

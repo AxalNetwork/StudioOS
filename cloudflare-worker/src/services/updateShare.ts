@@ -277,10 +277,30 @@ export const ASK_MODULE: Record<AskKind, { module: string; label: string; lands:
 
 export const ASK_AGAIN_DAYS = 14;
 
-/** True when an ask with no replies may be asked again. */
+/**
+ * A stored time as UTC milliseconds, whichever form it was written in: ISO
+ * with its zone (`nowIso()`), SQLite's zone-less `YYYY-MM-DD HH:MM:SS`
+ * (a column default, which is UTC), or a bare date (UTC midnight). A bare
+ * `Date.parse` reads the zone-less form as LOCAL time, which moves the
+ * cooldown by the runtime's offset (D4645-p2).
+ */
+export function stampMs(raw: string | null | undefined): number {
+  const s = String(raw ?? '').trim();
+  if (!s) return NaN;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return Date.parse(`${s}T00:00:00Z`);
+  const iso = s.replace(' ', 'T');
+  return Date.parse(/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(iso) ? iso : `${iso}Z`);
+}
+
+/**
+ * True when an ask with no replies may be asked again: ASK_AGAIN_DAYS whole
+ * days (of 24 hours, in UTC) after the last ask, or after the send when it was
+ * never asked again. The ask-again claim applies the same rule in SQL with
+ * `datetime()` on both sides (D4645-p2).
+ */
 export function canAskAgain(sentAt: string | null, replies: number, askedAgainAt: string | null, now = Date.now()): boolean {
   if (!sentAt || replies > 0) return false;
-  const from = Date.parse(askedAgainAt || sentAt);
+  const from = stampMs(askedAgainAt || sentAt);
   return Number.isFinite(from) && now - from >= ASK_AGAIN_DAYS * 86_400_000;
 }
 

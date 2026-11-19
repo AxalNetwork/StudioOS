@@ -187,7 +187,8 @@ test('Commitment: Withdraw needs a reason before anything is sent, then withdraw
   // Mutation checked: the withdraw posted without a reason; the reason not sent.
   const v = await mounted('/deals/4/commitment', INVESTOR, handlerWith({ 'deals/4/commitments': (u, m) => (m === 'GET' ? response([{ id: 1, uid: 'c1', amount: 50000, status: 'pending', notes: 'Follow on.', created_at: '2026-11-04 10:00:00', investor_user_id: 21 }]) : null) }));
   try {
-    assert.match(v.textOf('deal-my-commitment'), /\$50,000[\s\S]*Pending[\s\S]*Recorded 4 Nov 2026[\s\S]*Follow on\.[\s\S]*Only you read this note\./);
+    // D5906 (DE09): the status sits beside the card's title, before the amount.
+    assert.match(v.textOf('deal-my-commitment'), /Pending[\s\S]*\$50,000[\s\S]*Recorded 4 Nov 2026[\s\S]*Follow on\.[\s\S]*Only you read this note\./);
     assert.match(v.textOf('deal-round'), /\$250,000 confirmed of \$1,000,000[\s\S]*2 investors have a live commitment[\s\S]*counted, never named/);
     await v.click('deal-withdraw');
     assert.ok(v.has('deal-withdraw-dialog'));
