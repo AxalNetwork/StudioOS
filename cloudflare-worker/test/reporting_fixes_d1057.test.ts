@@ -32,7 +32,7 @@ const M437 = readFileSync(new URL('../sql/migrations/437_share_an_update.sql', i
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'portfolio_positions', 'portfolio_updates']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const t of ['users', 'projects', 'portfolio_positions', 'portfolio_updates', 'portfolio_kpi_definitions']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M437.split(/;\s*\n/).map((x) => x.replace(/^\s*--.*$/gm, '').trim())
     .filter((x) => /^(ALTER TABLE portfolio_updates|CREATE TABLE IF NOT EXISTS update_recipients)/i.test(x)).map((x) => `${x};`).join('\n'));
   db.prepare("INSERT INTO users (id, role, name, email, is_active) VALUES (?, 'admin', 'Ada Admin', 'ada@example.test', 1)").run(ADMIN);
