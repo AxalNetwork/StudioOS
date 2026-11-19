@@ -164,3 +164,80 @@ export function readingSummary(row: {
     basis: 'stored_reading',
   };
 }
+
+// ---------------------------------------------------------------------------
+// D7651 part 2 (#7651) — the Eadwyn summary of ALL of a member's readings
+// ---------------------------------------------------------------------------
+//
+// The second half of RMP-12, under the readings card's CSV export on
+// `/research/markets`. The owner answered A (2026-11-19): the same way as one
+// reading's summary, from the stored readings only, NO MODEL CALL. Every line
+// is `readingSummary` of one row, so its amounts are the same cents and
+// two-decimal text; the counts are counts of stored rows.
+
+/** Ageing after thirty days (the canvas's `AGE_AT`, `marketReadingRead.js`). Stale after `STALE_AT`. */
+export const AGE_AT = 30;
+
+export type ReadingAge = 'current' | 'ageing' | 'stale';
+
+/** The page's age band for a run date: current to 30 days, ageing to 90, stale past it. Null when undated. */
+export function readingAgeBand(ranAt: string | null | undefined, now = Date.now()): ReadingAge | null {
+  const days = readingAgeDays(String(ranAt || ''), now);
+  if (days == null) return null;
+  if (days > STALE_AT) return 'stale';
+  if (days > AGE_AT) return 'ageing';
+  return 'current';
+}
+
+/** One stored reading joined to its own service line, as the all-readings summary reads it. */
+export interface SummaryRow {
+  uid: string; offering_id: number | null; metric: string; scope: string | null;
+  range_low_cents: number | null; range_high_cents: number | null;
+  comparable_count: number | null; ran_at: string | null;
+  offering_uid: string | null; offering_active: number | null;
+  price_cents: number | null; price_usd: number | null;
+}
+
+export type SummaryLine = ReadingSummary & { age_days: number | null; age: ReadingAge | null };
+
+export interface ReadingsSummary {
+  readings: number;
+  lines: SummaryLine[];
+  age: { current: number; ageing: number; stale: number; undated: number };
+  newest_ran_at: string | null;
+  basis: 'stored_readings';
+}
+
+/**
+ * The summary of every reading the member has stored. `rows` come newest
+ * first; `stored` is how many the member has stored in all.
+ *
+ * THE LINES ARE THE CARD'S ROWS: the newest reading for each active service
+ * line, and every reading that is not for a service line — what
+ * `GET /market-readings` lists above it. An older run of a service line is
+ * counted in `readings` but not summarised, because a newer one replaced it;
+ * a reading whose service line has left the catalog is not on the card, so it
+ * is not on the summary either. The age counts are over the lines.
+ */
+export function readingsSummary(rows: SummaryRow[], stored: number, now = Date.now()): ReadingsSummary {
+  const seen = new Set<number>();
+  const lines: SummaryLine[] = [];
+  const age = { current: 0, ageing: 0, stale: 0, undated: 0 };
+  for (const r of rows) {
+    if (r.offering_id != null) {
+      if (r.offering_uid == null || Number(r.offering_active) !== 1 || seen.has(r.offering_id)) continue;
+      seen.add(r.offering_id);
+    }
+    const band = readingAgeBand(r.ran_at, now);
+    age[band ?? 'undated'] += 1;
+    lines.push({ ...readingSummary(r), age_days: readingAgeDays(String(r.ran_at || ''), now), age: band });
+  }
+  const dated = lines.map((l) => l.ran_at).filter((d): d is string => d != null).sort();
+  return {
+    readings: Math.max(Number(stored) || 0, lines.length),
+    lines,
+    age,
+    newest_ran_at: dated.length ? dated[dated.length - 1] : null,
+    basis: 'stored_readings',
+  };
+}
