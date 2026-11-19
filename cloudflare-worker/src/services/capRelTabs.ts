@@ -51,6 +51,7 @@ import { run as aiRun, type RunResult } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { decideRail, getRail, listRail, proposeRail, type RailProposal } from './railProposals';
 import { setProspectNextStep, updateProspect } from './raiseWriters';
+import { prospectSignals } from './raiseCycle';
 import { objectionKey } from './narrative/objections';
 
 // ─────────────────────────────────────────────────────────────── vocabulary
@@ -562,4 +563,70 @@ export async function feedbackPattern(env: Env, projectId: number, userId: numbe
     ...t, objection_keys: [...new Set(await Promise.all(t.sources.map((s) => objectionKey(s.words))))],
   })));
   return { state: 'ok' as const, feedback: rows.length, investors, result, themes: withLinks, dropped };
+}
+
+
+/** D6079: reject unsuccessful D1 replies instead of turning a source failure into zero. */
+function overviewEnv(env: Env): Env {
+  const statement = (stmt: any): any => new Proxy(stmt, { get(target, key) {
+    if (key === 'bind') return (...args: unknown[]) => statement(target.bind(...args));
+    if (key === 'all') return async () => {
+      const reply = await target.all();
+      if (!reply || reply.success === false || !Array.isArray(reply.results)) throw new Error('Overview source unavailable');
+      return reply;
+    };
+    const value = target[key];
+    return typeof value === 'function' ? value.bind(target) : value;
+  } });
+  return { ...env, DB: new Proxy(env.DB, { get(target, key) {
+    if (key === 'prepare') return (sql: string) => statement(target.prepare(sql));
+    const value = Reflect.get(target, key);
+    return typeof value === 'function' ? value.bind(target) : value;
+  } }) };
+}
+
+export const OVERVIEW_PARTS = ['meetings', 'activity', 'fit', 'history'] as const;
+/** CRL1: four independently recoverable sources; only the already-authorized venture is read. */
+export async function overviewRead(environment: Env, projectId: number, part?: string, now = new Date()) {
+  if (part && !OVERVIEW_PARTS.includes(part as any)) throw new CapRelTabError(400, 'bad_part', 'Pick an Overview block.', 'part');
+  const env = overviewEnv(environment);
+  const at = now.toISOString();
+  const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+  const readers = {
+    meetings: async () => {
+      // Same source and event eligibility as calendar/investorMeetings.ts. The tool scopes by
+      // venture, not by personal-calendar ownership; its work capability was checked by scope().
+      const rows = await env.DB.prepare(`SELECT ev.id, ev.kind, ev.starts_at, ev.calendar_item_uid,
+          p.id AS prospect_id, p.name, p.firm FROM raise_prospect_events ev
+          JOIN raise_prospects p ON p.id = ev.prospect_id
+          WHERE p.project_id = ? AND ev.kind IN ('meeting', 'call')
+            AND ev.starts_at IS NOT NULL AND ev.calendar_item_uid IS NOT NULL
+            AND julianday(ev.starts_at) >= julianday(?)
+          ORDER BY julianday(ev.starts_at), ev.id LIMIT 5`).bind(projectId, at).all<any>();
+      return { state: 'ok', items: rows.results.map((r: any) => ({ id: r.id, kind: r.kind, starts_at: r.starts_at, calendar_item_uid: r.calendar_item_uid, prospect_id: r.prospect_id, name: investorName(r) })) };
+    },
+    activity: async () => ({ state: 'ok', items: (await activityRead(env, projectId, () => undefined)).items.slice(0, 5) }),
+    fit: async () => {
+      const signals = await prospectSignals(env, projectId);
+      const counts = { fits: 0, outside: 0, unclear: 0, not_recorded: 0 };
+      for (const signal of signals.values()) counts[signal.fit] += 1;
+      return { state: 'ok', counts, total: signals.size, source: 'Served fund focus against the venture sector' };
+    },
+    history: async () => {
+      const rows = await env.DB.prepare(`SELECT id, entity_id, details, created_at FROM activity_logs
+        WHERE project_id = ? AND entity_type = ? AND action = 'prospect_updated'
+          AND julianday(created_at) >= julianday(?) ORDER BY created_at DESC, id DESC`)
+        .bind(projectId, MODULE_TYPE, since).all<any>();
+      // Stage prose is evidence of individual moves, not a completeness ledger. Neither
+      // pre-D1193 changes nor deleted prospects have a trustworthy baseline snapshot.
+      const moves = rows.results.filter((r: any) => /Investor edited:.*stage [^,\n]+ → [^,\n]+/.test(String(r.details)));
+      return { state: 'not_recorded', as_of: since.slice(0, 10), observed_moves: moves.length,
+        reason: 'A complete stage snapshot 30 days ago is not recorded. Logged stage moves began with D1193 and do not establish coverage of earlier changes or deleted investors.' };
+    },
+  };
+  const entries = await Promise.all((part ? [part as keyof typeof readers] : [...OVERVIEW_PARTS]).map(async (key) => {
+    try { return [key, await readers[key]()] as const; }
+    catch { return [key, { state: 'unreadable', reason: 'This Overview source could not be read. Try again.' }] as const; }
+  }));
+  return { read_at: at, ...Object.fromEntries(entries) };
 }
