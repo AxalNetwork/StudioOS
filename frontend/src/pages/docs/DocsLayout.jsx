@@ -17,7 +17,7 @@ import { statusChip } from '../../lib/ticketScreens';
 import { reportError } from '../../lib/log';
 import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine } from './helpCenter';
 import { guidePlacement, helpAreas } from './guidePlacement';
-import { guideReviewFor } from './guideGovernance';
+import { guideReviewFor, guideVerificationFor } from './guideGovernance';
 import { GuideAnswersAdmin, GuideFeedback, PopularGuides, usePopularGuides } from './HelpSignals';
 import {
   SEARCH_MISS_IDLE_MS, appliesToLine, areaChips, areasForTerms, broaderTerms, goToTarget, guideOutline,
@@ -25,7 +25,7 @@ import {
 } from './v2/helpV2';
 import HelpTicketSheet, { ADVISORY_URL, SECURITY_EMAIL } from './v2/HelpTicketSheet';
 import HelpDirectory from './v2/HelpDirectory';
-import { usePhoneWidth } from '../../ui';
+import { usePhoneWidth, StateChip } from '../../ui';
 import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 
@@ -292,6 +292,7 @@ export function SearchResults({ search, query, chip = 'all', onChip = () => {}, 
                     </span>
                     <span className="flex flex-wrap items-start gap-2 sm:flex-col sm:items-end">
                       <span className={CHIP}>{appliesToLine(p?.appliesTo)}</span>
+                      <ResultVerification anchor={r.anchor} />
                     </span>
                   </Link>
                 </li>
@@ -322,6 +323,23 @@ export function SearchResults({ search, query, chip = 'all', onChip = () => {}, 
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * D7515: a result's verification, only where the ledger records one: the
+ * first verified date (or the last, labelled as such) and Stale when the
+ * agreed review window has passed. A guide with nothing recorded adds nothing
+ * to its row; its page says "Verification pending".
+ */
+export function ResultVerification({ anchor, verification }) {
+  const v = verification || guideVerificationFor(anchor);
+  if (v.state === 'pending') return null;
+  return (
+    <>
+      <span className={CHIP} data-testid="help-result-verified">{v.line}</span>
+      {v.stale.state === 'stale' && <StateChip kind="stale" lastGood={v.stale.since} data-testid="help-result-stale" />}
+    </>
   );
 }
 
@@ -630,9 +648,16 @@ function GuideNotFound() {
   );
 }
 
-/** Owner and review, from `guideGovernance.js`: "Verification pending" until a first verified date exists (#4641). */
-function OwnerReview({ anchor }) {
+/**
+ * Owner and review, from `guideGovernance.js`: "Verification pending" until a
+ * verified date is recorded (#4641); then "First verified <date>" (D7515), or
+ * "Last verified <date>" saying the first is not recorded, and Stale with its
+ * age once the agreed review window has passed.
+ */
+export function OwnerReview({ anchor, verification: given }) {
   const review = guideReviewFor(anchor);
+  const verification = given || guideVerificationFor(anchor);
+  const recorded = verification.state !== 'pending';
   const assigned = review.owner !== 'Unassigned';
   return (
     <dl className="m-0 grid gap-2.5 rounded-xl border border-gray-200 px-3.5 py-3 dark:border-gray-700" data-testid="help-guide-owner">
@@ -642,11 +667,16 @@ function OwnerReview({ anchor }) {
       </div>
       <div className="flex items-baseline justify-between gap-3">
         <dt className={LABEL}>Review</dt>
-        <dd className="m-0 inline-flex items-center gap-1.5 text-[12.5px] text-gray-700 dark:text-gray-300">
-          <span aria-hidden className="inline-block h-[11px] w-[11px] rounded-full border border-dashed border-gray-500 dark:border-gray-400" />
-          {review.lastVerifiedAt ? `Verified ${review.lastVerifiedAt}` : review.status}
+        <dd className="m-0 inline-flex items-center gap-1.5 text-right text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="help-guide-verified">
+          <span aria-hidden className={`inline-block h-[11px] w-[11px] shrink-0 rounded-full ${recorded ? 'bg-emerald-600 dark:bg-emerald-400' : 'border border-dashed border-gray-500 dark:border-gray-400'}`} />
+          {verification.line}
         </dd>
       </div>
+      {verification.stale.state === 'stale' && (
+        <div className="flex justify-end">
+          <StateChip kind="stale" lastGood={verification.stale.since} data-testid="help-guide-stale" />
+        </div>
+      )}
     </dl>
   );
 }
@@ -697,6 +727,7 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
   const areaTitle = placement?.areaTitle || section.title;
   const go = goToTarget(placement, user, session);
   const recovery = anchor === 'account/auth-recovery';
+  const beforeYouStart = Array.isArray(sub.beforeYouStart) ? sub.beforeYouStart : [];
   const howto = Array.isArray(sub.howto) ? sub.howto : [];
   const tips = Array.isArray(sub.tips) ? sub.tips : [];
   const pitfalls = Array.isArray(sub.pitfalls) ? sub.pitfalls : [];
@@ -750,6 +781,15 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
             <section id="overview" className="scroll-mt-6">
               <h2 className={H2}>Overview</h2>
               <p className="mt-2 text-[15px] leading-relaxed text-gray-700 dark:text-gray-300">{sub.overview}</p>
+            </section>
+          )}
+
+          {beforeYouStart.length > 0 && (
+            <section id="before-you-start" className="scroll-mt-6" data-testid="help-guide-before">
+              <h2 className={H2}>Before you start</h2>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-[14.5px] leading-relaxed text-gray-700 dark:text-gray-300">
+                {beforeYouStart.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
             </section>
           )}
 

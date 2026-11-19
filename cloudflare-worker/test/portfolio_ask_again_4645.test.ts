@@ -64,6 +64,8 @@ function fixture() {
   // 202611091055's add the delivery columns `update_recipients` now carries.
   db.exec(file('437'));
   db.exec(file('202611091055'));
+  // D4645-p2: the reminder rounds and their per-recipient deliveries.
+  db.exec(file('202611182124'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');
   for (const [id, name] of [[ALEX, 'Alex'], [BEA, 'Bea'], [CASS, 'Cass']] as const) u.run(id, 'investor', null, name, `${String(name).toLowerCase()}@fund.example`);
@@ -217,8 +219,10 @@ test('a recipient whose delivery fails is counted, not thrown, and the rest stil
   const res = await askAgain(db);
   assert.equal(res.status, 200, 'the reminder still answers');
   assert.equal(res.body.recipients, 3);
-  assert.equal(res.body.notified + res.body.failed, 3, 'every recipient is still accounted for');
-  assert.ok(res.body.failed >= 1, 'and a failure is reported rather than hidden');
+  // D4645-p2: with the inbox unreadable the handler cannot tell whether a
+  // notification landed, so those are `unconfirmed`, not `failed`.
+  assert.equal(res.body.notified + res.body.failed + res.body.unconfirmed, 3, 'every recipient is still accounted for');
+  assert.ok(res.body.failed + res.body.unconfirmed >= 1, 'and a failure is reported rather than hidden');
   // The claim stands: a retry must not re-send to whoever did get theirs.
   assert.ok(askedAgainAt(db), 'the window is claimed even when delivery failed');
   assert.equal((await askAgain(db)).status, 409);

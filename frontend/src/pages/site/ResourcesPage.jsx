@@ -85,7 +85,7 @@ export function DirectoryBlock({ members }) {
       foot={(
         <div className="ax-nw-note">
           Verified members only.
-          <Link to="/contact" className="ax-nw-more">Request directory access →</Link>
+          <Link to="/contact?topic=directory" className="ax-nw-more">Request directory access →</Link>
         </div>
       )}
     >

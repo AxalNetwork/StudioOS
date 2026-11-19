@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { DataState, StateChip, Unreadable } from '../../ui/Honesty';
+import { DataState, PartialBanner, StateChip, Unreadable } from '../../ui/Honesty';
 import { api } from '../../lib/api';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import {
@@ -9,6 +9,8 @@ import {
   countryName, filterChips, isFiltered, marketListParams, patchMarketQuery, readMarketQuery,
   sectorHref, thesisFrom, thesisMatch, thesisMatchCount, writeMarketQuery,
 } from './marketDirectoryQuery.js';
+import { THESIS_EDIT } from './marketDirectoryExport.js';
+import { FiltersSheet, ThesisStrip } from './MarketDirectoryPhone.jsx';
 
 /**
  * Research › Markets, the Market directory tab (D7171, #7171), to the canvas
@@ -462,7 +464,7 @@ function FilterMenu({ label, current, options, multi = false, selected, onApply,
 
 const countOf = (facet, value) => facet?.options?.find((o) => (o.value ?? o.code) === value)?.count ?? 0;
 
-function Toolbar({ view, onPatch, facets }) {
+function Toolbar({ view, onPatch, facets, sectors = [] }) {
   const [q, setQ] = useState(view.q);
   useEffect(() => { setQ(view.q); }, [view.q]);
   const countryOptions = (facets?.country?.options || []).map((o) => ({ value: o.code, label: countryName(o.code), count: o.count }));
@@ -480,16 +482,24 @@ function Toolbar({ view, onPatch, facets }) {
             placeholder="Energy storage, robotics, logistics…" className={`${CTRL} w-full pl-9`} />
         </span>
       </form>
-      <FilterMenu label="Country" testid="filter-country" multi current={countryLabel} selected={view.country}
+      {/* RMD-11B (part 2): below md, one Filters sheet and the sort, side by side. */}
+      <div className="grid grid-cols-2 gap-2 md:hidden" data-testid="markets-phone-tools">
+        <FiltersSheet view={view} facets={facets} onPatch={onPatch} sectors={sectors} />
+        <select value={view.sort} onChange={(e) => onPatch({ sort: e.target.value })} aria-label="Sort markets by"
+          className={`${CTRL} min-h-[44px] w-full font-semibold`}>
+          {MARKET_SORTS.map((s) => <option key={s.value} value={s.value}>Sort · {s.label}</option>)}
+        </select>
+      </div>
+      <div className="hidden md:block"><FilterMenu label="Country" testid="filter-country" multi current={countryLabel} selected={view.country}
         options={countryOptions} onApply={(country) => onPatch({ country })}
-        note={`Markets with a directory company there.${facets?.country?.not_recorded ? ` Countries not recorded: ${fmt(facets.country.not_recorded)}. ` : ' '}A market with no recorded country is never listed under a country.`} />
-      <FilterMenu label="Source freshness" testid="filter-fresh" current={freshLabel} selected={view.fresh}
+        note={`Markets with a directory company there.${facets?.country?.not_recorded ? ` Countries not recorded: ${fmt(facets.country.not_recorded)}. ` : ' '}A market with no recorded country is never listed under a country.`} /></div>
+      <div className="hidden md:block"><FilterMenu label="Source freshness" testid="filter-fresh" current={freshLabel} selected={view.fresh}
         options={FRESH_OPTIONS.map((o) => ({ ...o, count: countOf(facets?.fresh, o.value) }))} onApply={(fresh) => onPatch({ fresh })}
-        note="By the newest source of any kind." />
-      <FilterMenu label="Source type" testid="filter-src" current={srcLabel} selected={view.src}
+        note="By the newest source of any kind." /></div>
+      <div className="hidden md:block"><FilterMenu label="Source type" testid="filter-src" current={srcLabel} selected={view.src}
         options={SRC_OPTIONS.map((o) => ({ ...o, count: countOf(facets?.src, o.value) }))} onApply={(src) => onPatch({ src })}
-        note="Sector-level sources describe the tracked sector as a whole. Evidence that names the market is from signals tagged with it." />
-      <label className="block">
+        note="Sector-level sources describe the tracked sector as a whole. Evidence that names the market is from signals tagged with it." /></div>
+      <label className="hidden md:block">
         <span className="mb-1 block text-[11.5px] font-semibold text-axal-ink dark:text-gray-200">Sort</span>
         <select value={view.sort} onChange={(e) => onPatch({ sort: e.target.value })} className={`${CTRL} w-full`} aria-label="Sort markets by">
           {MARKET_SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -515,8 +525,6 @@ function Toolbar({ view, onPatch, facets }) {
 }
 
 // ---- The thesis (RMD-08) -------------------------------------------------------
-
-const THESIS_EDIT = '/account/security-privacy#my-thesis';
 
 /** The investor's thesis beside the results: loading, unreadable, none, or set. */
 export function ThesisSection({ read, matchCount = 0, total = 0, onlyMatches = false, onOnlyMatches, onRetry }) {
@@ -707,11 +715,62 @@ function useKeyedRead(fn, key, enabled = true) {
 }
 
 /**
+ * Part 2 (D7171-p2): what the thesis switch does while the profile it rests on
+ * is not in hand. `waiting`: the profile is still being read and the view asks
+ * for thesis matches, so the list waits rather than answer the whole directory
+ * under a "Matches your thesis sectors" chip. `notApplied`: the profile could
+ * not be read; the list is the markets the other filters leave and a Partial
+ * banner says so. `impossible`: the profile is read and names no sector the
+ * crosswalk maps, so no market can match.
+ */
+export function thesisGate({ investor, view, profileStatus, thesisRead }) {
+  if (!investor) return { waiting: false, notApplied: false, impossible: false, failed: false };
+  const failed = profileStatus !== 'ready' && profileStatus !== 'loading' && profileStatus !== 'idle';
+  const loading = profileStatus === 'loading' || profileStatus === 'idle';
+  const ready = thesisRead?.status === 'ready';
+  const tracked = ready && thesisRead.thesis.kind === 'set' ? thesisRead.thesis.tracked : [];
+  return {
+    failed,
+    waiting: !!view.thesis && loading,
+    notApplied: !!view.thesis && failed,
+    impossible: !!view.thesis && ready && !tracked.length,
+  };
+}
+
+/**
+ * The Partial state (RMD-09B, part 2): the markets were read and the investor
+ * profile was not. The directory is listed; the thesis column, the match
+ * marker and the matches-only switch wait for the profile.
+ */
+export function ThesisPartial({ notApplied = false, onRetry }) {
+  return (
+    <PartialBanner data-testid="markets-partial" of={2} sources={[{ name: 'your investor profile', state: 'unavailable' }]}
+      rest={`Markets are listed; the Your thesis column and its matches wait for that read.${notApplied ? ' “Show only markets that match” is not applied: these are the markets the other filters leave.' : ''}`}
+      onRetry={onRetry} />
+  );
+}
+
+/** The view asks for thesis matches and none is possible: said, with the way out. */
+export function ThesisImpossible({ thesis, onShowAll }) {
+  return (
+    <div data-testid="markets-thesis-impossible" className="rounded-xl border border-axal-hairline px-4 py-3 dark:border-gray-800">
+      <p className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">No market can match your thesis sectors.</p>
+      <p className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-400">
+        {thesis?.kind === 'set' ? 'None of your profile sectors maps to a tracked sector.' : 'Your profile names no sector yet.'} A market matches only through its tracked sector.
+      </p>
+      <button type="button" onClick={onShowAll} className={`${BTN} mt-2`}>Show all markets</button>
+    </div>
+  );
+}
+
+/**
  * The Market directory tab: the URL's view, the investor's thesis when the
  * reader is an investor, and one read of the Worker's page. `onData` hands the
- * page it shows to the zone: its rows are what Export writes, so the file is the view.
+ * page it shows to the zone (the tab's count). `onRead` hands it the read's
+ * state with its exact request, which D7172's export (the header's Export view
+ * too) pages through, so the file is the view and never the 25 rows on screen.
  */
-export default function MarketDirectoryPanel({ role = 'founder', onData = null }) {
+export default function MarketDirectoryPanel({ role = 'founder', onData = null, onRead = null }) {
   const [params, setParams] = useSearchParams();
   const view = useMemo(() => readMarketQuery(params), [params]);
   const onPatch = (patch) => setParams((prev) => writeMarketQuery(prev, patchMarketQuery(readMarketQuery(prev), patch)), { replace: false });
@@ -719,12 +778,22 @@ export default function MarketDirectoryPanel({ role = 'founder', onData = null }
   const [profile, reloadProfile] = useKeyedRead(() => api.getInvestorProfile(), 'profile', investor);
   const thesisRead = profile.status === 'ready' ? { status: 'ready', thesis: thesisFrom(profile.data?.profile) } : profile;
   const thesis = thesisRead.status === 'ready' && thesisRead.thesis.kind === 'set' ? thesisRead.thesis : null;
+  const gate = thesisGate({ investor, view, profileStatus: profile.status, thesisRead });
   const listParams = marketListParams(view, thesis?.tracked || []);
   const listKey = JSON.stringify(listParams);
-  const [markets, reload] = useKeyedRead(() => researchMarketsApi.list(listParams), listKey);
+  const [read, reload] = useKeyedRead(() => researchMarketsApi.list(listParams), listKey, !gate.waiting);
+  const markets = gate.waiting ? { status: 'loading', data: null } : read;
   const data = markets.status === 'ready' ? markets.data : (markets.status === 'loading' ? markets.data : null);
 
   useEffect(() => { if (markets.status === 'ready') onData?.(markets.data); }, [markets.status, markets.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The zone's export (D7172, the header's Export view too) pages this exact
+  // request. A thesis no market can match is an empty view (part 2), never
+  // the unfiltered directory.
+  useEffect(() => {
+    onRead?.(gate.impossible
+      ? { status: 'ready', data: { total: 0, items: [] }, request: listParams }
+      : { ...markets, request: listParams });
+  }, [markets.status, markets.data, listKey, gate.impossible, onRead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // RMD-05B: back from a sector page, the open row's expand button takes focus.
   const focused = useRef('');
@@ -737,33 +806,46 @@ export default function MarketDirectoryPanel({ role = 'founder', onData = null }
   }, [markets.status, view.open]);
 
   const clear = () => onPatch({ q: '', country: [], fresh: '', src: '', thesis: false });
-  const chips = filterChips(view);
+  // A thesis switch the profile cannot back is shown as not applied, not as a filter.
+  const shownView = gate.notApplied ? { ...view, thesis: false } : view;
+  const chips = filterChips(view).map((c) => (c.key === 'thesis' && gate.notApplied ? { ...c, label: `${c.label} · not applied` } : c));
+  const partial = gate.failed && markets.status === 'ready' ? <ThesisPartial notApplied={gate.notApplied} onRetry={reloadProfile} /> : null;
   const body = (
     <div className="min-w-0 space-y-3">
-      <ResultLine data={data} view={view} />
-      <DirectoryBody markets={{ ...markets, data, reload }} view={view} onPatch={onPatch} thesis={thesis} onClear={clear} />
+      {partial}
+      {gate.impossible ? <ThesisImpossible thesis={thesisRead.thesis} onShowAll={() => onPatch({ thesis: false })} /> : (
+        <>
+          <ResultLine data={data} view={shownView} />
+          <DirectoryBody markets={{ ...markets, data, reload }} view={view} onPatch={onPatch} thesis={thesis} onClear={clear} />
+        </>
+      )}
     </div>
   );
+  const thesisProps = {
+    read: thesisRead, onRetry: reloadProfile, total: data?.total,
+    matchCount: thesisMatchCount(data?.summary, thesis), onlyMatches: view.thesis,
+    onOnlyMatches: (on) => onPatch({ thesis: on }),
+  };
   return (
     <div data-testid="markets-directory" className="space-y-4">
-      <Toolbar view={view} onPatch={onPatch} facets={data?.facets} />
+      <Toolbar view={view} onPatch={onPatch} facets={data?.facets} sectors={view.thesis ? (thesis?.tracked || []) : []} />
       {chips.length ? (
         <div className="flex flex-wrap items-center gap-2" data-testid="markets-chips">
           {chips.map((c) => (
             <button key={c.key} type="button" onClick={() => onPatch(c.patch)}
-              className="inline-flex min-h-[32px] items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-3 text-[12px] font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300">
+              className="inline-flex min-h-[44px] items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-3 text-[12px] font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300 md:min-h-[32px]">
               {c.label} <span aria-hidden="true">✕</span><span className="sr-only">Remove</span>
             </button>
           ))}
-          <button type="button" onClick={clear} className="text-[12px] font-semibold text-axal-ink underline dark:text-gray-200">Clear filters</button>
+          <button type="button" onClick={clear} className="min-h-[44px] text-[12px] font-semibold text-axal-ink underline dark:text-gray-200 md:min-h-0">Clear filters</button>
           {data ? <span className="text-[12px] text-axal-muted dark:text-gray-400">{fmt(data.total)} of {fmt(data.directory_total)} markets</span> : null}
         </div>
       ) : null}
       {investor ? (
         <div className="grid gap-4 lg:grid-cols-[296px_minmax(0,1fr)] lg:items-start">
-          <ThesisSection read={thesisRead} onRetry={reloadProfile} total={data?.total}
-            matchCount={thesisMatchCount(data?.summary, thesis)} onlyMatches={view.thesis}
-            onOnlyMatches={(on) => onPatch({ thesis: on })} />
+          {/* RMD-11D (part 2): below md the thesis is one line that opens. */}
+          <div className="md:hidden"><ThesisStrip {...thesisProps} /></div>
+          <div className="hidden md:block"><ThesisSection {...thesisProps} /></div>
           {body}
         </div>
       ) : body}

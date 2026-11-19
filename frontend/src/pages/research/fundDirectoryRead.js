@@ -23,6 +23,17 @@ export const SORT_OPTIONS = [
   ['vintage', 'Vintage, oldest first'],
 ];
 
+/** D7166 part 2 (RFD-03A): the sort as the phone's thumb bar names it, "Sort · Size ↓". */
+const SORT_SHORT = { name: 'Name A–Z', '-name': 'Name Z–A', '-size': 'Size ↓', size: 'Size ↑', '-vintage': 'Vintage ↓', vintage: 'Vintage ↑' };
+export function sortShort(sort) {
+  return SORT_SHORT[sort] || SORT_SHORT.name;
+}
+
+/** The sort's full name, "Size, largest first", for an accessible name or a sentence. */
+export function sortLabel(sort) {
+  return (SORT_OPTIONS.find(([v]) => v === sort) || SORT_OPTIONS[0])[1];
+}
+
 /** The Worker's SIZE_BANDS, for the labels while the facets have not answered. */
 export const SIZE_BANDS = [
   ['lt25', 'Under €25M'],
@@ -170,7 +181,9 @@ export function activeFilters(query, facets) {
   if (query.focus) out.push({ key: 'focus', label: `Focus: ${label(facets?.focus, query.focus)}` });
   const ccy = query.size_currency || 'EUR';
   const mark = MARK[ccy] || '';
-  if (query.size_band) {
+  if (query.size_band === UNSIZED) {
+    out.push({ key: 'size_band', label: `Size: not recorded in ${ccy}` });
+  } else if (query.size_band) {
     const band = (facets?.size_band || []).find((x) => x.value === query.size_band)?.label
       || ((SIZE_BANDS.find(([v]) => v === query.size_band) || [])[1] || query.size_band).replace(/€/g, mark);
     out.push({ key: 'size_band', label: `Size: ${band} (${ccy})` });
@@ -239,6 +252,24 @@ export function matchLine(data) {
   };
 }
 
+/**
+ * D7166 part 2 (RFD-02's "Show them"): the Worker's `size_band=none`, every match with no size in the asked
+ * currency — the funds the size filter's line says it leaves out.
+ */
+export const UNSIZED = 'none';
+
+/** The patch "Show them" applies: the size filter's other side, in the same currency, keeping every other filter. */
+export function showUnsized() {
+  return { size_band: UNSIZED, size_min: '', size_max: '' };
+}
+
+/** The link's accessible name, which starts with its visible text (WCAG 2.5.3). */
+export function showUnsizedLabel(query, facets) {
+  const n = Number(facets?.size_not_comparable || 0);
+  const word = CURRENCY_WORD[query.size_currency || 'EUR'] || 'euros';
+  return `Show them: the ${num(n)} ${n === 1 ? 'fund' : 'funds'} with no size in ${word}`;
+}
+
 /** True when a size filter (a band, or a from/to figure) is in force. */
 export const sizeFiltered = (query) => !!query.size_band || millionsToUnits(query.size_min) != null || millionsToUnits(query.size_max) != null;
 
@@ -247,7 +278,7 @@ export const sizeFiltered = (query) => !!query.size_band || millionsToUnits(quer
  * asked currency (`facets.size_not_comparable`). Null when no size filter is on.
  */
 export function sizeExclusion(query, facets) {
-  if (!sizeFiltered(query) || !facets) return null;
+  if (!sizeFiltered(query) || query.size_band === UNSIZED || !facets) return null;
   const n = Number(facets.size_not_comparable || 0);
   if (!n) return null;
   const word = CURRENCY_WORD[query.size_currency || 'EUR'] || 'euros';
@@ -274,6 +305,24 @@ export function zeroHint(query, facets) {
   if (!best) return null;
   const names = { size: 'the size filter', vintage: 'the vintage filter', eif: 'EIF', eifo: 'EIFO' };
   return { key: best[0], count: best[1], text: `Removing ${names[best[0]]} would show ${num(best[1])} fund ${best[1] === 1 ? 'vehicle' : 'vehicles'}.` };
+}
+
+/**
+ * D7166 part 2 (RFD-04B): the line under "Signed in. This is the search you opened.", from the answer on screen:
+ * "Directory · 3 filters · Size, largest first · page 1 of 1". Null until the read answers.
+ */
+export function restoredLine(query, facets, data) {
+  if (!data) return null;
+  const n = activeFilters(query, facets).length;
+  const q = String(query.q || '').trim();
+  const { page, pages } = pageInfo(data.offset || 0, data.limit || query.limit, data.total);
+  return [
+    'Directory',
+    q ? `search “${q}”` : null,
+    n ? `${num(n)} ${n === 1 ? 'filter' : 'filters'}` : 'no filters',
+    sortLabel(query.sort),
+    `page ${num(page)} of ${num(pages)}`,
+  ].filter(Boolean).join(' · ');
 }
 
 /** The patch that removes one active filter. */
