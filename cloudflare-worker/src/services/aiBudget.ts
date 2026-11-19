@@ -6,6 +6,7 @@ import { planAllowanceFor, type PlanAllowance } from './planAllowance';
 import { chargeMultiplier } from './ai/pricing';
 import { limitRefusal, noteSpendThresholds } from './aiSpendLimit';
 import { hydrateSuperAdmin, isSuperAdmin } from '../auth';
+import { runLicenceUid, stampReservationLicence } from './aiLicenceAttribution';
 
 export const AI_USD_SCALE = 1_000_000;
 export const AI_CAP_DEFAULTS = { day: 5, month: 50, orgMonth: 5000 } as const;
@@ -483,5 +484,7 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
         .bind(context.operation,context.surface,context.api_key_uid,context.execution_id,uid,userId).run();
     } catch { console.warn('[ai-budget] hold context not recorded'); }
   }
+  // D5948: the licence the hold is for, written once now; none named, or a failed lookup, leaves it NULL.
+  await stampReservationLicence(env,uid,await runLicenceUid(env));
   return { ok:true as const,reservation:{uid,userId} };
 }

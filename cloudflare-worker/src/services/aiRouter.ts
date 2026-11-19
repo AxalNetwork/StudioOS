@@ -38,6 +38,7 @@ import * as catalogue from './ai/catalogue';
 import { termsCleared } from './ai/modelTerms';
 import { isUnavailable, markUnavailable, meansUnavailable } from './ai/availability';
 import { catalogueSwitchesFor, modelsOffFor } from './featureFlags';
+import { runLicenceUid, stampUsageLicence } from './aiLicenceAttribution';
 import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
@@ -1343,7 +1344,7 @@ async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER, skill_id INTEGER, skill_version INTEGER)",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER, skill_id INTEGER, skill_version INTEGER, licence_uid TEXT)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
@@ -1369,6 +1370,8 @@ async function addLogColumns493(env: Env): Promise<void> {
     // D1612 part D (#3954), migration 202611022313: the skill and pinned version an agent's run used (`skillEval.tagUsage`).
     'ALTER TABLE ai_usage_logs ADD COLUMN skill_id INTEGER',
     'ALTER TABLE ai_usage_logs ADD COLUMN skill_version INTEGER',
+    // D5948 (#5948), migration 202611150131: the licence the run is for.
+    'ALTER TABLE ai_usage_logs ADD COLUMN licence_uid TEXT',
     LOG_PAGE_INDEX_493,
   ]);
 }
@@ -1425,12 +1428,14 @@ export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, ref
     const id = Number((r as { meta?: { last_row_id?: unknown } } | null)?.meta?.last_row_id);
     return Number.isSafeInteger(id) && id > 0 ? id : null;
   };
+  // D5948: the licence the run is for, stamped once after the insert; none named leaves it NULL.
+  const stamped = async (id: number | null) => { await stampUsageLicence(env, id, await runLicenceUid(env)); return id; };
   try {
-    try { return idOf(await insert()); }
+    try { return await stamped(idOf(await insert())); }
     catch (e) {
       if (!/no column named|no such column/i.test((e as Error).message)) throw e;
       await addLogColumns493(env);
-      return idOf(await insert());
+      return await stamped(idOf(await insert()));
     }
   } catch (e) {
     console.warn('[aiRouter] recordUsage:', (e as Error).message);
