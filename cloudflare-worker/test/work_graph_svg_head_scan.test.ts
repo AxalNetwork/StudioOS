@@ -19,10 +19,25 @@ const HEADS = [
   '<!-- a --> <!-- b -->\n<svg>', '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "x.dtd">\n<svg>',
   '<!DOCTYPE svg [ <!ENTITY a "b"> ]>\n<svg>', '<?xml version="1.0"?><!-- c --><!DOCTYPE svg><svg>',
   '<svgx>', '<html><svg>', '<!-- unclosed <svg>', '<!DOCTYPE html><svg>', '<?xml?>', '', 'svg', '<!DOCTYPE svg [ <svg>',
+  // The old pattern's lazy parts could run on to a later `]` or `-->`.
+  '<!DOCTYPE svg [ <!ENTITY a "]"> ]>\n<svg>', '<!DOCTYPE svg [ ] x><svg>', '<!DOCTYPE svg [ ]  \n >  <svg>',
+  '<!-- a --> junk --><svg>', '<!-- a --><!DOCTYPE svg [ ] --> ]><svg>', '<!---->\n<svg>', '<!-->--><svg>', '<!--->\n<svg>',
+  '<?xml-stylesheet href="a"?><svg>', '<?xml version="1.0"?><?xml-stylesheet?><svg>', '\u00a0<svg>', '<?xml?>\u2028<svg\t>',
 ];
 
 test('startsAsSvg agrees with the pattern it replaced', () => {
   for (const head of HEADS) assert.equal(startsAsSvg(head), OLD.test(head), JSON.stringify(head));
+});
+
+test('startsAsSvg agrees with the pattern it replaced on random short heads', () => {
+  const parts = ['<?xml?>', '<?xml', '<!--', '-->', '--', '<!DOCTYPE svg', '<!DOCTYPE', ' svg', '[', ']', '"]"', '>', '<svg', '<svg>', '<SVG ', 'x', ' ', '\n'];
+  let seed = 7; // xorshift32: the same heads on every run
+  const next = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) % 1000003; };
+  for (let n = 0; n < 20000; n++) {
+    let head = '';
+    for (let k = next() % 9; k > 0; k--) head += parts[next() % parts.length];
+    assert.equal(startsAsSvg(head), OLD.test(head), JSON.stringify(head));
+  }
 });
 
 test('a head of many unclosed comments is answered at once', () => {
@@ -30,4 +45,12 @@ test('a head of many unclosed comments is answered at once', () => {
   const t = performance.now();
   assert.equal(startsAsSvg(evil), false);
   assert.ok(performance.now() - t < 200, 'linear in the head');
+});
+
+test('many closed comments and brackets are answered at once', () => {
+  for (const evil of ['<!-- -->'.repeat(5000) + 'x', '<!-- --><!DOCTYPE svg [ ] '.repeat(1000) + 'x', '<!DOCTYPE svg [' + ']'.repeat(20000)]) {
+    const t = performance.now();
+    assert.equal(startsAsSvg(evil), false);
+    assert.ok(performance.now() - t < 500, 'no backtracking');
+  }
 });
