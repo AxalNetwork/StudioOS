@@ -1,14 +1,10 @@
 /**
- * D5074 slice 4 (#5074) — Capital relationships' capabilities, across roles. The module read returns the caller's map
- * (the working read for the owner and co-founders, the counts-only summary for staff), and each capability is checked
- * against the request it governs: an allowed request is never refused for who the caller is, a denied one is refused
- * with its own code. Roles: the founder who owns the venture, a member whose role is owner, an accepted co-founder, an
- * admin, the Super Admin on HQ, an advisor member, an investor-licence member, a removed co-founder, another founder and
- * a support session. The frontend fixtures' mirror (`frontend/test/_caprel_capabilities.mjs`) is pinned to the
- * Worker's function. Every identity and record is synthetic.
+ * D6079 (#6079): mounted Overview reads preserve venture access, isolate source failures,
+ * and bound sampled history diagnostics without claiming a complete stage snapshot.
+ * Every identity and record is synthetic.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
- *     --test cloudflare-worker/test/caprel_capabilities_5074.test.ts
+ *     --test cloudflare-worker/test/capital_overview_6079.test.ts
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

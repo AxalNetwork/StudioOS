@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { derivedSummary, summarySource } from '../../../lib/derivedSummary.js';
-import { raiseToolRefusal } from '../../../lib/raiseErrors.js';
+import { raiseReadState, raiseToolRefusal } from '../../../lib/raiseErrors.js';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships.js';
-import { raiseReadState } from '../../../lib/raiseErrors.js';
 import { overviewPart } from './capRelModel.js';
 import { Unreadable } from '../../../ui';
 import { useCommitments, useProspects } from './capRelHomeRead.js';
