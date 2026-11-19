@@ -1,5 +1,12 @@
 // D534 (#1079) — `/research/companies/company/:uid`, built to
-// `design/incoming/Research · Company.dc.html`.
+// `design/incoming/Research · Company.dc.html`, and since D7180 (#7180, D7046)
+// to boards RS-18 A to RS-18 F of `design/incoming/Research Companies Profiles
+// Peers and Evidence Page.dc.html`: sourced metric cards with Observed apart
+// from Updated, Sector peers by the Worker's printed rule, and the four
+// evidence collections as disclosures with a record drawer (a sheet on a
+// phone). A collection's Retry re-reads that collection only (`?part=`). The
+// directory record's competitor and diligence status are not shown (D7046
+// option A: they name no analysis).
 //
 // Five reads, each with its own state, so one failure never blanks the page:
 //   the company      GET /research/company-directory/:uid  (metrics, evidence,
@@ -9,10 +16,10 @@
 //   signals          the market's signals plus GET /research/geographies/:code
 //
 // The bundled `data/companyDirectory.json` read is retired. Description, logo
-// and investors read Not recorded: no source holds them. The "Run competitor
-// analysis" button opens the Saved analyses tab on `/research/companies` with
-// the company prefilled — `/build/competitors` redirected founders to the
-// directory and dropped the prefill.
+// and investors read Not recorded: no source holds them, and they are grouped
+// into one Not recorded line. "Set up competitor analysis →" opens the Saved
+// analyses tab on `/research/companies` with this company as the subject and
+// its sector label and country filled in; nothing runs until Analyze.
 //
 // Departures from the canvas: no public top bar; the app's type; a signal shows
 // its why-now and thesis, because the signals store has no "what a founder
@@ -25,20 +32,22 @@ import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
-  NOT_RECORDED, UNREADABLE, analysisHref, employees, indexRows, lastRound, latestOnly, money, relatedSignals,
-  sectorLabelHref, signedPct,
+  NOT_RECORDED, UNREADABLE, analysisHref, indexRows, latestOnly, relatedSignals,
 } from '../../lib/companyDirectoryView.js';
-import { companyHref } from '../../lib/companyDirectoryView.js';
 import { backToResults, sessionStore } from './companyDirectoryState.js';
 import { useResearchLinks } from './researchLinks.js';
 import { directoryHref } from './fundDirectoryRead';
 import { formatMinorOrCount } from '../../lib/money';
 import ResearchActions from './ResearchActions.jsx';
 import { canAddToResearch } from './researchComparisons.js';
+import { EVIDENCE_COLLECTIONS, UNSOURCED, collectionState, notRecordedFields, replaceCollection } from './companyProfileRead.js';
+import { EvidenceDrawer, EvidenceSection, KeyMetrics, KindBadge, NotRecordedGroup, SectorPeers } from './CompanyEvidence.jsx';
+
+export { KeyMetrics, SectorPeers, UNSOURCED };
 
 const SECTIONS = [
-  ['metrics', 'Key metrics'], ['market', 'Market context'], ['competitors', 'Competitors'],
-  ['funds', 'Funds'], ['signals', 'Signals'], ['sources', 'Sources and evidence'],
+  ['metrics', 'Key metrics'], ['peers', 'Sector peers'], ['market', 'Market context'],
+  ['funds', 'Funds'], ['signals', 'Signals'], ['evidence', 'Evidence'],
 ];
 
 const h2 = 'text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100';
@@ -74,65 +83,6 @@ function Unreadable({ what, onRetry }) {
 
 const Loading = ({ what }) => <p className="text-[12px] text-axal-muted">Loading {what}…</p>;
 
-function SourceLine({ m }) {
-  const parts = [m.source_name, m.as_of ? `as of ${m.as_of}` : null].filter(Boolean).join(' · ');
-  return parts ? <p className={faint}>{m.source_url ? <a href={m.source_url} target="_blank" rel="noreferrer" className="underline">{parts}</a> : parts}</p> : null;
-}
-
-/** One Key metrics card: the value with its source and date, or Not recorded with why. */
-export function MetricCard({ title, m, value, detail, confidence, notRecordedReason }) {
-  const recorded = m?.status === 'recorded';
-  return (
-    <Card data-testid={`metric-${title}`} className="space-y-1">
-      <div className="text-[11px] font-bold text-axal-muted">{title}</div>
-      {recorded ? (
-        <>
-          <div className="text-lg font-extrabold text-axal-ink dark:text-gray-100">{value}</div>
-          {detail ? <p className="text-[12px] text-axal-muted">{detail}</p> : null}
-          <SourceLine m={m} />
-          {confidence ? <p className={faint}>Confidence: {confidence}</p> : null}
-        </>
-      ) : (
-        <>
-          <div className="text-lg font-extrabold text-axal-faint">{NOT_RECORDED}</div>
-          <p className="text-[12px] text-axal-muted">{notRecordedReason}</p>
-        </>
-      )}
-    </Card>
-  );
-}
-
-export function KeyMetrics({ metrics }) {
-  const m = metrics || {};
-  const conf = m.confidence;
-  const growth = signedPct(m.headcount?.growth_pct);
-  const round = m.last_funding;
-  return (
-    <section id="metrics" className="space-y-3">
-      <div><h2 className={h2}>Key metrics</h2><p className={lede}>Each figure shows its own source and date. Not recorded means no source holds it; Unavailable means the read failed.</p></div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <MetricCard title="Funding total" m={m.funding_total} value={money(m.funding_total?.value, m.funding_total?.currency)}
-          detail={m.funding_total?.currency ? `All rounds the source lists, in ${m.funding_total.currency}` : null} confidence={conf}
-          notRecordedReason="No source lists funding for this company yet." />
-        <MetricCard title="Last round" m={round} value={money(round?.value, round?.currency)}
-          detail={[round?.type, round?.date ? `announced ${round.date}` : null].filter(Boolean).join(' · ') || null} confidence={conf}
-          notRecordedReason="No source lists a round for this company yet." />
-        <MetricCard title="Valuation" m={m.valuation} value={money(m.valuation?.value, m.valuation?.currency)} confidence={conf}
-          notRecordedReason="No source lists a valuation for this company yet." />
-        <MetricCard title="Revenue" m={m.revenue} value={money(m.revenue?.value, m.revenue?.currency)} confidence={conf}
-          notRecordedReason="No source lists revenue for this company yet." />
-        <MetricCard title="Employees" m={m.headcount} value={m.headcount?.value != null ? Number(m.headcount.value).toLocaleString('en-US') : null}
-          detail={m.headcount?.as_of ? `Headcount on ${m.headcount.as_of}` : null} confidence={conf}
-          notRecordedReason="No source lists a headcount for this company yet." />
-        <MetricCard title="Employee growth" m={growth ? m.headcount : null} value={growth} confidence={conf}
-          notRecordedReason="No source lists headcount growth for this company yet." />
-        <MetricCard title="Market share" m={m.market_share_pct} value={m.market_share_pct?.value != null ? `${m.market_share_pct.value}%` : null} confidence={conf}
-          notRecordedReason="No source lists a market share for this company yet." />
-      </div>
-    </section>
-  );
-}
-
 /** The six indexes of the tracked sector, or why there are none. */
 export function MarketContext({ tracked, market }) {
   const head = <h2 className={h2}>Market context{tracked?.name ? `: ${tracked.name}` : ''}</h2>;
@@ -157,44 +107,6 @@ export function MarketContext({ tracked, market }) {
         </div>
       )}
       <p className={faint}>Mapped by sector label to {tracked.name || tracked.slug} ({tracked.method === 'manual' ? 'by hand' : 'by rule'}). market_intel_indexes · global · monthly.</p>
-    </section>
-  );
-}
-
-/** Same-label companies, nearest first, with the API's total. */
-export function Competitors({ item, peers }) {
-  const head = <div><h2 className={h2}>Competitors</h2><p className={lede}>Other directory companies with the same sector label, nearest first: same country, then the rest by name.</p></div>;
-  if (!peers || peers.status === 'unreadable') return <section id="competitors" className="space-y-3">{head}<Unreadable what="The peers read" /></section>;
-  if (peers.status === 'not_recorded') return <section id="competitors" className="space-y-3">{head}<p className="text-[12px] text-axal-muted"><strong>{NOT_RECORDED}.</strong> This company has no sector label, so it has no peers to match.</p></section>;
-  return (
-    <section id="competitors" className="space-y-3">
-      {head}
-      <p className="text-[12.5px] text-axal-muted"><strong className="text-axal-ink dark:text-gray-100">{peers.total}</strong> {peers.total === 1 ? 'company shares' : 'companies share'} this label</p>
-      {peers.rows.length ? (
-        <Card padding="none" className="overflow-hidden"><div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-[12px]">
-            <thead className="bg-axal-ground text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint dark:bg-gray-950">
-              <tr><th className="px-4 py-2.5">Company</th><th className="px-4 py-2.5">Country</th><th className="px-4 py-2.5">Founded</th><th className="px-4 py-2.5">Last round</th><th className="px-4 py-2.5">Employees</th></tr>
-            </thead>
-            <tbody className="divide-y divide-axal-hairline dark:divide-gray-800">
-              {peers.rows.map((p) => {
-                const round = lastRound(p);
-                const staff = employees(p);
-                return (
-                  <tr key={p.uid}>
-                    <td className="px-4 py-3"><Link to={companyHref(p.uid)} className="font-semibold text-axal-violet underline dark:text-violet-300">{p.name}</Link>{p.website ? <div className="mt-0.5 max-w-[280px] truncate text-[11px] text-axal-faint">{p.website}</div> : null}</td>
-                    <td className="px-4 py-3 text-axal-muted">{p.country || NOT_RECORDED}{p.same_country ? <span className="ml-2 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-800 dark:bg-violet-950/40 dark:text-violet-200">Same country</span> : null}</td>
-                    <td className="px-4 py-3 font-mono text-axal-muted">{p.founded_year ?? NOT_RECORDED}</td>
-                    <td className="px-4 py-3">{round ? <>{round.amount}{round.detail ? <div className={faint}>{round.detail}</div> : null}</> : <span className="text-axal-faint">{NOT_RECORDED}</span>}</td>
-                    <td className="px-4 py-3">{staff ? staff.count : <span className="text-axal-faint">{NOT_RECORDED}</span>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div></Card>
-      ) : null}
-      {peers.total > peers.rows.length ? <Link to={sectorLabelHref(item.sector)} className="text-[12px] font-semibold text-axal-violet underline">See all {peers.total} with this label in Companies →</Link> : null}
     </section>
   );
 }
@@ -289,81 +201,28 @@ export function recordSource(item) {
   };
 }
 
-/** Where each fact comes from. A failed evidence table says so on its own row. */
-export function SourcesTable({ item, metrics, financials, employment, sources, fundingRounds }) {
-  const m = metrics || {};
-  const rec = (x) => x?.status === 'recorded';
-  const metricRow = (label, x) => rec(x)
-    ? [label, x.source_name || NOT_RECORDED, x.as_of || NOT_RECORDED, m.confidence || 'Not rated', x.source_url]
-    : [label, NOT_RECORDED, '', '', null];
-  const src = recordSource(item);
-  const rows = [
-    ['Name, website, country, founded', src.short, item.as_of, 'Not rated', item.source_url],
-    ['Sector label', item.sector ? src.short : NOT_RECORDED, item.sector ? item.as_of : '', item.sector ? 'Not rated' : '', item.sector ? item.source_url : null],
-    metricRow('Funding total', m.funding_total),
-    metricRow('Last round', m.last_funding),
-    metricRow('Employees and growth', m.headcount),
-    metricRow('Revenue', m.revenue),
-    metricRow('Valuation', m.valuation),
-    metricRow('Market share', m.market_share_pct),
-  ];
-  const evidence = [['Financial statements', financials], ['Headcount history', employment], ['Funding rounds', fundingRounds], ['Field sources', sources]];
-  return (
-    <section id="sources" className="space-y-3">
-      <div><h2 className={h2}>Sources and evidence</h2><p className={lede}>Where each fact on this page comes from, and how sure the source is.</p></div>
-      <Card padding="none" className="overflow-hidden"><div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-[12px]">
-          <thead className="bg-axal-ground text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint dark:bg-gray-950">
-            <tr><th className="px-4 py-2.5">Field</th><th className="px-4 py-2.5">Source</th><th className="px-4 py-2.5">As of</th><th className="px-4 py-2.5">Confidence</th><th className="px-4 py-2.5">Record</th></tr>
-          </thead>
-          <tbody className="divide-y divide-axal-hairline dark:divide-gray-800">
-            {rows.map(([f, src, asOf, conf, url]) => (
-              <tr key={f}><td className="px-4 py-2.5 font-semibold text-axal-ink dark:text-gray-100">{f}</td><td className="px-4 py-2.5 text-axal-muted">{src}</td><td className="px-4 py-2.5 text-axal-muted">{asOf}</td><td className="px-4 py-2.5 text-axal-muted">{conf}</td>
-                <td className="px-4 py-2.5">{url ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-axal-violet underline">Open source <ExternalLink size={11} /></a> : null}</td></tr>
-            ))}
-            {evidence.map(([f, e]) => (
-              <tr key={f}><td className="px-4 py-2.5 font-semibold text-axal-ink dark:text-gray-100">{f}</td>
-                <td className="px-4 py-2.5 text-axal-muted" colSpan={4}>{!e || e.status === 'unreadable' ? <span className="font-semibold text-red-700 dark:text-red-300">{UNREADABLE}: read failed</span> : e.rows.length ? `${e.rows.length} ${e.rows.length === 1 ? 'row' : 'rows'}` : NOT_RECORDED}</td></tr>
-            ))}
-            <tr><td className="px-4 py-2.5 font-semibold text-axal-ink dark:text-gray-100">Competitor status</td><td className="px-4 py-2.5 text-axal-muted" colSpan={4}>{item.competitor_status || NOT_RECORDED} <span className={faint}>· as stored on the directory record</span></td></tr>
-            <tr><td className="px-4 py-2.5 font-semibold text-axal-ink dark:text-gray-100">Diligence status</td><td className="px-4 py-2.5 text-axal-muted" colSpan={4}>{item.diligence_status || NOT_RECORDED} <span className={faint}>· as stored on the directory record</span></td></tr>
-          </tbody>
-        </table>
-      </div></Card>
-      <p className={faint}>Discovery metadata from {src.short}, plus figures only where a named source records them. Nothing on this page is estimated.</p>
-    </section>
-  );
-}
-
-/** Fields the canvas draws that no source holds: shown as Not recorded, never invented. */
-export const UNSOURCED = [
-  ['Description', 'no source holds one'],
-  ['Logo', 'no source holds one'],
-  ['Investors', 'no source lists them'],
-];
-
 /** The header: identity, sector label and tracked sector, and the directory record. */
 export function CompanyHeader({ item, tracked, research = null }) {
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
-        <h1 className="text-2xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.name}</h1>
-        {item.website ? <a href={item.website} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[12px] text-axal-violet underline">{item.website}<ExternalLink size={12} /><span className="sr-only">(opens in a new tab)</span></a> : null}
-        <dl data-testid="company-unsourced" className="mt-2 grid max-w-xl grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]">
-          {UNSOURCED.map(([name, why]) => (
-            <React.Fragment key={name}><dt className="text-axal-muted">{name}</dt><dd className="text-axal-faint">{NOT_RECORDED} · {why}</dd></React.Fragment>
-          ))}
-        </dl>
+        <KindBadge kind="directory" />
+        <h1 className="mt-1 break-words text-2xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.name}</h1>
+        {item.website
+          ? <a href={item.website} target="_blank" rel="noreferrer" className="mt-1 inline-flex min-h-[32px] max-w-full items-center gap-1 break-all text-[12px] text-axal-violet underline">{item.website}<ExternalLink size={12} /><span className="sr-only">(opens in a new tab)</span></a>
+          : <p className="mt-1 text-[12px] text-axal-muted">Official site: {NOT_RECORDED} <span className="text-axal-faint">· no source lists a website</span></p>}
         <div className="mt-2 flex flex-wrap gap-2 text-[11.5px]">
           <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-axal-muted dark:border-gray-700">Sector label: {item.sector || NOT_RECORDED}</span>
           <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-axal-muted dark:border-gray-700">Tracked sector: {tracked?.status === 'ok' ? (tracked.name || tracked.slug) : tracked?.status === 'unreadable' ? UNREADABLE : NOT_RECORDED}</span>
           <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-axal-muted dark:border-gray-700">{item.country || `Country: ${NOT_RECORDED}`}</span>
           <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-axal-muted dark:border-gray-700">{item.founded_year ? `Founded ${item.founded_year}` : `Founded: ${NOT_RECORDED}`}</span>
         </div>
+        <div className="mt-3 max-w-xl"><NotRecordedGroup testId="company-unsourced" fields={notRecordedFields(item)} /></div>
       </div>
       <div className="flex shrink-0 flex-col gap-2 lg:w-72">
-        <Link to={analysisHref(item)} className="inline-flex items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white hover:bg-violet-800">Run competitor analysis →</Link>
+        <Link to={analysisHref(item)} className="inline-flex min-h-[48px] items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[13px] font-semibold text-white hover:bg-violet-800 lg:min-h-[40px]">Set up competitor analysis →</Link>
         {research}
+        <p className={faint}>Opens the analysis setup with this company filled in. Nothing runs until you press Analyze.</p>
         <Card padding="sm" className="space-y-1">
           <div className="text-[11px] font-bold text-axal-muted">Directory record</div>
           <div className="text-[12px] text-axal-ink dark:text-gray-100">{recordSource(item).label}</div>
@@ -387,6 +246,26 @@ export default function CompanyProfile({ role }) {
   const geography = useRead(code ? () => researchMarketsApi.geography(code) : null, [code]);
   const focusRead = useRead(slug ? () => researchFundsApi.list({ focus: slug, limit: 3 }) : null, [slug]);
   const hqRead = useRead(code ? () => researchFundsApi.list({ hq_country: code, limit: 3 }) : null, [code]);
+  // D7180: a collection's Retry re-reads that collection only (`?part=`) and
+  // replaces it, keyed to the uid it was pressed on; the rest of the page stays.
+  const [parts, setParts] = useState({ uid, data: {}, retrying: {} });
+  const [inspect, setInspect] = useState(null);
+  useEffect(() => { setParts({ uid, data: {}, retrying: {} }); setInspect(null); }, [uid]);
+  const retryCollection = useCallback(async (key) => {
+    setParts((p) => (p.uid === uid ? { ...p, retrying: { ...p.retrying, [key]: true } } : p));
+    let next;
+    try {
+      const r = await researchCompaniesApi.part(uid, key);
+      next = r?.[key] || { status: 'unreadable', rows: [] };
+    } catch {
+      next = { status: 'unreadable', rows: [] };
+    }
+    setParts((p) => (p.uid === uid ? { ...p, data: { ...p.data, [key]: next }, retrying: { ...p.retrying, [key]: false } } : p));
+  }, [uid]);
+  const onInspect = useCallback((target, opener) => {
+    setInspect(typeof target === 'string' ? { metric: target, opener } : { ...target, opener });
+  }, []);
+  const closeInspect = useCallback(() => setInspect(null), []);
 
   // D7179 (RS-17 B): Back and the breadcrumb return to this tab's last results
   // (page, filters, sort and selection), named on the link; else the directory.
@@ -403,7 +282,10 @@ export default function CompanyProfile({ role }) {
   }
   if (company.error || !company.data) return <div data-testid="company-profile" className="space-y-4">{back}<Unreadable what="The company directory" onRetry={company.retry} /></div>;
 
-  const d = company.data;
+  let d = company.data;
+  if (parts.uid === uid) for (const [k, v] of Object.entries(parts.data)) d = replaceCollection(d, k, v);
+  const evidenceTotal = EVIDENCE_COLLECTIONS.reduce((n, c) => n + (collectionState(d[c.key]) === 'unreadable' ? 0 : (d[c.key]?.rows || []).length), 0);
+  const counts = { peers: d.peers?.status === 'ok' ? d.peers.total : null, evidence: evidenceTotal };
   return (
     <div data-testid="company-profile" className="space-y-6">
       <nav aria-label="Breadcrumb" className="text-[12px] text-axal-muted"><Link to={results.href} state={{ via: 'breadcrumb' }} className="underline">Companies</Link> / <span className="text-axal-ink dark:text-gray-100">{d.item.name}</span></nav>
@@ -411,14 +293,15 @@ export default function CompanyProfile({ role }) {
       <CompanyHeader item={d.item} tracked={tracked}
         research={canAddToResearch(role) ? <ResearchActions kind="company" item={{ uid: d.item.uid || uid, name: d.item.name }} /> : null} />
       <nav aria-label="Sections" className="flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-800">
-        {SECTIONS.map(([id, name]) => <a key={id} href={`#${id}`} className="whitespace-nowrap px-3 py-2 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">{name}</a>)}
+        {SECTIONS.map(([id, name]) => <a key={id} href={`#${id}`} className="inline-flex min-h-[44px] items-center gap-1 whitespace-nowrap px-3 py-2 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">{name}{counts[id] != null ? <span className="rounded-full bg-axal-ground px-1.5 text-[10.5px] font-bold dark:bg-gray-800">{counts[id]}</span> : null}</a>)}
       </nav>
-      <KeyMetrics metrics={d.metrics} />
+      <KeyMetrics d={d} onInspect={onInspect} />
+      <SectorPeers item={d.item} peers={d.peers} />
       <MarketContext tracked={tracked} market={market} />
-      <Competitors item={d.item} peers={d.peers} />
       <Funds tracked={tracked} focusRead={focusRead} hqRead={hqRead} country={d.item.country} links={links} />
       <Signals tracked={tracked} market={slug ? market : null} geography={code ? geography : null} />
-      <SourcesTable item={d.item} metrics={d.metrics} financials={d.financials} employment={d.employment} sources={d.sources} fundingRounds={d.funding_rounds} />
+      <EvidenceSection d={d} name={d.item.name} onInspect={onInspect} onRetry={retryCollection} retrying={parts.uid === uid ? parts.retrying : {}} />
+      <EvidenceDrawer open={inspect} d={d} onClose={closeInspect} />
       <p className={faint}>Company records come from Wikidata (CC0) or, for UK companies, Companies House (Open Government Licence v3.0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.</p>
     </div>
   );

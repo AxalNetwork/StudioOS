@@ -23,7 +23,8 @@ import {
   latestOnly, listState, money, pageList, pageWindow, relatedSignals, withoutFilter,
 } from '../src/lib/companyDirectoryView.js';
 import { CoverageCard, DirectoryFilters, DirectoryResults } from '../src/pages/research/CompanyDirectoryZone.jsx';
-import { CompanyHeader, Competitors, KeyMetrics, MarketContext, SourcesTable } from '../src/pages/research/CompanyProfile.jsx';
+import { CompanyHeader, KeyMetrics, MarketContext, SectorPeers } from '../src/pages/research/CompanyProfile.jsx';
+import { EvidenceSection } from '../src/pages/research/CompanyEvidence.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -146,31 +147,33 @@ test('/build/competitors keeps the company prefill, on the Saved analyses tab', 
 
 test('the company: a metric no source holds reads Not recorded with why, never a zero', () => {
   const metrics = {
-    funding_total: { status: 'recorded', value: 5e7, currency: 'USD', source_name: 'Company filings', as_of: '2026-09-30' },
+    funding_total: { status: 'recorded', value: 5e7, currency: 'USD', publisher: 'Company filings', observed_on: '2026-09-30', updated_on: '2026-10-01' },
     last_funding: { status: 'not_recorded', value: null },
     valuation: { status: 'not_recorded', value: null },
     revenue: { status: 'not_recorded', value: null },
-    headcount: { status: 'recorded', value: 120, as_of: '2026-06-01', growth_pct: null, source_name: 'Company filings' },
+    headcount: { status: 'recorded', value: 120, observed_on: '2026-06-01', growth_pct: null, publisher: 'Company filings' },
     market_share_pct: { status: 'not_recorded', value: null },
     confidence: 'medium',
   };
-  const t = render(KeyMetrics, { metrics });
+  // D7180: the card names its publisher and its observed date; the metrics no
+  // source holds are grouped into one Not recorded line.
+  const t = render(KeyMetrics, { d: { metrics }, onInspect: noop });
   assert.match(t, /USD 50M/);
-  assert.match(t, /Company filings · as of 2026-09-30/);
-  assert.match(t, /Confidence: medium/);
-  assert.match(t, /Valuation\s*Not recorded\s*No source lists a valuation/);
-  assert.match(t, /Employee growth\s*Not recorded/, 'a headcount without growth is not a growth of zero');
+  assert.match(t, /Publisher\s*Company filings/);
+  assert.match(t, /Observed\s*2026-09-30/);
+  assert.match(t, /Not recorded · 5 metrics\s*Last round · Revenue · Valuation · Market share · Employee growth/);
   assert.doesNotMatch(t, /USD 0|\b0%/);
 });
 
-test('competitors print the API total beyond the eight shown', () => {
+test('sector peers print the API total beyond the eight shown', () => {
   const peers = { status: 'ok', total: 11, rows: [{ uid: 'p', name: 'Peer', country: 'Germany', same_country: 1, founded_year: 2001 }] };
-  const t = render(Competitors, { item: { sector: 'robotics' }, peers });
-  assert.match(t, /11 companies share this label/);
+  const t = render(SectorPeers, { item: { sector: 'robotics', country: 'Germany' }, peers });
+  assert.match(t, /Sector peers\s*11/);
+  assert.match(t, /1 of 11 shown/);
   assert.match(t, /Same country/);
   assert.match(t, /See all 11 with this label in Companies/);
-  const none = render(Competitors, { item: { sector: null }, peers: { status: 'not_recorded', rows: [], total: null } });
-  assert.match(none, /Not recorded\. This company has no sector label/);
+  const none = render(SectorPeers, { item: { sector: null }, peers: { status: 'not_recorded', rows: [], total: null } });
+  assert.match(none, /Not recorded\s*This company has no sector label/);
 });
 
 test('market context: a dimension with no live point is Not recorded with the reason, never 50', () => {
@@ -191,27 +194,28 @@ test('signals: sector matches first, each signal once, labelled with what it mat
   assert.deepEqual(s.map((x) => [x.id, x.match]), [[1, 'Sector'], [2, 'Sector and country'], [3, 'Country']]);
 });
 
-test('sources: a failed evidence table is Unreadable on its own row; statuses read as stored or Not recorded', () => {
-  const t = render(SourcesTable, {
-    item: { as_of: '2026-09-30', source_url: 'https://www.wikidata.org/wiki/Q1', sector: 'robotics', competitor_status: 'tracked', diligence_status: null },
-    metrics: { funding_total: { status: 'not_recorded' } },
-    financials: { status: 'unreadable', rows: [] }, employment: { status: 'ok', rows: [{}, {}] }, sources: { status: 'ok', rows: [] },
-  });
-  assert.match(t, /Financial statements\s*Unreadable: read failed/);
-  assert.match(t, /Headcount history\s*2 rows/);
-  assert.match(t, /Field sources\s*Not recorded/);
-  assert.match(t, /Competitor status\s*tracked/);
-  assert.match(t, /Diligence status\s*Not recorded/);
+test('evidence: a failed collection is Unavailable on its own; the directory record\'s statuses are not shown (D7046 A)', () => {
+  const d = {
+    item: { sector: 'robotics', competitor_status: 'tracked', diligence_status: null },
+    financials: { status: 'unreadable', rows: [] }, employment: { status: 'ok', rows: [{ observed_date: '2026-01-01', employee_count: 2 }, { observed_date: '2025-01-01', employee_count: 0 }] },
+    sources: { status: 'ok', rows: [] }, funding_rounds: { status: 'ok', rows: [] },
+  };
+  const t = render(EvidenceSection, { d, name: 'Acme', onInspect: noop, onRetry: noop });
+  assert.match(t, /Financial statements\s*Unavailable · read failed/);
+  assert.match(t, /Employment observations\s*Read\s*2 records/);
+  assert.match(t, /Field citations\s*None\s*0 records/);
+  assert.doesNotMatch(t, /Competitor status|Diligence status|tracked/);
+  assert.doesNotMatch(read('frontend/src/pages/research/CompanyProfile.jsx'), /competitor_status|diligence_status/);
 });
 
 test('description, logo and investors read Not recorded, because no source holds them', () => {
   const t = render(CompanyHeader, { item: { name: 'Acme', website: 'https://acme.example', sector: 'robotics', country: 'Germany', founded_year: 2015 },
     tracked: { status: 'not_recorded' } });
-  assert.match(t, /Description\s*Not recorded · no source holds one/);
-  assert.match(t, /Logo\s*Not recorded/);
-  assert.match(t, /Investors\s*Not recorded · no source lists them/);
+  // D7180: grouped into one Not recorded line (the reasons open under it).
+  assert.match(t, /Not recorded · 3 fields\s*Description · Logo · Investors/);
   assert.match(t, /Tracked sector: Not recorded/);
-  assert.match(t, /Run competitor analysis/);
+  assert.match(t, /Set up competitor analysis →/);
+  assert.doesNotMatch(t, /Run competitor analysis/);
 });
 
 test('only the newest read lands: an older list or profile read is dropped', () => {
@@ -227,12 +231,12 @@ test('only the newest read lands: an older list or profile read is dropped', () 
   }
 });
 
-test('sources: funding rounds are listed, and a failed rounds read is Unreadable on its own row', () => {
-  const base = { item: { as_of: '2026-09-30', sector: null }, metrics: {},
-    financials: { status: 'ok', rows: [] }, employment: { status: 'ok', rows: [] }, sources: { status: 'ok', rows: [] } };
-  assert.match(render(SourcesTable, { ...base, fundingRounds: { status: 'ok', rows: [{}, {}, {}] } }), /Funding rounds\s*3 rows/);
-  assert.match(render(SourcesTable, { ...base, fundingRounds: { status: 'unreadable', rows: [] } }), /Funding rounds\s*Unreadable: read failed/);
-  assert.match(read('frontend/src/pages/research/CompanyProfile.jsx'), /fundingRounds=\{d\.funding_rounds\}/);
+test('evidence: funding rounds are listed, and a failed rounds read is Unavailable on its own', () => {
+  const base = { financials: { status: 'ok', rows: [] }, employment: { status: 'ok', rows: [] }, sources: { status: 'ok', rows: [] } };
+  const rounds = [{ round_type: 'Seed' }, { round_type: 'A' }, { round_type: 'B' }];
+  assert.match(render(EvidenceSection, { d: { ...base, funding_rounds: { status: 'ok', rows: rounds } }, name: 'X', onInspect: noop, onRetry: noop }), /Funding rounds\s*Read\s*3 records/);
+  assert.match(render(EvidenceSection, { d: { ...base, funding_rounds: { status: 'unreadable', rows: [] } }, name: 'X', onInspect: noop, onRetry: noop }), /Funding rounds\s*Unavailable · read failed/);
+  assert.match(read('frontend/src/pages/research/CompanyProfile.jsx'), /<EvidenceSection d=\{d\}/);
 });
 
 test('#1077: the bundled company directory is deleted, and nothing under src reads it', () => {

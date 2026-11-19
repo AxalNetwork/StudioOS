@@ -40,9 +40,10 @@ test('company records have one link per row and profiles separate identity from 
   assert.doesNotMatch(directory, /role="link"/);
   assert.doesNotMatch(directory, /navigate\(companyHref/);
   // D534 (#1079): the profile is built to the Research · Company canvas. Each
-  // metric shows its source and date or Not recorded, and diligence reads the
-  // stored status beside the sources, not an inferred figure.
-  assert.match(profile, /Key metrics/);
-  assert.match(profile, /Funding total/);
-  assert.match(profile, /Diligence status/);
+  // metric shows its source and date or Not recorded. D7180 (D7046 option A):
+  // the directory record's stored diligence status names no analysis, so the
+  // profile no longer prints it; nothing infers one either.
+  assert.match(profile, /<KeyMetrics /);
+  assert.match(read('pages/research/companyProfileRead.js'), /title: 'Funding total'/);
+  assert.doesNotMatch(profile, /Diligence status|diligence_status/);
 });
