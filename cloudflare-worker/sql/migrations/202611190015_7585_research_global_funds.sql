@@ -141,7 +141,8 @@ host_ports AS (
 bare_hosts AS (
   SELECT uid,name,fund_number,rtrim(substr(host_port,1,instr(host_port||':',':')-1),'.') AS host FROM host_ports
 ),
-served AS (
+-- Normalize the historical identities once, not for every candidate alias.
+served AS MATERIALIZED (
   SELECT lower(uid) AS uid,replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(name, '')), ' ', ''), '.', ''), ',', ''), '-', ''), '_', ''), '''', ''), '’', ''), '&', ''), '(', ''), ')', ''), char(9), ''), char(10), ''), char(13), '') AS name_key,
     replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(fund_number, '')), ' ', ''), '.', ''), ',', ''), '-', ''), '_', ''), '''', ''), '’', ''), '&', ''), '(', ''), ')', ''), char(9), ''), char(10), ''), char(13), '') AS fund_number_key,
     CASE WHEN substr(host,1,4) = 'www.' THEN substr(host,5) ELSE host END AS host FROM bare_hosts
