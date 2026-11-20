@@ -274,8 +274,9 @@ test('the landing reads have their own plan and cap, stated once, and the collec
   for (const key of ['pushPages', 'pushReads', 'openPages', 'mergeableReads', 'botRunPages', 'botJobs', 'modelLogs', 'prCiPages', 'prCiJobs']) {
     assert.match(cli, new RegExp(`LANDING_BUDGET\\.${key}\\b`), key);
   }
-  for (const path of ['actions/workflows/ci.yml/runs?event=push&branch=main', 'commits/${sha}/pulls', 'pulls?state=open', 'pulls/${p.number}',
-    'actions/workflows?per_page=100', 'actions/jobs/${edit.id}/logs', 'actions/workflows/ci.yml/runs?event=pull_request']) {
+  // The CLI's own template text, `${…}` included: escaped so it stays literal.
+  for (const path of ['actions/workflows/ci.yml/runs?event=push&branch=main', `commits/\${sha}/pulls`, 'pulls?state=open', `pulls/\${p.number}`,
+    'actions/workflows?per_page=100', `actions/jobs/\${edit.id}/logs`, 'actions/workflows/ci.yml/runs?event=pull_request']) {
     assert.ok(cli.includes(path), path);
   }
   // Every landing read is a GET; the tracker comment stays the only write.

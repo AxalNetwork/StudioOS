@@ -96,6 +96,13 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "GET /api/research/market-readings/:uid/summary": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_market_summary_7651.test.ts",
+    "note": "D7651: the reading is read only WHERE uid = ? AND owner_user_id = the caller, so another member's reading gets the same 404 a missing one does; an investor-only account is refused with 403 before anything is read (D6273 Q2)."
+  },
   "GET /api/research/markets/:slug": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

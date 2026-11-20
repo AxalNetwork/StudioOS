@@ -369,6 +369,7 @@ catalogue version only in the fixture.
 | `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
+| `research_global_funds_7325.test.mjs` | D7325: evidence validation, canonical catalogue preservation, source takedowns, country facets, duplicate suppression, replay and fault-injection checks on real SQLite. |
 
 | File | What it covers |
 |---|---|
@@ -377,5 +378,9 @@ catalogue version only in the fixture.
 
 | `research_recording_7587.test.mjs` | D7587: real Workers requests prove an abandoned bootstrap cannot strand the next request, with per-binding readiness. |
 | `research_email_7587.test.ts` | D7587: elevated HQ interview mail context, ordinary-admin and branch refusal, transcript exclusion and no invented address. |
+| File | What it covers |
+|---|---|
+
+| `file_recovery_6653.test.mjs` | D6653: include independent file recovery Python fixtures in the standard Worker runner. |
 | `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
 | `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |

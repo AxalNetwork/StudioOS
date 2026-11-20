@@ -52,10 +52,12 @@ function directCalls() {
     const rel = file.slice(SRC.length).replace(/\\/g, '/');
     const s = code(readFileSync(file, 'utf8'));
     const names = [...s.matchAll(/(?:const|let|var)\s+(\w+)\s*(?::[^=]+)?=\s*[^;\n]*\.AI\s*;/g)].map((m) => m[1]);
-    const res = [/\.AI\s*\.\s*run\s*\(/g, ...names.map((n) => new RegExp(`(?<![\\w.])${n}\\s*\\.\\s*run\\s*\\(`, 'g'))];
-    for (const re of res) {
-      for (const m of s.matchAll(re)) found.push(`${rel}:${s.slice(0, m.index).split('\n').length}`);
-    }
+    const at = (i: number) => `${rel}:${s.slice(0, i).split('\n').length}`;
+    for (const m of s.matchAll(/\.AI\s*\.\s*run\s*\(/g)) found.push(at(m.index!));
+    // A fixed pattern that captures the receiver, compared with each alias (one list per alias, as before).
+    const byName: string[][] = names.map(() => []);
+    for (const m of s.matchAll(/(?<![\w.])(\w+)\s*\.\s*run\s*\(/g)) names.forEach((n, k) => { if (n === m[1]) byName[k].push(at(m.index!)); });
+    found.push(...byName.flat());
   }
   return found;
 }

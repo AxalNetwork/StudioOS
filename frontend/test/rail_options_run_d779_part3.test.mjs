@@ -73,7 +73,8 @@ test('part 3 is the partner’s 19 other rows, every one a draft band, and the t
   for (const o of PART_3) assert.ok(o.handler === 'draft' && o.surface, `${o.key}: not a draft band`);
   // Part 1 took the investor's 15 (13 since D1243 retired the Pipeline zone's band and D1260 retired Screening's memo), part 2 the advisor's 14 and these 9; together, every row.
   // D6212 (#6212) added the investor's Overview and Performance notes: 15. D6888 (#6888) the statement's cover note: 16.
-  assert.equal(INVESTOR_RAIL_OPTIONS.length + ADVISOR_RAIL_OPTIONS.length + PARTNER_RAIL_OPTIONS.length, 16 + 14 + 9 + 19);
+  // D7652 (#7652) took the advisor's Refresh sources out (it runs no model since D7176): 13.
+  assert.equal(INVESTOR_RAIL_OPTIONS.length + ADVISOR_RAIL_OPTIONS.length + PARTNER_RAIL_OPTIONS.length, 16 + 13 + 9 + 19);
 });
 
 test('each band is a zone draft the Worker drafts, whose Accept writes only the draft', () => {

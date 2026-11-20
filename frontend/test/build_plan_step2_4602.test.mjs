@@ -28,10 +28,11 @@ import BuildPhoneNav from '../src/pages/cycles/BuildPhoneNav.jsx';
 import { ChoiceField } from '../src/pages/cycles/BuildPlanCards.jsx';
 import { evidenceCountLine, evidenceHref, evidenceNodes, evidenceParam } from '../src/pages/cycles/buildPlanModel.js';
 import { filterCount, filterRows, progressRows } from '../src/pages/cycles/buildProgressModel.js';
+import { tagHolding } from './_tagHolding.mjs';
 
 const h = React.createElement;
 /** The opening tag of the element with this test id, attributes in any order. */
-const tagOf = (out, id) => (out.match(new RegExp(`<[a-z]+ [^>]*data-testid="${id}"[^>]*>`)) || [''])[0];
+const tagOf = (out, id) => tagHolding(out, `data-testid="${id}"`, (t) => /^<[a-z]+ /.test(t));
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 
 const WIZARD = '55555555-5555-4555-8555-555555555555';

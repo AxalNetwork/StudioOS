@@ -33,6 +33,14 @@
  *   changes_requested     a manifest whose latest decision from some reviewer is reject or request_changes
  *   effect_target         an effect target the manifest or audience does not support
  *   queue_full            the tenant's outbox has no room for this publication's effects
+ *   taken_down            (part 2) a manifest a takedown covers, or one pinning a component revision a takedown covers
+ *   not_published         (part 2) a re-pin of a manifest the line never published
+ *
+ * PART 2 (D5585-p2) adds, here: a manifest that RE-PINS an earlier published manifest's component revisions (`repin` in
+ * its body) is current although those revisions are no longer their assets' heads, and its publication passes them to
+ * the CAS as `repinnedComponents`; takedowns (`work_graph_release_takedowns`) show on every component they cover and
+ * refuse publication. Takedown, re-pin, serving and delivery live in `workGraphReleaseTakedowns.ts` and
+ * `workGraphReleaseDelivery.ts`.
  *
  * COST. Every result carries `cost: { d1Statements, d1Batches }`, including the statements `createRevision` and
  * `advanceHead` issued for it. Ids and digests only: no column or result holds content.
@@ -148,35 +156,35 @@ export type ReleaseRefusalCode =
   | RefusalCode
   | 'audience_forbidden' | 'policy_profile' | 'incomplete_package' | 'rebuild_required' | 'reapproval_required'
   | 'attestation_missing' | 'no_authority' | 'self_approval' | 'approval_incomplete' | 'changes_requested'
-  | 'effect_target' | 'queue_full';
+  | 'effect_target' | 'queue_full' | 'taken_down' | 'not_published';
 export interface ReleaseRefusal { ok: false; code: ReleaseRefusalCode; ids: string[]; cost: Cost; currentHead?: { revisionUid: string | null; headSeq: number } }
 
 const MANIFEST_PROFILE = 'application/vnd.studioos.release-manifest+json';
 const ROLE = /^[a-z][a-z0-9_]{0,39}$/;
 const REF = /^[A-Za-z0-9][A-Za-z0-9_.:/#@-]{0,119}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
-const keyOk = (k: unknown): k is string => typeof k === 'string' && k.length >= 1 && k.length <= 160;
-const refOk = (r: unknown): r is string => typeof r === 'string' && r.length >= 1 && r.length <= 200;
+export const keyOk = (k: unknown): k is string => typeof k === 'string' && k.length >= 1 && k.length <= 160;
+export const refOk = (r: unknown): r is string => typeof r === 'string' && r.length >= 1 && r.length <= 200;
 const posInt = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
-function actorOk(a: Actor | undefined): a is Actor {
+export function actorOk(a: Actor | undefined): a is Actor {
   if (!a) return false;
   if (a.kind === 'person') return posInt(a.userId);
   return a.kind === 'agent' && typeof a.agentRunId === 'string' && a.agentRunId.length > 0 && a.agentRunId.length <= 200 && posInt(a.onBehalfOfUserId);
 }
-const userOf = (a: Actor) => (a.kind === 'person' ? a.userId : a.onBehalfOfUserId);
-const runOf = (a: Actor) => (a.kind === 'agent' ? a.agentRunId : null);
+export const userOf = (a: Actor) => (a.kind === 'person' ? a.userId : a.onBehalfOfUserId);
+export const runOf = (a: Actor) => (a.kind === 'agent' ? a.agentRunId : null);
 
-function canonical(v: unknown): string {
+export function canonical(v: unknown): string {
   if (v === undefined) return 'null';
   if (v === null || typeof v !== 'object') return JSON.stringify(v);
   if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
   const o = v as Record<string, unknown>;
   return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(',')}}`;
 }
-const hashOf = (v: unknown) => sha256Hex(new TextEncoder().encode(canonical(v)));
+export const hashOf = (v: unknown) => sha256Hex(new TextEncoder().encode(canonical(v)));
 
 /** Counts the D1 statements a call issues, and folds in what the #5581 calls it makes report. */
-class Meter {
+export class Meter {
   cost: Cost = { d1Statements: 0, d1Batches: 0 };
   private env: Pick<Env, 'DB'>;
   constructor(env: Pick<Env, 'DB'>) { this.env = env; }
@@ -190,20 +198,20 @@ class Meter {
   }
 }
 
-interface LineRow {
+export interface LineRow {
   line_asset_uid: string; tenant_id: number; company_id: number; project_id: number | null; audience: Audience;
   head_revision_uid: string | null; head_seq: number; approval_policy: string; access_class: string;
 }
-const scopeOf = (r: { tenant_id: number; company_id: number; project_id: number | null }): Scope =>
+export const scopeOf = (r: { tenant_id: number; company_id: number; project_id: number | null }): Scope =>
   ({ tenantId: r.tenant_id, companyId: r.company_id, projectId: r.project_id });
 
 /** D5579's own scope rule (a company-wide caller covers its projects). */
-function outOfScope(ctx: ValidationContext, scope: Scope): boolean {
+export function outOfScope(ctx: ValidationContext, scope: Scope): boolean {
   return validateWorkGraph({ assets: [{ id: 'x', scope, kind: 'composite', headVersionId: null, accessClass: 'internal', approvalPolicy: 'x' }] }, ctx)
     .some((v) => v.code === 'wrong_tenant');
 }
 
-async function readLine(env: Pick<Env, 'DB'>, m: Meter, lineAssetUid: string): Promise<LineRow | null> {
+export async function readLine(env: Pick<Env, 'DB'>, m: Meter, lineAssetUid: string): Promise<LineRow | null> {
   return m.first<LineRow>(env.DB.prepare(
     `SELECT l.line_asset_uid, l.tenant_id, l.company_id, l.project_id, l.audience, a.head_revision_uid, a.head_seq,
             a.approval_policy, a.access_class
@@ -258,7 +266,11 @@ export interface ManifestComponent {
   asset: string; revision: string; digest: string; kind: AssetKind; role: string; access: AccessClass;
   profiles: ProfileName[]; source: SourceRef;
 }
-export interface ManifestBody { v: 1; line: string; audience: Audience; partial: boolean; base: string | null; components: ManifestComponent[] }
+export interface ManifestBody {
+  v: 1; line: string; audience: Audience; partial: boolean; base: string | null; components: ManifestComponent[];
+  /** Part 2: the earlier published manifest whose component revisions this one re-pins. Absent on an ordinary cut. */
+  repin?: string;
+}
 
 export interface CutManifestInput {
   lineAssetUid: string;
@@ -272,14 +284,14 @@ export type CutManifestResult =
   | { ok: true; manifestUid: string; digest: string; baseManifestUid: string | null; replayed: boolean; cost: Cost }
   | ReleaseRefusal;
 
-interface ComponentRow {
+export interface ComponentRow {
   revision_uid: string; asset_uid: string; digest: string; tombstoned_at: string | null; source_store: string;
   source_locator: string; source_id: string; source_revision: string; residency: string | null; tenant_id: number;
   company_id: number; project_id: number | null; kind: string; access_class: string; approval_policy: string;
   head_revision_uid: string | null;
 }
 
-async function readComponents(env: Pick<Env, 'DB'>, m: Meter, revisionUids: string[]): Promise<Map<string, ComponentRow>> {
+export async function readComponents(env: Pick<Env, 'DB'>, m: Meter, revisionUids: string[]): Promise<Map<string, ComponentRow>> {
   const rows = await m.all<ComponentRow>(env.DB.prepare(
     `SELECT r.revision_uid, r.asset_uid, r.digest, r.tombstoned_at, r.source_store, r.source_locator, r.source_id,
             r.source_revision, r.residency, a.tenant_id, a.company_id, a.project_id, a.kind, a.access_class, a.approval_policy,
@@ -290,7 +302,7 @@ async function readComponents(env: Pick<Env, 'DB'>, m: Meter, revisionUids: stri
   return new Map(rows.map((r) => [r.revision_uid, r]));
 }
 
-function profilesFor(kind: AssetKind, declared: ProfileName | undefined, access: AccessClass, residency: string | null): ProfileName[] | null {
+export function profilesFor(kind: AssetKind, declared: ProfileName | undefined, access: AccessClass, residency: string | null): ProfileName[] | null {
   const allowed = KIND_PROFILES[kind] ?? [];
   const own = declared ?? allowed[0];
   if (!own || !allowed.includes(own)) return null;
@@ -328,7 +340,7 @@ export async function cutManifest(
   const asked = requestShape({ line: input.lineAssetUid, partial: input.partial, components: comps.map((c) => ({ asset: c.assetUid, revision: c.revisionUid, digest: c.digest, role: c.role })) });
   if (prior) {
     const body = JSON.parse(prior.body_json) as ManifestBody;
-    if (requestShape(body) !== asked) return m.refuse('idempotency_conflict', [prior.manifest_uid]);
+    if (body.repin !== undefined || requestShape(body) !== asked) return m.refuse('idempotency_conflict', [prior.manifest_uid]);
     return { ok: true, manifestUid: prior.manifest_uid, digest: prior.manifest_digest, baseManifestUid: prior.base_manifest_uid, replayed: true, cost: { ...m.cost } };
   }
 
@@ -476,12 +488,12 @@ export interface DecideInput {
 }
 export type DecideResult = { ok: true; decisionId: number; replayed: boolean; cost: Cost } | ReleaseRefusal;
 
-interface ManifestRow {
+export interface ManifestRow {
   manifest_uid: string; line_asset_uid: string; tenant_id: number; company_id: number; project_id: number | null;
   audience: Audience; manifest_digest: string; base_manifest_uid: string | null; partial: number; body_json: string;
   actor_kind: string; actor_user_id: number; agent_run_id: string | null; created_at: string;
 }
-async function readManifest(env: Pick<Env, 'DB'>, m: Meter, manifestUid: string): Promise<ManifestRow | null> {
+export async function readManifest(env: Pick<Env, 'DB'>, m: Meter, manifestUid: string): Promise<ManifestRow | null> {
   return m.first<ManifestRow>(env.DB.prepare(
     `SELECT manifest_uid, line_asset_uid, tenant_id, company_id, project_id, audience, manifest_digest, base_manifest_uid,
             partial, body_json, actor_kind, actor_user_id, agent_run_id, created_at
@@ -569,8 +581,11 @@ export type ComponentStatus = 'current' | StaleStatus;
 export interface ComponentState extends ManifestComponent {
   headRevisionUid: string | null;
   status: ComponentStatus;
-  /** `superseded`: its asset has a newer head; `input_changed`: a dependency it was built from has one. */
-  reasons: ('superseded' | 'input_changed' | 'tombstoned')[];
+  /**
+   * `superseded`: its asset has a newer head; `input_changed`: a dependency it was built from has one; `repinned`
+   * (part 2): a re-pin pins it on purpose, so neither counts; `taken_down`: a takedown covers it (part 2).
+   */
+  reasons: ('superseded' | 'input_changed' | 'tombstoned' | 'repinned' | 'taken_down')[];
   missingAttestations: Requirement[];
 }
 export interface PublishApproval { profile: ProfileName; approvalRef: string; reviewerUserId: number; authority: string; decidedAt: string }
@@ -585,15 +600,46 @@ export interface ReleaseState {
   approvals: PublishApproval[];
   /** Reviewers whose latest decision is reject or request_changes. */
   changesRequestedBy: number[];
+  /** Part 2: the earlier published manifest this one re-pins, or null. */
+  repinOf: string | null;
+  /** Part 2: applied takedowns covering this manifest or a component it pins. Retained evidence; never served. */
+  takedowns: TakedownRef[];
+}
+export interface TakedownRef { id: number; scope: 'manifest' | 'component'; revisionUid: string | null; reasonCode: string; createdAt: string }
+
+/**
+ * Part 2: the applied takedowns that cover a manifest: one of the manifest itself, or one of a component revision it
+ * pins (wherever that revision was taken down).
+ */
+export async function takedownsCovering(env: Pick<Env, 'DB'>, m: Meter, tenantId: number, companyId: number, manifestUid: string): Promise<TakedownRef[]> {
+  const rows = await m.all<{ id: number; scope: 'manifest' | 'component'; revision_uid: string | null; reason_code: string; created_at: string }>(env.DB.prepare(
+    `SELECT t.id, t.scope, t.revision_uid, t.reason_code, t.created_at FROM work_graph_release_takedowns t
+      WHERE t.tenant_id = ? AND t.company_id = ? AND t.outcome = 'applied'
+        AND ((t.scope = 'manifest' AND t.manifest_uid = ?)
+          OR (t.scope = 'component' AND t.revision_uid IN (
+                SELECT e.to_revision_uid FROM work_graph_edges e WHERE e.from_revision_uid = ? AND e.edge_kind = 'component')))
+      ORDER BY t.id`,
+  ).bind(tenantId, companyId, manifestUid, manifestUid));
+  return rows.map((r) => ({ id: r.id, scope: r.scope, revisionUid: r.revision_uid, reasonCode: r.reason_code, createdAt: r.created_at }));
 }
 
 const worse = (a: ComponentStatus, b: ComponentStatus): ComponentStatus =>
   (a === 'reapproval_required' || b === 'reapproval_required') ? 'reapproval_required'
     : (a === 'rebuild_required' || b === 'rebuild_required') ? 'rebuild_required' : 'current';
 
-async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseContext, man: ManifestRow, line: LineRow): Promise<ReleaseState> {
+export async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseContext, man: ManifestRow, line: LineRow): Promise<ReleaseState> {
   const body = JSON.parse(man.body_json) as ManifestBody;
   const revs = body.components.map((c) => c.revision);
+  // A re-pin pins the component revisions of a manifest this line published; only those are exempt from staleness.
+  let repinned = new Set<string>();
+  if (body.repin) {
+    const target = await readManifest(env, m, body.repin);
+    if (target && target.line_asset_uid === man.line_asset_uid) {
+      repinned = new Set((JSON.parse(target.body_json) as ManifestBody).components.map((c) => c.revision));
+    }
+  }
+  const takedowns = await takedownsCovering(env, m, man.tenant_id, man.company_id, man.manifest_uid);
+  const downRevs = new Set(takedowns.flatMap((t) => (t.revisionUid ? [t.revisionUid] : [])));
   const now = await readComponents(env, m, revs);
   // Inputs a pinned component was built from that have moved on (its read, write and derived edges).
   const stale = await m.all<{ from_revision_uid: string }>(env.DB.prepare(
@@ -613,14 +659,19 @@ async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseContext, man
     const reasons: ComponentState['reasons'] = [];
     let s: ComponentStatus = 'current';
     if (!r || r.tombstoned_at !== null) { reasons.push('tombstoned'); s = 'reapproval_required'; }
-    if (r && r.head_revision_uid !== c.revision) {
-      reasons.push('superseded');
-      for (const p of c.profiles) s = worse(s, POLICY_PROFILES[p].onSuperseded);
+    if (repinned.has(c.revision)) {
+      if (r && (r.head_revision_uid !== c.revision || staleSet.has(c.revision))) reasons.push('repinned');
+    } else {
+      if (r && r.head_revision_uid !== c.revision) {
+        reasons.push('superseded');
+        for (const p of c.profiles) s = worse(s, POLICY_PROFILES[p].onSuperseded);
+      }
+      if (staleSet.has(c.revision)) {
+        reasons.push('input_changed');
+        for (const p of c.profiles) s = worse(s, POLICY_PROFILES[p].onInputChanged);
+      }
     }
-    if (staleSet.has(c.revision)) {
-      reasons.push('input_changed');
-      for (const p of c.profiles) s = worse(s, POLICY_PROFILES[p].onInputChanged);
-    }
+    if (downRevs.has(c.revision)) reasons.push('taken_down');
     status = worse(status, s);
     const have = new Set(atts.filter((a) => a.revision_uid === c.revision && a.digest === c.digest).map((a) => a.requirement));
     const missingAttestations = [...new Set(c.profiles.flatMap((p) => POLICY_PROFILES[p].requirements))].filter((q) => !have.has(q));
@@ -653,7 +704,7 @@ async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseContext, man
   return {
     manifestUid: man.manifest_uid, lineAssetUid: man.line_asset_uid, audience: man.audience, digest: man.manifest_digest,
     partial: man.partial === 1, baseManifestUid: man.base_manifest_uid, published: line.head_revision_uid === man.manifest_uid,
-    status, components, missingApprovals, approvals, changesRequestedBy,
+    status, components, missingApprovals, approvals, changesRequestedBy, repinOf: body.repin ?? null, takedowns,
   };
 }
 
@@ -774,8 +825,11 @@ export async function publishRelease(
   };
 
   let approval: PublishApproval | null = null;
+  let repinnedComponents: string[] = [];
   {
     const state = await evaluate(env, m, ctx, man, line);
+    // Part 2: content a takedown covers is never published again, under any manifest.
+    if (state.takedowns.length) return audited('taken_down', [man.manifest_uid, ...state.takedowns.map((t) => t.revisionUid ?? t.scope)]);
     if (state.status !== 'current') {
       return audited(state.status, state.components.filter((c) => c.status !== 'current').flatMap((c) => [c.asset, c.revision, ...c.reasons]));
     }
@@ -832,6 +886,8 @@ export async function publishRelease(
       if (Number(q?.n ?? 0) + effects.length > WORK_GRAPH_EFFECT_LIMITS.maxPendingPerTenant) return audited('queue_full', [String(WORK_GRAPH_EFFECT_LIMITS.maxPendingPerTenant)]);
     }
     approval = state.approvals[0];
+    // Every component of a re-pin was pinned by a manifest this line published; the CAS exempts them from being heads.
+    if (state.repinOf) repinnedComponents = state.components.map((c) => c.revision);
   }
 
   const effectHashes = await Promise.all(effectRows.map((e) => hashOf({ kind: e.kind, asset: line.line_asset_uid, payload: e.payload })));
@@ -841,6 +897,7 @@ export async function publishRelease(
     approval: approval ? { ref: approval.approvalRef, contentDigest: man.manifest_digest, reviewer: { kind: 'person', userId: approval.reviewerUserId }, decidedAt: approval.decidedAt } : null,
     idempotencyKey: advanceKey,
   }, {
+    repinnedComponents,
     afterSwap: (swap) => effectRows.flatMap((e, i) => [
       env.DB.prepare(
         `INSERT INTO work_graph_effects (tenant_id, company_id, asset_uid, effect_kind, idempotency_key, request_hash, payload_json,
