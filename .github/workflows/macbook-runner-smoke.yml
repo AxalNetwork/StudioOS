@@ -1,0 +1,41 @@
+name: MacBook runner smoke
+
+on:
+  push:
+    branches:
+      - ci/macbook-runner-test
+    paths:
+      - .github/workflows/macbook-runner-smoke.yml
+
+permissions: {}
+
+concurrency:
+  group: macbook-runner-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/ci/macbook-runner-test'
+    runs-on: [self-hosted, macOS, ARM64, studioos-macbook]
+    timeout-minutes: 5
+
+    steps:
+      - name: Confirm Mac runner connectivity
+        shell: bash
+        run: |
+          test "$RUNNER_OS" = "macOS"
+          test "$RUNNER_ARCH" = "ARM64"
+          test "$(uname -m)" = "arm64"
+
+          {
+            printf '## Mac runner smoke passed\n\n'
+            printf 'Runner: `%s`\n\n' "$RUNNER_NAME"
+            printf 'macOS: %s\n\n' "$(sw_vers -productVersion)"
+            printf 'Logical CPUs: %s\n\n' "$(sysctl -n hw.logicalcpu)"
+            printf 'Memory bytes: %s\n' "$(sysctl -n hw.memsize)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          printf 'Mac runner connected successfully.\n'
