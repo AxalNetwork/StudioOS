@@ -17,6 +17,7 @@ They do not change production application state.
 | `test-tracer-hooks.mjs` | Collect module dependency evidence through off-thread loader hooks (D5608). |
 | `test-tracer-sqlite.mjs` | Record file-database dependencies while preserving the SQLite module interface (D5608). |
 | `test-tracer.mjs` | Collect opt-in dependency and timing evidence from test processes (D5608). |
+| `runners/` | Runner capacity evidence and lifecycle policy preparation; bootstrap/executor stages own activation. |
 
 Scanner callers load the installer and pins from the trusted base commit,
 never from a pull request checkout or cached executable. Archive reuse still

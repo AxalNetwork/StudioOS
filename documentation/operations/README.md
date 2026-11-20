@@ -57,3 +57,6 @@ and a link in `documentation/README.md`.
 | `WORKFLOW_SLACK_6370.md` | D6370: configure the sender, validate a workflow attempt and pause delivery. |
 | `WORKFLOW_FAILURE_ISSUES_6387.md` | D6387: GitHub repair issue activation, evidence and replay. |
 | `R2_INVENTORY.json` | D6650: reviewed source prefix classes, unknown retention bases, explicit copy approvals and dynamic-key provenance. `node scripts/build-r2-inventory.mjs --write` renders it with every current call site beside it as a generated, gitignored Markdown inventory. |
+
+| `RUNNER_CAPACITY_RUNBOOK.md` | D7888: staged runner capacity proof, eligibility-first drain, private budget controls and hosted rollback; preparation only. |
+| `RUNNER_CAPACITY_EVIDENCE_7888.md` | D7888: sanitized existing-run observations and explicit missing live-proof evidence. |

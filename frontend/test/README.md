@@ -249,3 +249,5 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
 `build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
+
+| `runner_capacity_7888.test.mjs` | D7888: bounded read-only capacity metadata, pagination, identity/timing/privacy, failure/cancel/restart and CLI GET-only checks. |
