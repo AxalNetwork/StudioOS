@@ -123,8 +123,11 @@ if (a[0] === 'r2' && a[2] === 'put') {
   process.exit(0);
 }
 if (a[0] === 'r2' && a[2] === 'delete') process.exit(0);
-if (a[0] === 'd1' && a[1] === 'create') process.exit(0);
-if (a[0] === 'd1' && a[1] === 'delete') process.exit(0);
+if (a[0] === 'd1' && a[1] === 'create') {
+  if (e.DR_DRILL_DB_FILE && fs.readFileSync(e.DR_DRILL_DB_FILE,'utf8').trim() !== a[2]) process.exit(90);
+  process.exit(0);
+}
+if (a[0] === 'd1' && a[1] === 'delete') process.exit(e.FAIL_DELETE ? 1 : 0);
 if (a[0] === 'd1' && a[1] === 'execute' && has('--file')) {
   const imports = ${JSON.stringify(join(dir, 'imports'))};
   fs.mkdirSync(imports, { recursive: true });
@@ -148,6 +151,11 @@ if (a[0] === 'd1' && a[1] === 'execute' && has('--command')) {
     const off = e.COUNT_OFF || '';
     console.log(JSON.stringify([{ results: asked.map((t) => ({ t, n: (m.tables.find((x) => x.name === t)?.rows ?? 0) + (t === off ? 1 : 0) })) }]));
     process.exit(0);
+  }
+  if (sql.includes(' AS c0')) {
+    const m=JSON.parse(e.MANIFEST_JSON), row={};
+    for (const x of sql.matchAll(/FROM "([^"]+)"\\) AS c([0-9]+)/g)) row['c'+x[2]]=(m.tables.find(t=>t.name===x[1])?.rows??0)+(e.COUNT_OFF===x[1]?1:0);
+    console.log(JSON.stringify([{results:[row]}])); process.exit(0);
   }
   if (/COUNT/.test(sql)) { console.log(JSON.stringify([{ results: [{ users: e.ZERO_USERS ? 0 : 3, projects: 2 }] }])); process.exit(0); }
   const names = ['users', 'projects', 'deals', 'score_snapshots', 'activity_logs', 'documents'];
@@ -175,6 +183,7 @@ function manifestFor(sql, { key = KEY, ageHours = 2, migration = null } = {}) {
 function drill(env = {}) {
   env = { MANIFEST_JSON: manifestFor(env.BACKUP_SQL || 'CREATE TABLE users(id);'), ...env };
   const dir = mkdtempSync(join(tmpdir(), 'd263-'));
+  if(env.DR_DRILL_DB_FILE==='AUTO')env.DR_DRILL_DB_FILE=join(dir,'owned.db');
   fakeWrangler(dir);
   bsdShellTools(dir);
   // Real curl reads the `--header @-` the drill pipes in. A fake that exits
@@ -193,7 +202,7 @@ function drill(env = {}) {
   const marker = existsSync(markerPath) ? JSON.parse(readFileSync(markerPath, 'utf8')) : null;
   const importsDir = join(dir, 'imports');
   const imports = existsSync(importsDir) ? readdirSync(importsDir).sort().map((f) => readFileSync(join(importsDir, f), 'utf8')) : [];
-  return { status: r.status, out: r.stdout + r.stderr, calls, marker, imports };
+  return { status: r.status, out: r.stdout + r.stderr, calls, marker, imports, ownership: env.DR_DRILL_DB_FILE && existsSync(env.DR_DRILL_DB_FILE) ? readFileSync(env.DR_DRILL_DB_FILE,'utf8').trim() : null };
 }
 
 test('D263 drill: a passing run writes a passed marker with the backup it restored, and exits 0', () => {
@@ -551,4 +560,11 @@ test('D4558 workflow: the backup is read back before its manifest and heartbeat 
   const notify = BACKUP_WF.slice(BACKUP_WF.indexOf('- name: Notify on failure'));
   assert.doesNotMatch(notify.split('\n')[1], /env\.PAGER_WEBHOOK_URL/, 'the pager step tests a variable its own if: cannot see');
   assert.match(BACKUP_WF, /time-travel info "\$\{TARGET_DB\}" --json/);
+});
+
+
+test('D7917 drill records its exact database before create, removes the record only after successful delete',()=>{
+ const env={DR_DRILL_DB_FILE:'AUTO',GITHUB_RUN_ID:'123',GITHUB_RUN_ATTEMPT:'2'};
+ const ok=drill(env);assert.equal(ok.status,0,ok.out);assert.equal(ok.ownership,null);assert.match(ok.calls.find(c=>c[1]==='create')[2],/^dr-drill-[0-9]{12}-123-2-db$/);
+ const failed=drill({...env,DR_DRILL_DB_FILE:'AUTO',FAIL_DELETE:'1'});assert.equal(failed.status,0,failed.out);assert.match(failed.ownership,/^dr-drill-[0-9]{12}-123-2-db$/);
 });

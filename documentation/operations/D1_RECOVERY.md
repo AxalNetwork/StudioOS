@@ -364,3 +364,17 @@ bash scripts/dr-drill.sh
   database is created.
 - The script never prints or copies the key file. Delete it from the disk
   afterwards.
+
+### Drill count limits and interrupted cleanup (D7917)
+
+The shared restore path counts up to 40 tables with scalar subqueries in one
+SELECT, avoiding D1 compound-SELECT limits. A refused or incomplete batch falls
+back to individual table queries; mismatched or unreadable tables still fail.
+
+The scheduled drill records its unique run/attempt database name before creation
+and reserves a bounded always-cleanup step. A successful script cleanup removes
+the record; interruption or failed deletion leaves it for the workflow fallback.
+Only that exact run/attempt database is eligible for deletion. If the runner is
+lost, cleanup is cancelled, or deletion is unconfirmed, an operator must verify
+the throwaway resource and clean it up; a restore pass is not teardown evidence.
+The old orphan reported on #7917 requires separate owner dashboard cleanup.
