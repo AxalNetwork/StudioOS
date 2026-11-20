@@ -28,7 +28,7 @@ import cycleBuild from '../src/routes/cycle_build.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { FORMS, EDITS, formFor, editFor, initialValues, validate } from '../../frontend/src/pages/cycles/forms.js';
+import { FORMS, EDITS, formFor, editFor, initialValues, validate, AMOUNT_KINDS } from '../../frontend/src/pages/cycles/forms.js';
 import { recordFormFor, recordEditAction } from '../../frontend/src/pages/cycles/recordModel.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
 import { loadSchema } from './_schema_once.mjs';
@@ -179,7 +179,8 @@ test('12: New segment, Record a signal and New hypothesis save their bodies, eve
       await sig.submit(w, P, { ...gv, kind, status, who: `${kind} ${status}`, amount: '1,200', signal_date: '2026-10-12' });
       const row = one(db, 'SELECT kind, status, amount_cents FROM demand_signals WHERE project_id = ? AND who = ?', P, `${kind} ${status}`);
       assert.deepEqual([row.kind, row.status], [kind, status]);
-      assert.equal(row.amount_cents, ['pre_sale', 'loi'].includes(kind) ? 120000 : null, `${kind}: an amount only where the route takes one`);
+      // D6013: a would-pay signal carries an amount too (AMOUNT_KINDS, the route's own list).
+      assert.equal(row.amount_cents, AMOUNT_KINDS.includes(kind) ? 120000 : null, `${kind}: an amount only where the route takes one`);
     }
   }
 

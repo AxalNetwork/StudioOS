@@ -1972,6 +1972,8 @@ const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
   // by a cold isolate's users-table repair, it would only ever mean the
   // redirect instead of the window.
   '/api/auth/google/config',
+  // D6957: whether /login shows the Apple button — env only, no D1.
+  '/api/auth/apple/config',
   '/api/public/circles',
   '/api/public/partners',
   '/api/public/status',

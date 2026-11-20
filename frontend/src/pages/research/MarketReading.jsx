@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Card, Pill, WorkerRail } from '../../ui';
+import { Card, DataState, Pill, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
+import { researchMarketReadingsApi } from '../../lib/api/researchMarketReadings.js';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { ACCENT } from '../../workspaces/shellConfig';
 import { NotRecorded } from '../../workspaces/canvasKit';
@@ -15,6 +16,7 @@ import {
   ageBand,
   DRAFT_PILL,
   OWN_RECORD_LINE,
+  SUMMARY_COPY,
   ageingAttachmentNote,
   attachState,
   attachesNowhere,
@@ -22,6 +24,7 @@ import {
   freshReadingForm,
   openProposals,
   plainWords,
+  railSummaryLine,
   rangeLine,
   rangeReadsForward,
   readingDraft,
@@ -31,6 +34,7 @@ import {
   recordedLine,
   runDayLabel,
   staleAttachmentSentence,
+  summaryView,
   usd,
 } from './marketReadingRead';
 
@@ -56,8 +60,7 @@ import {
  * the licence's accent (partner amber, advisor green, investor indigo); the
  * Comparable prices canvas (D7039) draws Research's violet, and the owner
  * answered A, as drawn (D7039-p2). `ACCENT.founder` is that violet: #7c3aed,
- * deep #6d28d9, #a78bfa on dark. A caller that still passes a role gets the
- * same values. Tailwind cannot build a class from a hex at runtime, so the page root
+ * deep #6d28d9, #a78bfa on dark, whatever the licence, so it takes no role. Tailwind cannot build a class from a hex at runtime, so the page root
  * carries the values as CSS variables and the classes below read them.
  *
  * Two pairs, as `ui/WorkerRail.jsx` does it. What sits on the page ground (the
@@ -155,6 +158,78 @@ function Tile({ k, v, sub, nr, ink = 'text-axal-ink dark:text-gray-100', hair, b
 
 const noop = () => {};
 
+/**
+ * D7651 (#7651) — the Eadwyn summary of this reading (D7039 board RMP-12):
+ * what it prices, its scope, the range to the cent, the comparable count and
+ * the run date, and the catalog price beside it on a service line. Computed
+ * by the Worker from the stored row; no model is called. Loading, Unreadable
+ * with Try again, and Not recorded each say so rather than draw a figure.
+ */
+export function SummaryLine({ status = 'idle', view = null, onRetry = noop }) {
+  if (status === 'idle') return null;
+  return (
+    <section
+      data-testid="market-reading-summary"
+      aria-labelledby="mr-summary-heading"
+      aria-busy={status === 'loading' ? 'true' : 'false'}
+      className={`min-w-0 rounded-[14px] border px-4 py-3 ${BAND_SKIN}`}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2
+          id="mr-summary-heading"
+          className="text-[10px] font-extrabold uppercase tracking-[.09em] text-[color:var(--mr-accent-deep)] dark:text-[color:var(--mr-accent-dark)]"
+        >
+          {SUMMARY_COPY.heading}
+        </h2>
+        <span className="text-[11px] text-axal-muted dark:text-gray-400">{SUMMARY_COPY.basis}</span>
+      </div>
+      {status === 'loading' && (
+        <>
+          <p className="mt-1.5 text-[12.5px] text-axal-muted dark:text-gray-400">{SUMMARY_COPY.loading}</p>
+          <Skeleton lines={1} />
+        </>
+      )}
+      {status === 'unavailable' && (
+        <div className="mt-1.5">
+          <DataState
+            state="unavailable"
+            what={SUMMARY_COPY.unreadableWhat}
+            claim={SUMMARY_COPY.unreadableClaim}
+            onRetry={onRetry}
+            retryLabel="Try again"
+            announce="always"
+            as="p"
+          />
+        </div>
+      )}
+      {status === 'ready' && view?.state !== 'recorded' && (
+        <p data-testid="market-reading-summary-not-recorded" className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-axal-muted dark:text-gray-400">
+          <NotRecorded />
+          <span>{view?.reason || SUMMARY_COPY.notRecorded}</span>
+        </p>
+      )}
+      {status === 'ready' && view?.state === 'recorded' && (
+        <>
+          <p data-testid="market-reading-summary-line" className="mt-1.5 break-words text-[12.5px] leading-relaxed text-axal-ink dark:text-gray-100">
+            {view.lead}: <b className="whitespace-nowrap font-mono font-bold">{view.range}</b>{view.tail}
+          </p>
+          {view.catalog?.state === 'recorded' && (
+            <p className="mt-1 text-[12px] text-axal-muted dark:text-gray-400">
+              <span className="font-mono">{view.catalog.text}</span> · your offer, beside the range and never added into it.
+            </p>
+          )}
+          {view.catalog?.state === 'not_recorded' && (
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-axal-muted dark:text-gray-400">
+              <span>Catalog price</span>
+              <NotRecorded />
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 /** The save that did not happen: its heading, and the Worker's sentence or the network's. */
 export const SAVE_FAILED = 'This reading was not saved.';
 export const NO_ANSWER = 'StudioOS did not answer, so nothing was recorded. Your entries are still here, to the cent. Record this reading again when you are ready.';
@@ -192,6 +267,9 @@ export function MarketReadingView({
   onDiscard = noop,
   headingRef = null,
   lowRef = null,
+  summary = null,
+  summaryStatus = 'idle',
+  onSummaryRetry = noop,
 }) {
   // D6273 Q2 (RS-17): an investor reads no pricing readings. Whatever was
   // passed, the page draws the not-on-your-list card (D7039 RMP-11).
@@ -217,6 +295,10 @@ export function MarketReadingView({
   const said = item && days != null && band
     ? plainWords({ ranAt: item.ran_at, days, band, comparableCount: item.comparable_count, ownRecord })
     : null;
+  // D7651: the Eadwyn summary (RMP-12) and the rail's "Summaries" line, both
+  // from `GET /research/market-readings/:uid/summary`, to the cent.
+  const sumView = summaryStatus === 'ready' ? summaryView(summary) : null;
+  const railSummary = item ? railSummaryLine(summaryStatus, sumView) : null;
   const ageLabel = stale ? 'Stale' : (band === 'ageing' ? 'Ageing' : 'Current');
   const err = errors || {};
   const describe = (key) => (err[key] ? `mr-${key}-error` : undefined);
@@ -240,7 +322,10 @@ export function MarketReadingView({
           workspace="Research"
           role={role}
           stance="This page does not invent a market figure"
-          note="A save writes a new reading. It does not edit the one you opened, and a stale range cannot be attached."
+          note={[
+            'A save writes a new reading. It does not edit the one you opened, and a stale range cannot be attached.',
+            railSummary,
+          ].filter(Boolean).join(' ')}
           coverage={[item
             ? `${item.metric}: ${days ?? '—'} days · ${item.comparable_count} comparables`
             : 'One market reading']}
@@ -251,7 +336,7 @@ export function MarketReadingView({
         />
       )}
     >
-      <div data-testid="market-reading" className="space-y-3" style={accentVars(role)}>
+      <div data-testid="market-reading" className="space-y-3" style={accentVars()}>
         <Link to="/research/markets" className={`inline-flex min-h-[44px] items-center text-[12px] sm:min-h-0 ${accentLink}`}>
           ‹ Markets
         </Link>
@@ -389,6 +474,8 @@ export function MarketReadingView({
                 <li><b>What it is not.</b> {said.not}</li>
               </ul>
             </Card>
+
+            <SummaryLine status={summaryStatus} view={sumView} onRetry={onSummaryRetry} />
 
             <Card>
               <h2 className="text-sm font-extrabold tracking-tight">{fresh ? 'Record a fresh reading' : 'Record this reading'}</h2>
@@ -709,6 +796,8 @@ export default function MarketReading({ role = 'founder' }) {
   const [busy, setBusy] = useState(false);
   const [draftEdit, setDraftEdit] = useState('');
   const [kept, setKept] = useState('');
+  const [summary, setSummary] = useState(null);
+  const [summaryStatus, setSummaryStatus] = useState('idle');
   const headingRef = useRef(null);
   const lowRef = useRef(null);
   // A save on the Markets list opens this page with `{ recorded: true }`: the
@@ -719,7 +808,31 @@ export default function MarketReading({ role = 'founder' }) {
   // page has left, is dropped with its result, its error and its loading state.
   const gate = useRef(null);
   if (!gate.current) gate.current = createRecordGate();
-  useEffect(() => () => gate.current.invalidate(), []);
+  // The summary has its own ticket, so a late summary for reading A is
+  // dropped on B without cancelling B's own reading.
+  const summaryGate = useRef(null);
+  if (!summaryGate.current) summaryGate.current = createRecordGate();
+  useEffect(() => () => { gate.current.invalidate(); summaryGate.current.invalidate(); }, []);
+
+  // D7651: an investor never asks (D6273 Q2); the Worker refuses one anyway.
+  const loadSummary = useCallback(async () => {
+    if (hidden) return;
+    const current = summaryGate.current.begin();
+    setSummary(null);
+    setSummaryStatus('loading');
+    try {
+      const res = await researchMarketReadingsApi.summary(uid);
+      if (!current()) return;
+      setSummary(res?.summary || null);
+      setSummaryStatus('ready');
+    } catch {
+      if (!current()) return;
+      setSummary(null);
+      setSummaryStatus('unavailable');
+    }
+  }, [uid, hidden]);
+
+  useEffect(() => { loadSummary(); }, [loadSummary]);
 
   const load = useCallback(async () => {
     if (hidden) return;
@@ -864,6 +977,9 @@ export default function MarketReading({ role = 'founder' }) {
       }}
       headingRef={headingRef}
       lowRef={lowRef}
+      summary={summary}
+      summaryStatus={summaryStatus}
+      onSummaryRetry={loadSummary}
     />
   );
 }

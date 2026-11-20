@@ -40,8 +40,8 @@ function topName(sections, prefix) {
 function rootKey(source, key) {
   for (const raw of source.split('\n')) {
     if (/^\s*\[/.test(raw)) return null;
-    const m = new RegExp(`^${key}\\s*=\\s*"([^"]*)"`).exec(raw.trim());
-    if (m) return m[1];
+    const m = /^([^\s=]+)\s*=\s*"([^"]*)"/.exec(raw.trim());
+    if (m && m[1] === key) return m[2];
   }
   return null;
 }

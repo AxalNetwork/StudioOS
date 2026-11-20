@@ -98,6 +98,8 @@ export const READ_KEYS = Object.freeze([
   'github.repos', 'vercel.deployments',
   // D4667 (owner's answer A): typed records with read keys of their own, so a rule book names them on purpose.
   'grow.burn', 'raise.pipeline', 'validate.transcripts', 'raise.diligence', 'grow.board_metrics',
+  // D4667-p4: one selected fund's recorded performance for a quarter, read by its GP of record.
+  'fund.performance',
 ] as const);
 
 /**
