@@ -18,10 +18,11 @@ const ORIGINAL = Object.freeze({
 // These workflows use the repository's two-space block style. Read active
 // properties and step order, not comments, without a new YAML dependency.
 const code = source => source.split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
-const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function block(source, key, indent = 0) {
   const lines = code(source).split('\n');
-  const start = lines.findIndex(line => new RegExp(`^ {${indent}}${escape(key)}:`).test(line));
+  // Exactly `indent` spaces, then the key: a key never starts with a space.
+  const prefix = `${' '.repeat(indent)}${key}:`;
+  const start = lines.findIndex(line => line.startsWith(prefix));
   assert.ok(start >= 0, `missing ${key}`);
   let end = start + 1;
   while (end < lines.length && (!lines[end].trim() || lines[end].search(/\S/) > indent)) end++;
