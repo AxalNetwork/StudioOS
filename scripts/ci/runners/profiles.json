@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "repository": "AxalNetwork/StudioOS",
+  "organization": "AxalNetwork",
+  "self_hosted_group": "StudioOS Worker Pool",
+  "shared_capability": "studioos-worker-v1",
+  "processes_per_machine": 1,
+  "profiles": {
+    "linux-x64": {
+      "pool": "self-hosted",
+      "system": "Linux",
+      "machine": "x86_64",
+      "github_os": "Linux",
+      "github_arch": "X64",
+      "labels": [
+        "self-hosted",
+        "Linux",
+        "X64",
+        "studioos-worker-v1"
+      ],
+      "node_arch": "x64",
+      "node_version": "22.23.3",
+      "python_version": "3.11.18",
+      "runner_version": "2.338.2",
+      "artifacts": {
+        "runner": {
+          "url": "https://github.com/actions/runner/releases/download/v2.338.2/actions-runner-linux-x64-2.338.2.tar.gz",
+          "sha256": "baebf204307bac6193480852732f0aba2ae97b6c5597c244f4d5558390147c40",
+          "directory": "."
+        },
+        "node": {
+          "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-linux-x64.tar.gz",
+          "sha256": "1084aa36196bba4c3a5e69a1ee388a6e4ff729dad09445fbcd434b28fe3c24af",
+          "directory": "node-v22.23.3-linux-x64"
+        },
+        "python": {
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.11.18%2B20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+          "sha256": "3288c54cea3db350052019b3f8b558dd8a3da8afa6fda573f5fd2bcb37635b4a",
+          "directory": "python"
+        }
+      },
+      "eligibleShards": [
+        "worker-1-of-6",
+        "worker-2-of-6",
+        "worker-3-of-6",
+        "worker-4-of-6",
+        "worker-5-of-6",
+        "worker-6-of-6"
+      ]
+    },
+    "macos-arm64": {
+      "pool": "self-hosted",
+      "system": "Darwin",
+      "machine": "arm64",
+      "github_os": "macOS",
+      "github_arch": "ARM64",
+      "labels": [
+        "self-hosted",
+        "macOS",
+        "ARM64",
+        "studioos-worker-v1"
+      ],
+      "node_arch": "arm64",
+      "node_version": "22.23.3",
+      "python_version": "3.11.18",
+      "runner_version": "2.338.2",
+      "artifacts": {
+        "runner": {
+          "url": "https://github.com/actions/runner/releases/download/v2.338.2/actions-runner-osx-arm64-2.338.2.tar.gz",
+          "sha256": "25a065af409ffa317ab4d5a3b614dd15fc9c40f2172bc1b35a1b1258e919a388",
+          "directory": "."
+        },
+        "node": {
+          "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-darwin-arm64.tar.gz",
+          "sha256": "23b25245dcfb9af7262f8ff142e9e2e0af025368117329e7a7458a51e5922f53",
+          "directory": "node-v22.23.3-darwin-arm64"
+        },
+        "python": {
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.11.18%2B20261110-aarch64-apple-darwin-install_only_stripped.tar.gz",
+          "sha256": "3afb0567b2a2b30b3a7341bd143cb4e8a69f3d8e95d4641218eaa45f0fabbd07",
+          "directory": "python"
+        }
+      },
+      "eligibleShards": [
+        "worker-1-of-6"
+      ]
+    },
+    "hosted": {
+      "pool": "github-hosted",
+      "runs_on": "ubuntu-latest",
+      "github_os": "Linux",
+      "github_arch": "X64",
+      "eligibleShards": [
+        "worker-1-of-6",
+        "worker-2-of-6",
+        "worker-3-of-6",
+        "worker-4-of-6",
+        "worker-5-of-6",
+        "worker-6-of-6"
+      ],
+      "node_version": "22.23.3",
+      "python_version": "3.11.18"
+    }
+  },
+  "pin_sources": [
+    "https://github.com/actions/runner/releases/tag/v2.338.2",
+    "https://nodejs.org/dist/v22.23.3/SHASUMS256.txt",
+    "https://github.com/astral-sh/python-build-standalone/releases/tag/20261110"
+  ],
+  "self_hosted_group_id": null
+}
