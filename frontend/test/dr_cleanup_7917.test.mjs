@@ -34,5 +34,5 @@ test('workflow reserves cleanup time, runs it always, and shares the exact owner
  const drill=job.steps.find(s=>s.id==='drill'),cleanup=job.steps.find(s=>s.run==='bash scripts/dr-drill-cleanup.sh');
  assert.equal(cleanup.if,'always()');assert.equal(cleanup['timeout-minutes'],5);assert.ok(drill['timeout-minutes']+cleanup['timeout-minutes']<job['timeout-minutes']);
  assert.equal(drill.env.DR_DRILL_DB_FILE,cleanup.env.DR_DRILL_DB_FILE);assert.match(cleanup.env.DR_DRILL_DB_FILE,/github.run_id/);assert.match(cleanup.env.DR_DRILL_DB_FILE,/github.run_attempt/);
- const source=readFileSync('scripts/dr-drill.sh','utf8');assert.ok(source.indexOf("printf '%s\\n'")<source.indexOf('wrangler d1 create'));assert.match(source,/GITHUB_RUN_ID.*GITHUB_RUN_ATTEMPT/);
+ const source=readFileSync('scripts/dr-drill.sh','utf8');const recorded=source.indexOf("printf '%s\\n'");assert.ok(recorded>=0&&recorded<source.indexOf('wrangler d1 create'));assert.match(source,/GITHUB_RUN_ID.*GITHUB_RUN_ATTEMPT/);
 });
