@@ -16,5 +16,9 @@ test('module reader gets checklist and reporting history without writer or cash 
  const data={parts:{checklist:[{key:'bank',label:'Bank account',done:false,ticks:'hand'}],updates:[]}};
  const oldFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(JSON.stringify({connected:false,items:[],proposals:[]}));
  const ui=await mountForm(grow.parts.get('durable-company-building')(data,{projectId:21,canWrite:false,openAction(){},reload(){}}));
- try{await ui.flush();assert.match(ui.text(),/Open Reporting/);assert.match(ui.text(),/only the venture’s team/);assert.doesNotMatch(ui.text(),/Share an update/);assert.equal(ui.by('checklist-tick-bank'),undefined);assert.equal(ui.by('checklist-na-bank'),undefined);}finally{await ui.unmount();globalThis.fetch=oldFetch;}
+ try{
+  // UpdatesHistory is lazy: wait for its content rather than one timer tick.
+  const deadline=performance.now()+10000;
+  while(!ui.text().includes('Open Reporting')&&performance.now()<deadline)await ui.flush();
+  assert.match(ui.text(),/Open Reporting/);assert.match(ui.text(),/only the venture’s team/);assert.doesNotMatch(ui.text(),/Share an update/);assert.equal(ui.by('checklist-tick-bank'),undefined);assert.equal(ui.by('checklist-na-bank'),undefined);}finally{await ui.unmount();globalThis.fetch=oldFetch;}
 });
