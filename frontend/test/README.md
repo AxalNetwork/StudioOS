@@ -28,6 +28,9 @@ also exercises a `project_id` deep link.
 
 | File | Guarantee |
 | --- | --- |
+| `macbook_worker_7881.test.mjs` | D7881: exact dispatch ownership, bounded busy/offline/API fallback, cancellation, failure identities and real Mac test failure propagation. |
+| `macbook_admission_7881.test.mjs` | D7881: active parent delegation, exact source and plan artifact, complete same-repository merge-queue provenance, and final liveness recheck. |
+| `macbook_workflow_7881.test.mjs` | D7881: trusted checkout ordering, plan selection, original gate semantics, trace transfer, owned-child cancellation and run-scoped cleanup, with mutation/restoration cases. |
 | `persona_segment_scopes_4438.test.mjs` | D4438: scope changes update SEG7, waiting suggestions, stale reply guards, failures and missing figures. |
 | `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
@@ -48,6 +51,8 @@ also exercises a `project_id` deep link.
 | `_storageAreasContract.mjs` | D5507: THE contract for the storage areas: key, kind and where its file opens, written by hand; read by the two suites below and the Worker's `usage_storage_d1169`. |
 | `storage_areas_contract_5507.test.mjs` | D5507: the Usage card, the Storage page's places and kinds, and ROUTE_MAP's D642 section each keep the storage-area contract. |
 | `build_overview_v2_6028.test.mjs` | D6028 (#6028): Build Overview V2's states (loading, empty venture, partial read, refused, read only, a failed overview), one primary, Not recorded never 0, and the phone root's parts. |
+| `runner_admission.test.mjs` | D7886: durable receipt bindings, source/queue/child provenance and fail-closed missing authority. |
+| `runner_executor.test.mjs` | D7886: exact plans, fixed profile targets, runtime checks, real test failure, scoped lifecycle and workflow mutation checks. |
 
 ## Conventions
 
@@ -233,6 +238,18 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `scan_remediation_6935.test.mjs` | D6935 automated tracking, Autofix publishing, retries and default-branch verification. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+
+## Observable readiness (D5504)
+
+| File | Guarantee |
+| --- | --- |
+| `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
+| `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+
+Prefer scoped business clocks and explicit observable outcomes to a fixed count
+of event-loop turns. The migration inventory and first changed-test command are
+in `documentation/architecture/decisions/D5504.md`; the coordinated future-clock
+run remains the integration signal for JavaScript, SQLite and child processes.
 | `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
