@@ -51,6 +51,12 @@ test('records exact requested identities separately from observed timing and ano
   assert.ok(report.logical_results.every((r) => r.authoritative_result === null));
   assert.ok(report.attempts.every((r) => /^runner-[a-f0-9]{16}$/.test(r.runner_ref)));
   assert.doesNotMatch(JSON.stringify(report), /private-node|private group|account@|private step|runner_name|runner_group_name/);
+  f.spec.requests.push({ ...f.spec.requests[2], shard: 'worker-4-of-6', job_id: 302 });
+  f.jobs.get(30).push({ ...f.jobs.get(30)[0], id: 302, runner_id: 1302 });
+  const extended = f.report();
+  assert.equal(extended.attempts[3].assignment_profile, 'linux-x64', 'another compatible node needs no per-host report configuration');
+  assert.notEqual(extended.attempts[3].runner_ref, extended.attempts[2].runner_ref);
+  assert.equal(extended.metrics.peak_completed_job_overlap, 4, 'profile equality does not collapse distinct executing nodes');
 });
 
 test('completes paginated jobs with a shared request budget and refuses truncated, failed or conflicting pages', () => {
