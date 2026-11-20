@@ -99,8 +99,8 @@ test('every reviewed SIC code keeps its old market, seed is reproducible and nor
 test('admin recompute is bounded and resumable over physical rows including held sources, repeatable, with counts and stale reads',async()=>{
  const f=fixture();try{
   assert.equal((await readCompanyClassification(f.env,'h-held')).state,'needs_recompute');
-  let after='',done=false;const totals:Record<string,number>={},schemeTotals:Record<string,number>={};let methods=0,schemes=0;
-  while(!done){const r=await call(f,'/recompute',{after,limit:3});assert.equal(r.status,200,JSON.stringify(r.body));assert.ok(r.body.processed<=3);for(const [state,n]of Object.entries(r.body.counts.state))totals[state]=(totals[state]||0)+Number(n);for(const [scheme,n]of Object.entries(r.body.counts.scheme))schemeTotals[scheme]=(schemeTotals[scheme]||0)+Number(n);methods+=Object.values(r.body.counts.method).reduce((a:any,b:any)=>a+b,0)as number;schemes+=Object.values(r.body.counts.scheme).reduce((a:any,b:any)=>a+b,0)as number;after=r.body.after;done=r.body.done;}
+  let after='',done=false,version:string|null=null;const totals:Record<string,number>={},schemeTotals:Record<string,number>={};let methods=0,schemes=0;
+  while(!done){const r=await call(f,'/recompute',{after,limit:3,rules_version:version});assert.equal(r.status,200,JSON.stringify(r.body));assert.ok(r.body.processed<=3);for(const [state,n]of Object.entries(r.body.counts.state))totals[state]=(totals[state]||0)+Number(n);for(const [scheme,n]of Object.entries(r.body.counts.scheme))schemeTotals[scheme]=(schemeTotals[scheme]||0)+Number(n);methods+=Object.values(r.body.counts.method).reduce((a:any,b:any)=>a+b,0)as number;schemes+=Object.values(r.body.counts.scheme).reduce((a:any,b:any)=>a+b,0)as number;after=r.body.after;version=r.body.rules_version;done=r.body.done;}
   assert.deepEqual(totals,{mapped:3,outside_tracked_markets:2,no_label:1,not_yet_considered:1,pinned_unmapped_by_hand:1});assert.equal(methods,8);assert.equal(schemes,8);assert.deepEqual(schemeTotals,{none:5,'UK SIC':3});
   const before=f.db.prepare('SELECT * FROM research_company_mapping ORDER BY company_uid').all();assert.equal((await readCompanyClassification(f.env,'h-held')).state,'mapped');
   assert.equal((await call(f,'/recompute',{limit:100})).status,200);assert.deepEqual(f.db.prepare('SELECT * FROM research_company_mapping ORDER BY company_uid').all(),before);
@@ -139,5 +139,16 @@ test('a concurrent override cannot leave a freshly versioned mapping from an old
   }};
   const result=await call(f,'/recompute',{});assert.equal(result.status,409);assert.equal(result.body.error,'recompute_rules_changed');assert.equal(f.db.prepare('SELECT COUNT(*) n FROM research_company_mapping').get()!.n,0);
   f.env.DB=base;assert.equal((await call(f,'/recompute',{})).status,200);assert.equal((await readCompanyClassification(f.env,'b-code')).state,'mapped');
+ }finally{f.db.close();}
+});
+
+test('resumed recompute pages refuse a missing or older version after an intervening override',async()=>{
+ const f=fixture();try{
+  const first=await call(f,'/recompute',{limit:3});assert.equal(first.status,200);assert.equal(first.body.done,false);
+  assert.equal((await call(f,'/recompute',{after:first.body.after,limit:3})).status,400);
+  const changed=await call(f,'/overrides',{raw_value:'Synthetic novel activity',target:'saas',reason:'Synthetic approved update'});assert.equal(changed.status,200);
+  const resumed=await call(f,'/recompute',{after:first.body.after,limit:3,rules_version:first.body.rules_version});assert.equal(resumed.status,409);assert.equal(resumed.body.error,'recompute_rules_changed');
+  assert.equal((await readCompanyClassification(f.env,'a-rule')).state,'needs_recompute');
+  const restarted=await call(f,'/recompute',{});assert.equal(restarted.status,200);assert.equal(restarted.body.done,true);assert.notEqual(restarted.body.rules_version,first.body.rules_version);
  }finally{f.db.close();}
 });

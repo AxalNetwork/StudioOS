@@ -12,7 +12,9 @@ mapping.post('/recompute',async c=>{
  if(!body||typeof body!=='object'||Array.isArray(body))return refuse(c,400,{code:'invalid_recompute_page',message:'Provide a JSON recompute page.'});
  const after=body?.after ?? '', limit=body?.limit ?? 100;
  if(typeof after!=='string'||after.length>200||!Number.isInteger(limit)||limit<1||limit>100)return refuse(c,400,{code:'invalid_recompute_page',message:'Use an after cursor and a limit from 1 to 100.'});
- const result=await recomputeCompanyClassifications(c.env,after,limit);
+ const version=body.rules_version ?? null;
+ if((version!==null&&(typeof version!=='string'||version.length>100))||(after&&!version))return refuse(c,400,{code:'invalid_recompute_version',message:'Resume with the rules_version returned by the previous page.'});
+ const result=await recomputeCompanyClassifications(c.env,after,limit,version);
  if(result.stale)return refuse(c,409,{code:'recompute_rules_changed',message:'An override changed during recompute. Restart from the beginning.'});
  return c.json(result);
 });

@@ -57,9 +57,10 @@ export async function readCompanyClassification(env: Env, companyUid: string) {
 }
 
 /** Reads EVERY physical catalogue row, including held records; cursor is lexical uid, not a served-directory cursor. */
-export async function recomputeCompanyClassifications(env: Env, after: string, limit: number) {
+export async function recomputeCompanyClassifications(env: Env, after: string, limit: number, expectedVersion: string | null = null) {
   const revisionRow = await env.DB.prepare('SELECT revision FROM research_company_mapping_revision WHERE id = 1').first<{revision:number}>();
   const revision = revisionRow?.revision ?? 0, version = COMPANY_MAPPING_RULES_VERSION + ':' + revision;
+  if(expectedVersion !== null && expectedVersion !== version)return { stale:true as const, processed:0, after, done:false, counts:{state:{},method:{},scheme:{}}, rules_version:version };
   const [companies, natives, crosswalk, overrides] = await Promise.all([
     env.DB.prepare('SELECT uid, sector FROM research_company_directory WHERE uid > ? ORDER BY uid LIMIT ?').bind(after, limit+1).all<{uid:string;sector:string|null}>(),
     env.DB.prepare('SELECT company_uid, scheme, scheme_version, code, native_label, language, source, position FROM research_company_classifications WHERE company_uid IN (SELECT uid FROM research_company_directory WHERE uid > ? ORDER BY uid LIMIT ?) ORDER BY company_uid, position, scheme, scheme_version').bind(after,limit).all<NativeClassification & {company_uid:string}>(),
