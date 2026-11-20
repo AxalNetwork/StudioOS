@@ -9,15 +9,18 @@
  * THE FAKE BINDING. No model is called. Each call takes a latency drawn,
  * from a fixed seed, from 1.5 s to 6 s, skewed to its low end (median about
  * 2.6 s), the range a short text run on the routed models answers in. The
- * run's own work (D1, the claims, the usage rows) is counted at `SCALE`
- * simulated milliseconds per millisecond of CPU, so the figures read high,
- * never low.
+ * run's own work between calls (D1, the claims, the usage rows) is charged a
+ * fixed `STEP_MS` of simulated time per call, more than it takes here, so
+ * the figures read high, never low.
  *
- * THE CLOCK (#7579, #7583). The figures are read on a simulated clock, not the
- * wall clock: each call waits its drawn latency there, and the runtime's own
- * work is charged from this process's CPU time at `SCALE`. On the wall clock a
- * busy runner put both into the result (a second of starvation was 20
- * simulated seconds), which failed the gate on two PRs that touch no deck code.
+ * THE CLOCK (#7579, #7583). The figures are read on a simulated clock,
+ * not the wall clock: each call waits its drawn latency plus `STEP_MS` there.
+ * On the wall clock a busy runner put its starvation into the result, which
+ * failed the gate on two PRs that touch no deck code; charging this process's
+ * CPU time at ×20 instead still did (#7655 and #7550 in the merge queue,
+ * 2026-11-19: p50 52.9 s on a figure that reads 21.8 s), since a loaded
+ * runner spends more CPU on the same work. With a fixed charge every run of
+ * this test prints the same figures on every machine.
  * What this measures is the runtime: the fan-out, the order of drafts before
  * second passes, and one hold per run. The AiGovernor's pacing has its own
  * tests and is stubbed open here. The capped staging run with real models
@@ -37,8 +40,8 @@ import { DRIVERS } from '../src/durable-objects/deck-gen-room.ts';
 
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const FOUNDERS = 5, CARDS = 12;
-/** Simulated milliseconds per real millisecond. */
-const SCALE = 20;
+/** The runtime's own work per model call (D1, the claim, the usage row), in simulated ms. */
+const STEP_MS = 50;
 const P50_S = 45, P95_S = 90;
 
 const M716 = readFileSync('cloudflare-worker/sql/migrations/716_deck_area_batches.sql', 'utf8');
@@ -75,19 +78,17 @@ function planCtx(founder: number, cards: any[]): PlanCtx {
 
 /**
  * A simulated clock in milliseconds. `sleep` waits on it; once the event loop has
- * nothing else to run, it charges the CPU time used since the last advance (times
- * `SCALE`) and moves to the next wake-up. The runtime's work between calls is
- * synchronous D1 and promises, so every driver is asleep when it advances; a
- * driver that is not yet asleep only wakes later, so the clock never reads low.
+ * nothing else to run, it moves to the next wake-up. The runtime's work between
+ * calls is synchronous D1 and promises, so every driver is asleep when it
+ * advances; a driver that is not yet asleep only wakes later, so the clock never
+ * reads low. Nothing here reads the machine, so the figures do not depend on it.
  */
 function simClock() {
-  let now = 0, cpu = process.cpuUsage(), armed = false;
+  let now = 0, armed = false;
   const sleepers: Array<{ at: number; wake: () => void }> = [];
-  const charge = () => { const d = process.cpuUsage(cpu); cpu = process.cpuUsage(); now += ((d.user + d.system) / 1000) * SCALE; };
   const advance = () => {
     armed = false;
     if (!sleepers.length) return;
-    charge();
     sleepers.sort((a, b) => a.at - b.at);
     now = Math.max(now, sleepers[0].at);
     while (sleepers.length && sleepers[0].at <= now) sleepers.shift()!.wake();
@@ -95,7 +96,7 @@ function simClock() {
   };
   const arm = () => { if (!armed && sleepers.length) { armed = true; setImmediate(advance); } };
   return {
-    now: () => { charge(); return now; },
+    now: () => now,
     sleep: (ms: number) => new Promise<void>((wake) => { sleepers.push({ at: now + ms, wake }); arm(); }),
   };
 }
@@ -114,7 +115,7 @@ test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first f
     const firstDraftAt = new Map<string, number>(); // run uid → when its last draft landed (simulated ms)
     const draftsLeft = new Map<string, number>();
     const run = async (_env: any, o: any) => {
-      await clock.sleep(latencyMs(draw));
+      await clock.sleep(latencyMs(draw) + STEP_MS);
       const ref = String(o.rail?.record ?? '');
       const row = f.db.prepare('INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd, reservation_uid, record_ref) VALUES (?, ?, ?, ?, ?, ?)')
         .run(o.userId, o.task, o.model ?? MODEL, 400, o.parentHold?.uid ?? null, ref);
