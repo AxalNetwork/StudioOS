@@ -46,7 +46,7 @@ import type { Env } from '../types';
 import { requireAuth, requireStepUp, requireSuperAdmin } from '../auth';
 import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCES, ENVELOPE_ABSENCES } from '../services/esignOriginators';
 import { esignEnvelopeScope } from '../services/tenancyScope';
-import { sendAgreementAssignedEmail, sendAgreementAssignedEmailResult, type EmailSendResult } from '../services/email';
+import { sendAgreementAssignedEmailResult, sendReleaseSignEmailResult, type EmailSendResult } from '../services/email';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
 import { paperModel, paperHtml, paperSha256, PART_STUB, STUB_LINE, type PaperRecipient } from '../services/legalPaper';
 import { structureForPaper } from '../services/fundStructure';
@@ -330,6 +330,29 @@ export function templateBodyRefusal(e: unknown, audience: 'admin' | 'member'):
       ? `${PART_STUB} This document has no text until counsel supplies it, so nothing was sent.`
       : `${STUB_LINE.replace(/\.$/, '')}, so nothing was sent. Add its body under Contracts › Templates.`;
   return { status: 409, code: 'template_has_no_body', message };
+}
+
+// ---------------------------------------------------------------------------
+// D5585-p5 — the signing email an envelope is sent under, by document type.
+// A `work_graph_release` envelope gets the release sign-off email, naming the
+// line, manifest and digest its body records; every other envelope gets the
+// agreement email, unchanged. A release envelope whose body names no release is
+// never sent the agreement email instead: it is refused, and recorded as a
+// failed mail. Used by the first send, `/remind` and a signer's `/resend`.
+// ---------------------------------------------------------------------------
+export const RELEASE_ENVELOPE_DOC_TYPE = 'work_graph_release';
+export async function signingEmailFor(
+  env: Env,
+  e: { documentType: string | null | undefined; documentBody: string | null | undefined; title: string },
+  to: string, recipientName: string, signLink: string, senderName: string, linkExpiryDays = 7,
+): Promise<EmailSendResult> {
+  if (e.documentType === RELEASE_ENVELOPE_DOC_TYPE) {
+    const { releaseSignFacts } = await import('../services/workGraphReleaseSigning');
+    const facts = releaseSignFacts(e.documentBody ?? '');
+    if (!facts) return { ok: false, reason: 'refused' };
+    return sendReleaseSignEmailResult(env, to, { recipientName, ...facts, signLink, linkExpiryDays });
+  }
+  return sendAgreementAssignedEmailResult(env, to, recipientName, e.title, signLink, senderName, linkExpiryDays);
 }
 
 // ---------------------------------------------------------------------------
@@ -749,9 +772,9 @@ export async function createAndSendEnvelope(
     meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
   });
 
-  const emailSent = await sendAgreementAssignedEmail(
-    env, opts.recipientEmail, opts.recipientName, tpl.title, signingUrl, opts.adminName
-  );
+  const emailSent = (await signingEmailFor(
+    env, { documentType, documentBody: tpl.body, title: tpl.title }, opts.recipientEmail, opts.recipientName, signingUrl, opts.adminName,
+  )).ok;
 
   await appendAudit(env, envelopeId, {
     ts: new Date().toISOString(),
@@ -1997,7 +2020,7 @@ const PENDING_ENVELOPE = ['sent', 'partially_signed'];
 
 async function senderEnvelope(c: any, id: number, userId: number) {
   return c.env.DB.prepare(
-    `SELECT id, envelope_uuid, document_title, status, provider, created_by
+    `SELECT id, envelope_uuid, document_title, document_type, document_body, status, provider, created_by
        FROM esign_envelopes WHERE id = ? AND created_by = ?`
   ).bind(id, userId).first();
 }
@@ -2208,10 +2231,10 @@ esign.post('/:id{[0-9]+}/remind', async (c) => {
         `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ? WHERE id = ? AND status = 'pending'`
       ).bind(tokenValue, expiresAt, r.id).run();
     }
-    const sent = await sendAgreementAssignedEmail(
-      c.env, r.recipient_email, r.recipient_name || '', envRow.document_title || 'Agreement',
-      `${appUrl}/esign/${tokenValue}`, senderName,
-    );
+    const sent = (await signingEmailFor(
+      c.env, { documentType: envRow.document_type, documentBody: envRow.document_body, title: envRow.document_title || 'Agreement' },
+      r.recipient_email, r.recipient_name || '', `${appUrl}/esign/${tokenValue}`, senderName,
+    )).ok;
     results.push({ email: r.recipient_email, sent, link_renewed: lapsed, expires_at: expiresAt });
     await appendAudit(c.env, id, {
       ts: new Date().toISOString(),
@@ -2257,7 +2280,7 @@ esign.post('/:id{[0-9]+}/resend', async (c) => {
   const id = Number(c.req.param('id'));
   const row: any = await c.env.DB.prepare(
     `SELECT r.id, r.recipient_email, r.recipient_name, r.signing_token, r.token_expires_at, r.status AS recipient_status,
-            e.document_title, e.status, e.provider, e.created_by
+            e.document_title, e.document_type, e.document_body, e.status, e.provider, e.created_by
        FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
       WHERE e.id = ? AND r.user_id = ? ORDER BY r.id LIMIT 1`
   ).bind(id, user.id).first();
@@ -2304,10 +2327,10 @@ esign.post('/:id{[0-9]+}/resend', async (c) => {
   const sender: any = row.created_by
     ? await c.env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(row.created_by).first()
     : null;
-  const sent = await sendAgreementAssignedEmail(
-    c.env, row.recipient_email, row.recipient_name || '', row.document_title || 'Agreement',
-    `${c.env.APP_URL || 'https://axal.vc'}/esign/${tokenValue}`, sender?.name || 'Axal VC',
-  );
+  const sent = (await signingEmailFor(
+    c.env, { documentType: row.document_type, documentBody: row.document_body, title: row.document_title || 'Agreement' },
+    row.recipient_email, row.recipient_name || '', `${c.env.APP_URL || 'https://axal.vc'}/esign/${tokenValue}`, sender?.name || 'Axal VC',
+  )).ok;
   await appendAudit(c.env, id, {
     ts: new Date().toISOString(),
     signer_id: user.id,

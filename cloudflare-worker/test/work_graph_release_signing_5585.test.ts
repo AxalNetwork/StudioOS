@@ -13,6 +13,9 @@
  *   4. Another release's envelope still pending for the owner refuses `signer_has_pending_release`.
  *   5. A takedown, a superseded release and another tenant's forged effect are still withheld, with no envelope.
  *   6. A retraction voids the envelope through the service, and a signature being recorded is waited for.
+ *   7. An unmailed envelope of the effect is voided and sent again; one the owner has is not.
+ *   8. (D5585-p5) The release envelope is mailed the release sign-off email, never the partner agreement email; the
+ *      agreement email is unchanged for every other document; the HTML escapes the line name.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/work_graph_release_signing_5585.test.ts
@@ -26,7 +29,9 @@ import { ALICE, CTX, ERIN, OTHER, approvedManifest, attestAll, campaign, clock, 
 import { WORK_GRAPH_EFFECT_LIMITS } from '../src/services/workGraphEffects.ts';
 import { takedownRelease } from '../src/services/workGraphReleaseTakedowns.ts';
 import { ProviderMeter, drainReleaseEffects } from '../src/services/workGraphReleaseAdapters.ts';
-import { RELEASE_SIGN_DOC_TYPE, releaseSignBody, signedDocumentAdapter } from '../src/services/workGraphReleaseSigning.ts';
+import { RELEASE_SIGN_DOC_TYPE, releaseSignBody, releaseSignFacts, signedDocumentAdapter } from '../src/services/workGraphReleaseSigning.ts';
+import { signingEmailFor } from '../src/routes/esign.ts';
+import { releaseSignEmailContent } from '../src/services/email.ts';
 
 const OWNER = (ALICE as { userId: number }).userId; // registered the line
 const REF = 'owner-signoff';
@@ -55,6 +60,13 @@ class FakeGmail {
   }
   get requests() { return this.tokens + this.sent.length; }
 }
+/** One sent message's subject, plain text and HTML, decoded from the raw MIME Gmail was given. */
+function decoded(raw: string) {
+  const subject = Buffer.from(/^Subject: =\?UTF-8\?B\?(.*)\?=\r?$/m.exec(raw)?.[1] ?? '', 'base64').toString('utf8');
+  const [text, html] = [...raw.matchAll(/Content-Transfer-Encoding: base64\r\n\r\n([A-Za-z0-9+/=\r\n]+)/g)].map((m) => Buffer.from(m[1].replace(/\s+/g, ''), 'base64').toString('utf8'));
+  return { subject, text, html, from: /^From: (.*)\r?$/m.exec(raw)?.[1] ?? '' };
+}
+const PARTNER_WORDING = /partner profile|Closing Binder|Axal Deals|deal@axal\.vc/;
 
 function signingWorld() {
   const w = world();
@@ -285,4 +297,45 @@ test('7. an envelope of the effect whose mail is not recorded is voided and sent
   assert.equal(envelopes(w).length, 2);
   assert.equal(x.gmail.sent.length, 2);
   assert.equal(meter.requests, 8, 'reads, voids and creates, each counted');
+});
+
+test('8. the release envelope is mailed the release email; the agreement email is unchanged; the HTML escapes the line', async () => {
+  const w = signingWorld();
+  const { c, m } = await shipped(w);
+  const x = live(w);
+  await drain(x.env);
+  assert.equal(x.gmail.sent.length, 1);
+  const mail = decoded(x.gmail.sent[0]);
+  assert.equal(mail.subject, `Sign release ${c.line} (sha256:${m.digest.slice(0, 12)})`);
+  assert.equal(mail.from, 'StudioOS releases <noreply@axal.vc>');
+  const tok = recipients(w)[0].signing_token;
+  for (const part of [mail.text, mail.html]) {
+    assert.ok(part.includes(c.line) && part.includes(m.manifestUid) && part.includes(`sha256:${m.digest}`), 'names line, manifest and digest');
+    assert.ok(part.includes(`https://app.example.test/esign/${tok}`), 'carries the signer\u2019s link');
+    assert.ok(part.includes('Signing records your signature against this manifest digest'), 'says what signing does');
+    assert.ok(part.includes('expires in 7 days'));
+    assert.ok(!PARTNER_WORDING.test(part), 'a release was mailed the partner agreement wording');
+  }
+  assert.ok(!PARTNER_WORDING.test(mail.subject));
+  assert.ok(!/acme\/site|COMPANY_LOGOS|pitch_decks|vid-/.test(mail.text + mail.html), 'ids only: no release content');
+
+  // The body is read back exactly; a body that names no release is never sent the agreement email instead.
+  assert.deepEqual(releaseSignFacts(envelopes(w)[0].document_body), { lineAssetUid: c.line, manifestUid: m.manifestUid, digest: m.digest });
+  const facts = (body: string) => signingEmailFor(x.env, { documentType: RELEASE_SIGN_DOC_TYPE, documentBody: body, title: 'T' }, 'a@example.test', 'A', 'https://l', 'S');
+  assert.deepEqual(await facts(envelopes(w)[0].document_body.replace('# StudioOS release sign-off', '# Something else')), { ok: false, reason: 'refused' });
+  assert.deepEqual(await facts(envelopes(w)[0].document_body.replace(`sha256:${m.digest}`, 'sha256:abc')), { ok: false, reason: 'refused' });
+  assert.equal(x.gmail.sent.length, 1, 'nothing mailed for a body that names no release');
+
+  // Every other document keeps the agreement email, subject and words as before.
+  assert.deepEqual(await signingEmailFor(x.env, { documentType: 'founder_nda_v1', documentBody: 'b', title: 'Mutual NDA' }, 'b@example.test', 'Bo Smith', 'https://l/esign/t', 'Sam'), { ok: true, reason: null });
+  const agreement = decoded(x.gmail.sent[1]);
+  assert.equal(agreement.subject, 'Your Closing Binder is ready: Mutual NDA');
+  assert.equal(agreement.from, 'Axal Deals <deal@axal.vc>');
+  assert.ok(agreement.text.startsWith('Hi Bo,\n\nSam has verified your partner profile and assigned your Closing Binder:'));
+
+  // The line name is the line's uid, which the caller chose: the HTML escapes it, the subject and text carry it as is.
+  const evil = releaseSignEmailContent({ recipientName: '<i>Al</i>', lineAssetUid: `l<script>"&'`, manifestUid: 'm<b>', digest: m.digest, signLink: 'https://l/esign/t' });
+  assert.ok(evil.html.includes('l&lt;script&gt;&quot;&amp;&#39;') && evil.html.includes('m&lt;b&gt;') && evil.html.includes('&lt;i&gt;Al&lt;/i&gt;'));
+  assert.ok(!/<script>|<b>|<i>/.test(evil.html), 'unescaped markup in the HTML');
+  assert.equal(evil.subject, `Sign release l<script>"&' (sha256:${m.digest.slice(0, 12)})`);
 });

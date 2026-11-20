@@ -20,17 +20,21 @@
  * RETRACTION voids every live envelope of the manifest and ref through `voidEnvelopeForResend`. A signature already
  * given stays, as evidence (retention keeps a taken-down release's decisions and audit the same way).
  *
+ * THE EMAIL (D5585-p5). The service mails a `work_graph_release` envelope the release sign-off email
+ * (`releaseSignEmailContent` in `services/email.ts`), never the partner agreement email: it names the line, manifest
+ * and digest that `releaseSignFacts` reads back from the body, and what signing does.
+ *
  * CREDENTIALS. The native service mails the signing link through Gmail. Without `GMAIL_CLIENT_ID`,
  * `GMAIL_CLIENT_SECRET` and `GMAIL_REFRESH_TOKEN` the adapter refuses `target_not_configured` and calls nothing.
  */
 import type { Env } from '../types';
-import { createAndSendEnvelope, voidEnvelopeForResend } from '../routes/esign';
+import { RELEASE_ENVELOPE_DOC_TYPE, createAndSendEnvelope, voidEnvelopeForResend } from '../routes/esign';
 import { sha256Hex } from './pdf';
 import { DeliveryRetry, type ReleaseDeliveryAdapter, type ReleaseDeliveryRequest } from './workGraphReleaseDelivery';
 import type { EffectTarget } from './workGraphReleases';
 
-/** The document type every release envelope is sent under. */
-export const RELEASE_SIGN_DOC_TYPE = 'work_graph_release';
+/** The document type every release envelope is sent under; the e-sign service mails it the release email (D5585-p5). */
+export const RELEASE_SIGN_DOC_TYPE = RELEASE_ENVELOPE_DOC_TYPE;
 export const RELEASE_SIGN_TITLE = 'StudioOS release sign-off';
 const SENDER_NAME = 'StudioOS releases';
 /** Envelope states in which the signer can still sign (and a retraction can void). */
@@ -58,6 +62,23 @@ export function releaseSignBody(req: Pick<ReleaseDeliveryRequest, 'idempotencyKe
     `- Release key: \`${req.idempotencyKey}\``,
     '',
   ].join('\n');
+}
+/**
+ * D5585-p5 — the ids a release envelope's body names, read back from the stored body, for the release sign-off email
+ * (`signingEmailFor` in `routes/esign.ts`, on the first send, a reminder and a signer's resend). `null` when the body
+ * is not one `releaseSignBody` wrote.
+ */
+export function releaseSignFacts(body: string): { lineAssetUid: string; manifestUid: string; digest: string } | null {
+  const lines = String(body ?? '').split('\n');
+  if (lines[0] !== `# ${RELEASE_SIGN_TITLE}`) return null;
+  const read = (label: string) => {
+    const m = lines.map((l) => /^- ([A-Za-z ]+): `(.*)`$/.exec(l)).find((x) => x && x[1] === label);
+    return m ? m[2] : null;
+  };
+  const lineAssetUid = read('Release line');
+  const manifestUid = read('Release');
+  const digest = /^sha256:([0-9a-f]{64})$/.exec(read('Manifest digest') ?? '')?.[1];
+  return lineAssetUid && manifestUid && digest ? { lineAssetUid, manifestUid, digest } : null;
 }
 const manifestLine = (uid: string) => `- Release: \`${uid}\``;
 const refLine = (ref: string) => `- Signing request: \`${ref}\``;
