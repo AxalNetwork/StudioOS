@@ -384,3 +384,4 @@ catalogue version only in the fixture.
 | `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
 
 `icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
+| `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
