@@ -112,6 +112,11 @@
       "channel": "#axalvc-actions-deck-visual"
     },
     {
+      "id": 425238679,
+      "path": ".github/workflows/dependency-review.yml",
+      "channel": "#axalvc-actions-dependency-review"
+    },
+    {
       "id": 280437837,
       "path": ".github/workflows/dr-drill.yml",
       "channel": "#axalvc-actions-dr-drill"
@@ -242,6 +247,11 @@
       "channel": "#axalvc-actions-migration-immutability"
     },
     {
+      "id": null,
+      "path": ".github/workflows/ossf-scorecard.yml",
+      "channel": "#axalvc-actions-ossf-scorecard"
+    },
+    {
       "id": 295717983,
       "path": ".github/workflows/post-deploy-smoke.yml",
       "channel": "#axalvc-actions-post-deploy-smoke"
@@ -305,6 +315,11 @@
       "id": 416139951,
       "path": ".github/workflows/runner-benchmark.yml",
       "channel": "#axalvc-actions-runner-benchmark"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/runner-executor.yml",
+      "channel": "#axalvc-actions-runner-executor"
     },
     {
       "id": null,
