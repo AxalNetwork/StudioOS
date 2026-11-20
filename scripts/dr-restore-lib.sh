@@ -143,26 +143,61 @@ dr_import_chunks() {
 }
 
 dr_compare_counts() {
-  local db="$1" manifest="$2" dir="$3" sql compare
-  # Read 40 tables to a query; a table missing from the restore fails its query.
-  # shellcheck disable=SC2016 # JavaScript, not shell
-  node -e '
-    const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-    const q = (n) => `"${n.replace(/"/g, "\"\"")}"`;
-    const lit = (n) => `${String.fromCharCode(39)}${n.replace(/\x27/g, "\x27\x27")}${String.fromCharCode(39)}`;
-    for (let i = 0; i < m.tables.length; i += 40) {
-      console.log(m.tables.slice(i, i + 40).map((t) => `SELECT ${lit(t.name)} AS t, COUNT(*) AS n FROM ${q(t.name)}`).join(" UNION ALL ") + ";");
-    }' "${manifest}" > "${dir}/counts.sql"
+  local db="$1" manifest="$2" dir="$3" sql compare codes batch=0 name one unreadable=()
+  # Read 40 tables to a query. When a batch query fails, each of its tables is
+  # counted on its own, so a failure names the table (schema, never content)
+  # and wrangler's error codes, and a limit on the batched query alone does
+  # not fail the drill. The query lines are built from the manifest by
+  # dr_count_sql (below): `batch` lines, then `one <batch>` lines per table.
+  dr_count_sql batch "${manifest}" > "${dir}/counts.sql"
   : > "${dir}/counts.jsonl"
   while IFS= read -r sql <&4; do
-    if ! wrangler d1 execute "${db}" --remote --command "${sql}" --json > "${dir}/count.json" 2>"${dir}/count.err"; then
-      dr_fail 3 row_counts_unreadable "a row-count query failed (a table in the manifest is missing from the restore)"
+    batch=$(( batch + 1 ))
+    if wrangler d1 execute "${db}" --remote --command "${sql}" --json > "${dir}/count.json" 2>"${dir}/count.err"; then
+      jq -c '.[] .results[]' "${dir}/count.json" >> "${dir}/counts.jsonl"
+      continue
     fi
-    jq -c '.[] .results[]' "${dir}/count.json" >> "${dir}/counts.jsonl"
+    codes=$(dr_count_codes "${dir}")
+    log "row-count batch ${batch} failed (wrangler's error codes: ${codes:-none recognised}); counting its tables one at a time"
+    while IFS=$'\t' read -r name one <&5; do
+      if wrangler d1 execute "${db}" --remote --command "${one}" --json > "${dir}/count.json" 2>"${dir}/count.err"; then
+        jq -c '.[] .results[]' "${dir}/count.json" >> "${dir}/counts.jsonl"
+      else
+        codes=$(dr_count_codes "${dir}")
+        log "row count unreadable: ${name} (wrangler's error codes: ${codes:-none recognised})"
+        unreadable+=("${name}")
+      fi
+    done 5< <(dr_count_sql "one $(( batch - 1 ))" "${manifest}")
   done 4< "${dir}/counts.sql"
+  if [[ ${#unreadable[@]} -gt 0 ]]; then
+    dr_fail 3 row_counts_unreadable "a row-count query failed for ${#unreadable[@]} table(s) in the manifest: ${unreadable[*]}"
+  fi
   jq -s '.' "${dir}/counts.jsonl" > "${dir}/counts.json"
   if ! compare=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" compare "${manifest}" "${dir}/counts.json"); then
     dr_fail 3 row_counts_differ "${compare}"
   fi
   log "${compare}"
+}
+
+# The row-count queries for a manifest. `batch`: one UNION ALL line per 40
+# tables. `one <i>`: batch i's tables, one `name<TAB>query` line each.
+dr_count_sql() {
+  # shellcheck disable=SC2016 # JavaScript, not shell
+  node -e '
+    const m = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+    const [mode, index] = process.argv[1].split(" ");
+    const q = (n) => `"${n.replace(/"/g, "\"\"")}"`;
+    const lit = (n) => `${String.fromCharCode(39)}${n.replace(/\x27/g, "\x27\x27")}${String.fromCharCode(39)}`;
+    const count = (t) => `SELECT ${lit(t.name)} AS t, COUNT(*) AS n FROM ${q(t.name)}`;
+    const batches = [];
+    for (let i = 0; i < m.tables.length; i += 40) batches.push(m.tables.slice(i, i + 40));
+    if (mode === "batch") for (const b of batches) console.log(b.map(count).join(" UNION ALL ") + ";");
+    else for (const t of batches[Number(index)] ?? []) console.log(`${t.name}\t${count(t)};`);
+  ' "$1" "$2"
+}
+
+# wrangler's error codes from a failed count, never its text: it can quote SQL.
+dr_count_codes() {
+  grep -ohE 'D1_[A-Z_]+|SQLITE_[A-Z_]+|no such table|not authorized|too many terms in compound SELECT|exceeded [a-zA-Z ]*limit' \
+    "$1/count.err" "$1/count.json" 2>/dev/null | sort -u | paste -sd ' ' - || true
 }

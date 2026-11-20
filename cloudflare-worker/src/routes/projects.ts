@@ -1365,9 +1365,10 @@ projects.put('/:projectId/spinout-deck/overrides', async (c) => {
  *
  * Kept as a local helper rather than folded into `projectAccess`: `canAccessProject`
  * there answers a different and looser question (may they SEE it), and an
- * investor passes that one.
+ * investor passes that one. Exported for `routes/market_sizing.ts` (D7704), so
+ * the sizing versions are gated by this one rule and no copy of it.
  */
-async function canEditProjectData(
+export async function canEditProjectData(
   env: Env, project: { id: number; founder_id: number | null }, user: User,
 ): Promise<boolean> {
   // D889 (#2438): only an admin bypasses membership; a partner edits as an accepted owner or co-founder.

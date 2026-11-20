@@ -59,7 +59,7 @@ for (const name of ['gitleaks', 'codeql']) {
   });
   test(`${name}: no usable copy and an exhausted release host fail acquisition before scanning`, async t => {
     const f = await fixture(t, name); let calls = 0;
-    await assert.rejects(f.install({ download: async () => { calls++; throw Error('504'); } }), new RegExp(`${name} ${f.tool.version}: acquisition exhausted after 5 attempts; scan did not start`));
+    await assert.rejects(f.install({ download: async () => { calls++; throw Error('504'); } }), { message: `${name} ${f.tool.version}: acquisition exhausted after 5 attempts; scan did not start` });
     assert.equal(calls, 5); assert.deepEqual(await readdir(f.options.workDir), []);
   });
   test(`${name}: poisoned cache cannot supply executable bytes and a corrupt download is refused`, async t => {
