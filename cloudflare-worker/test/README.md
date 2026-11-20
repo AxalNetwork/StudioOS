@@ -386,3 +386,4 @@ catalogue version only in the fixture.
 | `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
 | `skill_passage_citations_7700.test.ts` | D7700: selected-document passage citation qualification, file/ref/sequence/read-state isolation, missing/unknown/duplicate/capped evidence and preserved dotted paths under evaluator version 5. |
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
+| `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |

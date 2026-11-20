@@ -84,3 +84,15 @@ test('a malformed output passage reference is refused even beside a valid citati
   assert.equal(judge(c.expect, output, c.input).result, 'pass');
   assert.match(judge(c.expect, output + '\nInstrument [data_room_passage:invalid:1]', c.input).detail ?? '', /records do not hold/);
 });
+
+
+test('a passage reference is not a maturity value; a real value beside it is still refused', () => {
+  const c = checkCase({ name: 'Synthetic cited missing maturity', input: { records: records() }, expect: {
+    output: 'brief', must_include: [], must_say_not_recorded: ['maturity'], must_not_include: [], evidence: { cite: [REF] },
+  } });
+  assert.ok(c.ok);
+  if (!c.ok) return;
+  const output = `Maturity: Not recorded; the complete instrument states no maturity date [${REF}].`;
+  assert.equal(judge(c.expect, output, c.input).result, 'pass');
+  assert.equal(judge(c.expect, output + `\nMaturity: 24 months [${REF}].`, c.input).result, 'fail');
+});

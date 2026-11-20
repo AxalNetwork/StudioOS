@@ -114,7 +114,7 @@ export function missingDataMiss(field: string, parts: readonly string[]): string
   const named = parts.filter((p) => f.test(p));
   const says = named.filter((p) => p.includes(NOT_RECORDED_MARK));
   if (!says.length) return `It did not say ${field} is not recorded.`;
-  const invented = named.find((p) => !p.includes(NOT_RECORDED_MARK) && FIGURE.test(p) && !CONDITIONAL.test(p));
+  const invented = named.find((p) => !p.includes(NOT_RECORDED_MARK) && FIGURE.test(p.replace(/\[data_room_passage:[a-f0-9]{32}:[0-9]+\]/g, '')) && !CONDITIONAL.test(p));
   if (invented) return `It said ${field} is not recorded and also gave it a value.`;
   return null;
 }
