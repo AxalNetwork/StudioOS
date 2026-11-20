@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { computeWorld } from './_compute_world_4557.ts';
 import { AGENT, ADMIN, SPONSOR, STRANGER, PROJECT, loopDeps } from './_agent_engine_fixture.ts';
-import { createComputeRequest, computeRunRequested, uploadComputeInput, readyComputeRequest, dispatchCompute, cancelComputeRun, computeInternal, authorizeCompute, eraseComputeData, sweepComputeObjects } from '../src/services/agents/computeBridge.ts';
+import { computePolicy, createComputeRequest, computeRunRequested, uploadComputeInput, readyComputeRequest, dispatchCompute, cancelComputeRun, computeInternal, authorizeCompute, eraseComputeData, sweepComputeObjects } from '../src/services/agents/computeBridge.ts';
 import { runTaskLoop, load, runStep } from '../src/agents/loop.ts';
 import { createJob } from '../src/services/agents/compute.ts';
 import { computeTarget } from '../src/services/agents/computeHost.ts';
@@ -323,4 +323,14 @@ test('canonical authorization binds the admission company even if the live proje
     w.db.prepare('UPDATE agent_task_runs SET admitted_company_id = 2 WHERE uid = ?').run(runUid);
     assert.equal((await authorizeCompute(w.env, meta.job_uid, admission)).allowed, false);
   } finally { w.close(); }
+});
+
+
+test('server policy refuses missing, malformed or self-reported containment evidence', async()=>{
+ const w=await computeWorld();const original=w.env.AGENT_COMPUTE_POLICY_JSON;const policy=JSON.parse(original!);
+ assert.ok(computePolicy(w.env));
+ for(const bad of [null,{}, {...policy.provider.containment,source:'runner_report'}, {...policy.provider.containment,provider:'byoc'}]){
+  w.env.AGENT_COMPUTE_POLICY_JSON=JSON.stringify({...policy,provider:{...policy.provider,containment:bad}});assert.equal(computePolicy(w.env),null);
+ }
+ w.env.AGENT_COMPUTE_POLICY_JSON=original;assert.ok(computePolicy(w.env));
 });
