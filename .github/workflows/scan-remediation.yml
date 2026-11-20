@@ -24,10 +24,10 @@ jobs:
       name: scan-remediation
       deployment: false
     permissions:
-      contents: write
+      contents: read
       issues: write
-      pull-requests: write
-      security-events: write
+      pull-requests: read
+      security-events: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -54,10 +54,10 @@ jobs:
         with:
           app-id: ${{ secrets.SCAN_REMEDIATION_APP_ID }}
           private-key: ${{ secrets.SCAN_REMEDIATION_APP_PRIVATE_KEY }}
-          permission-contents: write
+          permission-contents: read
           permission-issues: write
-          permission-pull-requests: write
-          permission-security-events: write
+          permission-pull-requests: read
+          permission-security-events: read
       - name: Reconcile Code Scanning alerts
         env:
           SCAN_ALERT: ${{ inputs.alert }}

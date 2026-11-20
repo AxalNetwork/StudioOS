@@ -105,6 +105,8 @@ if (a[0] === 'd1' && a[1] === 'execute' && a.includes('--file')) {
   console.log('🚣 Executed 5 queries in 1.00ms (0 rows read, 5 rows written)'); process.exit(0);
 }
 if (a[0] === 'd1' && a[1] === 'execute' && a.includes('--command')) {
+  // FAIL_UNION: D1 refuses the batched row-count query, as a limit on it would.
+  if (e.FAIL_UNION && a[a.indexOf('--command') + 1].includes(' UNION ALL ')) { console.error('✘ [ERROR] D1_ERROR: the batched query was refused'); process.exit(1); }
   try {
     const db = new DatabaseSync(dbPath);
     console.log(JSON.stringify([{ results: db.prepare(a[a.indexOf('--command') + 1]).all() }])); process.exit(0);
@@ -289,6 +291,21 @@ test('the compare: restored row counts that differ from the manifest fail, namin
   // A table the manifest names and the restore lacks.
   const ghost = restore(R2, { MANIFEST_JSON: JSON.stringify({ ...m, tables: [...m.tables, { name: 'ghost', rows: 0, parents: [] }] }) });
   assert.deepEqual([ghost.status, ghost.reason], [3, 'row_counts_unreadable'], ghost.out);
+  // The failure names the table and SQLite's reason, and the batch's other tables were still read.
+  assert.match(ghost.out, /row-count batch 1 failed \(wrangler's error codes: no such table\); counting its tables one at a time/);
+  assert.match(ghost.out, /row count unreadable: ghost \(wrangler's error codes: no such table\)/);
+  assert.match(ghost.out, /a row-count query failed for 1 table\(s\) in the manifest: ghost/);
+  assert.doesNotMatch(ghost.out, /row count unreadable: (users|projects|vc_funds|legal_documents|fund_lps)\b/);
+});
+
+test('the compare: a refused batched count falls back to one query per table and still compares every table', () => {
+  const r = restore(R2, { FAIL_UNION: '1' });
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /row-count batch 1 failed \(wrangler's error codes: D1_ERROR\); counting its tables one at a time/);
+  assert.match(r.out, /row counts match in all 5 tables/);
+  const counts = r.wcalls.filter((c) => c[1] === 'execute' && c.includes('--command') && c[c.indexOf('--command') + 1].includes('COUNT(*) AS n'));
+  assert.equal(counts.length, 1 + 5, 'one refused batch, then one query per table');
+  assert.ok(!r.out.includes(SENTINEL), 'a count printed backup content');
 });
 
 // ── The independent copy ───────────────────────────────────────────────────

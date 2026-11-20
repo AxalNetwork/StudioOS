@@ -1,0 +1,88 @@
+name: Landing bot serial refresh
+
+# #6478: once main is green again, merge main into PRs that went red only because
+# main was (ciClassify's inherited_main_failure), through GitHub's update-branch,
+# one at a time at LANDING_BOT_REFRESH_PER_WINDOW per LANDING_BOT_REFRESH_WINDOW_MIN
+# minutes, stopping at once if main goes red or a breaker opens (owner, 2026-11-16;
+# amends D5398's rule against bulk refresh). Polls every 10 minutes: the #4571
+# guard (WF-4) forbids workflow_run. Never force-pushes, never touches main, never queues.
+
+on:
+  schedule:
+    - cron: '5-59/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The one inherited-red pull request to refresh
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: studioos-landing-bot-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh inherited-red branches
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      (vars.LANDING_BOT_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' && vars.LANDING_BOT_ENABLED == 'dispatch'))
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_REFRESH_PER_WINDOW: ${{ vars.LANDING_BOT_REFRESH_PER_WINDOW }}
+      LANDING_BOT_REFRESH_WINDOW_MIN: ${{ vars.LANDING_BOT_REFRESH_WINDOW_MIN }}
+      LANDING_BOT_MAX_QUEUED_RUNS: ${{ vars.LANDING_BOT_MAX_QUEUED_RUNS }}
+      QUEUE_ALERT_IGNORE_BEFORE: ${{ vars.QUEUE_ALERT_IGNORE_BEFORE }}
+      REFRESH_PR: ${{ inputs.pr }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Plan the window
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/landing-bot/refresh.mjs plan
+      - name: Reserve the window's refreshes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.reservation }}
+          path: ${{ runner.temp }}/refresh-plan.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Get the landing bot's installation token
+        if: steps.plan.outputs.count != '0'
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - name: Refresh, one at a time
+        id: apply
+        if: steps.plan.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REFRESH_APP_TOKEN: ${{ steps.app.outputs.token }}
+        run: node scripts/landing-bot/refresh.mjs apply
