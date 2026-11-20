@@ -21,6 +21,7 @@ files say how to act on it.
 | `SCHEMA_DRIFT.md` | What schema checks run before a deploy, what the post-deploy `schema-drift` job finds after it, and how a red result is escalated and corrected without silencing the check (#4591). |
 | `INCIDENT_RESPONSE.md` | Respond to an incident: severities, response times and who is paged. |
 | `CLAUDE_REVIEW.md` | Run, tune and cost the advisory pull-request review on the Anthropic API. |
+| `FREE_SECURITY_7899.md` | Maintain free deterministic GitHub security controls, handle scanner findings through S21, and roll out Dependency Review safely through the merge queue. |
 | `GITHUB_CONNECTOR_APP.md` | Register the StudioOS GitHub App for the GitHub connector (D655), put its Client ID and secret in production, check, rotate and remove them, and troubleshoot a failed connect. |
 | `TICKET_GITHUB_SYNC.md` | Recover support tickets that were saved in D1 but never reached GitHub. |
 | `TELEGRAM.md` | Set up the Telegram Business interview bot, check it on a real phone, rotate its secrets and switch it off (D756). |
