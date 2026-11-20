@@ -1,5 +1,6 @@
 /** D5567: unmounted broker security gate, one-use audience grants and tenant-bound artifact encryption. */
 import { z } from 'zod';
+import { containmentEligibility, containmentRefusal, type ContainmentEvidence } from './workspaceContainment';
 import { executorEligibility, trustedWorkspaceSpec, workspaceRefusal, workspaceReference,
   type ExecutorCapabilities, type WorkspaceResult, type WorkspaceSpec } from './workspaceSpec';
 
@@ -8,7 +9,7 @@ export type WorkspaceAudience = typeof WORKSPACE_AUDIENCES[number];
 export type WorkspaceSponsor = { member_id: number; tenant_id: number; company_id: number; project_id: number | null };
 type Authorization = { allowed: boolean; revision: number; approved: boolean };
 export type WorkspaceImageEvidence = { digest: string; signature_verified: boolean; provenance_verified: boolean; sbom_verified: boolean; scan_passed: boolean; revoked: boolean };
-export type WorkspaceProviderEvidence = { capabilities: ExecutorCapabilities; non_root: boolean; no_new_privileges: boolean; immutable_image: boolean;
+export type WorkspaceProviderEvidence = { containment: ContainmentEvidence | null; capabilities: ExecutorCapabilities; non_root: boolean; no_new_privileges: boolean; immutable_image: boolean;
   ephemeral_scratch: boolean; resource_limits: boolean; host_socket: boolean; privileged: boolean;
   isolation: 'microvm' | 'gvisor' | 'container' | 'unknown'; network_connect_fence: boolean; metadata_denied: boolean };
 export type WorkspaceObject = { ref: string; tenant_id: number; company_id: number; project_id: number | null; run_id: string;
@@ -89,6 +90,8 @@ export function createWorkspaceSecurity(deps: WorkspaceSecurityDeps) {
     if (!provider || provider.non_root !== true || provider.no_new_privileges !== true || provider.immutable_image !== true || provider.ephemeral_scratch !== true || provider.resource_limits !== true
       || provider.host_socket !== false || provider.privileged !== false || provider.metadata_denied !== true || provider.network_connect_fence !== true) return refuse('provider_security_denied', 403);
     if (spec.workload_class === 'coding_untrusted' && !['microvm', 'gvisor'].includes(provider.isolation)) return refuse('hostile_workload_denied', 403);
+    const containment = containmentEligibility(spec, provider.capabilities.provider, provider.containment, { now: now() });
+    if (!containment.eligible) return containmentRefusal(containment)!;
     const caps = executorEligibility(spec, provider.capabilities);
     return caps.ok ? { ok: true, value: true } : caps;
   }

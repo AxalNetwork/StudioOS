@@ -1,3 +1,4 @@
+import { containmentFixture } from './_containment_fixture_5567.ts';
 /** D5567: synthetic broker identities, actual WebCrypto grants/encryption and atomic refusal paths; no provider calls. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +20,7 @@ async function fixture(factory = createWorkspaceSecurity) {
   const flags = { enabled: true, halted: false, allowed: true, revision: 1, approved: false, keyAvailable: true };
   const image: WorkspaceImageEvidence = { digest: spec.image_digest, signature_verified: true, provenance_verified: true, sbom_verified: true, scan_passed: true, revoked: false };
   const provider: WorkspaceProviderEvidence = { capabilities: fakeCapabilities(), non_root: true, no_new_privileges: true, immutable_image: true, ephemeral_scratch: true,
-    resource_limits: true, host_socket: false, privileged: false, isolation: 'microvm', network_connect_fence: true, metadata_denied: true };
+    resource_limits: true, host_socket: false, privileged: false, isolation: 'microvm', network_connect_fence: true, metadata_denied: true, containment: containmentFixture(now) };
   const object: WorkspaceObject = { ref: 'object-synthetic', tenant_id: spec.tenant_id, company_id: spec.company_id, project_id: spec.project_id,
     run_id: spec.run_id, execution_generation: 1, sink_ref: spec.artifact_sink_ref, region: 'weur', approved_restore_regions: [], key_id: 'key-synthetic', expires_at: 120000 };
   const objects = new Map([[object.ref, object]]);
@@ -182,6 +183,7 @@ test('security mutations must fail one-use, sponsor, provenance, halt and object
   const dir = mkdtempSync(join(tmpdir(), 'workspace-security-5567-'));
   let source = readFileSync(new URL('../src/services/agents/workspaceSecurity.ts', import.meta.url), 'utf8');
   source = source.replace("'zod'", JSON.stringify(new URL('../node_modules/zod/index.js', import.meta.url).href))
+    .replace("'./workspaceContainment'", JSON.stringify(new URL('../src/services/agents/workspaceContainment.ts', import.meta.url).href))
     .replace("'./workspaceSpec'", JSON.stringify(new URL('../src/services/agents/workspaceSpec.ts', import.meta.url).href));
   const changes: [string, string, string, (factory: typeof createWorkspaceSecurity) => Promise<void>][] = [
     ['nonce replay', 'nonce.used || ', '', async factory => { const f = await fixture(factory); await f.register(); const token = await f.issue(); value(await f.security.redeem(token, f.target())); denied(await f.security.redeem(token, f.target())); }],
@@ -198,4 +200,19 @@ test('security mutations must fail one-use, sponsor, provenance, halt and object
       await assert.rejects(journey(broken), 'must kill ' + label);
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test('broker requires trusted current containment on admission, grant issue and redemption', async () => {
+ const f=await fixture();const evidence=structuredClone(f.provider.containment!);
+ for(const bad of [null,undefined,{}, {...evidence,source:'runner_report'}, {...evidence,provider:'aws'}, {...evidence,verified_at:1001}, {...evidence,localhost_blocked:false}, {...evidence,guest:{...evidence.guest,secret_bindings:true}}]){
+  f.provider.containment=bad as any;assert.equal((await f.security.register(f.spec,f.sponsor)).ok,false);assert.equal(f.inspect().size,0);
+ }
+ f.provider.containment=structuredClone(evidence);await f.register();
+ const token=await f.issue();f.provider.containment=null;
+ assert.equal((await f.security.issue(f.target())).ok,false);
+ assert.equal((await f.security.redeem(token,f.target())).ok,false);
+ f.provider.containment=evidence;value(await f.security.redeem(token,f.target()));
+ const late=await f.issue();f.time(86401001);assert.equal((await f.security.eligibility(f.spec)).ok,false);
+ assert.equal((await f.security.redeem(late,f.target())).ok,false);
 });
