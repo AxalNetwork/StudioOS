@@ -61,6 +61,7 @@ export function prepareOwned(paths) {
   need(!lstatIfPresent(paths.temp)?.isSymbolicLink(), 'unsafe_owned_directory');
   mkdirSync(paths.temp, { recursive: true, mode: 0o700 });
   mkdirSync(join(paths.temp, 'tmp'), { recursive: true, mode: 0o700 });
+  mkdirSync(join(paths.temp, 'home'), { recursive: true, mode: 0o700 });
   writeFileSync(join(paths.temp, '.runner-owner'), paths.suffix, { mode: 0o600 });
 }
 function lstatIfPresent(path) { try { return lstatSync(path); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } }
@@ -87,7 +88,10 @@ export function originalTestContext(admitted, paths, baseEnv = process.env) {
   if (admitted.originalEvent === 'merge_group') need(SHA.test(admitted.queueBaseSha), 'missing_queue_base');
   const eventPath = join(paths.temp, 'original-event.json');
   writeFileSync(eventPath, JSON.stringify(event), { mode: 0o600 });
-  return { ...baseEnv, GITHUB_EVENT_NAME: admitted.originalEvent, GITHUB_EVENT_PATH: eventPath,
+  // An allowlist prevents ambient job/OIDC/provider tokens reaching test code.
+  // This is defense in depth; verified OS isolation is a separate admission gate.
+  const runtimeEnv=Object.fromEntries(['PATH','CI','LANG','LC_ALL','TZ','NODE_EXTRA_CA_CERTS'].filter(key=>typeof baseEnv[key]==='string').map(key=>[key,baseEnv[key]]));
+  return { ...runtimeEnv, HOME: join(paths.temp, 'home'), GITHUB_EVENT_NAME: admitted.originalEvent, GITHUB_EVENT_PATH: eventPath,
     GITHUB_SHA: admitted.sourceSha, GITHUB_REF: admitted.sourceRef, GITHUB_RUN_ID: String(admitted.originalRunId), GITHUB_RUN_ATTEMPT: String(admitted.originalAttempt),
     TEST_TRACE_DIR: join(paths.temp, 'test-traces'), TEST_TRACE_ROOT: paths.source, TMPDIR: join(paths.temp, 'tmp') };
 }

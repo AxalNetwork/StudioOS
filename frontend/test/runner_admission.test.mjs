@@ -27,7 +27,7 @@ function fixture(event='push'){
  const context={repository:REPO,executorSha:EXEC,childRunId:202,childAttempt:1};
  const calls=[];let reads=0;
  const profile={id:'hosted',platform:'linux',arch:'x64',target:'ubuntu-latest',nodeVersion:'22.16.0',pythonVersion:'3.11.11',eligibleShards:Array.from({length:6},(_,i)=>`worker-${i+1}-of-6`)};
- const deps={api:async(method,path)=>{assert.equal(method,'GET');calls.push(path);assert.ok(map.has(path),'unexpected API read '+path);return clone(map.get(path));},readReceipt:async()=>{reads++;return{active:true,receipt:clone(receipt)};},resolveProfile:async()=>clone(profile),context,now:()=>NOW};
+ const deps={verifyIsolation:async()=>true,api:async(method,path)=>{assert.equal(method,'GET');calls.push(path);assert.ok(map.has(path),'unexpected API read '+path);return clone(map.get(path));},readReceipt:async()=>{reads++;return{active:true,receipt:clone(receipt)};},resolveProfile:async()=>clone(profile),context,now:()=>NOW};
  return{receipt,parent,child,map,request,context,deps,calls,profile,reads:()=>reads};
 }
 const admit=f=>admitRunnerJob(f.request,f.deps);
@@ -101,4 +101,9 @@ test('a later main-only dispatch wrapper can use the published callee SHA withou
  f.map.set(PREFIX+'/actions/workflows/runner-dispatch.yml',{id:99,path:f.child.path,state:'active'});
  assert.equal((await admit(f)).allowed,true);
  f.context.childWorkflowPath='.github/workflows/unselected.yml';assert.equal((await admit(f)).allowed,false);
+});
+
+test('an isolation claim in request data cannot replace independent job-identity isolation verification',async()=>{
+ const missing=fixture();delete missing.deps.verifyIsolation;missing.request.isolationVerified=true;assert.equal((await admit(missing)).reason,'execution_isolation_unconfigured');
+ const unsafe=fixture();unsafe.deps.verifyIsolation=async()=>false;assert.equal((await admit(unsafe)).reason,'execution_isolation_unverified');assert.equal(unsafe.calls.length,0);
 });

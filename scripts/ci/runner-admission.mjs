@@ -182,7 +182,7 @@ async function proveQueue(get, prefix, input, parent, repoId) {
 }
 
 /** Unknown transport, unavailable evidence, revoked leases and any provenance mismatch deny before candidate checkout. */
-export async function admitRunnerJob(request,{api,readReceipt,resolveProfile,context,now=Date.now,phase='start',signal}={}){
+export async function admitRunnerJob(request,{api,readReceipt,resolveProfile,verifyIsolation,context,now=Date.now,phase='start',signal}={}){
  const denied={allowed:false,reason:'admission_not_completed'};
  try{
   requireThat(phase==='start'||phase==='execute','invalid_admission_phase');
@@ -194,6 +194,10 @@ export async function admitRunnerJob(request,{api,readReceipt,resolveProfile,con
   const receipt=validateReceipt(await readReceipt({request,context,phase,signal}),request,context,now(),phase);
   const identity=receiptIdentity(receipt),profile=await resolveProfile(receipt.profile);
   const target=executionTarget(profile);
+  // This trusted adapter must verify isolation for dependency installation AND tests,
+  // including denial of access to the runner agent and its job/OIDC credentials.
+  requireThat(typeof verifyIsolation==='function','execution_isolation_unconfigured');
+  requireThat(await verifyIsolation({receipt,context,profile,phase,signal})===true,'execution_isolation_unverified');
   requireThat(profile?.id===receipt.profile&&profile.eligibleShards?.includes(receipt.logicalShard),'profile_not_verified_for_shard');
   let calls=0;
   const get=async path=>{requireThat(!signal?.aborted,'admission_cancelled');requireThat(++calls<=ADMISSION_LIMITS.apiCalls,'admission_api_limit');return api('GET',path,undefined,{signal});};
