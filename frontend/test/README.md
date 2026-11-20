@@ -237,3 +237,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
 `company_source_7810.test.mjs` checks stored publisher provenance and explicit unreviewed licence terms (D7810).
+`build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
