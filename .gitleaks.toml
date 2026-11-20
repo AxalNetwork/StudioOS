@@ -1,7 +1,7 @@
 # Gitleaks config for AxalNetwork/StudioOS.
 # Inherits the upstream default ruleset (covers AWS, GCP, Stripe, JWT,
-# private keys, generic high-entropy, etc.) and layers project-specific
-# allowlists on top.
+# private keys, generic high-entropy, etc.) and adds project-specific
+# credential detection and narrowly scoped allowlists.
 #
 # Only ALLOWLIST things that are demonstrably non-secret:
 #   - example values in .env.example / .env.sample
@@ -15,6 +15,18 @@
 
 [extend]
 useDefault = true
+
+# D7899: apiKeys.ts mints this complete member API bearer. The public
+# axk_<key_id> prefix and the documented placeholder carry no secret and do
+# not match. Match the complete token even outside an assignment, without
+# depending on a generic keyword or entropy heuristic. Delimiters prevent
+# matching a valid-looking substring of a longer identifier.
+[[rules]]
+id = "axal-member-api-key"
+description = "Axal member API bearer"
+regex = '''(?:^|[^A-Za-z0-9_-])(axk_[a-z0-9]{12}_[A-Za-z0-9_-]{43})(?:$|[^A-Za-z0-9_-])'''
+secretGroup = 1
+keywords = ["axk_"]
 
 [allowlist]
 description = "Project-wide allowlist for known false positives"
@@ -67,8 +79,6 @@ regexes = [
 
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',
-  # Known synthetic test JWTs (signed with the literal "test" key).
-  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+''',
   # Bundler-emitted Symbol.keyFor reference — false positive on generic-api-key.
   '''(?i)Symbol2?\.keyFor''',
   # Application-level identifier names that gitleaks' generic-api-key

@@ -112,6 +112,11 @@
       "channel": "#axalvc-actions-deck-visual"
     },
     {
+      "id": null,
+      "path": ".github/workflows/dependency-review.yml",
+      "channel": "#axalvc-actions-dependency-review"
+    },
+    {
       "id": 280437837,
       "path": ".github/workflows/dr-drill.yml",
       "channel": "#axalvc-actions-dr-drill"
@@ -240,6 +245,11 @@
       "id": 366792790,
       "path": ".github/workflows/migration-immutability.yml",
       "channel": "#axalvc-actions-migration-immutability"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/ossf-scorecard.yml",
+      "channel": "#axalvc-actions-ossf-scorecard"
     },
     {
       "id": 295717983,

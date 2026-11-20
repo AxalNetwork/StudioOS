@@ -33,8 +33,8 @@ concurrency:
 # UPLOADS ONLY WHERE CODE SCANNING TAKES THEM (D721). D672 stopped the
 # upload while the repository was private and code scanning needed GitHub
 # Code Security, which was off; D718 put it back once the repository was
-# public, where code scanning is free and Copilot Autofix can propose a fix
-# per alert. The `visibility` job below now decides on every run, so a
+# public, where code scanning is free. Alerts feed the non-AI S21 tracker
+# reconciliation (D7899). The `visibility` job decides on every run, so a
 # change of visibility no longer turns this check red.
 # The SARIF is still written to codeql-results/, and the report step still
 # lists the findings in the job summary, because the agents that fix them
