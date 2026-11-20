@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional, List, Tuple, Dict
+from backend.app.services.log_safe import log_safe
 
 logger = logging.getLogger("studioos.email")
 
@@ -151,7 +152,7 @@ def _send_html_email(
     """Low-level Gmail API send. Returns True on success, False on failure
     (logged). Caller is responsible for rate-limit and activity-log."""
     if not _is_gmail_configured():
-        logger.warning("Gmail not configured; would have sent to %s subject=%r", to_email, subject)
+        logger.warning("Gmail not configured; would have sent to %s subject=%r", log_safe(to_email), log_safe(subject))
         return False
     try:
         service = _get_gmail_service()
@@ -168,7 +169,7 @@ def _send_html_email(
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
         return True
     except Exception as e:
-        logger.exception("Gmail send failed to=%s subject=%r err=%s", to_email, subject, e)
+        logger.exception("Gmail send failed to=%s subject=%r err=%s", log_safe(to_email), log_safe(subject), log_safe(e))
         return False
 
 
@@ -404,7 +405,8 @@ def _escape_html(s: str) -> str:
 
 def _strip_html(s: str) -> str:
     import re
-    return re.sub(r"<[^>]+>", "", s or "").strip()
+    # `[^<>]` stops each attempt at the next "<", so a run of "<" is linear.
+    return re.sub(r"<[^<>]+>", "", s or "").strip()
 
 
 def is_email_configured() -> bool:

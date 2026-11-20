@@ -12,6 +12,7 @@ from backend.app.api.deps import require_role, ensure_founder_access, is_privile
 from backend.app.services.access_policy import require_contract_view
 from datetime import datetime, date
 import time
+from backend.app.services.log_safe import log_safe
 
 logger = logging.getLogger(__name__)
 
@@ -2805,7 +2806,7 @@ async def upload_83b_receipt(
         placeholder_uid = str(_uuid.uuid4())
         obj = store_contract_bytes(placeholder_uid, data, content_type)
     except Exception as exc:
-        logger.exception("83b receipt storage failed for tracker %s", tracker_id)
+        logger.exception("83b receipt storage failed for tracker %s", log_safe(tracker_id))
         raise HTTPException(status_code=502, detail="Receipt storage failed; please retry.") from exc
 
     doc = Document(

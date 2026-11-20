@@ -34,6 +34,7 @@ import { ensureCompetitorSchema } from './competitorSchema';
 import type { AnalysisInputs } from './competitorAnalysis';
 import { FINDING_KINDS, isFindingKind } from './interviewFindings';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
+import { putRecordOrThrow } from './recordStore';
 
 /**
  * A refusal a route can return as-is. `sentence` is always one this file
@@ -322,7 +323,7 @@ export async function writeDemandSignal(env: Env, input: DemandSignalInput): Pro
   // D690 (#1692) — "pre-sales and letters of intent only" (CO:309): a
   // need-to-have mention or a waitlist sign-up names no amount.
   if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) {
-    throw new WriterError(400, 'An amount is for pre-sales and letters of intent only');
+    throw new WriterError(400, 'Waitlist and need-to-have signals do not carry amounts');
   }
   const currency = amount != null ? (String(input.currency ?? 'usd').trim().toLowerCase() || 'usd') : null;
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');
@@ -1292,7 +1293,7 @@ export async function updateDemandSignal(
     if (!Number.isInteger(n) || n <= 0) throw new WriterError(400, 'amount_cents must be a positive whole number, or omitted');
     amount = n;
   }
-  if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) throw new WriterError(400, 'An amount is for pre-sales and letters of intent only');
+  if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) throw new WriterError(400, 'Waitlist and need-to-have signals do not carry amounts');
   const currency = amount == null ? null
     : (String(input.currency === undefined ? (row.currency ?? 'usd') : (input.currency ?? 'usd')).trim().toLowerCase() || 'usd');
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');
@@ -1358,7 +1359,8 @@ export async function attachDemandEvidence(
     fileName = String(input.file.name || `evidence.${ext}`).replace(/[\r\n"]/g, '').slice(0, 200) || `evidence.${ext}`;
     // D1170 — Validate evidence counts to the venture's owner (D1169 §1).
     storage = await assertStorageRoom(env, { projectId: input.projectId }, input.file.size, input.userId == null ? null : { id: input.userId });
-    await env.FILES.put(key, await input.file.arrayBuffer(), { httpMetadata: { contentType: mime }, customMetadata: { project_id: String(input.projectId) } });
+    // D6651: evidence is a record, written once under a fresh key; a replacement points the row at the newest key.
+    await putRecordOrThrow(env.FILES, key, await input.file.arrayBuffer(), { httpMetadata: { contentType: mime }, customMetadata: { project_id: String(input.projectId) } });
   }
   const stmts = [];
   if (key) stmts.push(env.DB.prepare("UPDATE demand_signals SET evidence_file_key = ?, evidence_file_name = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
@@ -1371,9 +1373,7 @@ export async function attachDemandEvidence(
   }));
   await env.DB.batch(stmts);
   if (storage) await noteStorageLanded(env, storage);
-  if (key && row.evidence_file_key && row.evidence_file_key.startsWith(EVIDENCE_PREFIX)) {
-    try { await env.FILES?.delete(row.evidence_file_key); } catch (e) { console.warn('[validateWriters] old evidence not deleted:', (e as Error)?.message); }
-  }
+  // D6651: the replaced evidence file is a record and is kept; the row now points at the newest key.
   return { id: input.signalId, file_name: fileName };
 }
 

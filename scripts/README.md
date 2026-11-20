@@ -102,6 +102,7 @@ represents a bug that reached production once:
 | `release-rollback-class.mjs` | D7151: report-only release step that records, before any write, whether the release could be rolled back automatically (`auto`, `auto-additive`, `manual`), the reasons and the rollback target, into the release evidence and job summary. Always exits 0. Rules in `lib/rollbackClass.mjs`. |
 | `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
 | `check-decision-appends.mjs` | D6466 (#6466): a change that appends a section to a decision file already on its base. A `D<n>.md` or `D<n>-p<k>.md` there fails when it gains a `##`/`###` heading or more than 10 lines; it names the `D<n>-p<k>.md` to write instead (D5615). Typo and link fixes pass; a file the change creates passes. On a pull request it reads the merge commit's first parent, which a shallow checkout still names; a base it cannot resolve exits 2, never a pass; a push says it skipped. |
+| `ci/` | CI evidence, provider boundaries and verified tool acquisition; see its README. |
 
 ## The one rule that needed a linter
 
@@ -323,6 +324,7 @@ each row on its own mutation.
 | `remote-latency.mjs` | D1581 (#3828): the staging test that the phone remote advances Present within 300 ms. It pairs a deck, joins as the phone, and times each step from the request to the frame on Present's socket. It needs `STUDIOOS_BASE`, `STUDIOOS_TOKEN` and a deck id; exits 1 at 300 ms or more. Not in CI. |
 | `hub-freeze.json` | D5615: the sorted names each frozen hub held when the freeze landed, read by `lib/hubFreeze.mjs`. A name leaving a hub stays listed; never add one to let an entry in (`documentation/architecture/HUBS.md`). |
 | `pr-overlap.mjs` | D5616: bounded advisory open-PR overlap and real merge-tree conflict checks; `--dry-run` writes no comments. |
+| `landing-list.mjs` | D6469: the owner's landing list. Default: open non-draft PRs with every required check green on the head, tiered by `merge-policy.mjs`, T2 and model-changed (`bot:resolved`, `main-repair`) first, in the overlap report's order; `--history[=N]` reports the T0/T1/T2 share over the last N (300) merged PRs and the T2 rules matched most; `--sticky [--dry-run]` edits one sticky issue body in place (the hourly `pr-overlap.yml` step). Never labels, merges or queues. |
 
 D5676: `check-tail-archive.mjs` is an external authenticated metadata-only observer check; query/process fallback belongs to the shared independent monitor owner.
 
@@ -343,10 +345,15 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
 | `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |
 | `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory and classification/provenance guard; `--write` renders the generated, gitignored Markdown inventory beside the policy JSON. |
+| `check-record-writes.mjs` | D6651: fails on a put or delete of a `record` R2 prefix outside `cloudflare-worker/src/services/recordStore.ts` (writes) and `cloudflare-worker/src/services/recordErasure.ts` (deletes); baseline `record-writes-baseline.json` started empty. |
 
 | `file-recovery.py` | D6428: approved-class-only, lock-verified R2 snapshots and suppression-required restore primitive; live activation waits for counsel/#6650/#6654. |
 | `file-recovery-drill.py` | D6428: synthetic-only archive/source-loss/restore/suppression drill, with no provider access. |
 | `file_recovery_6428_test.py` | D6428: synthetic registry, lock duration, archive immutability, corruption, copy failure and suppression regressions. |
 | `report-incorporation-state.mjs` | #6684: read-only incorporation state by jurisdiction id (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals, ids outside the six, multi-paid projects, a US beneficial-ownership step); counts and yes/no only. |
+| `import-global-funds.py` | D7325: offline validator and duplicate-safe SQL generator for primary-source fund-manager research; `--check` verifies the committed migration. |
 
 | `local-files.mjs` | D7255: descriptor-bound regular file reads/edits and private, no-follow operator-state files; rejects symlinks and hard links before truncation. |
+
+| `file-recovery-independent.py` | D6653: encrypted independent snapshots, private run heartbeats and synthetic-only outside-preview restore proof. |
+| `file_recovery_6653_test.py` | D6653: fixtures for independent integrity, isolated credential roles, unconfigured skips and failure heartbeats. |

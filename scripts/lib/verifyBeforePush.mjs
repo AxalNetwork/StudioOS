@@ -11,6 +11,8 @@
  * Owned by `../verify-before-push.mjs`; tested in `verifyBeforePush.test.mjs`.
  */
 
+import { starGlobMatches } from './literalMatch.mjs';
+
 /** Paths whose change can affect any test: run everything. */
 const EVERYTHING = [
   /(?:^|\/)package(?:-lock)?\.json$/,
@@ -32,7 +34,7 @@ const AREA_RULES = [
   ['merge-control', /^merge-control\//],
   ['scripts', /^scripts\//],
   ['backend', /^backend\//],
-  ['prose', /^(?:documentation|design|attached_assets)\/|\.md$/],
+  ['prose', /(?:^(?:documentation|design|attached_assets)\/)|(?:\.md$)/],
   ['skills', /^\.claude\//],
 ];
 
@@ -70,10 +72,9 @@ const SHARD_AREAS = Object.freeze({
 const REST_ORDER = ['guards', 'types', 'types-frontend', 'lint-undef', 'dark-mode'];
 const LATE_ORDER = ['retention', 'meeting-bot', 'merge-control'];
 
-/** A glob of the shape package.json uses (`dir/*.test.mjs`) as a RegExp. */
+/** A glob of the shape package.json uses (`dir/*.test.mjs`) as a matcher with `test(path)`; see literalMatch.mjs. */
 export function globToRegExp(glob) {
-  const esc = glob.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*');
-  return new RegExp(`^${esc}$`);
+  return { test: (path) => starGlobMatches(glob, path) };
 }
 
 /** The runner prefix (`node ... --test `) and patterns of one package test script. */

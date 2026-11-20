@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton } from '../ui';
 import { accentLinkClass, zonePath } from './shellConfig';
@@ -85,6 +85,8 @@ export default function BucketBoard({ bucket, role = 'founder', board, className
   // they do under BucketOverview's grid.
   // #4830 (D4830): a board may name a `lead` component, which decides whether the sections show. The advisor's
   // Practice board leads with its setup checklist, which takes their place while a setup step is missing.
+  // D7516 (#7516): the lead is handed the board's source states too, so a lead that summarises them (Expertise's
+  // Next step and status strip) reads nothing twice; a lazy lead shows the sections until it has loaded.
   const Lead = board.lead || null;
   const grid = (
     <div className={`grid gap-3.5 md:grid-cols-2 ${className}`.trim()}>
@@ -114,7 +116,7 @@ export default function BucketBoard({ bucket, role = 'founder', board, className
   );
   return (
     <>
-    {Lead ? <Lead fallback={grid} /> : grid}
+    {Lead ? <Suspense fallback={grid}><Lead fallback={grid} sources={byKey} /></Suspense> : grid}
     <AlsoIn role={role} row={bucket.label} />
     </>
   );

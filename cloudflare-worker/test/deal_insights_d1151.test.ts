@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
 import insights from '../src/routes/deal_insights.ts';
+import { collectEvidenceSources } from '../src/services/raiseEvidenceSources.ts';
 import { ARCHETYPES } from '../src/services/archetypeScoring.ts';
 import { loadSchema } from './_schema_once.mjs';
 const secret = 'synthetic-d1151-only-'.repeat(3);
@@ -124,11 +125,11 @@ test('D1151: published team projection omits private/inactive/invited people and
     f.db.exec('INSERT INTO profile_archetype_publish(user_id,published) VALUES(2,0)');
     const result=await read(f,'/100/team');
     assert.deepEqual(result.body.people.data,[
-      {uid:f.db.prepare('SELECT uid FROM users WHERE id=2').get()!.uid,name:'Founder',role:'founder',prior_roles:[{title:'Builder',company:'Prior Co',start:'2020',end:null}],archetype:null,full_time_since:null,full_time_reason:'Not recorded',founder_market_fit:null,founder_market_fit_reason:'No published evidence recorded'},
-      {uid:f.db.prepare('SELECT uid FROM users WHERE id=7').get()!.uid,name:'Published hire',role:'engineer',prior_roles:[],archetype:null,full_time_since:null,full_time_reason:'Not recorded',founder_market_fit:null,founder_market_fit_reason:'No published evidence recorded'},
+      {uid:f.db.prepare('SELECT uid FROM users WHERE id=2').get()!.uid,name:'Founder',role:'founder',prior_roles:[{title:'Builder',company:'Prior Co',start:'2020',end:null}],archetype:null},
+      {uid:f.db.prepare('SELECT uid FROM users WHERE id=7').get()!.uid,name:'Published hire',role:'engineer',prior_roles:[],archetype:null},
     ]);
     assert.deepEqual(result.body.coverage.data.map((x:any)=>x.coverage_band),Array(8).fill(null));
-    assert.deepEqual(result.body.values_band,{ value:null,state:'not_recorded',reason:'No recorded consent to share a team values band' });
+    assert.deepEqual(result.body.values_band,{ value:null,state:'not_recorded',reason:'Every founder must have recorded consent to share a team values band. Consent is not recorded here yet.' });
     f.db.exec('UPDATE profile_archetype_publish SET published=1 WHERE user_id=2');
     assert.deepEqual((await read(f,'/100/team')).body.people.data[0].archetype,{slug:archetype.slug,label:archetype.label});
     f.db.prepare(`UPDATE users SET privacy_prefs='{"public_profile":{"name":false}}' WHERE id=7`).run();
@@ -219,5 +220,63 @@ test('D1151: traction requires explicit sharing and a source, preserves zero and
     assert.deepEqual((await read(f,'/100/traction',5)).body.history.data.flatMap((x:any)=>x.figures).map((x:any)=>x.value),[0]);
     f.db.exec('DROP TABLE portfolio_updates');
     assert.deepEqual((await read(f,'/100/traction')).body.history,{state:'unreadable',reason:'Unreadable. Try again.'});
+  } finally { f.db.close(); }
+});
+
+test('#6172: advisors are accepted active project members, counted by role without names', async () => {
+  const f = fixture();
+  try {
+    nda(f);
+    f.db.exec(`UPDATE project_members SET role='advisor' WHERE user_id IN (7,8,9);
+      INSERT INTO project_members(project_id,user_id,role,status) VALUES(20,4,'advisor','accepted');
+      UPDATE project_members SET role='advisor' WHERE user_id=6;`);
+    const result = await read(f, '/100/team');
+    assert.deepEqual(result.body.advisors, { state:'recorded', data:{
+      count:2, roles:[{role:'Advisor',count:2}], source:'Accepted project memberships'
+    }});
+    assert.deepEqual(result.body.people.data.map((p:any)=>p.name), ['Founder']);
+    assert.doesNotMatch(JSON.stringify(result.body), /Published hire|Private hire|Other founder/);
+    assert.equal(Object.hasOwn(result.body.people.data[0], 'full_time_since'), false);
+    f.db.exec("UPDATE project_members SET removed_at=datetime('now') WHERE user_id=7");
+    assert.equal((await read(f, '/100/team')).body.advisors.data.count, 1);
+    f.db.exec("DROP TABLE project_members");
+    const failed = await read(f, '/100/team');
+    assert.equal(failed.body.advisors.state, 'unreadable');
+    assert.equal(failed.body.values_band.value, null);
+    assert.match(failed.body.values_band.reason, /Every founder.*consent/);
+  } finally { f.db.close(); }
+});
+
+test('#6172: Team evidence uses current shared sources, withholds private pins and keeps the NDA mask', async () => {
+  const f = fixture();
+  try {
+    nda(f);
+    f.db.exec("INSERT INTO cap_table_holders(id,user_id,project_id,name,kind,shares,ownership_pct) VALUES(901,2,10,'Founder','founder',100,100)");
+    const sources = await collectEvidenceSources(f.env, 10, 2, new Date().toISOString(), ['founder-holding']);
+    const candidate = sources.candidates.find(c=>c.kind==='founder-holding')!;
+    assert.ok(candidate, JSON.stringify(sources.blocks));
+    f.db.prepare(`INSERT INTO raise_evidence_items(uid,project_id,area,kind,source_table,source_ref,source_label,strength,
+      observed_on,summary,snapshot_hash,accepted_by,updated_by,mutation_uid,state,visibility)
+      VALUES('team-shared',10,?,?,?,?,?,?,?,?,?,2,2,'6172-synthetic','pinned','after_nda')`).run(
+        candidate.area,candidate.kind,candidate.source_table,candidate.source_ref,candidate.source_label,candidate.strength,
+        candidate.observed_on,candidate.summary,candidate.snapshot_hash);
+    const shared = (await read(f,'/100/team')).body.founder_market_fit;
+    assert.equal(shared.state, 'recorded');
+    assert.equal(shared.data.groups.length, 1);
+    assert.deepEqual([shared.data.groups[0].kind,shared.data.groups[0].count,shared.data.groups[0].source_label],
+      ['founder-holding',1,candidate.source_label]);
+    assert.doesNotMatch(JSON.stringify(shared), /snapshot_hash|source_ref|ownership_pct|shares/);
+    f.db.exec("UPDATE raise_evidence_items SET visibility='private' WHERE uid='team-shared'");
+    assert.deepEqual((await read(f,'/100/team')).body.founder_market_fit.data.groups, []);
+    f.db.exec("UPDATE raise_evidence_items SET visibility='after_nda' WHERE uid='team-shared'; UPDATE cap_table_holders SET shares=200 WHERE id=901");
+    assert.deepEqual((await read(f,'/100/team')).body.founder_market_fit.data.groups, []);
+    f.db.exec("DELETE FROM pairwise_ndas");
+    const masked = await read(f,'/100/team');
+    assert.deepEqual(Object.keys(masked.body).sort(), ['masked','project','reason']);
+    nda(f);
+    f.db.exec('DROP TABLE raise_evidence_items');
+    const failed = await read(f,'/100/team');
+    assert.equal(failed.body.founder_market_fit.state, 'unreadable');
+    assert.equal(failed.body.advisors.state, 'recorded');
   } finally { f.db.close(); }
 });

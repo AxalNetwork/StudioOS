@@ -28,12 +28,13 @@ import { agentQuote } from './agentRun';
 import { canManage, canRead, effectiveBook, monthSpend, scopeOfAgent, type AgentRow, type Scope } from './teams';
 import { fromSql, sqlTime, type DutyRow } from './duties';
 import type { Refusal } from './goals';
+import { roomReaderRole } from './reads';
 
 export const INSTRUCTION_MAX = 1000;
 export const SESSIONS_PER_AGENT_MAX = 20;
 export const TARGET_KINDS = ['module', 'deck', 'meeting', 'deal', 'document'] as const;
 /** The record kinds a session can work on today: the ones whose read gate this file can check. */
-export const CHECKED_TARGETS = ['module', 'deck'] as const;
+export const CHECKED_TARGETS = ['module', 'deck', 'document'] as const;
 /** The screen's weekday names; agent_duties stores 0 = Sunday … 6 = Saturday. */
 export const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
@@ -171,6 +172,15 @@ export async function targetReadable(env: Env, a: AgentRow, s: Scope, target: { 
       : ((await env.DB.prepare('SELECT id FROM projects WHERE company_id = ?').bind(s.id).all<{ id: number }>()).results ?? []).map((p) => Number(p.id));
     const deck = await env.DB.prepare('SELECT id, project_id, title FROM pitch_decks WHERE id = ?').bind(Number(target.id)).first<{ id: number; project_id: number; title: string | null }>();
     return deck && projectIds.includes(Number(deck.project_id)) ? { title: deck.title || 'Pitch deck', href: `/raise/pitch?deck=${deck.id}` } : null;
+  }
+  if (target.kind === 'document') {
+    // D4667-p3: one live file of a data room in this scope, which the sponsor reads whole by the room's own rule.
+    if (!/^[a-f0-9]{32}$/.test(target.id)) return null;
+    const file = await env.DB.prepare(
+      `SELECT f.name, f.project_id FROM data_room_files f JOIN projects p ON p.id = f.project_id
+        WHERE f.uid = ? AND f.removed_at IS NULL AND ((? = 'project' AND p.id = ?) OR (? = 'company' AND p.company_id = ?))`,
+    ).bind(target.id, s.kind, s.id, s.kind, s.id).first<{ name: string; project_id: number }>();
+    return file && await roomReaderRole(env, Number(a.sponsor_user_id), Number(file.project_id)) ? { title: file.name, href: null } : null;
   }
   return null;
 }

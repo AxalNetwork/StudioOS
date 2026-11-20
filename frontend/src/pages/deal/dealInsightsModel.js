@@ -109,10 +109,6 @@ export function personView(p) {
     role: roleWord(p.role),
     archetype: p.archetype?.label || null,
     roles,
-    fullTime: p.full_time_since ? dateText(p.full_time_since) : null,
-    fullTimeReason: p.full_time_reason || NOT_RECORDED,
-    fit: p.founder_market_fit || null,
-    fitReason: p.founder_market_fit_reason || NOT_RECORDED,
   };
 }
 
@@ -310,9 +306,6 @@ export const EVIDENCE_LINK = Object.freeze({
   line: 'What the founder shared with you, with each item’s source and date, is on the Evidence tab.',
   act: 'Open the Evidence tab',
 });
-
-/** Words for the team values band, advisors and geography the read holds no figure for. */
-export const ADVISORS_LINE = 'No advisor count is read for this deal yet.';
 
 
 /** D6177 (#6177): each chart names its sources and each source's newest recorded as-of. */

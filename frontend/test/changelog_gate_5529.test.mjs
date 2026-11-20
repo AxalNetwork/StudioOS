@@ -49,7 +49,7 @@ test('uses the event head with complete history and an unavailable remote', t =>
   assert.match(clean.stdout, /does not touch/);
   const refused = gate(root, base, edited);
   assert.equal(refused.status, 1, refused.stderr);
-  assert.match(refused.stderr, new RegExp(`git restore --source=${base}`));
+  assert.ok(refused.stderr.includes(`git restore --source=${base}`), refused.stderr);
   const allowed = gate(root, base, edited, true);
   assert.equal(allowed.status, 0, allowed.stderr);
   assert.match(allowed.stdout, /carries the/);
@@ -79,7 +79,7 @@ test('recovers exact event commits and common ancestry from a shallow checkout',
   assert.equal(git(checkout, 'rev-parse', '--is-shallow-repository'), 'true');
   const verdict = gate(checkout, divergedBase, edited);
   assert.equal(verdict.status, 1, verdict.stderr);
-  assert.match(verdict.stderr, new RegExp(`git restore --source=${base}`));
+  assert.ok(verdict.stderr.includes(`git restore --source=${base}`), verdict.stderr);
   assert.equal(git(checkout, 'rev-parse', '--is-shallow-repository'), 'false');
 });
 

@@ -27,6 +27,7 @@ import {
   ACCESS_CLASSES, sha256Hex, validateWorkGraph,
   type AccessClass, type Actor, type Scope, type SourceRef, type ValidationContext,
 } from './workGraphContracts';
+import { putContentAddressedRecord } from './recordStore';
 
 export const BLOB_BINDING = 'FILES' as const;
 export const BLOB_PREFIX = 'wg/v1';
@@ -298,7 +299,8 @@ export async function putVerified(
   let written: R2Object | null;
   try {
     // R2 computes SHA-256 over what it received and refuses the put when it is not `digest`: a torn body never lands.
-    written = await bucket.put(key, bytes, { sha256: digest, customMetadata: metadata, httpMetadata: { contentType: 'application/octet-stream' } });
+    // D6651: the one content-addressed record write — it can only ever store the bytes the key names.
+    written = await putContentAddressedRecord(bucket, key, bytes, digest, { customMetadata: metadata, httpMetadata: { contentType: 'application/octet-stream' } });
   } catch {
     s.cost.r2ClassA++;
     return s.refuse('digest_mismatch', [digest, 'put_refused'], evd);
@@ -313,9 +315,8 @@ export async function putVerified(
       'SELECT COUNT(*) AS n FROM work_graph_blobs WHERE tenant_id = ? AND company_id = ? AND digest = ? AND deleted_at IS NULL',
     ).bind(input.scope.tenantId, input.scope.companyId, digest));
     if (Number(row?.n ?? 0) === 0) {
-      // Another put of this tenant took the last bytes between the read and the record: undo ours, unless the object
-      // was there before this call (revisions may point at it; a corrupt one was just repaired, not added).
-      if (!existing) { await bucket.delete(key); s.cost.r2ClassA++; }
+      // Another put of this tenant took the last bytes between the read and the record. D6651: the object is a
+      // record and is not deleted here; with no row and no revision naming it, reconciliation collects it as an orphan.
       return s.refuse('tenant_limit', [String(limits.maxBytesPerTenant)], { ...evd, action: 'limit_refused' });
     }
     // The same bytes were recorded by a concurrent put of this company: this call reused them.

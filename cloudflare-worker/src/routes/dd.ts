@@ -34,6 +34,7 @@ import { encryptBytes, decryptBytes } from '../services/cryptoBox';
 import { DOWNLOAD_TTL_MS, REMINDER_GAP_MS, dueDateOf, markRequestAnsweredByFile, tokenHash } from '../services/ddRequests';
 import { createIcRecordForCase, icRecordForCase, caseSentToIc } from './ic';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { putRecord } from '../services/recordStore';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -157,7 +158,7 @@ export function caseAllowed(
   };
 }
 
-async function requireDdReader(c: AppContext): Promise<AppUser> {
+export async function requireDdReader(c: AppContext): Promise<AppUser> {
   const user = await requireAuth(c);
   // D4472: founder-only accounts cannot read diligence. An independently
   // held Investor, Advisor or Operating Partner licence admits the caller;
@@ -1192,7 +1193,7 @@ dd.get('/cases/:uid/findings/:id/history', async (c) => {
 /** The user the case is ABOUT: project → owning founder user; every
  *  other subject_type stores a users.id directly in subject_id (see
  *  partnerDeals.activatePartnerDealOnSignature + /report/share). */
-async function resolveSubjectUserId(env: Env, cs: Record<string, unknown>): Promise<number | null> {
+export async function resolveSubjectUserId(env: Env, cs: Record<string, unknown>): Promise<number | null> {
   if (cs.subject_type === 'project') {
     const sql = getSQL(env);
     try {
@@ -1832,7 +1833,8 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     const storage = c.env.FILES ? await assertStorageRoom(c.env, { userId: user.id }, size, user) : null;
     if (c.env.FILES) {
       storageKey = `dd-ndas/${caseId}/${sectionId}/${Date.now()}-${genUid().slice(0, 8)}-${filename}`;
-      try { await c.env.FILES.put(storageKey, buf, { httpMetadata: { contentType: mime } }); }
+      // D6651: a diligence NDA is a record, written once.
+      try { const stored = await putRecord(c.env.FILES, storageKey, buf, { httpMetadata: { contentType: mime } }); if (!stored.ok) throw new Error('record_exists'); }
       catch (e) {
         console.warn('[dd] NDA R2 put failed:', (e as Error).message);
         storageKey = `inline:failed:${genUid()}`;
@@ -1901,7 +1903,9 @@ dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
     const key = `dd-evidence/${caseId}/${item.section_id}/${uid}`;
     // D1170 — a diligence upload counts to its uploader (D1169 §1).
     const storage = await assertStorageRoom(c.env, { userId: user.id }, buf.byteLength, user);
-    await c.env.FILES.put(key, buf, { httpMetadata: { contentType: mime } });
+    // D6651: diligence evidence is a record, written once.
+    const stored = await putRecord(c.env.FILES, key, buf, { httpMetadata: { contentType: mime } });
+    if (!stored.ok) return c.json({ error: 'This evidence file is already stored.', code: 'record_exists' }, 409);
     const attachment = await c.env.DB.prepare(
       `INSERT INTO dd_attachments (case_id, section_id, file_key, filename, mime_type, size_bytes, uploaded_by_user_id)
        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
@@ -2035,7 +2039,7 @@ dd.get('/documents/dl/:token', async (c) => {
 
 const LEAD_ROLES = new Set(['admin', 'partner', 'investor']);
 const MEMO_FIELDS = ['summary', 'verified', 'on_trust', 'conditions'] as const;
-const MEMO_MAX = 8000;
+export const MEMO_MAX = 8000;
 const REASON_MAX = 2000;
 
 function isDay(v: string): boolean {

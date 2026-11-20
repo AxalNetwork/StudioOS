@@ -73,6 +73,7 @@ const MODE = process.argv.includes('--write') ? 'write' : process.argv.includes(
 // it then demands is the point.
 const DOCUMENTED = new Map([
   ['frontend/src/pages/relationships', 'relationship intelligence, consent pickers and introduction records'],
+  ['cloudflare-worker/src/services/eventSyndication', 'event syndication (D1490): the channel registry, eligibility, triggers, the job and the adapters'],
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
   ['cloudflare-worker/src/agents', 'the agent engine runtime (D1528): the seam, the AgentScope object, the task Workflow, the agent queue and the sweep'],
   ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],
@@ -117,6 +118,7 @@ const DOCUMENTED = new Map([
   ['scripts',                         'build, deploy and the CI guards'],
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
+  ['scripts/ci',                      'CI evidence, provider boundaries and verified tool acquisition'],
   ['scripts/landing-bot',             'pull request admission, queue requests and bot safeguards'],
   ['scripts/landing-bot/model',       'the landing bot\'s model runner: task caps, edit tools, provider order, patch checks'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
@@ -206,6 +208,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
   ['frontend/src/pages/partner/offers',       'the partner Offers bucket’s zones and the pure rules they read (#4688, D4842, D4843)'],
   ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],
+  ['frontend/src/pages/investor/fund',         'Axal VC Fund workspace sections and navigation (D6130)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/portfolio',            'the Portfolio v2 frame, its shared parts and models, the company workspace and the Admin Investor preview (D4817)'],
   ['frontend/src/pages/incorporate',          'Incorporate: the formation flow, its review quote, the bank step, Done and HQ\'s read-only frame'],
