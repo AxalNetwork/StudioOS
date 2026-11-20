@@ -53,20 +53,6 @@ jobs:
               "$(sw_vers -productVersion)" "$(sysctl -n hw.logicalcpu)" "$(sysctl -n hw.memsize)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Check out the pinned main commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: c6d0d48a984847a2b14325c82e9616da4c3dfdcf
-          path: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Set up Node 22
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: '22'
-          package-manager-cache: false
-
       - name: Set up the portable Python installer
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
@@ -81,20 +67,30 @@ jobs:
           "$python_path" -c 'import platform, sqlite3, sys; assert sys.version_info[:2] == (3, 11); assert platform.machine() == "arm64"; print("Portable Python:", sys.version.split()[0])'
           printf '%s\n' "$(dirname "$python_path")" >> "$GITHUB_PATH"
 
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
       - name: Verify the runtime and SQLite
-        working-directory: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           node --input-type=module -e '
+            import assert from "node:assert/strict";
             import { availableParallelism } from "node:os";
             import { DatabaseSync } from "node:sqlite";
-            if (process.platform !== "darwin" || process.arch !== "arm64" || process.versions.node.split(".")[0] !== "22") process.exit(1);
+            console.log("Node runtime:", { version: process.version, platform: process.platform, arch: process.arch, executable: process.execPath });
+            assert.equal(process.platform, "darwin", "Expected native macOS Node");
+            assert.equal(process.arch, "arm64", "Expected ARM64 Node");
+            assert.equal(process.versions.node.split(".")[0], "22", "Expected Node 22");
             const db = new DatabaseSync(":memory:");
-            if (db.prepare("SELECT 1 AS ok").get().ok !== 1) process.exit(1);
+            const row = db.prepare("SELECT 1 AS ok").get();
+            console.log("SQLite result:", row);
+            assert.equal(Number(row.ok), 1, "SQLite SELECT 1 failed");
             db.close();
             console.log("Node:", process.version, "available parallelism:", availableParallelism());
           '
-          python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 11); print("Python:", sys.version.split()[0], "SQLite:", sqlite3.sqlite_version)'
+          python3 -c 'import sqlite3, sys; print("Python:", sys.version.split()[0], "SQLite:", sqlite3.sqlite_version); assert sys.version_info[:2] == (3, 11), "Expected Python 3.11"'
           {
             printf 'Node: %s; npm: %s; Python: %s\n\n' "$(node --version)" "$(npm --version)" "$(python3 --version)"
             printf 'Node available parallelism: %s. Test concurrency uses the existing Node default.\n\n' \
@@ -102,9 +98,20 @@ jobs:
             printf 'This run uses a fresh dependency cache and disables queue-only tracing.\n\n'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Check out the pinned main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: c6d0d48a984847a2b14325c82e9616da4c3dfdcf
+          path: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Generate the existing equal-weight shard plan
         working-directory: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
+          actual_sha=$(/usr/bin/git rev-parse HEAD)
+          printf 'Checked-out source: %s\nExpected source: %s\n' "$actual_sha" "$SOURCE_SHA"
+          test "$actual_sha" = "$SOURCE_SHA"
           node scripts/test-drift-parts.mjs --plan --equal-weights
           node --input-type=module -e '
             import { readFileSync, appendFileSync } from "node:fs";
