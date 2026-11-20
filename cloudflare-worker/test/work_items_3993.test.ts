@@ -132,6 +132,8 @@ test('comments: a member comments, mentions notify people and an agent’s spons
   try {
     const t = await create(w);
     const cfo = await agent(w);
+    // A hostile comment body on purpose: the test checks it is stored inert.
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     const r = await call(w, MEMBER, 'POST', '/project/7/tasks/1/comments', { body: 'Look <script>x</script>[here](javascript:y)', mentions: [{ kind: 'person', uid: `u-${OTHER}` }, { kind: 'agent', uid: cfo.uid }] });
     assert.equal(r.status, 201, r.text);
     noPrivate(r.text);

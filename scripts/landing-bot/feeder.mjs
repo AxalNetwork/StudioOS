@@ -19,7 +19,7 @@ async function main(stage, env) {
       (event === 'workflow_dispatch' && !dispatchPr) || !triggerAllowed(env, {event, dispatchPr, prNumber: dispatchPr})) {
     throw new Error('Workflow invocation is outside the enabled landing policy.');
   }
-  const reader = createGitHubReader({repo, token: env.GH_TOKEN});
+  const reader = createGitHubReader({repo, token: env.GH_TOKEN, botLogin: env.LANDING_BOT_LOGIN || undefined});
   const planFile = join(env.RUNNER_TEMP, 'landing-feed-plan.json');
   const day = new Date().toISOString().slice(0, 10);
   const limit = count(env.LANDING_BOT_DAILY_FEEDS);

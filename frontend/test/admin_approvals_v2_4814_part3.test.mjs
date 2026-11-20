@@ -111,7 +111,7 @@ async function mount(url, over = {}) {
 // ---------------------------------------------------------------- the model
 
 test('owners: the inbox filtered to a lane, read page by page; complete only when the last page was read', async () => {
-  assert.deepEqual(BOARD_LANE, { 'product-testers': 'product_testers', 'co-marketing': 'comarketing', 'wellbeing-experts': 'wellbeing_experts' });
+  assert.deepEqual(BOARD_LANE, { 'product-testers': 'product_testers', 'co-marketing': 'comarketing', 'wellbeing-experts': 'wellbeing_experts', 'best-fit': 'best_fit' });
   const pages = { 1: { items: Array.from({ length: 25 }, (_, i) => ({ id: i + 1, assignee: null })), total: 30, page_size: 25 }, 2: { items: Array.from({ length: 5 }, (_, i) => ({ id: i + 26, assignee: null })), total: 30, page_size: 25 } };
   const asked = [];
   const got = await readLaneOwners(async (p) => { asked.push(p); return pages[p]; });

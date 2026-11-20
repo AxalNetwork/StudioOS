@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { investorZoneActions } from '../../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../../workspaces/investorZoneFilters';
@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../../../hooks/useAuthSync';
 import { exportView } from '../../../lib/csvExport';
 import FromMercury from '../FromMercury';
+import ClosingWorkspace from './ClosingWorkspace';
 
 /**
  * Deals · Closing — canvas **ID4**, `/deals/closing`. COLLECTION.
@@ -195,6 +196,11 @@ const ITEM_STATE_CLASS = {
 export default function InvestorClosingZone() {
   const navigate = useNavigate();
   const { user } = useAuth() || {};
+  // D6866: `?deal=<id>` opens that deal's closing workspace (DX17 to DX22) in place of the list.
+  const [params, setParams] = useSearchParams();
+  const workspaceDeal = Number(params.get('deal')) || null;
+  // Bumped after a transfer is recorded, so the workspace reads its tabs again.
+  const [workspaceKey, setWorkspaceKey] = useState(0);
   const [deals, setDeals] = useState(null);
   const [envelopes, setEnvelopes] = useState(null);
   const [conditions, setConditions] = useState(null);
@@ -369,6 +375,7 @@ export default function InvestorClosingZone() {
       });
       setWireForm(null);
       load();
+      setWorkspaceKey((k) => k + 1);
     } catch (cause) {
       // The conditions gate refuses with 409 `open_conditions_block_transfer`;
       // e.message is the route's own sentence and names the count.
@@ -505,40 +512,7 @@ export default function InvestorClosingZone() {
         },
   });
 
-  const bothFailed = deals === UNAVAILABLE && envelopes === UNAVAILABLE;
-
-  return (
-    <>
-      <ZoneToolbar
-        className="mb-3"
-        role="investor"
-        filters={investorZoneFilters('deals/closing', {
-          value: view,
-          onChange: setView,
-          // A count beside a failed read would read as a figure the store
-          // disclaimed, so every chip drops the clause when its read failed
-          // rather than printing one. This close counts deals, not paper.
-          counts: {
-            close: dealsReady ? closing.length : undefined,
-            documents: joinedReady ? rows.length : undefined,
-            blocking: condReady ? blockingRows.length : undefined,
-            wires: wiresReady ? wireRows.length : undefined,
-          },
-        })}
-        actions={rowActions}
-      />
-      <div className="mb-3 flex" data-testid="closing-search">
-        <SearchInput value={query} onChange={setQuery} placeholder="Search deal or document" />
-      </div>
-      {actionError && (
-        <p className="mb-3 text-[11px] text-red-700 dark:text-red-400" role="alert" data-testid="status-closing-action-error">{actionError}</p>
-      )}
-      {/* RECORD WIRE — a transfer OUT to the company, recorded. The amount is
-          typed in dollars and stored as integer cents; the phone-verified flag
-          is the artboard's own fraud note (email-only verification is how
-          funds get defrauded). An open Commit condition refuses the write —
-          the route's 409 sentence renders in the form. */}
-      {wireForm && (
+  const wirePanel = wireForm ? (
         <div className="rounded-[10px] border border-amber-300 bg-amber-50/70 p-3 mb-3 dark:border-amber-900 dark:bg-amber-950/25" data-testid="panel-record-wire">
           <p className="text-[11px] font-bold text-gray-900 dark:text-gray-100">Record a transfer</p>
           <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
@@ -609,7 +583,59 @@ export default function InvestorClosingZone() {
             <button type="button" onClick={() => setWireForm(null)} className="rounded-[7px] px-[11px] py-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400">Cancel</button>
           </div>
         </div>
+  ) : null;
+
+  const bothFailed = deals === UNAVAILABLE && envelopes === UNAVAILABLE;
+
+  if (workspaceDeal) {
+    const deal = dealsReady ? deals.find((d) => Number(d.id) === workspaceDeal) || null : null;
+    return (
+      <>
+        {wirePanel}
+        <ClosingWorkspace
+          key={workspaceKey}
+          dealId={workspaceDeal}
+          deal={deal}
+          user={user}
+          onBack={() => setParams({})}
+          onRecordTransfer={(id) => { setActionError(''); setWireForm({ dealId: id, amount: '', reference: '', phoneVerified: false, note: '', busy: false, error: '' }); }}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <ZoneToolbar
+        className="mb-3"
+        role="investor"
+        filters={investorZoneFilters('deals/closing', {
+          value: view,
+          onChange: setView,
+          // A count beside a failed read would read as a figure the store
+          // disclaimed, so every chip drops the clause when its read failed
+          // rather than printing one. This close counts deals, not paper.
+          counts: {
+            close: dealsReady ? closing.length : undefined,
+            documents: joinedReady ? rows.length : undefined,
+            blocking: condReady ? blockingRows.length : undefined,
+            wires: wiresReady ? wireRows.length : undefined,
+          },
+        })}
+        actions={rowActions}
+      />
+      <div className="mb-3 flex" data-testid="closing-search">
+        <SearchInput value={query} onChange={setQuery} placeholder="Search deal or document" />
+      </div>
+      {actionError && (
+        <p className="mb-3 text-[11px] text-red-700 dark:text-red-400" role="alert" data-testid="status-closing-action-error">{actionError}</p>
       )}
+      {/* RECORD WIRE — a transfer OUT to the company, recorded. The amount is
+          typed in dollars and stored as integer cents; the phone-verified flag
+          is the artboard's own fraud note (email-only verification is how
+          funds get defrauded). An open Commit condition refuses the write —
+          the route's 409 sentence renders in the form. */}
+      {wireForm ? wirePanel : null}
       {/* APPLY TEMPLATE — the closing checklist for a deal, from one of the
           three closing templates. No default items are seeded: the default
           set is the owner's call, and the checklist says so until then. */}

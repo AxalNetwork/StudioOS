@@ -174,26 +174,46 @@ export default {
     },
     {
       id: 'wellbeing',
-      title: 'Founder wellbeing',
+      title: 'Wellness and your Wellbeing workspace',
       overview:
-        "The Wellbeing tracker is a private, encrypted check-in (mood, sleep, stress, support) you can fill in weekly. Only you see the entries; the studio team sees aggregated, anonymized trends across the cohort.",
+        'Founders and Administrators can use their own Wellbeing workspace for weekly check-ins, expert bookings and resources. Administrators can find the Wellness program under Programs. Its My Wellbeing link opens the signed-in person’s workspace.',
       howto: [
-        'Open Wellbeing from the founder support group in the sidebar.',
-        'Take the 60-second weekly check-in.',
-        'Review your trend chart over the past 12 weeks.',
-        'If you flag distress, the platform offers a private link to schedule with the studio’s mental-health partner.',
+        'Open the heart in the desktop header, or open Wellbeing from the founder account menu on a phone.',
+        'Choose the scores you want to record and add a note or topics if you wish. Check the save confirmation before leaving.',
+        'Review your past weeks or browse wellbeing experts. Open an expert’s service to see its availability and booking terms.',
       ],
       tips: [
-        'Set a weekly reminder — the value comes from a continuous trend, not single entries.',
-        'Use the “share with advisor” option only with people you trust to hold the data.',
+        'You can browse resources independently of booking a session.',
+        'The studio’s reporting view shows aggregate trends only when enough members have contributed.',
       ],
       pitfalls: [
-        'Treating the check-in as a performance metric defeats it; honest entries beat optimistic ones.',
-        'The mental-health partner is the right resource for crisis support — don’t rely on chat or community channels.',
+        'Editing the current week updates that reflection. Check your history before expecting separate entries for different days.',
       ],
       related: [
         { label: 'Advisors', href: '#validate-grow/advisors' },
       ],
+    },
+    {
+      id: 'board-meeting-resolutions',
+      title: 'Board meeting resolutions',
+      overview: 'A board meeting record in Grow › Company keeps the resolutions recorded for each held meeting. Its next due date can change without changing that history.',
+      howto: [
+        'Open the board meeting record, then choose Mark held.',
+        'Enter Held on and, if needed, upload PDF or DOCX minutes of up to 20 MB.',
+        'Enter one resolution per line, up to 20, with up to 2000 characters each. Leave Resolutions blank when none were passed.',
+        'Set Resolutions passed on if it differs from Held on. Choose Yes to cite the uploaded minutes; otherwise leave No selected.',
+        'Choose Mark held to save the meeting, resolutions and next due date together.',
+      ],
+      tips: [
+        'Resolutions are listed by held meeting, newest first. A meeting without entries says None recorded.',
+        'Calendar → Compliance edits the same obligation, preserving its held meetings and resolutions.',
+        'The venture’s writers can record resolutions. An advisor can read them but cannot mark a meeting held.',
+      ],
+      pitfalls: [
+        'A next-date clash refuses the save; your meeting and resolutions are not partially recorded.',
+        'Citing minutes requires uploading that meeting’s minutes. Recording resolutions does not verify their legal effect.',
+      ],
+      related: [],
     },
   ],
 };

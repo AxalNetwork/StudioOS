@@ -11,7 +11,8 @@
  *   · Attention and risks are facts from recorded fields (ball, days since a move, days since a quote was sent,
  *     utilisation, days to renewal, fit score). Nothing records whether a client opened a proposal, so nothing
  *     here says "unopened"; it says no reply is recorded.
- *   · Recent movement has no store: nothing joins lead, proposal, negotiation and retainer events into one feed.
+ *   · Recent movement is D5942's recorded lifecycle feed (`GET /partner/pipeline/activity`), in the order the Worker
+ *     returns it, newest first (D4838 part 9, #5943). No event is derived here from a zone's fields.
  */
 import { usd, usdCents } from '../../../workspaces/boards/format.js';
 
@@ -353,4 +354,39 @@ export function railSteps({ loading, failed, firstRun, steps, attention }) {
     items: attention.slice(0, 4).map((a) => ({ key: a.key, tone: 'act', text: `${a.who} · ${a.issue}`, to: a.to, action: a.action })),
     foot: 'Nothing in Pipeline is sent or changed without your click.',
   };
+}
+
+/**
+ * D4838 part 9 (#5943) — the words for each kind of event D5942's feed records (`routes/partner_pipeline.ts`).
+ * One list for Recent movement and the opportunity sheet's Activity tab. A kind not listed is left out, not guessed at.
+ */
+export const EVENT_WORDS = Object.freeze({
+  passed: 'Lead passed',
+  proposal_version: 'Proposal version recorded',
+  proposal_won: 'Proposal won',
+  proposal_lost: 'Proposal lost',
+  negotiation_moved: 'Negotiation last moved',
+  retainer_created: 'Retainer recorded',
+  retainer_ended: 'Retainer ended',
+});
+
+/** Recorded events only, in the feed's order (the Worker sorts newest first); `who` is the opportunity's title. */
+export function activityRows(items) {
+  return (Array.isArray(items) ? items : []).filter((e) => EVENT_WORDS[e?.kind]).map((e) => ({
+    key: e.key || `${e.kind}:${e.occurred_at}`, at: e.occurred_at, text: EVENT_WORDS[e.kind],
+    who: e.opportunity?.title || null,
+  }));
+}
+
+/** How many events Recent movement asks the feed for. */
+export const MOVEMENT_SHOWN = 8;
+
+/**
+ * Recent movement: `{ state: 'unreadable' }` for a failed read, else `{ state: 'ok', rows }`. An empty list over a
+ * read that answered means nothing has moved; it is never drawn from a stage, a date or a count on another read.
+ */
+export function movementView(source) {
+  if (source?.state !== 'ok') return { state: 'unreadable' };
+  const items = source.data?.items;
+  return { state: 'ok', rows: activityRows(Array.isArray(items) ? items : []).slice(0, MOVEMENT_SHOWN) };
 }

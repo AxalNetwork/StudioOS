@@ -32,6 +32,7 @@
 
 import { SLIDE_META } from './pitchDeckViewModel';
 import { numberWordCap } from './numberWords';
+import { DIMENSIONS } from './scoringViewModel';
 import { TEMPLATES } from './brand/templates.js';
 
 /** The five groups, in the order the arsenal draws them. */
@@ -59,7 +60,7 @@ export const TOOL_GROUPS = ['Company', 'Evidence', 'Build', 'Formation', 'Capita
 export const LAB_TOOLS = [
   { id: 'record', group: 'Company', name: 'Company record', blurb: 'One record every tool writes into.', route: '/spinout-lab/startup' },
   { id: 'profile', group: 'Company', name: 'Founder profiling', blurb: 'Skills, values, archetype.', route: '/spinout-lab/profiling' },
-  { id: 'score', group: 'Company', name: 'Venture scoring', blurb: 'Nine dimensions, each with its confidence.', route: '/spinout-lab/scoring' },
+  { id: 'score', group: 'Company', name: 'Venture scoring', blurb: `${numberWordCap(DIMENSIONS.length)} dimensions, each with its confidence.`, route: '/spinout-lab/scoring' },
   { id: 'advisors', group: 'Company', name: 'Advisor matching', blurb: 'Advisors matched against measured gaps.', route: '/spinout-lab/advisors' },
   { id: 'cofind', group: 'Company', name: 'Co-founder matching', blurb: 'Complementarity, not similarity.', route: '/spinout-lab/cofounder-match' },
 

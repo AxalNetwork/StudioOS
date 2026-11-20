@@ -225,7 +225,8 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Sign in with TikTok to grant access to your basic profile, audience counts and public videos. Read-only.',
       'You press each sync from Grow: your followers, total likes and video count land in Revenue and traction, beside revenue and never as revenue, and each public video’s views, likes, comments and shares land in Distribution, with their date. A figure you delete stays deleted. One TikTok account serves one venture.',
-      'Disconnecting removes every figure your TikTok fed.',
+      'When the venture has no channel with utm_source tiktok, Distribution asks the founder whether to add TikTok as a channel. Nothing is added unless the founder accepts, and a dismissed proposal does not come back.',
+      'Disconnecting removes every figure your TikTok fed and its channel proposal. A channel the founder accepted stays.',
     ],
     tools: [
       tool('audience', 'followers, likes and video count', 'read', 'Reads your follower count, total likes and video count, as a dated snapshot each sync.', 'revenue_and_traction', ['/v2/user/info/']),
@@ -240,6 +241,27 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     endpoints: { sign_in: 'https://www.tiktok.com/v2/auth/authorize/', api: 'https://open.tiktokapis.com' },
     added: '2026-11',
     links: { ...NO_LINKS, developer_docs: 'https://developers.tiktok.com/docs/en/login-kit-web' },
+    verified_on: null,
+  },
+  // D2403 part 2 (#2403): the sign-in only. The Grow feeds are part 3 and Post to X is part 4; until then the page
+  // names no tool, and the registry claims no feed (`xFeeds.ts`, `x_connector_2403.test.ts`).
+  x: {
+    tagline: 'Connect your own X account: read first, publishing off until you turn it on.',
+    long_description: [
+      'Sign in with X to let Axal read your follower count and your own posts’ figures. Connecting asks X for read permissions only.',
+      'Publishing is off. Turning it on is a second sign-in that adds posting permissions; nothing is ever posted until you press Post, and you can retract it. Available on paid founder plans.',
+      'Disconnecting revokes Axal’s access at X.',
+    ],
+    tools: [],
+    never_does: ['StudioOS never posts, replies, likes or follows on X by itself.', 'StudioOS never reads your followers’ identities or other people’s posts.'],
+    prompts: [],
+    prompts_reason: notRead('X'),
+    made_by: AXAL,
+    service: { name: 'X', href: 'https://x.com' },
+    sign_in: { kind: 'oauth', label: 'Sign in with X', key_help_href: null },
+    endpoints: { sign_in: 'https://x.com/i/oauth2/authorize', api: 'https://api.x.com/2' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code' },
     verified_on: null,
   },
   google_search_console: {
@@ -1054,7 +1076,7 @@ export function trustFor(key: string, variant?: string): Trust | null {
 }
 
 /** The same pattern as `CONNECTOR_KEY_RE` (`services/eadwynConnectors.ts`); the test holds them equal. */
-const PAGE_KEY_RE = /^[a-z][a-z0-9_]{1,39}$/;
+const PAGE_KEY_RE = /^[a-z][a-z0-9_]{0,39}$/;
 const HUB = '/account/connectors';
 
 /** A connector's page path, from a registry key or a page key; the hub for anything unknown. */

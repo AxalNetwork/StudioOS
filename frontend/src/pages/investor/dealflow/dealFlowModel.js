@@ -17,6 +17,8 @@ export const BASE = '/deals';
 export const COMPARE = '/deals/compare';
 /** D4815 (#4815): the deal rooms' own route, linked from "Other deal activity". */
 export const ROOMS = '/deals/rooms';
+/** D6160 (#6160): the investor's round calls, a page of Deals at its own address (D6159 Q1). */
+export const ROUND_CALLS = '/round-calls';
 
 /** The page's title (DLS1). The Deals bucket's root is this page. */
 export const TITLE = 'Deal flow';
@@ -31,16 +33,18 @@ export const DEALS_PAGE_TITLES = Object.freeze({
   root: 'Deal flow · Axal VC',
   compare: 'Compare · Axal VC',
   rooms: 'Deal rooms · Axal VC',
+  roundCalls: 'Round calls · Axal VC',
   screening: 'Screening · Axal VC',
   commit: 'Investment committee · Axal VC',
   closing: 'Closing · Axal VC',
 });
 
 /** The tab title for a Deals route: the root, Compare, the deal rooms, or a zone by its slug. */
-export function dealsPageTitle({ isRoot, isCompare, isRooms, slug }) {
+export function dealsPageTitle({ isRoot, isCompare, isRooms, isRoundCalls, slug }) {
   if (isRoot) return DEALS_PAGE_TITLES.root;
   if (isCompare) return DEALS_PAGE_TITLES.compare;
   if (isRooms) return DEALS_PAGE_TITLES.rooms;
+  if (isRoundCalls) return DEALS_PAGE_TITLES.roundCalls;
   return DEALS_PAGE_TITLES[slug] || DEALS_PAGE_TITLES.root;
 }
 

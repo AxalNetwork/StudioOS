@@ -15,6 +15,8 @@ import Sheet from '../../../ui/Sheet.jsx';
  * read; what they can see from the access grants (D1019). Each read answers
  * alone. D1025 (#2862): each recorded row offers Void (CT12b) when `onVoid` is
  * given (the owner) and Correct (CT12c) when `onCorrect` is (an admin).
+ * D6086 (#6086): a grant recorded with its schedule is a Vesting row here,
+ * vested and unvested, worked out by the Worker from the dates.
  */
 
 const INK = 'text-axal-ink dark:text-gray-200';
@@ -107,7 +109,8 @@ export default function HolderDrawer({ projectId, holderId, record, grants, onCl
                         : v.vesting.map((g) => (
                           <div key={g.key} className="flex flex-col gap-1" data-testid="captable-holder-vesting">
                             <span className={`font-mono text-[12px] font-semibold ${INK}`}>{g.terms}</span>
-                            <span className={`text-[12.5px] ${INK}`}>{g.vested}</span>
+                            <span className={`text-[12.5px] ${INK}`} data-testid="captable-holder-vested">{g.vested} · {g.unvested}</span>
+                            {g.basis ? <span className={`text-[11.5px] ${MUTED}`} data-testid="captable-holder-vesting-basis">{g.basis}</span> : null}
                             {g.pct != null ? <span className="block h-2 w-60 overflow-hidden rounded-full border border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-800"><span className="block h-full bg-axal-violet" style={{ width: `${Math.min(100, g.pct)}%` }} /></span> : null}
                           </div>
                         ))}

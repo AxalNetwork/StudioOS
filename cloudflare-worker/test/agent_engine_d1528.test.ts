@@ -850,7 +850,15 @@ test('routes: start, runs, run, cancel and engine, behind the flag and the gates
     assert.deepEqual([cancelled.status, cancelled.body.run.status, taskRow(w, 200).status], [200, 'cancelled', 'open']);
     assert.equal((await call(w, SPONSOR, 'POST', `/runs/${run.uid}/cancel`)).body.error, 'not_running');
     const eng = await call(w, SPONSOR, 'GET', `/project/${PROJECT}/engine`);
-    assert.deepEqual(eng.body, { engine: 'on', halted: false, scope_paused: false, max_parallel_runs: 2, autonomy: 'manual' });
+    // D7074: the scope's capacity beside the fields it always had. On the defaults nothing is offered and nothing changed.
+    assert.deepEqual(eng.body, {
+      engine: 'on', halted: false, scope_paused: false, max_parallel_runs: 2, autonomy: 'manual',
+      capacity: {
+        mode: 'fixed', elastic_max_runs: null, lanes_per_agent: 1, review_backlog_max: null, daily_runs_per_agent: null,
+        offered: { elastic_max_runs: null, lanes_per_agent: null },
+        in_force: { parallel_runs: 2, lanes_per_agent: 1, review_backlog: 5, daily_runs_per_agent: 20 },
+      },
+    });
     assert.equal((await call(w, SPONSOR, 'PUT', `/project/${PROJECT}/engine`, { max_parallel_runs: 6 })).body.error, 'invalid_engine');
     assert.equal((await call(w, SPONSOR, 'PUT', `/project/${PROJECT}/engine`, { paused: 'yes' })).body.error, 'invalid_engine');
     const paused = await call(w, SPONSOR, 'PUT', `/project/${PROJECT}/engine`, { paused: true, max_parallel_runs: 3 });

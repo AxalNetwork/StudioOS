@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
@@ -35,6 +35,10 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  */
 
 const EMPTY = { metric: '', our_value: '', peer_value: '', peer_source: '', peer_sample_size: '', peer_as_of: '', reading: '' };
+const TILES = [
+  ['Metrics', 'metric_count'], ['With a peer set', 'comparison_count'],
+  ['No read yet', 'unread_count'], ['Smallest sample', 'smallest_sample_size'],
+];
 
 export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
@@ -43,9 +47,20 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
   // peer figure reads `Tracked, not compared` — so the chip narrows to a split
   // the reader can already see.
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('newest');
   const [form, setForm] = useState(EMPTY);
+  const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(null);
+  const metricInput = useRef(null);
+  const formOpen = showForm || !zoneActions || role !== 'investor';
+  const openForm = () => {
+    if (formOpen) metricInput.current?.focus();
+    else setShowForm(true);
+  };
+  useEffect(() => {
+    if (showForm) metricInput.current?.focus();
+  }, [showForm]);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true }));
@@ -80,9 +95,12 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
     } finally { setBusy(false); }
   };
 
-  const data = state.data;
+  const data = state.loading || state.error ? null : state.data;
   const items = data?.items || [];
-  const visible = filter === 'comparison' ? items.filter((b) => b.is_comparison) : items;
+  const visible = items.filter((b) => (
+    (filter !== 'comparison' || b.is_comparison) && (filter !== 'unread' || !b.reading)
+  ));
+  if (sort === 'metric') visible.sort((a, b) => a.metric.localeCompare(b.metric));
   // The form asks for a peer figure and its base together, because the route
   // and the schema both refuse them apart.
   const wantsPeer = Boolean(form.peer_value.trim());
@@ -94,14 +112,21 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
           role={role}
           className="mb-3"
           filters={zoneFilters ? zoneFilters({ value: filter, onChange: setFilter }) : []}
-          actions={zoneActions(visible)}
+          actions={zoneActions(visible, { newBenchmark: openForm })}
         />
       )}
       <ZoneHeading
         title="Fund & manager benchmarking"
         blurb="What you are measuring, what the peer set says, and how many it was measured over."
-        action={data ? <Pill tone="neutral">{`${data.comparison_count} of ${data.metric_count} carry a peer set`}</Pill> : null}
       />
+      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {TILES.map(([label, key]) => (
+          <div key={key} data-testid={`benchmark-tile-${key}`} className="rounded-xl border border-axal-hairline px-4 py-3 dark:border-gray-700">
+            <dt className="text-xs text-axal-muted dark:text-gray-400">{label}</dt>
+            <dd className="m-0 mt-1 text-lg font-bold">{data?.[key] ?? 'Not recorded'}</dd>
+          </div>
+        ))}
+      </dl>
 
       {removed && (
         <p data-testid="benchmark-removed" role="status" className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
@@ -135,8 +160,15 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
         <Card padding="lg">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h3 className="text-sm font-extrabold tracking-tight">Against the peer set</h3>
-            <span className="text-[11px] text-gray-600 dark:text-gray-300">Every row carries its own read</span>
+            <label className="text-xs text-axal-muted dark:text-gray-400">
+              Sort by
+              <select className={`ml-2 ${inputClass}`} value={sort} onChange={(event) => setSort(event.target.value)}>
+                <option value="newest">Newest</option>
+                <option value="metric">Metric A to Z</option>
+              </select>
+            </label>
           </div>
+          {!visible.length && <p className="text-sm text-axal-muted dark:text-gray-400">No benchmarks match this view.</p>}
           <ul className="divide-y divide-axal-ground dark:divide-gray-800">
             {visible.map((b) => (
               <li key={b.uid} className="py-3">
@@ -175,11 +207,11 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
         </Card>
       </ZoneBody>
 
-      <Card padding="lg">
+      <Card padding="lg" hidden={!formOpen} data-testid="benchmark-add-form">
         <h3 className="text-sm font-extrabold tracking-tight">Add a metric</h3>
         <form className="mt-3 grid gap-3 md:grid-cols-3" onSubmit={add}>
           <Field label="Metric">
-            <input className={inputClass} value={form.metric} maxLength={200} required
+            <input ref={metricInput} className={inputClass} value={form.metric} maxLength={200} required
               onChange={(e) => setForm({ ...form, metric: e.target.value })} />
           </Field>
           <Field label="Ours">

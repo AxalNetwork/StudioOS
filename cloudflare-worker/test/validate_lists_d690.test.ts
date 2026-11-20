@@ -124,8 +124,9 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
   },
   'ideal-customer-profile': {
     title: 'Segments', cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated'],
-    filters: [['evidence', 'Evidence', ['anecdote', 'pattern', 'measured', 'not_recorded']], ['fit', 'Fit', ['strong', 'none']]],
-    sorts: ['evidence'],
+    // D6003: attainable evidence levels and every supported sort, default first.
+    filters: [['evidence', 'Evidence', ['anecdote', 'pattern', 'not_recorded']], ['fit', 'Fit', ['strong', 'none']]],
+    sorts: ['evidence', 'name', 'strong', 'interviews'],
   },
   'market-intelligence': {
     title: 'Competitors tracked', cols: ['Company', 'Kind', 'Latest signal', 'Date', 'Source'],
@@ -138,7 +139,7 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
     sorts: ['newest'],
   },
   experiments: {
-    title: 'Hypotheses', cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
+    title: 'Hypotheses', cols: ['Code', 'Claim', 'Evidence state', 'Relationships', 'Distinct sources', 'Sprint', 'Owner', 'Source'],
     filters: [['status', 'Status', ['untested', 'testing', 'supported', 'contested', 'refuted', 'inconclusive', 'not_recorded', 'retired']],
       ['sprint', 'Sprint', ['Sprint 2', 'Sprint 3']], ['strength', 'Strength', ['anecdote', 'pattern', 'measured', 'not_recorded']],
       ['moved', 'Recently moved', ['recent']], ['history', 'History', ['last_week', 'this_month']]],

@@ -4,7 +4,7 @@ import SitePage from '../../components/site/SitePage';
 import { useTurnstile } from '../../components/site/NewsletterSignup';
 import { request } from '../../lib/api';
 import { trustPublicApi, securityReportsApi } from '../../lib/api/trustContent';
-import { overallStatus } from '../../lib/statusOverall';
+import { statusSummary, summaryLines } from '../../lib/statusSummary';
 import { DAY_WORDS } from '../../lib/statusHistory';
 import { openCookiePreferences } from '../../lib/cookieConsent';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -12,10 +12,11 @@ import { Lightbox, usePhoneWidth } from '../../ui';
 import { TERMS_UPDATED } from '../TermsPage';
 import { PRIVACY_UPDATED } from '../PrivacyPage';
 import { RISK_UPDATED } from '../RiskDisclosuresPage';
+import { currentInterviewNotice } from '../InterviewNoticePage';
 import {
-  LINE, MATRIX_FOOT, NOT_RECORDED, NO_CHANGES, NO_CHANGES_SUB, PART_UNREADABLE, REPORT_DIALOG, REPORT_WAYS, RESPONSE_TIMES,
-  SAFE_HARBOUR, TABS, TITLE, TRY_AGAIN, UNREADABLE, YOUR_TRUST,
-  blockOf, certificationsTile, changesOf, checkedLine, documentTable, lastReviewed, matrixOf, statusLine, statusStrip,
+  DATA_REQUESTS, LINE, MATRIX_FOOT, NOT_RECORDED, NO_CHANGES, NO_CHANGES_SUB, PART_UNREADABLE, REPORT_DIALOG, REPORT_WAYS, RESPONSE_TIMES,
+  SAFE_HARBOUR, SUBPROCESSORS_REQUEST, TABS, TITLE, TRY_AGAIN, UNCHECKED_WHY, UNREADABLE, YOUR_TRUST,
+  blockOf, certificationsTile, changesOf, checkedLine, dataRequestHref, documentTable, lastReviewed, lineMark, matrixOf, statusStrip,
   subprocessorsOf, subprocessorsTile, tabOf,
 } from './trustCenterModel';
 
@@ -89,9 +90,24 @@ function Reading({ lines = 3, testId }) {
   );
 }
 
-/** One line: a fact with its Checked date, or a gap with Not recorded and why. */
+/**
+ * One line: a fact with its Checked date and a tick, or a gap with Not recorded and why. #7002 (D1072): a fact
+ * with no recorded check date gets no tick; it reads Not recorded with UNCHECKED_WHY.
+ */
 function Fact({ f }) {
-  return f.recorded
+  const mark = lineMark(f);
+  if (mark === 'unchecked') {
+    return (
+      <li className="flex gap-2 border-t border-[#ececf1] py-2 first:border-t-0 dark:border-gray-700" data-testid="trust-fact-unchecked">
+        <span aria-hidden="true" className="text-[#6b6577]">○</span>
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="flex flex-wrap items-center gap-2 text-[13px] text-[#4a4553] dark:text-gray-200">{f.text} <span className={PILL}>{NOT_RECORDED}</span></span>
+          <span className="text-[12px] text-[#6b6577] dark:text-gray-400" data-testid="trust-fact-checked">{UNCHECKED_WHY}</span>
+        </span>
+      </li>
+    );
+  }
+  return mark === 'checked'
     ? (
       <li className="flex gap-2 border-t border-[#ececf1] py-2 first:border-t-0 dark:border-gray-700" data-testid="trust-fact">
         <span aria-hidden="true" className="text-emerald-600 dark:text-emerald-400">✓</span>
@@ -142,14 +158,21 @@ function Tile({ eye, children, testId }) {
   return <section className={CARD} data-testid={testId}><span className={EYE}>{eye}</span>{children}</section>;
 }
 
+/** #7002: the tile draws the record /status draws (lib/statusSummary.js): headline, affected functions, incident, last update. */
 function StatusTile({ read }) {
-  const overall = read.status === 'ready' ? overallStatus(read.data?.services) : null;
+  const summary = read.status === 'ready' ? statusSummary(read.data) : null;
+  const failed = read.status === 'error' || summary?.state === 'unreadable';
   return (
     <Tile eye="Status" testId="trust-status">
       <p className={VALUE} data-testid="trust-status-line">
-        {read.status === 'loading' ? 'Reading…' : read.status === 'error' ? 'Status could not be read.' : statusLine(overall)}
+        {read.status === 'loading' ? 'Reading…' : failed ? 'Status could not be read.' : summary.headline}
       </p>
-      {read.status === 'error' ? <p className={MUTED}>The rest of the page reads as usual.</p> : null}
+      {failed ? <p className={MUTED}>The rest of the page reads as usual.</p> : null}
+      {!failed && summary ? summaryLines(summary).map((l) => (
+        <p key={l.key} className={MUTED} data-testid={`trust-status-${l.key}`}>
+          {l.href ? <a href={l.href} className={LINK}>{l.text}</a> : l.text}
+        </p>
+      )) : null}
       <Link to="/status" className={LINK}>Status page ›</Link>
     </Tile>
   );
@@ -334,10 +357,7 @@ function CopyButton({ text, label = 'Copy address', testId }) {
 }
 
 function Data({ reads, signedIn }) {
-  const rights = [
-    ['Download your data', 'Your profile, companies, agreements and activity.'],
-    ['Delete your account', 'We keep only what the law makes us keep.'],
-  ];
+
   return (
     <div className="flex flex-col gap-[14px]" data-testid="trust-data">
       <BlockCards block={blockOf(reads.trust.read, 'data')} what="Data and privacy" onRetry={reads.trust.reload} testId="trust-data-blocks" cols="lg:grid-cols-2" />
@@ -345,10 +365,10 @@ function Data({ reads, signedIn }) {
         <h2 className={H2}>Your rights</h2>
         <p className={MUTED}>We answer within 30 days.</p>
         <ul className="m-0 flex list-none flex-col p-0">
-          {rights.map(([t, s]) => (
-            <li key={t} className="flex flex-wrap items-center justify-between gap-2 border-t border-[#ececf1] py-2.5 first:border-t-0 dark:border-gray-700">
-              <span className="flex flex-col"><span className="text-[13.5px] font-bold text-[#141118] dark:text-gray-100">{t}</span><span className={MUTED}>{s}</span></span>
-              <Link to={signedIn ? '/account' : '/login?next=%2Faccount'} className={BTN}>{signedIn ? 'Open your account' : 'Sign in to do this'}</Link>
+          {DATA_REQUESTS.map((req) => (
+            <li key={req.key} className="flex flex-wrap items-center justify-between gap-2 border-t border-[#ececf1] py-2.5 first:border-t-0 dark:border-gray-700">
+              <span className="flex flex-col"><span className="text-[13.5px] font-bold text-[#141118] dark:text-gray-100">{req.title}</span><span className={MUTED}>{req.sub}</span></span>
+              <Link to={dataRequestHref(req, signedIn)} className={BTN} data-testid={`trust-data-${req.key}`}>{req.title}</Link>
             </li>
           ))}
           <li className="flex flex-wrap items-center justify-between gap-2 border-t border-[#ececf1] py-2.5 dark:border-gray-700">
@@ -423,6 +443,7 @@ function Subprocessors({ reads }) {
           <section className="flex flex-col gap-2 rounded-xl border border-[#ddd0fb] bg-[#f4f0fe] px-[18px] py-4 dark:border-violet-800 dark:bg-violet-950/40" data-testid="trust-subprocessors-review">
             <h2 className={H2}>Subprocessors</h2>
             <p className="m-0 text-[13.5px] font-semibold text-[#141118] dark:text-gray-100">{s.line}</p>
+            <a href={SUBPROCESSORS_REQUEST.href} className={BTN} data-testid="trust-subprocessors-request">{SUBPROCESSORS_REQUEST.label}</a>
           </section>
         ) : null}
         {s.state === 'ready' ? (
@@ -461,7 +482,7 @@ function Subprocessors({ reads }) {
  * ------------------------------------------------------------------ */
 
 function Documents({ reads }) {
-  const rows = documentTable({ terms: TERMS_UPDATED, privacy: PRIVACY_UPDATED, risk: RISK_UPDATED });
+  const rows = documentTable({ terms: TERMS_UPDATED, privacy: PRIVACY_UPDATED, risk: RISK_UPDATED, interview: currentInterviewNotice() });
   const notes = blockOf(reads.trust.read, 'documents');
   return (
     <div className="flex flex-col gap-[14px]">
@@ -474,8 +495,8 @@ function Documents({ reads }) {
               {rows.map((r) => (
                 <tr key={r.name} className={ROW} data-testid="trust-document-row">
                   <td className="py-2 pr-3 font-bold">{r.name}{!r.to && r.kind === 'page' ? <span className="block text-[12px] font-normal text-[#6b6577] dark:text-gray-400">Being reviewed by counsel.</span> : null}</td>
-                  <td className="py-2 pr-3">{r.version ? (r.version === '—' ? '—' : <span className={PILL}>{r.version}</span>) : <span className={PILL}>{NOT_RECORDED}</span>}</td>
-                  <td className="py-2 pr-3 font-mono">{r.updated || <span className={PILL}>{NOT_RECORDED}</span>}</td>
+                  <td className="py-2 pr-3" data-testid="trust-document-version">{r.version ? (r.version === '—' || /^Version \d+$/.test(r.version) ? r.version : <span className={PILL}>{r.version}</span>) : <span className={PILL}>{NOT_RECORDED}</span>}</td>
+                  <td className="py-2 pr-3 font-mono" data-testid="trust-document-updated">{r.updated || <span className={PILL}>{NOT_RECORDED}</span>}</td>
                   <td className="py-2 pr-3">{r.appliesTo}</td>
                   <td className="py-2 pr-3">
                     {r.kind === 'page' && r.to ? <Link to={r.to} className={LINK}>Read</Link> : null}
@@ -553,7 +574,7 @@ function Disclosure({ reads, signedIn }) {
             <span className={EYE}>{w.eye}</span>
             <h2 className={H2}>{w.title}</h2>
             <p className={MUTED}>{w.note}</p>
-            {w.href ? <a href={w.href} target="_blank" rel="noopener noreferrer" className={BTN}>{w.action}</a> : null}
+            {w.href ? <a href={w.href} target="_blank" rel="noopener noreferrer" className={BTN} data-testid={`trust-report-${w.key}-action`}>{w.action}</a> : null}
             {w.copy ? <CopyButton text={w.copy} testId="trust-copy-security" /> : null}
             {w.key === 'app' ? (signedIn
               ? <button type="button" className={BTN} onClick={() => setDialog(true)} data-testid="trust-report-open">{w.action}</button>

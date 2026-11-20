@@ -188,17 +188,22 @@ export async function listClosings(env: Env, user: User) {
  * for an admin or the founder, and only the caller's own for anyone else.
  * `for_investor` (D6199) is the caller's own part when they read through a
  * line of their own, and null for an admin or the founder.
+ * D6889: each event carries `actor_name`; for an admin or the founder each
+ * line carries `in_portfolio`, and for an admin `portfolio_position_uid`.
  */
 export async function readClosing(env: Env, user: User, closingUid: string) {
   const { closing, reach } = await readable(env, user, closingUid);
   // An investor's own lines only: `investor_user_id` matched to the caller, or every line (-1 matches none).
+  // D6195: each line carries its commitment's route preference (null for a prospect line or none
+  // recorded), beside the route the studio sets; the preference never sets `route`.
   const lines = await env.DB.prepare(
     `SELECT l.id, l.uid, l.commitment_id, l.prospect_id, l.investor_user_id, l.route, l.amount_cents, l.currency, l.envelope_id,
             l.safe_issuance_uid, l.vehicle_ref, l.status, l.created_at, l.updated_at,
-            COALESCE(u.name, rp.name) AS investor_name
+            COALESCE(u.name, rp.name) AS investor_name, cm.route_preference AS route_preference
        FROM closing_lines l
        LEFT JOIN users u ON u.id = l.investor_user_id
        LEFT JOIN raise_prospects rp ON rp.id = l.prospect_id
+       LEFT JOIN commitments cm ON cm.id = l.commitment_id
       WHERE l.closing_id = ? AND (? = 0 OR l.investor_user_id = ?)
       ORDER BY l.id`,
   ).bind(closing.id, reach === 'own' ? 1 : 0, reach === 'own' ? Number(user.id) : -1).all<any>();
@@ -228,9 +233,29 @@ export async function readClosing(env: Env, user: User, closingUid: string) {
     list.push(rest);
     byLine.set(Number(e.line_id), list);
   }
+  // D6889: the actor's name beside the id, under the events' own rule (reach 'all' only). An
+  // account that no longer exists, or has no name, reads null: "Not recorded", never a guess.
   const events = reach === 'all' ? ((await env.DB.prepare(
-    `SELECT ev.event, ev.line_id, ev.actor_user_id, ev.source_ref, ev.created_at FROM closing_events ev WHERE ev.closing_id = ? ORDER BY ev.id`,
+    `SELECT ev.event, ev.line_id, ev.actor_user_id, au.name AS actor_name, ev.source_ref, ev.created_at
+       FROM closing_events ev LEFT JOIN users au ON au.id = ev.actor_user_id WHERE ev.closing_id = ? ORDER BY ev.id`,
   ).bind(closing.id).all<any>()).results || []) : null;
+  // D6889: the Portfolio position recorded for each line (`portfolio_positions.closing_line_uid`, 612,
+  // written by POST /api/positions). Only the record's link counts: a position recorded without naming
+  // the line is not matched by venture or round. An admin reads the position's uid; the founder reads
+  // whether one exists; an investor reads neither (positions are a fund's record, D1057).
+  const positionByLine = new Map<string, string>();
+  if (reach === 'all' && ids.length) {
+    const linked = await env.DB.prepare(
+      `SELECT l.uid AS line_uid, (SELECT pp.uid FROM portfolio_positions pp WHERE pp.closing_line_uid = l.uid ORDER BY pp.id LIMIT 1) AS position_uid
+         FROM closing_lines l WHERE l.id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(ids)).all<any>();
+    for (const r of linked.results || []) if (r.position_uid) positionByLine.set(String(r.line_uid), String(r.position_uid));
+  }
+  const portfolioOf = (lineUid: string) => {
+    if (reach !== 'all') return {};
+    const position = positionByLine.get(lineUid) ?? null;
+    return isAdmin(user) ? { in_portfolio: position !== null, portfolio_position_uid: position } : { in_portfolio: position !== null };
+  };
   const all = await env.DB.prepare('SELECT status FROM closing_lines WHERE closing_id = ?').bind(closing.id).all<{ status: string }>();
   const captable = captableState(closing, (all.results || []).map((r) => r.status));
   // D6199: the investor's own part (what waits on them, a count of the rest, their summary and duties). Never for reach 'all'.
@@ -263,7 +288,7 @@ export async function readClosing(env: Env, user: User, closingUid: string) {
     captable: { state: captable, decided_at: closing.captable_decided_at },
     lines: (lines.results || []).map((l: any) => {
       const { id: _id, ...rest } = l;
-      return { ...rest, evidence: byLine.get(Number(l.id)) || [], sender_declarations: declByLine.get(Number(l.id)) || [] };
+      return { ...rest, evidence: byLine.get(Number(l.id)) || [], sender_declarations: declByLine.get(Number(l.id)) || [], ...portfolioOf(String(l.uid)) };
     }),
     events,
     for_investor: forInvestor,

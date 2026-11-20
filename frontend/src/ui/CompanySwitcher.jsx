@@ -205,6 +205,42 @@ function ProjectRow({ p, picked, onPick, indent = false }) {
   );
 }
 
+/** The action the trigger's accessible name ends with, after its visible text (D7661). */
+export const SWITCH_ACTION = 'switch company or project';
+
+/**
+ * D7661 (#7661): what the expanded trigger shows, which is also its accessible
+ * name. The button carries no `aria-label`. The one it had read "Switch
+ * company or project" and did not contain the words on the button (WCAG 2.5.3,
+ * axe `label-content-name-mismatch`), so a speech-input user saying "No
+ * company" or a company's name could not reach it. The name is now the
+ * visible text first, in the order it is drawn, then the action: "No
+ * company, switch company or project", "Example Ventures, Company, switch
+ * company or project". It is one screen-reader-only sentence, and the drawn
+ * parts are `aria-hidden`. Commas in separate hidden spans would each be a
+ * block, and the browser then reads "No company , switch …". The initials
+ * mark repeats the name, so it is not read. Nothing on screen changes.
+ */
+export function switcherTriggerName(selection) {
+  return [selection.name, selection.type, selection.sub, SWITCH_ACTION].filter(Boolean).join(', ');
+}
+
+export function SwitcherTriggerFace({ selection, abbr }) {
+  return (
+    <>
+      <span className="sr-only">{switcherTriggerName(selection)}</span>
+      <div aria-hidden="true" className={`w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center flex-none ${selection.type === 'Project' ? 'border border-dashed border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200' : 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300'}`}>{abbr}</div>
+      <span aria-hidden="true" className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{selection.name}</span>
+          {selection.type ? <span className="flex-none rounded-full border border-gray-200 px-1.5 text-[9.5px] font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-400" data-testid="switcher-type">{selection.type}</span> : null}
+        </span>
+        {selection.sub ? <span className="truncate text-[10.5px] text-gray-500 dark:text-gray-400" data-testid="switcher-sub">{selection.sub}</span> : null}
+      </span>
+    </>
+  );
+}
+
 function CompanySwitcher({ collapsed, role }) {
   const { company, setCompany, companies, setCompanies } = _useActiveCompany();
   const { switchTo, create } = useCompanySwitch();
@@ -471,21 +507,11 @@ function CompanySwitcher({ collapsed, role }) {
         data-company-switcher=""
         type="button"
         onClick={() => setOpen(v => !v)}
-        aria-label={selection.type ? `Switch company or project. Current: ${displayName}, ${selection.type}` : 'Switch company or project'}
         aria-expanded={open}
         data-testid="switcher-trigger"
         className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-colors text-left"
       >
-        <div className={`w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center flex-none ${selection.type === 'Project' ? 'border border-dashed border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200' : 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300'}`}>
-          {abbr}
-        </div>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{displayName}</span>
-            {selection.type ? <span className="flex-none rounded-full border border-gray-200 px-1.5 text-[9.5px] font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-400" data-testid="switcher-type">{selection.type}</span> : null}
-          </span>
-          {selection.sub ? <span className="truncate text-[10.5px] text-gray-500 dark:text-gray-400" data-testid="switcher-sub">{selection.sub}</span> : null}
-        </span>
+        <SwitcherTriggerFace selection={selection} abbr={abbr} />
         <ChevronDown size={12} className={`flex-none text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && dropdownContent}

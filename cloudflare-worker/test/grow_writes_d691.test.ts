@@ -20,6 +20,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import cycleGrow, { shapeRecords } from '../src/routes/cycle_grow.ts';
+import { durableCard } from '../src/services/growCycle.ts';
 import jobs from '../src/routes/jobs.ts';
 import { RECORD_ID } from '../src/services/records/owned.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -553,4 +554,78 @@ test('D6122: each checklist item says what ticks it: the Lab, Mercury or a hand'
   assert.equal(by.key_person_cover, 'hand');
   assert.equal(by.board_cadence, 'hand');
   assert.ok(items.every((i: any) => ['lab', 'hand', 'mercury'].includes(i.ticks)), 'every item names what ticks it');
+});
+
+// ---------------------------------------------------------------------------
+// D6789 (#6789) — a checklist item can be Not applicable, and is out of the score
+// ---------------------------------------------------------------------------
+
+const card = (f: any) => durableCard({ env: f.env, projectId: PA, now: Date.now(), href: (s: string) => `/grow/${s}?project_id=${PA}` } as any);
+const item = async (f: any, key: string) => (await list(f, 'durable-company-building')).body.parts.checklist.find((i: any) => i.key === key);
+
+test('D6789: Not applicable records who and when, leaves the score, and clears again', async () => {
+  const f = fixture();
+  const before = await card(f);
+  const total = before.series.checklist.total;
+  assert.equal(before.series.checklist.not_applicable, 0);
+  assert.equal((await grow(f, FOUNDER, 'PUT', '/checklist/key_person_cover', { done: true })).status, 200);
+  const r = await grow(f, FOUNDER, 'PUT', '/checklist/board_cadence', { not_applicable: true });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const row = await item(f, 'board_cadence');
+  assert.equal(row.not_applicable, true);
+  assert.equal(row.done, false);
+  assert.equal(row.not_applicable_by, 'Fay Founder');
+  assert.match(row.not_applicable_at, /^\d{4}-\d{2}-\d{2}/);
+  const c = (await card(f)).series.checklist;
+  assert.deepEqual([c.done, c.total, c.not_applicable], [1, total - 1, 1], 'done out of the items that apply');
+  assert.equal(c.pct, Math.round(100 / (total - 1)));
+  // The card's next step never points at an item that does not apply.
+  assert.notEqual((await card(f)).next?.text, 'Board meeting cadence agreed.');
+  const logs = all(f, "SELECT action FROM activity_logs WHERE entity_id = 'board_cadence' ORDER BY id").map((l) => l.action);
+  assert.deepEqual(logs, ['grow_checklist_not_applicable']);
+  // Applies again: back in the score, open.
+  assert.equal((await grow(f, FOUNDER, 'PUT', '/checklist/board_cadence', { not_applicable: false })).status, 200);
+  const back = await item(f, 'board_cadence');
+  assert.deepEqual([back.not_applicable, back.not_applicable_at, back.not_applicable_by, back.done], [false, null, null, false]);
+  assert.equal((await card(f)).series.checklist.total, total);
+});
+
+test('D6789: marking an item done by hand clears Not applicable, and Not applicable clears a hand tick', async () => {
+  const f = fixture();
+  await grow(f, FOUNDER, 'PUT', '/checklist/key_person_cover', { done: true });
+  await grow(f, FOUNDER, 'PUT', '/checklist/key_person_cover', { not_applicable: true });
+  let row = await item(f, 'key_person_cover');
+  assert.deepEqual([row.done, row.not_applicable], [false, true]);
+  assert.equal(one(f, "SELECT done_at FROM durability_checklist WHERE item_key = 'key_person_cover'").done_at, null);
+  await grow(f, FOUNDER, 'PUT', '/checklist/key_person_cover', { done: true });
+  row = await item(f, 'key_person_cover');
+  assert.deepEqual([row.done, row.not_applicable, row.source], [true, false, 'manual']);
+});
+
+test('D6789: an item the Spin-Out Lab ticked cannot be marked Not applicable', async () => {
+  const f = fixture();
+  f.db.exec(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (${FOUNDER}, 2, 'ein_received', '2026-03-02 10:00:00')`);
+  assert.equal((await item(f, 'ein_received')).source, 'Spin-Out Lab');
+  const r = await grow(f, FOUNDER, 'PUT', '/checklist/ein_received', { not_applicable: true });
+  assert.equal(r.status, 409);
+  assert.match(JSON.stringify(r.body), /Spin-Out Lab ticked this item/);
+  assert.equal(one(f, "SELECT COUNT(*) AS n FROM durability_checklist WHERE item_key = 'ein_received'").n, 0);
+  // A Lab item the Lab has not ticked yet can be.
+  assert.equal((await grow(f, FOUNDER, 'PUT', '/checklist/data_room_built', { not_applicable: true })).status, 200);
+});
+
+test('D6789: not_applicable must be a boolean; a read-only member cannot mark it; every item N/A has no percentage', async () => {
+  const f = fixture();
+  assert.equal((await grow(f, FOUNDER, 'PUT', '/checklist/board_cadence', { not_applicable: 'yes' })).status, 400);
+  assert.equal((await grow(f, PARTNER, 'PUT', '/checklist/board_cadence', { not_applicable: true })).status >= 403, true);
+  for (const i of (await list(f, 'durable-company-building')).body.parts.checklist) {
+    assert.equal((await grow(f, FOUNDER, 'PUT', `/checklist/${i.key}`, { not_applicable: true })).status, 200);
+  }
+  const c = (await card(f)).series.checklist;
+  assert.deepEqual([c.done, c.total, c.pct], [0, 0, null]);
+  // One item applies again and is done: the card has no next item, since none that applies is open.
+  await grow(f, FOUNDER, 'PUT', '/checklist/key_person_cover', { done: true });
+  const after = await card(f);
+  assert.deepEqual([after.series.checklist.done, after.series.checklist.total, after.series.checklist.pct], [1, 1, 100]);
+  assert.equal(after.next, null);
 });

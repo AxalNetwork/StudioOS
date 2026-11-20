@@ -229,7 +229,10 @@ test('the wiring: the def owns the page, the bands fold, no header action, no Wo
   assert.match(route, /<PmfExplain [^\n]*\/>\}\s*<\/Bands>/, 'the PMF reading sits in AI gap analysis too');
   assert.match(route, /action: \(q\) => \(\{ label: 'Build your deck', href: `\/raise\/pitch\$\{q\}` \}\)/, 'the header action is #5081\'s, unchanged');
   const page = read('frontend/src/pages/cycles/ReadinessHome.jsx') + read('frontend/src/pages/cycles/readinessModel.js');
-  assert.ok(!/Fix next priority/.test(page), 'no second header action');
+  // D5081 part 5 (#5081, RA-14): the header's action is the page's own Fix next priority (`nextPriorityAction`,
+  // through `homes`); the page itself draws no second one.
+  assert.ok(!/Fix next priority/.test(read('frontend/src/pages/cycles/ReadinessHome.jsx')), 'no second header action');
+  assert.match(read('frontend/src/pages/cycles/defs/raise.jsx'), /action: nextPriorityAction\(data\?\.records\)/);
   assert.ok(!/cyclesWrite|fetch\(|method: '(POST|PUT)'/.test(page), 'the home writes nothing');
   assert.ok(!/\b(advisor|advice|recommend\w*|fiduciary)\b/i.test(page.replace(/\/\*[\s\S]*?\*\//g, '')), 'Eadwyn voice');
   assert.equal(renderToStaticMarkup(h(ReadinessBands, null, null, false)), '', 'nothing to fold, nothing drawn');

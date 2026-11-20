@@ -16,9 +16,11 @@
  * 1 and says so; it never prints an empty table. Local files only; no
  * network, no writes.
  */
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, basename, dirname, relative } from 'node:path';
 import { readBoards, coverage, checklistTable, departuresTable, boardsFileFor, pageFileFor, rowNamesCanvas } from './lib/buildScreenToCanvas.mjs';
+
+import { regularTextFile } from './local-files.mjs';
 
 const arg = (name) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
 const flag = (name) => process.argv.includes(`--${name}`);
@@ -52,9 +54,9 @@ function main() {
     if (!found) throw new Error(`no "${name} · Boards.dc.html" in ${INCOMING}; check the name in design/incoming/README.md`);
     boardsPath = join(INCOMING, found);
   }
-  if (!existsSync(boardsPath) || !statSync(boardsPath).isFile()) throw new Error(`no such file: ${boardsPath}`);
-
-  const { boards, source } = readBoards(readFileSync(boardsPath, 'utf8'));
+  const boardsText = regularTextFile(boardsPath);
+  if (boardsText === null) throw new Error(`no such file: ${boardsPath}`);
+  const { boards, source } = readBoards(boardsText);
   const unread = boards.length ? null
     : `${boardsPath} is not in a shape this script reads. List its boards by hand (renderVals in the boards file).`;
   if (flag('departures')) {
@@ -74,7 +76,7 @@ function main() {
   const ids = [...new Set(decisionFiles.map((f) => /^D(\d+)/.exec(basename(f))[1]))];
   const citing = ids.length
     ? walk('frontend/src', (n) => /\.(jsx?|tsx?|css)$/.test(n))
-      .filter((f) => ids.some((id) => new RegExp(`\\bD${id}\\b`).test(readFileSync(f, 'utf8'))))
+      .filter((f) => { const cited = new Set([...readFileSync(f, 'utf8').matchAll(/\bD(\d+)\b/g)].map((m) => m[1])); return ids.some((id) => cited.has(id)); })
     : [];
   const cov = coverage(boards, source);
 

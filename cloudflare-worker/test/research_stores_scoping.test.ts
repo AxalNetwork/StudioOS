@@ -24,7 +24,10 @@ const sheetService = read('cloudflare-worker/src/services/fundSheets.ts');
 // Sheets sync writes the same owner-scoped table from a service module. A
 // statement that forgot its WHERE would be just as bad there, so both files
 // are one corpus for the owner filter.
-const routes = `${handlers}\n${sheetService}`;
+// D6278: the benchmark row's DTO moved to services/researchBenchmarks.ts.
+const benchService = read('cloudflare-worker/src/services/researchBenchmarks.ts')
+  + '\n' + read('cloudflare-worker/src/routes/research_benchmark_funds.ts');
+const routes = `${handlers}\n${sheetService}\n${benchService}`;
 const funds = read('cloudflare-worker/sql/migrations/216_research_funds.sql');
 const bench = read('cloudflare-worker/sql/migrations/217_research_benchmarks.sql');
 const sheetMig = read('cloudflare-worker/sql/migrations/274_research_fund_sheets.sql');
@@ -278,6 +281,17 @@ test('the sheets link is one per owner and every statement names that owner', ()
   }
 });
 
+test('every sheet run statement names its owner (D7170)', () => {
+  const runsMig = read('cloudflare-worker/sql/migrations/202611180052_7170_research_fund_sheet_runs.sql');
+  assert.match(runsMig, /UNIQUE \(owner_user_id, idempotency_key\)/);
+  const found = touching(routes, 'research_fund_sheet_runs');
+  assert.ok(found.length > 0, 'no prepared statement names research_fund_sheet_runs');
+  for (const stmt of found.filter((t) => !/^\s*INSERT/i.test(t.trim()))) {
+    assert.match(stmt, /owner_user_id = \?/,
+      'a research_fund_sheet_runs statement reads without narrowing to its owner');
+  }
+});
+
 test('sheets OAuth tokens are a separate table keyed on the signed-in user', () => {
   assert.match(sheetMig, /CREATE TABLE IF NOT EXISTS google_sheets_oauth_tokens/);
   assert.doesNotMatch(sheetService, /google_oauth_tokens/,
@@ -310,7 +324,8 @@ test('sheet sync is super-admin only', () => {
   const end = handlers.indexOf("research.patch('/funds/:uid'");
   assert.ok(start > 0 && end > start, 'the sheet-route block could not be found');
   const sheet = handlers.slice(start, end);
-  assert.equal((sheet.match(/requireSuperAdmin\(c\)/g) || []).length, 7,
+  // D7170 added tabs, the two previews and reconcile to the seven.
+  assert.equal((sheet.match(/requireSuperAdmin\(c\)/g) || []).length, 11,
     'a sheet handler is still on requireAuth — founders would get a Google copy');
   assert.equal((sheet.match(/requireAuth\(c\)/g) || []).length, 0,
     'a sheet handler fell back to requireAuth');

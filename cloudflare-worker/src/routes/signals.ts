@@ -7,7 +7,9 @@
  * source-adapter layer, and sql/migrations/136_signals.sql for the schema.
  *
  * Endpoints:
- *   GET  /                 → ranked + filtered signal cards (list view)
+ *   GET  /                 → ranked + filtered signal cards (list view);
+ *                            503 `signals_unreadable` when the store cannot be
+ *                            read (D7173) — never the example set
  *   GET  /sources          → source registry (confidence transparency)
  *
  * D670 retired the /signals page, and with it `/filters`, `/kpis`, `/meta`,
@@ -24,12 +26,33 @@ import { requireAuth } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import type { SignalFilters } from '../services/signals/types';
 import { SOURCE_REGISTRY } from '../services/signals/sources';
-import { getRankedSignals, getIngestHealth } from '../services/signals/engine';
+import { getRankedSignals, getIngestHealth, SignalsUnreadableError } from '../services/signals/engine';
+import { refuse } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
 function readMode(c: any): 'founder' | 'advisor' {
   return c.req.query('mode') === 'advisor' ? 'advisor' : 'founder';
+}
+
+/**
+ * The list, or the D7173 refusal: a failed read answers 503
+ * `signals_unreadable` — never the example set, and never cached (the engine
+ * throws before its KV write). Exported for the test that drives it.
+ */
+export async function rankedSignalsResponse(c: any, filters: SignalFilters): Promise<Response> {
+  try {
+    return c.json(await getRankedSignals(c.env, filters));
+  } catch (e) {
+    if (e instanceof SignalsUnreadableError) {
+      return refuse(c, 503, {
+        code: 'signals_unreadable',
+        message: 'The signals could not be read. That is not a sign there are none. Try again.',
+        raw: e.raw,
+      });
+    }
+    throw e;
+  }
 }
 
 // GET /api/signals — ranked, filtered list.
@@ -52,8 +75,7 @@ r.get('/', async (c) => {
       mode: readMode(c),
       limit: q('limit') ? Number(q('limit')) : undefined,
     };
-    const result = await getRankedSignals(c.env, filters);
-    return c.json(result);
+    return await rankedSignalsResponse(c, filters);
   } catch (e) {
     return mapError(c, e);
   }

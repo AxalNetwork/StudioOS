@@ -16,6 +16,7 @@ import teamAgents from '../src/routes/team_agents.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { world, hex, AGENT, COMPANY, PROJECT, SPONSOR, STRANGER } from './_agent_engine_fixture.ts';
 import { removeMigratedDatabases } from './_storage_schema.ts';
+import { roleOf } from '../src/services/agents/catalogue.ts';
 
 after(removeMigratedDatabases);
 type W = ReturnType<typeof world>;
@@ -74,5 +75,46 @@ test('a company agent reads a venture only when it is the company\'s', async () 
     assert.equal(own.status, 200, own.text);
     assert.equal((await call(w, SPONSOR, `/agents/${uid}/skills/cash-runway-snapshot/readiness?project=99`)).body.error, 'project_not_in_company');
     assert.equal((await call(w, SPONSOR, `/agents/${uid}/skills/cash-runway-snapshot/readiness?project=1%20OR%201`)).body.error, 'invalid_project');
+  } finally { w.close(); }
+});
+
+test('D4667-p3: readiness names the one data-room document a run would work on, and refuses anything else as a document', async () => {
+  const w = world();
+  try {
+    w.agent(AGENT, 'general_counsel');
+    const doc = '6'.repeat(32);
+    w.db.prepare("INSERT INTO data_room_files (id, uid, project_id, name, r2_key, updated_at) VALUES (80, ?, ?, 'Synthetic NDA.pdf', 'data-room/p7/nda', '2026-11-01 09:00:00')").run(doc, PROJECT);
+    w.db.prepare("INSERT INTO data_room_search_state (file_id, project_id, status, passages, indexed_at) VALUES (80, ?, 'indexed', 1, '2026-11-01 10:00:00')").run(PROJECT);
+    w.db.prepare("INSERT INTO data_room_passages (project_id, file_id, seq, text, vector_id) VALUES (?, 80, 0, 'Synthetic confidential terms 4411.', 'drf:80:0')").run(PROJECT);
+    const uid = hex(AGENT, 'b');
+    const input = (r: any) => r.body.readiness.inputs.find((i: any) => i.read === 'data_room.index');
+    const none = await call(w, SPONSOR, `/agents/${uid}/skills/contract-clause-extraction/readiness`);
+    assert.deepEqual([none.status, input(none).status, input(none).reason], [200, 'missing', 'not_selected'], none.text);
+    // Mutation checked: the query not passed to the preflight → the document stays not_selected.
+    const one = await call(w, SPONSOR, `/agents/${uid}/skills/contract-clause-extraction/readiness?document=data_room_file:${doc}`);
+    assert.equal(input(one).status, 'available', one.text);
+    assert.ok(!one.text.includes('4411'), 'statuses and reasons only: never the document\'s text');
+    assert.equal((await call(w, SPONSOR, `/agents/${uid}/skills/contract-clause-extraction/readiness?document=1%20OR%201`)).body.error, 'invalid_document');
+  } finally { w.close(); }
+});
+
+test('D4667-p4: readiness names the one fund a run would read, for a quarter, and refuses anything else as a fund', async () => {
+  const w = world();
+  try {
+    w.agent(AGENT, 'cfo');
+    w.db.prepare(`INSERT INTO team_rulebooks (uid, scope_kind, project_id, role_key, version, rules_json, created_by)
+      VALUES ('book-route-p4', 'project', ?, 'cfo', 1, ?, ?)`).run(PROJECT, JSON.stringify({ ...roleOf('cfo')!.default_rules, reads: ['fund.performance', 'grow.records'] }), SPONSOR);
+    w.db.exec(`INSERT INTO vc_funds (id, name, vintage_year, status, gp_user_id, company_id) VALUES (5, 'Synthetic Fund I', 2025, 'investing', ${SPONSOR}, ${COMPANY});
+      INSERT INTO fund_capital_calls (uid, fund_id, call_number, amount_cents, line_count, created_at) VALUES ('call-route', 5, 1, 77123400, 1, '2026-08-15 09:00:00');`);
+    const uid = hex(AGENT, 'b');
+    const input = (r: any) => r.body.readiness.inputs.find((i: any) => i.read === 'fund.performance');
+    const none = await call(w, SPONSOR, `/agents/${uid}/skills/lp-quarterly-letter-draft/readiness`);
+    assert.deepEqual([none.status, input(none).status, input(none).reason], [200, 'missing', 'not_selected'], none.text);
+    // Mutation checked: the query not passed to the preflight → the fund stays not_selected.
+    const one = await call(w, SPONSOR, `/agents/${uid}/skills/lp-quarterly-letter-draft/readiness?fund=vc_fund:5&to=2026-09-30`);
+    assert.equal(input(one).status, 'partial', one.text);
+    assert.ok(!one.text.includes('77123400'), 'statuses and reasons only: never the fund\'s figures');
+    assert.equal(input(await call(w, SPONSOR, `/agents/${uid}/skills/lp-quarterly-letter-draft/readiness?fund=vc_fund:6`)).reason, 'not_found');
+    assert.equal((await call(w, SPONSOR, `/agents/${uid}/skills/lp-quarterly-letter-draft/readiness?fund=5%20OR%201`)).body.error, 'invalid_fund');
   } finally { w.close(); }
 });

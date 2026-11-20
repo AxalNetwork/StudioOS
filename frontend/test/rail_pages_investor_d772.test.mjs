@@ -29,6 +29,11 @@ function assertBandsNamed(rows) {
   for (const o of rows.filter((r) => r.handler === 'draft')) {
     // Each `<ZoneDraft … />` opening tag, found by plain string search (no regex is built from data).
     const src = read(o.source.file);
+    // D6888: a draft card that keeps nothing names its surface and its option on its root, beside each other.
+    if (src.includes(`data-draft-${o.source.match}`)) {
+      assert.ok(src.includes(`data-draft-${o.source.match}\n      data-rail-option="${o.key}"`), `${o.page}: the card does not name ${o.key}`);
+      continue;
+    }
     const bands = src.split('<ZoneDraft').slice(1).map((rest) => rest.slice(0, rest.indexOf('>')));
     const band = bands.find((b) => b.includes(o.source.match));
     assert.ok(band, `${o.page}: no band ${o.source.match}`);
@@ -95,7 +100,7 @@ test('Portfolio: each board draws exactly one rail of its own', () => {
 
 test('Portfolio: every option of the section names itself on its band', () => {
   const rows = rowsOf('Portfolio');
-  assert.deepEqual(rows.map((o) => o.key), ['draft:portfolio-read', 'draft:performance-note', 'draft:multiple-narrative', 'draft:updates-read', 'draft:support-summary']);
+  assert.deepEqual(rows.map((o) => o.key), ['draft:portfolio-read', 'draft:performance-note', 'draft:statement-cover-note', 'draft:multiple-narrative', 'draft:updates-read', 'draft:support-summary']);
   assertBandsNamed(rows);
 });
 

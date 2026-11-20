@@ -324,7 +324,7 @@ test('D686: the Opened states, and module links keep the venture once the Worker
   assert.equal(recipientState({ opened_at: '2026-11-04T08:00:00Z' }), 'Opened 4 Nov');
   assert.equal(recipientState({}), 'Not opened');
   assert.equal(moduleHref('customers', null), '/grow/distribution');
-  assert.equal(moduleHref('partnerships', 7), '/grow/partner-network?project_id=7');
+  assert.equal(moduleHref('partnerships', 7), '/grow/partnerships?project_id=7'); // D6118: one Partnerships page
   assert.equal(moduleHref('capital', null), '/raise/capital-relationships');
   assert.equal(moduleHref('nowhere', 7), null);
 });

@@ -1,8 +1,10 @@
 /**
  * D1268 (#3291) — the investor's evidence block (VR8, VR9), one item's drawer
  * (VR10) and the phone (VR18), on D1265's read (`investorEvidence`). Placed on
- * the deal page's Evidence tab (`EvidenceSummary`), an investor's round call
- * (the call read's own `evidence`) and the diligence room (`SharedEvidence`).
+ * an investor's round call (the call read's own `evidence`) and the diligence
+ * room (`SharedEvidence`). The deal page's Evidence tab (`EvidenceSummary`)
+ * reads the same projection and, since D6164, draws it to the Deals v2
+ * addendum in `DealEvidence.jsx`.
  *
  * WHAT THE READ HOLDS BACK STAYS OUT. Before the NDA the read carries coverage
  * only, so nothing here can draw a value, an item or a claim. After it, every
@@ -17,8 +19,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../../ui/Lightbox';
 import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence.js';
-import { tabHref } from '../../dealPageModel';
-import { BASE, STAFF_READ_LINE, claimWord, coverageTile, evidenceChoices, evidenceMatches, investorView, kindWord, refusalOf, sharedClaimTally, sourceLine, sourceWord, strengthWord } from './evidenceModel';
+import { groupHref, notesHref, tabHref } from '../../dealPageModel';
+import { BASE, STAFF_READ_LINE, claimWord, coverageTile, investorView, kindWord, refusalOf, sourceLine, sourceWord, strengthWord } from './evidenceModel';
+import { DealEvidence, DealEvidenceLoading, DealEvidenceUnreadable } from './DealEvidence';
 
 const box = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -71,7 +74,7 @@ function ClaimPills({ claims }) {
 }
 
 /** VR10: one shared item. Its figure only when the read carried one; otherwise the read's own reason. */
-function ItemDrawer({ item, onClose, diligenceHref, notesHref }) {
+function ItemDrawer({ item, onClose }) {
   const title = kindWord(item.kind);
   return (
     <Lightbox label={title} title={title} onClose={onClose} width={520} phone="full" testId="evidence-item">
@@ -91,12 +94,6 @@ function ItemDrawer({ item, onClose, diligenceHref, notesHref }) {
           </div>
         )}
         <p className={`m-0 text-[12px] ${MUTED}`}>{item.sharing === 'summary' ? 'The founder shared this as a summary only.' : 'Shared after the NDA.'} Each item names where it came from and when.</p>
-        {(diligenceHref || notesHref) && (
-          <div className="flex flex-wrap gap-2">
-            {diligenceHref && <Link to={diligenceHref} className={BTN} data-testid="evidence-item-diligence">Ask the founder about this</Link>}
-            {notesHref && <Link to={notesHref} state={{ evidenceNote: `Evidence · ${title} · ${item.area}\n\n` }} className={BTN} data-testid="evidence-item-notes">Add a note</Link>}
-          </div>
-        )}
       </div>
     </Lightbox>
   );
@@ -106,17 +103,11 @@ function ItemDrawer({ item, onClose, diligenceHref, notesHref }) {
  * The block itself, from one read (or `null` when the read does not admit this
  * reader). `company` names the venture in the canvas's lines.
  */
-export function InvestorEvidence({ read, onRetry = null, company = null, heading = 'Evidence', ndaHref = null, dealActions = null }) {
+export function InvestorEvidence({ read, onRetry = null, company = null, heading = 'Evidence' }) {
   const v = investorView(read);
   const [open, setOpen] = useState(null);
-  const [filters, setFilters] = useState({});
   if (v.stage === 'none') return null;
   const who = company || 'The founder';
-  const dealView = Boolean(ndaHref || dealActions);
-  const choices = dealView && v.stage === 'after' && v.items.ok ? evidenceChoices(v.items.rows) : null;
-  const selected = choices ? Object.fromEntries(Object.entries(filters).filter(([name, value]) => choices[name].includes(value))) : {};
-  const areas = v.items?.areas?.map(([area, rows]) => [area, rows.filter((item) => evidenceMatches(item, selected))]).filter(([, rows]) => rows.length);
-  const claimTally = dealView && v.stage === 'after' ? sharedClaimTally(v.items, v.claims) : null;
   return (
     <section className={box} data-testid="evidence-summary" data-stage={v.stage}>
       <h2 className="m-0 text-[15px] font-bold">{heading}</h2>
@@ -125,7 +116,6 @@ export function InvestorEvidence({ read, onRetry = null, company = null, heading
         <>
           <span className={`${PILL} border-gray-200 text-axal-muted dark:border-gray-700 dark:text-gray-400`} data-testid="evidence-before-nda">Before the NDA</span>
           <p className="m-0 text-[13.5px]">{who} shares what backs its claims. {v.line}</p>
-          {ndaHref && <Link to={ndaHref} className={BTN} data-testid="evidence-sign-nda">Sign the NDA on Documents</Link>}
           <Coverage coverage={v.coverage} onRetry={onRetry} />
           <p className={`m-0 text-[12px] ${MUTED}`}>Coverage only: each kind of evidence, how many, its source and its newest date. No values.</p>
         </>
@@ -134,38 +124,18 @@ export function InvestorEvidence({ read, onRetry = null, company = null, heading
         <>
           <span className={`${PILL} border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200`} data-testid="evidence-after-nda">✓ NDA signed</span>
           <p className="m-0 text-[13.5px]">You see what {company || 'the founder'} chose to share. Each item names where it came from and when.</p>
-          {claimTally && <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="evidence-claim-tally">{claimTally}</p>}
-          {choices && (
-            <div className="grid gap-2">
-              {[['area', 'Area', (value) => value], ['source', 'Source', sourceWord], ['claim', 'Claim state', claimWord]].map(([name, label, word]) =>
-                choices[name].length > 0 && (
-                  <div key={name} role="group" aria-label={label} className="flex flex-wrap items-center gap-1.5">
-                    <span className={`mr-1 text-[12px] font-semibold ${MUTED}`}>{label}</span>
-                    {['', ...choices[name]].map((value) => (
-                      <button key={value} type="button" aria-pressed={(selected[name] || '') === value}
-                        className={`${BTN} aria-pressed:border-axal-violet aria-pressed:text-axal-violet dark:aria-pressed:text-violet-300`}
-                        data-testid={`evidence-filter-${name}-${value || 'all'}`}
-                        onClick={() => setFilters((previous) => ({ ...previous, [name]: value }))}>
-                        {value ? word(value) : 'All'}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-            </div>
-          )}
           {!v.items.ok ? <ReadFailed line={v.items.reason} onRetry={onRetry} testId="evidence-items-unreadable" />
             : v.items.rows.length === 0 ? <p className={`m-0 text-[13px] ${MUTED}`} data-testid="evidence-items-empty">The founder has shared no evidence yet.</p>
               : (
                 <>
                   {v.tally && <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="evidence-tally">{v.tally}</p>}
-                  {!areas.length && <p className={`m-0 text-[13px] ${MUTED}`}>No shared evidence matches these filters.</p>}
-                  {areas.map(([area, rows]) => (
+                  {v.items.areas.map(([area, rows]) => (
                     <div key={area} className="flex flex-col gap-1.5" data-testid="evidence-area">
                       <h3 className="m-0 text-[13px] font-bold">{area}</h3>
                       <ul className="m-0 flex list-none flex-col divide-y divide-gray-100 p-0 dark:divide-gray-800">
                         {rows.map((i) => (
                           <li key={i.uid} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`evidence-row-${i.uid}`}>
-                            <button type="button" className={`min-h-[32px] text-left text-[13px] font-semibold text-axal-violet hover:underline dark:text-violet-300 ${dealView ? 'max-sm:min-h-[44px]' : ''}`} onClick={() => setOpen(i.uid)} data-testid={`evidence-open-${i.uid}`}>{kindWord(i.kind)}</button>
+                            <button type="button" className="min-h-[32px] text-left text-[13px] font-semibold text-axal-violet hover:underline dark:text-violet-300" onClick={() => setOpen(i.uid)} data-testid={`evidence-open-${i.uid}`}>{kindWord(i.kind)}</button>
                             <span className={`text-[13px] ${i.figure != null ? MONO : MUTED}`} data-testid={`evidence-value-${i.uid}`}>{i.figure ?? i.value_reason ?? 'No figure is recorded for this item.'}</span>
                             <span className={`text-[12px] ${MUTED}`}>{sourceLine(i)}</span>
                             <ClaimPills claims={i.claims} />
@@ -180,14 +150,14 @@ export function InvestorEvidence({ read, onRetry = null, company = null, heading
         </>
       )}
       {v.partial && <p className="m-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="evidence-partial">Some of the founder’s evidence could not be checked against its record just now, so it is left out. Try again later.</p>}
-      <OpenItem uid={open} items={v.items} onClose={() => setOpen(null)} actions={dealActions} />
+      <OpenItem uid={open} items={v.items} onClose={() => setOpen(null)} />
     </section>
   );
 }
 
-function OpenItem({ uid, items, onClose, actions }) {
+function OpenItem({ uid, items, onClose }) {
   const item = uid && items?.ok && items.rows.find((row) => row.uid === uid);
-  return item ? <ItemDrawer item={item} onClose={onClose} {...actions} /> : null;
+  return item ? <ItemDrawer item={item} onClose={onClose} /> : null;
 }
 
 /** A read the block draws itself: loading, then the read or its refusal. */
@@ -221,13 +191,22 @@ function Refused({ error, onRetry, role = null }) {
   );
 }
 
-/** The deal page's Evidence tab: `GET /api/deals/:id/evidence`. D6167: staff read the investor's projection, and say so. */
+/**
+ * The deal page's Evidence tab: `GET /api/deals/:id/evidence`, drawn to the v2 addendum (D6164, `DealEvidence.jsx`).
+ * D6167: staff read the investor's projection, and say so. An investor gets the item sheet's hand-offs.
+ */
 export function EvidenceSummary({ dealId, company = null, role = null, ndaHref = null, api = raiseEvidenceApi }) {
   const r = useEvidence(() => api.forDeal(dealId), dealId ? `deal:${dealId}` : null);
-  if (r.status === 'loading') return <Loading />;
-  if (r.status === 'refused') return <Refused error={r.error} onRetry={r.retry} role={role} />;
-  const dealActions = role === 'investor' && ndaHref ? { diligenceHref: tabHref(dealId, 'diligence'), notesHref: tabHref(dealId, 'notes') } : null;
-  const block = <InvestorEvidence key={dealId} read={r.data} onRetry={r.retry} company={company} ndaHref={ndaHref} dealActions={dealActions} />;
+  if (r.status === 'loading') return <DealEvidenceLoading />;
+  if (r.status === 'refused') {
+    if (refusalOf(r.error, role).kind === 'unreadable') return <DealEvidenceUnreadable onRetry={r.retry} />;
+    return <Refused error={r.error} onRetry={r.retry} role={role} />;
+  }
+  const actions = role === 'investor' ? {
+    dataRoomHref: groupHref(dealId, 'dataroom'), diligenceHref: tabHref(dealId, 'diligence'),
+    notesHref: notesHref(dealId), scorecardHref: tabHref(dealId, 'scorecard'),
+  } : null;
+  const block = <DealEvidence key={dealId} read={r.data} onRetry={r.retry} ndaHref={ndaHref} actions={actions} />;
   if (r.data?.reader !== 'staff') return block;
   return <div className="grid gap-2"><p className={`m-0 text-[12px] ${MUTED}`} data-testid="evidence-staff-read">{STAFF_READ_LINE}</p>{block}</div>;
 }

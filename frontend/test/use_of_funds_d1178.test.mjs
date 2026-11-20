@@ -71,14 +71,16 @@ const LEAN = {
     runway: block(null, 'Needs a raise and a split.'), milestones: block([]) },
 };
 const SHORT = { ...BASE, id: 3, name: 'Small round', is_base: 0, model: { ...BASE.model, runway: block({ months: 12, relation: 'exact' }) } };
+const FOUNDER_MAP = { edit: true, mercury: true, admin_logged: false };
 const TODAY = { state: 'ok', chosen: { kind: 'metrics', ref: 'm1', source: 'Typed', value: 7, cash_cents: 70000000, burn_cents: 10000000, as_of: '2026-10-01' }, candidates: [], partial: false, sources: {} };
 
 const PROJECTS = [{ id: 3, uid: 'p3uid', name: 'Harbor Ledger' }];
 function handler(url, options = {}) {
   if (/\/api\/projects(\?|$)/.test(url)) return response(PROJECTS);
-  if (/\/api\/financials\/3$/.test(url)) return response(options.method === 'PUT' ? { ok: true } : FORECAST);
-  if (url.includes('/use-of-funds/scenarios?')) return response(options.method === 'POST' ? { id: 9 } : { items: [BASE, LEAN, SHORT] });
-  if (url.includes('/use-of-funds/compare?')) return response({ today: TODAY, scenarios: [BASE, LEAN], source: 'Modelled', reason: 'Today is the measured record.' });
+  // D5074 part 6: each read carries the founder's map, as the Worker sends it.
+  if (/\/api\/financials\/3$/.test(url)) return response(options.method === 'PUT' ? { ok: true } : { ...FORECAST, capabilities: { edit: true } });
+  if (url.includes('/use-of-funds/scenarios?')) return response(options.method === 'POST' ? { id: 9 } : { items: [BASE, LEAN, SHORT], capabilities: FOUNDER_MAP });
+  if (url.includes('/use-of-funds/compare?')) return response({ today: TODAY, scenarios: [BASE, LEAN], source: 'Modelled', reason: 'Today is the measured record.', capabilities: FOUNDER_MAP });
   if (/\/use-of-funds\/scenarios\/\d+/.test(url)) return response({ ok: true });
   if (url.includes('/cycles/raise/modules/')) return response({ module: { slug: 'use-of-funds', name: 'Use of funds' }, card: { state: 'empty' }, records: { rows: [], cols: [] } });
   return response({});
@@ -352,6 +354,29 @@ test('Scenarios (UF9): a card each, the base first and kept; Compare carries the
     assert.equal(landed, '/raise/use-of-funds/scenarios/compare?project_id=3&ids=1%2C2');
     assert.ok(v.ids().includes('uof-compare-page'));
   } finally { await v.close(); }
+});
+
+test('D5074 part 6: a map that does not allow edit (a support session) draws no scenario or forecast write; no map draws none', async () => {
+  const SUPPORT = { edit: false, mercury: false, admin_logged: false };
+  for (const caps of [SUPPORT, undefined]) {
+    const handle = (u, o = {}) => {
+      if (/\/api\/financials\/3$/.test(u)) return response({ ...FORECAST, capabilities: caps && { edit: false } });
+      if (u.includes('/use-of-funds/scenarios?')) return response({ items: [BASE, LEAN, SHORT], capabilities: caps });
+      return handler(u, o);
+    };
+    const v = await mounted('/raise/use-of-funds/scenarios?project_id=3', { handle });
+    try {
+      assert.equal(v.all('uof-scenario').length, 3, 'the scenarios still read');
+      for (const id of ['uof-scenarios-new', 'uof-scenario-edit', 'uof-scenario-make-base', 'uof-scenario-delete']) assert.ok(!v.ids().includes(id), `${id} with ${JSON.stringify(caps)}`);
+      assert.ok(v.ids().includes('uof-scenarios-compare'), 'Compare is a read, still offered');
+    } finally { await v.close(); }
+    const fc = await mounted('/raise/use-of-funds/runway/forecast?project_id=3', { handle });
+    try {
+      assert.ok(fc.ids().includes('uof-drivers'), 'the forecast still reads');
+      assert.ok(!fc.ids().includes('uof-drivers-edit') && !fc.ids().includes('uof-forecast-save'), `no forecast write with ${JSON.stringify(caps)}`);
+      assert.ok(fc.ids().includes('uof-forecast-read-only'));
+    } finally { await fc.close(); }
+  }
 });
 
 test('Scenarios\' writes each open a dialog first: New, Edit, Make this the base (with its warning), Delete', async () => {

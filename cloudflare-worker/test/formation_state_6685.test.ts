@@ -40,6 +40,8 @@ function fixture() {
   db.exec(migrationTable('466_company_visits.sql', 'user_company_visits'));
   db.exec(migration('597_company_archive_and_events.sql'));
   db.exec(migration('685_company_legal_record_and_slugs.sql'));
+  // D6687: the order's subject company, which the formation reads also name.
+  db.exec('ALTER TABLE incorporations ADD COLUMN subject_company_id INTEGER');
   for (const s of Object.values(CYCLE_STORES).flat()) db.exec(`CREATE TABLE ${s} (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER)`);
   const insert = (table: string, given: Record<string, any>) => {
     const v = { ...given };

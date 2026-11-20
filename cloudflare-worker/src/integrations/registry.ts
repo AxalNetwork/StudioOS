@@ -29,6 +29,8 @@ import { TYPEFORM_READ_SCOPES } from './typeformOAuth';
 import { FACEBOOK_READ_SCOPES } from './facebookScopes';
 import { FACEBOOK_BUILT_FEEDS, FACEBOOK_FEEDS } from './facebookFeeds';
 import { TIKTOK_BUILT_FEEDS, TIKTOK_FEEDS } from './tiktokFeeds';
+import { X_PUBLISH_SCOPES } from './xScopes';
+import { X_BUILT_FEEDS, X_FEEDS } from './xFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
 import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
@@ -642,6 +644,16 @@ export const REGISTRY: ProviderDescriptor[] = [
     audience_rule: 'venture', docs_url: 'https://developers.tiktok.com/docs/en/login-kit-web',
     icon: 'Video', oauth_scopes: [...TIKTOK_READ_SCOPES],
   },
+  // D2403 part 2 (#2403): a founder's own X, through the HQ-owned founders app (owner decision 2B); paid founder
+  // plans only (decision 4). Read first; publishing is a second consent, off by default. The union is listed so
+  // `hasScopeOverreach` accepts either grant; the provider refuses a read sign-in that came back with a write scope.
+  {
+    key: 'x', display_name: 'X', integration_type: 'data_feed',
+    description: 'Your own X account: Axal reads your follower count and your own posts’ figures. Nothing is posted unless you turn on publishing and press Post.',
+    status: 'beta', tier: 'growth', auth_type: 'oauth2', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code',
+    icon: 'AtSign', oauth_scopes: [...X_PUBLISH_SCOPES],
+  },
   // D5839 (#5839): Search Console, read only, through its own Google OAuth client; one chosen property per venture.
   {
     key: 'google_search_console', display_name: 'Google Search Console', integration_type: 'data_feed',
@@ -674,6 +686,8 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     permissions: ['List the Pages you manage.', 'Read Page engagement.', 'Read Page insights.'] },
   tiktok: { category: 'Social', verified: false, pulls: TIKTOK_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })), sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
+  x: { category: 'Social', verified: false, pulls: X_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })), sends: [], feeds: [...X_FEEDS],
+    permissions: ['Read your own posts and their figures.', 'Read your X profile and follower count.', 'Keep the connection when you are away, so a sync works without signing in again.', 'Only if you turn on publishing: post, thread and delete your posts.', 'Only if you turn on publishing: upload an image for a post.'] },
   google_search_console: { category: 'Analytics', verified: false, pulls: [], sends: [], feeds: [],
     permissions: ['Read your Search Console properties, your permission level on each, and the data of the property you choose. Axal VC never changes a property, its users or its settings.'] },
   typeform: { category: 'Data', verified: false, pulls: [], sends: [], feeds: [],

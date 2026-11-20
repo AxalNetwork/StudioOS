@@ -24,7 +24,7 @@ import type { IntegrationRow, PushPreview } from '../integrations/registry';
 import { getDescriptor } from '../integrations/registry';
 
 /** A connector key exactly as the registry spells it. */
-export const CONNECTOR_KEY_RE = /^[a-z][a-z0-9_]{1,39}$/;
+export const CONNECTOR_KEY_RE = /^[a-z][a-z0-9_]{0,39}$/;
 
 /** At most this many switches on in one conversation. */
 export const MAX_ENABLED = 12;

@@ -115,7 +115,7 @@ registerFactWriter({
     }
     // A name or an email reaches the record only when the founder mapped a column for it: `mapRow` carries mapped fields only.
     const out = await addFeedback(env, ctx.projectId, { id: ctx.userId } as User, {
-      body, source, theme: text(v.theme, 80), status: oneOf(v.status, FEEDBACK_STATUS), from_name: text(v.from_name, 200), from_email: emailOf(v.from_email),
+      body, source, theme: text(v.theme, 80), status: oneOf(v.status, FEEDBACK_STATUS), from_name: text(v.from_name, 200), from_email: emailOf(v.from_email), origin: 'notion',
     });
     const row = await env.DB.prepare('SELECT id FROM product_feedback WHERE uid = ?').bind(out.uid).first<{ id: number }>();
     return Number(row!.id);

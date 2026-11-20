@@ -99,6 +99,13 @@ function freshDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(ic_decision_id, user_id)
     );
+    -- D6143: the voting roster (migration 202611180056_6143); empty, so every decision here has none.
+    CREATE TABLE ic_decision_voters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, ic_decision_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL, added_by INTEGER NOT NULL,
+      added_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(ic_decision_id, user_id)
+    );
     CREATE TABLE decision_journal_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, owner_user_id INTEGER,
       project_id INTEGER, deal_id INTEGER, ic_decision_id INTEGER,

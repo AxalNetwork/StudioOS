@@ -123,15 +123,19 @@ const has = (cls, token) => cls.split(/\s+/).includes(token);
 
 test('the header line is the scope or Not recorded; the catalog price is a line of its own', () => {
   const line = (item) => words(part(page({ item }), 'market-reading-scope'));
-  assert.equal(line(reading()), 'Scope: Design & product services · Catalog lists $45,000');
-  // A scoped reading with no catalog price shows no chip: the chip used to
-  // stand for the missing price, and printed beside a scope that was there.
+  // D7174 (D7039 RMP-04): the catalog price left the header for its own box
+  // beside the range, so the header line is the scope alone.
+  assert.equal(line(reading()), 'Scope: Design & product services');
   assert.equal(line(reading({ catalog_price_cents: null })), 'Scope: Design & product services');
   // No scope is Not recorded, whether or not the offering is catalogued.
-  assert.equal(line(reading({ scope: null })), 'Scope: Not recorded · Catalog lists $45,000');
+  assert.equal(line(reading({ scope: null })), 'Scope: Not recorded');
   assert.equal(line(reading({ scope: null, catalog_price_cents: null })), 'Scope: Not recorded');
-  // The catalog price stays out of the range.
-  assert.match(words(part(page(), 'market-reading-tiles')), /Comparable range \$38,000 – \$62,000 11 comparables/);
+  // The catalog price stays out of the range, and both are to the cent.
+  assert.match(words(part(page(), 'market-reading-tiles')),
+    /Comparable range \$38,000\.00 – \$62,000\.00 from 11 comparables · both ends to the cent/);
+  assert.doesNotMatch(words(part(page(), 'market-reading-tiles')), /45,000/);
+  assert.match(words(part(page(), 'market-reading-versus')),
+    /Comparable range · your reading \$38,000\.00 – \$62,000\.00 .* Catalog price · your offer \$45,000\.00 .*Never added into the range\./);
 });
 
 // ---- 2. The comparables table ------------------------------------------------
@@ -153,9 +157,12 @@ test('the comparables table has the canvas\'s four columns, and still nothing un
 
 // ---- 3. The licence accent ---------------------------------------------------
 
-test('the page root carries the licence\'s ACCENT values, for both grounds', () => {
-  for (const role of ['partner', 'founder', 'advisor', 'investor']) {
-    const a = ACCENT[role];
+test('the page root carries Research violet on every licence, for both grounds', () => {
+  // D7174: the owner answered A on D7039 (violet as drawn, D7039-p2), so the
+  // licence accent of D593 gives way to `ACCENT.founder`'s violet everywhere.
+  // An investor reads no reading (D6273 Q2), so its page draws none.
+  for (const role of ['partner', 'founder', 'advisor']) {
+    const a = ACCENT.founder;
     const root = part(page({ role }), 'market-reading');
     const style = /^<div[^>]*style="([^"]*)"/.exec(root)?.[1] || '';
     assert.ok(style.includes(`--mr-accent:${a.ink}`), `${role}: the fill is not its ACCENT ink`);
@@ -163,9 +170,11 @@ test('the page root carries the licence\'s ACCENT values, for both grounds', () 
     assert.ok(style.includes(`--mr-accent-line:${a.border}`), `${role}: no accent border`);
     assert.ok(style.includes(`--mr-accent-dark:${a.deepDark}`), `${role}: no dark-ground accent`);
   }
-  // An admin reaches this page as a founder (App.jsx `researchRole`); an
-  // unknown role still gets an accent rather than none.
-  assert.deepEqual(accentVars('nobody'), accentVars('founder'));
+  // The accent no longer depends on the licence, so the helper takes no role
+  // (an admin reaches this page as a founder, App.jsx `researchRole`; the loop
+  // above shows every licence draws the same violet).
+  assert.equal(accentVars.length, 0, 'accentVars takes no role');
+  assert.equal(accentVars()['--mr-accent'], '#7c3aed');
 });
 
 test('buttons, the draft pill, Accept, the focus ring and the back link read the accent, light and dark', () => {
@@ -202,8 +211,8 @@ test('buttons, the draft pill, Accept, the focus ring and the back link read the
     assert.ok(has(classOf(current, label), 'focus-visible:outline-[color:var(--mr-accent)]'), `${label}: no accent focus ring`);
   }
 
-  // A partner sees amber: nothing on the page body is violet any more.
-  for (const html of [current, stale]) assert.doesNotMatch(part(html, 'market-reading'), /violet/);
+  // A partner sees violet now, never the licence amber (D7174).
+  for (const html of [current, stale]) assert.doesNotMatch(part(html, 'market-reading'), /amber-(50|200|900|950)\b/);
 });
 
 // ---- 4. The Scope field ------------------------------------------------------
@@ -231,7 +240,7 @@ test('the form records a scope, and a blank one is saved as none rather than car
   assert.equal(readingSubmission(item, { ...form, high: '1000' }).error,
     'High is below low. Nothing is saved until the range reads forward.');
   assert.equal(readingSubmission(item, { ...form, n: '0' }).error,
-    'How many engagements the range came from. Refused if 0.');
+    'How many engagements the range came from: a whole number, 1 or more. Refused if 0.');
   assert.equal(readingSubmission(item, { ...form, ran_at: '' }).error, 'A reading needs the date you ran it.');
 
   // And the page posts that body, not the opened reading's scope.

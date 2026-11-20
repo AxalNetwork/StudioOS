@@ -14,8 +14,10 @@ import { isolatePreviewTraffic, requirePreview } from './_helpers.js';
  * where a success lands, and that every other path still ends on the
  * same-tab redirect.
  *
- * Runs against the PR preview: `.github/workflows/pr-preview.yml`'s
- * `login-e2e` job points PLAYWRIGHT_BASE_URL at the Worker it just deployed.
+ * Runs against the PR preview build: `.github/workflows/pr-preview.yml`'s
+ * `login-e2e` job serves the artifact the trusted deploy ships with
+ * `wrangler dev` and the preview's own config (D7146), and points
+ * PLAYWRIGHT_BASE_URL at it.
  * The preview has no API (`/api/*` is a 404), which is why every Google route
  * is stubbed here. Skips locally when PLAYWRIGHT_BASE_URL is unset.
  */
@@ -178,22 +180,25 @@ test.describe('Continue with Google opens Google’s window on /login (D722)', (
     expect(seen.start).toBe(1);
   });
 
-  test('a typed address is the login hint, and the expected_email of the next attempt', async ({ page }) => {
+  // D6958: the first view has no address field, and Google launches from it
+  // independent of any draft typed in the Email branch, so no hint is sent and
+  // no "different account" check is asked for.
+  test('Google from the first view sends no login hint and no expected_email; a second press is a fresh attempt', async ({ page }) => {
     const seen = await stubGoogle(page, { mode: 'closed' });
     await page.goto('/login', { waitUntil: 'domcontentloaded' });
-    await page.getByPlaceholder('you@company.com').fill('e2e.google@example.test');
     await gisLoaded(page);
+    await expect(page.getByPlaceholder('you@company.com')).toHaveCount(0);
     const button = page.getByTestId('login-google');
     await button.click();
     await expect(page.getByText('Google sign-in was cancelled. Nothing was changed.')).toBeVisible();
     const cfgs = await page.evaluate(() => window.__gisConfigs);
-    expect(cfgs[0].login_hint).toBe('e2e.google@example.test');
+    expect(cfgs[0].login_hint).toBeUndefined();
     // A second press is a fresh attempt with a fresh state; this one answers.
     await page.evaluate(() => { window.__gisMode = 'code'; });
     await button.click();
     await page.waitForURL((url) => url.pathname === '/studio', { timeout: 10_000 });
     expect(seen.popup.length).toBe(1);
-    expect(seen.popup[0].body.expected_email).toBe('e2e.google@example.test');
+    expect(seen.popup[0].body.expected_email).toBeUndefined();
     expect(seen.popup[0].body.state).not.toBe(cfgs[0].state);
   });
 

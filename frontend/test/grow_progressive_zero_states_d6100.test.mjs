@@ -41,7 +41,9 @@ const addFor = (slug) => FORMS.grow[slug].map((f) => ({ text: f.button, href: `/
 const parts = (names) => names.map((n) => h('div', { key: n, 'data-testid': 'grow-part' }, n));
 
 test('both Grow modules are listed, with D5076\'s fold label and the form\'s own button as the action', () => {
-  assert.deepEqual(Object.keys(PROGRESSIVE.grow), Object.keys(MODULES));
+  // D6123 adds Grow's four zero-only modules after these two; D6100's two keep all three stages.
+  assert.deepEqual(Object.keys(PROGRESSIVE.grow).slice(0, 2), Object.keys(MODULES));
+  for (const slug of Object.keys(MODULES)) assert.equal(PROGRESSIVE.grow[slug].zeroOnly, undefined);
   for (const [slug, m] of Object.entries(MODULES)) {
     const c = progressiveFor('grow', slug);
     assert.equal(c.heading, m.heading);

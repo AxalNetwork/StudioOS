@@ -239,6 +239,7 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   // Validate
   'fill:pain_tag': 'VA11', 'transcribe:interview': 'VA1', 'transcribe:session': 'VA1', 'transcribe:recording': 'VA1',
   'summarise:session': 'VA5', 'structure:transcript': 'VA5', 'ask:transcript': 'VA6', 'fill:hypothesis': 'VA15',
+  'draft:validate/interview-guide': 'VA5', // D6008: interview questions under the open hypotheses (nearest: Validate's interview writing on the 70B)
   // Build
   'draft:build/plan': 'BU1', 'draft:build/roadmap': 'BU2', 'draft:build/this-week': 'BU2', 'draft:build/retro': 'BU2', 'draft:build/kpi': 'BU3',
   // D6042 (#6042): each runs its page's kind's Build job, so neither moves a model. Founding team's
@@ -272,14 +273,15 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   // Research
   'ask:research': 'RE1', 'ask:library': 'RE1', 'ask:evidence': 'RE1', 'ask:question': 'RE1',
   'draft:research/ask': 'RE3', 'draft:research/funds': 'RE3', 'draft:research/library': 'RE3', 'draft:index-gaps': 'RE3',
-  'analyse:competitors': 'RE3', 'analyse:again': 'RE3', 'analyse:sources': 'RE3', 'extract:candidate': 'RE3', 'extract:site': 'RE3',
-  'analyze:competitors': 'RE3', 'rerun:analysis': 'RE3', 'refresh:sources': 'RE3',
+  'analyse:competitors': 'RE3', 'analyse:again': 'RE3', 'extract:candidate': 'RE3', 'extract:site': 'RE3',
+  'analyze:competitors': 'RE3', 'rerun:analysis': 'RE3', // D7652: Refresh sources runs no model (D7176), so no job
   'upload:document': 'RE2', 'upload:reindex': 'RE2', 'reindex:document': 'RE2',
   'draft:session-brief': 'CA2', 'draft:checkpoint-brief': 'CA2',
   // Invest, the fund and the portfolio
   'draft:ic-memo': 'IN1', 'draft:closing-cover-note': 'IN1', 'draft:thin-evidence': 'IN1',
   'draft:multiple-narrative': 'IN5',
   'draft:performance-note': 'IN5', 'draft:portfolio-read': 'IN5', // D6212: the quarter-end note, as the multiple's narrative
+  'draft:statement-cover-note': 'IN5', // D6888: the statement's covering note, from its own figures, as D6212's notes
   'draft:updates-read': 'IN13', // nearest: a summary on the 70B (IN9 reads sentiment and writes nothing)
   'draft:support-summary': 'IN11', 'draft:lp-reminder': 'RA10',
   // Advisor and Operating Partner practice

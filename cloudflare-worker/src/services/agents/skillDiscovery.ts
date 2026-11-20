@@ -5,7 +5,7 @@
  * Pure: it takes the agent's facts (role, company, granted tools) and the catalogue's skill facts (each skill's
  * published version) and returns `{ outcome, candidates, blocked, clarify, abstain_reason, stages }`. It reads no
  * store, writes nothing, calls no model and sends nothing anywhere; it never attaches a skill (attaching stays
- * `PUT /api/teams/agents/:uid/skills`, through `attachCheck`). No route serves it yet (#5967).
+ * `PUT /api/teams/agents/:uid/skills`, through `attachCheck`). `POST /api/teams/skills/discover` (`routes/team_skills.ts`, #5967) serves it.
  *
  * THE GATE (`gateOf`), in `attachCheck`'s order (`skillLinks.ts`), then discovery's:
  *   not_found              another company's skill, or a draft the caller may not read: listed nowhere

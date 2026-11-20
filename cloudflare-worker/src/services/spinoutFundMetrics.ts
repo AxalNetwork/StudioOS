@@ -229,3 +229,202 @@ export function summarizeLpRows(rows: LpCommitmentRow[]): FundRaiseSummary {
     median_commitment: median(tickets),
   };
 }
+
+/* ---------------------------------------------------------------------------
+ * D6137 (#6137): the fund block. Every reader gets a headline; committed LPs
+ * also get the raise and the portfolio; nothing is drawn without a record.
+ *
+ * The LP pages used to fall back to `frontend/src/lib/spinoutFundModel.js`, a
+ * port of a design file, whenever a figure had no record. Its target, committed
+ * capital, 31 LPs, eleven positions and MOIC are not fund facts (owner, Q1), so
+ * every figure here is either read from a record or answers
+ * `available: false` with a short reason, and the page draws "Not recorded".
+ * ------------------------------------------------------------------------- */
+
+/** One figure: its value when a record backs it, else why it is not drawn. */
+export type Figure = {
+  available: boolean;
+  value: number | null;
+  /** Set only when `available` is false: `no_fund_record`, `no_position_records`, … */
+  reason?: string;
+};
+
+const recorded = (value: number): Figure => ({ available: true, value });
+const notRecorded = (reason: string): Figure => ({ available: false, value: null, reason });
+
+/**
+ * The first close's scheduled date, confirmed by the owner on 2026-11-16 (Q3).
+ * No store records whether the close happened, so `outcome_recorded` stays
+ * false until Fund Admin records one, and a passed date says so rather than
+ * being printed as still ahead.
+ */
+export const FIRST_CLOSE_SCHEDULED = '2026-09-15';
+export const FIRST_CLOSE_CONFIRMED_AS_OF = '2026-11-16';
+
+export type CloseStatus = {
+  first_close_date: string;
+  /** The date the owner confirmed the schedule on. */
+  as_of: string;
+  date_passed: boolean;
+  outcome_recorded: false;
+  outcome: null;
+};
+
+/** `today` is a UTC calendar date, `YYYY-MM-DD`. */
+export function closeStatus(today: string): CloseStatus {
+  return {
+    first_close_date: FIRST_CLOSE_SCHEDULED,
+    as_of: FIRST_CLOSE_CONFIRMED_AS_OF,
+    date_passed: FIRST_CLOSE_SCHEDULED < today,
+    outcome_recorded: false,
+    outcome: null,
+  };
+}
+
+export type PositionRow = {
+  id: number;
+  project_id: number;
+  invested_amount: number | null;
+  position_date: string | null;
+};
+
+export type MarkRow = {
+  id: number;
+  project_id: number;
+  as_of_date: string | null;
+  fmv: number | null;
+};
+
+export type PortfolioSummary = {
+  /** True when at least one position record exists for the fund. */
+  available: boolean;
+  /** Companies the fund holds a position in. */
+  positions: Figure;
+  /** Dollars invested across every position row, initial and follow-on. */
+  invested: Figure;
+  /** Dollars at each company's latest mark; only when every held company has one. */
+  held: Figure;
+  /** Position rows after a company's first: their count and dollars. */
+  follow_ons: { available: boolean; count: number | null; amount: number | null; reason?: string };
+  /** No store records the fund's reserve, so this is never drawn. */
+  reserve: Figure;
+  /** held ÷ invested, when both are recorded. */
+  gross_moic: Figure;
+  /** The newest date among the records this block read. */
+  as_of: { available: boolean; value: string | null; reason?: string };
+};
+
+/** Every portfolio figure unavailable for one reason (no rows, or the read failed). */
+export function unavailablePortfolio(reason: string): PortfolioSummary {
+  return {
+    available: false,
+    positions: notRecorded(reason),
+    invested: notRecorded(reason),
+    held: notRecorded(reason),
+    follow_ons: { available: false, count: null, amount: null, reason },
+    reserve: notRecorded('no_reserve_record'),
+    gross_moic: notRecorded(reason),
+    as_of: { available: false, value: null, reason },
+  };
+}
+
+/**
+ * The fund's portfolio from its `portfolio_positions` and `portfolio_marks`
+ * rows. A company's first position (earliest `position_date`, then lowest id)
+ * is its initial check; every later row is a follow-on. `held` uses each
+ * company's latest mark and is drawn only when every held company has one: a
+ * total over some of the companies would read as the whole portfolio.
+ */
+export function summarizePortfolio(positions: PositionRow[], marks: MarkRow[]): PortfolioSummary {
+  if (!positions.length) return unavailablePortfolio('no_position_records');
+
+  const byProject = new Map<number, PositionRow[]>();
+  let invested = 0;
+  for (const p of positions) {
+    const amount = Number(p.invested_amount ?? 0);
+    if (Number.isFinite(amount) && amount > 0) invested += amount;
+    const list = byProject.get(Number(p.project_id)) ?? [];
+    list.push(p);
+    byProject.set(Number(p.project_id), list);
+  }
+
+  let followOnCount = 0;
+  let followOnAmount = 0;
+  for (const list of byProject.values()) {
+    list.sort((a, b) => String(a.position_date ?? '9999').localeCompare(String(b.position_date ?? '9999')) || a.id - b.id);
+    for (const p of list.slice(1)) {
+      followOnCount += 1;
+      const amount = Number(p.invested_amount ?? 0);
+      if (Number.isFinite(amount) && amount > 0) followOnAmount += amount;
+    }
+  }
+
+  const latest = new Map<number, MarkRow>();
+  for (const m of marks) {
+    const pid = Number(m.project_id);
+    if (!byProject.has(pid) || !m.as_of_date || m.fmv == null || !Number.isFinite(Number(m.fmv))) continue;
+    const cur = latest.get(pid);
+    if (!cur || String(m.as_of_date) > String(cur.as_of_date) || (m.as_of_date === cur.as_of_date && m.id > cur.id)) {
+      latest.set(pid, m);
+    }
+  }
+  const allMarked = [...byProject.keys()].every((pid) => latest.has(pid));
+  const heldValue = [...latest.values()].reduce((sum, m) => sum + Number(m.fmv), 0);
+  const held = allMarked ? recorded(heldValue) : notRecorded(latest.size ? 'unmarked_positions' : 'no_mark_records');
+
+  const dates = [
+    ...positions.map((p) => p.position_date),
+    ...(allMarked ? [...latest.values()].map((m) => m.as_of_date) : []),
+  ].filter((d): d is string => typeof d === 'string' && d.length >= 10).map((d) => d.slice(0, 10)).sort();
+  const asOf = dates.length ? dates[dates.length - 1] : null;
+
+  return {
+    available: true,
+    positions: recorded(byProject.size),
+    invested: recorded(invested),
+    held,
+    follow_ons: { available: true, count: followOnCount, amount: followOnAmount },
+    reserve: notRecorded('no_reserve_record'),
+    gross_moic: held.available && invested > 0
+      ? recorded(Number(held.value) / invested)
+      : notRecorded(held.reason ?? 'no_invested_amount'),
+    as_of: asOf ? { available: true, value: asOf } : { available: false, value: null, reason: 'no_dated_records' },
+  };
+}
+
+/** The raise, for committed LPs: `available: false` when the fund has no LP rows. */
+export type RaiseBlock = (FundRaiseSummary & { available: true }) | { available: false; reason: string };
+
+export function raiseBlock(rows: LpCommitmentRow[]): RaiseBlock {
+  if (!rows.length) return { available: false, reason: 'no_lp_records' };
+  return { available: true, ...summarizeLpRows(rows) };
+}
+
+/** What every reader of the fund block gets: the target and the close status. */
+export type FundHeadline = {
+  available: boolean;
+  target: Figure;
+  close: CloseStatus;
+};
+
+/** A committed LP's fund block: the headline plus the raise and the portfolio. */
+export type FundLpBlock = FundHeadline & {
+  raise: RaiseBlock;
+  portfolio: PortfolioSummary;
+};
+
+/** The keys a visitor's fund block carries, and no others (owner, Q2). */
+export const HEADLINE_KEYS = ['available', 'target', 'close'] as const;
+
+/**
+ * The headline. `targetDollars` is the fund record's size (`fund_size_cents`,
+ * in dollars); a fund with no size recorded, or no fund row, has no target.
+ */
+export function fundHeadline(fundFound: boolean, targetDollars: number | null, today: string): FundHeadline {
+  const target = !fundFound
+    ? notRecorded('no_fund_record')
+    : targetDollars != null && Number.isFinite(targetDollars) && targetDollars > 0
+      ? recorded(targetDollars)
+      : notRecorded('no_target_record');
+  return { available: fundFound, target, close: closeStatus(today) };
+}

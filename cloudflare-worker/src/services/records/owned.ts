@@ -50,7 +50,7 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
     }
     case 'customer_segments': {
       const n = numeric(value);
-      return n !== null && !!await db.prepare('SELECT 1 FROM customer_segments WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+      return n !== null && !!await db.prepare('SELECT 1 FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL').bind(n, projectId).first();
     }
     case 'competitor_candidates':
       return !!await db.prepare(
@@ -147,6 +147,15 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
     case 'market_entry_steps':
       return !!await db.prepare(
         'SELECT 1 FROM market_entry_steps s JOIN markets m ON m.id = s.market_id WHERE s.uid = ? AND m.project_id = ?',
+      ).bind(value, projectId).first();
+    // D6114 (#6114): a deal through its partner, an agenda item through its obligation.
+    case 'growth_partner_deals':
+      return !!await db.prepare(
+        'SELECT 1 FROM growth_partner_deals d JOIN growth_partners p ON p.id = d.partner_id WHERE d.uid = ? AND p.project_id = ?',
+      ).bind(value, projectId).first();
+    case 'obligation_agenda_items':
+      return !!await db.prepare(
+        'SELECT 1 FROM obligation_agenda_items a JOIN compliance_events e ON e.id = a.event_id WHERE a.uid = ? AND e.project_id = ?',
       ).bind(value, projectId).first();
     // D690 (S18-B, #1694): Build. Each id resolves through its store and the venture.
     case 'mvp_features': {

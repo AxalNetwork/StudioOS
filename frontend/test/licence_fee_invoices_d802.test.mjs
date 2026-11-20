@@ -61,6 +61,8 @@ async function mount(api) {
   return {
     by, props, text: () => text(container),
     click: (id) => act(async () => { props(by(id)).onClick(); await settle(); await settle(); }),
+    // D4819 part 21: Issue and Void ask in the consequence sheet, which renders in this tree.
+    clickNoWait: (id) => act(async () => { props(by(id)).onClick(); await settle(); }),
     type: (id, value) => act(async () => { props(by(id)).onChange({ target: { value } }); }),
     submit: (id) => act(async () => { props(by(id)).onSubmit({ preventDefault() {} }); await settle(); await settle(); }),
     async unmount() { await act(async () => root.unmount()); restore(); },
@@ -76,23 +78,31 @@ test('the list draws each invoice, its states, and Issue calls the Worker and re
   const m = await mount(api);
   try {
     assert.ok(m.by('fee-invoices-empty'));
-    await m.click('fee-invoices-issue');
+    await m.clickNoWait('fee-invoices-issue');
+    assert.ok(m.by('licence-consequence-sheet'), 'Issue asks in the consequence sheet first');
+    assert.deepEqual(calls, ['list'], 'nothing is issued before the sheet is confirmed');
+    assert.match(m.text(), /An invoice for €12,000\.00 is issued/);
+    await m.click('licence-consequence-confirm');
     assert.deepEqual(calls, ['list', 'issue:lic_a', 'list']);
     assert.ok(m.by('fee-invoice-inv_1'));
     assert.match(m.text(), /2026–27/);
     assert.match(m.text(), /AXAL-LIC-LIC-A-2026-27/);
     assert.match(m.text(), /€12,000\.00/);
-    assert.match(m.text(), /Invoice issued\./);
+    assert.match(m.text(m.by('fee-invoices-write-outcome')), /Invoice issued/);
+    assert.equal(m.props(m.by('fee-invoices-write-outcome'))['data-outcome'], 'completed');
   } finally { await m.unmount(); }
 
   const noFee = await mount({ list: async () => ({ ...READ, annual_fee_cents: null, invoices: [] }) });
   try { assert.equal(noFee.props(noFee.by('fee-invoices-issue')).disabled, true); } finally { await noFee.unmount(); }
   const down = await mount({ list: async () => { throw new Error('boom'); } });
   try { assert.ok(down.by('fee-invoices-unreadable')); } finally { await down.unmount(); }
-  const refused = await mount({ list: async () => READ, issue: async () => { throw new Error('The 2026–27 licence year is already invoiced.'); } });
+  const refused = await mount({ list: async () => READ, issue: async () => { throw Object.assign(new Error('already invoiced'), { status: 409, data: { error: 'year_invoiced', message: 'The 2026–27 licence year is already invoiced.' } }); } });
   try {
-    await refused.click('fee-invoices-issue');
-    assert.match(refused.text(refused.by('fee-invoices-outcome-error')), /already invoiced/);
+    await refused.clickNoWait('fee-invoices-issue');
+    await refused.click('licence-consequence-confirm');
+    const card = refused.by('fee-invoices-write-outcome');
+    assert.equal(refused.props(card)['data-outcome'], 'refused');
+    assert.match(refused.text(card), /The 2026–27 licence year is already invoiced\./, 'a refusal shows the Worker\'s words');
   } finally { await refused.unmount(); }
 });
 
@@ -116,12 +126,13 @@ test('Record payment sends the total in cents with its note; Void needs a reason
     await m.type('fee-invoice-note', ' Bank ref 1 ');
     await m.submit('fee-invoice-pay-form');
     assert.deepEqual(sent, [['pay', 'lic_a', 'inv_1', 400010, 'Bank ref 1', 0]], 'the revision the screen read rides the call (D4694)');
-    await m.click('fee-invoice-void');
-    await m.type('fee-invoice-void-note', 'short');
-    await m.submit('fee-invoice-void-form');
+    await m.clickNoWait('fee-invoice-void');
+    assert.ok(m.by('licence-consequence-sheet'), 'Void asks in the consequence sheet');
+    await m.type('licence-consequence-field', 'short');
+    assert.equal(m.props(m.by('licence-consequence-confirm')).disabled, true, 'no void without a ten-character reason');
     assert.equal(sent.length, 1, 'no void without a reason');
-    await m.type('fee-invoice-void-note', 'Issued to the wrong licence year');
-    await m.submit('fee-invoice-void-form');
+    await m.type('licence-consequence-field', 'Issued to the wrong licence year');
+    await m.click('licence-consequence-confirm');
     assert.deepEqual(sent[1], ['void', 'lic_a', 'inv_1', 'Issued to the wrong licence year', 0]);
   } finally { await m.unmount(); }
   const paid = await mount({ list: async () => ({ ...READ, invoices: [{ ...INV, paid_cents: 100, status: 'issued' }] }) });

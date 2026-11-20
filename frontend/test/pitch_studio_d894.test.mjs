@@ -302,7 +302,7 @@ test('every investor link is reachable: the links read a page at a time, under a
   assert.match(renderedText(between(page1, 'pitch-studio-links-pager')), /Links 1–25 of 30\s*Previous\s*Next/);
   assert.match(page1, /disabled=""[^>]*data-testid="pitch-studio-links-prev"/);
   assert.doesNotMatch(page1, /disabled=""[^>]*data-testid="pitch-studio-links-next"/);
-  assert.match(renderedText(between(analytics(reads()), 'pitch-studio-links-pager')), /^Links 1–6 of 6$/, 'one page: the total, and no pager buttons');
+  assert.match(renderedText(between(analytics(reads()), 'pitch-studio-links-pager', 'deck-grants')), /^Links 1–6 of 6$/, 'one page: the total, and no pager buttons');
 });
 
 test('the cover reads the title slide\'s headline and tagline, never its section name', () => {

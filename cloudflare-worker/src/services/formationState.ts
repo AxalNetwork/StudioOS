@@ -53,25 +53,25 @@ export const COMPANY_IDENTITY_SQL = `SELECT cp.id AS company_id FROM company_pro
     AND (TRIM(COALESCE(cp.incorporation_date, '')) <> '' OR TRIM(COALESCE(cp.registration_number, '')) <> '')`;
 
 /**
- * Orders that bear on a company: linked to it, or else placed for a venture now
- * in it (`account_companies.ts`'s attribution). Latest first, as its
+ * Orders that bear on a company: linked to it, or placed for it (D6687, `subject_company_id`), or
+ * else placed for a venture now in it (`account_companies.ts`'s attribution). Latest first, as its
  * `formation` block orders them.
  */
-export const COMPANY_ORDERS_SQL = `SELECT COALESCE(o.company_id, p.company_id) AS company_id, o.id AS order_id, o.status
+export const COMPANY_ORDERS_SQL = `SELECT COALESCE(o.company_id, o.subject_company_id, p.company_id) AS company_id, o.id AS order_id, o.status
   FROM incorporations o LEFT JOIN projects p ON p.id = o.project_id
   WHERE o.status IN ('paid', 'packet_processing', 'packet_ready', 'filed')
-    AND COALESCE(o.company_id, p.company_id) IN (SELECT value FROM json_each(?))
+    AND COALESCE(o.company_id, o.subject_company_id, p.company_id) IN (SELECT value FROM json_each(?))
   ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC`;
 
 /**
  * Orders that bear on a venture: its own, at any counted status, and a filed
  * order of the company it sits in. Latest first.
  */
-export const PROJECT_ORDERS_SQL = `SELECT o.project_id, COALESCE(o.company_id, p.company_id) AS company_id, o.id AS order_id, o.status
+export const PROJECT_ORDERS_SQL = `SELECT o.project_id, COALESCE(o.company_id, o.subject_company_id, p.company_id) AS company_id, o.id AS order_id, o.status
   FROM incorporations o LEFT JOIN projects p ON p.id = o.project_id
   WHERE o.status IN ('paid', 'packet_processing', 'packet_ready', 'filed')
     AND (o.project_id IN (SELECT value FROM json_each(?))
-      OR (o.status = 'filed' AND COALESCE(o.company_id, p.company_id) IN (SELECT value FROM json_each(?))))
+      OR (o.status = 'filed' AND COALESCE(o.company_id, o.subject_company_id, p.company_id) IN (SELECT value FROM json_each(?))))
   ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC`;
 
 type Row = Record<string, any>;

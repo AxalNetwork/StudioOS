@@ -15,10 +15,11 @@ import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../lib/fillScoped.js';
 import ZoneDraft from '../workspaces/ZoneDraft';
-import { Eyebrow, Instrument, NotRecorded } from '../workspaces/canvasKit';
+import { NotRecorded } from '../workspaces/canvasKit';
+import { Pill, NotMeasured } from './partner/kit';
+import { CATALOG_FOOT, LISTING_STATES, inListing, listingCounts, priceBasis, requestsLine } from './partner/offers/catalogModel.js';
 import { useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions';
-import { requestTotals, requestedNote, rowRequests } from '../lib/serviceMeasures.js';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAT_LABEL = {
@@ -249,7 +250,6 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
  */
 const MODELS = [['fixed', 'Fixed'], ['retainer', 'Retainer'], ['seat', 'Seat']];
 const MODEL_LABEL = Object.fromEntries(MODELS);
-const MODEL_TONE = { Fixed: 'info', Retainer: 'warn', Seat: 'seam' };
 
 /** The chips, as predicates. `all` is absent and falls through to every row. */
 const NARROW = {
@@ -258,15 +258,10 @@ const NARROW = {
   seat: (o) => o.engagement_model === 'seat',
 };
 
-/**
- * Cents to a dollar figure, formatted ONCE — the artboard's own instMeta.
- *
- * `priceLabel` above still reads `price_usd` because the marketplace cards it
- * serves are shared with the founder-facing browse tab. This is the catalog's
- * own edge, and it takes the integer: a REAL that came back as 47999.999999
- * renders as $48,000 here and as $47,999.99 anywhere that divides it late.
+/*
+ * Cents become a dollar figure ONCE, in `priceBasis` (`partner/offers/catalogModel.js`,
+ * #4843 part 3). `priceLabel` above still reads `price_usd` for the marketplace cards.
  */
-const usd = (cents) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
 
 /**
  * A service with no price is a DRAFT, and that is derived rather than stored.
@@ -291,6 +286,8 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [listing, setListing] = useState('All');
+  const [menuFor, setMenuFor] = useState(null);
   const [filter, setFilter] = useState('all');
   const [result, setResult] = useState(null);
   const request = React.useRef(0);
@@ -342,27 +339,13 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
     return <Empty icon={Briefcase} text="Only partner accounts can publish offerings." />;
   }
 
-  const visible = NARROW[filter] ? rows.filter(NARROW[filter]) : rows;
+  // #4843 part 3 (D4843-p3, OF-02): the model chips (the toolbar's) and the listing switch
+  // (the page's) narrow together; the switch's counts are over the whole page of rows.
+  const byModel = NARROW[filter] ? rows.filter(NARROW[filter]) : rows;
+  const visible = byModel.filter(inListing(listing, catalogState));
   const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
-
-  // The tiles describe this page before its local chip filter.
-  const priced = rows.filter((o) => o.price_cents != null);
-  const drafts = rows.filter((o) => o.price_cents == null);
-  const live = rows.filter((o) => catalogState(o) === 'Live');
-  // REQUESTS ARE COUNTED, NEVER PRICED (#4696). This multiplied each entry's
-  // CURRENT price by its non-cancelled requests and called the sum "Booked to
-  // date": a pending request read as a sale, and repricing an entry restated
-  // the apparent history. A request stores no amount, so no historical value
-  // is stated until one is snapshotted (`lib/serviceMeasures.js`).
-  const requests = requestTotals(rows);
-  const dearest = priced.reduce((best, o) => (best && best.price_cents >= o.price_cents ? best : o), null);
-  // The artboard's fourth tile is the RETAINER's price, and it is `Not
-  // recorded` there because that is the row sitting in draft. Here it is the
-  // firm's own retainer if they have priced one, and the absence if they have
-  // not — which is the same tile reporting the same thing about this reader's
-  // catalog rather than about the sample one.
-  const retainer = rows.find((o) => o.engagement_model === 'retainer' && o.price_cents != null);
-  const retainerDraft = rows.find((o) => o.engagement_model === 'retainer');
+  const counts = listingCounts(rows, catalogState);
+  const edit = (o) => { setMenuFor(null); setEditing(o); setShowForm(true); };
 
   const handlers = {
     newService: {
@@ -371,22 +354,46 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
     },
   };
 
+  const priceCell = (o) => {
+    const line = priceBasis(o);
+    return line ?? <span className="text-axal-muted" data-testid={`catalog-noprice-${o.id}`}>No price yet</span>;
+  };
+  const requestsCell = (o) => {
+    const line = requestsLine(o);
+    return line ?? <NotMeasured label="Not recorded" why="This row predates request counts, so none is stated." testId={`catalog-requests-${o.id}`} />;
+  };
+  const statePill = (o) => {
+    const state = catalogState(o);
+    return <Pill tone={state === 'Live' ? 'ok' : state === 'Draft' ? 'warn' : 'neutral'}>{state}</Pill>;
+  };
+  const rowMenu = (o) => (
+    <span className="relative inline-block">
+      <button type="button" aria-label={`More actions for ${o.title}`} aria-expanded={menuFor === o.id}
+        onClick={() => setMenuFor((m) => (m === o.id ? null : o.id))} data-testid={`catalog-more-${o.id}`}
+        className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-axal-hairline text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 max-sm:h-11 max-sm:w-11">⋯</button>
+      {menuFor === o.id && (
+        <span role="menu" className="absolute right-0 z-10 mt-1 flex w-36 flex-col rounded-md border border-axal-hairline bg-white p-1 text-left shadow-md dark:border-gray-700 dark:bg-gray-900"
+          data-testid={`catalog-menu-${o.id}`}>
+          <button type="button" role="menuitem" onClick={() => { setMenuFor(null); toggleListed(o); }}
+            className="rounded px-2 py-1.5 text-left text-[12.5px] hover:bg-gray-50 dark:hover:bg-gray-800">{o.is_active ? 'Unlist' : 'List'}</button>
+          <button type="button" role="menuitem" onClick={() => { setMenuFor(null); remove(o); }}
+            className="mt-1 rounded border-t border-axal-hairline px-2 py-1.5 text-left text-[12.5px] text-rose-700 hover:bg-rose-50 dark:border-gray-800 dark:text-rose-300 dark:hover:bg-rose-950/30">Delete</button>
+        </span>
+      )}
+    </span>
+  );
+  const editButton = (o) => (
+    <button type="button" onClick={() => edit(o)} data-testid={`catalog-edit-${o.id}`}
+      className="rounded-md px-2 py-1 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800 max-sm:min-h-[44px]">Edit</button>
+  );
+  const modelOf = (o) => (o.engagement_model ? MODEL_LABEL[o.engagement_model] : null);
+
   return (
     <div className="space-y-4">
-      {/* `role` IS THE SHELL'S LICENCE, NOT THE VIEWER'S, and the distinction
-          matters here more than on a page that serves one licence. This
-          component is mounted at `/offers/catalog`, inside the partner
-          shell — so an admin reading a partner's
-          catalogue is still in the amber shell, and chips painted from
-          `user.role` would put founder violet inside it. The caller says which
-          shell it is, the same way it already supplies the actions: this page
-          learns nothing about roles, which is what its docblock above promises.
-
-          FOUR LIVE CHIPS NOW, WHERE THERE WAS ONE AND NO STATE. The note that
-          stood here read: "`Fixed`, `Retainer` and `Seat` need a pricing-model
-          column `service_offerings` does not have. A `useState` whose value can
-          never change would be a control that looks selectable and selects
-          nothing." Migration 227 added the column; the state is real. */}
+      {/* `role` IS THE SHELL'S LICENCE, NOT THE VIEWER'S: this page is mounted at
+          `/offers/catalog` inside the partner shell, so the caller says which shell it
+          is and this page learns nothing about roles. The model chips are the toolbar's;
+          migration 227 made them real. */}
       {(zoneActions || zoneFilters) && (
         <ZoneToolbar
           role={role}
@@ -396,103 +403,79 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
       )}
 
       <div>
-        <h2 className="text-lg font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Service catalog</h2>
-        <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-400">
-          Productised services with engagement model and price.
-        </p>
+        <h2 className="text-lg font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Catalog</h2>
+        <p className="mt-1 text-[12.5px] text-gray-600 dark:text-gray-400">The services your firm sells through Axal.</p>
       </div>
 
       {error && <ErrorBox message={error} />}
       {loading && <div className="text-sm text-gray-500">Loading…</div>}
 
-      {result?.total > result?.page_size && <p className="text-sm text-gray-600 dark:text-gray-400">Figures and filters below apply to this page.</p>}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <CatalogTile
-          label="Live services" value={String(live.length)}
-          note={drafts.length ? `${drafts.length} draft, unpriced` : 'none unpriced'}
-        />
-        <CatalogTile label="Requested" value={String(requests.requested)} note={requestedNote(requests)} />
-        {dearest
-          ? <CatalogTile label="Highest price" value={usd(dearest.price_cents)} note={dearest.title} />
-          : <CatalogTile label="Highest price" nr note="nothing in the catalog carries a price yet" />}
-        {retainer
-          ? <CatalogTile label="Retainer price" value={`${usd(retainer.price_cents)} / mo`} note={retainer.title} />
-          : (
-            <CatalogTile
-              label="Retainer price" nr
-              note={retainerDraft ? 'the one draft — scope not final' : 'no retainer is in the catalog'}
-            />
-          )}
-      </div>
-
-      {/* READS THROUGH TO PIPELINE, in the artboard's own words and its own
-          cyan. This is not decoration: an unpriced entry is a SCORING gap, and
-          a reader who does not know that reads the draft row as cosmetic. */}
-      <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
-        <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Pipeline:</strong>{' '}
-        Pipeline · Leads computes each lead’s match score against these entries.
-        {result?.total <= result?.page_size && (drafts.length
-          ? ` The ${drafts.length === 1 ? 'unpriced entry scores' : `${drafts.length} unpriced entries score`} as a capability but not as a fit, so leads shaped like ${drafts.length === 1 ? 'it' : 'them'} currently read lower than they should — a pricing decision, surfacing as a pipeline symptom.`
-          : ' Every entry carries a price, so every one of them can be scored as a fit rather than only as a capability.')}
-      </div>
-
       {!loading && rows.length === 0 ? (
-        <Empty icon={Package} text="No offerings yet. Publish your first package to appear in the catalogue." />
+        <Empty icon={Package} text="No services yet. Add your first service to appear in the catalogue." />
       ) : (
-        <Instrument
-          testid="service-catalog"
-          title="Services"
-          meta="Prices stored as integers, formatted once"
-          cols="1.5fr .8fr 1fr .6fr 2fr"
-          head={['Service', 'Model', 'Price', 'Requested', 'What’s included']}
-          rows={visible.map((o) => {
-            const state = catalogState(o);
-            return {
-              key: o.id,
-              rowClass: state === 'Draft' ? 'bg-amber-50/40 dark:bg-amber-950/15' : '',
-              cells: [
-                {
-                  text: o.title,
-                  ...(state === 'Live' ? {} : { pill: state, pillTone: state === 'Draft' ? 'warn' : 'neutral' }),
-                  sub: CAT_LABEL[o.category] || o.category,
-                  node: (
-                    <>
-                      <button type="button" onClick={() => { setEditing(o); setShowForm(true); }}
-                        className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400">Edit</button>
-                      <button type="button" onClick={() => toggleListed(o)}
-                        className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400">
-                        {o.is_active ? 'Unlist' : 'List'}
-                      </button>
-                      <button type="button" onClick={() => remove(o)}
-                        className="text-[11px] text-rose-600 underline hover:text-rose-800">Delete</button>
-                    </>
-                  ),
-                },
-                o.engagement_model
-                  ? { pill: MODEL_LABEL[o.engagement_model], pillTone: MODEL_TONE[MODEL_LABEL[o.engagement_model]] }
-                  : { nr: true },
-                // PER MONTH ON THE TWO MODELS THAT RECUR, which is the artboard's
-                // own rule and the instNote's point: a seat and a retainer price
-                // monthly, a fixed service prices once, and a figure without that
-                // suffix beside one that has it reads as the same kind of number.
-                o.price_cents == null
-                  ? { nr: true }
-                  : { text: usd(o.price_cents) + (o.engagement_model === 'retainer' || o.engagement_model === 'seat' ? ' / mo' : '') },
-                { text: rowRequests(o)?.requested ? String(rowRequests(o).requested) : '—' },
-                { text: o.summary },
-              ],
-            };
-          })}
-          note={`${drafts.length ? `${drafts.length === 1 ? 'One entry sits' : `${drafts.length} entries sit`} in draft with ${drafts.length === 1 ? 'its price' : 'their prices'} reading "Not recorded" rather than a placeholder figure — an invented number here would propagate straight into lead scoring and into every proposal generated from the catalog.` : 'Every entry carries a price, so none of them reads as a placeholder.'} Seat services price monthly and carry a granted scope; fixed services price once. That distinction is the same one Delivery reports progress against. Requested counts the service requests made against each entry, whatever became of them, so an entry nobody has requested reads "—" rather than zero. A request is not a sale, and it stores no amount, so no booked revenue is stated: the tile counts what was booked and what is pending, and the value reads "Not recorded" until requests record one.`}
-        />
+        <>
+          <div role="radiogroup" aria-label="Listing state" className="inline-flex flex-wrap gap-1 rounded-lg border border-axal-hairline p-1 dark:border-gray-800"
+            data-testid="catalog-listing">
+            {['All', ...LISTING_STATES].map((k) => (
+              <button key={k} type="button" role="radio" aria-checked={listing === k} onClick={() => setListing(k)}
+                data-testid={`catalog-listing-${k}`}
+                className={`rounded-md px-2.5 py-1 text-[12.5px] font-semibold max-sm:min-h-[44px] ${listing === k ? 'bg-axal-ink text-white dark:bg-gray-100 dark:text-gray-900' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
+                {k} {counts[k]}
+              </button>
+            ))}
+          </div>
+          {result?.total > result?.page_size && <p className="text-[12px] text-gray-600 dark:text-gray-400">Counts and filters apply to this page.</p>}
+
+          <section className="overflow-hidden rounded-xl border border-axal-hairline dark:border-gray-800" data-testid="service-catalog">
+            <table className="hidden w-full text-left text-[13px] sm:table">
+              <thead className="bg-gray-50 text-[11px] uppercase tracking-[.06em] text-axal-faint dark:bg-gray-900/40">
+                <tr>
+                  <th scope="col" className="px-3 py-2">Service</th>
+                  <th scope="col" className="px-3 py-2">Engagement model</th>
+                  <th scope="col" className="px-3 py-2 text-right">Price</th>
+                  <th scope="col" className="px-3 py-2">Listing</th>
+                  <th scope="col" className="px-3 py-2">Requests</th>
+                  <th scope="col" className="px-3 py-2"><span className="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((o) => (
+                  <tr key={o.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`catalog-row-${o.id}`}>
+                    <td className="px-3 py-2.5">
+                      <b className="block text-[14px]">{o.title}</b>
+                      <small className="text-[12px] text-axal-muted">{CAT_LABEL[o.category] || o.category}</small>
+                    </td>
+                    <td className="px-3 py-2.5">{modelOf(o) ?? <NotRecorded />}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">{priceCell(o)}</td>
+                    <td className="px-3 py-2.5">{statePill(o)}</td>
+                    <td className="px-3 py-2.5">{requestsCell(o)}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right">{editButton(o)}{rowMenu(o)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <ul className="divide-y divide-axal-hairline sm:hidden dark:divide-gray-800" data-testid="catalog-cards">
+              {visible.map((o) => (
+                <li key={o.id} className="space-y-1 p-3" data-testid={`catalog-card-${o.id}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div><b className="block text-[14px]">{o.title}</b><small className="text-[12px] text-axal-muted">{CAT_LABEL[o.category] || o.category}</small></div>
+                    {statePill(o)}
+                  </div>
+                  <p className="text-[12.5px]">{modelOf(o) ?? 'Model not recorded'} · {priceCell(o)}</p>
+                  <p className="text-[12.5px]">{requestsCell(o)}</p>
+                  <div className="flex items-center justify-end">{editButton(o)}{rowMenu(o)}</div>
+                </li>
+              ))}
+            </ul>
+          </section>
+          {!visible.length && (
+            <p className="text-[12px] text-gray-600 dark:text-gray-300" data-testid="catalog-view-empty">No service is in this view.</p>
+          )}
+          <p className="text-[12px] text-gray-600 dark:text-gray-400" data-testid="catalog-foot">{CATALOG_FOOT}</p>
+        </>
       )}
 
       <OfferPages label="Catalogue" result={result} busy={loading} onPage={load} />
-      {!visible.length && rows.length > 0 && (
-        <p className="text-[12px] text-gray-600 dark:text-gray-300">
-          Nothing in the catalog is charged this way. The engagement model is set on the service itself.
-        </p>
-      )}
 
       <ZoneDraft
         surface="offers/catalog"
@@ -513,20 +496,6 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
           onClose={() => { setShowForm(false); setEditing(null); load(); }}
         />
       )}
-    </div>
-  );
-}
-
-function CatalogTile({ label, value, note, nr = false }) {
-  return (
-    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-      <Eyebrow>{label}</Eyebrow>
-      <div className="mt-1.5">
-        {nr ? <NotRecorded /> : (
-          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
-        )}
-      </div>
-      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
     </div>
   );
 }
@@ -597,9 +566,9 @@ function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
   }
 
   return (
-    <Modal title={offering ? 'Edit offering' : 'New offering'} onClose={onClose} wide>
+    <Modal title={offering ? 'Edit service' : 'New service'} onClose={onClose} wide>
       <div className="space-y-3 text-sm">
-        <Field label="Title">
+        <Field label="Service name">
           <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
@@ -616,7 +585,7 @@ function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
             choice: a firm that has not decided how a service is charged should
             not have this form decide for it, and the catalog draws the absence
             rather than guessing "Fixed". */}
-        <Field label="Engagement model">
+        <Field label="How is it sold?">
           <select value={form.engagement_model} onChange={(e) => setForm({ ...form, engagement_model: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value="">Not recorded</option>
             {MODELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -624,8 +593,8 @@ function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
         </Field>
         <FillFormBar fill={fill} />
         <div>
-          <FillLabel fill={fill} name="summary" label="Summary (what the founder gets)" value={form.summary}>
-            <label htmlFor="offering-summary" className="mb-1 block text-[11px] uppercase tracking-wide text-gray-500">Summary (what the founder gets)</label>
+          <FillLabel fill={fill} name="summary" label="What do you deliver?" value={form.summary}>
+            <label htmlFor="offering-summary" className="mb-1 block text-[11px] uppercase tracking-wide text-gray-500">What do you deliver?</label>
           </FillLabel>
           <textarea id="offering-summary" rows={3} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
         </div>

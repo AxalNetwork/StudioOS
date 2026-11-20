@@ -48,6 +48,7 @@ import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from 
 import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
 import { countsOnly, insightsParams, type InsightsLoader } from '../services/insightsScope';
 import { programsParams, type ProgramsLoader } from '../services/programCatalogue';
+import { subscriptionRevenue } from '../services/subscriptionRevenue';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -288,9 +289,10 @@ export async function branchOverview(env: Env): Promise<BranchAnswer<BranchOverv
     ...(reason ? { backlog_reason: reason } : {}),
     revenue_mtd_cents: null,
     revenue_reason:
-      'This branch reports its previous and current quarter to HQ every morning (D266), and every '
-      + 'stream in that report arrives unmeasured: this database records no revenue amounts, so '
-      + 'there is no month-to-date figure to send.',
+      'This branch reports its previous and current quarter to HQ every morning (D266), stream by '
+      + 'stream, and nothing totals a month to date. A stream is measured only where this database '
+      + 'records amounts: subscriptions from its own financial ledger, which stays empty while the '
+      + 'branch receives no Stripe webhooks (D5947).',
     suspended: String(licence.status || '').toLowerCase() === 'suspended',
     active_accounts_week: active.value,
     active_accounts_week_of: weekOf,
@@ -564,7 +566,7 @@ export async function applyLicenceCopy(
       void res;
     } catch (e) {
       failed.push(sec.name);
-      console.warn(`[branchOps] branch_licence.${sec.key} not written`, (e as Error).message);
+      console.warn('[branchOps] branch_licence.%s not written', sec.key, (e as Error).message);
     }
   }
   if (revision !== null) {
@@ -622,30 +624,53 @@ export async function branchLicenceKind(env: Env): Promise<string | null> {
  * H5 — what a branch can say about its own money (D111)               *
  * ------------------------------------------------------------------ */
 
+/**
+ * D5947: the words the revenue read model (D5950) uses, so HQ stores and shows
+ * one vocabulary. `complete` and `incomplete` carry a figure (or a NULL one when
+ * the rows had no amount); the other three never do.
+ */
+export const STREAM_STATES = ['complete', 'incomplete', 'not_recorded', 'not_available', 'unreadable'] as const;
+export type StreamState = (typeof STREAM_STATES)[number];
+
 export type StreamReport = {
   stream: string;
   gross_cents: number | null;
+  /**
+   * The figure's own currency. On a NULL figure it is a placeholder the column
+   * needs (migration 260: NOT NULL DEFAULT 'EUR') and means nothing.
+   */
   currency: string;
   available: boolean;
   is_estimate?: boolean;
   estimate_basis?: string;
   reason?: string;
+  /** D5947 — whether the figure is whole, partial or absent, and why. */
+  state: StreamState;
+  /** D5947 — what the figure was read from, or `none` when this branch has no store for the stream. */
+  source: string;
+  /** D5947 — when this branch read that source. */
+  source_as_of: string;
 };
+
+/** D5947 — the ledger the subscriptions stream is read from (the D5946 reader). */
+export const SUBSCRIPTION_SOURCE = 'financial_events';
 
 /**
  * What this branch billed in a period, per stream, with the unavailable ones
  * named rather than zeroed.
  *
- * THE HONEST ANSWER TODAY IS MOSTLY "CANNOT MEASURE", and that was worth
- * checking rather than assuming. Read against the schema on 2026-09-15:
+ * Read against the schema on 2026-09-15 (D111) and again on 2026-11-16 (D5947):
  *
- *   subscriptions  `account_subscriptions` carries `plan`, `status`,
- *                  `period_end` and Stripe ids and NO AMOUNT. The charges live
- *                  in the Stripe API, read one customer at a time by
- *                  `/api/admin/billing/ltv`. There is no local charge ledger
- *                  to total a quarter from — on a branch any more than at HQ,
- *                  which is the same finding `admin_revenue.ts` already
- *                  records for the platform.
+ *   subscriptions  MEASURED FROM THE BRANCH'S OWN LEDGER WHEN IT HAS ONE.
+ *                  `financial_events` (D5299) exists in every database, and
+ *                  the D5946 reader totals one quarter of it per currency.
+ *                  But only the Stripe webhook writes those rows, and a
+ *                  branch is provisioned with no STRIPE_WEBHOOK_SECRET
+ *                  (branch-provision.yml's secret bundle carries none), so
+ *                  its webhook refuses every event and its ledger is empty BY
+ *                  DESIGN. That is reported as `not_recorded` with that
+ *                  reason — never as a zero, and never as a figure from HQ's
+ *                  ledger, which is not this branch's to read.
  *   licence_fees   A branch charges no onward licence fee in the product. The
  *                  annual fee flows the other way, from the branch to HQ, and
  *                  it is a term of the licence rather than something the
@@ -677,23 +702,18 @@ export async function branchRevenueSummary(
   // reason attached, and HQ would have drawn a statement over a window nobody
   // meant. Refusing up front is the only place the caller learns the truth.
   const bounds = quarterBounds(period);
+  const readAt = new Date().toISOString();
 
   const streams: StreamReport[] = [
-    {
-      stream: 'subscriptions',
-      gross_cents: null,
-      currency: 'EUR',
-      available: false,
-      reason:
-        'Subscription revenue is not totalled in this database. `account_subscriptions` records a '
-        + 'plan and a status but no amount, and the charges live in the Stripe API, so nothing here '
-        + 'can derive it and the stream is reported unmeasured.',
-    },
+    await subscriptionStream(env, String(period).trim(), bounds, readAt),
     {
       stream: 'licence_fees',
       gross_cents: null,
       currency: 'EUR',
       available: false,
+      state: 'not_available',
+      source: 'none',
+      source_as_of: readAt,
       reason:
         'A subsidiary charges no onward licence fee in the product — the annual fee is a term of '
         + 'its own licence and flows to HQ, so there is nothing for this branch to report.',
@@ -713,6 +733,9 @@ export async function branchRevenueSummary(
       currency: 'USD',
       available: false,
       is_estimate: true,
+      state: 'not_available',
+      source: 'ai_usage_logs',
+      source_as_of: readAt,
       estimate_basis:
         `Inference COST for the period was USD ${(costCents / 100).toFixed(2)} over `
         + `${Number(q?.calls) || 0} calls (ai_usage_logs.est_cost_usd).`,
@@ -727,11 +750,98 @@ export async function branchRevenueSummary(
       gross_cents: null,
       currency: 'USD',
       available: false,
+      state: 'unreadable',
+      source: 'ai_usage_logs',
+      source_as_of: readAt,
       reason: 'The AI usage log could not be read on this branch.',
     });
   }
 
-  return { branch: code, as_of: new Date().toISOString(), period: String(period), streams };
+  return { branch: code, as_of: readAt, period: String(period), streams };
+}
+
+/**
+ * D5947 — the subscriptions stream, from this branch's own `financial_events`
+ * through the D5946 reader (`subscriptionRevenue`), which already keeps
+ * currencies apart, sums one kind, and names a coverage gap.
+ *
+ * ONE ROW PER STREAM AT HQ (migration 260's key), so one currency per stream:
+ *   · one currency in the period: its gross, in that currency, with the
+ *     reader's own state — `incomplete` when the quarter began before the
+ *     ledger's coverage start or a row has no amount or no stream;
+ *   · two or more: the licence's own currency is reported when the ledger has
+ *     it, the stream is `incomplete`, and the other currencies are named in the
+ *     reason, never added in. With no licence currency among them the figure
+ *     is NULL;
+ *   · no row at all: NULL and `not_recorded`. An empty ledger has no currency
+ *     to state a zero in, and on a branch with no Stripe webhook it is empty by
+ *     design, which the reason says.
+ */
+async function subscriptionStream(
+  env: Env, period: string, bounds: [string, string], readAt: string,
+): Promise<StreamReport> {
+  const base = { stream: 'subscriptions', source: SUBSCRIPTION_SOURCE, source_as_of: readAt };
+  const absent = (state: StreamState, reason: string): StreamReport => ({
+    ...base, gross_cents: null, currency: 'EUR', available: false, state, reason,
+  });
+  // Date-only bounds, the form HQ's summary hands the same reader (`quarterFromKey`).
+  const read = await subscriptionRevenue(env, { key: period, start: bounds[0].slice(0, 10), end: bounds[1].slice(0, 10) });
+  if (read.state === 'unreadable') return absent('unreadable', read.reason);
+  if (read.state === 'not_recorded') return absent('not_recorded', read.reason);
+
+  const currencies = read.by_currency;
+  if (!currencies.length) {
+    const noWebhook = !String(env.STRIPE_WEBHOOK_SECRET ?? '').trim();
+    if (noWebhook && read.unattributed_rows === 0 && read.missing_amount_rows === 0) {
+      return absent('not_recorded',
+        'This branch receives no Stripe webhooks — it is provisioned without STRIPE_WEBHOOK_SECRET, so its '
+        + 'webhook refuses every event — and its financial ledger is empty by design. Subscription revenue '
+        + 'for this licence is not recorded here, not zero (D5947).');
+    }
+    return absent(read.state === 'incomplete' ? 'incomplete' : 'not_recorded',
+      read.reason
+      ?? `No subscription invoice is recorded in this branch's financial ledger for ${period}. An empty ledger `
+        + 'has no currency to state a figure in, so none is reported (D5947).');
+  }
+
+  if (currencies.length === 1) {
+    const [only] = currencies;
+    return {
+      ...base,
+      gross_cents: only.gross_cents,
+      currency: only.currency,
+      available: only.gross_cents !== null,
+      state: read.state,
+      ...(read.reason ? { reason: read.reason } : {}),
+    };
+  }
+
+  let licenceCurrency = '';
+  try {
+    const row = await env.DB.prepare('SELECT currency FROM branch_licence WHERE id = 1')
+      .first<{ currency: string | null }>();
+    licenceCurrency = String(row?.currency ?? '').trim().toUpperCase();
+  } catch { /* no licence currency: the figure stays NULL below */ }
+  const primary = currencies.find((c) => c.currency === licenceCurrency) ?? null;
+  const others = currencies.filter((c) => c !== primary)
+    .map((c) => `${c.currency} ${c.gross_cents === null ? '(no amount recorded)' : `${c.gross_cents} minor units`}`);
+  const reason = [
+    primary
+      ? `Subscriptions were collected in ${currencies.length} currencies in ${period}; HQ stores one figure per `
+        + `stream, so this is the ${primary.currency} figure (the licence's currency) and the rest is reported `
+        + `here, not added in: ${others.join(', ')} (D5947).`
+      : `Subscriptions were collected in ${currencies.length} currencies in ${period} and none is the licence's `
+        + `own; HQ stores one figure per stream, so none is reported as the stream's gross: ${others.join(', ')} (D5947).`,
+    read.reason,
+  ].filter(Boolean).join(' ');
+  return {
+    ...base,
+    gross_cents: primary?.gross_cents ?? null,
+    currency: primary?.currency ?? 'EUR',
+    available: (primary?.gross_cents ?? null) !== null,
+    state: 'incomplete',
+    reason,
+  };
 }
 
 /** The half-open [start, end) ISO bounds of a 'YYYY-Qn' period. */

@@ -109,10 +109,14 @@ export default function WorkspaceShell({
   activeSlug,
   sectionNav,
   zoneRow = null,
+  bucketPath,
   children,
 }) {
   const location = useLocation();
-  const bucket = bucketForPath(role, location.pathname);
+  // D6160 (#6160): a page of a bucket that lives at its own address names the
+  // bucket's path here — `/round-calls` is a page of Deals (D6159 Q1) — so the
+  // crumb reads "Deals ‹ Round calls" and the bucket's pills show, none lit.
+  const bucket = bucketForPath(role, bucketPath || location.pathname);
   // READ, NEVER WRITTEN. `useContext` on a provider-less tree returns the
   // context's own default (`{ company: null, … }`), so a page rendered outside
   // `ProtectedLayout` — a test harness, a public route — gets no badge rather
@@ -137,7 +141,7 @@ export default function WorkspaceShell({
     : null;
   const zone = resolved || namedZone;
   const ownNav = sectionNav !== undefined;
-  const crumbTitle = !ownNav && typeof title === 'string' && zone && title !== zone.label ? title : null;
+  const crumbTitle = !ownNav && typeof title === 'string' && ((zone && title !== zone.label) || (bucketPath && !zone)) ? title : null;
   // BACK TO THE ZONE, NOT THE TOP OF THE BUCKET (D403). Where the root is a
   // board (`boards/index.js`), each zone has a section there with its own
   // anchor, and the crumb returns the reader to it: `/pipeline#pl-proposals`.
@@ -199,7 +203,7 @@ export default function WorkspaceShell({
       */}
       <div className="p-5">
         {bucket && (
-          <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-faint">
+          <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-muted">
             <Link to={crumbTo} className="hover:underline" data-testid="link-workspace-crumb">
               {bucket.label}
             </Link>

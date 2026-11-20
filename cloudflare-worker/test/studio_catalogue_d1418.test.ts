@@ -88,7 +88,8 @@ test('the renames: no module_map, firm_standing or "Module map"; Lab tools, Firm
 test('the defaults are the canvas’s, within the cap, each in its catalogue at its own default size', () => {
   const short = (p: string) => STUDIO_DEFAULTS[p as keyof typeof STUDIO_DEFAULTS].map((d) => `${d.key} ${d.size}`);
   assert.deepEqual(short('founder'), ['company_progress full', 'eadwyn_questions 1/2', 'lab_tools 1/2']);
-  assert.deepEqual(short('investor'), ['usage_quota', 'deal_lifecycle', 'quick_stats', 'portfolio_glance', 'upcoming_events', 'fund_commitment', 'needs_you'].map((k) => `${k} 1/2`));
+  // D6129 (#6129): D6126's default under the owner's pick A. Quick stats and Portfolio glance stay placeable; Historical match scores is retired (#6622).
+  assert.deepEqual(short('investor'), ['needs_you full', 'fund_commitment full', 'returns 1/2', 'thesis_fit 1/2', 'arrivals 1/2', 'upcoming_events 1/2', 'usage_quota 1/2', 'deal_lifecycle 1/2']);
   assert.deepEqual(short('advisor'), ['today 1/2', 'storefront 1/2', 'engagements 1/2', 'consented_proof 1/2', 'earnings full']);
   assert.deepEqual(short('partner'), ['firm_tiles full', 'operating_brief full', 'firm_feed full']);
   for (const p of STUDIO_PROFILES) {
@@ -101,7 +102,7 @@ test('the defaults are the canvas’s, within the cap, each in its catalogue at 
   }
 });
 
-test('GET /modules: the founder gets five groups and 30 modules; a Spin-Out Lab member no Grow and 23; an investor one group and 7; in_default marks exactly the defaults', async () => {
+test('GET /modules: the founder gets five groups and 30 modules; a Spin-Out Lab member no Grow and 23; an investor one group and 10; in_default marks exactly the defaults', async () => {
   const w = world();
   try {
     const founder = await modules(w.env, 1);
@@ -123,9 +124,11 @@ test('GET /modules: the founder gets five groups and 30 modules; a Spin-Out Lab 
     const admin = await modules(w.env, 5, '?profile=founder');
     assert.equal(admin.body.modules.length, 30, 'an admin previews the founder Studio with Grow');
     const inv = await modules(w.env, 2);
-    assert.deepEqual([inv.body.groups, inv.body.modules.length], [[{ key: 'investor', label: 'Investor' }], 7]);
-    assert.ok(inv.body.modules.every((m: any) => m.in_default));
-    assert.ok(!inv.body.modules.some((m: any) => m.key === 'scored_opportunities'));
+    assert.deepEqual([inv.body.groups, inv.body.modules.length], [[{ key: 'investor', label: 'Investor' }], 10]);
+    assert.deepEqual(inv.body.modules.filter((m: any) => !m.in_default).map((m: any) => m.key), ['quick_stats', 'portfolio_glance'], 'the two the default left stay placeable');
+    assert.ok(!inv.body.modules.some((m: any) => m.key === 'scored_opportunities'), 'Historical match scores is retired (#6622)');
+    const fit = inv.body.modules.find((m: any) => m.key === 'thesis_fit');
+    assert.deepEqual([fit.locked_by_plan, fit.plan?.tier], [true, 'professional'], 'Thesis fit reads /api/deals, so a Free investor sees it locked');
     const adv = await modules(w.env, 3);
     assert.deepEqual(adv.body.groups, [{ key: 'advisor', label: 'Advisor' }]);
     const partner = await modules(w.env, 4);

@@ -69,7 +69,6 @@ const GLANCE = {
     no_queue: [],
   },
 };
-const ALL_READ = { ...GLANCE, approvals: { ...GLANCE.approvals, lanes: GLANCE.approvals.lanes.map((l) => (l.key === 'lp' ? { ...l, count: 3, oldest_age_hours: 12 } : l)) } };
 const ready = (payload) => ({ status: 'ready', hq: glancesFromStudioGlance(payload, null).hq });
 
 // D1045: HQ's inbox read (D1040, D1132) as the Worker answers it: three items,
@@ -378,7 +377,6 @@ function stub({ glance = () => json(GLANCE), queue = (s) => json({ items: [] }),
   };
   return { seen, restore() { globalThis.fetch = original; } };
 }
-const reads = (s) => [...new Set(s.seen.filter((p) => !p.startsWith('/api/ai') && !p.startsWith('/api/rail')).map((p) => p.split('?')[0]))].sort();
 
 // D1045: the page with every read it makes, focus kept (so focus return reads), POSTs recorded.
 const PART7 = {

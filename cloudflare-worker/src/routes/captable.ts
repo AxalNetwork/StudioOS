@@ -16,7 +16,8 @@ import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
  *   GET    /scenarios/{uid}/export.csv   — 409A-friendly CSV export
  *
  * D1018 (#2855) — scenarios from the record (part 3):
- *   GET    /scenarios/by-project/{projectId}/today    — Today from the record, the model as "Cap table · model", its rows offered as proposals
+ *   GET    /scenarios/by-project/{projectId}/today    — Today from the record, the model as "Cap table · model", its rows offered as proposals,
+ *                                                       and the caller's scenario `capabilities` (D5074 part 6)
  *   POST   /scenarios/by-project/{projectId}/simulate — a scenario from Today: { rounds, exit_values (≤4), converting? }
  *
  * D1020 (#2857) — the recorded register, per venture:
@@ -32,6 +33,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { ensureTier, userMeetsTier } from '../middleware/requireTier';
 import { recordCan, recordCapabilities, type RecordStanding } from '../services/capTableCapabilities';
+import { scenarioCapabilities } from '../services/capTableScenarioCapabilities';
 import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
@@ -67,6 +69,8 @@ import {
   actorHash, auditStatement, csvCell, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
 } from '../services/capTableRegister';
+import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -358,6 +362,12 @@ async function ventureFor(c: Ctx, projectId: number, user: AuthUser): Promise<Pr
  * provider's answer, and second-guessing it here would put two different
  * vested numbers in front of the same founder. `as_of` reports when the row was
  * last written so the UI can say how fresh the answer is.
+ *
+ * D6086 (#6086): a schedule StudioOS holds (a grant recorded with its vesting,
+ * a founder's from Add holder) has no provider and no stored count, so its
+ * vested shares are worked out from its dates on today's date
+ * (`vested_basis: 'schedule'`, `vested_as_of`) in `equityPlanBody`. A row with
+ * a stored count, Carta's above all, keeps it.
  */
 captable.get('/equity-plan', async (c) => {
   const user = await requireAuth(c) as AuthUser;
@@ -377,7 +387,7 @@ captable.get('/equity-plan', async (c) => {
   }
   // D1020: totals are sums of what is recorded, nothing modelled, and null
   // unless every row records the figure (`knownSum`).
-  return c.json({ scope: scopeBody(scope), ...equityPlanBody(plan.pools, plan.vesting), elections: plan.elections });
+  return c.json({ scope: scopeBody(scope), ...equityPlanBody(plan.pools, plan.vesting, today()), elections: plan.elections });
 });
 
 captable.post('/simulate', async (c) => {
@@ -505,13 +515,17 @@ const SCENARIO_ASSUMPTIONS = [
   'A SAFE that has not converted takes cash back or converts at its cap, whichever pays more.',
 ];
 
-async function readableVenture(c: Ctx, user: AuthUser): Promise<number> {
+async function readableProject(c: Ctx, user: AuthUser) {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isSafeInteger(projectId) || projectId < 1) throw new HttpError(400, 'Invalid project_id');
   const proj = await loadProject(c, projectId, user);
   if (!proj) throw new HttpError(404, 'Project not found');
   if (!canReadProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
-  return projectId;
+  return { projectId, proj };
+}
+
+async function readableVenture(c: Ctx, user: AuthUser): Promise<number> {
+  return (await readableProject(c, user)).projectId;
 }
 
 /**
@@ -524,7 +538,10 @@ async function readableVenture(c: Ctx, user: AuthUser): Promise<number> {
 captable.get('/scenarios/by-project/:projectId/today', async (c) => {
   const user = await requireAuth(c);
   let projectId: number;
-  try { projectId = await readableVenture(c, user); } catch (e) { return asJsonError(c, e); }
+  let proj: NonNullable<Awaited<ReturnType<typeof loadProject>>>;
+  try { ({ projectId, proj } = await readableProject(c, user)); } catch (e) { return asJsonError(c, e); }
+  // D5074 part 6: who may change scenarios, from the gate every scenario write asks (`canWriteProject`) and the plan.
+  const capabilities = scenarioCapabilities({ writes: canWriteProject(user, proj), plan: userMeetsTier(user, 'studio') });
   const record = await readRecord(c.env, projectId);
   const start = startFromRecord(record);
   const model = await c.env.DB.prepare(
@@ -546,6 +563,7 @@ captable.get('/scenarios/by-project/:projectId/today', async (c) => {
     model: model ? { ...serialize(model), name: MODEL_SCENARIO_NAME, stored_name: model.name, source: 'model' } : null,
     offer: offerFromModel(modelInputs, record),
     assumptions: SCENARIO_ASSUMPTIONS,
+    capabilities,
   });
 });
 
@@ -580,9 +598,23 @@ captable.get('/scenarios/:uid', async (c) => {
   const user = await requireAuth(c);
   try {
     const row = await ensureScenarioReadOr404(c, c.req.param('uid'), user);
-    return c.json(serialize(row));
+    return c.json({ ...serialize(row), used_by_plans: await plansUsing(c.env, row) });
   } catch (e) { return asJsonError(c, e); }
 });
+
+/**
+ * D6085 (#6085): the Use of funds scenarios of the same venture that name this
+ * cap-table scenario ("Paid for by"). Null when that read fails: the scenario
+ * page still reads, and says nothing it does not know.
+ */
+async function plansUsing(env: Env, row: ScenarioRow): Promise<Array<{ id: number; name: string; is_base: boolean }> | null> {
+  if (row.project_id == null) return [];
+  try {
+    const res = await env.DB.prepare('SELECT id,name,is_base FROM uof_scenarios WHERE project_id=? AND cap_table_scenario_uid=? ORDER BY is_base DESC,id LIMIT 20')
+      .bind(row.project_id, row.uid).all<{ id: number; name: string; is_base: number }>();
+    return (res.results ?? []).map((p) => ({ id: p.id, name: p.name, is_base: !!p.is_base }));
+  } catch { return null; }
+}
 
 /** D5069: a save made from a read that is no longer the row's. Nothing was written. */
 function changedSinceOpen(c: Ctx, current: string | null): Response {
@@ -1472,7 +1504,9 @@ captable.post('/register/:projectId/snapshot', async (c) => {
   const name = `Cap table as of ${asOf}.pdf`;
   // D1170 — a filed snapshot is a data room file: it counts to the venture's owner (D1169 §1).
   const storage = await assertStorageRoom(c.env, { projectId }, bytes.byteLength, user);
-  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: venture.uid, uploaded_by: String(user.id) } });
+  // D6651: a filed snapshot is a record, written once under a fresh key.
+  const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: venture.uid, uploaded_by: String(user.id) } });
+  if (!stored.ok) return refuse(c, 409, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.' });
   try {
     await c.env.DB.batch([
       c.env.DB.prepare(
@@ -1486,7 +1520,9 @@ captable.post('/register/:projectId/snapshot', async (c) => {
       }),
     ]);
   } catch (e) {
-    await c.env.FILES.delete(key).catch(() => {});
+    // D6651: this request just stored the file under a fresh key and no row names it: it leaves through
+    // the one record-erasure path as `unreferenced`; a cleanup failure never masks the refusal.
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
     return refuse(c, 500, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.', raw: e });
   }
   await noteStorageLanded(c.env, storage);

@@ -48,6 +48,7 @@ const VIEWERS: Array<[string, number]> = [['you', YOU], ['colleague', COLLEAGUE]
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'ic_decisions', 'user_company_links', 'super_admins', 'partners', 'company_profiles']) db.exec(ddl(t));
+  db.exec(readFileSync(new URL('../sql/migrations/202611161505_6195_commitment_route_preference.sql', import.meta.url), 'utf8')); // D6195: commitments.route_preference
   db.exec(ddl('ic_conditions', IC_CONDITIONS));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active, investor_tier) VALUES (?, ?, ?, ?, 1, ?)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, NAMES[Number(id)], `u${id}@example.test`, 'professional');

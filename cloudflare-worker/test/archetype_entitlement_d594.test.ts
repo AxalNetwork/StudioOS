@@ -18,8 +18,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import bestFit from '../src/routes/best_fit.ts';
@@ -32,8 +30,6 @@ import { ensureAssessmentSchema } from '../src/services/assessmentSchema.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '../..');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const DAY = 24 * 60 * 60 * 1000;

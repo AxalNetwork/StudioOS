@@ -55,6 +55,19 @@ export const LEGACY_STAGE: Readonly<Record<string, Stage>> = Object.freeze({
 });
 
 /** Who a stage waits on, where the stage alone says so. */
+/**
+ * D6686 part 2 (the owner's answer, 2026-11-16): the stages that keep a
+ * formation_case_stages record — every stage but draft through quoted. Entering
+ * one opens its row; leaving it marks the row completed, by whom and when.
+ */
+export const RECORDED_STAGES: readonly Stage[] = ['paid', 'preparing', 'ready_to_file', 'submitted', 'registry_query', 'registered', 'activating', 'handed_off'];
+const RECORDED = new Set<string>(RECORDED_STAGES);
+/** The role responsible for a recorded stage. */
+export const STAGE_ROLE: Readonly<Record<string, string>> = Object.freeze({
+  paid: 'hq', preparing: 'hq', ready_to_file: 'hq', submitted: 'registry', registry_query: 'registry',
+  registered: 'hq', activating: 'hq', handed_off: 'founder',
+});
+
 const WAITING_ON: Partial<Record<Stage, string>> = {
   paid: 'hq', preparing: 'hq', ready_to_file: 'hq',
   submitted: 'registry', registry_query: 'registry', registered: 'nobody',
@@ -96,6 +109,11 @@ const EVENT_INSERT_HEAD =
   + "SELECT ?, ?, ?, 'stage_change', ?, ?, ?, ?, ? WHERE " + CASE_AS_READ;
 const EVENT_INSERT_NO_ORDER = EVENT_INSERT_HEAD;
 const EVENT_INSERT_WITH_ORDER = EVENT_INSERT_HEAD + ' AND ' + ORDER_AS_READ;
+// D6694 (#6694): a transition a filing drives is also guarded on that filing
+// still at the state that was read, so a filing changed in between moves nothing.
+const FILING_AS_READ = 'EXISTS (SELECT 1 FROM formation_filings WHERE id = ? AND state = ?)';
+const EVENT_INSERT_NO_ORDER_FILING = EVENT_INSERT_NO_ORDER + ' AND ' + FILING_AS_READ;
+const EVENT_INSERT_WITH_ORDER_FILING = EVENT_INSERT_WITH_ORDER + ' AND ' + FILING_AS_READ;
 // The order's D601 fields: a NULL leaves the column as it was; a 1 in a *_now
 // slot stamps it with datetime('now').
 const ORDER_UPDATE_TAIL =
@@ -107,6 +125,23 @@ const ORDER_UPDATE_TAIL =
 const ORDER_UPDATE: Readonly<Record<OrderStatus, string>> = Object.freeze(
   Object.fromEntries(Object.entries(SET_STATUS).map(([k, head]) => [k, head + ORDER_UPDATE_TAIL])) as Record<OrderStatus, string>,
 );
+// D6694: with filingAsRead the order moves only while the filing is as read, as the event and the case do.
+const ORDER_UPDATE_FILING: Readonly<Record<OrderStatus, string>> = Object.freeze(
+  Object.fromEntries(Object.entries(ORDER_UPDATE).map(([k, sql]) => [k, sql + ' AND ' + FILING_AS_READ])) as Record<OrderStatus, string>,
+);
+// Both stage statements run after the case update and are guarded on the case
+// being at the new stage and revision, so they write only when the transition did.
+const STAGE_AFTER = 'EXISTS (SELECT 1 FROM formation_cases WHERE id = ? AND stage = ? AND revision = ?)';
+const STAGE_COMPLETE =
+  'INSERT INTO formation_case_stages (case_id, stage, responsible_role, completed_by, completed_at) '
+  + "SELECT ?, ?, ?, ?, datetime('now') WHERE " + STAGE_AFTER + ' '
+  + 'ON CONFLICT(case_id, stage) DO UPDATE SET completed_by = excluded.completed_by, completed_at = excluded.completed_at '
+  + 'WHERE formation_case_stages.completed_at IS NULL';
+const STAGE_OPEN =
+  'INSERT OR IGNORE INTO formation_case_stages (case_id, stage, responsible_role) SELECT ?, ?, ? WHERE ' + STAGE_AFTER;
+const STAGE_OPEN_BY_UID =
+  'INSERT OR IGNORE INTO formation_case_stages (case_id, stage, responsible_role) SELECT id, stage, ? FROM formation_cases WHERE uid = ? AND stage = ?';
+
 const CASE_UPDATE =
   "UPDATE formation_cases SET stage = ?, stage_entered_at = datetime('now'), revision = revision + 1, "
   + "waiting_on = COALESCE(?, waiting_on), updated_at = datetime('now') "
@@ -154,6 +189,8 @@ export async function ensureCaseForOrder(env: Env, incorporationId: number): Pro
        SELECT id, 'system', 'case_opened', ?, 'hq_only', ? FROM formation_cases
         WHERE uid = ? AND NOT EXISTS (SELECT 1 FROM formation_case_events e WHERE e.case_id = formation_cases.id AND e.kind = 'case_opened')`,
     ).bind(stage, JSON.stringify({ incorporation_id: order.id, status: order.status }), uid),
+    // D6686 part 2: the opened case's stage gets its record (every legacy stage is a recorded one).
+    env.DB.prepare(STAGE_OPEN_BY_UID).bind(STAGE_ROLE[stage] ?? null, uid, stage),
   ]);
   return (await env.DB.prepare(
     CASE_BY_ORDER,
@@ -169,6 +206,10 @@ export interface TransitionPayload {
   extra?: D1PreparedStatement[];
   detail?: Record<string, unknown>;
   visibility?: 'all' | 'hq_partner' | 'hq_only';
+  /** D6694: move only while this filing is still at this state (formationFilings.ts). */
+  filingAsRead?: { id: number; state: string };
+  /** D6694: move only from this revision, the one the caller read and built its `extra` statements on. */
+  expectRevision?: number;
 }
 
 export type TransitionResult =
@@ -185,6 +226,7 @@ export async function transition(
   if (!c) return { ok: false, status: 404, error: 'case_not_found' };
   if (c.closed_at) return { ok: false, status: 409, error: 'case_closed' };
   if (c.stage === to) return { ok: false, status: 409, error: 'case_already_at_stage' };
+  if (payload.expectRevision !== undefined && c.revision !== payload.expectRevision) return { ok: false, status: 409, error: 'case_moved' };
   for (const k of Object.keys(payload.orderSet || {})) if (!ORDER_FIELDS.has(k)) throw new Error(`transition: order field ${k} is not allowed`);
   for (const k of payload.orderNow || []) if (!ORDER_NOW_FIELDS.has(k)) throw new Error(`transition: order field ${k} is not allowed`);
 
@@ -200,22 +242,29 @@ export async function transition(
   const orderBinds = order ? [order.id, order.status] : [];
 
   const statements: D1PreparedStatement[] = [];
-  statements.push(env.DB.prepare(order ? EVENT_INSERT_WITH_ORDER : EVENT_INSERT_NO_ORDER).bind(
+  const filing = payload.filingAsRead;
+  const eventSql = filing
+    ? (order ? EVENT_INSERT_WITH_ORDER_FILING : EVENT_INSERT_NO_ORDER_FILING)
+    : (order ? EVENT_INSERT_WITH_ORDER : EVENT_INSERT_NO_ORDER);
+  statements.push(env.DB.prepare(eventSql).bind(
     c.id, actor.userId ?? null, actor.party, c.stage, to, nextRevision, payload.visibility ?? 'hq_only',
     JSON.stringify({ ...(payload.detail || {}), incorporation_id: order?.id ?? null, status_from: order?.status ?? null, status_to: toStatus }),
-    ...caseBinds, ...orderBinds,
+    ...caseBinds, ...orderBinds, ...(filing ? [filing.id, filing.state] : []),
   ));
   const set = payload.orderSet || {};
   const now = new Set(payload.orderNow || []);
   if (order && toStatus && (toStatus !== order.status || Object.keys(set).length || now.size)) {
-    statements.push(env.DB.prepare(ORDER_UPDATE[toStatus]).bind(
+    statements.push(env.DB.prepare((filing ? ORDER_UPDATE_FILING : ORDER_UPDATE)[toStatus]).bind(
       set.packet_document_id ?? null, set.packet_ready_by ?? null, now.has('packet_ready_at') ? 1 : 0,
       set.filed_on ?? null, set.filed_by ?? null, now.has('filed_recorded_at') ? 1 : 0,
-      order.id, order.status, ...caseBinds,
+      order.id, order.status, ...caseBinds, ...(filing ? [filing.id, filing.state] : []),
     ));
   }
   const caseIndex = statements.length;
   statements.push(env.DB.prepare(CASE_UPDATE).bind(to, WAITING_ON[to] ?? null, c.id, c.stage, c.revision, c.id, nextRevision));
+  const after = [c.id, to, nextRevision];
+  if (RECORDED.has(c.stage)) statements.push(env.DB.prepare(STAGE_COMPLETE).bind(c.id, c.stage, STAGE_ROLE[c.stage], actor.userId ?? null, ...after));
+  if (RECORDED.has(to)) statements.push(env.DB.prepare(STAGE_OPEN).bind(c.id, to, STAGE_ROLE[to], ...after));
   statements.push(...(payload.extra || []));
 
   const results = await env.DB.batch(statements);

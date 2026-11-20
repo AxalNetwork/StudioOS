@@ -77,12 +77,14 @@ test('the editors send their revision, reset from what the server stored, and ha
 
 test('the inputs\' limits are the Worker\'s limits', () => {
   const src = read('../cloudflare-worker/src/services/advisorLimits.ts');
-  const obj = (name) => Object.fromEntries([...src.match(new RegExp(`${name} = \\{([^}]*)\\}`))[1].matchAll(/(\w+): (\d+)/g)].map((m) => [m[1], Number(m[2])]));
+  const literalBody = (name) => { const head = `${name} = {`; const at = src.indexOf(head); return src.slice(at + head.length, src.indexOf('}', at + head.length)); };
+const obj = (name) => Object.fromEntries([...literalBody(name).matchAll(/(\w+): (\d+)/g)].map((m) => [m[1], Number(m[2])]));
   assert.deepEqual(limits.SERVICE_LIMITS, obj('SERVICE_LIMITS'));
   assert.deepEqual(limits.PROFILE_LIMITS, obj('PROFILE_LIMITS'));
   assert.equal(limits.LIST_MAX_ITEMS, Number(src.match(/LIST_MAX_ITEMS = (\d+)/)[1]));
   const cur = src.match(/SUPPORTED_CURRENCIES = \[([^\]]*)\]/)[1].match(/'([A-Z]{3})'/g).map((x) => x.slice(1, 4));
   assert.deepEqual(limits.SUPPORTED_CURRENCIES, cur);
-  assert.match(read('src/pages/advisor/expertise/ServicesZone.jsx'), /maxLength=\{SERVICE_LIMITS\.scope\}/);
-  assert.match(read('src/pages/advisor/expertise/ProfileZone.jsx'), /maxLength=\{PROFILE_LIMITS\.bio\}/);
+  // D4828: the limit is a counter that blocks the save, never a maxLength that cuts a paste.
+  assert.match(read('src/pages/advisor/expertise/ServicesZone.jsx'), /limit=\{SERVICE_LIMITS\.scope\}/);
+  assert.match(read('src/pages/advisor/expertise/ProfileZone.jsx'), /limit=\{PROFILE_LIMITS\.bio\}/);
 });

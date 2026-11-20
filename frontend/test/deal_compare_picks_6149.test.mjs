@@ -24,6 +24,7 @@ import { api } from '../src/lib/api.js';
 import { dealFlowApi } from '../src/lib/api/dealFlow.js';
 import { dealViewsApi } from '../src/lib/api/dealViews.js';
 import { ventureScoresApi } from '../src/lib/api/ventureScores.js';
+import { tagHolding } from './_tagHolding.mjs';
 
 const h = React.createElement;
 const sc = (scope, band, conf = 'High', state = 'scored') => ({ scope, state, band, confidence_word: conf });
@@ -40,14 +41,16 @@ const VENTURES = () => [
   venture({ id: '3', name: 'Copperline Energy', daysInStage: null, scores: scoresOf('failed', 3), fit: 'failed', traction: 'failed' }),
 ];
 const markup = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(CompareView, props)));
-const strip = (s) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+// Tags are removed until none is left and &amp; is decoded last, so no entity is decoded twice (Code Scanning).
+const untag = (s) => { for (let prev = null; prev !== s;) { prev = s; s = s.replace(/<[^>]+>/g, ''); } return s; };
+const strip = (s) => untag(s).replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim();
 /** The table's body rows as on screen: [label, ...cell text], read from the rendered markup. */
 const screenRows = (html) => {
   const table = html.slice(html.indexOf('data-testid="dealflow-compare-table"'), html.indexOf('</table>'));
   return [...table.matchAll(/<tr[^>]*>(<th scope="row".*?)<\/tr>/g)].map(([, tr]) => [...tr.matchAll(/<t[hd][^>]*>(.*?)<\/t[hd]>/g)].map(([, cell]) => strip(cell)));
 };
 /** The href of the link with this test id (React writes `href` after the other props). */
-const hrefOf = (html, id) => html.match(new RegExp(`<a[^>]*data-testid="${id}"[^>]*>`))?.[0]?.match(/href="([^"]*)"/)?.[1]?.replace(/&amp;/g, '&');
+const hrefOf = (html, id) => (tagHolding(html, `data-testid="${id}"`, (t) => t.startsWith('<a')) || null)?.match(/href="([^"]*)"/)?.[1]?.replace(/&amp;/g, '&');
 const csvRows = (csv) => csv.split('\n').slice(1).map((line) => line.split(','));
 
 test('Remove: each venture card links to the same address without it, keyboard-reachable and 44px on a phone', () => {

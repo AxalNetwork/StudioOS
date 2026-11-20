@@ -83,7 +83,7 @@ test('Sessions: publish availability from the empty state', async () => {
   await m.unmount();
 });
 
-test('Sessions: a confirmed session can be marked held, and history offers the review', async () => {
+test('Sessions: a confirmed session can be marked held, and Past offers the review', async () => {
   stubEverything();
   let status = 'confirmed';
   api.listMyAdvisorBookings = async () => ({ items: [{ ...CONFIRMED, status }] });
@@ -91,10 +91,12 @@ test('Sessions: a confirmed session can be marked held, and history offers the r
   api.completeAdvisorBooking = async (id) => { done.push(id); status = 'completed'; return {}; };
   const m = await mountContracts(React.createElement(SessionsZone), '/practice/sessions');
   await m.flush();
-  await m.click('Session held');
+  await m.click('Complete');
   await m.flush();
   assert.deepEqual(done, [41]);
-  assert.ok(m.text().includes('History'));
+  // #4832 (D4832): a held session moves to the Past tab, which is the history.
+  await m.click('Past 1');
+  assert.ok(m.text().includes('Held'));
   assert.ok(m.text().includes('Review it'));
   await m.unmount();
 });
@@ -123,7 +125,7 @@ test('Sessions: a failed write says so without the Worker message', async () => 
   api.completeAdvisorBooking = async () => { throw new Error('SQLITE_BOOM internal'); };
   const m = await mountContracts(React.createElement(SessionsZone), '/practice/sessions');
   await m.flush();
-  await m.click('Session held');
+  await m.click('Complete');
   assert.ok(m.text().includes('The session is unchanged'));
   assert.ok(!m.text().includes('SQLITE_BOOM'));
   await m.unmount();

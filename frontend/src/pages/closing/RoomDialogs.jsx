@@ -18,7 +18,7 @@ import { BTN, INPUT } from '../account/AccountCenter';
 import { Err } from './ClosingDialogs';
 import { closingHrefFor, moneyCents } from './deskModel';
 import {
-  ACCOUNT_FIELDS, ACCOUNT_WORDS, accountBody, accountFieldOf, accountForm, isAccountConflict, PAY_WORDS, ROOM_WAITS, commitmentUidFor, dayOf, evidenceRows, payRows, payState, revealRefusal, revealSeconds, signingRows,
+  ACCOUNT_FIELDS, ACCOUNT_WORDS, accountBody, accountFieldOf, accountForm, isAccountConflict, PAY_WORDS, ROOM_WAITS, SIGN_WORDS, commitmentUidFor, dayOf, evidenceRows, payRows, payState, revealRefusal, revealSeconds, signActions, signingRows,
 } from './roomModel';
 import Sheet from '../../ui/Sheet.jsx';
 
@@ -42,6 +42,61 @@ function useAct() {
     try { await fn(); return true; } catch (e) { setError(refusal(e, fallback)); return false; } finally { setBusy(false); }
   };
   return { busy, error, run };
+}
+
+/** Saves a fetched file. The room's downloads go through the Worker, never a stored URL. */
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * D6197 (#6197): the viewer's own link again (by email, never shown here) and their executed copy. Each is the
+ * Worker's act on the viewer's own envelope; a refusal is drawn as the Worker's sentence.
+ */
+function SignActions({ envelope }) {
+  const { resend, download } = signActions(envelope);
+  const act = useAct();
+  const [sent, setSent] = useState(false);
+  const [dl, setDl] = useState({ busy: false, error: '' });
+  if (!resend && !download) return null;
+  const again = async () => {
+    setSent(false);
+    if (await act.run(() => closingsApi.resendSigningLink(resend), SIGN_WORDS.resendFailed)) setSent(true);
+  };
+  const save = async () => {
+    setDl({ busy: true, error: '' });
+    try {
+      const { blob, filename } = await closingsApi.signedCopyBlob(download);
+      saveBlob(blob, filename);
+      setDl({ busy: false, error: '' });
+    } catch (e) { setDl({ busy: false, error: refusal(e, SIGN_WORDS.downloadFailed) }); }
+  };
+  return (
+    <section className="flex flex-col gap-2" data-testid="closing-sign-actions">
+      {resend ? (
+        <>
+          <button type="button" className={`${BTN.ghost} min-h-[44px] w-fit max-sm:w-full`} disabled={act.busy} onClick={again} data-testid="closing-sign-resend">{act.busy ? SIGN_WORDS.resending : SIGN_WORDS.resend}</button>
+          {sent ? <p className="m-0 text-[12.5px]" role="status" data-testid="closing-sign-resent">{SIGN_WORDS.resent}</p> : null}
+          {act.error ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="closing-sign-resend-refused">{act.error}</p> : null}
+          <p className={mutedText} data-testid="closing-sign-paper">{SIGN_WORDS.paper}</p>
+        </>
+      ) : null}
+      {download ? (
+        <>
+          <button type="button" className={`${BTN.ghost} min-h-[44px] w-fit max-sm:w-full`} disabled={dl.busy} onClick={save} data-testid="closing-sign-download">{dl.busy ? SIGN_WORDS.downloading : SIGN_WORDS.download}</button>
+          <p className={mutedText}>{SIGN_WORDS.copyNote}</p>
+          {dl.error ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="closing-sign-download-refused">{dl.error}</p> : null}
+        </>
+      ) : null}
+    </section>
+  );
 }
 
 /** CP4: the paper's signing order, whose turn it is, and where the viewer signs. */
@@ -68,6 +123,7 @@ export function SignDrawer({ row, envelope, failed, viewer, company, onClose }) 
               {mine ? (
                 <p className="m-0 text-[13px] font-semibold" data-testid="closing-sign-yours">Your turn. The signing link was sent to you{mine.sentAt ? ` on ${mine.sentAt}` : ''}. You sign on the e-sign page it opens, which records your signature.</p>
               ) : null}
+              <SignActions envelope={envelope} />
               {rows.some((r) => r.state === 'Waiting for the Super Admin') ? <p className={mutedText}>A Super Admin countersigns for Axal, last.</p> : null}
               <section className="flex flex-col gap-1" data-testid="closing-sign-clause">
                 <span className={NOT_YET_PILL}>Not read here yet</span>

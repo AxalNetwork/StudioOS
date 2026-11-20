@@ -1,3 +1,4 @@
+import { useSidebarListsSubpages } from '../../lib/sidebarSubpages.js';
 import { Lock } from 'lucide-react';
 import { openCheckout } from '../../components/checkout/checkoutEntry.js';
 import { Link, useNavigate } from 'react-router-dom';
@@ -5,7 +6,7 @@ import { DataState, StateChip, Unrecorded, Unreadable } from '../../ui';
 import { BuildPartialNotice, BuildStateTag } from './BuildStates.jsx';
 import { TABLET_CARD_COLS, TABLET_FIGURE_COLS, tabletLastSpan } from '../../ui/phone/tabletTier.js';
 import { Chart, Spark } from './CycleCharts';
-import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
+import { cardView, cycleOf, cycleTabGroups, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 import { MODULES } from './modules';
 import { mvpTargetHref } from './mvpTable.js';
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
@@ -94,9 +95,11 @@ export function GrowSubsections({ search, active }) {
 export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null, slots = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
+  const sidebarLists = useSidebarListsSubpages(`/${meta.key}`);
   const legacyTabs = cycleTabs(meta.key, cards, active, search);
   const tabs = meta.key === 'grow' ? growTabs(search, active) : legacyTabs;
   const current = tabs.find((t) => t.active) || tabs[0];
+  const groups = cycleTabGroups(meta.key, tabs);
   const backHref = record ? (legacyTabs.find((t) => t.key === active)?.href || `/${meta.key}${linkSearch(search)}`) : null;
   // #6109: Team expansion and Partner network say which half of their pair they are; #6090's subsections name theirs.
   const displayTitle = meta.key === 'grow' && !record && active ? GROW_MODULE_TITLES[active] || growSubsections(search, active).find(tab => tab.active)?.name || growArea(active)?.name || title : title;
@@ -124,14 +127,28 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           {record && slots && <div ref={slots.actions} className="flex flex-wrap items-center justify-end gap-2" data-testid="record-header-actions" />}
         </div>
       </div>
-      <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`}</p>
-      <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 lg:flex" data-testid="cycle-tabs">
-        {tabs.map((t) => (
-          <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !record ? 'page' : undefined}
-            className={`whitespace-nowrap rounded-full border px-[11px] py-[5px] text-[11px] ${t.active ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white font-semibold text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`}>
-            {t.name}
-          </Link>
-        ))}
+      <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? (sidebarLists ? `${meta.outcome}. The cycle’s data at a glance.` : `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`)}</p>
+      {/* D5081 part 5 (#5081, RA-12): the one desktop navigation, from 1024px. Raise's tabs sit under its four
+          stage headings (`cycleTabGroups`); headings, not routes. Below 1024px the select replaces it, and each
+          is `display: none` where the other shows, so only one is ever in the accessibility tree.
+          D6029 (#6029, BD23): where the sidebar lists this cycle's pages (Build), it is the one module switcher on
+          desktop, so no tabs are drawn there; tablet and phone keep the module select below. */}
+      <nav aria-label={`${meta.name} modules`} className={`mt-1 hidden flex-wrap gap-1.5 ${sidebarLists ? '' : 'lg:flex '}items-center`} data-testid="cycle-tabs" data-sidebar-lists={sidebarLists ? 'true' : undefined}>
+        {groups.map((g) => {
+          const links = g.tabs.map((t) => (
+            <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !record ? 'page' : undefined}
+              className={`whitespace-nowrap rounded-full border px-[11px] py-[5px] text-[11px] ${t.active ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white font-semibold text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`}>
+              {t.name}
+            </Link>
+          ));
+          if (!g.label) return links;
+          return (
+            <div key={g.label} role="group" aria-label={g.label} className="flex flex-wrap items-center gap-1.5" data-testid="cycle-tab-stage">
+              <span aria-hidden="true" className={`${SECTION} ml-1.5 text-axal-muted dark:text-gray-400`}>{g.label}</span>
+              {links}
+            </div>
+          );
+        })}
       </nav>
       <label className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3.5 lg:hidden dark:border-gray-700 dark:bg-gray-900">
         <span className={`${SECTION} text-axal-muted dark:text-gray-400`}>{record ? 'Record' : 'Module'}</span>
@@ -139,7 +156,11 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
         <select className="min-w-0 flex-1 bg-transparent text-sm font-bold text-axal-ink outline-none dark:text-gray-100" value={record ? 'record' : current.key || 'overview'}
           onChange={(e) => { const to = tabs.find((t) => (t.key || 'overview') === e.target.value); if (to) navigate(to.href); }} aria-label={`${meta.name} module`}>
           {record && <option value="record">{title}</option>}
-          {tabs.map((t) => <option key={t.key || 'overview'} value={t.key || 'overview'}>{t.name}</option>)}
+          {/* RA-12's compact select: the same stages as optgroups. */}
+          {groups.map((g) => {
+            const opts = g.tabs.map((t) => <option key={t.key || 'overview'} value={t.key || 'overview'}>{t.name}</option>);
+            return g.label ? <optgroup key={g.label} label={g.label}>{opts}</optgroup> : opts;
+          })}
         </select>
       </label>
       {meta.key === 'grow' && !record && <GrowSubsections search={search} active={active} />}

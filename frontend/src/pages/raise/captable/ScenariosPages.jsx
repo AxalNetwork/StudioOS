@@ -1,9 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { capTableScenariosApi } from '../../../lib/api/capTableScenarios';
-import { useAuth } from '../../../hooks/useAuthSync';
-import { hasTier } from '../../../sidebarConfig';
 import { Unreadable } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { ChartTable, Columns, ExitSteps, Legend, WeekLines } from '../../../ui/Charts';
@@ -17,8 +14,8 @@ import {
   attachRead, attachedRead, beforeAfter, todayPrice, compareExits, compareHref, compareIds, compareRows, dialogCopy, exitTable,
   draftFromScenario, engineNotes, exitPanels, founderPanels, fromToday, inputsFromDraft, nameError,
   newScenarioInputs, nextName, notModelled, paymentReadBack, roundEvents, roundReadBack, runRequest,
-  sameInputs, scenarioCards, scenarioHref, scenariosHead, shareSteps, short, shortName, swipeCards, todayBody, todayDraft,
-  isChangedSinceOpen, toggleCompare, variantSaveErrors, waterfallTable, waterfallsOf, withNotes,
+  sameInputs, scenarioCards, scenarioHref, scenarioStanding, scenariosHead, shareSteps, short, shortName, swipeCards, todayBody, todayDraft,
+  isChangedSinceOpen, toggleCompare, usedByLine, variantSaveErrors, waterfallTable, waterfallsOf, withNotes,
 } from './scenariosModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -68,17 +65,10 @@ function useRead(load, key, reload) {
 
 const readCompare = (id) => capTableScenariosApi.compare(id);
 const readToday = (id) => capTableScenariosApi.today(id);
-const readGrants = (id) => capTableHolderApi.grants(id);
 const readScenario = (uid) => capTableScenariosApi.get(uid);
 
-/** Who may change scenarios: the plan, then the venture's owner or a co-founder (the grants read answers), or an admin. */
-function useWrites(projectId) {
-  const { user } = useAuth() || {};
-  const grants = useRead(readGrants, projectId, 0);
-  const plan = hasTier(user, 'studio');
-  const admin = String(user?.role || '').toLowerCase() === 'admin';
-  return { plan, writes: plan && (grants.status === 'ready' || admin) };
-}
+/** D5074 part 6: who may change scenarios is the Today read's map, which every Scenarios page reads before it draws. */
+const standingOf = (today) => scenarioStanding(today.status === 'ready' ? today.data?.capabilities : null);
 
 function Block({ title, tags, aside, testId, children, foot }) {
   return (
@@ -205,7 +195,7 @@ export function ScenariosList({ projectId, reload, retry, search }) {
   const navigate = useNavigate();
   const read = useRead(readCompare, projectId, reload);
   const today = useRead(readToday, projectId, reload);
-  const { plan, writes } = useWrites(projectId);
+  const { plan, writes } = standingOf(today);
   const [picked, setPicked] = useState([]);
   const [creating, setCreating] = useState(false);
   const cards = read.status === 'ready' ? scenarioCards(read.data, codeOf(today.status === 'ready' ? today.data?.currency : null)) : [];
@@ -464,7 +454,7 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
   // D5373/D5497: the record's currency, from Today's read (always sent). Only a scenario that starts from Today is in it; the
   // saved model and a scenario typed from it are whole US dollars, so their figures keep "$".
   const recordCurrency = codeOf(today.status === 'ready' ? today.data?.currency : null);
-  const { plan, writes } = useWrites(projectId);
+  const { plan, writes } = standingOf(today);
   const scenario = read.status === 'ready' ? read.data : null;
   const model = scenario && !scenario.is_variant;
   const today_ = fromToday(scenario);
@@ -538,6 +528,11 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
                 </span>
               ) : null}
             </div>
+            {usedByLine(scenario.used_by_plans) ? (
+              <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-used-by">
+                {usedByLine(scenario.used_by_plans)} <Link className={LINK} to={`/raise/use-of-funds${tabSearch(search)}`}>Open Use of funds</Link>
+              </p>
+            ) : null}
             {model ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-model-locked">{MODEL_LOCKED}</p> : null}
             {!plan ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-plan">{PLAN_LINE} Everything here still reads.</p>
               : !writes && !model ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-read-only">{READ_ONLY}</p> : null}
@@ -797,7 +792,7 @@ export function ComparePage({ projectId, search, reload, retry }) {
   const [own, setOwn] = useState(0);
   const read = useRead(readMany, ids.length ? JSON.stringify(ids) : null, `${reload}-${own}`);
   const today = useRead(readToday, projectId, reload);
-  const { writes } = useWrites(projectId);
+  const { writes } = standingOf(today);
   const back = () => `${SCENARIOS_PATH}${tabSearch(search)}`;
   if (!ids.length) {
     return <p className={`m-0 text-[13px] ${INK}`} data-testid="captable-compare-none">No scenario is chosen to compare. <Link className={LINK} to={back()}>Tick up to {MAX_COMPARE} on Scenarios</Link>.</p>;

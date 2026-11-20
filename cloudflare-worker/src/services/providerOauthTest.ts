@@ -387,6 +387,7 @@ export async function testOauthCreds(
     case 'affinity':   return testAffinity(cred.id, cred.secret);
     case 'telegram':   return testTelegram(cred.id, cred.secret);
     case 'gcip':       return testGcip(cred.id, cred.secret);
+    case 'x':          return { ok: false, reachable: false, detail: 'Verify the X founders app by completing a member sign-in.' };
     case 'tiktok':     return { ok: false, reachable: false, detail: 'Verify TikTok credentials by completing an approved member sign-in.' };
     case 'google_search_console': return { ok: false, reachable: false, detail: 'Verify Search Console credentials by completing an approved member sign-in.' };
     case 'typeform':   return { ok: false, reachable: false, detail: 'Verify Typeform credentials by completing an approved member sign-in.' };

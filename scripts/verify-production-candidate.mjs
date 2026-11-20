@@ -1,5 +1,6 @@
 /** D5501: admit only the exact main commit with all six trusted Actions checks. */
 import { resolve } from 'node:path';
+import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -59,9 +60,16 @@ export async function verifyCandidate(candidate, get) {
 
 async function main(candidate, mode) {
   const token = process.env.GH_TOKEN;
+  // Only the initial Worker job consumes a decision. The shared write guards
+  // and other workflows continue to require a verified candidate to exit zero.
+  const decision = mode === '--wait-for-decision';
+  const stage = process.env.STUDIOOS_RELEASE_CHECK;
+  const run = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT;
+  const identifiedRun = /^[1-9][0-9]*$/.test(run ?? '') && /^[1-9][0-9]*$/.test(attempt ?? '');
   if (process.env.GITHUB_REPOSITORY !== repo || process.env.GITHUB_REF !== 'refs/heads/main' ||
       !['push', 'workflow_dispatch'].includes(process.env.GITHUB_EVENT_NAME) || process.env.GITHUB_SHA !== candidate ||
-      !fullSha.test(candidate ?? '') || !token || !['--wait', '--once'].includes(mode)) {
+      !fullSha.test(candidate ?? '') || !token || !['--wait', '--once', '--wait-for-decision'].includes(mode) ||
+      (decision && (stage !== 'initial' || !identifiedRun || !process.env.GITHUB_OUTPUT || !process.env.GITHUB_STEP_SUMMARY))) {
     console.error('Production admission requires the canonical main workflow, exact SHA and Actions read access.');
     process.exitCode = 1;
     return;
@@ -72,7 +80,7 @@ async function main(candidate, mode) {
     if (!response.ok) throw new Error(`GitHub verification request failed (${response.status}).`);
     return response.json();
   }
-  const deadline = Date.now() + (mode === '--wait' ? 95 * 60_000 : 0);
+  const deadline = Date.now() + (mode === '--once' ? 0 : 95 * 60_000);
   let report;
   do {
     try { report = await verifyCandidate(candidate, get); }
@@ -81,12 +89,17 @@ async function main(candidate, mode) {
     await delay(60_000);
   } while (Date.now() < deadline);
   console.log(JSON.stringify(report));
-  const stage = process.env.STUDIOOS_RELEASE_CHECK;
-  const run = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT;
-  if (report.status === 'superseded' && report.candidate === process.env.GITHUB_SHA &&
-      /^[a-z-]+$/.test(stage ?? '') && /^[1-9][0-9]*$/.test(run ?? '') && /^[1-9][0-9]*$/.test(attempt ?? '')) {
+  if (report.status === 'superseded' && report.candidate === candidate && /^[a-z-]+$/.test(stage ?? '') && identifiedRun) {
     console.log('::notice title=StudioOS release outcome v1::' +
       ['superseded', stage, run, attempt, report.candidate, report.main].join(' '));
+  }
+  if (decision && ['verified', 'superseded'].includes(report.status)) {
+    if (report.status === 'superseded') {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+        `### Deployment skipped\n\nCandidate \`${candidate}\` was superseded by \`${report.main}\` on main before admission.\n`);
+    }
+    appendFileSync(process.env.GITHUB_OUTPUT, `decision=${report.status}\n`);
+    return;
   }
   if (report.status !== 'verified') process.exitCode = 1;
 }

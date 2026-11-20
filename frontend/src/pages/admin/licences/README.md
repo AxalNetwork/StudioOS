@@ -54,6 +54,12 @@ unchanged when it was split.
 - `RegistryLedger.jsx` — D5060 (#5060, part 3): the registry by licence family (addendum board L36): the
   family chips, and the ten-column table across operator and user licences read from
   `/api/admin/licence-registry`. Operator / territory stays `LedgerTable.jsx`.
+- `PricingShell.jsx`, `PricingCatalogue.jsx`, `PricingCountry.jsx`, `PricingModels.jsx`, `PricingReviews.jsx` — D5020
+  part 2 (#5020): Country pricing at `/admin/licences/pricing` (addendum boards L23 to L25, L27): the catalogue, one
+  market's inputs and calculation trace, the model versions and the annual review queue, each reading the D5020 routes
+  through `../../../lib/api/licencePricingHq.js`. Their rules are `pricingHqModel.js` here.
+- `CountryPricing.jsx` — D5017, headed Pricing & Market since D5020 part 2 (L26): the licence's recommendation,
+  accepted terms and reviews on the Terms tab. Its rules are `countryPricingModel.js`.
 - `UserLicenceDetail.jsx` — D5060 part 3: one user licence at `/admin/licences/registry/user/:uid` (L37, L37B):
   Overview, Programs, Agreement, Billing (only with commercial terms) and History. Its model is
   `../licenceRegistryModel.js`.
@@ -73,3 +79,5 @@ amendment, effects and conflict, D4819), `licenceReasonModel.js` and `LicenceRea
 by `LicenceDetail.jsx`. Tests that read the page as text read every file here
 through `frontend/test/_licencePage.mjs`, so moving code between these files
 does not break them.
+
+- `AgreementReplacement.jsx` — D6562: L09 comparison and five-field readiness, L10 frozen text/hash preview, and the send-readiness predicate. ContractStep integration awaits #5920's ownership handoff.

@@ -146,12 +146,11 @@ export const INVESTOR_ZONE_ACTIONS = {
     // an exact cents split and receipts, and the Calls page is the form: New
     // call previews the split and issues it.
     { label: 'New call', kind: 'handler', handler: 'newCall', primary: true },
-    // A reason still, and a narrower one than "nothing on this desk sends
-    // mail": a notice is logged per LP account when a call is issued, and the
-    // overdue lines are listed on the page. What nobody builds is the chase.
-    // D553: a reminder for ONE line is now drafted on its row (Draft reminder)
-    // and logged as sent (Log as sent). Sending in bulk from here still is not.
-    { label: 'Send reminders', unbuilt: 'a notice is logged per LP account when a call is issued, and each line offers a reminder draft and a sent log; sending reminders in bulk is not built', hover: 'Draft a reminder on the line itself; bulk sending is not built.' },
+    // D6238 (#6238): live. It opens the call's chase: one Eadwyn reminder
+    // draft per line behind (the `funds/calls` surface), each logged as sent
+    // only when the GP confirms it on that line. The product sends nothing;
+    // the GP sends each reminder themselves.
+    { label: 'Send reminders', kind: 'handler', handler: 'sendReminders' },
     // Was "no wire schedule is stored to export" — true until migration 312's
     // receipts. It exports the wire trail the page shows.
     { label: 'Export wires', kind: 'export' },
@@ -227,10 +226,8 @@ export const INVESTOR_ZONE_ACTIONS = {
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
-    // D497 (#1023): built up to the owner's line. A tie is a request the other
-    // person accepts (D493), and finding that person without opening a user
-    // directory is question 7 on #1023.
-    { label: 'Add person', unbuilt: 'a tie is a request the other person accepts, and who you may find to send one to, without opening a directory of every account, is the owner’s decision, asked on #1023', hover: 'Adding a person is not decided yet: it needs a way to find someone without a user directory.' },
+    // D6636 / D6263 Q7: select an existing shared-resource person; D493 consent still applies.
+    { label: 'Add person', kind: 'handler', handler: 'addPerson' },
     // LIVE WITH D465 (migration 338): `partner_reminders` is the store, and a
     // reminder surfaces on the desk when it is due — no notification fan-out.
     { label: 'Set reminders', kind: 'handler', handler: 'setReminders' },
@@ -241,9 +238,8 @@ export const INVESTOR_ZONE_ACTIONS = {
     // called `introductionsRequest`. The AI Matching Engine was removed, the
     // button with it, and nothing else asks for an intro.
     { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    // D497 (#1023): question 8 on #1023 asks whether this reuses the
-    // `intro_propositions` flow between two of your accepted ties.
-    { label: 'Offer one', unbuilt: 'offering an introduction between two of your accepted ties is not built, and whether it reuses the existing introduction-proposal flow is the owner’s decision, asked on #1023', hover: 'Offering an introduction is not decided yet.' },
+    // D6637 / D6263 Q8: offer between two accepted ties through existing propositions.
+    { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },
   ],
   // D6258: the list is derived from the relationship book, and since D572
@@ -290,28 +286,28 @@ export const INVESTOR_ZONE_ACTIONS = {
     // The zone's own StatedLimit argues this one, and the note says the same
     // thing it does: "a request button that wrote nowhere would be worse than
     // the conversation it replaced."
-    // D6272: THE NOTES SAY WHERE A ROOM IS ASKED FOR TODAY. They said both
-    // waited on "the deal-request routes in research.ts (slot S02)", but the
-    // request shipped on the deal itself (`POST /api/deals/:id/room-access/
-    // request`, the deal's Documents tab, `Ask for access`). This list is the
-    // rooms already granted, so the request stays on the deal and the row
-    // points there. Interim wording until the room-list build replaces it.
+    // Data-room requests live on the deal’s Documents tab; this list shows granted rooms.
     { label: 'New request', unbuilt: 'a room is asked for on its deal: open the deal, then Documents, then Ask for access. The founder decides, and you get a notice either way', hover: 'Ask for a data room from the deal’s Documents tab.' },
-    { label: 'Attach to deal', unbuilt: 'a room opens from its own deal, and nothing on this list links a grant to a deal record yet; open the deal to see its room', hover: 'Each room opens from its own deal.' },
+    // D6266: a room already shows the deals on its company that you may open; there is nothing to attach by hand.
+    { label: 'Attach to deal', unbuilt: 'a room shows the deals on its company that you are invited to or committed on, with their stage and a link; there is nothing to attach by hand', hover: 'Each room already shows its deal when you are invited to it.' },
     { label: 'Export', kind: 'export' },
   ],
   'research/benchmarking': [
-    { label: 'New benchmark', unbuilt: 'the add-a-metric form below takes one, with its source and sample size' },
+    { label: 'New benchmark', kind: 'handler', handler: 'newBenchmark' },
     { label: 'Change peer set', unbuilt: 'a peer source is recorded per row, so there is no one set to switch' },
     // Not an export. The zone renders comparisons as rows precisely so each
     // carries the base it rests on; a chart is the shape that detaches a figure
     // from its sample size, which is the thing this zone exists to refuse.
     { label: 'Export chart', unbuilt: 'no chart is drawn here — each comparison is a row carrying the base it rests on' },
-  ],
-  'research/markets': [
-    { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },
     { label: 'Export', kind: 'export' },
-    { label: 'Cite in a memo', unbuilt: 'nothing carries a sector into a memo' },
+  ],
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); Edit thesis opens Settings › My thesis. They
+  // replace New deep-dive, Export and Cite in a memo.
+  'research/markets': [
+    { label: 'Export view', kind: 'export' },
+    { label: 'Edit thesis', kind: 'handler', handler: 'editThesis', primary: true },
   ],
   // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
   // `Add document`, and it opens the same file picker. It was

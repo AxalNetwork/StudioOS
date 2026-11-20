@@ -5,7 +5,7 @@ import io
 import subprocess
 import unittest
 
-from pip_audit_gate import audit
+import pip_audit_gate
 
 READ_TIMEOUT = (
     "Traceback (most recent call last):\n"
@@ -29,7 +29,7 @@ class AuditTest(unittest.TestCase):
             return subprocess.CompletedProcess(command, code, out, err)
 
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            code = audit(run=run, sleep=delays.append, report=messages.append)
+            code = pip_audit_gate.audit(run=run, sleep=delays.append, report=messages.append)
         return code, calls, delays, messages, stdout.getvalue(), stderr.getvalue()
 
     def test_timeout_then_healthy_scan(self):
@@ -86,6 +86,17 @@ class AuditTest(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(delays, [5])
         self.assertIn("scan exceeded 120s", messages[0])
+
+    def test_no_attempt_fails_closed(self):
+        # #7257: with no attempt left the gate must not return None, which exits as success.
+        saved = pip_audit_gate.ATTEMPTS
+        pip_audit_gate.ATTEMPTS = 0
+        try:
+            code, calls, _, _, _, _ = self.run_audit([])
+        finally:
+            pip_audit_gate.ATTEMPTS = saved
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":

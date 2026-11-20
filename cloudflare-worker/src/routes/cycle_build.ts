@@ -33,6 +33,7 @@ import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords
 import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 import { csvCell } from '../services/capTableRegister';
 import { csvResponse, stamp } from '../services/csv';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
@@ -2104,7 +2105,8 @@ async function deleteFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Respons
     logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `step-${id}`, 'build_formation_step_deleted', `Filing deleted: ${existing.title}`),
   ]);
   if (existing.proof_file_key && c.env.FILES) {
-    try { await c.env.FILES.delete(existing.proof_file_key); }
+    // D6651: the venture removing its own filing goes through the one record-erasure path.
+    try { await eraseRecordObjects(c.env.FILES, existing.proof_file_key, 'owner_removed'); }
     catch (e) { console.warn('[cycle_build] deleted filing proof not removed:', (e as Error)?.message); }
   }
   return c.json({ ok: true, deleted: id });

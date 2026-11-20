@@ -1,25 +1,29 @@
 /**
  * D1154 (#3059, part 6 of #2421) — the reading tabs: Team (DL4), Market (DL5)
- * and Traction (DL6), on D1151's reads, with the slots from sibling canvases
- * (DL24) where their reads have not landed. The words and the rules come from
+ * and Traction (DL6), on D1151's reads. D6168 (#6168): each tab draws its
+ * scopes' scorecard rows (`ScopeRows`, one scorecard read per tab), and Market
+ * and Traction point to the Evidence tab. The words and the rules come from
  * `dealInsightsModel.js`; this file only draws them.
  *
- * Each tab reads once. A viewer with no NDA on file sees the company's basics
+ * Each tab reads its section once, and its scorecard rows once. A viewer with no NDA on file sees the company's basics
  * and the way to the NDA; a read that fails says Unreadable with Try again;
  * one block that fails leaves the rest of the tab standing. Nothing here
  * changes anything, so nothing opens a dialog.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Unreadable } from '../../ui';
+import { Lightbox, Unreadable, actionGhost, actionPrimary } from '../../ui';
+import { dd } from '../../lib/api';
+import { caseForDeal } from './dealWorkModel';
 import { dealInsightsApi } from '../../lib/api/dealInsights';
 import { reportError } from '../../lib/log';
 import { tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
-import { Slot } from './DealOverview';
+import { ScopeRows } from '../../components/scoring/scorecard/Scorecard';
+import { kindWord, sourceWord } from '../cycles/evidence/evidenceModel.js';
 import {
-  ADVISORS_LINE, COVERAGE_NOTE, MASKED, NOT_RECORDED, NOT_REPORTED, SLOTS, TRACTION_CHARTS,
-  blockOf, chartSummary, coverageView, dateText, figureText, insightState, marketRow, personView, safeUrl, sizingView, slotOf, tractionCsv, tractionSources, tractionView,
+  COMPETITOR_SORTS, COVERAGE_NOTE, EVIDENCE_LINK, MASKED, NOT_IN_UPDATE, NOT_RECORDED, NOT_REPORTED, NO_UPDATE, SCORECARD_ROWS, TEAM_WORDS, TRACTION_CHARTS,
+  askDraft, blockOf, chartSummary, competitorsView, coverageView, dateText, figureText, insightState, marketRow, monthRows, monthsLine, peopleLine, personView, safeUrl, sizingView, tractionCsv, tractionSources, tractionView,
 } from './dealInsightsModel';
 
 const TONE = {
@@ -96,12 +100,17 @@ function Block({ block, what, retry, testId, children }) {
   return children(b.data);
 }
 
-/** A sibling canvas's slot (DL24), with its own state. */
-function SlotFrame({ slot, testId, retry }) {
-  if (slot.state === 'unreadable') {
-    return <section className={`${CARD} p-4`} data-testid={testId}><span className={EYE}>{slot.eye}</span><Unreadable what={slot.title} claim="That is not the same as none." onRetry={retry} /></section>;
-  }
-  return <Slot slot={slot} testId={testId} />;
+/** D6168: the tab's scopes as the Scorecard tab draws them, each opening its drawer there. */
+const Rows = ({ dealId, view }) => <ScopeRows dealId={dealId} keys={SCORECARD_ROWS[view]} ndaHref={tabHref(dealId, 'documents')} testId={`deal-${view}-scorecard`} />;
+
+/** D6168: what the founder shared is on the Evidence tab, one link away; nothing is read or counted here. */
+function EvidenceLink({ dealId, testId }) {
+  return (
+    <Card eye="Evidence" title={EVIDENCE_LINK.title} testId={testId}>
+      <p className={`m-0 ${SUB}`}>{EVIDENCE_LINK.line}</p>
+      <Link to={tabHref(dealId, 'evidence')} className={`${BTN_S} w-fit`} data-testid={`${testId}-link`}>{EVIDENCE_LINK.act}</Link>
+    </Card>
+  );
 }
 
 // ---------------------------------------------------------------- DL4 Team
@@ -113,22 +122,16 @@ function Person({ p }) {
         <span aria-hidden="true" className="grid h-10 w-10 flex-none place-items-center rounded-full bg-axal-lavender font-mono text-[13px] font-bold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300">{p.initials}</span>
         <div className="min-w-0">
           <p className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{p.name}</p>
-          <p className={`m-0 ${SUB}`}>{p.role} · {p.fullTime ? `Full time since ${p.fullTime}` : `Full time: ${p.fullTimeReason}`}</p>
+          <p className={`m-0 ${SUB}`}>{p.role}</p>
         </div>
       </div>
+      {/* D6164 part 2 (DE23): the archetype, or that none is published. */}
+      {p.archetype ? <Pill tone="src">◆ {p.archetype}</Pill> : <Pill tone="off" testId={`deal-team-person-${p.key}-archetype`}>{TEAM_WORDS.noArchetype}</Pill>}
       <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700">
-        <span className={EYE}>Archetype</span>
-        {p.archetype ? <Pill tone="src">◆ {p.archetype}</Pill> : <Pill tone="off">Not published</Pill>}
-      </div>
-      <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700">
-        <span className={EYE}>Prior roles · as published</span>
+        <span className={EYE}>Prior roles</span>
         {p.roles.state === 'recorded' && <ul className="m-0 list-none p-0 text-[12.5px] leading-[1.55] text-axal-ink dark:text-gray-100">{p.roles.rows.map((r) => <li key={r}>{r}</li>)}</ul>}
-        {p.roles.state === 'not_published' && <Pill tone="off">Not published</Pill>}
+        {p.roles.state === 'not_published' && <Pill tone="off">{TEAM_WORDS.noRoles}</Pill>}
         {p.roles.state === 'unreadable' && <p className="m-0 text-[12px] text-axal-destructive dark:text-red-300" role="alert">Their prior roles could not be read. That is not the same as none.</p>}
-      </div>
-      <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700">
-        <span className={EYE}>Founder-market fit</span>
-        {p.fit ? <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100">{p.fit}</p> : <Missing reason={p.fitReason} />}
       </div>
     </Card>
   );
@@ -137,8 +140,8 @@ function Person({ p }) {
 function Coverage({ block, retry }) {
   const v = coverageView(block);
   return (
-    <Card title="Team coverage" testId="deal-team-coverage" className="md:col-span-2">
-      <p className={`m-0 ${SUB}`}>{COVERAGE_NOTE}</p>
+    <Card title={TEAM_WORDS.coverageTitle} testId="deal-team-coverage" className="md:col-span-2">
+      <p className={`m-0 ${SUB}`}>{TEAM_WORDS.coverageLine} {COVERAGE_NOTE}</p>
       {v.state === 'unreadable' && <Unreadable what="The team’s coverage" claim="That is not the same as none." onRetry={retry} />}
       {v.state === 'not_recorded' && <Missing reason={v.reason} />}
       {v.state === 'recorded' && (<>
@@ -162,6 +165,14 @@ export function DealTeam({ deal }) {
     <InsightFrame read={read} retry={retry} dealId={deal.id} what="The team" testId="deal-team">
       {(d) => (
         <div className="grid gap-3.5 md:grid-cols-3" data-testid="deal-team">
+          {/* D6164 part 2 (DE23): the scope's row heads the tab, as the canvas's scope head does. */}
+          <div className="min-w-0 md:col-span-3"><Rows dealId={deal.id} view="team" /></div>
+          {blockOf(d.people).state === 'recorded' && (
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 md:col-span-3" data-testid="deal-team-people-head">
+              <h3 className={H3}>{TEAM_WORDS.people}</h3>
+              <span className={SUB}>{peopleLine(Array.isArray(d.people.data) ? d.people.data.length : 0)}</span>
+            </div>
+          )}
           <Block block={d.people} what="The team’s profiles" retry={retry} testId="deal-team-people">
             {(people) => (people.length
               ? people.map((raw) => { const p = personView(raw); return <Person key={p.key} p={p} />; })
@@ -171,13 +182,37 @@ export function DealTeam({ deal }) {
             <p role="alert" className="m-0 text-[12px] text-axal-destructive md:col-span-3 dark:text-red-300" data-testid="deal-team-publication">Some members’ publication choices could not be read, so they are not shown. That is not the same as none.</p>
           )}
           <Coverage block={d.coverage} retry={retry} />
+          <Card title="Founder-market fit" testId="deal-team-fit">
+            <Block block={d.founder_market_fit}
+              what="Shared Team evidence" retry={retry} testId="deal-team-fit">
+              {(evidence) => (
+                <>
+                  {evidence.groups.length ? <ul className={`m-0 list-none p-0 ${SUB}`}>
+                    {evidence.groups.map((group) => <li key={`${group.area}-${group.kind}-${group.source_label}`}>
+                      {kindWord(group.kind)} · {group.count} shared · {sourceWord(group.source_label)}{group.newest ? ` · ${dateText(group.newest)}` : ''}
+                    </li>)}
+                  </ul> : <p className={`m-0 ${SUB}`}>No Team evidence is shared with you on this deal.</p>}
+                  {evidence.partial && <p className={`m-0 ${SUB}`}>Some Team evidence could not be read.</p>}
+                </>
+              )}
+            </Block>
+            <Link to={tabHref(deal.id, 'evidence')} className={`${BTN_S} w-fit`}>Open the Evidence tab</Link>
+          </Card>
           <div className="flex flex-col gap-3.5">
-            <Card title="Co-founders’ values" testId="deal-team-values">
+            <Card title={TEAM_WORDS.values} testId="deal-team-values">
               {d.values_band?.value ? <Pill tone="done">{d.values_band.value}</Pill> : <Missing reason={d.values_band?.reason} />}
             </Card>
-            <SlotFrame slot={slotOf(SLOTS.teamRow)} testId="deal-slot-team-row" />
-            <Card title="Advisors on this company" testId="deal-team-advisors"><Missing reason={ADVISORS_LINE} /></Card>
+            <Card title={TEAM_WORDS.advisors} testId="deal-team-advisors">
+              <Block block={d.advisors} what="The accepted advisors" retry={retry} testId="deal-team-advisors">
+                {(advisors) => <>
+                  <p className={`m-0 ${SUB}`}>{advisors.count} accepted advisor{advisors.count === 1 ? '' : 's'}</p>
+                  {advisors.roles.map((entry) => <p key={entry.role} className={`m-0 ${SUB}`}>{entry.role} · {entry.count}</p>)}
+                  <p className={`m-0 ${SUB}`}>Source · {advisors.source}</p>
+                </>}
+              </Block>
+            </Card>
           </div>
+          <Link to={tabHref(deal.id, 'diligence')} className={`${BTN_S} min-h-11 w-fit md:col-span-3`} data-testid="deal-team-next">{TEAM_WORDS.next}</Link>
         </div>
       )}
     </InsightFrame>
@@ -185,6 +220,93 @@ export function DealTeam({ deal }) {
 }
 
 // ---------------------------------------------------------------- DL5 Market
+
+const count = (rows) => (Array.isArray(rows) ? rows.length : null);
+const Count = ({ n, testId }) => (n == null ? null : <span className="font-mono text-[12px] font-bold text-axal-muted dark:text-gray-400" data-testid={testId}>{n}</span>);
+const TITLE_ROW = 'flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1';
+
+/** D6164 part 2 (DE24, DE30c): the competitors, searched and sorted in the browser; a card each on a phone. */
+function Competitors({ rows }) {
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('name');
+  const id = useId();
+  const v = competitorsView(rows, { query, sort });
+  const field = 'min-h-11 rounded-axal-sm border border-axal-hairline bg-white px-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 md:min-h-8';
+  return (
+    <>
+      <div className="flex min-w-0 flex-wrap items-center gap-2" data-testid="deal-market-competitors-tools">
+        <label htmlFor={`${id}-q`} className="sr-only">Search competitors</label>
+        <input id={`${id}-q`} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="⌕ Search competitors" className={`${field} min-w-0 flex-1 sm:max-w-[260px]`} data-testid="deal-market-competitors-search" />
+        <label htmlFor={`${id}-s`} className={SUB}>Sort</label>
+        <select id={`${id}-s`} value={sort} onChange={(e) => setSort(e.target.value)} className={field} data-testid="deal-market-competitors-sort">
+          {COMPETITOR_SORTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+        </select>
+      </div>
+      {v.line && <p className={`m-0 ${SUB}`} aria-live="polite" data-testid="deal-market-competitors-matches">{v.line}</p>}
+      {v.none
+        ? <p className={`m-0 ${SUB}`} data-testid="deal-market-competitors-none">{v.none}</p>
+        : (
+          <>
+          {/* D4815 part 15 (#5908, DE15): a card per competitor on a phone, never a table scrolled sideways. */}
+          <ul className="m-0 flex list-none flex-col gap-2 p-0 md:hidden" data-testid="deal-market-competitor-cards">{v.shown.map((r, i) => (
+            <li key={`${r.name}-${i}`} className="rounded-axal-sm border border-axal-hairline px-3 py-2.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:text-gray-100">
+              <p className="m-0 text-[13.5px] font-bold">{r.name || NOT_RECORDED}</p>
+              <p className="m-0 mt-0.5">{r.why_it_matters || NOT_RECORDED}</p>
+              <dl className="m-0 mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+                <dt className="text-axal-muted dark:text-gray-400">Price</dt><dd className="m-0">{r.price_position || NOT_RECORDED}</dd>
+                <dt className="text-axal-muted dark:text-gray-400">Depth</dt><dd className="m-0">{r.depth_position || NOT_RECORDED}</dd>
+              </dl>
+            </li>))}</ul>
+          <div className="hidden md:block">
+            <table className="w-full border-collapse text-left text-[12.5px]">
+              <thead><tr className="text-axal-muted dark:text-gray-400">{['Name', 'Why it matters', 'Price', 'Depth'].map((c) => <th key={c} scope="col" aria-sort={c === 'Name' ? (sort === 'name' ? 'ascending' : 'descending') : undefined} className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{c}</th>)}</tr></thead>
+              <tbody>{v.shown.map((r, i) => (
+                <tr key={`${r.name}-${i}`} className="align-top text-axal-ink dark:text-gray-100" data-testid="deal-market-competitor-row">
+                  <td className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{r.name || NOT_RECORDED}</td>
+                  <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.why_it_matters || NOT_RECORDED}</td>
+                  <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.price_position || NOT_RECORDED}</td>
+                  <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.depth_position || NOT_RECORDED}</td>
+                </tr>))}</tbody>
+            </table>
+          </div>
+          </>
+        )}
+    </>
+  );
+}
+
+/** D6164 part 2 (DE24): each company market as a row with its four readings; a card each on a phone. */
+function CompanyMarkets({ rows }) {
+  const views = rows.map(marketRow);
+  return (
+    <>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0 md:hidden" data-testid="deal-market-where-cards">{views.map((r, i) => (
+        <li key={`${r.name}-${i}`} className="flex flex-col gap-0.5 border-t border-axal-hairline pt-2 dark:border-gray-700">
+          <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.name} · {r.where}</span>
+          {r.decided && <span className={SUB}>Decided {r.decided}</span>}
+          {/* D6171 (#6171): demand, regulation, partners and cost, each with its source or Not recorded. */}
+          <span className={SUB} data-testid="deal-market-readiness">Readiness: {r.readinessText}</span>
+        </li>))}</ul>
+      <div className="hidden md:block">
+        <table className="w-full border-collapse text-left text-[12.5px]">
+          <thead><tr className="text-axal-muted dark:text-gray-400">{['Market', 'State', 'Decided', 'Demand', 'Regulation', 'Partners', 'Cost'].map((c) => <th key={c} scope="col" className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{c}</th>)}</tr></thead>
+          <tbody>{views.map((r, i) => (
+            <tr key={`${r.name}-${i}`} className="align-top text-axal-ink dark:text-gray-100" data-testid="deal-market-where-row">
+              <td className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{r.name}</td>
+              <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.where}</td>
+              <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.decided || '—'}</td>
+              {r.readiness.map((part) => (
+                <td key={part.key} className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">
+                  {part.score == null
+                    ? <Pill tone="off">{NOT_RECORDED}</Pill>
+                    : <span className="flex flex-col"><b className="font-mono">{part.score}/10</b>{part.source && <span className={SUB}>{part.source}</span>}</span>}
+                </td>))}
+            </tr>))}</tbody>
+        </table>
+      </div>
+    </>
+  );
+}
 
 export function DealMarket({ deal }) {
   const [read, retry] = useInsight(dealInsightsApi.market, deal.id);
@@ -194,6 +316,8 @@ export function DealMarket({ deal }) {
         const sizing = sizingView(d.sizing);
         return (
           <div className="grid gap-3.5 md:grid-cols-3" data-testid="deal-market">
+            {/* D6164 part 2 (DE24): the four scopes' rows head the tab. */}
+            <div className="min-w-0 md:col-span-3"><Rows dealId={deal.id} view="market" /></div>
             {sizing.state === 'recorded'
               ? sizing.tiles.map((t) => (
                 <Card key={t.key} eye={t.label} testId={`deal-market-${t.key}`}>
@@ -203,7 +327,8 @@ export function DealMarket({ deal }) {
                 </Card>
               ))
               : <Card title="Market size" testId="deal-market-sizing" className="md:col-span-3"><Block block={d.sizing} what="TAM, SAM and SOM" retry={retry} testId="deal-market-sizing">{() => null}</Block></Card>}
-            <Card title="Who pays" testId="deal-market-who" className="md:col-span-1">
+            <Card testId="deal-market-who" className="md:col-span-1">
+              <div className={TITLE_ROW}><h3 className={H3}>Who pays</h3>{count(blockOf(d.who_pays).data) != null && <span className={SUB} data-testid="deal-market-who-count">{`${count(d.who_pays.data)} ${count(d.who_pays.data) === 1 ? 'segment' : 'segments'}`}</span>}</div>
               <p className={`m-0 ${SUB}`}>Customer segments from Validate.</p>
               <Block block={d.who_pays} what="Who pays" retry={retry} testId="deal-market-who">
                 {(rows) => (rows.length
@@ -211,26 +336,23 @@ export function DealMarket({ deal }) {
                     <li key={`${r.name}-${i}`} className="flex flex-col gap-0.5 border-t border-axal-hairline pt-2 dark:border-gray-700">
                       <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.name || NOT_RECORDED}</span>
                       {r.description && <span className={SUB}>{r.description}</span>}
-                      {r.source && <Pill tone="src">From {r.source}</Pill>}
+                      {r.source ? <Pill tone="src">Source · {r.source}</Pill> : <Pill tone="off">{NOT_RECORDED}</Pill>}
                     </li>))}</ul>
                   : <p className={`m-0 ${SUB}`}>The founder has not recorded who pays.</p>)}
               </Block>
             </Card>
-            <Card title="Where" testId="deal-market-where">
+            <Card title="Company markets and readiness" testId="deal-market-where" className="md:col-span-3">
               <Block block={d.company_markets} what="The company’s markets" retry={retry} testId="deal-market-where">
                 {(rows) => (rows.length
-                  ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{rows.map((m, i) => { const r = marketRow(m); return (
-                    <li key={`${r.name}-${i}`} className="flex flex-col gap-0.5 border-t border-axal-hairline pt-2 dark:border-gray-700">
-                      <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.name} · {r.where}</span>
-                      {r.decided && <span className={SUB}>Decided {r.decided}</span>}
-                      {/* D6171 (#6171): demand, regulation, partners and cost, each with its source or Not recorded. */}
-                      <span className={SUB} data-testid="deal-market-readiness">Readiness: {r.readinessText}</span>
-                    </li>); })}</ul>
+                  ? <CompanyMarkets rows={rows} />
                   : <p className={`m-0 ${SUB}`}>The founder has not recorded where the company sells.</p>)}
               </Block>
-              <p className={`m-0 ${SUB}`} data-testid="deal-market-geography">{blockOf(d.geography).reason || 'Customer geography is not recorded.'}</p>
             </Card>
-            <Card title="Market sources" testId="deal-market-sources">
+            <Card title="Customer geography and geographic risk" testId="deal-market-geo">
+              <Missing reason={blockOf(d.geography).reason || 'Customer geography is not recorded.'} testId="deal-market-geography" />
+            </Card>
+            <Card testId="deal-market-sources">
+              <div className={TITLE_ROW}><h3 className={H3}>Market sources</h3><Count n={count(blockOf(d.sources).data)} testId="deal-market-sources-count" /></div>
               <Block block={d.sources} what="The market sources" retry={retry} testId="deal-market-sources">
                 {(rows) => (rows.length
                   ? <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-[12.5px]">{rows.map((s, i) => { const href = safeUrl(s.url); return (
@@ -239,28 +361,15 @@ export function DealMarket({ deal }) {
               </Block>
               <p className={`m-0 ${SUB}`}>A source here backs the market overall, never one figure above.</p>
             </Card>
-            <Card title="Competitors" testId="deal-market-competitors" className="md:col-span-3">
+            <Card testId="deal-market-competitors" className="md:col-span-3">
+              <div className={TITLE_ROW}><h3 className={H3}>Competitors</h3><Count n={count(blockOf(d.competitors).data)} testId="deal-market-competitors-count" /></div>
               <Block block={d.competitors} what="The competitors" retry={retry} testId="deal-market-competitors">
                 {(rows) => (rows.length
-                  ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[520px] border-collapse text-left text-[12.5px]">
-                        <thead><tr className="text-axal-muted dark:text-gray-400">{['Name', 'Why it matters', 'Price', 'Depth'].map((c) => <th key={c} scope="col" className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{c}</th>)}</tr></thead>
-                        <tbody>{rows.map((r, i) => (
-                          <tr key={`${r.name}-${i}`} className="align-top text-axal-ink dark:text-gray-100">
-                            <td className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{r.name || NOT_RECORDED}</td>
-                            <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.why_it_matters || NOT_RECORDED}</td>
-                            <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.price_position || NOT_RECORDED}</td>
-                            <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.depth_position || NOT_RECORDED}</td>
-                          </tr>))}</tbody>
-                      </table>
-                    </div>
-                  )
+                  ? <Competitors rows={rows} />
                   : <p className={`m-0 ${SUB}`}>The founder tracks no competitors.</p>)}
               </Block>
             </Card>
-            <SlotFrame slot={slotOf(SLOTS.evidence, d.evidence)} testId="deal-slot-market-evidence" retry={retry} />
-            <div className="md:col-span-2"><SlotFrame slot={slotOf(SLOTS.marketRows)} testId="deal-slot-market-rows" /></div>
+            <EvidenceLink dealId={deal.id} testId="deal-market-evidence" />
           </div>
         );
       }}
@@ -332,6 +441,117 @@ function Chart({ chart, points }) {
   );
 }
 
+/**
+ * D6187: Ask the founder for the months not reported, as a diligence request
+ * on the deal's case. Only the case's owner or lead may send one (the Worker
+ * says so too); with no case, the investor is pointed at Diligence to open one.
+ */
+export function AskFounder({ deal, userId, draft }) {
+  const [list, setList] = useState({ status: 'loading' });
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState(draft);
+  const [state, setState] = useState({ busy: false, err: '', sent: false });
+  useEffect(() => {
+    let live = true;
+    dd.listCases({ subject_type: 'project', subject_id: deal.project_id })
+      .then((data) => { if (live) setList({ status: 'ready', data }); })
+      .catch((e) => { reportError('DealTraction:cases', e); if (live) setList({ status: 'unreadable' }); });
+    return () => { live = false; };
+  }, [deal.project_id]);
+  const found = caseForDeal(list, deal.project_id);
+  if (found.state === 'loading' || found.state === 'unreadable') return null;
+  const diligence = tabHref(deal.id, 'diligence');
+  if (found.state === 'none') {
+    return (
+      <p className={`m-0 md:col-span-4 ${SUB}`} data-testid="deal-traction-ask-nocase">
+        Some months were not reported. To ask the founder for them, <Link to={diligence} className="font-semibold text-axal-violet-deep dark:text-violet-300">open a diligence case</Link> first.
+      </p>
+    );
+  }
+  const owns = [found.row.owner_user_id, found.row.lead_user_id].some((u) => u != null && Number(u) === Number(userId));
+  if (!owns) return <p className={`m-0 md:col-span-4 ${SUB}`} data-testid="deal-traction-ask-notowner">Some months were not reported. Only the diligence case's owner can ask the founder for them.</p>;
+  const send = async () => {
+    if (!f.title.trim()) { setState({ busy: false, err: 'Give the request a title.', sent: false }); return; }
+    setState({ busy: true, err: '', sent: false });
+    try { await dd.createRequest(found.row.uid, { title: f.title.trim(), details: f.details.trim() || null }); setState({ busy: false, err: '', sent: true }); }
+    catch (e) { setState({ busy: false, err: e?.message || 'The request was not sent. Try again.', sent: false }); }
+  };
+  return (
+    <div className="md:col-span-4">
+      <button type="button" className={BTN_S} onClick={() => { setF(draft); setState({ busy: false, err: '', sent: false }); setOpen(true); }} data-testid="deal-traction-ask">Ask the founder for an update</button>
+      {open && (
+        <Lightbox label="Ask the founder for an update" title="Ask the founder for an update" sub="A diligence request on this deal's case. The founder answers it from their requests." onClose={() => setOpen(false)} testId="deal-traction-ask-dialog"
+          footer={(
+            <div className="flex flex-wrap justify-end gap-2">
+              {state.sent
+                ? <button type="button" className={actionPrimary} onClick={() => setOpen(false)}>Done</button>
+                : (<>
+                  <button type="button" className={actionGhost} onClick={() => setOpen(false)}>Back</button>
+                  <button type="button" className={actionPrimary} disabled={state.busy} onClick={send} data-testid="deal-traction-ask-send">{state.busy ? 'Sending…' : 'Send request'}</button>
+                </>)}
+            </div>
+          )}>
+          <div className="flex flex-col gap-3 px-5 py-4">
+            {state.sent
+              ? <p className="m-0 text-[13px]" data-testid="deal-traction-ask-sent">Sent. The request is on the <Link to={diligence} className="font-semibold text-axal-violet-deep dark:text-violet-300">Diligence</Link> tab, where you can remind or withdraw it.</p>
+              : (<>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Title
+                  <input value={f.title} maxLength={200} onChange={(e) => setF((x) => ({ ...x, title: e.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900" /></label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">What you are asking for
+                  <textarea rows={5} value={f.details} maxLength={4000} onChange={(e) => setF((x) => ({ ...x, details: e.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900" /></label>
+                {state.err && <p className="m-0 text-sm text-red-700 dark:text-red-300" role="alert">{state.err}</p>}
+              </>)}
+          </div>
+        </Lightbox>
+      )}
+    </div>
+  );
+}
+
+/**
+ * D6164 part 2 (DE25, DE30d): MRR, paying accounts and growth a month, newest
+ * first, with the source. A month not reported says so and draws no figure; a
+ * reported month without a figure says it was not in that update.
+ */
+function MonthTable({ view }) {
+  const rows = monthRows(view);
+  const cellOf = (v) => v ?? <span className={SUB}>{NOT_IN_UPDATE}</span>;
+  const gap = <span className="inline-flex w-fit items-center rounded-axal-pill border border-dashed border-axal-muted px-2 py-0.5 text-[11.5px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_REPORTED}</span>;
+  return (
+    <Card testId="deal-traction-months" className="md:col-span-4">
+      <div className={TITLE_ROW}><h3 className={H3}>MRR, last 12 months</h3><span className={SUB}>From the monthly updates the founder shared with you.</span></div>
+      <p className={`m-0 ${SUB}`} data-testid="deal-traction-months-line">{monthsLine(view)}</p>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0 md:hidden" data-testid="deal-traction-month-cards">{rows.map((r) => (
+        <li key={r.month} className="flex min-h-11 flex-col gap-0.5 border-t border-axal-hairline pt-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:text-gray-100">
+          <span className="font-bold">{r.label}</span>
+          {r.reported
+            ? (<>
+              <span className="font-mono">{r.mrr ?? NOT_IN_UPDATE}</span>
+              {r.source && <Pill tone="src">{r.source}</Pill>}
+            </>)
+            : <span className="flex flex-wrap items-center gap-2">{gap}<span className={SUB}>{NO_UPDATE}</span></span>}
+        </li>))}</ul>
+      <div className="hidden md:block">
+        <table className="w-full border-collapse text-left text-[12.5px]">
+          <thead><tr className="text-axal-muted dark:text-gray-400">{['Month', 'MRR', 'Paying accounts', 'Growth', 'Source'].map((c) => <th key={c} scope="col" className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{c}</th>)}</tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.month} className="align-top text-axal-ink dark:text-gray-100" data-testid={`deal-traction-month-${r.month}`}>
+              <td className="border-b border-axal-hairline py-1.5 pr-3 font-bold dark:border-gray-700">{r.label}</td>
+              {r.reported
+                ? (<>
+                  <td className="border-b border-axal-hairline py-1.5 pr-3 font-mono dark:border-gray-700">{cellOf(r.mrr)}</td>
+                  <td className="border-b border-axal-hairline py-1.5 pr-3 font-mono dark:border-gray-700">{cellOf(r.customers)}</td>
+                  <td className="border-b border-axal-hairline py-1.5 pr-3 font-mono dark:border-gray-700">{cellOf(r.growth)}</td>
+                  <td className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700">{r.source ? <Pill tone="src">{r.source}</Pill> : <span className={SUB}>{NOT_RECORDED}</span>}</td>
+                </>)
+                : <td colSpan={4} className="border-b border-axal-hairline py-1.5 pr-3 dark:border-gray-700"><span className="flex flex-wrap items-center gap-2">{gap}<span className={SUB}>{NO_UPDATE}</span></span></td>}
+            </tr>))}</tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 /** D6177: the browser downloads the already-read monthly figures, without another API request. */
 function downloadTraction(view, dealId) {
   const url = URL.createObjectURL(new Blob([tractionCsv(view)], { type: 'text/csv;charset=utf-8' }));
@@ -343,7 +563,7 @@ function downloadTraction(view, dealId) {
   } finally { link.remove(); URL.revokeObjectURL(url); }
 }
 
-export function DealTraction({ deal }) {
+export function DealTraction({ deal, userId }) {
   const [read, retry] = useInsight(dealInsightsApi.traction, deal.id);
   return (
     <InsightFrame read={read} retry={retry} dealId={deal.id} what="The traction figures" testId="deal-traction">
@@ -358,6 +578,8 @@ export function DealTraction({ deal }) {
         );
         return (
           <div className="grid gap-3.5 md:grid-cols-4" data-testid="deal-traction">
+            {/* D6164 part 2 (DE25): Traction and Financial's rows head the tab. */}
+            <div className="min-w-0 md:col-span-4"><Rows dealId={deal.id} view="traction" /></div>
             {v.state === 'unreadable' && <section className={`${CARD} p-4 md:col-span-4`} data-testid="deal-traction-history-unreadable"><Unreadable what="The shared figures" claim="That is not the same as none." onRetry={retry} /></section>}
             {v.state === 'recorded' && (<>
               <p className={`m-0 md:col-span-4 ${SUB}`} data-testid="deal-traction-reported">
@@ -367,6 +589,7 @@ export function DealTraction({ deal }) {
                 <p className={`m-0 ${SUB}`} data-testid="deal-traction-last-shared">Last shared: {dateText(v.lastShared) || NOT_RECORDED}</p>
                 <button type="button" className={`${BTN_S} min-h-11`} onClick={() => downloadTraction(v, deal.id)} data-testid="deal-traction-csv">Download CSV</button>
               </div>
+              {askDraft(v) && <AskFounder deal={deal} userId={userId} draft={askDraft(v)} />}
               {v.tiles.map((t) => (
                 <Card key={t.key} eye={t.label} testId={`deal-traction-tile-${t.key}`}>
                   {t.value ? <p className={BIG}>{t.value}</p> : <Missing reason={t.reason} />}
@@ -374,10 +597,10 @@ export function DealTraction({ deal }) {
                   {t.value && t.asOf && <span className={SUB}>{t.asOf}</span>}
                 </Card>
               ))}
+              <MonthTable view={v} />
               {TRACTION_CHARTS.map((c) => <Chart key={c.key} chart={c} points={v.series[c.key]} />)}
             </>)}
-            <SlotFrame slot={slotOf(SLOTS.evidence, d.evidence)} testId="deal-slot-traction-evidence" retry={retry} />
-            <div className="md:col-span-3"><SlotFrame slot={slotOf(SLOTS.tractionRows)} testId="deal-slot-traction-rows" /></div>
+            <EvidenceLink dealId={deal.id} testId="deal-traction-evidence" />
           </div>
         );
       }}

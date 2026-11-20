@@ -218,9 +218,10 @@ test('on a phone the bar carries no action, so Overview draws it full width', as
 
 test('the wiring: CycleRoute imports no new module, and the decision is its own part file', () => {
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /^import \{ useCapRelHome, useUseOfFundsHome \} from '\.\/defs\/raise\.jsx';$/m, 'through defs/raise.jsx (HUBS.md)');
+  // D5081 part 3 adds Cap table's read to the same line; part 4 adds Data room's `owned` to the chain.
+  assert.match(route, /^import \{ useCapRelHome, (?:useCapTableHome, )?useUseOfFundsHome \} from '\.\/defs\/raise\.jsx';$/m, 'through defs/raise.jsx (HUBS.md)');
   assert.doesNotMatch(route, /capRelHomeRead/);
-  assert.match(route, /owned=\{uofOwnsHome \? \{ sub: UOF_FRAME \} : capRelOwnsHome \? \{ sub: CAP_REL_LINE \} : null\}/);
+  assert.match(route, /owned=\{uofOwnsHome \? \{ sub: UOF_FRAME \} : capRelOwnsHome \? \{ sub: CAP_REL_LINE \} : (?:capTableOwnsHome \? \{ sub: CAP_TABLE_LINE \} : )?(?:dataRoomOwnsHome \? \{ sub: DATA_ROOM_LINE \} : )?null\}/);
   const doc = readFileSync('documentation/architecture/decisions/D5081-p2.md', 'utf8');
   assert.match(doc, /^## D5081 part 2 — Raise tools own their pages: Capital relationships \(#5081\)$/m);
 });

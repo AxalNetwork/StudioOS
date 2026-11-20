@@ -111,8 +111,10 @@ test('no sample event, circle, job, company, person or program fact from the can
       assert.ok(!body.includes(s), `${FILES[key]} carries the canvas sample "${s}"`);
     }
   }
-  // The static program list in data/network.js is invented; the page no longer reads it.
-  assert.doesNotMatch(code(SRC.events), /\bPROGRAMS\b|PROGRAM_CATEGORIES|AUDIENCES/, 'the curated program list is not drawn');
+  // Public Events keeps its real format filters; the retired preview catalogue must not return.
+  const network = code(read('frontend/src/data/network.js'));
+  assert.doesNotMatch(network, /export const (PROGRAMS|PROGRAM_CATEGORIES|AUDIENCES)\b/);
+  assert.match(SRC.events, /import \{ FORMATS \} from '\.\.\/\.\.\/data\/network'/);
 });
 
 test('every list is a live read', () => {
@@ -172,14 +174,14 @@ test('a circle card draws the row\'s own fields: no cadence, no seats', () => {
   assert.match(pub, /City \/ region circles · Lisbon/);
   assert.match(pub, /ax-n2-chip-green">Public</);
   assert.match(pub, />1 member</);
-  assert.match(pub, /href="\/register\?intent=circle&amp;circle=lisbon"[^>]*>Join</, 'join goes where it went before');
+  assert.match(pub, /href="\/contact\?topic=circle"[^>]*>Join</, 'join opens the contact form on its Circle topic (#6987)');
   assert.doesNotMatch(pub, /seat|cadence|Fortnightly|Monthly ·/i);
 
   const priv = render(React.createElement(circles.CircleCard, {
     c: { id: 8, name: 'Another', type: 'founder', access: 'private', members: 0 },
   }));
   assert.match(priv, /ax-chip-quiet">Invite-only</);
-  assert.match(priv, /href="\/register\?intent=circle&amp;circle=8"[^>]*>Request access</);
+  assert.match(priv, /href="\/contact\?topic=circle"[^>]*>Request access</);
   assert.doesNotMatch(priv, /members?</, 'a zero count is not drawn');
 });
 

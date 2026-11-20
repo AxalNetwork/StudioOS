@@ -8,7 +8,7 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, WorkerRail } from '../../../ui';
 import PitchPage from './PitchPage';
 import PitchNotes from './PitchNotes';
-import PitchReview from './PitchReview';
+import PitchReview, { PitchVersionReview } from './PitchReview';
 import ReviewTile from './ReviewTile';
 import {
   EMPTY_DECK, LINE, NOT_RECORDED, NO_VENTURE, READ_ONLY, TABS, TITLE,
@@ -16,6 +16,7 @@ import {
 } from './pitchStudioModel';
 import ShareDialog from './ShareDialog';
 import ShareBoard from './ShareBoard';
+import DeckGrants from './DeckGrants';
 import StudioHome from './StudioHome';
 import ScriptTab from './ScriptTab';
 import PitchOverview from './PitchOverview';
@@ -37,7 +38,9 @@ import { NEW_LINK, ndaCell, settingsLine } from './shareModel';
  *                           Investor links). Before that, PD2: the current
  *                           deck, its versions, and
  *                           views by week, most read slide and NDA signed.
- *   /raise/pitch/review     Review (PD14): the current version's review, each
+ *   /raise/pitch/review     Review (PD14): first, D6060's Review of the exact
+ *                           saved version (`?deck=`, else the current one; six
+ *                           groups, no score, PS-06); then the current version's review, each
  *                           point pointing to a card, and the reviews per
  *                           version (D900, `PitchReview.jsx`); the reviewer for
  *                           an upload or pasted text below it.
@@ -45,7 +48,8 @@ import { NEW_LINK, ndaCell, settingsLine } from './shareModel';
  *                           board on top (`ShareBoard.jsx`, the daily read:
  *                           views per day, the two funnels, drop-off); below it
  *                           every investor link, a page at a time, with
- *                           Withdraw on every link not known to be dead.
+ *                           Withdraw on every link not known to be dead;
+ *                           then D6166's "Shared on a deal" (`DeckGrants.jsx`).
  *   /raise/pitch/notes      Notes (PD21, D905): the thread from the venture's
  *                           admins to its founders, and the composer.
  *   /raise/pitch/new        New deck (PD3–PD6, D897): `NewDeck.jsx`. The Decks
@@ -214,6 +218,8 @@ export default function PitchStudio({ tab = 'overview' }) {
             {reads.requestedDeck != null && reads.versions.status === 'ok' && !currentDeck && (
               <ReadFailed text="Unavailable · This saved version was not found for this venture." testId="pitch-studio-version-missing" />
             )}
+            {/* D6060 (#6060, PS-06): Review of the exact saved version, first. */}
+            <PitchVersionReview reads={reads} readOnly={readOnly} />
             <ReviewTile reads={reads} readOnly={readOnly} projectId={projectId} />
             <PitchReview reads={reads} readOnly={readOnly} />
           </>
@@ -445,6 +451,10 @@ export function StudioAnalytics({ reads, readOnly }) {
             </nav>
           ) : null}
         </section>
+        {/* D6166 (#6166): one saved version for one investor on one of the venture's deals (D1587's grants). */}
+        {reads.project?.id && reads.versions.status === 'ok' ? (
+          <DeckGrants projectId={reads.project.id} versions={versions} readOnly={readOnly} />
+        ) : null}
       </>
     );
   }

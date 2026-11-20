@@ -54,11 +54,16 @@ and StudioHome at `/raise/pitch`).
 | `_security_seed.ts` | What `server.ts` seeds for that spec, read through the real routes as a Super Admin: a failed restore drill, administrators without MFA, sessions, a deletion request near its date, ledger rows, a Trust Center draft, the backup heartbeats; made-up names |
 | `fund_admin.a11y.spec.mjs` | D4812 (#4812, part 8): Fund Admin's workspaces, the Funds list and a fund's page at 1440, 390 and 320, light and dark: zero serious or critical axe violations, including with each dialog open; no page wider than its window; Fund scope, ⋯ and dialogs by keyboard; 44 px phone targets. No screenshots |
 | `_fund_admin_seed.ts` | What `server.ts` seeds for that spec, read through the real routes as HQ Security's Super Admin: one fund with three LPs, an overdue call line, fee periods, a prepared pack and two bank matches. Made-up names |
+| `portfolio.a11y.spec.mjs` | D4818 (#4818, part 2): Portfolio's Overview, Positions and Performance at 1440, 1280, 834, 390 and 320, light and dark: zero serious or critical axe violations, no page wider than its window, one H1, the named local navigation, the skip link and the Tab path, 44px phone targets, one failed read retried alone, the mark-history Sheet's focus; no screenshots |
+| `_portfolio.mjs` | The reads those boards make, answered for that spec as the Worker answers them, signed in as an investor; made-up names |
 | `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
 | `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
 | `pricing_entitlements_4653.spec.mjs` | D4653: actual public catalogue capacity defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into signup; synthetic prices and no payment. |
 
 | `prospect_paging_6316.spec.mjs` | #6316: real Worker/SPA reads 250 prospects at desktop and phone widths after an edit between pages; no duplicate or skipped cards. |
+
+| `grow_proposal_undo_6315.spec.mjs` | #6315: built SPA Mercury confirmation, destination and undo at desktop/phone widths with synthetic source responses; no bank account is accessed. |
+| `login_journeys_6959.spec.mjs` | #6959: /login's Sign In v2 journeys (#6958, D6957) on the desktop card at 1440 and the phone sheet under the iPhone 13, iPhone SE and Pixel 7 descriptors at 390 and 320 (Chromium, not Safari): three actions, the Email methods, Apple and Google returns through mocked callbacks, the sheet's focus, axe, keyboard-open and 200% text, destination continuity; screenshots only to `LOGIN_EVIDENCE_DIR`, no baselines. |
 
 ### Run it
 

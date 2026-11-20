@@ -12,6 +12,8 @@
  */
 import type { Env } from '../types';
 import { assertStorageRoom, noteStorageLanded } from './storageRoom';
+import { putRecordOrThrow } from './recordStore';
+import { eraseRecordObjects, type RecordErasureReason } from './recordErasure';
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -61,7 +63,8 @@ export async function putKycDocumentFromDataUri(
   const sha256 = await sha256Hex(bytes);
   const uuid = crypto.randomUUID();
   const fileKey = `kyc/${userId}/${uuid}.${ext}`;
-  await env.FILES.put(fileKey, bytes, {
+  // D6651: a verification document is a record, written once under a fresh key.
+  await putRecordOrThrow(env.FILES, fileKey, bytes, {
     httpMetadata: { contentType },
     customMetadata: { user_id: String(userId), sha256 },
   });
@@ -81,11 +84,15 @@ export async function getKycDocument(env: Env, fileKey: string): Promise<R2Objec
   return await env.FILES.get(fileKey);
 }
 
-/** Delete a KYC document (e.g. on user deletion / GDPR request). */
-export async function deleteKycDocument(env: Env, fileKey: string): Promise<void> {
+/**
+ * Delete a KYC document (a rejected case's purge, user deletion, a GDPR request). D6651: a KYC
+ * document is a record, so it goes through the one record-erasure path, with its reason; it is
+ * never deleted as a rollback or because a newer document replaced it.
+ */
+export async function deleteKycDocument(env: Env, fileKey: string, reason: RecordErasureReason): Promise<void> {
   if (!env.FILES) return;
   if (!fileKey.startsWith('kyc/')) return;
-  await env.FILES.delete(fileKey);
+  await eraseRecordObjects(env.FILES, fileKey, reason);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +197,8 @@ export async function putResumeFromDataUri(
   const sha256 = await sha256Hex(bytes);
   const uuid = crypto.randomUUID();
   const fileKey = `resumes/${postingId}/${uuid}.${ext}`;
-  await env.FILES.put(fileKey, bytes, {
+  // D6651: an application document is a record, written once under a fresh key.
+  await putRecordOrThrow(env.FILES, fileKey, bytes, {
     httpMetadata: { contentType },
     customMetadata: { posting_id: String(postingId), sha256 },
   });
@@ -241,7 +249,8 @@ export async function putTaxFormFromDataUri(env: Env, userId: number, dataUri: s
   if (bytes.byteLength > TAX_FORM_MAX_BYTES) throw new Error('too_large');
   const sha256 = await sha256Hex(bytes);
   const fileKey = `${TAX_FORM_PREFIX}${userId}/${crypto.randomUUID()}.${ext}`;
-  await env.FILES.put(fileKey, bytes, { httpMetadata: { contentType }, customMetadata: { user_id: String(userId), sha256 } });
+  // D6651: a tax form is a record, written once under a fresh key.
+  await putRecordOrThrow(env.FILES, fileKey, bytes, { httpMetadata: { contentType }, customMetadata: { user_id: String(userId), sha256 } });
   return { file_key: fileKey, content_type: contentType, size: bytes.byteLength, sha256 };
 }
 

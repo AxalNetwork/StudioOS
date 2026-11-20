@@ -56,9 +56,7 @@ const LABEL_PAIRS = {
 
 /** Lanes with no page to open, each drawn as plain words by its door. */
 const NO_DOOR = {
-  // The registry names "Best-Fit" as where it is decided, but no review page
-  // exists yet, so `LaneDoor` says so in words rather than linking nowhere.
-  best_fit: 'Best-Fit · no review page yet',
+  // Empty since D5885 gave Best-Fit its board (/admin/approvals/best-fit).
 };
 
 /** The page's view of every lane: key, label, group and scope. */

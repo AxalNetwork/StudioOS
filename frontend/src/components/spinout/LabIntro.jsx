@@ -7,7 +7,7 @@ import {
   LAB_PANEL_HEX, LAB_SURFACE, LAB_TAG_LEAD, LAB_TAG_SOON, LAB_TOOL, LAB_TOOL_LEAD,
 } from './labIntroStyles';
 import {
-  LAB_JURISDICTIONS, PIPELINE_PHASES, labJurisdiction, pipelineItemsFor,
+  LAB_FORMATION, LAB_JURISDICTIONS, PIPELINE_PHASES, formationItemsFor, labJurisdiction, pipelineItemsFor,
 } from '../../lib/spinoutLab';
 import {
   LAB_TRACKS, TOOL_COUNT, arsenalFor, labTrack, leadsWithFor,
@@ -174,7 +174,7 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
               </Link>
             ) : null}
             <Link className={LAB_BTN_GHOST_ON_DARK} to={briefHref}>
-              Download the programme brief
+              Read the programme brief
             </Link>
           </div>
         </div>
@@ -211,8 +211,7 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
             </button>
           ) : null}
           <p className="mt-4 text-[11px] leading-relaxed text-white/50">
-            Read from the cohort record. The deadline is computed as seven days before the
-            start, 23:59 Delaware time — never typed.
+            Dates come from the cohort record.
           </p>
         </div>
       </div>
@@ -311,7 +310,7 @@ export function LabGates({ jurisdiction }) {
                 {phase.name}
               </div>
               <ul className="mt-2.5 mb-3 grid gap-1.5">
-                {pipelineItemsFor(phase, jurisdiction).map((item) => (
+                {pipelineItemsFor(phase).map((item) => (
                   <li key={item} className="flex gap-2 text-[12px] leading-snug text-gray-600 dark:text-gray-400">
                     <span aria-hidden="true" className="text-axal-violet-deep dark:text-violet-400">✓</span>
                     <span>{item}</span>
@@ -319,7 +318,7 @@ export function LabGates({ jurisdiction }) {
                 ))}
               </ul>
               {/* mt-auto, so the four gate footers align on one line however
-                  many items a week carries — Fund has five, the rest four. */}
+                  many items a week carries. */}
               <div className={`mt-auto border-t pt-2.5 ${LAB_HAIRLINE}`}>
                 <div className={LAB_EYEBROW}>Gate opens on</div>
                 {/* Two lines' worth whether or not the sentence needs them: the
@@ -335,6 +334,12 @@ export function LabGates({ jurisdiction }) {
           </li>
         ))}
       </ol>
+      {/* D6991: formation has no week of its own (owner answer F1); the
+          jurisdiction's two lines sit here, under the four gates. */}
+      <p className={`mt-4 ${LAB_LEDE}`} data-testid="lab-formation">
+        {LAB_FORMATION}{' '}
+        <span className="text-gray-600 dark:text-gray-400">({formationItemsFor(jurisdiction).join('; ')}.)</span>
+      </p>
     </section>
   );
 }
@@ -602,13 +607,8 @@ export function LabCommunity({ surface, directory, shipped }) {
 
         {/* Asks — stated, not drawn */}
         <div className={`p-4 ${LAB_CARD_SUNKEN}`}>
-          <span className={LAB_EYEBROW}>Founder-to-founder asks</span>
+          <span className={LAB_EYEBROW}>Getting an answer</span>
           <p className="mt-3 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
-            This does not exist yet. No store holds a question from one founder to another,
-            and the cohort read deliberately returns no founder identity — so there would be
-            nobody to address one to.
-          </p>
-          <p className="mt-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
             Office hours and matched advisors are the routes to an answer today, and both are
             in the arsenal above.
           </p>
@@ -620,7 +620,7 @@ export function LabCommunity({ surface, directory, shipped }) {
 
 /* ── Apply ────────────────────────────────────────────────────────────── */
 
-export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
+export function LabApplyBand({ cohort, applyHref, briefHref }) {
   const record = cohortOf(cohort);
   return (
     <section className="mt-16 pb-16">
@@ -631,9 +631,8 @@ export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
         <div className="max-w-[580px]">
           <div className={LAB_EYEBROW_ON_DARK}>How to apply</div>
           <h2 className="mt-2 text-[24px] font-black tracking-axal-heading">
-            {record?.open && record.name
-              ? `Apply to the ${record.name} cohort on the ${labTrack(track).name} track.`
-              : `Apply on the ${labTrack(track).name} track.`}
+            {/* #6990: no track in the heading until the application stores one (#6989). */}
+            {record?.open && record.name ? `Apply to the ${record.name} cohort.` : 'Apply to the Spin-Out Lab.'}
           </h2>
           <p className={`mt-2.5 text-[14px] leading-relaxed ${LAB_ON_DARK_MUTED}`}>
             {record?.deadlineLabel ? (
@@ -647,21 +646,13 @@ export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
             )}
             Selection is on evidence of thinking. No equity is taken for taking part.
           </p>
-          {/* The track is a reading aid, not a record. Saying so here is the
-              alternative to carrying a ?track= param the register page would
-              drop in silence. */}
-          <p className="mt-2 text-[11.5px] leading-relaxed text-white/45">
-            The track you picked above is not carried into the form — nothing stores one yet.
-            The application asks where the company is, and that answer is what an admission
-            decision reads.
-          </p>
         </div>
         <div className="flex flex-none flex-col gap-2.5">
           <Link className={LAB_BTN_ON_DARK} to={applyHref}>
             {applyLabelFor(cohort)} →
           </Link>
           <Link className={LAB_BTN_GHOST_ON_DARK} to={briefHref}>
-            Download the programme brief
+            Read the programme brief
           </Link>
         </div>
       </div>
@@ -719,7 +710,7 @@ export default function LabIntro({
         <LabJurisdictionCard value={jurisdiction} onChange={onJurisdiction} track={track} />
         <LabCommunity surface={surface} directory={directory} shipped={shipped} />
         {children}
-        {canApply ? <LabApplyBand cohort={cohort} applyHref={applyHref} briefHref={briefHref} track={track} /> : null}
+        {canApply ? <LabApplyBand cohort={cohort} applyHref={applyHref} briefHref={briefHref} /> : null}
       </div>
     </div>
   );

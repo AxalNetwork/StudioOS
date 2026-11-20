@@ -1,5 +1,5 @@
 // #4736 — D2319 retired `/company-settings` and the `/account/companies…` addresses. Nothing in frontend/src may
-// build a link to one, except the three Team and Compliance routes `routes/team.jsx` still mounts (and
+// build a link to one, except the Team and Compliance routes `routes/team.jsx` still mounts (#5964 adds Team's Compare with Axal page) (and
 // `settingsScope.js`, which matches the current address against the company's settings prefix for them).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +12,7 @@ const LIVE = [
   /\/account\/companies\/\$\{[^}]+\}\/settings\/compliance\b/,
   /\/account\/companies\/\$\{[^}]+\}\/settings\/projects\/\$\{[^}]+\}\/team\b/,
   /request\('\/account\/companies'\)/, // GET /api/account/companies, an API path
-  /path="\/account\/companies\/:uid\/settings\/(team|compliance|projects\/:id\/team)"/, // the mounts themselves
+  /path="\/account\/companies\/:uid\/settings\/(team|team\/skills\/:skillUid\/base|compliance|projects\/:id\/team)"/, // the mounts themselves (#5964: Compare with Axal sits under Team)
   /from '[^']*'|import\('[^']*'\)/, // a source path, not an address
 ];
 const SCOPE_PREFIX = /\/account\/companies\/\$\{[^}]+\}\/settings(\/projects\/\$\{[^}]+\})?`/; // settingsScope.js only
@@ -34,5 +34,5 @@ test('no /company-settings or /account/companies link is built in frontend/src, 
 
 test('the live exceptions are really mounted by routes/team.jsx', () => {
   const team = readFileSync('frontend/src/routes/team.jsx', 'utf8');
-  for (const p of ['/account/companies/:uid/settings/team', '/account/companies/:uid/settings/projects/:id/team', '/account/companies/:uid/settings/compliance']) assert.ok(team.includes(`path="${p}"`), p);
+  for (const p of ['/account/companies/:uid/settings/team', '/account/companies/:uid/settings/team/skills/:skillUid/base', '/account/companies/:uid/settings/projects/:id/team', '/account/companies/:uid/settings/compliance']) assert.ok(team.includes(`path="${p}"`), p);
 });

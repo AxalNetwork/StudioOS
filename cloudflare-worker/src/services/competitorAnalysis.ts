@@ -17,6 +17,7 @@ import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { untrustedBlock, withUntrustedRule, withoutUnrecordedLinks } from './ai/untrusted';
 import { fetchPage, pagesForDomain, normalizeUrl, type FetchedPage } from './webFetch';
+import { hostOf, nameKey } from './competitorDirectoryLink';
 
 /**
  * D778 part 9 (#2103): the fallback for these runs, for a client that sent no
@@ -26,13 +27,13 @@ import { fetchPage, pagesForDomain, normalizeUrl, type FetchedPage } from './web
  * part 10's `SHARED_DRAFT_PAGES` keeps it (`routes/research.ts`); the options
  * are the founder inventory's (`frontend/src/lib/railOptions/founder.js`,
  * Founder · Research · Companies). Before part 9 every run logged
- * `scan:competitors`, a key no inventory lists.
+ * `scan:competitors`, a key no inventory lists. Refresh sources has no option:
+ * it runs no model (D7176), so D7652 took its row out of the inventory.
  */
 export const COMPANIES_PAGE = 'research';
 export const COMPANIES_OPTIONS = {
   analyze: 'analyse:competitors',
   again: 'analyse:again',
-  sources: 'analyse:sources',
   candidate: 'extract:candidate',
   site: 'extract:site',
 } as const;
@@ -50,6 +51,39 @@ export interface AnalysisInputs {
   region_focus?: string;
   depth?: 'quick' | 'deep';
   nudge?: string;
+  /**
+   * D7175: the directory company the run is about, as it read when the run
+   * started. Stored in `inputs_json` beside `competitor_analyses.subject_uid`
+   * so a re-run or a refresh, which re-read the stored inputs, keep it out of
+   * the candidates too. Absent for a custom market.
+   */
+  subject?: AnalysisSubject;
+}
+
+/** D7175: the subject company of a run: never one of its candidates. */
+export interface AnalysisSubject {
+  uid: string;
+  name: string;
+  domain: string | null;
+}
+
+/**
+ * D7175: one finding of a run, with the fetched sources it rests on.
+ * `source_ids` are `competitor_sources.id`s; an empty list is a finding with
+ * no source in this run, which the page says in words.
+ */
+export interface Finding {
+  text: string;
+  kind: 'fact' | 'interpretation';
+  source_ids: string[];
+}
+
+/** D7175: what self-match protection kept out of a run's candidates. */
+export interface ExcludedCandidate {
+  name: string;
+  domain: string | null;
+  uid: string | null;
+  reason: 'subject';
 }
 
 export interface CandidateSubScores {
@@ -110,6 +144,10 @@ export interface AnalysisOutput {
   wedge: string;
   next_actions: string[];
   notes: string;
+  /** D7175: findings with their sources; Interpretation kept apart by `kind`. */
+  findings?: Finding[];
+  /** D7175: the subject, listed as excluded from the candidates. */
+  excluded?: ExcludedCandidate[];
 }
 
 export interface AnalysisResult {
@@ -267,6 +305,8 @@ async function discoverCandidates(env: Env, userId: number, inputs: AnalysisInpu
     inputs.problem ? `Problem being solved: ${inputs.problem}` : '',
     inputs.known_competitors ? `Already-known competitors (include + expand beyond these): ${inputs.known_competitors}` : '',
     inputs.nudge ? `Analyst nudge: ${inputs.nudge}` : '',
+    // D7175: the subject is who the competitors are competitors OF.
+    inputs.subject ? `Subject company (never list it): ${inputs.subject.name}${inputs.subject.domain ? ` (${inputs.subject.domain})` : ''}` : '',
     '',
     'Return the JSON array now.',
   ]
@@ -302,6 +342,7 @@ async function enrichWithCrawl(
   sources: SourceRecord[],
   signals: SignalRecord[],
   rail: RailContext,
+  failed?: SourceRecord[],
 ): Promise<void> {
   const homepage = cand.url || (cand.domain ? `https://${cand.domain}` : null);
   if (!homepage) return;
@@ -338,6 +379,8 @@ async function enrichWithCrawl(
       if (/blog|news|press/i.test(page.url)) {
         signals.push({ id: uid(), candidate_id: cand.id, signal_type: 'content', label: 'Active content/press', detail: page.headings[0] || page.title || page.url });
       }
+    } else if (failed && failedRead(url === targets[0], page)) {
+      failed.push(failedSource(cand.id, url, page));
     }
   }
 
@@ -351,6 +394,34 @@ async function enrichWithCrawl(
     cand.relevance_score = weightedRelevance(cand.scores);
     signals.push({ id: uid(), candidate_id: cand.id, signal_type: 'web', label: 'Public site crawled', detail: `${sources.filter((s) => s.candidate_id === cand.id).length} page(s) captured` });
   }
+}
+
+/**
+ * D7175: which unanswered fetches are failed reads. The homepage always is: it
+ * is the company's own site. A guessed path (/pricing, /about) that is not
+ * there is not a failure, so only a timeout, a refused connection (0), a rate
+ * limit (429) or a server error is recorded for it. `competitor_sources.status`
+ * keeps the code, so the page can tell "No candidates" from "Unavailable".
+ */
+export function failedRead(isHomepage: boolean, page: { ok: boolean; status: number }): boolean {
+  // An answered page with nothing in it is not a failed read, and not a source.
+  if (page.ok) return false;
+  if (isHomepage) return true;
+  const n = Number(page.status) || 0;
+  return n === 0 || n === 429 || n >= 500;
+}
+
+function failedSource(candidateId: string, url: string, page: { status: number; fetched_at?: string }): SourceRecord {
+  return {
+    id: uid(),
+    candidate_id: candidateId,
+    url,
+    kind: sourceKind(url),
+    title: '',
+    // A read that failed with a 2xx code (not a page we can read) never counts as fetched.
+    status: Number(page.status) >= 200 && Number(page.status) < 400 ? 0 : Number(page.status) || 0,
+    fetched_at: page.fetched_at || new Date().toISOString(),
+  };
 }
 
 /** Kind of one public page, from its URL. A homepage is the fallback, not a guess at the company. */
@@ -428,7 +499,7 @@ async function distillPositioning(env: Env, userId: number, rail: RailContext, n
 }
 
 /** D1506: the landscape run's prompt: the candidates, which carry crawled site text, as one untrusted block. */
-export function landscapePrompt(inputs: AnalysisInputs, candidates: Candidate[]): { system: string; user: string } {
+export function landscapePrompt(inputs: AnalysisInputs, candidates: Candidate[], sources: SourceRecord[] = []): { system: string; user: string } {
   const compactCands = candidates.map((c) => ({
     name: c.name,
     category: c.category,
@@ -440,7 +511,10 @@ export function landscapePrompt(inputs: AnalysisInputs, candidates: Candidate[])
   const system = withUntrustedRule(
     'You are a seed-stage VC analyst. Given the market context and a list of competitors (some enriched with real website data), produce a competitive-landscape report. Respond ONLY with JSON matching this exact shape: ' +
     '{"market_summary": string, "direct_competitors": string[], "adjacent_competitors": string[], "feature_comparison": {"features": string[], "rows": [{"competitor": string, "values": string[]}]}, "pricing_signals": [{"competitor": string, "signal": string}], "positioning": [{"competitor": string, "messaging": string}], "traction_signals": [{"competitor": string, "signal": string}], "gaps": string[], "wedge": string, "next_actions": string[]}. ' +
-    'Be specific and blunt. feature_comparison.rows[i].values must align 1:1 with feature_comparison.features. Keep arrays under 8 items.');
+    'Be specific and blunt. feature_comparison.rows[i].values must align 1:1 with feature_comparison.features. Keep arrays under 8 items. ' +
+    // D7175: no finding without a source. The numbers are the Sources list's.
+    'Also return "findings": [{"text": string, "kind": "fact" | "interpretation", "sources": number[]}], where each fact cites the numbers of the Sources it was read from; ' +
+    'gaps may be given as {"text": string, "sources": number[]} and wedge as {"text": string, "sources": number[]}. Anything no listed source supports goes in next_actions as an open research question, never as a fact.');
   const user = [
     `Market: ${inputs.market}`,
     inputs.target_customer ? `ICP: ${inputs.target_customer}` : '',
@@ -451,6 +525,9 @@ export function landscapePrompt(inputs: AnalysisInputs, candidates: Candidate[])
     // D1506: the candidates carry text crawled from their own sites.
     `Competitors JSON:\n${untrustedBlock('web_page', JSON.stringify(compactCands))}`,
     '',
+    // D7175: the fetched pages, numbered as findings cite them.
+    `Sources:\n${untrustedBlock('web_page', numberedSources(sources, candidates).join('\n') || 'None.')}`,
+    '',
     'Return the report JSON now.',
   ]
     .filter(Boolean)
@@ -459,13 +536,42 @@ export function landscapePrompt(inputs: AnalysisInputs, candidates: Candidate[])
   return { system, user };
 }
 
-async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, candidates: Candidate[], rail: RailContext): Promise<AnalysisOutput> {
-  const { system, user } = landscapePrompt(inputs, candidates);
+async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, candidates: Candidate[], rail: RailContext, sources: SourceRecord[] = []): Promise<AnalysisOutput> {
+  const { system, user } = landscapePrompt(inputs, candidates, sources);
   const ai = await runJson<Partial<AnalysisOutput>>(env, userId, rail, system, user, 1600);
-  return normalizeOutput(ai, inputs, candidates);
+  return normalizeOutput(ai, inputs, candidates, sources);
 }
 
-function normalizeOutput(ai: Partial<AnalysisOutput> | null, inputs: AnalysisInputs, candidates: Candidate[]): AnalysisOutput {
+/** D7175: a source the run actually read (its stored status is the HTTP code). */
+export function sourceFetched(s: { status?: unknown }): boolean {
+  const n = Number(s?.status);
+  return Number.isFinite(n) && n >= 200 && n < 400;
+}
+
+/** D7175: the fetched sources, numbered from 1 in the order the run read them, as a finding cites them. */
+export function numberedSources(sources: SourceRecord[], candidates: Candidate[] = []): string[] {
+  const nameOf = new Map(candidates.map((c) => [c.id, c.name]));
+  return sources.filter(sourceFetched).map((s, i) =>
+    `[${i + 1}] ${(s.candidate_id && nameOf.get(s.candidate_id)) || 'Unattributed'} · ${s.kind} · ${s.url}${s.title ? ` · ${s.title}` : ''}`);
+}
+
+/** A question in place of a statement no source in the run supports (the owner's answer A on D7041). */
+const asQuestion = (text: string): string => `What source would confirm this: “${text.replace(/[?.]+$/, '')}”?`;
+
+/**
+ * D7175: the run's report, with nothing in it that the run did not return.
+ *
+ * - No fallback gaps, wedge or next actions: an empty answer stays empty.
+ * - A finding keeps only citations to sources the run fetched (`source_ids`);
+ *   one with none is kept and the page marks it "No source in this run".
+ * - A gap or wedge line with no fetched source moves to `next_actions`, which
+ *   the page draws as Suggested research questions, apart from the findings.
+ * - With 0 fetched sources (Insufficient evidence) the run states no summary,
+ *   no gaps, no wedge, no classifications and no findings: every statement
+ *   the model wrote becomes a question.
+ * - With no candidates, no competitor is named anywhere in the output.
+ */
+export function normalizeOutput(ai: Partial<AnalysisOutput> | null, inputs: AnalysisInputs, candidates: Candidate[], sources: SourceRecord[] = []): AnalysisOutput {
   const direct = candidates.filter((c) => c.category === 'direct').map((c) => c.name);
   const adjacent = candidates.filter((c) => c.category === 'adjacent').map((c) => c.name);
   const strArr = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean).slice(0, 10) : []);
@@ -481,17 +587,54 @@ function normalizeOutput(ai: Partial<AnalysisOutput> | null, inputs: AnalysisInp
     positioning: normalizePairs(ai?.positioning, 'messaging', candidates, (c) => c.details.positioning || ''),
     traction_signals: normalizePairs(ai?.traction_signals, 'signal', candidates, () => ''),
     activity_signals: [],
-    gaps: strArr(ai?.gaps).length ? strArr(ai?.gaps) : ['Under-served ICP segment', 'Weak pricing transparency among incumbents', 'Onboarding / time-to-value gap'],
-    wedge:
-      typeof ai?.wedge === 'string' && ai.wedge.trim()
-        ? ai.wedge.trim()
-        : `Win a beachhead in ${inputs.target_customer || 'an under-served segment'} with a sharper take on "${inputs.problem || inputs.market}" than the incumbents offer.`,
-    next_actions: strArr(ai?.next_actions).length
-      ? strArr(ai?.next_actions)
-      : ['Interview 5 target customers on their current tool', 'Build a feature-by-feature battlecard for the top 3 direct competitors', 'Pressure-test pricing against the cheapest incumbent'],
+    gaps: [],
+    wedge: '',
+    next_actions: strArr(ai?.next_actions),
     notes: '',
   };
-  return out;
+  return withEvidenceRules(out, ai, candidates, sources);
+}
+
+/** D7175: the citation, gap, wedge and Insufficient-evidence rules `normalizeOutput` applies. */
+function withEvidenceRules(out: AnalysisOutput, ai: Partial<AnalysisOutput> | null, candidates: Candidate[], sources: SourceRecord[]): AnalysisOutput {
+  const fetched = sources.filter(sourceFetched);
+  const refs = (v: unknown): string[] => {
+    const ids = (Array.isArray(v) ? v : []).map((n) => fetched[Math.trunc(Number(n)) - 1]?.id).filter((x): x is string => !!x);
+    return [...new Set(ids)];
+  };
+  const textOf = (v: unknown): string => (typeof v === 'string' ? v : (v && typeof (v as { text?: unknown }).text === 'string' ? (v as { text: string }).text : '')).trim();
+  const questions = [...out.next_actions];
+  const ask = (text: string) => { const q = asQuestion(text); if (!questions.includes(q)) questions.push(q); };
+
+  const findings: Finding[] = [];
+  for (const f of (Array.isArray((ai as { findings?: unknown })?.findings) ? (ai as { findings: unknown[] }).findings : []).slice(0, 12)) {
+    const text = textOf(f);
+    if (!text) continue;
+    const o = (f && typeof f === 'object' ? f : {}) as { kind?: unknown; sources?: unknown };
+    findings.push({ text, kind: o.kind === 'interpretation' ? 'interpretation' : 'fact', source_ids: refs(o.sources) });
+  }
+  const gaps: string[] = [];
+  for (const g of (Array.isArray(ai?.gaps) ? ai.gaps as unknown[] : []).slice(0, 10)) {
+    const text = textOf(g);
+    if (!text) continue;
+    if (refs((g as { sources?: unknown })?.sources).length) gaps.push(text);
+    else ask(text);
+  }
+  const wedgeText = textOf(ai?.wedge);
+  let wedge = '';
+  if (wedgeText) {
+    if (refs((ai?.wedge as unknown as { sources?: unknown } | undefined)?.sources).length) wedge = wedgeText;
+    else ask(wedgeText);
+  }
+
+  // With no candidates, nobody is named; with no fetched source, nothing is stated.
+  const unnamed = { direct_competitors: [], adjacent_competitors: [], pricing_signals: [], positioning: [], traction_signals: [], feature_comparison: { features: [], rows: [] } };
+  if (!fetched.length) {
+    // Insufficient evidence: a statement with no source is a question.
+    for (const f of findings) ask(f.text);
+    return { ...out, ...unnamed, market_summary: '', gaps: [], wedge: '', next_actions: questions.slice(0, 12), findings: [] };
+  }
+  return { ...out, ...(candidates.length ? {} : unnamed), gaps, wedge, next_actions: questions.slice(0, 12), findings };
 }
 
 function normalizeFeatureComparison(fc: AnalysisOutput['feature_comparison'] | undefined, candidates: Candidate[]): AnalysisOutput['feature_comparison'] {
@@ -548,7 +691,10 @@ export async function runCompetitorAnalysis(
   rail: RailContext = fallbackRail(COMPANIES_OPTIONS.analyze, analysisId),
 ): Promise<AnalysisResult> {
   const depth: 'quick' | 'deep' = inputs.depth === 'deep' ? 'deep' : 'quick';
-  const raw = await discoverCandidates(env, userId, inputs, rail);
+  // D7175: self-match protection: the subject is never its own competitor,
+  // whether the model found it or it was typed as a known competitor.
+  const raw = (await discoverCandidates(env, userId, inputs, rail))
+    .filter((r) => !isSubjectMatch(inputs.subject, { name: r.name, domain: r.domain || guessDomain(r.name) }));
 
   const sources: SourceRecord[] = [];
   const signals: SignalRecord[] = [];
@@ -573,8 +719,11 @@ export async function runCompetitorAnalysis(
 
   // Crawl the top candidates (by relevance) that have a domain.
   const crawlTargets = [...candidates].sort((a, b) => b.relevance_score - a.relevance_score).slice(0, MAX_CRAWL_CANDIDATES);
+  // D7175: a read that failed is recorded with its status, so "Unavailable"
+  // is told from "nothing to read".
+  const failed: SourceRecord[] = [];
   for (const cand of crawlTargets) {
-    await enrichWithCrawl(env, userId, analysisId, cand, depth, sources, signals, rail);
+    await enrichWithCrawl(env, userId, analysisId, cand, depth, sources, signals, rail, failed);
   }
 
   // Re-sort by (post-crawl) relevance and re-number positions.
@@ -583,7 +732,9 @@ export async function runCompetitorAnalysis(
     c.position = i;
   });
 
-  const output = await synthesize(env, userId, inputs, candidates, rail);
+  const output = await synthesize(env, userId, inputs, candidates, rail, sources);
+  if (inputs.subject) output.excluded = [{ name: inputs.subject.name, domain: inputs.subject.domain, uid: inputs.subject.uid, reason: 'subject' }];
+  sources.push(...failed);
   // Fold discovered activity signals into the output for the UI.
   output.activity_signals = signals
     .filter((s) => s.signal_type === 'hiring' || s.signal_type === 'content')
@@ -594,6 +745,69 @@ export async function runCompetitorAnalysis(
     .slice(0, 12);
 
   return { candidates, sources, signals, output };
+}
+
+/**
+ * D7175: whether a candidate is the run's subject: the same name (case and
+ * spacing ignored), the same site (`www.` ignored), or the subject's uid typed
+ * as a name. False when the run has no subject.
+ */
+export function isSubjectMatch(subject: AnalysisSubject | null | undefined, cand: { name?: unknown; domain?: unknown; url?: unknown }): boolean {
+  if (!subject) return false;
+  const name = nameKey(cand.name);
+  if (name && (name === nameKey(subject.name) || name === nameKey(subject.uid))) return true;
+  const host = hostOf(cand.domain) || hostOf(cand.url);
+  return !!host && !!subject.domain && host === hostOf(subject.domain);
+}
+
+export type EvidenceStatus = 'supported' | 'partial' | 'insufficient' | 'no_candidates' | 'unavailable';
+
+export interface Evidence {
+  status: EvidenceStatus;
+  candidates: number;
+  sources_tried: number;
+  sources_fetched: number;
+  sources_failed: number;
+  findings: number;
+  findings_with_source: number;
+}
+
+/**
+ * D7175: a finished run's evidence status, derived on every read from what is
+ * stored (so a source added by hand moves it), in one vocabulary for the page,
+ * the saved list and the export:
+ *
+ *   insufficient  — 0 sources fetched and 0 candidates (D7041), or candidates
+ *                   with nothing read and nothing tried (no websites);
+ *   no_candidates — sources were read but no company is listed;
+ *   unavailable   — candidates, and every read tried failed;
+ *   supported     — every finding cites a fetched source, and no read failed;
+ *   partial       — anything else: a finding with no source, a failed read,
+ *                   or a run that wrote no cited findings at all.
+ */
+export function evidenceOf(a: {
+  candidates?: Array<unknown>;
+  sources?: Array<{ id?: unknown; status?: unknown }>;
+  output?: { findings?: Array<{ source_ids?: unknown }> } | null;
+}): Evidence {
+  const candidates = (a.candidates || []).length;
+  const sources = a.sources || [];
+  const fetchedIds = new Set(sources.filter(sourceFetched).map((s) => String(s.id)));
+  const findings = Array.isArray(a.output?.findings) ? a.output.findings : [];
+  const cited = findings.filter((f) => Array.isArray(f?.source_ids) && f.source_ids.some((id) => fetchedIds.has(String(id)))).length;
+  const e = {
+    candidates,
+    sources_tried: sources.length,
+    sources_fetched: fetchedIds.size,
+    sources_failed: sources.length - fetchedIds.size,
+    findings: findings.length,
+    findings_with_source: cited,
+  };
+  let status: EvidenceStatus;
+  if (!e.sources_fetched) status = candidates && e.sources_failed ? 'unavailable' : 'insufficient';
+  else if (!candidates) status = 'no_candidates';
+  else status = e.findings && cited === e.findings && !e.sources_failed ? 'supported' : 'partial';
+  return { status, ...e };
 }
 
 /**

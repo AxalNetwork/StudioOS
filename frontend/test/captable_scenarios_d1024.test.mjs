@@ -105,6 +105,8 @@ const TODAY = {
   today: { available: true, reason: null, source: 'record', inputs: TODAY_INPUTS, result: { founding: FOUNDING, rounds: [], warnings: [] }, not_modelled: [{ name: 'Angel Note', reason: 'basis_not_recorded', sentence: 'Its basis is not recorded.' }] },
   model: null, offer: null,
   assumptions: ['1× non-participating preferred.', 'The unallocated pool takes no proceeds.'],
+  // D5074 part 6: the Worker's scenario map for the venture's owner on the Raise + Grow plan.
+  capabilities: { edit: true, plan: true },
 };
 const CANONICAL = {
   uid: 'm1', name: 'My model', is_variant: 0, updated_at: '2026-10-12T08:00:00Z',
@@ -615,16 +617,24 @@ test('Compare (CT7): Today dotted, each scenario run at the same exits, two char
 });
 
 test('the states: a plan that does not include scenarios reads only; a scenario that cannot be read says so; nothing recorded', async () => {
-  const free = await mounted('/raise/cap-table/scenarios?project_id=3', { user: FREE });
+  // D5074 part 6: the plan line and the read-only line come from the Today read's map, not the account.
+  const free = await mounted('/raise/cap-table/scenarios?project_id=3', { user: FREE, today: { ...TODAY, capabilities: { edit: true, plan: false } } });
   try {
     assert.match(free.text(free.by('captable-scenarios-plan')), /Raise \+ Grow plan\. Everything here still reads\./);
     assert.ok(!free.ids().includes('captable-scenario-new'));
   } finally { await free.close(); }
-  const reader = await mounted('/raise/cap-table/scenarios/s-today?project_id=3', { grants: Object.assign(new Error('Forbidden'), { status: 403 }) });
+  const reader = await mounted('/raise/cap-table/scenarios/s-today?project_id=3', { today: { ...TODAY, capabilities: { edit: false, plan: true } } });
   try {
     assert.ok(reader.ids().includes('captable-scenario-read-only'));
     assert.ok(!reader.ids().includes('captable-scenario-save') && !reader.ids().includes('captable-scenario-delete'));
   } finally { await reader.close(); }
+  // D5074 part 6: an admin's Today read is refused (an admin never holds the venture's gate, D1130), so it carries no
+  // map and no write is drawn, though the account is an admin's on the Raise + Grow plan. Before, the page drew them and
+  // the Worker refused each one.
+  const admin = await mounted('/raise/cap-table/scenarios?project_id=3', { user: { id: 1, role: 'admin', subscription_tier: 'studio', name: 'Ops Admin' }, today: Object.assign(new Error('Forbidden'), { status: 403 }) });
+  try {
+    assert.ok(!admin.ids().includes('captable-scenario-new'), 'no New scenario without a map');
+  } finally { await admin.close(); }
   const gone = await mounted('/raise/cap-table/scenarios/s-x?project_id=3');
   try {
     assert.ok(gone.ids().includes('captable-scenario-refused'), 'a missing scenario is refused, not empty');

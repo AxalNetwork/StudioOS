@@ -108,6 +108,61 @@ export function tabSearch(search = '') {
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
 
+/**
+ * D5081 part 3 (#5081, RA-20 and RA-14's table: Set up cap table · Record issuance) — the module's own actions.
+ * Overview owns its page: the header's one primary is the tool's, chosen from the record read Overview draws.
+ */
+export const SETUP_ACTION = 'Set up cap table';
+export const RECORD_ACTION = 'Record an issuance';
+export const PROPOSE_ACTION = 'Propose an issuance';
+export const IMPORT_ACTION = 'Import a spreadsheet';
+export const MODEL_ACTION = 'Model a round';
+/** Overview's line under the tabs once the tool owns the page: no generic Holders list or Planned round card follows. */
+export const OWNED_NOTE = 'Figures tagged On record come from the record of what was issued. Figures tagged Modelled come from your saved model, which Scenarios keeps as Cap table · model.';
+/** Record an issuance (a co-founder's Propose), the dialog over Overview (D1025). */
+export const newHref = (search = '') => `${HOME_PATH}/new${tabSearch(search)}`;
+const tabById = (id) => TABS.find((t) => t.id === id);
+
+/**
+ * First use (RA-14's "Set up cap table"): the record read answered and nothing is recorded. A read still
+ * loading, failed or refused is never first use: that would claim an empty cap table nobody read.
+ */
+export const isFirstUse = (record) => record?.status === 'ready' && record.data?.by_holder?.reason === 'nothing_recorded';
+
+/**
+ * The module header's one primary (RA-20's Record issuance). None while the record is unread, failed or
+ * refused; on first use, where the empty card's first action is the page's one primary (D5076); and for a viewer
+ * the record's capability map does not let write (D5074: a reader, an admin who corrects, or no plan). The owner
+ * records; a co-founder proposes. Both open `/new` over Overview.
+ */
+export function homeAction(record, { search = '' } = {}) {
+  if (record?.status !== 'ready' || isFirstUse(record)) return null;
+  const s = recordStanding(record);
+  if (!s.writes) return null;
+  if (s.role === 'owner') return { label: RECORD_ACTION, href: newHref(search) };
+  if (s.role === 'cofounder') return { label: PROPOSE_ACTION, href: newHref(search) };
+  return null;
+}
+
+/**
+ * First use's set-up actions (at most three, the first the page's primary): the owner's Set up cap table (the
+ * founding shares, `/new`) or a co-founder's Propose an issuance; Import a spreadsheet where the map allows an
+ * import; and Model a round in Scenarios. None without the plan or for a viewer who only reads.
+ */
+export function setupActions(record, { search = '' } = {}) {
+  if (record?.status !== 'ready') return [];
+  const s = recordStanding(record);
+  if (!s.plan) return [];
+  const first = s.role === 'owner' ? { key: 'setup', label: SETUP_ACTION, href: newHref(search) }
+    : s.role === 'cofounder' ? { key: 'propose', label: PROPOSE_ACTION, href: newHref(search) } : null;
+  if (!first) return [];
+  return [
+    first,
+    ...(s.can('import') ? [{ key: 'import', label: IMPORT_ACTION, href: tabHref(tabById('import-export'), search) }] : []),
+    { key: 'model', label: MODEL_ACTION, href: tabHref(tabById('scenarios'), search) },
+  ];
+}
+
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /**

@@ -28,7 +28,7 @@ const code = (src) => src.split('\n').map((l) => l.replace(/(^|\s)#.*$/, '')).jo
 /** A top-level block: the lines after `^key:` up to the next top-level key. */
 function block(src, key) {
   const lines = code(src).split('\n');
-  const at = lines.findIndex((l) => new RegExp(`^${key}:`).test(l));
+  const at = lines.findIndex((l) => l.startsWith(`${key}:`));
   if (at < 0) return null;
   const out = [lines[at].slice(key.length + 1)];
   for (let i = at + 1; i < lines.length && !/^\S/.test(lines[i]); i++) out.push(lines[i]);
@@ -84,12 +84,11 @@ export const RUNS_ON_DRAFTS = {
   'agent-compute-image.yml': 'path-filtered to the agent-compute image\'s own files, so a draft that touches them is checking them',
   'meeting-bot-image.yml': 'path-filtered to the meeting bot\'s own files, so a draft that touches them is checking them',
   'release-rehearsal.yml': 'path-filtered to the release scripts, so a draft that touches them is checking them',
-  'copilot-setup-steps.yml': 'path-filtered to itself: it validates the Copilot agent\'s setup when that file changes',
+  'dependency-review.yml': 'D7899 checks newly introduced vulnerable dependencies on every PR and merge group, including drafts, without checking out candidate code',
 };
 /** Jobs that run on drafts inside a workflow that otherwise skips them, each with why. */
 export const JOB_RUNS_ON_DRAFTS = {
   'claude-review.yml': { review: 'the reviewer decides on drafts itself (CLAUDE_REVIEW_DRAFTS), and is off until enabled' },
-  'pr-preview.yml': { delete: 'it runs only when the pull request closes, to remove its preview (a draft never deploys one)' },
 };
 const REQUIRED = [['gitleaks.yml', 'scan'], ['migration-immutability.yml', 'applied migrations unchanged']];
 
@@ -163,6 +162,6 @@ test('#6461: the guard refuses each way back', () => {
   // The required scan skipping drafts.
   refused(mutate('gitleaks.yml', '    name: scan\n', '    name: scan\n    if: ${{ !github.event.pull_request.draft }}\n'), /the required scan skips drafts/);
   // A stale exemption.
-  const { 'copilot-setup-steps.yml': _gone, ...withoutOne } = SRC;
-  refused(withoutOne, /RUNS_ON_DRAFTS names copilot-setup-steps\.yml, which does not exist/);
+  const { 'dependency-review.yml': _gone, ...withoutOne } = SRC;
+  refused(withoutOne, /RUNS_ON_DRAFTS names dependency-review\.yml, which does not exist/);
 });

@@ -14,9 +14,10 @@ import { Loader2, X, UserMinus, UserPlus } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { Unreadable } from '../../../ui/Honesty';
-import { useReasonDialog } from '../LicenceReasonDialog';
+import { useConsequenceSheet } from '../LicenceConsequenceSheet';
+import LicenceOutcomeCard, { useLicenceWrite } from '../LicenceOutcomeCard';
 import {
-  accountState, addAdminAsk, addAdminOffer, adminRoleWord, adminsState, detachLine, removeAdminAsk,
+  accountState, addAdminOffer, adminRoleWord, adminsState, detachLine,
 } from '../licenceAccessModel';
 
 /* ------------------------------------------------------------------ *
@@ -79,8 +80,9 @@ function AccountChip({ state }) {
 }
 
 export function AdminsEditor({ licence, onSaved, prefill = null }) {
-  // D4707 — reasons are asked for in a labelled dialog, never window.prompt.
-  const [reasonDialog, ask] = useReasonDialog();
+  // D4819 part 21 (#5928): appoint and remove go through the one consequence sheet (L17), and every write here
+  // reports through the L18 outcome card. Never window.prompt.
+  const [sheet, ask] = useConsequenceSheet();
   const { items, load } = useLicenceAdmins(licence.uid);
   // D801 — "Grant admin" from a delegate request arrives with the email and the
   // role filled, and the form already open; HQ still reads it and appoints,
@@ -89,29 +91,24 @@ export function AdminsEditor({ licence, onSaved, prefill = null }) {
     ? { email: prefill.email, admin_role: 'delegate', reason: `Delegate requested by the Administrator (${prefill.uid}).` }
     : { email: '', admin_role: 'principal', reason: '' }));
   const [adding, setAdding] = useState(Boolean(prefill));
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
 
   const refresh = () => { load(); onSaved?.(); };
 
-  async function run(fn) {
-    setBusy(true); setErr(null);
-    try { await fn(); refresh(); return true; }
-    catch (e) { reportError('AdminLicences:adminAction', e); setErr(e?.message || 'That did not go through. Nothing was changed.'); return false; }
-    finally { setBusy(false); }
-  }
+  const write = useLicenceWrite({ onSettled: refresh, tag: 'AdminLicences' });
+  const { busy } = write;
+  const run = async (action, fn) => (await write.run(action, fn)) !== null;
 
   const offer = addAdminOffer(licence);
   const listState = adminsState(items);
   const canContinue = form.email.trim().length > 0;
 
   async function appoint() {
-    // The reason is asked for in the dialog, after the consequence is said, at
+    // The reason is asked for in the sheet, after the consequence is said, at
     // the Worker's own ten characters (`reason_too_short`).
-    const reason = await ask(addAdminAsk(licence, { email: form.email, adminRole: form.admin_role }, form.reason));
-    if (!reason) return;
-    const ok = await run(() => api.licenceAdminAdd(licence.uid, {
-      email: form.email.trim(), admin_role: form.admin_role, reason: reason.trim(),
+    const out = await ask('addAdmin', licence, { target: { email: form.email, adminRole: form.admin_role, initial: form.reason } });
+    if (!out?.reason) return;
+    const ok = await run('addAdmin', () => api.licenceAdminAdd(licence.uid, {
+      email: form.email.trim(), admin_role: form.admin_role, reason: out.reason,
     }));
     if (ok) { setForm({ email: '', admin_role: 'principal', reason: '' }); setAdding(false); }
   }
@@ -119,7 +116,7 @@ export function AdminsEditor({ licence, onSaved, prefill = null }) {
   return (
     <section data-testid="licence-admins"
       className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      {reasonDialog}
+      {sheet}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
           Administrators
@@ -221,8 +218,8 @@ export function AdminsEditor({ licence, onSaved, prefill = null }) {
                       <button
                         type="button" disabled={busy} data-testid="licence-admin-remove"
                         onClick={async () => {
-                          const reason = await ask(removeAdminAsk(licence, a));
-                          if (reason) run(() => api.adminDemoteAdmin(a.user_id, reason));
+                          const out = await ask('removeAdmin', licence, { target: a });
+                          if (out?.reason) run('removeAdmin', () => api.adminDemoteAdmin(a.user_id, out.reason));
                         }}
                         className="inline-flex min-h-[44px] items-center gap-1 rounded-md border border-gray-300 px-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 sm:min-h-0 sm:py-1"
                       >
@@ -232,7 +229,7 @@ export function AdminsEditor({ licence, onSaved, prefill = null }) {
                     {!isAdmin && st.key === 'demoted' && (
                       <button
                         type="button" disabled={busy} data-testid="licence-admin-detach"
-                        onClick={() => run(() => api.licenceAdminRemove(licence.uid, a.user_id))}
+                        onClick={() => run('detachAdmin', () => api.licenceAdminRemove(licence.uid, a.user_id))}
                         className="inline-flex min-h-[44px] items-center gap-1 rounded-md border border-gray-300 px-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 sm:min-h-0 sm:py-1"
                       >
                         <X size={12} /> Detach
@@ -257,7 +254,7 @@ export function AdminsEditor({ licence, onSaved, prefill = null }) {
         </div>
       )}
 
-      {err && <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert" data-testid="licence-admin-error">{err}</p>}
+      <LicenceOutcomeCard outcome={write.outcome} busy={busy} onReread={refresh} onDismiss={write.clear} testId="licence-admin-outcome" />
       <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">
         Adding and removing need a recent TOTP step-up as well as the Super Admin elevation, so a
         403 can mean &ldquo;step up and try again&rdquo; rather than &ldquo;you may not&rdquo;.

@@ -6,6 +6,7 @@ import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
 import { rememberLabVenture } from './labVenture.js';
 import { readAllPages } from './pagedRead.js';
+import { sessionEndedRedirectFor } from './pendingNext.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, so unrelated features stop colliding in this file.
@@ -219,6 +220,10 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/share/captable/')
     // D6864 (#6864): an evidence pack a founder shared outside Axal; no sign-in by design.
     || currentPath.startsWith('/share/evidence/')
+    // D6897 (#6897): a readiness snapshot a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/readiness/')
+    // D6897 part 4 (#6897): a Raise status page a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/status/')
     || currentPath.startsWith('/insights')
     // ROUTE literals, not API paths — this whole predicate reads
     // window.location. /account/email/* is the live pair; /settings/email/*
@@ -664,7 +669,9 @@ export async function request(path, options = {}) {
           // even though we're about to leave the page; this is what makes a
           // silent "session expired → /login" redirect debuggable in prod.
           reportError('api:session-expired-redirect', new Error(`401 on ${path}; redirecting ${currentPath} → /login`));
-          window.location.href = '/login';
+          // D7178 (#7044, RCL04B): an area that keeps its destination (Companies, Grow, Learning) goes to
+          // `/login?next=<this page>&ended=1`, through the route guard's own sanitiser; every other page to `/login`.
+          window.location.href = sessionEndedRedirectFor(window.location);
         }
         throw new Error('Session expired');
       }
@@ -1162,6 +1169,7 @@ export const api = {
     set('limit', params.limit);
     set('tz', params.tz);
     set('budget_max', params.budget_max);
+    set('personalise', params.personalise ? 1 : null);
     (params.want_categories || []).forEach((v) => q.append('want_category', v));
     (params.want_languages || []).forEach((v) => q.append('want_language', v));
     (params.want_sectors || []).forEach((v) => q.append('want_sector', v));
@@ -5464,6 +5472,8 @@ export const api = {
     // grant answers (`project_name` null where the call or deal behind it did
     // not name the venture); `requests: null` with `requests_unreadable` when
     // they could not be read, never an empty list.
+    // D6266: each room also carries `deals`: the permitted deals on its company
+    // (`{ id, stage, name }`), and `deal_stage_note` only when there are none.
     diligence: () => request('/research/diligence'),
     // One room and one document in it, keyed by the grant the investor holds.
     // A grant they do not hold is a 404 (`room_not_found`), the same as one

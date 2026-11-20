@@ -122,6 +122,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Validate · Customer research', key: 'ask:transcript', route: '/validate/session/1', label: 'Ask', kind: 'research', handler: 'draft',
     at: [[SESSION, 'api.ask(']],
   },
+  // D6008 (#6008): Eadwyn's interview questions, quoted before the press, saved only on Accept.
+  {
+    page: 'Founder · Validate · Customer research', key: 'draft:validate/interview-guide', route: '/validate/customer-research', label: 'Draft questions', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/InterviewGuide.jsx', 'api.draft(']],
+  },
   {
     page: 'Founder · Validate · Experiments and evidence', key: 'fill:hypothesis', route: '/validate/experiments', label: 'Draft a hypothesis', kind: 'reason', handler: 'form',
     at: [[VALIDATE, "experiments: 'hypothesis'"]],
@@ -438,10 +443,7 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Research · Companies', key: 'analyse:again', route: '/research/companies/1', label: 'Re-run', kind: 'research', handler: 'draft',
     at: [[COMPETITORS, 'api.competitors.rerun('], [ANALYSIS, 'api.competitors.rerun(']],
   },
-  {
-    page: 'Founder · Research · Companies', key: 'analyse:sources', route: '/research/companies/1', label: 'Refresh sources', kind: 'research', handler: 'draft',
-    at: [[COMPETITORS, 'api.competitors.refresh('], [ANALYSIS, 'api.competitors.refresh(']],
-  },
+  // D7652: Refresh sources re-fetches the stored pages and runs no model (D7176), so it is not a row.
   // Runs a model only with "Crawl site" ticked and a URL given.
   {
     page: 'Founder · Research · Companies', key: 'extract:candidate', route: '/research/companies/1', label: 'Add', kind: 'research', handler: 'draft',

@@ -5,5 +5,19 @@
     "state": "verified",
     "test": "cloudflare-worker/test/raise_evidence_share_6864.test.ts",
     "note": "A capability link a founder made for a reader outside Axal: no sign-in by design. The token is 32 random bytes stored only as a SHA-256 digest; one conditional UPDATE consumes a view only while the link is unrevoked, unexpired, under its view limit and its venture exists. Unknown, malformed, expired, used-up and revoked tokens are refused 404/410 with a page that names no venture and consumes nothing; the body is the pack frozen at creation from the founder's own preview projection. Only the venture's founders make, list or revoke links."
+  },
+  "GET /api/share/readiness/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/readiness_share_6897.test.ts",
+    "note": "The readiness snapshot a founder made for a reader outside Axal (D6897): no sign-in by design, on the evidence pack's link store and rules. The token is 32 random bytes stored only as a SHA-256 digest; one conditional UPDATE consumes a view only while the link is unrevoked, unexpired, under its view limit, of output 'readiness' and its venture exists, so a pack token never opens here. Unknown, expired, used-up and revoked tokens are refused 404/410 with a page that names no venture; the body is the seven areas frozen at creation, with no overall score and no Product-market fit. Only the venture's founders make, list or revoke links."
+  },
+  "GET /api/share/status/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/raise_status_share_6897.test.ts",
+    "note": "The Raise status page a founder made for a reader outside Axal (D6897 part 4): no sign-in by design, on the evidence pack's link store and rules. The token is 32 random bytes stored only as a SHA-256 digest; one conditional UPDATE consumes a view only while the link is unrevoked, unexpired, under its view limit, of output 'status' and its venture exists, so a pack or snapshot token never opens here. Unknown, expired, used-up and revoked tokens are refused 404/410 with a page that names no venture; the body is frozen at creation and carries investor counts by stage only, never a name, contact or amount. Only the venture's founders make, list or revoke links."
   }
 }

@@ -10,7 +10,6 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -26,7 +25,6 @@ after(() => { globalThis.fetch = realFetch; });
 
 const TODAY = new Date().toISOString().slice(0, 10);
 const secret = 'synthetic-d1258-only-'.repeat(3);
-const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
 
 const ddl = (() => {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });

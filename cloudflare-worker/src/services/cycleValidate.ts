@@ -1153,10 +1153,10 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
   'ideal-customer-profile': {
     cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated'],
     filters: [
-      { key: 'evidence', label: 'Evidence', options: [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), opt('measured', 'Measured'), NOT_RECORDED] },
+      { key: 'evidence', label: 'Evidence', options: [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), NOT_RECORDED] },
       { key: 'fit', label: 'Fit', options: [opt('strong', 'Has a strong fit'), opt('none', 'No strong fit')] },
     ],
-    sorts: [{ key: 'evidence', label: 'Evidence' }],
+    sorts: [{ key: 'evidence', label: 'Evidence' }, { key: 'name', label: 'Name' }, { key: 'strong', label: 'Strong fit' }, { key: 'interviews', label: 'Interviews' }],
   },
   'market-intelligence': {
     cols: ['Company', 'Kind', 'Latest signal', 'Date', 'Source'],
@@ -1175,8 +1175,9 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'newest', label: 'Newest' }],
   },
   experiments: {
-    // D4585: the status counts interviews only (the approved policy), so the column says so.
-    cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
+    // D6016 (#6016, V7): the Hypotheses list in the canvas's columns. Relationships carries D4585's interview-only support
+    // (support, contradiction and unknown fit together); Distinct sources counts interviews, organizations and other evidence.
+    cols: ['Code', 'Claim', 'Evidence state', 'Relationships', 'Distinct sources', 'Sprint', 'Owner', 'Source'],
     filters: [
       { key: 'status', label: 'Status', options: [
         opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('contested', 'Contested'), opt('refuted', 'Refuted'),

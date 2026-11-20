@@ -14,7 +14,6 @@
  */
 import { NOT_RECORDED } from '../../lib/absence';
 import { SEAT_TYPES } from './licences/licenceShared';
-import { LICENCE_REASONS } from './licenceReasonModel';
 
 export { NOT_RECORDED };
 export const NONE = 'None';
@@ -121,41 +120,6 @@ export function seatRows(licence) {
 
 /** Why In use is Not recorded. Operator words: no internal identifier. */
 export const SEAT_USE_REASON = 'HQ cannot reliably attribute account usage to individual licences yet. Branch-level usage is on HQ Home and the branch console.';
-
-/**
- * Add administrator, said before the reason is asked for (the labelled reason
- * dialog, until the consequence sheet lands). What the appointment writes, in
- * `POST /:uid/admins`: the role and the binding in one step, the licence's
- * history and the audit log with the reason, a notice to the account holder;
- * an account that held a member licence keeps it.
- */
-export function addAdminAsk(licence, { email, adminRole }, initial = '') {
-  const who = String(email || '').trim() || 'This account';
-  const suspended = licence?.status === 'suspended'
-    ? 'This licence is suspended; the appointment still takes effect now. '
-    : '';
-  return {
-    title: 'Add an administrator',
-    consequence: `${suspended}${who} becomes a ${adminRoleWord(adminRole).toLowerCase()} administrator of ${refOf(licence)}: the account is given the admin role and bound to this licence in one step, and its holder is told. An account that held a member licence keeps it. Undoing it is two steps: remove, then detach.`,
-    question: 'Why this account? The reason is recorded in the licence history and the audit log.',
-    min: 10, confirm: 'Add administrator', tone: 'warn', initial,
-  };
-}
-
-/**
- * Remove…, the first of the two steps (`POST /api/admin/users/:userId/demote-admin`):
- * the admin role goes now; the binding stays until Detach.
- */
-export function removeAdminAsk(licence, admin) {
-  const who = admin?.name || admin?.email || 'This administrator';
-  return {
-    ...LICENCE_REASONS.demoteAdmin,
-    title: 'Remove this administrator',
-    consequence: `${who} loses the admin role now and can no longer administer ${refOf(licence)}; its holder is told. The account stays bound to this licence until you detach it, the second step. An account holding the Super Admin elevation is refused, and nothing changes.`,
-    question: 'Why is this administrator being removed? It is recorded in the audit log.',
-    confirm: 'Remove administrator', tone: 'danger',
-  };
-}
 
 /** Detach, the second step (`DELETE /:uid/admins/:userId`). It takes no reason, so none is asked for. */
 export function detachLine(licence) {

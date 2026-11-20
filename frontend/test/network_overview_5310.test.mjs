@@ -1,7 +1,8 @@
 /**
  * #5310 (D5310) — the founder Network overview, built to the #4799 canvas: NW1 populated, NW1.2
  * first run and NW5's states (read, loading, could not be read, stale, not recorded, empty, credits),
- * and part 4's checks against the phone (NW8) and dark (NW10) boards (D5310-p4).
+ * part 4's checks against the phone (NW8) and dark (NW10) boards (D5310-p4), and part 5's Recent
+ * network activity from the recorded-events read (D5310-p5, D6557).
  * Every person and company here is made up.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/network_overview_5310.test.mjs
@@ -13,7 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  READ_LOADING, acceptGate, attentionRows, introGroups, isFirstRun, matchesView, overviewTiles, settle, sharingLine, staleNotice,
+  ACTIVITY_LIMIT, READ_LOADING, acceptGate, activityView, attentionRows, introGroups, isFirstRun, matchesView, overviewTiles, settle, sharingLine, staleNotice,
 } from '../src/pages/founder/networkOverviewModel.js';
 
 const h = React.createElement;
@@ -58,6 +59,34 @@ test('NW1, NW8, NW10 tiles: only a read count above zero that asks for something
   assert.deepEqual(marks({ ...reads, followUps: READ_LOADING }), [null, null, '!', null], 'nor a loading one');
   const stale = { status: 'stale', data: { total: 2, items: [] }, readAt: '2026-11-14T11:00:00Z' };
   assert.equal(overviewTiles({ ...reads, followUps: stale })[1].mark, '◷', 'a stale count still asks');
+});
+
+// D5310-p5. Mutation checked: a failed source left out (fails); an empty list with a failed source read as
+// nothing recorded (fails); the import count dropped (fails); a declined intro drawn as done (fails);
+// more rows than the limit (fails); an unread read drawn as empty (fails).
+test('NW1 recent activity: recorded events with their time, each failed source named, never an empty history', () => {
+  const src = (over = {}) => ({ follow_ups: { state: 'readable' }, introductions: { state: 'readable' }, imports: { state: 'readable' }, duplicate_reviews: { state: 'readable' }, ...over });
+  const ev = (kind, at, extra = {}) => ({ kind, at, label_parts: { action: kind.replace(/_/g, ' '), ...extra } });
+  const full = activityView(ready({ complete: true, sources: src(), events: [
+    ev('follow_up_completed', '2026-11-06 16:20:00'), ev('contacts_imported', '2026-10-30T18:47:00Z', { count: 118 }), ev('intro_declined', '2026-10-29 09:00:00'),
+  ] }));
+  assert.equal(full.state, 'ready');
+  assert.deepEqual(full.rows.map((r) => [r.glyph, r.tone, r.action, r.detail, r.at]), [
+    ['✓', 'ok', 'follow up completed', null, '2026-11-06 16:20'],
+    ['⇩', 'plain', 'contacts imported', '118 added', '2026-10-30 18:47'],
+    ['×', 'off', 'intro declined', null, '2026-10-29 09:00'],
+  ]);
+  assert.deepEqual(full.unread, []);
+  const many = activityView(ready({ complete: true, sources: src(), events: Array.from({ length: 9 }, (_, i) => ev('intro_requested', `2026-11-0${i + 1} 10:00:00`)) }));
+  assert.equal(many.rows.length, ACTIVITY_LIMIT);
+  const partial = activityView(ready({ complete: false, sources: src({ introductions: { state: 'unreadable', reason: 'x' } }), events: [ev('follow_up_completed', '2026-11-06 16:20:00')] }));
+  assert.deepEqual([partial.state, partial.unread], ['ready', ['Introductions']]);
+  const hollow = activityView(ready({ complete: false, sources: src({ imports: { state: 'unreadable' }, follow_ups: { state: 'unreadable' } }), events: [] }));
+  assert.deepEqual([hollow.state, hollow.unread], ['partial-empty', ['Follow-ups', 'Imports']], 'not "nothing recorded"');
+  assert.equal(activityView(ready({ complete: true, sources: src(), events: [] })).state, 'empty');
+  assert.equal(activityView(fail).state, 'unreadable');
+  assert.equal(activityView(READ_LOADING).state, 'loading');
+  assert.equal(activityView({ status: 'stale', data: { complete: true, sources: src(), events: [ev('intro_made', '2026-11-01 10:00:00')] }, readAt: 'x' }).state, 'stale');
 });
 
 // Mutation checked: settle dropping the earlier value on failure (fails); staleNotice ignoring stale (fails).
@@ -175,6 +204,8 @@ const populated = (over = {}) => (url) => {
   if (/intro-requests\?status=accepted/.test(url)) return json({ sent: [req({ uid: 'a1', status: 'accepted', accepted_at: '2026-11-03' })], received: [], totals: { sent: 3, received: 0, sent_pending: 0, received_pending: 0 } });
   if (/intro-requests\?status=made/.test(url)) return json({ sent: [], received: [], totals: { sent: 0, received: 0, sent_pending: 0, received_pending: 0 } });
   if (/\/introductions\/propositions/.test(url)) return json({ propositions: [{ uid: 'p1', status: 'pending', target: { name: 'Example Kim', headline: 'GP' }, breakdown: { reasons: ['Invests pre-seed'] } }], credits: { balance: 4 } });
+  if (/\/relationships\/activity/.test(url)) return json({ complete: true, sources: { follow_ups: { state: 'readable' }, introductions: { state: 'readable' }, imports: { state: 'readable' }, duplicate_reviews: { state: 'readable' } },
+    events: [{ kind: 'follow_up_completed', at: '2026-11-06 16:20:00', label_parts: { action: 'Follow-up completed' } }, { kind: 'contacts_imported', at: '2026-10-30 18:47:00', label_parts: { action: 'Contacts imported', count: 118 } }] });
   if (/\/api\/contacts(\?|$)/.test(url)) return json({ items: [] });
   return json({});
 };
@@ -191,7 +222,8 @@ test('NW1 mounted: populated — the tiles, the attention list, the four groups,
     assert.match(v.textOf('text-network-strength'), /Relationship strength: Not recorded/);
     assert.match(v.textOf('group-intro-decide'), /Awaiting my decision · 3[\s\S]*Decide/);
     assert.match(v.textOf('group-intro-accepted'), /Accepted — not yet made · 3/);
-    assert.match(v.textOf('card-network-activity'), /Not recorded/);
+    assert.match(v.textOf('card-network-activity'), /Follow-up completed\s*2026-11-06 16:20[\s\S]*Contacts imported · 118 added\s*2026-10-30 18:47/);
+    assert.ok(v.calls.some((c) => /\/relationships\/activity\?limit=5$/.test(c)), 'D6557: the activity read, five events');
     assert.match(v.textOf('text-match-gate-p1'), /Accepting spends 1 credit · 3 left after/);
     assert.equal(v.disabled('button-match-accept-p1'), false);
     assert.ok(!v.has('network-first-run'));
@@ -246,6 +278,22 @@ test('NW5 mounted: every read failing draws Could not be read and Retry, and no 
     }
     assert.match(v.textOf('card-network-introductions'), /Introductions could not be read[\s\S]*Nothing is shown as zero/);
     assert.match(v.textOf('card-network-matches'), /Curated matches could not be read/);
+    assert.match(v.textOf('card-network-activity'), /Recent network activity could not be read[\s\S]*This is not an empty history/);
+  } finally { await v.close(); }
+});
+
+// D5310-p5. Mutation checked: the partial notice dropped (fails); an empty list with a failed source drawn as
+// "Nothing recorded yet" (fails); Retry not re-reading the activity (fails).
+test('NW1 mounted: a failed activity source is named, and an empty list it leaves is not an empty history', async () => {
+  let reads = 0;
+  const v = await mount(populated({ 'relationships/activity': () => { reads += 1; return json({ complete: false,
+    sources: { follow_ups: { state: 'readable' }, introductions: { state: 'unreadable', reason: 'x' }, imports: { state: 'readable' }, duplicate_reviews: { state: 'readable' } }, events: [] }); } }));
+  try {
+    assert.match(v.textOf('text-network-activity-partial'), /Introductions could not be read\.\s*This is not an empty history/);
+    assert.doesNotMatch(v.textOf('card-network-activity'), /Nothing recorded yet/);
+    const before = reads;
+    await v.click('button-network-activity-retry');
+    assert.equal(reads, before + 1, 'Retry re-reads the activity');
   } finally { await v.close(); }
 });
 

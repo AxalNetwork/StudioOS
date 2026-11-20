@@ -22,7 +22,7 @@ import { canAccessProject, getMemberProjectIds } from '../services/projectAccess
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
   ASK_AGAIN_DAYS, ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics, validMetricUnit,
-  draftLines, landReply, noMetrics, payloadFor, periodFacts,
+  audienceFact, draftLines, landReply, noMetrics, payloadFor, periodFacts, periodFollowers,
   type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
 
@@ -35,6 +35,10 @@ import {
   UpdateChanged, correctPublished, ensurePublished, listVersions, reserveDeliveries, runDeliveries,
   type DeliveryProvider, type DeliveryRow, type LifecycleRow, type Recipient,
 } from '../services/updateLifecycle';
+import {
+  REMINDER_GUARANTEE, REQUEST_KEY, currentVersionId, latestRound, latestRounds, openRound, roundByRequestKey, roundByUid,
+  roundDeliveries, runRound, summariseRound, type ReminderProvider, type ReminderRow,
+} from '../services/updateAskReminders';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -640,7 +644,9 @@ r.post('/share/draft-lines', async (c) => {
       ).bind(pid, start, end).first<{ n: number }>();
       contacts = Number(row?.n ?? 0);
     } catch { contacts = null; }
-    return c.json(await draftLines(c.env, user.id, periodFacts(metrics, roles, contacts, end, await shippedItems(c.env, pid, start, end))));
+    // D5867: the TikTok audience is a fact to draft from; the founder keeps or drops the line and sends.
+    const audience = audienceFact(await periodFollowers(c.env, pid, start, end));
+    return c.json(await draftLines(c.env, user.id, periodFacts(metrics, roles, contacts, end, await shippedItems(c.env, pid, start, end), audience)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -856,6 +862,8 @@ r.get('/:uid/page', async (c) => {
         AND (version_id IS NULL OR version_id = (SELECT MAX(x.version_id) FROM update_recipients x WHERE x.update_id = update_recipients.update_id))`).bind(u.id).first<{sent:number;opened:number;replied:number}>();
     const byAsk = new Map<string, any[]>();
     for (const x of replies.results || []) byAsk.set(x.ask_uid, [...(byAsk.get(x.ask_uid) || []), x]);
+    const rounds = await latestRounds(c.env, asks.map((a: any) => Number(a.id)))
+      .catch((e) => { console.warn('[portfolio-updates] reminder rounds unreadable', e); return null; });
     const count = (a: Audience) => (recipients.results || []).filter((x: any) => x.audience === a).length;
     return c.json({
       uid: u.uid, project_id: u.project_id, audience: cleanAudience(jload(u.audience_json, {})), sent_at: u.sent_at, ...shape,
@@ -868,10 +876,14 @@ r.get('/:uid/page', async (c) => {
           replies: rs.map((x) => ({ uid: x.uid, name: x.name, message: x.message, created_at: x.created_at,
             landed_module: x.landed_module, landed_reason: x.landed_reason })),
           can_ask_again: canAskAgain(u.sent_at, rs.length, raw?.asked_again_at ?? null),
+          // D4645-p2: the latest reminder round's recorded progress; null when
+          // it was never asked again, absent when the rounds were unreadable.
+          ...(rounds ? { reminder: (raw && rounds.get(Number(raw.id))) || null } : {}),
         };
       }),
       recipients: (recipients.results || []).map((x) => ({ ...x, replied: !!x.replied })),
       network: { sent: network?.sent ?? 0, opened: network?.opened ?? 0, replied: network?.replied ?? 0 },
+      reminders_readable: rounds != null,
       sent_to: { investors: count('investor'), team: count('team'), network: network?.sent ?? 0 },
     });
   } catch (e) { return mapError(c, e); }
@@ -943,6 +955,21 @@ r.post('/asks/:askUid/replies', async (c) => {
 
 // POST /api/portfolio-updates/asks/:askUid/ask-again — the author re-asks an ask
 // that had no reply after ASK_AGAIN_DAYS.
+//
+// #4645 (D4645, D4645-p2). The cooldown is claimed in SQL before anything is
+// sent, and the claim opens a recorded ROUND with one reservation per current
+// recipient, in the same batch (`services/updateAskReminders.ts`). Each
+// reservation is then checked against the records as they stand — no reply,
+// the same current version, still a recipient — and sent, its outcome
+// recorded. Body, all optional:
+//   request_key       the caller's key for this press; repeating a request whose
+//                     response was lost finds the original round instead of
+//                     opening another or being refused
+//   reminder_uid      resume and reconcile that round (the page's "Check delivery")
+//   resend_ambiguous  true re-sends a delivery whose outcome is unknown and
+//                     whose inbox row was not found; never done otherwise
+// Resuming attempts only what was never attempted or failed before sending,
+// and looks for an interrupted attempt's inbox row by its delivery uid.
 r.post('/asks/:askUid/ask-again', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -952,64 +979,77 @@ r.post('/asks/:askUid/ask-again', async (c) => {
     if (!ask || !ask.sent_at) return c.json({ detail: 'Not found' }, 404);
     const refused = await operateRefusal(c, user, { author_user_id: ask.author_user_id, project_id: ask.project_id });
     if (refused) return refused;
+    const body = await c.req.json().catch(() => ({} as any)) as Record<string, unknown>;
+    const requestKey = typeof body?.request_key === 'string' ? body.request_key : null;
+    if (requestKey != null && !REQUEST_KEY.test(requestKey)) {
+      return c.json({ error: 'invalid_request_key', detail: 'A request key is 8 to 80 letters, digits, dashes or underscores.' }, 400);
+    }
+    const resend = body?.resend_ambiguous === true;
+    const provider = reminderProvider(c.env, ask);
+    const answer = async (round: ReminderRow, recovered: boolean) => c.json({
+      uid: ask.uid, recovered, version_id: round.version_id,
+      ...(await runRound(c.env, round, provider, { resendAmbiguous: resend })),
+      delivery: REMINDER_GUARANTEE,
+    });
+    // A round already opened: by its uid (the page), or by the key of a request
+    // whose response was lost. Nothing already attempted is sent blind.
+    if (typeof body?.reminder_uid === 'string') {
+      const round = await roundByUid(c.env, ask.id, body.reminder_uid);
+      if (!round) return c.json({ error: 'reminder_not_found', detail: 'That reminder is not one of this ask\'s.' }, 404);
+      return answer(round, true);
+    }
+    if (requestKey) {
+      const round = await roundByRequestKey(c.env, ask.id, requestKey);
+      if (round) return answer(round, true);
+    }
+    // The latest round, so a refused press still shows where the last one
+    // stands. An unreadable read leaves it out rather than costing the refusal.
+    const latest = async () => {
+      try {
+        const round = await latestRound(c.env, ask.id);
+        return round ? summariseRound(round, await roundDeliveries(c.env, round.id)) : null;
+      } catch (e) { console.warn('[portfolio-updates] latest reminder round unreadable', e); return undefined; }
+    };
     const n = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM update_ask_replies WHERE ask_id = ?').bind(ask.id).first<{ n: number }>();
     if (!canAskAgain(ask.sent_at, Number(n?.n ?? 0), ask.asked_again_at)) {
-      return c.json({ detail: `An ask can be asked again once it has had no reply for ${ASK_AGAIN_DAYS} days` }, 409);
+      return c.json({ error: 'ask_not_due', detail: `An ask can be asked again once it has had no reply for ${ASK_AGAIN_DAYS} days`, reminder: await latest() }, 409);
     }
-    // #4645 (D4645): CLAIM THE COOLDOWN BEFORE SENDING, and claim it in SQL.
-    //
-    // The cooldown was checked above and then written AFTER the whole
-    // recipient loop, by id and unconditionally. Two presses at once — a
-    // double click, a retried request — both passed the check above and both
-    // notified every recipient, and the second write overwrote the first's
-    // timestamp. Worse, a `notify` that threw part-way through the loop left
-    // `asked_again_at` unset, so a retry re-sent to everyone who had already
-    // been told: the recipients at the front of the list got the reminder
-    // twice, and nothing recorded how far the first attempt had got.
-    //
-    // The claim is now the same predicate `canAskAgain` applies, written into
-    // the UPDATE's WHERE clause and bound. Only the request whose write
-    // changes a row sends anything; the loser gets the same 409 as a request
-    // inside the cooldown, which is what it is. `changes()` is the lock.
     const claimedAt = nowIso();
-    const earliest = new Date(Date.now() - ASK_AGAIN_DAYS * 86_400_000).toISOString();
-    const claim = await c.env.DB.prepare(
-      `UPDATE update_asks SET asked_again_at = ?
-        WHERE id = ? AND (asked_again_at IS NULL OR asked_again_at <= ?)
-          AND NOT EXISTS (SELECT 1 FROM update_ask_replies WHERE ask_id = update_asks.id)`,
-    ).bind(claimedAt, ask.id, earliest).run();
-    if (Number((claim as any)?.meta?.changes ?? 0) === 0) {
-      return c.json({ detail: 'This ask was asked again a moment ago. Reload it to see where it stands.' }, 409);
+    let round: ReminderRow | null;
+    try {
+      round = await openRound(c.env, {
+        askId: ask.id, updateId: ask.update_id, versionId: await currentVersionId(c.env, ask.update_id),
+        requestKey, actorId: user.id, claimedAt, earliest: new Date(Date.now() - ASK_AGAIN_DAYS * 86_400_000).toISOString(),
+      });
+    } catch (e) {
+      // The batch is one transaction: nothing of it stands. The only expected
+      // cause is the same key landing twice at once; the other one's round answers.
+      const twin = requestKey ? await roundByRequestKey(c.env, ask.id, requestKey) : null;
+      if (twin) return answer(twin, true);
+      throw e;
     }
-    // The recipients are read AFTER the claim, so the list is the one current
-    // at the moment this reminder is actually sent rather than one read before
-    // a wait (#4645: "current recipient and record identities after data refresh").
-    const rcps = await c.env.DB.prepare('SELECT DISTINCT user_id FROM update_recipients WHERE update_id = ? AND user_id IS NOT NULL').bind(ask.update_id).all<{ user_id: number }>();
-    const recipients = (rcps.results || []).map((x) => Number(x.user_id));
-    // Per-recipient outcome. `notify` answers with the inbox row's id, or null
-    // when it could not deliver, and never throws — so one recipient's failure
-    // cannot cost the rest their reminder, and the response can be reconciled
-    // against the list instead of asserting that all of them were reached.
-    let notified = 0;
-    const failed: number[] = [];
-    for (const userId of recipients) {
-      const id = await notify(c.env, { userId, type: 'followed_entity_news', title: 'Asked again', body: ask.text,
-        link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges' })
-        .catch(() => null);
-      if (id == null) failed.push(userId); else notified += 1;
+    if (!round) {
+      return c.json({ error: 'ask_claimed', detail: 'This ask was asked again a moment ago. Reload it to see where it stands.', reminder: await latest() }, 409);
     }
-    return c.json({
-      uid: ask.uid, asked_again_at: claimedAt,
-      // `asked_again` was the length of the recipient list — a claim of
-      // delivery the handler never checked. These three are what happened.
-      recipients: recipients.length, notified, failed: failed.length,
-      // What this guarantees, stated as narrowly as it is true: the cooldown
-      // claim makes one reminder per ask per window, and each recipient gets
-      // at most one inbox row from this request. Delivery beyond the inbox
-      // (email, push) is the notify pipeline's, and is not exactly-once.
-      delivery: 'in_app inbox rows written here; onward channels are the notify pipeline\'s and are not guaranteed exactly once',
-    });
+    return answer(round, false);
   } catch (e) { return mapError(c, e); }
 });
+
+/** The notification path as the reminder's provider; each notification carries its delivery's uid. */
+function reminderProvider(env: Env, ask: { uid: string; text: string; update_uid: string }): ReminderProvider {
+  return {
+    async send(d) {
+      const id = await notify(env, { userId: d.user_id, type: 'followed_entity_news', title: 'Asked again', body: ask.text,
+        link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid, reminder_delivery_uid: d.delivery_uid }, category: 'proactive_nudges' });
+      return id == null ? null : String(id);
+    },
+    async find(d) {
+      const row = await env.DB.prepare(
+        `SELECT id FROM notifications_inbox WHERE user_id = ? AND json_valid(payload) AND json_extract(payload, '$.reminder_delivery_uid') = ? ORDER BY id LIMIT 1`,
+      ).bind(d.user_id, d.delivery_uid).first<{ id: number }>();
+      return row ? String(row.id) : null;
+    },
+  };
+}
 
 export default r;

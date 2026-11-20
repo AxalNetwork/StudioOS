@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, RefreshCw } from 'lucide-react';
-import { WorkerRail } from '../../ui';
+import { Sheet, WorkerRail } from '../../ui';
 import ZoneHeader from '../../workspaces/ZoneHeader';
 import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { api } from '../../lib/api';
@@ -12,6 +13,9 @@ import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { titleCase as caseLabel } from '../../lib/absence';
 import { useManagedFund, FundPicker } from './managedFund';
 import { LP_TYPES, LP_TYPE_LABELS, COMM_KIND_LABELS, lpTypeLabel, typeChips, matchesType } from './fundLpCommsModel';
+import LpRecordDrawer from './InvestorFundLpRecord';
+import { lpParam } from './fundLpRecordModel';
+import { percent } from './fundCallsModel';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const cents = (value) => value == null || value === '' ? null : Number(value);
@@ -32,6 +36,18 @@ export default function InvestorFundLPs() {
   const [addError, setAddError] = useState('');
   const [typeError, setTypeError] = useState('');
   const [comms, setComms] = useState({ status: 'loading', data: null });
+  // D6236: `?lp=<id>` opens that LP's record over the register; closing drops it.
+  const [params, setParams] = useSearchParams();
+  const openLpId = lpParam(params.get('lp'));
+  const openLp = (id) => { const next = new URLSearchParams(params); next.set('lp', String(id)); setParams(next); };
+  const closeLp = () => { const next = new URLSearchParams(params); next.delete('lp'); setParams(next); };
+
+  const loadComms = useCallback((fundId) => {
+    setComms({ status: 'loading', data: null });
+    api.fundsCommsList(fundId)
+      .then((data) => setComms({ status: 'ready', data }))
+      .catch(() => setComms({ status: 'unreadable', data: null }));
+  }, []);
 
   const load = useCallback(async () => {
     if (managed.loading) { setState({ loading: true, fund: null, rows: null, error: null }); return; }
@@ -41,18 +57,15 @@ export default function InvestorFundLPs() {
       return;
     }
     setState({ loading: true, fund: managed.fund, rows: null, error: null });
-    setComms({ status: 'loading', data: null });
     // D553: the comms log is its own read, so a failed log never blanks the register.
-    api.fundsCommsList(managed.fund.id)
-      .then((data) => setComms({ status: 'ready', data }))
-      .catch(() => setComms({ status: 'unreadable', data: null }));
+    loadComms(managed.fund.id);
     try {
       const result = await api.fundsLpsList(managed.fund.id);
       setState({ loading: false, fund: managed.fund, rows: result?.items || [], error: null });
     } catch (error) {
       setState({ loading: false, fund: managed.fund, rows: null, error: error?.message || 'The LP register is unavailable for this fund.' });
     }
-  }, [managed.loading, managed.error, managed.fund]);
+  }, [managed.loading, managed.error, managed.fund, loadComms]);
 
   // D553: set or clear one LP's type. The register re-reads it, so the cell
   // shows what was stored, not what was picked.
@@ -179,8 +192,9 @@ export default function InvestorFundLPs() {
     </form>}
     {state.error && <div className="i6-load-error ip1-fund-unavailable" data-testid="status-fund-lps-unavailable"><AlertCircle size={14} /> <span>LP registry unavailable. No LP count, commitment, payment, KYC, or delinquency claim is being made. <small>{state.error}</small></span></div>}
     <section className="i6-summary ip1-fund-summary"><div><div className="i6-kicker">{state.fund?.name || 'Fund record unavailable'}</div><strong className="i6-money">{state.error ? 'Unavailable' : money(totalCommitted)}</strong><span className="i6-caption">committed</span></div><dl className="i6-summary-stats"><div><dt>LPs</dt><dd>{state.error ? 'Unavailable' : rows.length}</dd></div><div><dt>Largest position</dt><dd>{state.error ? 'Unavailable' : money(largest)}</dd></div><div><dt>KYC outstanding</dt><dd>{state.error ? 'Unavailable' : kycOutstanding}</dd></div></dl><p>Figures appear only when a fund record and its authorized LP register are available. Share of fund is computed from returned commitment rows.</p></section>
-    <section className="i6-card i6-registry ip1-fund-registry"><header><div><h2>LP register</h2><span>{state.error ? 'Register source unavailable' : `${visible.length} of ${rows.length} records`}</span></div><span>Type is the one editable column</span></header>{state.loading ? <div className="i6-skeleton" /> : state.error ? <div className="i6-empty"><AlertCircle size={16} /> The detailed LP register cannot be displayed without an accessible fund source.</div> : rows.length === 0 ? <div className="i6-empty">No LP records are available for this fund.</div> : visible.length === 0 ? <div className="i6-empty">No LP records match this filter.</div> : <div className="ip1-fund-table-wrap"><table><thead><tr><th>LP</th><th>Type</th><th>Commitment</th><th>Share</th><th>Paid to date</th><th>State</th><th>KYC</th></tr></thead><tbody>{visible.map((lp) => { const commitment = lpCommitment(lp); const paid = lpPaid(lp); const status = lp.status || (commitment != null && paid != null && paid >= commitment ? 'Paid' : 'Unrecorded'); const kyc = lp.account_user_id == null && !lp.kyc ? 'No account' : lp.kyc_status || lp.kyc || 'Unrecorded'; return <tr key={lp.id || lp.uid || lp.email}><td><strong>{lp.name || lp.email || `LP #${lp.id}`}</strong><small>{lp.joined_at ? `Joined ${date(lp.joined_at)}` : 'Name source preserved'}</small></td><td data-label="Type"><LpTypeCell lp={lp} onChange={setLpType} /></td><td data-label="Commitment">{money(commitment)}</td><td data-label="Share">{commitment && totalCommitted ? `${((commitment / totalCommitted) * 100).toFixed(1)}%` : 'Unavailable'}</td><td data-label="Paid to date">{money(paid)}</td><td data-label="State"><span className={`ip1-fund-pill ${String(status).toLowerCase()}`}>{titleCase(status)}</span></td><td data-label="KYC"><span className={`ip1-fund-pill ${String(kyc).toLowerCase()}`}>{titleCase(kyc)}</span></td></tr>; })}</tbody></table></div>}{typeError && <p className="i6-footnote" role="alert" data-testid="status-lp-type-error">{typeError}</p>}<p className="i6-footnote">An LP with no platform account has no KYC record; that reads "No account", never pending. An LP nobody has typed reads "Not recorded". This register does not send communications or change KYC/LPA records.</p></section>
+    <section className="i6-card i6-registry ip1-fund-registry"><header><div><h2>LP register</h2><span>{state.error ? 'Register source unavailable' : `${visible.length} of ${rows.length} records`}</span></div><span>Type is the one editable column</span></header>{state.loading ? <div className="i6-skeleton" /> : state.error ? <div className="i6-empty"><AlertCircle size={16} /> The detailed LP register cannot be displayed without an accessible fund source.</div> : rows.length === 0 ? <div className="i6-empty">No LP records are available for this fund.</div> : visible.length === 0 ? <div className="i6-empty">No LP records match this filter.</div> : <div className="ip1-fund-table-wrap"><table><thead><tr><th>LP</th><th>Type</th><th>Commitment</th><th>Share</th><th>Paid to date</th><th>State</th><th>KYC</th></tr></thead><tbody>{visible.map((lp) => { const commitment = lpCommitment(lp); const paid = lpPaid(lp); const status = lp.status || (commitment != null && paid != null && paid >= commitment ? 'Paid' : 'Unrecorded'); const kyc = lp.account_user_id == null && !lp.kyc ? 'No account' : lp.kyc_status || lp.kyc || 'Unrecorded'; return <tr key={lp.id || lp.uid || lp.email}><td><button type="button" className="ip1-lp-open" onClick={() => openLp(lp.id)} data-testid={`button-open-lp-${lp.id}`} aria-label={`Open the record of ${lp.name || lp.email || `LP #${lp.id}`}`}><strong>{lp.name || lp.email || `LP #${lp.id}`}</strong><small>{lp.joined_at ? `Joined ${date(lp.joined_at)}` : 'Open the LP record'}</small></button></td><td data-label="Type"><LpTypeCell lp={lp} onChange={setLpType} /></td><td data-label="Commitment">{money(commitment)}</td><td data-label="Share">{commitment && totalCommitted ? `${((commitment / totalCommitted) * 100).toFixed(1)}%` : 'Unavailable'}</td><td data-label="Paid to date">{money(paid)}</td><td data-label="State"><span className={`ip1-fund-pill ${String(status).toLowerCase()}`}>{titleCase(status)}</span></td><td data-label="KYC"><span className={`ip1-fund-pill ${String(kyc).toLowerCase()}`}>{titleCase(kyc)}</span></td></tr>; })}</tbody></table></div>}{typeError && <p className="i6-footnote" role="alert" data-testid="status-lp-type-error">{typeError}</p>}<p className="i6-footnote">An LP with no platform account has no KYC record; that reads "No account", never pending. An LP nobody has typed reads "Not recorded". This register does not send communications or change KYC/LPA records.</p></section>
     <CommsLog comms={comms} onRetry={load} />
+    {openLpId != null && state.fund && !state.loading && !state.error && <LpRecordSlot fund={state.fund} lp={rows.find((r) => Number(r.id) === openLpId) || null} lpId={openLpId} totalCommitted={totalCommitted} onClose={closeLp} onLogged={() => loadComms(state.fund.id)} />}
     <footer className="i6-footnote ip1-fund-boundary">Fund source-preserved · Add LP and an LP's type are the writes on this page.</footer>
   </main><WorkerRail
     workspace="Fund"
@@ -197,6 +211,25 @@ export default function InvestorFundLPs() {
       ]}
   /></div></ZonePrimaryScope>;
 }
+/**
+ * D6236: the drawer for `?lp=<id>`, with the register row's own figures. An id
+ * that is not on this fund's register says so, in the same sheet.
+ */
+export function LpRecordSlot({ fund, lp, lpId, totalCommitted, onClose, onLogged }) {
+  if (!lp) {
+    return <Sheet label="LP record" eyebrow="LP record" title={`LP #${lpId}`} testId="lp-record" onClose={onClose} width={480}>
+      <p className="lpr-empty" style={{ padding: '16px 20px' }} data-testid="lp-record-missing">No LP with this id is on this fund's register.</p>
+    </Sheet>;
+  }
+  const commitment = lpCommitment(lp);
+  const figures = {
+    commitment: money(commitment),
+    share: percent(commitment, totalCommitted) ?? 'Unavailable',
+    paid: money(lpPaid(lp)),
+  };
+  return <LpRecordDrawer fund={fund} lp={lp} figures={figures} onClose={onClose} onLogged={onLogged} />;
+}
+
 /** D553: an LP's type, editable by the GP. None recorded reads "Not recorded". */
 export function LpTypeCell({ lp, onChange }) {
   const label = lpTypeLabel(lp);

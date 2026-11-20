@@ -34,6 +34,7 @@ import { ensureCompetitorSchema } from './competitorSchema';
 import type { AnalysisInputs } from './competitorAnalysis';
 import { FINDING_KINDS, isFindingKind } from './interviewFindings';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
+import { putRecordOrThrow } from './recordStore';
 
 /**
  * A refusal a route can return as-is. `sentence` is always one this file
@@ -150,8 +151,9 @@ export async function writeSegment(env: Env, input: SegmentInput): Promise<{ id:
   const source = (SEGMENT_SOURCES as readonly string[]).includes(String(input.source)) ? String(input.source) : 'manual';
   const norm = segmentNameNorm(name);
   const existing = await env.DB.prepare(
-    'SELECT id, name FROM customer_segments WHERE project_id = ? AND name_norm = ?',
-  ).bind(input.projectId, norm).first<{ id: number; name: string }>();
+    'SELECT id, name, archived_at FROM customer_segments WHERE project_id = ? AND name_norm = ?',
+  ).bind(input.projectId, norm).first<{ id: number; name: string; archived_at: string | null }>();
+  if (existing?.archived_at) throw new WriterError(409, 'This segment name is archived. Choose another name.');
   if (existing) return { id: Number(existing.id), name: existing.name, created: false };
   const steps = segmentSteps(input);
   // A segment with none of the five steps writes the columns every caller has
@@ -321,7 +323,7 @@ export async function writeDemandSignal(env: Env, input: DemandSignalInput): Pro
   // D690 (#1692) — "pre-sales and letters of intent only" (CO:309): a
   // need-to-have mention or a waitlist sign-up names no amount.
   if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) {
-    throw new WriterError(400, 'An amount is for pre-sales and letters of intent only');
+    throw new WriterError(400, 'Waitlist and need-to-have signals do not carry amounts');
   }
   const currency = amount != null ? (String(input.currency ?? 'usd').trim().toLowerCase() || 'usd') : null;
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');
@@ -742,27 +744,30 @@ export async function updateSegment(
 ): Promise<{ id: number }> {
   const row = await env.DB.prepare(
     `SELECT id, name, description, who_they_are, context, job_to_be_done, urgency, value_promised, value_source, score_since
-       FROM customer_segments WHERE id = ? AND project_id = ?`,
+       FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL`,
   ).bind(input.segmentId, input.projectId).first<Record<string, string | null>>();
   if (!row) throw new WriterError(404, 'Segment not found on this project');
   const name = input.name === undefined ? String(row.name) : trimOrNull(input.name, 120);
   if (!name) throw new WriterError(400, 'A segment needs a name');
   const norm = segmentNameNorm(name);
-  const clash = await env.DB.prepare('SELECT id FROM customer_segments WHERE project_id = ? AND name_norm = ? AND id <> ?')
-    .bind(input.projectId, norm, input.segmentId).first();
-  if (clash) throw new WriterError(409, 'Another segment already has that name');
+  const clash = await env.DB.prepare('SELECT id, archived_at FROM customer_segments WHERE project_id = ? AND name_norm = ? AND id <> ?')
+    .bind(input.projectId, norm, input.segmentId).first<{ id: number; archived_at: string | null }>();
+  if (clash) throw new WriterError(409, clash.archived_at != null
+    ? 'This segment name is archived. Choose another name.'
+    : 'Another segment already has that name');
   const steps = segmentSteps(input);
   const keep = (k: (typeof SEGMENT_STEP_KEYS)[number]) => (steps[k] === undefined ? row[k] ?? null : steps[k]);
-  await env.DB.prepare(
+  const updated = await env.DB.prepare(
     `UPDATE customer_segments
         SET name = ?, name_norm = ?, description = ?, who_they_are = ?, context = ?, job_to_be_done = ?, urgency = ?,
             value_promised = ?, value_source = ?, score_since = ?, updated_at = datetime('now')
-      WHERE id = ? AND project_id = ?`,
+      WHERE id = ? AND project_id = ? AND archived_at IS NULL`,
   ).bind(
     name, norm, input.description === undefined ? row.description ?? null : trimOrNull(input.description, 1000),
     keep('who_they_are'), keep('context'), keep('job_to_be_done'), keep('urgency'), keep('value_promised'),
     keep('value_source'), keep('score_since'), input.segmentId, input.projectId,
   ).run();
+  if (Number(updated.meta?.changes) !== 1) throw new WriterError(404, 'Segment not found on this project');
   await recordActor(env, input.userId, input.projectId, 'ideal-customer-profile', input.segmentId, 'segment_edited', `Segment ${input.segmentId} edited`);
   return { id: input.segmentId };
 }
@@ -1288,7 +1293,7 @@ export async function updateDemandSignal(
     if (!Number.isInteger(n) || n <= 0) throw new WriterError(400, 'amount_cents must be a positive whole number, or omitted');
     amount = n;
   }
-  if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) throw new WriterError(400, 'An amount is for pre-sales and letters of intent only');
+  if (amount != null && (kind === 'need_to_have' || kind === 'waitlist')) throw new WriterError(400, 'Waitlist and need-to-have signals do not carry amounts');
   const currency = amount == null ? null
     : (String(input.currency === undefined ? (row.currency ?? 'usd') : (input.currency ?? 'usd')).trim().toLowerCase() || 'usd');
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');
@@ -1354,7 +1359,8 @@ export async function attachDemandEvidence(
     fileName = String(input.file.name || `evidence.${ext}`).replace(/[\r\n"]/g, '').slice(0, 200) || `evidence.${ext}`;
     // D1170 — Validate evidence counts to the venture's owner (D1169 §1).
     storage = await assertStorageRoom(env, { projectId: input.projectId }, input.file.size, input.userId == null ? null : { id: input.userId });
-    await env.FILES.put(key, await input.file.arrayBuffer(), { httpMetadata: { contentType: mime }, customMetadata: { project_id: String(input.projectId) } });
+    // D6651: evidence is a record, written once under a fresh key; a replacement points the row at the newest key.
+    await putRecordOrThrow(env.FILES, key, await input.file.arrayBuffer(), { httpMetadata: { contentType: mime }, customMetadata: { project_id: String(input.projectId) } });
   }
   const stmts = [];
   if (key) stmts.push(env.DB.prepare("UPDATE demand_signals SET evidence_file_key = ?, evidence_file_name = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
@@ -1367,9 +1373,7 @@ export async function attachDemandEvidence(
   }));
   await env.DB.batch(stmts);
   if (storage) await noteStorageLanded(env, storage);
-  if (key && row.evidence_file_key && row.evidence_file_key.startsWith(EVIDENCE_PREFIX)) {
-    try { await env.FILES?.delete(row.evidence_file_key); } catch (e) { console.warn('[validateWriters] old evidence not deleted:', (e as Error)?.message); }
-  }
+  // D6651: the replaced evidence file is a record and is kept; the row now points at the newest key.
   return { id: input.signalId, file_name: fileName };
 }
 
@@ -1779,4 +1783,19 @@ export async function writeInterviewFinding(env: Env, input: InterviewFindingInp
   await recordActor(env, input.userId, input.projectId, module as ModuleSlug, null, 'interview_finding_written',
     `${prior ? 'Updated' : 'Added'} a ${input.kind.replace(/_/g, ' ')} from interview ${input.interviewId}`);
   return { id: Number(row.id), module, created: !prior };
+}
+
+/** D6003: retain interview history and fit; only active segments participate in current scoring. */
+export async function archiveSegment(env: Env, input: { projectId: number; userId: number | null; segmentId: number }): Promise<void> {
+  const row = await env.DB.prepare('SELECT id FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL')
+    .bind(input.segmentId, input.projectId).first();
+  if (!row) throw new WriterError(404, 'Segment not found on this project');
+  const result = await env.DB.batch([
+    env.DB.prepare('UPDATE customer_segments SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND archived_at IS NULL')
+      .bind(input.segmentId, input.projectId),
+    // Keep the ordinary cycle activity format, and log only the UPDATE that changed a row.
+    env.DB.prepare('INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1')
+      .bind(input.projectId, input.userId, 'validate.ideal-customer-profile', String(input.segmentId), 'segment_archived', `Segment ${input.segmentId} archived`, input.userId == null ? 'system' : `user:${input.userId}`),
+  ]);
+  if (Number(result[0]?.meta?.changes) !== 1) throw new WriterError(404, 'Segment not found on this project');
 }

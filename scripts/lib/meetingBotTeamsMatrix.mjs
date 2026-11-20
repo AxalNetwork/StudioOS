@@ -14,6 +14,7 @@
  * and #5675's isolated preview receipt, and runs in the deploy workflow.
  */
 import { parseSections } from '../check-wrangler-binding-parity.mjs';
+import { botBindingProblem } from './meetingBotBinding.mjs';
 
 const unquote = v => (typeof v === 'string' && /^".*"$/.test(v) ? v.slice(1, -1) : v);
 const SWITCH = new Set(['off', 'canary', 'on']);
@@ -39,8 +40,8 @@ function topName(sections, prefix) {
 function rootKey(source, key) {
   for (const raw of source.split('\n')) {
     if (/^\s*\[/.test(raw)) return null;
-    const m = new RegExp(`^${key}\\s*=\\s*"([^"]*)"`).exec(raw.trim());
-    if (m) return m[1];
+    const m = /^([^\s=]+)\s*=\s*"([^"]*)"/.exec(raw.trim());
+    if (m && m[1] === key) return m[2];
   }
   return null;
 }
@@ -60,10 +61,9 @@ export function teamsMatrix({ site, bot, workflow, dockerfile, botPackage, conta
   for (const e of ENVIRONMENTS) {
     const sv = vars(S, e.site);
     // 1. Site → host: a cross-script Durable Object binding to this environment's own host.
-    const binding = section(S, `${e.site}durable_objects.bindings`, s => s.kv.get('name') === '"MEETING_BOT_CONTAINER"');
-    add('site_binds_its_own_bot_host', e.env, binding.length === 1
-      && unquote(binding[0].kv.get('class_name')) === 'MeetingBotContainer'
-      && unquote(binding[0].kv.get('script_name')) === e.hostScript
+    //    D7147 part 2: preview may instead bind nothing while its MEETING_BOT is "off" (staging);
+    //    it never binds production's host or a local class. Production always binds its own.
+    add('site_binds_its_own_bot_host', e.env, botBindingProblem(S, e.site) === null
       && hostNames[e.env] === e.hostScript);
     // 2. The run-state Durable Object stays on the site (it holds the lease, consent and billing state).
     const run = section(S, `${e.site}durable_objects.bindings`, s => s.kv.get('name') === '"MEETING_BOT_RUN"');

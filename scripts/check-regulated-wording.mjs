@@ -89,6 +89,9 @@ export const SURFACES = [
   ['prompt', 'cloudflare-worker/src/services/decks/autofill.ts', 'the deck autofill system message'],
   ['prompt', 'cloudflare-worker/src/services/publications.ts', 'buildSystemPrompt for drafted publications'],
   ['prompt', 'cloudflare-worker/src/services/market_intel/extractors/index.ts', 'the paraphrase systemPrompt'],
+  // D6862: Eadwyn's read of a decision's evidence, its system message and its task card.
+  ['prompt', 'cloudflare-worker/src/services/verdictSummary.ts', 'the evidence read systemPrompt'],
+  ['copy', 'frontend/src/pages/cycles/VerdictEvidencePanel.jsx', 'the Read the evidence task card on Record a decision'],
 ];
 
 /**

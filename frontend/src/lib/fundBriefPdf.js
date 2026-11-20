@@ -201,6 +201,12 @@ function drawRecord(b, y, record) {
 function drawPipeline(b, y, vm) {
   let cy = sectionLabel(b, RIGHT_X, COL_W, y, vm.pipelineHeading, vm.pipelineNote);
 
+  // D6137: no store records the pipeline, so the table is one sentence, not rows.
+  if (!vm.pipeline.length) {
+    cy = b.text(vm.pipelineEmpty || 'Not recorded', RIGHT_X, cy, { size: 10, color: C.muted, lineHeight: 1.45, maxW: COL_W });
+    return cy + 14;
+  }
+
   const icRight = RIGHT_EDGE;
   const revRight = icRight - 54;
   const scoreRight = revRight - 50;
@@ -318,12 +324,14 @@ export const BRIEF_BOARD = { w: BOARD_W, h: BOARD_H };
  * @param {object} [opts]
  * @param {Date}   [opts.generatedAt]  stamped on the masthead; defaults to now
  * @param {object} [opts.recipient]    { name, email, standing }
+ * @param {object|null} [opts.metrics] the GET /fund-metrics body the page drew,
+ *                                     so the brief prints the page's figures (D6137)
  * @param {string} [opts.filename]
  * @returns {Promise<{ filename: string }>}
  */
-export async function exportFundBriefPdf({ generatedAt, recipient, filename } = {}) {
+export async function exportFundBriefPdf({ generatedAt, recipient, metrics = null, filename } = {}) {
   const stamp = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime()) ? generatedAt : new Date();
-  const vm = fundBriefModel({ generatedAt: stamp, recipient });
+  const vm = fundBriefModel({ generatedAt: stamp, recipient, metrics });
 
   const jspdfMod = await import('jspdf');
   const JsPDF = jspdfMod.jsPDF || jspdfMod.default;

@@ -92,7 +92,7 @@ export const FAMILY_OG_KEYS = ['event', 'profile', 'private'];
 const ROUTES = [
   {
     path: '/',
-    title: 'From idea to funded company',
+    title: 'StudioOS, the founder workspace', // #6988 (X6): the page title's words
     // D1379: says what the app does, for Google's OAuth verification as much as for a link preview.
     description:
       'Axal VC is a venture studio platform: founders validate an idea with customer interviews, form the company and raise, with partners and investors in one network.',
@@ -118,7 +118,7 @@ const ROUTES = [
     path: '/for-founders',
     title: 'For Founders',
     description:
-      'Everything you need to go from idea to funded — a startup workspace, pitch deck builder, venture-readiness scoring, and warm investor intros on the Axal VC network.',
+      'A founder workspace for customer interviews, your pitch deck and venture scoring.',
     key: 'product-founders',
     type: 'website',
     section: 'product',
@@ -166,7 +166,7 @@ const ROUTES = [
     path: '/influencers',
     title: 'Influencers',
     description:
-      'Earn recurring revenue by bringing people to Axal VC. Share your own handle; when someone subscribes through it, you earn part of every invoice.',
+      'Share your own handle. When someone subscribes through it, you earn a share of their subscription for a set period.',
     type: 'website',
     section: 'company',
   },
