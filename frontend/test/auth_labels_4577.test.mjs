@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { tagHolding } from './_tagHolding.mjs';
 
 const page = (name) => codeOnly(readFileSync(path.resolve(import.meta.dirname, `../src/pages/${name}`), 'utf8'));
 const LOGIN = page('LoginPage.jsx');
@@ -25,7 +26,8 @@ const labels = (src) => [...src.matchAll(/<label\b([^>]*)>\s*([^<{]+?)\s*<\/labe
   .map((m) => ({ attrs: m[1], text: m[2], id: /\bhtmlFor="([^"]+)"/.exec(m[1])?.[1] || null }));
 /** The `<input …>` element carrying `id="X"`, as written. */
 const inputOf = (src, id) => {
-  const at = src.search(new RegExp(`<input\\b[^>]*?\\bid="${id}"`, 's'));
+  const tag = tagHolding(src, ` id="${id}"`, (t) => /^<input\b/.test(t)) || tagHolding(src, `\nid="${id}"`, (t) => /^<input\b/.test(t));
+  const at = tag ? src.indexOf(tag) : -1;
   if (at < 0) return null;
   return src.slice(at, src.indexOf('/>', at) + 2);
 };

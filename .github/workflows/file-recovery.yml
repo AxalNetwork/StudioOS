@@ -1,8 +1,15 @@
 name: Approved file recovery snapshot
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'synthetic-proof' && 'Synthetic independent file proof' || 'Approved file recovery snapshot' }}
 on:
   schedule:
     - cron: '30 2 * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Approved snapshot or synthetic independent-copy proof (never a live restore)'
+        type: choice
+        options: [snapshot, synthetic-proof]
+        default: snapshot
 permissions:
   contents: read
 concurrency:
@@ -11,7 +18,7 @@ concurrency:
 jobs:
   snapshot:
     # #6650/counsel approval and destination-prefix lock precede activation.
-    if: vars.FILE_RECOVERY_ENABLED == 'true'
+    if: vars.FILE_RECOVERY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'snapshot')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -19,6 +26,7 @@ jobs:
       - name: Synthetic restore drill
         run: python3 scripts/file-recovery-drill.py
       - name: Snapshot approved record classes and verify every copy
+        id: primary
         env:
           FILE_RECOVERY_REGISTRY: ${{ vars.FILE_RECOVERY_REGISTRY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -32,4 +40,67 @@ jobs:
         run: |
           test -n "$FILE_RECOVERY_REGISTRY"
           aws --version
-          python3 scripts/file-recovery.py --registry "$FILE_RECOVERY_REGISTRY"
+          python3 scripts/file-recovery.py --registry "$FILE_RECOVERY_REGISTRY" \
+            --bundle-dir "$RUNNER_TEMP/file-recovery-bundle" --receipt "$RUNNER_TEMP/file-recovery-primary.json"
+      - name: Independent encrypted copy (or explicit unconfigured notice)
+        id: independent
+        env:
+          FILE_DR_SECOND_COPY_ENABLED: ${{ vars.FILE_DR_SECOND_COPY_ENABLED }}
+          FILE_DR_EXTERNAL_ACCOUNT_CONFIRMED: ${{ vars.FILE_DR_EXTERNAL_ACCOUNT_CONFIRMED }}
+          DR_COPY_ENDPOINT: ${{ vars.DR_COPY_ENDPOINT }}
+          DR_COPY_BUCKET: ${{ vars.DR_COPY_BUCKET }}
+          DR_COPY_REGION: ${{ vars.DR_COPY_REGION }}
+          DR_AGE_RECIPIENT: ${{ vars.DR_AGE_RECIPIENT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FILE_DR_COPY_ACCESS_KEY_ID: ${{ secrets.FILE_DR_COPY_ACCESS_KEY_ID }}
+          FILE_DR_COPY_SECRET_ACCESS_KEY: ${{ secrets.FILE_DR_COPY_SECRET_ACCESS_KEY }}
+        run: |
+          if [[ "$FILE_DR_SECOND_COPY_ENABLED" == "true" ]]; then
+            sudo apt-get update -qq && sudo apt-get install -y age >/dev/null
+          fi
+          python3 scripts/file-recovery-independent.py copy --bundle-dir "$RUNNER_TEMP/file-recovery-bundle" \
+            --receipt "$RUNNER_TEMP/file-recovery-independent.json"
+      - name: Record run heartbeat, including failures
+        if: always()
+        env:
+          FILE_DR_SECOND_COPY_ENABLED: ${{ vars.FILE_DR_SECOND_COPY_ENABLED }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID: ${{ secrets.FILE_RECOVERY_DESTINATION_ACCESS_KEY_ID }}
+          FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY: ${{ secrets.FILE_RECOVERY_DESTINATION_SECRET_ACCESS_KEY }}
+          PRIMARY_OUTCOME: ${{ steps.primary.outcome }}
+          COPY_OUTCOME: ${{ steps.independent.outcome }}
+        run: |
+          python3 scripts/file-recovery-independent.py heartbeat \
+            --primary-receipt "$RUNNER_TEMP/file-recovery-primary.json" \
+            --independent-receipt "$RUNNER_TEMP/file-recovery-independent.json" \
+            --primary-outcome "$PRIMARY_OUTCOME" --copy-outcome "$COPY_OUTCOME"
+      - name: Remove private plaintext staging
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          shutil.rmtree(Path(os.environ['RUNNER_TEMP']) / 'file-recovery-bundle', ignore_errors=True)
+          PY
+  synthetic-proof:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'synthetic-proof' && vars.FILE_DR_PREVIEW_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Restore only a fresh synthetic record from the outside copy
+        env:
+          FILE_DR_SYNTHETIC_PREVIEW: 'true'
+          FILE_DR_SECOND_COPY_ENABLED: ${{ vars.FILE_DR_PREVIEW_ENABLED }}
+          FILE_DR_EXTERNAL_ACCOUNT_CONFIRMED: ${{ vars.FILE_DR_EXTERNAL_ACCOUNT_CONFIRMED }}
+          DR_COPY_ENDPOINT: ${{ vars.FILE_DR_PREVIEW_ENDPOINT }}
+          DR_COPY_BUCKET: ${{ vars.FILE_DR_PREVIEW_BUCKET }}
+          DR_COPY_REGION: ${{ vars.FILE_DR_PREVIEW_REGION }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FILE_DR_COPY_ACCESS_KEY_ID: ${{ secrets.FILE_DR_PREVIEW_COPY_ACCESS_KEY_ID }}
+          FILE_DR_COPY_SECRET_ACCESS_KEY: ${{ secrets.FILE_DR_PREVIEW_COPY_SECRET_ACCESS_KEY }}
+          FILE_DR_RESTORE_ACCESS_KEY_ID: ${{ secrets.FILE_DR_PREVIEW_RESTORE_ACCESS_KEY_ID }}
+          FILE_DR_RESTORE_SECRET_ACCESS_KEY: ${{ secrets.FILE_DR_PREVIEW_RESTORE_SECRET_ACCESS_KEY }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y age >/dev/null
+          python3 scripts/file-recovery-independent.py drill

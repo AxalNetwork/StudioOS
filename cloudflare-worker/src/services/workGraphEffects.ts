@@ -256,17 +256,26 @@ export async function deliverEffect(
 
 /** Deliver what is due (pending past its backoff, or claimed with a lapsed claim), oldest first, at most `drainMax`. */
 export async function drainEffects(
-  env: Pick<Env, 'DB'>, handlers: Readonly<Record<string, EffectHandler>>, opts: { limit?: number } = {},
+  env: Pick<Env, 'DB'>, handlers: Readonly<Record<string, EffectHandler>>, opts: { limit?: number; kinds?: readonly string[] } = {},
   limits: WorkGraphEffectLimits = WORK_GRAPH_EFFECT_LIMITS,
 ): Promise<{ results: DeliveryResult[]; cost: BlobCost }> {
   const s = new Spend(env);
   const limit = Math.min(Math.max(1, Math.trunc(opts.limit ?? limits.drainMax)), limits.drainMax);
   const t = WORK_GRAPH_BLOB_DEPS.now().getTime();
-  const due = await s.all<{ id: number }>(env.DB.prepare(
-    `SELECT id FROM work_graph_effects
-      WHERE (state = 'pending' AND next_attempt_ms <= ?) OR (state = 'claimed' AND claimed_until_ms <= ?)
-      ORDER BY next_attempt_ms, id LIMIT ?`,
-  ).bind(t, t, limit));
+  // D5585 part 3: `kinds` limits the drain to those effect kinds, so a drain that holds handlers for some kinds only
+  // never claims (and so never dead-letters as `no_handler`) an effect of another. Without it, every due effect.
+  const due = await s.all<{ id: number }>(opts.kinds
+    ? env.DB.prepare(
+      `SELECT id FROM work_graph_effects
+        WHERE ((state = 'pending' AND next_attempt_ms <= ?) OR (state = 'claimed' AND claimed_until_ms <= ?))
+          AND effect_kind IN (SELECT value FROM json_each(?))
+        ORDER BY next_attempt_ms, id LIMIT ?`,
+    ).bind(t, t, JSON.stringify(opts.kinds), limit)
+    : env.DB.prepare(
+      `SELECT id FROM work_graph_effects
+        WHERE (state = 'pending' AND next_attempt_ms <= ?) OR (state = 'claimed' AND claimed_until_ms <= ?)
+        ORDER BY next_attempt_ms, id LIMIT ?`,
+    ).bind(t, t, limit));
   const results: DeliveryResult[] = [];
   for (const d of due) {
     const r = await deliverEffect(env, handlers, d.id, limits);

@@ -15,7 +15,7 @@ const { default: ZoneToolbar, PHONE_TARGET, PHONE_ACTION_TARGETS } = await impor
 const h = React.createElement;
 // Class attributes carry `&` as `&amp;`; decode it so `max-sm:[&_a]:…` compares as written.
 const render = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(ZoneToolbar, props))).replace(/&amp;/g, '&');
-const classesOf = (html, tag) => [...html.matchAll(new RegExp(`<${tag}[^>]*class="([^"]*)"`, 'g'))].map((m) => m[1].split(/\s+/));
+const classesOf = (html, tag) => [...html.matchAll(/<([a-z][a-z0-9-]*)[^>]*class="([^"]*)"/g)].filter((m) => m[1] === tag).map((m) => m[2].split(/\s+/));
 
 const FILTERS = [
   { label: 'All', active: true, onSelect: () => {} },
