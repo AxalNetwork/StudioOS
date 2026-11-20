@@ -153,10 +153,13 @@ export async function load(d: LoopDeps, uid: string): Promise<StepOut> {
 
 // ── context ─────────────────────────────────────────────────────────────────
 
-/** D4667-p2: `scope`, `rules` and `projectId` are what the context read under; `bound` the read keys its prompt holds. */
+/**
+ * D4667-p2: `scope`, `rules` and `projectId` are what the context read under; `bound` the read keys its prompt holds.
+ * D4667-p3: `document` the data-room document its session works on (`data_room_file:<uid>`), else null.
+ */
 export type Built = {
   ok: true; prompt: string; reads: string[]; notes: number; omitted: string[];
-  scope: Scope; rules: Rules; projectId: number | null; bound: string[];
+  scope: Scope; rules: Rules; projectId: number | null; bound: string[]; document: string | null;
 } | { ok: false; status: string; refusal: string; summary: string; pause?: PauseReason };
 
 /** The prompt, built from D1 alone. Every read is wrapped as data. */
@@ -191,7 +194,12 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   const { rules } = await effectiveBook(d.env, s, l.agent.role_key);
   const missing = rules.reads.find((k) => typeof d.readers[k] !== 'function');
   if (missing) return { ok: false, status: 'refused', refusal: 'read_unavailable', summary: `The read ${missing} is not available yet.` };
-  const rc: ReadContext = { scope: s, agent: l.agent, projectId };
+  // #3957: a scheduled session's skill, record and instruction: the member's words are data, never the prompt's own lines.
+  const session = await sessionBlock(d.env, l.task);
+  // D4667-p3: a session on one data-room document reads that document's text; the reader checks the room's rule again.
+  const target = session?.target as { kind?: string; id?: string } | null | undefined;
+  const document = target?.kind === 'document' && typeof target.id === 'string' ? `data_room_file:${target.id}` : null;
+  const rc: ReadContext = { scope: s, agent: l.agent, projectId, document };
   const reads: { key: string; block: string }[] = [];
   for (const key of rules.reads) {
     const r = await readOne(d.env, key, rc, d.readers);
@@ -210,8 +218,6 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   // D1530 (#3849, E5): the roles this agent may hand off to, and how; a handoff task's why and note, as data.
   const handTo = await handsOffTo(d.env, l.agent);
   const handoff = await handoffBlockFor(d.env, l.task);
-  // #3957: a scheduled session's skill, record and instruction: the member's words are data, never the prompt's own lines.
-  const session = await sessionBlock(d.env, l.task);
   const head = [
     `Task: ${l.task.title}`,
     l.task.detail ? `Detail: ${l.task.detail}` : '',
@@ -234,7 +240,7 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
     else omitted.push(names[i]);
   });
   if (omitted.length) prompt += `\nLeft out for length: ${omitted.join(', ')}.`;
-  return { ok: true, prompt, reads: rules.reads, notes: notes.length, omitted, scope: s, rules, projectId, bound: rules.reads.filter((k) => !omitted.includes(k)) };
+  return { ok: true, prompt, reads: rules.reads, notes: notes.length, omitted, scope: s, rules, projectId, bound: rules.reads.filter((k) => !omitted.includes(k)), document };
 }
 
 export async function context(d: LoopDeps, uid: string): Promise<StepOut> {
@@ -289,7 +295,7 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
   if (sk.kind === 'skill' && !(await railByRunKey(d.env, l.agent.sponsor_user_id, runKeyOf(uid)))) {
     const slug = await skillSlugOf(d.env, sk.uid);
     const checked = await skillEvidenceForRun(d.env, {
-      agent: l.agent, scope: b.scope, rules: b.rules, slug, projectId: b.projectId, bound: b.bound, readers: d.readers, now: d.now().getTime(),
+      agent: l.agent, scope: b.scope, rules: b.rules, slug, projectId: b.projectId, bound: b.bound, document: b.document, readers: d.readers, now: d.now().getTime(),
     });
     if (!checked.ok) return end(d, l, 'run', 'refused', checked.code, checked.message);
     if (slug) readiness = { slug, limits: checked.evidence?.limits ?? [] };
