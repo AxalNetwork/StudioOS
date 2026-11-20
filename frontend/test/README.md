@@ -38,6 +38,7 @@ also exercises a `project_id` deep link.
 | `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
 | `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
 | `learning_studio_stream_copy_integration_4742.test.mjs` | #4742: Copy to Stream wired into the Studio (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid` drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal. |
+| `dr_cleanup_7917.test.mjs` | D7917: fake-CLI exact-run cleanup, unsafe-record refusal, retry and workflow timeout/always contract. |
 | `restore_d1_d5337.test.mjs` | D5337: `scripts/restore-d1.sh` run against a fake `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared path with the drill, and the runbook's reasons. |
 | `d1_backup_stream_d7142.test.mjs` | D7142: the backup manifest and the drill split stream the export: byte-identical to the frozen pre-D7142 code (`fixtures/d7142_old_*.mjs`) at read sizes down to one byte, a statement or `;` across a read boundary counted once, and an export bigger than the heap read under a heap cap (the >600 MiB run with `D7142_LARGE=1`). |
 | `_dr_fakes.mjs` | D5337: the `age` key pair and the fake `aws` store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`). |
@@ -258,6 +259,7 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
 `portfolio_unavailable_6201.test.mjs` (D6201) keeps explicit route failure reasons on financial figures and reporting, and excludes failed reads from chase rows.
+`icp_complete_6003.test.mjs` (D6003) renders and round-trips the missing five-step fields without blanking omitted values.
 `build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
 
 `runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).

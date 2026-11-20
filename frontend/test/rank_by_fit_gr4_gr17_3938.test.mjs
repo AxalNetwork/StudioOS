@@ -58,7 +58,7 @@ async function mount(url, routes, handle) {
 const TALENT_ROUTES = [h(Route, { key: 't', path: '/grow/talent', element: h(FounderGrowTalent) })];
 const JOBS = [{ id: 7, project_id: 3, title: 'Backend engineer', status: 'published' }];
 const APPS = [
-  { id: 101, posting_id: 7, name: 'Ana Ortiz', status: 'applied', created_at: '2026-10-28' },
+  { id: 101, posting_id: 7, name: 'Ana Ortiz', status: 'applied', stage: 'offer', created_at: '2026-10-28' },
   { id: 102, posting_id: 7, name: 'Bo Chen', status: 'applied', created_at: '2026-10-29' },
   { id: 103, posting_id: 7, name: 'Cy Park', status: 'shortlisted', created_at: '2026-10-30' },
 ];
@@ -79,6 +79,7 @@ test('GR4 on Grow › Talent: the role\'s applicants ranked by fit, each with it
   })));
   try {
     assert.deepEqual(m.rowsIn('grow-talent-row-'), ['grow-talent-row-101', 'grow-talent-row-102', 'grow-talent-row-103'], 'the usual order first');
+    assert.match(m.text(m.by('grow-talent-row-101')), /Offer/);
     await m.press(m.by('grow-talent-rank-run'));
     const call = m.requests.find((r) => r.url.includes('/research/grow/talent/rank'));
     assert.deepEqual([call.method, call.body], ['POST', { scope_key: '3', posting_id: 7 }], 'the project and the posting, nothing else');
