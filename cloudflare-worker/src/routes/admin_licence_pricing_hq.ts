@@ -15,6 +15,7 @@
  *   GET /api/admin/licence-pricing/signals            per licence: pricing review due, pricing data incomplete,
  *                                                     overridden pricing, exclusivity at risk; with counts
  *                                                     ?needs=<signal,…> &licence=<uid,…>
+ *   GET /api/admin/licence-pricing/consistency        D7714: each profile field against its latest history row
  *
  * Nothing here writes: a catalogue figure is calculated now and stored nowhere (`stored: false`).
  */
@@ -28,6 +29,7 @@ import { PricingError, countryCodeOf } from '../services/licencePricingStore';
 import {
   catalogue, countryDetail, ledgerPricingStates, modelVersions, reviewQueue, signalCounts, signalsFromParam, SIGNALS,
 } from '../services/licencePricingHq';
+import { catalogueConsistency } from '../services/licencePricingConsistency';
 
 type C = Context<{ Bindings: Env }>;
 const r = new Hono<{ Bindings: Env }>();
@@ -114,6 +116,14 @@ r.get('/signals', async (c) => {
     // Two named signals narrow, as two Needs HQ chips do on the ledger.
     const items = needs.length ? scoped.filter((s) => needs.every((n) => s.signals[n] === true)) : scoped;
     return c.json({ today: day, needs, items, total: items.length, counts: signalCounts(scoped), signals: SIGNALS });
+  } catch (e) { return answer(c, e); }
+});
+
+// D7714: outside `/countries/` and `/catalogue/`, where `/:code` would take the path.
+r.get('/consistency', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    return c.json(await catalogueConsistency(c.env));
   } catch (e) { return answer(c, e); }
 });
 
