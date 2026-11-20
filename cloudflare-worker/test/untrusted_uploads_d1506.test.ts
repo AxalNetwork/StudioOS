@@ -188,7 +188,9 @@ test('our own stored image URLs are left alone; every other image a slide names 
 
 test('the export browser may load the page\'s origin, the web fonts and inline data/blob URLs only', async () => {
   const pats = exportAllowPatterns('https://axal.vc/deck/print-export/tok?print_mode=pdf')!;
-  const re = pats.map((p) => new RegExp(p.slice(1, p.lastIndexOf('/'))));
+  // Production hands Browser Run these exact pattern strings; the literals below are them, and are what the URLs are tried on.
+  const re = [/^https:\/\/axal\.vc\//, /^https:\/\/fonts\.googleapis\.com\//, /^https:\/\/fonts\.gstatic\.com\//, /^data:/, /^blob:/];
+  assert.deepEqual(pats, re.map(String));
   const allowed = (u: string) => re.some((r) => r.test(u));
   for (const u of ['https://axal.vc/api/decks/images/x/file', 'https://fonts.googleapis.com/css2?family=Inter', 'https://fonts.gstatic.com/s/inter.woff2', 'data:image/png;base64,AA', 'blob:https://axal.vc/synthetic']) assert.ok(allowed(u), u);
   for (const u of ['https://img.example.test/a.png', 'https://axal.vc.evil.example/x', 'http://axal.vc/x', 'https://evil.example/https://axal.vc/', 'https://169.254.169.254/latest']) assert.equal(allowed(u), false, u);

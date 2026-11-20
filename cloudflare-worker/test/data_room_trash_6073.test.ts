@@ -412,6 +412,7 @@ const UNFILTERED: Array<[string, string, string]> = [
   ['services/mercury/raiseFeeds.ts', 'data_room_files', 'the Mercury ledger and its writes; a row in Trash still exists'],
   ['services/raiseEvidenceSources.ts', 'data_room_files', 'founder-side candidates; the investor read re-checks each file (fileAdmits, filtered)'],
   ['services/raiseWriters.ts', 'UPDATE data_room_files SET checklist_item', 'a record action; records/owned.ts refuses a file in Trash first'],
+  ['services/roomLibrary.ts', "const row = await env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?')", 'D6869: whether a removed reference\'s activity row can still name the file; a row in Trash still exists'],
   ['services/storageUsage.ts', 'data_room_files', 'a file in Trash still holds its bytes until it is purged, so it counts to storage'],
 ];
 

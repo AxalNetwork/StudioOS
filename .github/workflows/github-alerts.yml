@@ -5,6 +5,8 @@ name: GitHub alerts
 #   main-red      every 15 min: the latest finished CI run on a push to main
 #                 failed, so every PR that merges main fails
 #   queue         the Actions queue backed up, so CI results arrive hours late
+#   queue-stalled every 15 min: one failure (test, guard, or job and step) in
+#                 merge-queue candidates of two queue chains (D5604, D7125)
 #   future-clock  nightly: the suites with the clock 7 days ahead, which finds a
 #                 date-bound test (D5052, D5039) before its date breaks main
 # The reviewer's alert (no model called) is a job in claude-review.yml, where
@@ -105,9 +107,13 @@ jobs:
     concurrency:
       group: github-alerts-queue-stalled
       cancel-in-progress: false
+    # D7125: checks to read each failed queue job's ci-failure-id annotations;
+    # pull-requests to list open PRs that change a failing test (possible repairs).
     permissions:
       contents: read
       actions: read
+      checks: read
+      pull-requests: read
       issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

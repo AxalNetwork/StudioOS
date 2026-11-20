@@ -82,7 +82,7 @@ async function mount(url, answer) {
   };
 }
 
-const rowIds = (v, tab) => v.ids().filter((id) => new RegExp(`^deal-${tab}-scorecard-(${OPEN.scopes.map((s) => s.scope).join('|')})$`).test(id));
+const rowIds = (v, tab) => v.ids().filter((id) => OPEN.scopes.some((s) => id === `deal-${tab}-scorecard-${s.scope}`));
 
 test('scopeParam: only one of the eleven scope keys opens a drawer', () => {
   assert.equal(scopeParam('team'), 'team');

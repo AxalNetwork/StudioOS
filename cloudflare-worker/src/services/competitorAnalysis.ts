@@ -27,13 +27,13 @@ import { hostOf, nameKey } from './competitorDirectoryLink';
  * part 10's `SHARED_DRAFT_PAGES` keeps it (`routes/research.ts`); the options
  * are the founder inventory's (`frontend/src/lib/railOptions/founder.js`,
  * Founder · Research · Companies). Before part 9 every run logged
- * `scan:competitors`, a key no inventory lists.
+ * `scan:competitors`, a key no inventory lists. Refresh sources has no option:
+ * it runs no model (D7176), so D7652 took its row out of the inventory.
  */
 export const COMPANIES_PAGE = 'research';
 export const COMPANIES_OPTIONS = {
   analyze: 'analyse:competitors',
   again: 'analyse:again',
-  sources: 'analyse:sources',
   candidate: 'extract:candidate',
   site: 'extract:site',
 } as const;

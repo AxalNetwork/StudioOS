@@ -19,11 +19,17 @@
  * mounted at `/api/research` ahead of it, matches any of these paths, so
  * mounting them ahead of the rest of `research.ts` changes no precedence
  * (`D4574-p8.md` holds the route inventory before and after).
+ *
+ * ADDED SINCE THE MOVE. `GET /market-readings/:uid/summary` (D7651, #7651):
+ * the Eadwyn summary of one reading, computed from the stored row with no
+ * model call, amounts in cents and two-decimal text.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
+import { catalogPriceCents, proposalName, readingIsStale, readingSummary } from '../services/marketReadingRead';
+import { holdsOnlyLicence } from '../services/accountLicences';
+import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 import researchRoutes from './research';
 
@@ -227,6 +233,46 @@ research.delete('/market-readings/:uid', async (c) => {
   ).bind(c.req.param('uid'), user.id).run();
   if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
   return c.json({ ok: true });
+});
+
+/**
+ * D7651 (#7651) — the Eadwyn summary of one reading, to the cent (canvas D7039,
+ * board RMP-12 and the rail's "Summaries" line).
+ *
+ * COMPUTED FROM THE STORED ROW, NO MODEL. The `research/market` draft surface
+ * D6285 removed from `research.ts` sent the readings to a model and rounded
+ * them to whole dollars; this read writes the reading's own range, count,
+ * scope and run date, and its catalog price where it is a service line
+ * (`services/marketReadingRead.ts`, `readingSummary`). Amounts leave as
+ * cents and as two-decimal text.
+ *
+ * AN INVESTOR IS REFUSED (D6273 Q2): pricing readings are hidden from the
+ * investor view, so an investor-only account gets a refusal, not a summary,
+ * before anything is read. A reading that is not the caller's is a 404, the
+ * same as a missing one.
+ */
+research.get('/market-readings/:uid/summary', async (c) => {
+  const user = await requireAuth(c);
+  if (holdsOnlyLicence(user, 'investor')) {
+    return refuse(c, 403, {
+      code: 'readings_hidden_for_investors',
+      message: 'Market readings are not shown on an investor licence.',
+    });
+  }
+  const row = await c.env.DB.prepare(
+    `SELECT r.uid, r.metric, r.scope, r.range_low_cents, r.range_high_cents, r.comparable_count, r.ran_at,
+            o.uid AS offering_uid, o.price_usd AS price_usd, o.price_cents AS price_cents
+       FROM research_market_readings r
+       LEFT JOIN service_offerings o ON o.id = r.offering_id AND o.owner_user_id = r.owner_user_id
+      WHERE r.uid = ? AND r.owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<{
+    uid: string; metric: string; scope: string | null;
+    range_low_cents: number | null; range_high_cents: number | null;
+    comparable_count: number | null; ran_at: string | null;
+    offering_uid: string | null; price_usd: number | null; price_cents: number | null;
+  }>();
+  if (!row) return refuse(c, 404, { code: 'not_found', message: 'This reading is not on your list.' });
+  return c.json({ summary: readingSummary(row) });
 });
 
 // ---------------------------------------------------------------------------
