@@ -114,15 +114,15 @@ function workflowProblems(src){
  const bad=[];
  const candidate=src.indexOf('- name: Check out only the admitted immutable source'),admission=src.indexOf('- name: Independently admit this exact child before checkout');
  if(admission<0||candidate<admission)bad.push('candidate_before_admission');
- if(!(src.includes('ref: ${{ steps.identity.outputs.executor_sha }}')&&src.includes('ref: ${{ needs.admit.outputs.executor_sha }}')))bad.push('untrusted_control_revision');
+ if(!src.includes('ref: ${{ github.workflow_sha }}'))bad.push('untrusted_control_revision');
  if(!src.includes('ref: ${{ steps.admission.outputs.source_sha }}'))bad.push('unadmitted_source');
  if(!src.includes("vars.RUNNER_EXECUTOR_ENABLED == 'true'"))bad.push('caller_enabled');
  if(!src.includes("github.ref == 'refs/heads/main'"))bad.push('branch_definition_allowed');
  if(src.includes('persist-credentials: true'))bad.push('persisted_credentials');
- if(!src.includes('runs-on: ${{ fromJSON(needs.admit.outputs.target'))bad.push('unreviewed_target');
+ if(!src.includes('runs-on: ${{ fromJSON(inputs.profile'))bad.push('unreviewed_target');
  const step=src.split('- name: Run admitted Worker shard')[1]?.split('- name: Upload test traces')[0];
  if(!step||step.includes('continue-on-error: true')||step.includes('|| true'))bad.push('test_failure_hidden');
- if(!src.includes('timeout-minutes: ${{ fromJSON(needs.admit.outputs.job_timeout')||!src.includes('timeout-minutes: ${{ fromJSON(needs.admit.outputs.test_timeout'))bad.push('unbounded_execution');
+ if(!src.includes("timeout-minutes: ${{ inputs.profile == 'hosted' && 45 || 35 }}")||!src.includes("timeout-minutes: ${{ inputs.profile == 'hosted' && 41 || 26 }}"))bad.push('unbounded_execution');
  if(/secrets\.|secrets: inherit/.test(src))bad.push('executor_secrets');
  return bad;
 }
@@ -130,7 +130,7 @@ test('staged workflow loads trusted control first, never enables callers, and ke
  const src=readFileSync(WORKFLOW,'utf8');assert.deepEqual(workflowProblems(src),[]);
  const changes=[
   ['candidate_before_admission',src.replace('- name: Independently admit this exact child before checkout','- name: Wrong boundary')],
-  ['untrusted_control_revision',src.replaceAll('ref: ${{ steps.identity.outputs.executor_sha }}','ref: ${{ inputs.executor_ref }}')],
+  ['untrusted_control_revision',src.replaceAll('ref: ${{ github.workflow_sha }}','ref: ${{ inputs.executor_ref }}')],
   ['unadmitted_source',src.replace('ref: ${{ steps.admission.outputs.source_sha }}','ref: main')],
   ['caller_enabled',src.replace("vars.RUNNER_EXECUTOR_ENABLED == 'true'",'true')],
   ['branch_definition_allowed',src.replace("github.ref == 'refs/heads/main'",'true')],
@@ -142,32 +142,18 @@ test('staged workflow loads trusted control first, never enables callers, and ke
  assert.ok(src.indexOf('Verify runtime and exact plan before candidate dependency scripts')<src.indexOf('run: npm ci'));
 });
 
-const rsa=generateKeyPairSync('rsa',{modulusLength:2048}),jwk={...rsa.publicKey.export({format:'jwk'}),kid:'synthetic-test-key',use:'sig'};
-function bootstrapScript(){const src=readFileSync(WORKFLOW,'utf8');const start=src.indexOf('          script: |\n')+'          script: |\n'.length;const end=src.indexOf('      - name: Check out trusted executor definition',start);return src.slice(start,end).split('\n').filter(Boolean).map(line=>line.slice(12)).join('\n');}
-async function bootstrap(changes={}, {badSignature=false,headerChanges={},script=bootstrapScript()}={}){
- const claims={iss:'https://token.actions.githubusercontent.com',aud:'studioos-runner-executor-v1',nbf:NOW/1000-1,exp:NOW/1000+300,repository:'AxalNetwork/StudioOS',run_id:'202',run_attempt:'1',event_name:'workflow_dispatch',ref:'refs/heads/main',workflow_ref:'AxalNetwork/StudioOS/.github/workflows/runner-dispatch.yml@refs/heads/main',workflow_sha:BASE,job_workflow_ref:'AxalNetwork/StudioOS/.github/workflows/runner-executor.yml@'+EXEC,job_workflow_sha:EXEC,...changes};
- const header=Buffer.from(JSON.stringify({alg:'RS256',kid:'synthetic-test-key',...headerChanges})).toString('base64url'),body=Buffer.from(JSON.stringify(claims)).toString('base64url');
- const signature=sign('RSA-SHA256',Buffer.from(header+'.'+body),rsa.privateKey);if(badSignature)signature[0]^=1;
- const token=header+'.'+body+'.'+signature.toString('base64url'),outputs={};let failed=false,masked=false;
- const core={getIDToken:async audience=>{assert.equal(audience,'studioos-runner-executor-v1');return token;},setSecret:value=>{assert.equal(value,token);masked=true;},setOutput:(key,value)=>{outputs[key]=value;},setFailed:()=>{failed=true;}};
- const fetch=async(url,options)=>{assert.equal(url,'https://token.actions.githubusercontent.com/.well-known/jwks');assert.equal(options.redirect,'error');return{ok:true,json:async()=>({keys:[jwk]})};};
- const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
- await new AsyncFunction('core','require','fetch','process','Date','Buffer','AbortSignal',script)(core,createRequire(import.meta.url),fetch,{env:{GITHUB_RUN_ID:'202',GITHUB_RUN_ATTEMPT:'1',GITHUB_WORKFLOW_SHA:claims.workflow_sha}},{now:()=>NOW},Buffer,AbortSignal);
- return{failed,masked,outputs};
-}
-test('signed GitHub identity resolves the pinned reusable callee rather than the caller SHA before loading control code',async()=>{
- const good=await bootstrap();assert.equal(good.failed,false);assert.equal(good.masked,true);assert.deepEqual(good.outputs,{executor_sha:EXEC,child_workflow_sha:BASE,child_workflow_path:'.github/workflows/runner-dispatch.yml'});
- const bad=[{iss:'https://attacker.invalid'},{aud:'different'},{exp:NOW/1000-1},{exp:NOW/1000+1000},{nbf:NOW/1000+100},{repository:'Fork/StudioOS'},{run_id:'999'},{run_attempt:'2'},{event_name:'pull_request'},{ref:'refs/heads/feature'},{workflow_ref:'AxalNetwork/StudioOS/.github/workflows/unknown.yml@refs/heads/main'},{job_workflow_ref:'AxalNetwork/StudioOS/.github/workflows/runner-executor.yml@main'},{job_workflow_sha:SHA}];
- for(const mutation of bad){const outcome=await bootstrap(mutation);assert.equal(outcome.failed,true,JSON.stringify(mutation));assert.deepEqual(outcome.outputs,{});}
- assert.equal((await bootstrap({}, {badSignature:true})).failed,true);
- assert.equal((await bootstrap({}, {headerChanges:{kid:'unknown-key'}})).failed,true);
- assert.equal((await bootstrap({}, {headerChanges:{alg:'HS256'}})).failed,true);
- const direct=await bootstrap({workflow_ref:'AxalNetwork/StudioOS/.github/workflows/runner-executor.yml@refs/heads/main',workflow_sha:EXEC,job_workflow_ref:null,job_workflow_sha:null});assert.equal(direct.failed,false);assert.equal(direct.outputs.executor_sha,EXEC);
+test('D7904 target admission has no hosted preflight dependency or OIDC minting permission',()=>{
+ const src=readFileSync(WORKFLOW,'utf8');
+ assert.doesNotMatch(src,/id-token:|getIDToken|needs:|needs\.admit|runner-dispatch/);
+ assert.match(src,/ref: \$\{\{ github\.workflow_sha \}\}/);
+ assert.match(src,/permissions:\n      contents: read\n      actions: read/);
+ assert.match(src,/inputs\.profile == 'linux-x64' && '\{"group":"StudioOS Worker Pool","labels":\["self-hosted","Linux","X64","studioos-worker-v1"\]\}'/);
+ assert.match(src,/inputs\.profile == 'macos-arm64' && '\{"group":"StudioOS Worker Pool","labels":\["self-hosted","macOS","ARM64","studioos-worker-v1"\]\}'/);
+ assert.doesNotMatch(src,/runs-on:.*\$\{\{ inputs\.profile \}\}/);
 });
-test('a wrapped result also requires the recorded callee attestation and exact owned caller SHA',()=>{
- const f=result();f.run.path='.github/workflows/runner-dispatch.yml';f.run.head_sha=BASE;f.jobs[0].head_sha=BASE;f.jobs[0].name='execute / '+TEST_JOB;f.owned.childWorkflowPath=f.run.path;f.owned.childWorkflowSha=BASE;
- assert.equal(childResult(f,f.owned).outcome,'unknown');f.owned.workflowAttested=true;assert.equal(childResult(f,f.owned).outcome,'success');
- f.jobs[0].head_sha=SHA;assert.equal(childResult(f,f.owned).outcome,'unknown');
+test('D7904 a nonexistent wrapper never supplies result authority, even with a claimed callee attestation',()=>{
+ const f=result();f.run.path='.github/workflows/runner-dispatch.yml';f.run.head_sha=BASE;f.jobs[0].head_sha=BASE;f.jobs[0].name='execute / '+TEST_JOB;f.owned.childWorkflowPath=f.run.path;f.owned.childWorkflowSha=BASE;f.owned.workflowAttested=true;
+ assert.equal(childResult(f,f.owned).outcome,'unknown');
 });
 
 test('mid-test cancellation kills only the owned process group promptly and remains cancellation even if the child exits zero',async()=>{

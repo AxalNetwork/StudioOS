@@ -6,7 +6,6 @@ import { pathToFileURL } from 'node:url';
 const REPOSITORY = 'AxalNetwork/StudioOS';
 const CI_PATH = '.github/workflows/ci.yml';
 const EXECUTOR_PATH = '.github/workflows/runner-executor.yml';
-const DISPATCH_PATH = '.github/workflows/runner-dispatch.yml';
 const SHA = /^[a-f0-9]{40}$/;
 const ID = /^[1-9][0-9]*$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -208,10 +207,10 @@ export async function admitRunnerJob(request,{api,readReceipt,resolveProfile,ver
   parentIdentity(parent,input,repoId);parentIdentity(await get(`${runPath}/attempts/${receipt.parentAttempt}`),input,repoId);
   // V1 dispatches this trusted definition directly; no same-branch wrapper or candidate workflow is admitted.
   const child=await get(`${prefix}/actions/runs/${context.childRunId}`);
-  requireThat(sameId(child?.id,context.childRunId)&&sameId(child.run_attempt,context.childAttempt)&&child.event==='workflow_dispatch'&&child.path===(context.childWorkflowPath??EXECUTOR_PATH)&&[EXECUTOR_PATH,DISPATCH_PATH].includes(child.path)&&child.head_branch==='main'&&child.head_sha===(context.childWorkflowSha??context.executorSha)&&child.status==='in_progress'&&child.conclusion==null&&sameRepo(child.repository,REPOSITORY,repoId)&&sameRepo(child.head_repository,REPOSITORY,repoId),'child_workflow_identity_mismatch');
+  requireThat(sameId(child?.id,context.childRunId)&&sameId(child.run_attempt,context.childAttempt)&&child.event==='workflow_dispatch'&&child.path===(context.childWorkflowPath??EXECUTOR_PATH)&&child.path===EXECUTOR_PATH&&child.head_branch==='main'&&child.head_sha===(context.childWorkflowSha??context.executorSha)&&child.status==='in_progress'&&child.conclusion==null&&sameRepo(child.repository,REPOSITORY,repoId)&&sameRepo(child.head_repository,REPOSITORY,repoId),'child_workflow_identity_mismatch');
   const workflow=await get(`${prefix}/actions/workflows/runner-executor.yml`);
   requireThat(workflow?.path===EXECUTOR_PATH&&workflow.state==='active','executor_workflow_unavailable');
-  const childWorkflow=child.path===EXECUTOR_PATH?workflow:await get(`${prefix}/actions/workflows/runner-dispatch.yml`);
+  const childWorkflow=workflow;
   requireThat(childWorkflow?.path===child.path&&childWorkflow.state==='active'&&sameId(child.workflow_id,childWorkflow.id),'child_workflow_definition_mismatch');
   const main=await get(`${prefix}/git/ref/heads/main`);
   requireThat(main?.ref==='refs/heads/main'&&main.object?.type==='commit'&&SHA.test(main.object.sha??''),'trusted_main_ref_unavailable');

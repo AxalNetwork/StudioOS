@@ -96,10 +96,10 @@ test('GitHub adapter forbids arbitrary origins and paths; the staged CLI denies 
  const result=await main({REQUEST_ID:'request-7886',LEASE_GENERATION:'3',PART:'worker-1-of-6',PROFILE:'hosted',GITHUB_REPOSITORY:REPO,GITHUB_WORKFLOW_SHA:EXEC,GITHUB_RUN_ID:'202',GITHUB_RUN_ATTEMPT:'1'});assert.equal(result,1);
 });
 
-test('a later main-only dispatch wrapper can use the published callee SHA without confusing it with the wrapper SHA',async()=>{
+test('an absent dispatch wrapper cannot obtain admission even with an apparent published callee SHA',async()=>{
  const f=fixture();f.child.path='.github/workflows/runner-dispatch.yml';f.child.head_sha=BASE;f.child.workflow_id=99;f.context.childWorkflowPath=f.child.path;f.context.childWorkflowSha=BASE;
  f.map.set(PREFIX+'/actions/workflows/runner-dispatch.yml',{id:99,path:f.child.path,state:'active'});
- assert.equal((await admit(f)).allowed,true);
+ assert.equal((await admit(f)).reason,'child_workflow_identity_mismatch');
  f.context.childWorkflowPath='.github/workflows/unselected.yml';assert.equal((await admit(f)).allowed,false);
 });
 
