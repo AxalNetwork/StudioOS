@@ -275,3 +275,21 @@ with mock.patch.object(b.pwd,'getpwnam',side_effect=lambda name:users[name]),moc
  assert command.call_count==0
 `);
 });
+
+
+test('credential hard links and replaced runner directories cannot change unrelated modes', () => {
+  fixture(`with tempfile.TemporaryDirectory() as t:
+ root=Path(t);directory=root/'listener/runner';directory.mkdir(parents=True)
+ target=root/'unrelated';target.write_text('untouched');target.chmod(0o644)
+ os.link(target,directory/'.credentials')
+ refuses(lambda:b.private_files(root),'must_not_be_a_link')
+ assert stat.S_IMODE(target.stat().st_mode)==0o644
+ (directory/'.credentials').unlink();directory.rmdir()
+ directory.symlink_to(root,target_is_directory=True)
+ refuses(lambda:b.private_files(root),'must_not_be_a_link')
+ assert stat.S_IMODE(target.stat().st_mode)==0o644
+ (root/'.credentials').write_text('preserve')
+ refuses(lambda:b.clear_registration(root,{}),'must_not_be_a_link')
+ assert (root/'.credentials').read_text()=='preserve'
+`);
+});

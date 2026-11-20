@@ -304,16 +304,40 @@ def other_listeners(root, managed_active=False):
     return max(0, len(listeners) - (1 if managed_active and own else 0))
 
 def private_files(root):
-    for name in ['.runner','.credentials','.credentials_rsaparams','.env','.path']:
-        p = root / 'listener/runner' / name
-        if p.exists() or p.is_symlink():
-            require(p.is_file() and not p.is_symlink(), 'registration_file_must_not_be_a_link')
-            p.chmod(0o600)
-    if (root / 'listener/runner/_diag').exists(): (root / 'listener/runner/_diag').chmod(0o700)
+    # Hold directory descriptors: listener-owned path components can change concurrently.
+    descriptors = []
+    try:
+        for name in [root, 'listener', 'runner']:
+            descriptors.append(os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptors[-1] if descriptors else None))
+        runner_fd = descriptors[-1]
+        owner = os.fstat(runner_fd).st_uid
+        for name in ['.runner','.credentials','.credentials_rsaparams','.env','.path','_diag']:
+            try:
+                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | (os.O_DIRECTORY if name == '_diag' else 0), dir_fd=runner_fd)
+            except FileNotFoundError: continue
+            try:
+                info = os.fstat(fd)
+                require(info.st_uid == owner and (stat.S_ISDIR(info.st_mode) if name == '_diag' else stat.S_ISREG(info.st_mode) and info.st_nlink == 1), 'registration_file_must_not_be_a_link_or_have_another_owner')
+                os.fchmod(fd, 0o700 if name == '_diag' else 0o600)
+            finally: os.close(fd)
+    except OSError:
+        raise Refusal('registration_file_must_not_be_a_link_or_have_another_owner')
+    finally:
+        for fd in reversed(descriptors): os.close(fd)
+
 
 def clear_registration(root, state):
-    for name in ['.runner','.credentials','.credentials_rsaparams','.env','.path']:
-        (root/'listener/runner'/name).unlink(missing_ok=True)
+    descriptors = []
+    try:
+        for name in [root, 'listener', 'runner']:
+            descriptors.append(os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptors[-1] if descriptors else None))
+        for name in ['.runner','.credentials','.credentials_rsaparams','.env','.path']:
+            try: os.unlink(name, dir_fd=descriptors[-1])
+            except FileNotFoundError: pass
+    except OSError:
+        raise Refusal('registration_file_must_not_be_a_link_or_have_another_owner')
+    finally:
+        for fd in reversed(descriptors): os.close(fd)
     state.pop('runner_id',None);state.pop('group_id',None);state['phase']='verified'
     save_state(root,state)
 
