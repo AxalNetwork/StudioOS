@@ -112,6 +112,9 @@ def verify_tools(profile, root, run=command):
         require(translated.stdout.strip() != '1', 'rosetta_is_not_supported')
     node = root / 'tools/node/bin/node'
     python = root / 'tools/python/bin/python3'
+    if run is command and os.geteuid() == 0:
+        # Read-only preflight must not execute caller-controlled tools as root.
+        trusted_file(node.resolve());trusted_file(python.resolve())
     values = json.loads(run([str(node), '--no-warnings', '--input-type=module', '-e', "import {DatabaseSync} from 'node:sqlite';const d=new DatabaseSync(':memory:');d.exec('CREATE VIRTUAL TABLE f USING fts5(t)');console.log(JSON.stringify({version:process.versions.node,arch:process.arch,sqlite:d.prepare('select sqlite_version() v').get().v,json:d.prepare(\"select json_valid('{}') v\").get().v}));d.close();"]))
     require(values['version'] == profile['node_version'] and values['arch'] == profile['node_arch'] and values['json'] == 1, 'pinned_node_native_architecture_and_sqlite_required')
     py = json.loads(run([str(python), '-I', '-c', "import json,platform;print(json.dumps({'version':platform.python_version(),'machine':platform.machine()}))"]))

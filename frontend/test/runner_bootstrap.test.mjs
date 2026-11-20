@@ -227,9 +227,10 @@ test('root tool verification never executes listener-owned runner code as root, 
  if args[0]=='/usr/bin/git':return 'git version 2.43.0'
  if 'node' in args[0]:return json.dumps({'version':p['node_version'],'arch':'x64','sqlite':'3.51.3','json':1})
  return json.dumps({'version':p['python_version'],'machine':'x86_64'})
-with mock.patch.object(b.os,'geteuid',return_value=0),mock.patch.object(b,'command',side_effect=run) as command,mock.patch.object(b,'listener_command',return_value=p['runner_version']) as listener:
+with mock.patch.object(b.os,'geteuid',return_value=0),mock.patch.object(b,'trusted_file') as trusted,mock.patch.object(b,'command',side_effect=run) as command,mock.patch.object(b,'listener_command',return_value=p['runner_version']) as listener:
  b.verify_tools(p,Path('/opt/test'),run=b.command)
  assert listener.call_count==1
+ assert trusted.call_count==2
  assert not any('Runner.Listener' in str(c.args) for c in command.call_args_list)
 with tempfile.TemporaryDirectory() as t:
  root=Path(t);directory=root/'listener/runner';directory.mkdir(parents=True)
@@ -291,5 +292,16 @@ test('credential hard links and replaced runner directories cannot change unrela
  (root/'.credentials').write_text('preserve')
  refuses(lambda:b.clear_registration(root,{}),'must_not_be_a_link')
  assert (root/'.credentials').read_text()=='preserve'
+`);
+});
+
+
+test('root preflight refuses untrusted Node and Python paths before executing either', () => {
+  fixture(`for rejected in ['node','python']:
+ def trust(path):
+  if rejected in str(path):raise b.Refusal('untrusted_runtime')
+ with mock.patch.object(b.os,'geteuid',return_value=0),mock.patch.object(b,'trusted_file',side_effect=trust),mock.patch.object(b,'command') as run:
+  refuses(lambda:b.verify_tools(p,Path('/opt/test'),run=b.command),'untrusted_runtime')
+  run.assert_not_called()
 `);
 });
