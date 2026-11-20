@@ -33,8 +33,13 @@ import { PARTNER_ZONE_ACTIONS } from '../src/workspaces/partnerZoneActions.js';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const at = (path, el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, el));
-const words = (markup) => String(markup).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+const words = (markup) => String(markup).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 const p = (s) => new URLSearchParams(s);
+
+test('rendered text decodes punctuation once and keeps literal entity text', () => {
+  const text = `"quoted" and 'single' & literal &quot; &#x27; &amp; &amp;quot;`;
+  assert.equal(words(renderToStaticMarkup(h('span', null, text))), text);
+});
 
 const market = (i, extra = {}) => ({
   slug: `m-${i}`, name: `Market ${i}`, mi_sector: 'Climate Intelligence', supplied_count: 10 + i,

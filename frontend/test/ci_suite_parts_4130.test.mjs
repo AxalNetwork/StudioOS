@@ -77,7 +77,10 @@ test('both workflow matrices consume only generated names and the gate requires 
   const matrix = `        part: \${{ fromJSON(github.event_name == 'merge_group' && '${literal}' || needs.plan.outputs.parts) }}\n`;
   assert.equal(ci.split(matrix).length, 2, 'the queue matrix lists partsOf(package.json) names, in order, once');
   const sharded = plan.parts.filter((p) => p.script).length;
-  assert.equal((ci.match(/(?:frontend|worker)-\d+-of-\d+/g) || []).length, sharded, 'no part name outside that one list');
+  // D7881 names the one delegated part only to bound its hosted fallback.
+  const macTimeout = "    timeout-minutes: ${{ matrix.part == 'worker-1-of-6' && vars.MACBOOK_WORKER_ENABLED == 'true' && github.event_name != 'pull_request' && 75 || 40 }}\n";
+  assert.equal(ci.split(macTimeout).length, 2, 'exactly one bounded Mac-part timeout');
+  assert.equal((ci.replace(macTimeout, '').match(/(?:frontend|worker)-\d+-of-\d+/g) || []).length, sharded, 'no additional part lists outside the queue matrix');
   assert.equal(new Set(JSON.parse(literal)).size, plan.parts.length, 'the literal list has no repeated part');
   assert.match(ci, /needs: \[verified, plan, suite\]/);
   assert.match(ci, /if \{ \{ \[ "\$PLAN" = "success" \] && \[ "\$EVENT" != "merge_group" \]; \} \|\| \{ \[ "\$PLAN" = "skipped" \] && \[ "\$EVENT" = "merge_group" \]; \}; \} && \[ "\$SUITE" = "success" \]; then/);

@@ -172,3 +172,17 @@ test('the worker still emits the code this page renders', () => {
   );
   assert.match(worker, /fail\('limiter'\)/, "routes/auth.ts no longer returns the 'limiter' code");
 });
+
+test('#6959: Resend on "Check your email" can send — it is not gated on a Turnstile widget that step does not mount', () => {
+  // The sent step offers "Resend link". Turnstile mounts only with the link and code forms, and the step change and
+  // the widget's unmount both clear the token, so a check on the token outside the link step left Resend saying
+  // "Please complete the verification challenge first." with no challenge anywhere on screen (found by #6959's
+  // browser run). The control the page names must be one that works.
+  const send = src.slice(src.indexOf('const sendMagicLink'), src.indexOf('\n  };', src.indexOf('const sendMagicLink')));
+  const gate = send.match(/if \(TURNSTILE_SITE_KEY && ([^)]*?)!turnstileToken\)/);
+  assert.ok(gate, 'the link form no longer checks its Turnstile token');
+  assert.match(gate[1], /step === 'link' &&/, "the token check must apply only to the link step, which mounts the widget");
+  const sent = src.slice(src.indexOf("(step === 'sent') {"), src.indexOf("(step === 'code') {"));
+  assert.match(sent, /onClick=\{sendMagicLink\}/, 'Resend no longer sends');
+  assert.ok(!/<TurnstileBox /.test(sent), 'the sent step mounts a widget now; revisit this gate');
+});
