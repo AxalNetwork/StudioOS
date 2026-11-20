@@ -388,7 +388,13 @@ def install(root, registry, profile, state, os_dependencies=False):
     state['phase']='verified';save_state(root,state)
     return report
 
+def isolation_enrollment_gate():
+    # D7905: no receipt boolean authorizes persistent-host execution.
+    # Reopen only after trusted workflow wiring and a reviewed credential-denial canary.
+    raise Refusal('self_hosted_isolation_canary_required_7905')
+
 def serve(root, deadline):
+    isolation_enrollment_gate()
     require(os.geteuid() == pwd.getpwnam(USERS[0]).pw_uid != 0, 'service_must_use_listener_identity')
     remaining = deadline - time.time();require(0 < remaining <= 86400, 'pilot_deadline_invalid_or_expired')
     child = subprocess.Popen([str(root/'listener/runner/run.sh'),'--startuptype','service'],cwd=root/'listener/runner',env=clean_env(root/'listener',root/'tools'),start_new_session=True)
@@ -446,6 +452,7 @@ def main(directory, argv):
         if args.action=='status':
             existing=registration(root,registry,state)
             print(json.dumps({'identity':state['identity'],'profile':args.profile,'local_registration':bool(existing),'service_active':service(root,state,directory/'bootstrap.sh','status'),'online_idle_eligibility':'unverified_operator_inventory_required'}));return 0
+        if args.action in ('register','start'): isolation_enrollment_gate()
         if args.action=='register':
             existing=registration(root,registry,state)
             if existing:
@@ -457,6 +464,7 @@ def main(directory, argv):
         if args.action in ['register','start']:
             verify_tools(profile,root);published_executor(receipt)
             require(other_listeners(root,service(root,state,directory/'bootstrap.sh','status'))==0,'another_runner_is_present_drain_before_migration')
+        if args.action in ('register','start'): isolation_enrollment_gate()
         if args.action=='register':
             token=token_from_fd(args.token_fd)
             try: listener_command(root,registration_args(root,registry,state),token)

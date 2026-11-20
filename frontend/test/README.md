@@ -261,3 +261,5 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 
 `runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).
 | `macbook_orphan_7902.test.mjs` | D7902: stale queued-child ownership/lease cleanup, pickup races and redacted API-status diagnostics. |
+
+| `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
