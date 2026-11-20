@@ -10,6 +10,7 @@
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
 | `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. D5973: also writes one classified row per merge-group candidate to `$CI_SCORECARD_ROWS`. D6479: the landing section's reads, under their own cap. |
 | `actions-concurrency.mjs` | #6462: read-only report of effective Actions concurrency. Rebuilds jobs executing per minute over a window (default 24 h) from every run's job timestamps: the effective ceiling (the level executing sat at while jobs queued), peak, the highest level held for 10 minutes, share of time at the ceiling, queued jobs per minute, slot-minutes per workflow and per event (draft vs ready PRs from each PR's timeline), whether phantom queued runs ever held a slot, and which plan cap (20, 40, 60, 500) the ceiling matches. #6676: also a merge-candidate table (`merge_group` runs of `ci.yml`: minutes from run creation to the first job with a runner and to the first `landing gate` result, p50/p90 by UTC hour). GET requests only, capped (`--cap`, `--reserve`); prints how much of the window it covered. `--save`/`--load` re-render without the API. Logic in `lib/actionsConcurrency.mjs`. |
+| `dr-drill-cleanup.sh` | D7917: bounded workflow fallback deletes only the database recorded for this Actions run/attempt, retaining ownership on failure. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
 | `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 | `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |
@@ -334,6 +335,8 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `future-clock-producer.mjs` | D5663: attempt-bound future-clock TAP and exit manifests. |
 
 | `future-clock-report.mjs` | D5663: trusted same-attempt producer evidence verification. |
+
+| `future-clock-changed.mjs` | D7124: a PR's added or edited test files under libfaketime at +7d and +9d 11h (ci.yml, `suite (rest)` on non-draft PRs); fails on a test that fails ahead and passes today. `--offset +7d <file>` reproduces one. |
 
 | `health-alert-episodes.mjs` | D5663: paginated health episodes with persistent transition delivery intents. |
 

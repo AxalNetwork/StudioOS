@@ -19,7 +19,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../../ui/Lightbox';
 import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence.js';
-import { groupHref, tabHref } from '../../dealPageModel';
+import { groupHref, notesHref, tabHref } from '../../dealPageModel';
 import { BASE, STAFF_READ_LINE, claimWord, coverageTile, investorView, kindWord, refusalOf, sourceLine, sourceWord, strengthWord } from './evidenceModel';
 import { DealEvidence, DealEvidenceLoading, DealEvidenceUnreadable } from './DealEvidence';
 
@@ -204,7 +204,7 @@ export function EvidenceSummary({ dealId, company = null, role = null, ndaHref =
   }
   const actions = role === 'investor' ? {
     dataRoomHref: groupHref(dealId, 'dataroom'), diligenceHref: tabHref(dealId, 'diligence'),
-    notesHref: tabHref(dealId, 'notes'), scorecardHref: tabHref(dealId, 'scorecard'),
+    notesHref: notesHref(dealId), scorecardHref: tabHref(dealId, 'scorecard'),
   } : null;
   const block = <DealEvidence key={dealId} read={r.data} onRetry={r.retry} ndaHref={ndaHref} actions={actions} />;
   if (r.data?.reader !== 'staff') return block;
