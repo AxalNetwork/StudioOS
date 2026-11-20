@@ -29,9 +29,6 @@ jobs:
       SOURCE_SHA: c6d0d48a984847a2b14325c82e9616da4c3dfdcf
       TZ: UTC
       TEST_TRACE_DIR: ''
-      npm_config_cache: ${{ runner.temp }}/macbook-npm-${{ github.run_id }}-${{ github.run_attempt }}
-      UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/macbook-python-${{ github.run_id }}-${{ github.run_attempt }}
-      UV_CACHE_DIR: ${{ runner.temp }}/macbook-uv-${{ github.run_id }}-${{ github.run_attempt }}
     defaults:
       run:
         shell: bash
@@ -42,6 +39,11 @@ jobs:
           test "$RUNNER_OS" = "macOS"
           test "$RUNNER_ARCH" = "ARM64"
           test "$(uname -m)" = "arm64"
+          {
+            printf 'npm_config_cache=%s/macbook-npm-%s-%s\n' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'UV_PYTHON_INSTALL_DIR=%s/macbook-python-%s-%s\n' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'UV_CACHE_DIR=%s/macbook-uv-%s-%s\n' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          } >> "$GITHUB_ENV"
           {
             printf '## MacBook Worker shard benchmark\n\n'
             printf 'Runner: `%s`\n\n' "$RUNNER_NAME"
