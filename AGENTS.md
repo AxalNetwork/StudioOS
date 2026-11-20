@@ -236,6 +236,10 @@ it to close.
   starts at (remove it, do not re-queue it) or says it fails on the base. The
   one exception is the single repair linked on the alert, which the owner
   moves to the front of the queue.
+- An open `[alert] future-clock tests failing` is a main repair due before its break date
+  (D7124): main still passes, but those tests fail on main once that date comes.
+  Session 1 files the slot task from the run summary, which names each failing test,
+  its file and part, and the reproduce command; the issue itself carries no test names (D5663).
 
 ### CHANGELOG.md is Session 1's
 
