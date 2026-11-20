@@ -1,7 +1,7 @@
 /** D7902: verified expired Mac children and fixed, non-sensitive API diagnostics. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reclaimExpiredChild, delegateWorker, expectedTitle, GitHubRequestError, githubApi } from '../../scripts/ci/macbook-worker.mjs';
+import { reclaimExpiredChild, delegateWorker, expectedTitle, GitHubRequestError, githubApi, main } from '../../scripts/ci/macbook-worker.mjs';
 const REPO='AxalNetwork/StudioOS', ROOT=`/repos/${REPO}`, FLOW=`${ROOT}/actions/workflows/macbook-worker.yml`;
 const NOW=Date.UTC(2026,10,20,12), SOURCE='a'.repeat(40), TARGET='b'.repeat(40);
 const CONFIG={enabled:true,repo:REPO,event:'push',ref:'refs/heads/main',sourceSha:SOURCE,parentRunId:'101',parentRunAttempt:'1',part:'worker-1-of-6',queueBaseSha:''};
@@ -93,5 +93,31 @@ test('the real API boundary records status without reading or disclosing an erro
  let bodyRead=false;
  const api=githubApi('synthetic',{fetchImpl:async()=>({ok:false,status:403,text:async()=>{bodyRead=true;return 'private response';}})});
  await assert.rejects(()=>api('GET',`${ROOT}/actions/runs/201`),error=>error instanceof GitHubRequestError&&error.status===403&&error.message==='github_request_failed');
+ assert.equal(bodyRead,false);
+});
+
+
+test('D7902 the CLI prints status-read and cancellation diagnostics without an error body or credential',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NOW});
+ const lines=[];let bodyRead=false;
+ t.mock.method(console,'log',line=>lines.push(String(line)));
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  const parsed=new URL(url),path=parsed.pathname+parsed.search,method=options.method;
+  let value;
+  if(path===`${ROOT}/actions/runs/101`)value=parent(101);
+  else if(path===FLOW)value={id:42,path:'.github/workflows/macbook-worker.yml',state:'active'};
+  else if(path.startsWith(`${FLOW}/runs?`))value={total_count:0,workflow_runs:[]};
+  else if(path===`${ROOT}/branches/main`)value={commit:{sha:TARGET}};
+  else if(path.endsWith('/dispatches'))value={workflow_run_id:201};
+  else if(path===`${ROOT}/actions/runs/201`||method==='POST'&&path.endsWith('/cancel'))return {ok:false,status:method==='POST'?409:403,text:async()=>{bodyRead=true;return 'private error body';}};
+  else throw Error('Unexpected fixture request');
+  return {ok:true,status:200,text:async()=>JSON.stringify(value)};
+ });
+ const code=await main({GH_TOKEN:'unit',MACBOOK_WORKER_ENABLED:'true',GITHUB_REPOSITORY:REPO,GITHUB_EVENT_NAME:'push',GITHUB_REF:'refs/heads/main',GITHUB_SHA:SOURCE,GITHUB_RUN_ID:'101',GITHUB_RUN_ATTEMPT:'1',PART:'worker-1-of-6'},[]);
+ assert.equal(code,0);
+ assert.ok(lines.some(line=>line.includes('MacBook diagnostic:')&&line.includes('"operation":"child_status"')&&line.includes('"status":403')));
+ assert.ok(lines.some(line=>line.includes('MacBook diagnostic:')&&line.includes('"operation":"cancel_request"')&&line.includes('"status":409')));
+ assert.ok(lines.some(line=>line.includes('child_status_unavailable_cancel_unconfirmed')));
+ assert.doesNotMatch(lines.join('\n'),/private error body|unit|Authorization/);
  assert.equal(bodyRead,false);
 });
