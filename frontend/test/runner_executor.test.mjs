@@ -5,8 +5,6 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,symlinkSync,
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {generateKeyPairSync,sign} from 'node:crypto';
-import {createRequire} from 'node:module';
 import {EventEmitter} from 'node:events';
 import {buildPlan,validatePlan} from '../../scripts/test-drift-parts.mjs';
 import {planDigest,verifiedPlan,verifyRuntime,ownedPaths,prepareOwned,cleanupOwned,originalTestContext,childResult,executeShard,TEST_STEP,TEST_JOB} from '../../scripts/ci/runner-execution.mjs';
