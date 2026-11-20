@@ -1,0 +1,220 @@
+# Temporary, owner-controlled Linux validation of one pinned existing Worker shard.
+name: Linux Worker runner pilot
+run-name: Linux Worker pilot | c6d0d48 | worker-1-of-6
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/linux-runner-test
+    paths:
+      - .github/workflows/linux-runner-smoke.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studioos-linux-runner-pilot
+  cancel-in-progress: false
+
+jobs:
+  worker_shard:
+    name: Worker 1 of 6 on Linux
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' &&
+      github.ref == 'refs/heads/ci/linux-runner-test' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.actor == 'guillaumelauzier'
+    runs-on:
+      group: StudioOS Linux Workers
+      labels: [self-hosted, Linux, X64, studioos-worker-v1, studioos-linux-x64]
+    timeout-minutes: 40
+    env:
+      SOURCE_SHA: c6d0d48a984847a2b14325c82e9616da4c3dfdcf
+      TZ: UTC
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check the Linux runner and prepare private directories
+        run: |
+          test "$RUNNER_OS" = Linux
+          test "$RUNNER_ARCH" = X64
+          test "$(uname -m)" = x86_64
+          test "$(id -u)" -ne 0
+          command -v git
+          test -x /usr/bin/time
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          job_temp="$RUNNER_TEMP/linux-worker-pilot-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -p "$job_temp/tmp" "$job_temp/traces"
+          {
+            printf 'PILOT_TEMP=%s\n' "$job_temp"
+            printf 'npm_config_cache=%s/npm\n' "$job_temp"
+            printf 'UV_PYTHON_INSTALL_DIR=%s/python\n' "$job_temp"
+            printf 'UV_CACHE_DIR=%s/uv\n' "$job_temp"
+          } >> "$GITHUB_ENV"
+          {
+            printf '## Linux Worker runner pilot\n\n'
+            printf 'Runner: %s\n\nSource: %s\n\nShard: worker-1-of-6\n\n' "$RUNNER_NAME" "$SOURCE_SHA"
+            printf 'Kernel: %s; architecture: %s; affinity CPUs: %s\n\n' "$(uname -sr)" "$(uname -m)" "$(nproc)"
+            printf 'Kernel-visible memory: '
+            awk '/^MemTotal:/ { print $2 " KiB" }' /proc/meminfo
+            printf '\nContainer limits, when exposed (kernel totals are not a capacity guarantee):\n\n'
+            for limit in /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max /sys/fs/cgroup/cpuset.cpus.effective /sys/fs/cgroup/cpu/cpu.cfs_quota_us /sys/fs/cgroup/cpu/cpu.cfs_period_us /sys/fs/cgroup/memory/memory.limit_in_bytes; do
+              if [ -r "$limit" ]; then
+                printf '%s: ' "$limit"
+                cat "$limit"
+                printf '\n'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up the portable Python installer
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.13.9'
+          enable-cache: false
+          cache-python: false
+
+      - name: Install temporary Python 3.11
+        run: |
+          uv python install --no-bin --no-config 3.11
+          python_path=$(uv python find --managed-python --no-config 3.11)
+          "$python_path" -c 'import platform, sqlite3, sys; assert sys.version_info[:2] == (3, 11); assert platform.machine() == "x86_64"; print("Portable Python:", sys.version.split()[0])'
+          printf '%s\n' "$(dirname "$python_path")" >> "$GITHUB_PATH"
+
+      # Select Node after setup-uv, which may prepend the user's bin directory.
+      - name: Set up native Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Verify the runtime and SQLite
+        run: |
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import { appendFileSync } from "node:fs";
+            import { availableParallelism } from "node:os";
+            import { DatabaseSync } from "node:sqlite";
+            console.log("Node runtime:", process.version, process.platform, process.arch, process.execPath);
+            assert.equal(process.platform, "linux");
+            assert.equal(process.arch, "x64");
+            assert.equal(process.versions.node.split(".")[0], "22");
+            const db = new DatabaseSync(":memory:");
+            assert.equal(Number(db.prepare("SELECT 1 AS ok").get().ok), 1);
+            db.close();
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              "\nNode: " + process.version + "; available parallelism: " + availableParallelism() +
+              ". The existing shard uses Node default test concurrency.\n\n");
+          '
+          python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 11); print("Python:", sys.version.split()[0], "SQLite:", sqlite3.sqlite_version)'
+          printf 'npm: %s; Python: %s. Fresh dependency cache; tracing enabled.\n\n' \
+            "$(npm --version)" "$(python3 --version)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check out the pinned source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: c6d0d48a984847a2b14325c82e9616da4c3dfdcf
+          path: linux-worker-pilot-${{ github.run_id }}-${{ github.run_attempt }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Generate the existing equal-weight shard plan
+        working-directory: linux-worker-pilot-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          node scripts/test-drift-parts.mjs --plan --equal-weights
+          node --input-type=module -e '
+            import { readFileSync, appendFileSync } from "node:fs";
+            const plan = JSON.parse(readFileSync("suite-plan.json", "utf8"));
+            const part = plan.parts.find(p => p.name === "worker-1-of-6");
+            if (!part || !Array.isArray(part.files) || !part.files.length) process.exit(1);
+            console.log("Selected worker-1-of-6:", part.files.length, "test files");
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, "Selected test files: **" + part.files.length + "**\n\n");
+          '
+          cp suite-plan.json "$PILOT_TEMP/suite-plan.json"
+
+      - name: Install Worker dependencies
+        working-directory: linux-worker-pilot-${{ github.run_id }}-${{ github.run_attempt }}/cloudflare-worker
+        run: npm ci
+
+      - name: Install root dependencies
+        working-directory: linux-worker-pilot-${{ github.run_id }}-${{ github.run_attempt }}
+        run: npm ci
+
+      - name: Run worker-1-of-6 with tracing and timing
+        id: benchmark
+        working-directory: linux-worker-pilot-${{ github.run_id }}-${{ github.run_attempt }}
+        env:
+          TEST_TRACE_DIR: ${{ env.PILOT_TEMP }}/traces
+          TMPDIR: ${{ env.PILOT_TEMP }}/tmp
+        run: |
+          metrics="$PILOT_TEMP/time.txt"
+          set +e
+          /usr/bin/time -v -o "$metrics" node scripts/test-drift-parts.mjs worker-1-of-6 --plan-file suite-plan.json
+          test_exit=$?
+          set -e
+          printf 'TEST_EXIT=%s\n' "$test_exit"
+          printf 'exit_code=%s\n' "$test_exit" >> "$GITHUB_OUTPUT"
+          cat "$metrics"
+          {
+            printf '### Test result\n\nExit code: **%s**\n\n' "$test_exit"
+            printf '### Timing and resource usage\n\n~~~text\n'
+            cat "$metrics"
+            printf '~~~\n\n'
+            printf 'Timing includes generated-module preparation, tracing, and the existing shard tests. It excludes checkout and dependency installation. GNU time reports maximum resident set size in KiB; this is not total simultaneous memory across all test processes.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$test_exit"
+
+      - name: Summarize trace capture
+        if: always() && (steps.benchmark.outcome == 'success' || steps.benchmark.outcome == 'failure')
+        env:
+          BENCHMARK_OUTCOME: ${{ steps.benchmark.outcome }}
+        run: |
+          node --input-type=module -e '
+            import { appendFileSync, readdirSync, readFileSync } from "node:fs";
+            import { join } from "node:path";
+            const directory = join(process.env.PILOT_TEMP, "traces");
+            const files = readdirSync(directory).filter(name => name.endsWith(".trace.json"));
+            const roots = new Set();
+            let invalid = 0;
+            for (const file of files) {
+              try {
+                const row = JSON.parse(readFileSync(join(directory, file), "utf8"));
+                if (row.isTest && typeof row.test === "string") roots.add(row.test);
+              } catch { invalid++; }
+            }
+            const line = "Trace records: **" + files.length + "**; test files traced: **" + roots.size + "**; unreadable records: **" + invalid + "**.\n\n";
+            console.log(line);
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, "\n### Trace capture\n\n" + line);
+            if (process.env.BENCHMARK_OUTCOME === "success" && roots.size === 0) {
+              console.error("Expected trace evidence from the successful Worker shard.");
+              process.exit(1);
+            }
+          '
+
+      - name: Upload pilot evidence
+        if: always() && env.PILOT_TEMP != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-worker-pilot-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.PILOT_TEMP }}/time.txt
+            ${{ env.PILOT_TEMP }}/suite-plan.json
+            ${{ env.PILOT_TEMP }}/traces
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Record completion and remove this run's files
+        if: always()
+        env:
+          BENCHMARK_OUTCOME: ${{ steps.benchmark.outcome }}
+        run: |
+          printf '\nWorker test step outcome: **%s**\n' "$BENCHMARK_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          rm -rf -- "$GITHUB_WORKSPACE/linux-worker-pilot-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          rm -rf -- "$RUNNER_TEMP/linux-worker-pilot-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+
