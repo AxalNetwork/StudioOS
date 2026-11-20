@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import research from './research';
+import clientPrep from './research_client_prep';
 import { FundShortlistError, readFundShortlistSave, saveFundShortlist } from '../services/researchMyFunds';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
@@ -24,5 +25,5 @@ shortlist.get('/requests/:requestId', async c => {
   try { return c.json(await readFundShortlistSave(c.env, user.id, c.req.param('requestId'))); }
   catch (error) { return failure(c, error); }
 });
-export const mount: RouteMount = { path: '/api/research/fund-shortlist', router: shortlist, before: [research] };
+export const mount: RouteMount = { path: '/api/research/fund-shortlist', router: shortlist, before: [clientPrep, research] };
 export default shortlist;
