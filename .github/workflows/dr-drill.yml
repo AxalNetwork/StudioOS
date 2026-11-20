@@ -106,7 +106,7 @@ jobs:
         run: bash scripts/dr-drill-cleanup.sh
 
       # The drill script pages from its own EXIT trap when it fails, so this
-      # step pages only for a failure BEFORE the drill ran (preflight, install).
+      # step pages for preflight/install failures and failed fallback cleanup.
       - name: Notify on failure
         if: failure() && steps.drill.outcome != 'failure' && env.PAGER_CONFIGURED == 'true'
         env:
