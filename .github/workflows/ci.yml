@@ -217,7 +217,7 @@ jobs:
       checks: read
     # D7881: only the optional Mac part reserves time for its bounded handoff
     # and a complete hosted fallback. The queue's existing bound is 90 minutes.
-    timeout-minutes: ${{ matrix.part == 'worker-1-of-6' && vars.MACBOOK_WORKER_ENABLED == 'true' && github.event_name != 'pull_request' && 75 || 40 }}
+    timeout-minutes: ${{ matrix.part == 'worker-1-of-6' && vars.MACBOOK_WORKER_ENABLED == 'true' && github.event_name != 'pull_request' && 83 || 50 }}
     strategy:
       # Queue entries cannot land after a failure. PRs and pushes report every part.
       fail-fast: ${{ github.event_name == 'merge_group' }}
