@@ -231,6 +231,9 @@ export function isPublicPath(pathname) {
     // 401 bounce to /login is exactly what breaks an email-change flow.
     || currentPath.startsWith('/account/email/')
     || currentPath.startsWith('/settings/email/')
+    // D6966 (#6966): the public Programs index and each program's presentation address.
+    || currentPath === '/programs'
+    || currentPath.startsWith('/programs/')
     // Task #5 — Public event surface (no auth)
     || currentPath === '/events'
     || currentPath.startsWith('/events/')
@@ -5928,11 +5931,11 @@ export const spinoutLab = {
   cohort: () => request('/spinout-lab/cohort'),
   // Public — real hero stats (companies built, total raised by graduates).
   stats: () => request('/spinout-lab/stats'),
-  // Public — the six live values the Programme Brief prints, and only those
-  // (D141). The brief's tracks, tools, gates and jurisdictions are the
-  // programme's own description and come from `lib/spinoutBrief.js` and
-  // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
-  // invented so a page could look dynamic.
+  // Public — the cohort's live values (D141): the Spin-Out Lab presentation's
+  // availability panel reads them (D6966). Everything else the presentation
+  // says is the programme's own description, in
+  // `pages/programs/content/spinout-lab.js`; a route serving that too would be a
+  // store invented so a page could look dynamic.
   brief: () => request('/spinout-lab/brief'),
   // D383 — the caller's own application lifecycle. No id in any path: each
   // acts on the signed-in account's draft or latest application only.
