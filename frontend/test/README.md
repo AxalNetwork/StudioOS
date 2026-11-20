@@ -256,3 +256,4 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 `build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
 
 `runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).
+| `macbook_orphan_7902.test.mjs` | D7902: stale queued-child ownership/lease cleanup, pickup races and redacted API-status diagnostics. |
