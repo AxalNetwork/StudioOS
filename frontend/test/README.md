@@ -54,6 +54,8 @@ also exercises a `project_id` deep link.
 | `runner_admission.test.mjs` | D7886: durable receipt bindings, source/queue/child provenance and fail-closed missing authority. |
 | `runner_executor.test.mjs` | D7886: exact plans, fixed profile targets, runtime checks, real test failure, scoped lifecycle and workflow mutation checks. |
 
+| `runner_catalog_7906.test.mjs` | D7906: real catalog translation, approved group refusal, exact pins and native shard limits. |
+
 ## Conventions
 
 - One file per surface or per rule; the header comment says what went wrong and

@@ -61,8 +61,10 @@ def load_registry(path):
     require(data.get('processes_per_machine') == 1 and data.get('shared_capability') == 'studioos-worker-v1', 'unsupported_capacity_contract')
     require(re.fullmatch(r'[A-Za-z0-9 -]{1,64}', data.get('self_hosted_group', '')), 'invalid_group')
     for name, p in data['profiles'].items():
+        expected_shards = ['worker-1-of-6'] if name == 'macos-arm64' else [f'worker-{i}-of-6' for i in range(1,7)]
+        require(p.get('eligibleShards') == expected_shards, 'invalid_eligible_shards')
         if name == 'hosted':
-            require(p == {'pool': 'github-hosted', 'runs_on': 'ubuntu-latest', 'github_os': 'Linux', 'github_arch': 'X64'}, 'hosted_pool_must_remain_separate')
+            require({k:p.get(k) for k in ['pool','runs_on','github_os','github_arch']} == {'pool': 'github-hosted', 'runs_on': 'ubuntu-latest', 'github_os': 'Linux', 'github_arch': 'X64'} and re.fullmatch(r'22\.\d+\.\d+',p.get('node_version','')) and re.fullmatch(r'3\.11\.\d+',p.get('python_version','')), 'hosted_pool_must_remain_separate')
             continue
         expected = ('Linux', 'x86_64', 'Linux', 'X64', 'x64') if name == 'linux-x64' else ('Darwin', 'arm64', 'macOS', 'ARM64', 'arm64')
         require(tuple(p.get(k) for k in ['system', 'machine', 'github_os', 'github_arch', 'node_arch']) == expected, 'invalid_platform_contract')
