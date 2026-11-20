@@ -41,6 +41,7 @@ files say how to act on it.
 | `S1_HANDOFF_2026-10-18.md` | Take over S1, the coordinator session. A dated handoff, true on its date. |
 | [`CODEBUILD_RUNNER_6724.md`](CODEBUILD_RUNNER_6724.md) | Prepare an isolated CodeBuild runner, benchmark it against GitHub and roll back queue routing. |
 | [`CODEBUILD_RUNNER_6724.yml`](CODEBUILD_RUNNER_6724.yml) | Reviewable AWS project template for the nine suite shards. |
+| `RUNNER_BOOTSTRAP.md` | Prepare pinned native runner profiles and perform private, restricted organization enrollment (D7885). |
 
 ## Adding one
 
