@@ -308,6 +308,11 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/runner-executor.yml",
+      "channel": "#axalvc-actions-runner-executor"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/scan-remediation.yml",
       "channel": "#axalvc-actions-scan-remediation"
     },
