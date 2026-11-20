@@ -335,3 +335,7 @@ ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.te
 # so the squashed commit holds no finding; this entry covers the PR's own
 # history only.
 ccc09e1c70105242b457a98dac385fd9e5d349f8:cloudflare-worker/test/research_company_publishers_7810.test.ts:generic-api-key:14
+# #7926: ic_voting_closed_7920's first commit used a fixture secret gitleaks reads as
+# generic-api-key; the next commit switches to the standard test value. This covers that
+# PR commit only.
+9615940a3a9931caba3418527f7cd295ec27be07:cloudflare-worker/test/ic_voting_closed_7920.test.ts:generic-api-key:8
