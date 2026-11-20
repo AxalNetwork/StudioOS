@@ -239,6 +239,7 @@ test('Updates history is newest first with grouped counts, author links, legacy 
     INSERT INTO update_ask_replies (uid,ask_id,name,message) VALUES ('reply1',203,'Alex','I know someone');`);
   const before = (f.db.prepare('SELECT COUNT(*) AS n FROM portfolio_updates').get() as any).n;
   const module = (await module_(f, 'durable-company-building')).body;
+  assert.equal(module.parts.can_write, true, 'D6122: writer controls use the scoped server capability');
   const rows = module.parts.updates;
   assert.deepEqual(rows.map((u: any) => [u.uid, u.kind]), [['newer', 'update'], ['legacy', 'update'], ['older', 'report']]);
   assert.deepEqual(rows[0].sent_to, { investors: 2, team: 1, network: 1 });
@@ -250,6 +251,7 @@ test('Updates history is newest first with grouped counts, author links, legacy 
   assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM portfolio_updates').get() as any).n, before);
   const advisor = await call(f, ADVISOR, 'GET', `/api/cycles/grow/modules/durable-company-building?project=${PID}`);
   assert.equal(advisor.status, 200);
+  assert.equal(advisor.body.parts.can_write, false, 'D6122: a reader gets no writer controls');
   assert.equal(advisor.body.parts.updates[0].href, null);
   f.db.exec('DROP TABLE update_recipients');
   const unreadable = (await module_(f, 'durable-company-building')).body.parts;
