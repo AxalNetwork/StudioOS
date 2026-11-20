@@ -125,9 +125,12 @@ test('1. the HTML file opens offline: no URL, no <link>, default-src none, data:
     assert.match(csp, /font-src data:;/);
     // Counted on the lower-cased file, so <SCRIPT>, <Script src=…> and the like count too.
     const lower = html.toLowerCase();
+    // The test reads the exported markup for its one <script>; nothing outside reaches it.
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     assert.equal(lower.split('<script').length - 1, 1, 'exactly one script element, in any case');
     const open = lower.indexOf('<script>');
     assert.ok(open > 0, 'the one script has no attributes (no src)');
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     const body = html.slice(open + '<script>'.length, lower.indexOf('</script', open));
     assert.equal(body, NAV_SCRIPT, 'the one script is the navigation');
     const hash = createHash('sha256').update(NAV_SCRIPT).digest('base64');

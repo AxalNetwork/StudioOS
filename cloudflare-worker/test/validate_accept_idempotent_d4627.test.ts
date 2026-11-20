@@ -43,10 +43,10 @@ const ADMIN = 1;
 function build(db: any, table: string, create?: string) {
   db.exec(create ?? tableFromBaseline(BASELINE, table));
   const have = () => new Set((db.prepare(`PRAGMA table_info(${table})`).all() as any[]).map((c: any) => c.name));
-  const re = new RegExp(`ALTER TABLE ${table} ADD COLUMN ([a-z_0-9]+)([^;]*);`, 'g');
+  const re = /ALTER TABLE (\w+) ADD COLUMN ([a-z_0-9]+)([^;]*);/g; // the table is captured and compared below
   for (const f of MIGRATIONS) {
     for (const m of migration(f).matchAll(re)) {
-      if (!have().has(m[1])) db.exec(`ALTER TABLE ${table} ADD COLUMN ${m[1]}${m[2]};`);
+      if (m[1] === table && !have().has(m[2])) db.exec(`ALTER TABLE ${table} ADD COLUMN ${m[2]}${m[3]};`);
     }
   }
 }

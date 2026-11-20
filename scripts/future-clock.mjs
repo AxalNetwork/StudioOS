@@ -31,6 +31,7 @@
  */
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
+import { promisify } from 'node:util';
 
 /** The variables that carry libfaketime into a process. */
 export const clockVars = (env) => Object.fromEntries(
@@ -65,14 +66,39 @@ export const withoutPreload = (args, env = process.env) => {
   return out;
 };
 
+/**
+ * `real` (a child_process function) with the clock put back into its env, or
+ * taken out for workerd. `exec` and `execFile` carry `util.promisify.custom`,
+ * which makes `promisify(execFile)` resolve `{ stdout, stderr }`; a bare
+ * wrapper loses it and the promise resolves stdout alone, so
+ * `(await exec(...)).stdout` read undefined in every test that used it, and
+ * only on the nightly (#7664). The wrapper keeps that shape, through itself.
+ */
+export function wrapForClock(real, vars, env = process.env) {
+  const wrapped = function (...args) {
+    const unshifted = typeof args[0] === 'string' && RUNS_UNSHIFTED.test(args[0]);
+    return real.apply(this, unshifted ? withoutPreload(args, env) : withClock(args, vars));
+  };
+  if (real[promisify.custom]) {
+    wrapped[promisify.custom] = (...args) => {
+      let child;
+      const settled = new Promise((resolve, reject) => {
+        child = wrapped(...args, (error, stdout, stderr) => {
+          if (error) reject(Object.assign(error, { stdout, stderr }));
+          else resolve({ stdout, stderr });
+        });
+      });
+      settled.child = child;
+      return settled;
+    };
+  }
+  return wrapped;
+}
+
 if (process.env.FAKETIME && /faketime/.test(process.env.LD_PRELOAD || '')) {
   const vars = clockVars(process.env);
   for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) {
-    const real = childProcess[name];
-    childProcess[name] = function (...args) {
-      const unshifted = typeof args[0] === 'string' && RUNS_UNSHIFTED.test(args[0]);
-      return real.apply(this, unshifted ? withoutPreload(args) : withClock(args, vars));
-    };
+    childProcess[name] = wrapForClock(childProcess[name], vars);
   }
   syncBuiltinESMExports();
 } else {

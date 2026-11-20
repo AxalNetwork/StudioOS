@@ -26,7 +26,7 @@
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/notify_quiet_hours_digest_off_d333.test.ts
  */
-import test from 'node:test';
+import test, { afterEach, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -43,6 +43,10 @@ function isHost(url: string, host: string): boolean {
 
 const ME = 7;
 
+// notify() reads the real clock for quiet hours; pin it inside the window.
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 0, 15, 12, 0, 0) }));
+afterEach(() => mock.timers.reset());
+
 function fixture() {
   const db = new DatabaseSync(':memory:');
   db.exec(`
@@ -58,8 +62,10 @@ function fixture() {
     );
   `);
   db.prepare(`INSERT INTO users (id, email) VALUES (?, 'rae@axal.example')`).run(ME);
-  // Quiet hours spanning the whole day in UTC, so "now" is always inside —
-  // this isolates the digest=off branch from any clock-dependent flakiness.
+  // Quiet hours over most of the day in UTC, with the clock pinned at noon
+  // (above), so "now" is always inside. This isolates the digest=off branch
+  // from the clock. Unpinned, a run at 23:59 UTC fell outside the window
+  // (its end is exclusive) and sent the email.
   db.prepare(
     `INSERT INTO user_settings (user_id, digest_frequency, quiet_hours_start, quiet_hours_end, quiet_hours_tz)
      VALUES (?, 'off', '00:00', '23:59', 'UTC')`,

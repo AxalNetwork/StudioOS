@@ -39,6 +39,8 @@ const given = (notice_version: number | null = 1) => ({ status: 'given' as const
 test('D860 a calls delivery is verified like any WhatsApp POST: signed passes, tampered or unsigned does not', async () => {
   const env = { WHATSAPP_APP_SECRET: APP_SECRET } as any;
   const raw = new TextEncoder().encode(JSON.stringify(delivery({ calls: [connect()] })));
+  // A test-only app secret signing a synthetic webhook.
+  // nosemgrep: javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key
   const sig = 'sha256=' + createHmac('sha256', APP_SECRET).update(raw).digest('hex');
   assert.equal(await verifyWhatsAppSignature(env, raw.buffer, sig), 'ok');
   const tampered = new TextEncoder().encode(JSON.stringify(delivery({ calls: [connect({ from: '15550000002' })] })));
