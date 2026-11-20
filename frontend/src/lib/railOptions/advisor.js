@@ -43,8 +43,7 @@ export const ADVISOR_RAIL_OPTIONS = [
     source: { file: 'components/CompetitorAnalysis.jsx', marker: 'api.competitors.analyze(' } },
   { page: 'Companies', route: '/research/companies', key: 'rerun:analysis', label: 'Re-run', kind: 'research', handler: 'form',
     source: { file: 'components/CompetitorAnalysis.jsx', marker: 'api.competitors.rerun(' } },
-  { page: 'Companies', route: '/research/companies', key: 'refresh:sources', label: 'Refresh sources', kind: 'research', handler: 'form',
-    source: { file: 'components/CompetitorAnalysis.jsx', marker: 'api.competitors.refresh(' } },
+  // D7652: Refresh sources runs no model since D7176, so it is not a row.
   { page: 'Library', route: '/research/library', key: 'upload:document', label: 'Add to library', kind: 'search', handler: 'upload',
     source: { file: 'pages/research/LibraryZone.jsx', marker: 'type="file"' } },
   { page: 'Library', route: '/research/library', key: 'reindex:document', label: 'Re-index', kind: 'search', handler: 'form',

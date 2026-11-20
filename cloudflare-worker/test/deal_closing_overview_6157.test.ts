@@ -40,7 +40,7 @@ app.onError((err: any, c) => {
 const ADMIN = 1, FOUNDER = 3, INV_A = 6, INV_B = 7, INV_NONE = 8;
 const ROLE: Record<number, string> = { 1: 'admin', 3: 'founder', 6: 'investor', 7: 'investor', 8: 'investor' };
 // 41 and 42 are funded (at closing); 43 is active (not at closing); 44 is funded on a deleted venture.
-const DEAL = 41, OTHER_DEAL = 42, ACTIVE_DEAL = 43, DELETED_DEAL = 44;
+const DEAL = 41, OTHER_DEAL = 42;
 
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });

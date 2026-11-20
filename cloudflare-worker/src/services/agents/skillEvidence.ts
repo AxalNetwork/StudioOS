@@ -16,14 +16,19 @@
  * are kept (`blocks`), so the manual path binds the same snapshot it judged into the run's message as data. The
  * scheduled path's context already carries its rule book's reads, so it binds nothing more.
  *
- * Native readers only. A member's approved MCP tool read does not stand in for a required input (D4667: the
- * approved-MCP evidence shape is still open). Statuses and reasons go in the refusal, never a record's figures.
+ * Native readers only. A member's approved MCP tool read does not stand in for a required input: the check runs
+ * before any MCP call, so a skill not ready is refused with nothing called. D4667-p4: a ready or conditional run that
+ * also reads approved MCP tools carries them as their own evidence (`agentTools.ts` `McpEvidence`), and its system
+ * prompt says what they are and where one was cut or refused (`mcpPrompt`). An unapproved, ungranted or drifted tool
+ * is refused before the model call (`tool_not_granted`, `tool_not_in_skill`, `tool_disconnected`). Statuses and
+ * reasons go in the refusal, never a record's figures.
  */
 import type { Env } from '../../types';
 import type { Rules } from './catalogue';
 import type { AgentRow, Scope } from './teams';
 import { READERS, type ReadContext, type ReadResult } from './reads';
 import { FIRST_TEN_SLUGS, HARD, preflight, type InputReport, type Readiness } from './skillInputs';
+import { TOOL_RESULT_MAX, type McpEvidence } from './agentTools';
 
 type Reader = (env: Env, c: ReadContext) => Promise<unknown>;
 
@@ -43,6 +48,13 @@ export type EvidenceInput = {
   agent: AgentRow; scope: Scope; rules: Pick<Rules, 'reads'>; slug: string | null; projectId: number | null;
   /** The scheduled path only: the read keys whose blocks the task's context holds. */
   bound?: readonly string[] | null;
+  /**
+   * D4667-p3: the one data-room document the run selected (`data_room_file:<uid>`): the manual run's `record`, a
+   * scheduled session's document target. None selected, a skill that needs a document's text is `not_ready`.
+   */
+  document?: string | null;
+  /** D4667-p4: the one fund the run selected (`vc_fund:<id>`): the manual run's `record`. None, a skill that needs its performance is `not_ready`. */
+  fund?: string | null;
   readers?: Partial<Record<string, Reader>>;
   now?: number;
 };
@@ -51,7 +63,7 @@ export type EvidenceInput = {
 export async function skillEvidenceForRun(env: Env, o: EvidenceInput): Promise<EvidenceCheck> {
   if (!o.slug || !FIRST_TEN_SLUGS.includes(o.slug)) return { ok: true, evidence: null };
   const capture = new Map<string, ReadResult>();
-  const p = await preflight(env, o.slug, { scope: o.scope, agent: o.agent, projectId: o.projectId }, o.readers ?? READERS, o.now ?? Date.now(),
+  const p = await preflight(env, o.slug, { scope: o.scope, agent: o.agent, projectId: o.projectId, document: o.document ?? null, fund: o.fund ?? null }, o.readers ?? READERS, o.now ?? Date.now(),
     undefined, {}, { granted: o.rules.reads, ...(o.bound ? { bound: o.bound } : {}), capture });
   if (!p) return { ok: true, evidence: null };
   if (p.state === 'not_ready') {
@@ -71,6 +83,14 @@ export async function skillEvidenceForRun(env: Env, o: EvidenceInput): Promise<E
 function statusWords(i: InputReport): string {
   if (i.reason === 'wrong_shape') return 'its reader gives another kind of record';
   if (i.reason === 'not_bound') return 'left out of the run\'s context for length';
+  if (i.reason === 'not_selected' && i.read === 'fund.performance') return 'no fund is selected for the run';
+  if (i.reason === 'not_found' && i.read === 'fund.performance') return 'the selected fund is not one the sponsor runs under this company';
+  if (i.reason === 'not_selected') return 'no document is selected for the run';
+  if (i.reason === 'not_found') return 'the selected document is not in the data room';
+  if (i.reason === 'not_read') return 'the selected document\'s text has not been read yet';
+  if (i.reason === 'not_current') return 'the selected document was replaced after its text was read';
+  if (i.reason === 'no_text') return 'the selected document holds no readable text';
+  if (i.reason === 'failed') return 'the selected document could not be read to text';
   switch (i.status) {
     case 'not_granted': return `the agent's rule book does not read ${i.read}`;
     case 'withheld': return 'the sponsor may not read it';
@@ -79,6 +99,31 @@ function statusWords(i: InputReport): string {
     case 'empty': return 'nothing is recorded';
     default: return 'not recorded';
   }
+}
+
+/** D4667-p3: the document a manual run's `record` selects, when it names one (`data_room_file:<uid>`); else null. */
+export const documentOfRecord = (record: unknown): string | null =>
+  typeof record === 'string' && /^data_room_file:[a-f0-9]{32}$/.test(record.trim()) ? record.trim() : null;
+
+/** D4667-p4: the fund a manual run's `record` selects, when it names one (`vc_fund:<id>`); else null. */
+export const fundOfRecord = (record: unknown): string | null =>
+  typeof record === 'string' && /^vc_fund:[1-9][0-9]{0,11}$/.test(record.trim()) ? record.trim() : null;
+
+/**
+ * D4667-p4 — a first-ten skill run's approved MCP reads, for its system prompt: each by its reference, server and
+ * time, as the member's own connection's answer, which meets none of the skill's inputs; a cut or refused one is
+ * named, so the brief says so. Null when the run read none.
+ */
+export function mcpPrompt(evidence: readonly McpEvidence[]): string | null {
+  if (!evidence.length) return null;
+  const lines = evidence.map((e) => {
+    const what = `- [${e.ref}] ${e.tool} on ${e.server.name}, read ${e.fetched_at}`;
+    if (e.outcome === 'refused') return `${what}: the tool could not be read, so it supplies nothing.`;
+    if (!e.complete) return `${what}: cut at ${TOOL_RESULT_MAX} characters of ${e.bytes ?? 'an unknown number of'}; say the result is incomplete.`;
+    return `${what}.`;
+  });
+  return ['The tool results below come from the member\'s own approved MCP tools, not from a record the platform read. '
+    + 'They meet none of this skill\'s inputs: do not use one for an input the evidence check found missing. Cite each by its reference.', ...lines].join('\n');
 }
 
 /** A conditional run's system prompt states what its evidence lacks; null when nothing does. */
