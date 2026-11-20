@@ -14,3 +14,5 @@ Install/verify need no runner token, provider API or fleet manager. Register/sta
 require the trusted executor from #7886 on main, a recent private operator
 receipt, verified job isolation, and a scheduled bounded pilot. Local preflight
 is not evidence of online/idle eligibility or live CI capacity.
+
+`catalog.mjs` translates this trusted registry into executor profiles and the coordinator approvedGroupId; unverified self-hosted groups fail closed (D7906).
