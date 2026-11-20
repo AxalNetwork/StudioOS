@@ -9,6 +9,7 @@ import { isSupportSession } from '../services/companyAccess';
 import { projectEnabled } from '../integrations/companyScope';
 import { WriterError } from '../services/validateWriters';
 import { mapTypeformEvidence, prepareTypeformReviews, decideTypeformReview, typeformReviews } from '../services/typeform/review';
+import { typeformReviewCounts } from '../services/typeform/reviewCounts';
 
 const r = new Hono<{ Bindings: Env }>();
 r.onError((e, c) => {
@@ -33,6 +34,10 @@ async function scope(c: Context<{ Bindings: Env }>, raw: unknown) {
 }
 
 r.get('/reviews', async c => c.json(await typeformReviews(c.env, await scope(c, c.req.query('project')))));
+r.get('/form-counts', async c => {
+  const s = await scope(c, c.req.query('project'));
+  return c.json({ forms: await typeformReviewCounts(c.env, s.projectId, s.integrationId) });
+});
 r.put('/evidence-mapping', async c => {
   const b = await c.req.json(); const s = await scope(c, b?.project);
   return c.json({ mapping: await mapTypeformEvidence(c.env, s, b) });

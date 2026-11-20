@@ -20,6 +20,7 @@ source records for Validate's review (#5829). No webhook.
 - `signature.ts` — stable semantic mapping identity, independent of titles and choice order.
 - `reviewCleanup.ts` — retract derived evidence in the source removal's batch, retaining tombstones.
 - `review.ts` — versioned same-venture targets, private proposals, explicit review and separate counts (D5829).
+- `reviewCounts.ts` — per-form completed, matching-answer and confirmed-signal reconciliation.
 
 The rules for adding to this folder:
 

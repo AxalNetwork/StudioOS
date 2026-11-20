@@ -50,7 +50,7 @@ test('mapping versions preserve stable rule identity, same-venture targets and a
   const first: any = await w.map({ experiment_id: 201, direction: 'contradicts', strength: 'pattern' });
   const again: any = await w.map({ experiment_id: 201, direction: 'contradicts', strength: 'pattern' });
   const next: any = await w.map({ direction: 'supports' });
-  assert.deepEqual([first.version, again.id === first.id, next.version], [1, true, 2]);
+  assert.deepEqual([first.version, again.id === first.id, again.version, next.version], [1, true, 1, 2]);
   await assert.rejects(w.map({ hypothesis_id: 102 }), /not on this venture/);
   await assert.rejects(w.map({ experiment_id: 202 }), /not on this venture/);
 });
