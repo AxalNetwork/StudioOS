@@ -369,11 +369,17 @@ catalogue version only in the fixture.
 | `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
+| `research_global_funds_7325.test.mjs` | D7325: evidence validation, canonical catalogue preservation, source takedowns, country facets, duplicate suppression, replay and fault-injection checks on real SQLite. |
 
 | File | What it covers |
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
 | `research_companies_registers_d7316.test.mjs` | D7316 part 2: native registry identity/status and retained-hold admission; record/file hash tampering; shared-domain/name conflicts; immutable evidence and exact SQL ownership; real-schema insert-only replay, unknown metrics, and source-ledger overwrite refusal. |
+
+| File | What it covers |
+|---|---|
+
+| `file_recovery_6653.test.mjs` | D6653: include independent file recovery Python fixtures in the standard Worker runner. |
 | `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
 | `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |

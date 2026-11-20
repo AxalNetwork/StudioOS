@@ -36,7 +36,11 @@ for (const width of [1440, 390]) {
     const names = (page) => phone
       ? page.getByTestId('pitch-editor-phone').locator('ol > li > button:first-child')
       : page.getByTestId(/^pitch-editor-rail-\d+$/);
-    const expectNames = (page, titles) => expect(names(page)).toHaveText(titles.map((title) => new RegExp(title)));
+    // Each rail item contains its title, in order, and there are no others.
+    const expectNames = async (page, titles) => {
+      await expect(names(page)).toHaveCount(titles.length);
+      for (const [i, title] of titles.entries()) await expect(names(page).nth(i)).toContainText(title);
+    };
     const urlOf = ({ projectId }) => `/raise/pitch/edit?project_id=${projectId}`;
     const draftOf = ({ deckId }) => `/api/decks/${deckId}/draft`;
 

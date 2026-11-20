@@ -144,10 +144,19 @@ _CONTENT_RE = re.compile(
     # Real streams escape unbalanced parentheses, and a nested balanced pair
     # never matched here anyway, because the body could not hold its ")".
     r"\(((?:\\.|[^\\()])*)\)\s*(Tj|')"
-    r"|\[((?:[^\]\\]|\\.)*)\]\s*TJ"
+    # A TJ array's body takes its string literals whole and never a bare "[":
+    # with "[" allowed, every "[" of an unclosed run started a scan to the end
+    # of the stream, which is quadratic (20,000 "[" took twelve seconds). A
+    # literal may still hold "[" or "]", as real arrays' strings can.
+    r"|\[((?:\((?:\\.|[^\\()])*\)|[^\[\]\\(]|\\.)*)\]\s*TJ"
     # Number sub-pattern is linear (no `\d*…\d+` overlap) to avoid polynomial
     # backtracking (CodeQL py/polynomial-redos) while matching the same set.
-    r"|(-?(?:\d+\.\d+|\.\d+|\d+))\s+(-?(?:\d+\.\d+|\.\d+|\d+))\s+(Td|TD)"
+    # A number starts the stream or follows the whitespace it consumes, as
+    # content-stream operands do: otherwise each digit of a long run started
+    # its own scan of the run (quadratic; 20,000 digits took four seconds).
+    # CodeQL does not read a lookbehind as that boundary; a consumed "\s"
+    # it does (py/polynomial-redos).
+    r"|(?:\A|\s)(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(Td|TD)"
     r"|(T\*)"
     # An escape outside a literal is consumed whole, so its "(" never starts a
     # literal: a "(" followed by many "\(" was quadratic, each "\(" starting a
