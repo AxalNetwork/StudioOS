@@ -13,8 +13,8 @@
  *          indexed count over `ai_budget_reservations` against
  *          `ai_usage_logs.reservation_uid` (`readSettlementSignal`).
  *
- * Not read, with why (`SIGNALS_NOT_READ_HERE`): #4572, #4568, #4571 and #4556
- * shipped no record the Worker can read. They are listed, not invented.
+ * Not read, with why (`SIGNALS_NOT_READ_HERE`): #4572, #4568, #4571, #4556 and
+ * #4591 shipped no record the Worker can read. They are listed, not invented.
  *
  * EVERY SIGNAL SAYS where it came from (`source`), what span it covers
  * (`window`), how it is recorded and sampled (`sampling`), its `unit`, its
@@ -134,6 +134,7 @@ export const SIGNALS_NOT_READ_HERE = [
   { key: 'd1.runtime_ddl_attempts', reason: '#4568 shipped a build-time ratchet (scripts/check-runtime-ddl.mjs) and an audit; the Worker counts no runtime ALTER attempt.' },
   { key: 'auth.monitor_state', reason: '#4571\'s probe outcome is printed in the GitHub Actions run of magic-link-probe.yml; nothing reaches a Worker binding.' },
   { key: 'ai.gateway_quota_retries', reason: '#4556\'s gateway path has no caller and its switch is off, so it records no attempt; the shared upstream limits are published figures, not counters.' },
+  { key: 'd1.schema_parity', reason: '#4591\'s parity checks (the deploy job "repo can still rebuild production\'s schema" and the dispatch-only schema-rehearsal.yml) print their outcome in the GitHub Actions run; nothing reaches a Worker binding or a D1 row.' },
 ] as const;
 
 type Base = Omit<Metric, 'value' | 'availability' | 'reason' | 'level' | 'last_success_at'>;

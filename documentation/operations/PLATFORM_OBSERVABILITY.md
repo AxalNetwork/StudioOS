@@ -163,8 +163,9 @@ Two availabilities are new:
 | #4568 | a build-time ratchet on blind runtime `ALTER`s (`check-runtime-ddl.mjs`) and an audit | **nothing.** The Worker counts no runtime DDL attempt; `runSchemaBootstrap` records none. |
 | #4571 | the probes' outcome line (`EDGE_CHALLENGED` … `VERIFIED_END_TO_END`) | **nothing.** The outcome is printed in the GitHub Actions run of `magic-link-probe.yml`; nothing reaches a Worker binding, and this read makes no outbound call. |
 | #4556 | the AI Gateway slice, its retries counted per call | **nothing.** The slice has no caller and its switch is off, so no attempt is recorded; the shared upstream limits are published figures, not counters. |
+| #4591 | the deploy job's schema parity check (`repo can still rebuild production's schema`, `check-baseline-drift.mjs`) and the dispatch-only `schema-rehearsal.yml` | **nothing.** Both print their outcome in the GitHub Actions run; nothing reaches a Worker binding or a D1 row, and this read makes no outbound call. Listed as `d1.schema_parity`. |
 
-These four are listed in the read's `not_read_here`, each with its reason.
+These five are listed in the read's `not_read_here`, each with its reason.
 A freshness rule: the sweep runs every 5 minutes, so a newest batch older than
 20 minutes is `unavailable` and still says when it was written.
 
