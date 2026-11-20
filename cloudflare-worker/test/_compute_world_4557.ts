@@ -15,7 +15,7 @@ export async function computeWorld() {
     image: { digest: spec.image_digest, signature_verified: true, provenance_verified: true, sbom_verified: true, scan_passed: true, revoked: false },
     provider: { capabilities: { ...fakeCapabilities(), enforced_regions: ['global'], workload_classes: ['python', 'spreadsheet', 'document_convert'], shell: false, untrusted_code: false },
       non_root: true, no_new_privileges: true, immutable_image: true, ephemeral_scratch: true, resource_limits: true, host_socket: false, privileged: false,
-      isolation: 'microvm', network_connect_fence: true, metadata_denied: true, containment: containmentFixture(Date.now()) }, artifact_ttl_s: 86400,
+      isolation: 'microvm', network_connect_fence: true, metadata_denied: true, containment: containmentFixture(Date.now()) }, artifact_ttl_s: 86400, // clock-ok: relative — matches migrated SQLite CURRENT_TIMESTAMP and host grant clock
     job_cost_ceiling_microusd: { python: 100, document_convert: 500, spreadsheet: 100 },
   };
   w.env.AGENT_COMPUTE = 'on'; w.env.AGENT_COMPUTE_SECRET = 'synthetic-compute-control-secret-4557'; w.env.AGENT_COMPUTE_POLICY_JSON = JSON.stringify(policy);
