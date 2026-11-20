@@ -18,6 +18,11 @@
  * venture's own `market_sources` rows by id; its title and link are copied
  * from that row here, so a client cannot write a source text of its own and
  * the history still names the source after the row is removed.
+ *
+ * D7704 (#7704): a market sizing version writes its three rows in its own
+ * batch through `marketFigureStatement`, each naming the version
+ * (`sizing_version_id`). A figure typed through `PUT /api/projects/:id`, and
+ * every row saved before formula version 2, names none.
  */
 import type { Env } from '../types';
 
@@ -30,6 +35,7 @@ export type MarketFigureRow = {
   id: number; project_id: number; figure: MarketFigureKey; value: number | null; currency: string;
   method: MarketMethod; source_title: string | null; source_url: string | null;
   market_source_id: number | null; set_by: number | null; set_at: string;
+  sizing_version_id?: number | null;
 };
 
 /**
@@ -158,17 +164,42 @@ export async function recordMarketFigures(
   return changed;
 }
 
+/**
+ * D7704: one `market_figures` row as an unrun statement, for a caller's own
+ * `DB.batch`. `sizingVersionUid` names the version written earlier in the same
+ * batch; the row takes that version's id. Always written, changed value or
+ * not, so all three current rows name one version.
+ */
+export function marketFigureStatement(env: Env, input: {
+  projectId: number; figure: MarketFigureKey; value: number; provenance: MarketProvenance;
+  setBy: number | null; sizingVersionUid: string;
+}): D1PreparedStatement {
+  const { method, source } = input.provenance;
+  return env.DB.prepare(
+    `INSERT INTO market_figures (project_id, figure, value, currency, method, source_title, source_url, market_source_id, set_by, sizing_version_id)
+     VALUES (?, ?, ?, 'USD', ?, ?, ?, ?, ?, (SELECT id FROM market_sizing_versions WHERE uid = ? AND project_id = ?))`,
+  ).bind(input.projectId, input.figure, input.value, method, source?.title ?? null, source?.url ?? null, source?.id ?? null,
+    input.setBy, input.sizingVersionUid, input.projectId);
+}
+
 export type MarketHistoryRow = {
   id: number; figure: MarketFigureKey; value: number | null; currency: string; method: MarketMethod;
   source_title: string | null; source_url: string | null; set_by_name: string | null; set_at: string;
+  /** D7704: the sizing version that saved this row, or null (typed, or saved before formula version 2). */
+  sizing_version: number | null;
 };
 
 /** Every change, newest first, with who made it (a name, never an address). */
 export async function marketFigureHistory(env: Env, projectId: number, limit = 60): Promise<MarketHistoryRow[]> {
   const rows = await env.DB.prepare(
-    `SELECT m.id, m.figure, m.value, m.currency, m.method, m.source_title, m.source_url, m.set_at, u.name AS set_by_name
+    `SELECT m.id, m.figure, m.value, m.currency, m.method, m.source_title, m.source_url, m.set_at, u.name AS set_by_name,
+            v.version_number AS sizing_version
        FROM market_figures m LEFT JOIN users u ON u.id = m.set_by
+       LEFT JOIN market_sizing_versions v ON v.id = m.sizing_version_id
       WHERE m.project_id = ? ORDER BY m.id DESC LIMIT ?`,
   ).bind(projectId, limit).all<MarketHistoryRow>();
-  return (rows.results || []).map((r) => ({ ...r, value: num(r.value), set_by_name: r.set_by_name ?? null }));
+  return (rows.results || []).map((r) => ({
+    ...r, value: num(r.value), set_by_name: r.set_by_name ?? null,
+    sizing_version: r.sizing_version == null ? null : Number(r.sizing_version),
+  }));
 }

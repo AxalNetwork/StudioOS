@@ -50,6 +50,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `landing-feeder.yml` | Feed the merge queue | — | — | — | — | Feed the merge queue (advisory, conditional) | `workflow_dispatch` · Feed the merge queue (advisory, conditional) |
 | `landing-policy.yml` | Landing policy | landing policy (advisory) | — | — | — | — | — |
 | `lfs-budget.yml` | LFS budget | — | — | — | — | Check LFS bandwidth vs 250 GB plan (advisory) | `workflow_dispatch` · Check LFS bandwidth vs 250 GB plan (advisory) |
+| `macbook-worker.yml` | MacBook Worker | — | — | — | — | — | `workflow_dispatch` · Worker shard on MacBook (advisory, conditional) |
 | `magic-link-insert-probe.yml` | magic-link insert probe | — | — | — | — | magic-link insert (advisory) | `workflow_dispatch` · magic-link insert (advisory) |
 | `magic-link-probe.yml` | magic-link round-trip probe | — | — | — | — | magic-link round trip (advisory) | `workflow_dispatch` · magic-link round trip (advisory) |
 | `mcp-worker-contracts.yml` | MCP Worker contracts | MCP OAuth and deployment contracts (advisory, conditional) | — | — | — | — | — |

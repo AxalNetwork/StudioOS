@@ -87,13 +87,14 @@ export const PLAN_CARDS = Object.freeze({
     {
       id: 'free', name: 'Partner Basic', kick: 'Free plan', free: true, storage: 'partner:free', lane: 'partner', cta: 'Start free',
       tag: 'Get listed.',
-      feats: ['Provider profile and directory listing', 'Live founder requests', 'Verification badges', 'AI runs from AI tokens you top up'],
+      // D4653 part 2 (#4653): no "Verification badges" and no Stripe Connect payouts; D676 dropped both as not running.
+      feats: ['Provider profile and directory listing', 'Live founder requests', 'AI runs from AI tokens you top up'],
     },
     {
       // The owner's ruling (2026-10-20): the plan is "Operating Partner Pro".
       id: 'pro', name: 'Operating Partner Pro', kick: 'Delivery subscription', match: 'partner', storage: 'partner:pro', lane: 'partner', cta: 'Get Operating Partner Pro', highlight: true,
       tag: 'Manage client work from proposal to delivery.',
-      feats: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect'],
+      feats: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports'],
     },
   ],
 });
@@ -146,8 +147,8 @@ export const COMPARE = Object.freeze({
     ['Practice', [['Office hours and session types', 1, 1], ['Booking links', 1, 1], ['Paid sessions', 0, 1], ['Deliverables and the client access log', 0, 1], ['Earnings and payouts', 0, 1]]],
   ],
   'operating-partner': [
-    ['Listing', [['Provider profile and directory listing', 1, 1], ['Verification badges', 1, 1], ['Live founder requests', 1, 1]]],
-    ['Delivery', [['Proposals, pipeline and delivery', 0, 1], ['Partner insights', 0, 1], ['Client status reports', 0, 1], ['Payouts through Stripe Connect', 0, 1]]],
+    ['Listing', [['Provider profile and directory listing', 1, 1], ['Live founder requests', 1, 1]]],
+    ['Delivery', [['Proposals, pipeline and delivery', 0, 1], ['Partner insights', 0, 1], ['Client status reports', 0, 1]]],
   ],
 });
 
