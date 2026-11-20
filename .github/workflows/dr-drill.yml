@@ -86,16 +86,27 @@ jobs:
 
       - name: Run DR drill
         id: drill
+        timeout-minutes: 50
         # Cloudflare creds + optional pager are consumed by scripts/dr-drill.sh
         # (it runs wrangler and posts its own failure page), so scope them here.
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
+          DR_DRILL_DB_FILE: ${{ runner.temp }}/dr-drill-${{ github.run_id }}-${{ github.run_attempt }}.db
         run: bash scripts/dr-drill.sh
 
+      - name: Delete this run’s throwaway database
+        if: always()
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DR_DRILL_DB_FILE: ${{ runner.temp }}/dr-drill-${{ github.run_id }}-${{ github.run_attempt }}.db
+        run: bash scripts/dr-drill-cleanup.sh
+
       # The drill script pages from its own EXIT trap when it fails, so this
-      # step pages only for a failure BEFORE the drill ran (preflight, install).
+      # step pages for preflight/install failures and failed fallback cleanup.
       - name: Notify on failure
         if: failure() && steps.drill.outcome != 'failure' && env.PAGER_CONFIGURED == 'true'
         env:
