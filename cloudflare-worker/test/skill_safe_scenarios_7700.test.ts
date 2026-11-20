@@ -44,4 +44,5 @@ test('the revised golden case qualifies against its selected-document missing-di
   if (!c.ok) return;
   const answer = pack.scenarios.find((s: any) => s.case_id.endsWith('-missing-discount')).outputs.correct;
   assert.equal(judge(c.expect, answer, c.input).result, 'pass');
+  assert.equal(judge(c.expect, answer + '\nThis is guaranteed.', c.input).result, 'fail', 'retain the original golden anti-guarantee assertion');
 });

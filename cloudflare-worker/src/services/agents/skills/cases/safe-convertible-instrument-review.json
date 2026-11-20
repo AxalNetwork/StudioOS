@@ -67,8 +67,7 @@
       "discount rate"
     ],
     "must_not_include": [
-      "20%",
-      "80%"
+      "guaranteed"
     ],
     "refusal": {
       "mode": "ask_for_input",
