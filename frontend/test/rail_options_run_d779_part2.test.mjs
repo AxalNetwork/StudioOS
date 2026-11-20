@@ -3,9 +3,10 @@
  * options that run on the same components, fill, draft and place through the
  * run path, and nothing is written without the member's press, Accept or Save.
  *
- * The part is every row of `lib/railOptions/advisor.js` (14) and the nine rows
+ * The part is every row of `lib/railOptions/advisor.js` (13; D7652 took out
+ * Refresh sources, which runs no model since D7176) and the nine rows
  * of `lib/railOptions/partner.js` that are the advisor's own components (the
- * Studio interview and Research): 23 options, at most 30 per part. The
+ * Studio interview and Research): 22 options, at most 30 per part. The
  * partner's 19 other rows are the operating partner's own boards: part 3.
  *
  *   draft       A zone draft band drafts on the press, from a stubbed run; the
@@ -72,7 +73,6 @@ const PART_2 = [
   'Advisor · Client prep|draft:checkpoint-brief',
   'Advisor · Companies|analyze:competitors',
   'Advisor · Companies|rerun:analysis',
-  'Advisor · Companies|refresh:sources',
   'Advisor · Library|upload:document',
   'Advisor · Library|reindex:document',
   'Advisor · Library|draft:index-gaps',
@@ -87,7 +87,7 @@ const PART_2 = [
   'Partner · Library|draft:index-gaps',
 ];
 
-test('part 2 is the advisor’s 14 options and the partner’s 9 on the same components, at most 30', () => {
+test('part 2 is the advisor’s 13 options and the partner’s 9 on the same components, at most 30', () => {
   assert.ok(PART_2.length <= 30);
   assert.deepEqual(ROWS.map((o) => `${o.who} · ${o.page}|${o.key}`), PART_2);
   for (const o of ROWS) {
@@ -239,9 +239,12 @@ test('Ask answers on the press, and its answer is stored unsaved until Save', ()
 
 test('the competitor analysis runs on the press and writes only its own analysis', () => {
   const rows = ROWS.filter((o) => o.source.file === 'components/CompetitorAnalysis.jsx');
-  assert.deepEqual(rows.map((o) => o.key), ['analyze:competitors', 'rerun:analysis', 'refresh:sources']);
+  assert.deepEqual(rows.map((o) => o.key), ['analyze:competitors', 'rerun:analysis']);
   const ui = spa('components/CompetitorAnalysis.jsx');
   for (const o of rows) assert.equal(ui.split(o.source.marker).length - 1, 1, `${o.key}: not one press`);
+  // D7652: Refresh sources runs no model (D7176), so it is no row and its press names no option.
+  assert.match(ui, /await api\.competitors\.refresh\(analysis\.id\);/);
+  assert.match(spa('pages/research/CompanyAnalysis.jsx'), /await api\.competitors\.refresh\(id\);/);
   // Re-run keeps the member's hand-added competitors (and, D778 part 9, sends its press's option).
   assert.match(ui, /api\.competitors\.rerun\(analysis\.id, \{ inputs: analysis\.inputs \|\| inputs, keep_manual: true \}, railPressHeaders\(pressKey\.rerun\)\)/);
   const src = workerFile('routes/competitors.ts');

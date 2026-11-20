@@ -1,8 +1,9 @@
 /**
- * D778 part 9 (#2103) — Research · Companies' five presses through the run
+ * D778 part 9 (#2103) — Research · Companies' presses through the run
  * path: `analyse:competitors` (Analyze competitors), `analyse:again` (Re-run),
- * `analyse:sources` (Refresh sources), `extract:candidate` (Add, with a site to
- * crawl) and `extract:site` (Crawl site). Each run names the page and option
+ * `extract:candidate` (Add, with a site to crawl) and `extract:site` (Crawl
+ * site). Refresh sources runs no model (D7176) and has no option (D7652); it is
+ * pressed here to prove it logs no run. Each run names the page and option
  * D771's inventory gives it, where before every one logged `research` /
  * `scan:competitors`; a mounted rail's page and the press's option win, so the
  * advisor's board logs its own keys (D773); the record is the analysis the
@@ -87,6 +88,8 @@ const runsSince = (db: any, after: number) => (db.prepare(
 ).all(after) as any[]).map((r) => ({ ...r }));
 const lastRun = (db: any) => Number((db.prepare('SELECT COALESCE(MAX(id), 0) AS n FROM ai_usage_logs').get() as any).n);
 const at = (id: string) => `competitor_analysis:${id}`;
+/** D7652: Refresh sources is not an option; the press is labelled here only to find it. */
+const REFRESH = 'refresh (no option)';
 
 /** Each press, in order, from one analysis: what it called and the option it falls back to. */
 async function pressAll(db: any, headersFor: (option: string) => Record<string, string> = () => ({})) {
@@ -98,7 +101,7 @@ async function pressAll(db: any, headersFor: (option: string) => Record<string, 
   out.push({ option: COMPANIES_OPTIONS.analyze, rows: runsSince(db, mark), id });
   for (const [option, path, json] of [
     [COMPANIES_OPTIONS.again, `/${id}/rerun`, { keep_manual: true }],
-    [COMPANIES_OPTIONS.sources, `/${id}/refresh`, {}],
+    [REFRESH, `/${id}/refresh`, {}],
     [COMPANIES_OPTIONS.candidate, `/${id}/candidates`, { name: 'Tallyfreight', url: 'https://tallyfreight.example', crawl: true }],
   ] as const) {
     mark = lastRun(db);
@@ -116,7 +119,7 @@ async function pressAll(db: any, headersFor: (option: string) => Record<string, 
   return out;
 }
 
-test('D778: Companies\' five presses fall back to the workspace and the options D771\'s inventory gives them', () => {
+test('D778: Companies\' model presses fall back to the workspace and the options D771\'s inventory gives them', () => {
   // The routes are shared, so the page is the workspace the Manual switch is stored under (part 10).
   assert.equal(COMPANIES_PAGE, SHARED_DRAFT_PAGES['research/ask']);
   const rows = FOUNDER_OPTIONS.filter((o: any) => o.page === 'Founder · Research · Companies' && o.handler !== 'none');
@@ -130,7 +133,7 @@ test('D778: each press with no rail context names its inventoried option, and th
   const db = fixture();
   for (const press of await pressAll(db)) {
     // D7176 (owner answer A): Refresh sources re-fetches the stored pages and runs no model.
-    if (press.option === COMPANIES_OPTIONS.sources) { assert.deepEqual(press.rows, [], 'refresh ran a model'); continue; }
+    if (press.option === REFRESH) { assert.deepEqual(press.rows, [], 'refresh ran a model'); continue; }
     assert.ok(press.rows.length > 0, `${press.option}: no run was logged`);
     for (const r of press.rows) {
       assert.deepEqual([r.rail_page, r.rail_option, r.record_ref], [COMPANIES_PAGE, press.option, at(press.id)], press.option);
@@ -147,7 +150,6 @@ test('D778: a mounted rail\'s page and the press\'s option win; the browser\'s r
   const ADVISOR_KEYS: Record<string, string> = {
     [COMPANIES_OPTIONS.analyze]: 'analyze:competitors',
     [COMPANIES_OPTIONS.again]: 'rerun:analysis',
-    [COMPANIES_OPTIONS.sources]: 'refresh:sources',
   };
   const page = 'Advisor · Research · Companies';
   const sent = (option: string) => ADVISOR_KEYS[option] ?? option;
@@ -155,7 +157,7 @@ test('D778: a mounted rail\'s page and the press\'s option win; the browser\'s r
     'X-Rail-Page': encodeURIComponent(page), 'X-Rail-Option': encodeURIComponent(sent(option)), 'X-Rail-Record': 'project:999',
   }));
   for (const press of presses) {
-    if (press.option === COMPANIES_OPTIONS.sources) { assert.deepEqual(press.rows, [], 'refresh ran a model'); continue; }
+    if (press.option === REFRESH) { assert.deepEqual(press.rows, [], 'refresh ran a model'); continue; }
     assert.ok(press.rows.length > 0, press.option);
     for (const r of press.rows) assert.deepEqual([r.rail_page, r.rail_option, r.record_ref], [page, sent(press.option), at(press.id)], press.option);
   }
