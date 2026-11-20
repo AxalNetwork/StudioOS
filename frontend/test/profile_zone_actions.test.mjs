@@ -442,12 +442,23 @@ const PROFILES = {
     // #4832 (D4832): Sessions' header is the Practice v2 canvas's (PX-05),
     // written as `hdr('Sessions', '…', 'Block time', 'Share booking link')`, so
     // its ops are that call's string arguments after the title and the blurb.
-    v2Ops: [['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions', { args: true }]],
+    // #4833 part 4 (D4833-p4): Delivery's header is PX-06's,
+    // `hdr('Delivery', '…', 'New work product')`, read the same way.
+    v2Ops: [
+      ['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions', { args: true }],
+      ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery', { args: true }],
+    ],
     // `Export to calendar` stays on the page off the v2 canvas: an .ics of the
-    // tab's sessions, built in the browser (D4832).
+    // tab's sessions, built in the browser (D4832). Delivery's two PR3 ops stay
+    // too, after its v2 primary: the nudge and the client pack are working
+    // controls the v2 header does not draw (D4833-p4).
     // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
     withheld: { 'research/markets': ['Re-run stale', 'Add source', 'Export'] },
-    offCanvas: { 'practice/sessions': ['Export to calendar'], 'research/markets': ['Export view', 'New market research'] },
+    offCanvas: {
+      'practice/sessions': ['Export to calendar'],
+      'practice/delivery': ['Bulk: nudge unopened', 'Export as client pack'],
+      'research/markets': ['Export view', 'New market research'],
+    },
     buckets: /^(expertise|network|research|practice)\//,
     // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
     // TWO HAVE MOVED APART. PR1, PR2 and PR3 each drew exactly two ops, one of
@@ -494,7 +505,9 @@ const PROFILES = {
     // said no public profile page existed, and `/advisors/:uid` does; both
     // are the page's `openPublicPreview`. Two gaps became two handlers.
     // FOURTEEN: #4832 (D4832) — Sessions' `Share booking link` (PX-05).
-    handlers: 14,
+    // FIFTEEN: #4833 part 4 (D4833-p4) — Delivery's `New work product`, PX-06's
+    // header primary, which opens the page's v1 form.
+    handlers: 15,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -1740,7 +1753,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasOps(profile);
     const table = tableEntries(SRC);
     const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
-    assert.equal(primaries.length, { founder: 0, investor: 8, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
+    assert.equal(primaries.length, { founder: 0, investor: 8, advisor: 5, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
     for (const e of primaries) {
       const zone = e.zone;
       // `canvas:` is the artboard's word where the rendered label differs.
