@@ -1,4 +1,5 @@
-name: MacBook runner smoke
+# Temporary native Mac benchmark on an isolated branch.
+name: MacBook Worker shard benchmark
 
 on:
   push:
@@ -7,35 +8,151 @@ on:
     paths:
       - .github/workflows/macbook-runner-smoke.yml
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
   group: macbook-runner-smoke
   cancel-in-progress: false
 
 jobs:
-  smoke:
+  worker_shard:
+    name: Worker 1 of 6 on MacBook
     if: >-
       github.repository == 'AxalNetwork/StudioOS' &&
       github.event_name == 'push' &&
-      github.ref == 'refs/heads/ci/macbook-runner-test'
+      github.ref == 'refs/heads/ci/macbook-runner-test' &&
+      github.actor == 'guillaumelauzier'
     runs-on: [self-hosted, macOS, ARM64, studioos-macbook]
-    timeout-minutes: 5
+    timeout-minutes: 40
+    env:
+      SOURCE_SHA: c6d0d48a984847a2b14325c82e9616da4c3dfdcf
+      TZ: UTC
+      TEST_TRACE_DIR: ''
+      npm_config_cache: ${{ runner.temp }}/macbook-npm-${{ github.run_id }}-${{ github.run_attempt }}
+      UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/macbook-python-${{ github.run_id }}-${{ github.run_attempt }}
+      UV_CACHE_DIR: ${{ runner.temp }}/macbook-uv-${{ github.run_id }}-${{ github.run_attempt }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
-      - name: Confirm Mac runner connectivity
-        shell: bash
+      - name: Check the Mac runner
         run: |
           test "$RUNNER_OS" = "macOS"
           test "$RUNNER_ARCH" = "ARM64"
           test "$(uname -m)" = "arm64"
-
           {
-            printf '## Mac runner smoke passed\n\n'
+            printf '## MacBook Worker shard benchmark\n\n'
             printf 'Runner: `%s`\n\n' "$RUNNER_NAME"
-            printf 'macOS: %s\n\n' "$(sw_vers -productVersion)"
-            printf 'Logical CPUs: %s\n\n' "$(sysctl -n hw.logicalcpu)"
-            printf 'Memory bytes: %s\n' "$(sysctl -n hw.memsize)"
+            printf 'Source commit: `%s`\n\n' "$SOURCE_SHA"
+            printf 'Shard: `worker-1-of-6`\n\n'
+            printf 'macOS: %s; logical CPUs: %s; RAM bytes: %s\n\n' \
+              "$(sw_vers -productVersion)" "$(sysctl -n hw.logicalcpu)" "$(sysctl -n hw.memsize)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          printf 'Mac runner connected successfully.\n'
+      - name: Check out the pinned main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: c6d0d48a984847a2b14325c82e9616da4c3dfdcf
+          path: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Set up the portable Python installer
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.13.9'
+          enable-cache: false
+          cache-python: false
+
+      - name: Install temporary Python 3.11
+        run: |
+          uv python install --no-bin --no-config 3.11
+          python_path=$(uv python find --managed-python --no-config 3.11)
+          "$python_path" -c 'import platform, sqlite3, sys; assert sys.version_info[:2] == (3, 11); assert platform.machine() == "arm64"; print("Portable Python:", sys.version.split()[0])'
+          printf '%s\n' "$(dirname "$python_path")" >> "$GITHUB_PATH"
+
+      - name: Verify the runtime and SQLite
+        working-directory: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          node --input-type=module -e '
+            import { availableParallelism } from "node:os";
+            import { DatabaseSync } from "node:sqlite";
+            if (process.platform !== "darwin" || process.arch !== "arm64" || process.versions.node.split(".")[0] !== "22") process.exit(1);
+            const db = new DatabaseSync(":memory:");
+            if (db.prepare("SELECT 1 AS ok").get().ok !== 1) process.exit(1);
+            db.close();
+            console.log("Node:", process.version, "available parallelism:", availableParallelism());
+          '
+          python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 11); print("Python:", sys.version.split()[0], "SQLite:", sqlite3.sqlite_version)'
+          {
+            printf 'Node: %s; npm: %s; Python: %s\n\n' "$(node --version)" "$(npm --version)" "$(python3 --version)"
+            printf 'Node available parallelism: %s. Test concurrency uses the existing Node default.\n\n' \
+              "$(node -p 'require("node:os").availableParallelism()')"
+            printf 'This run uses a fresh dependency cache and disables queue-only tracing.\n\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate the existing equal-weight shard plan
+        working-directory: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          node scripts/test-drift-parts.mjs --plan --equal-weights
+          node --input-type=module -e '
+            import { readFileSync, appendFileSync } from "node:fs";
+            const plan = JSON.parse(readFileSync("suite-plan.json", "utf8"));
+            const part = plan.parts.find(p => p.name === "worker-1-of-6");
+            if (!part || !Array.isArray(part.files) || !part.files.length) process.exit(1);
+            console.log("Selected worker-1-of-6:", part.files.length, "test files");
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, "Selected test files: **" + part.files.length + "**\n\n");
+          '
+
+      - name: Install Worker dependencies
+        working-directory: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}/cloudflare-worker
+        run: npm ci
+
+      - name: Install root dependencies
+        working-directory: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
+        run: npm ci
+
+      - name: Run worker-1-of-6 with timing
+        id: benchmark
+        working-directory: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          metrics="$RUNNER_TEMP/macbook-worker-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.time"
+          set +e
+          /usr/bin/time -l -p -o "$metrics" node scripts/test-drift-parts.mjs worker-1-of-6 --plan-file suite-plan.json
+          test_exit=$?
+          set -e
+          printf 'TEST_EXIT=%s\n' "$test_exit"
+          printf 'exit_code=%s\n' "$test_exit" >> "$GITHUB_OUTPUT"
+          cat "$metrics"
+          {
+            printf '### Test result\n\nExit code: **%s**\n\n' "$test_exit"
+            printf '### Timing and resource usage\n\n```text\n'
+            cat "$metrics"
+            printf '```\n\n'
+            printf 'The timer includes generated-module preparation and the shard tests. It excludes checkout and dependency installation. macOS maximum resident set size is in bytes; it is not total simultaneous memory across all test processes.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$test_exit"
+
+      - name: Record completion and remove this run's checkout
+        if: always()
+        env:
+          BENCHMARK_OUTCOME: ${{ steps.benchmark.outcome }}
+        run: |
+          printf '\nBenchmark step outcome: **%s**\n' "$BENCHMARK_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          rm -rf -- "$GITHUB_WORKSPACE/macbook-worker-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          rm -rf -- "$RUNNER_TEMP/macbook-npm-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          rm -rf -- "$RUNNER_TEMP/macbook-python-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          rm -rf -- "$RUNNER_TEMP/macbook-uv-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          rm -f -- "$RUNNER_TEMP/macbook-worker-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.time"
+
