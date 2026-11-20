@@ -29,7 +29,6 @@ import { canManage, canRead, effectiveBook, monthSpend, scopeOfAgent, type Agent
 import { fromSql, sqlTime, type DutyRow } from './duties';
 import type { Refusal } from './goals';
 import { roomReaderRole, selectedFund } from './reads';
-import { fundGpScope } from '../tenancyScope';
 import { heldLicences } from '../accountLicences';
 import { userMeetsInvestorTier } from '../../middleware/requireInvestorTier';
 
@@ -182,9 +181,9 @@ export async function targetReadable(env: Env, a: AgentRow, s: Scope, target: { 
     const companyId = s.kind === 'company' ? s.id : s.company_id ?? null;
     const caller = { ...sponsor, licences: await heldLicences(env.DB as any, { id: Number(sponsor.id), role: sponsor.role }) };
     if (id === null || companyId === null || String(caller.role).toLowerCase() === 'admin' || !userMeetsInvestorTier(caller, 'institutional')) return null;
-    const scope = fundGpScope(sponsor, companyId, 'f');
-    const fund = await env.DB.prepare(`SELECT f.name FROM vc_funds f WHERE f.id = ? AND ${scope.sql}`)
-      .bind(id, ...scope.binds).first<{ name: string }>();
+    // Non-admin fundGpScope predicate, kept static so all caller values remain bound.
+    const fund = await env.DB.prepare('SELECT f.name FROM vc_funds f WHERE f.id = ? AND f.gp_user_id = ? AND (f.company_id = ? OR f.company_id IS NULL)')
+      .bind(id, Number(caller.id), companyId).first<{ name: string }>();
     return fund ? { title: fund.name, href: null } : null;
   }
   if (target.kind === 'document') {

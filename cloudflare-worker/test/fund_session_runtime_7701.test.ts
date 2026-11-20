@@ -29,12 +29,16 @@ test('checked fund targets and scheduling accept the institutional GP only in th
     }
     assert.ok(await targetReadable(f.w.env, a, SCOPE, { kind: 'fund', id: String(NO_COMPANY) }), 'same null-company exception as the reader');
     assert.equal(await targetReadable(f.w.env, a, { ...SCOPE, company_id: null }, { kind: 'fund', id: String(FUND) }), null);
+    assert.equal(await targetReadable(f.w.env, a, { ...SCOPE, company_id: null }, { kind: 'fund', id: String(NO_COMPANY) }), null);
+    f.w.db.prepare("INSERT INTO user_company_links(uid,company_id,user_id) VALUES('fund-company-member',?,?)").run(SCOPE.company_id, SPONSOR);
+    assert.ok(await targetReadable(f.w.env, a, { kind: 'company', id: SCOPE.company_id, name: 'Synthetic company' }, { kind: 'fund', id: String(FUND) }));
     f.w.db.prepare("UPDATE users SET investor_tier='professional' WHERE id=?").run(SPONSOR);
     const lower = await checkSession(f.w.env, a, SCOPE, input(), new Date(NOW));
     assert.equal(!lower.ok && lower.refusal.code, 'target_not_readable');
   } finally { f.w.close(); }
   const admin = fundWorld({ sponsor: ADMIN });
   try {
+    admin.w.db.prepare('UPDATE vc_funds SET gp_user_id=? WHERE id=?').run(ADMIN, FUND);
     assert.equal(await targetReadable(admin.w.env, agentOf(admin.w), SCOPE, { kind: 'fund', id: String(FUND) }), null);
   } finally { admin.w.close(); }
 });
