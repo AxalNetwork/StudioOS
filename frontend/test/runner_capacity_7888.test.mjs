@@ -47,6 +47,7 @@ test('records exact requested identities separately from observed timing and ano
     ['worker-1-of-6', 'standard-hosted', 5000, 110000], ['worker-2-of-6', 'macos-arm64', 5000, 90000], ['worker-3-of-6', 'linux-x64', 5000, 70000],
   ]);
   assert.deepEqual(report.metrics, { peak_completed_job_overlap: 3, three_pool_overlap_ms: 70000, known_controller_wait_overlap_ms: 80000, resource_headroom: null, provider_metered_cost: null, controller_availability: null });
+  assert.deepEqual(report.controllers, [{ job_id: 102, execution_ms: 80000, declared_wait_ms: 80000, non_wait_execution_ms: 0 }]);
   assert.equal(report.live_capacity_proof, 'not_verified');
   assert.ok(report.logical_results.every((r) => r.authoritative_result === null));
   assert.ok(report.attempts.every((r) => /^runner-[a-f0-9]{16}$/.test(r.runner_ref)));
@@ -107,6 +108,10 @@ test('parent cancellation, skipped tests, wrong attempt and changed workflow rev
 test('unrecorded controller phases and invalid intervals stay unknown; exact interval boundaries are not overlap', () => {
   const f = fixture(); f.spec.controllers[0].wait_steps = null;
   assert.equal(f.report().metrics.known_controller_wait_overlap_ms, null);
+  assert.equal(f.report().controllers[0].non_wait_execution_ms, null);
+  f.spec.controllers[0].wait_steps = [1]; f.jobs.get(10)[1].steps[0].completed_at = date(121);
+  assert.equal(f.report().controllers[0].non_wait_execution_ms, null, 'invalid wait duration cannot become negative overhead');
+  assert.equal(f.report().controllers[0].declared_wait_ms, null, 'waits outside the controller job are unavailable evidence');
   f.jobs.get(30)[0].completed_at = date(20);
   assert.equal(f.report().attempts[2].timing_state, 'unavailable');
   assert.equal(f.report().metrics.three_pool_overlap_ms, 0);

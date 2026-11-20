@@ -135,7 +135,9 @@ export function collectCapacity(read, manifest, { requestCap = 100 } = {}) {
     if (!job) fail('controller_unavailable');
     const spans = c.wait_steps == null ? null : c.wait_steps.map((number) => {
       const step = job.steps?.find((s) => s.number === number);
-      if (!step || stamp(step.started_at) == null || stamp(step.completed_at) == null || stamp(step.completed_at) < stamp(step.started_at)) return null;
+      if (!step || stamp(step.started_at) == null || stamp(step.completed_at) == null || stamp(step.completed_at) < stamp(step.started_at)
+          || (stamp(job.started_at) != null && stamp(step.started_at) < stamp(job.started_at))
+          || (stamp(job.completed_at) != null && stamp(step.completed_at) > stamp(job.completed_at))) return null;
       return { start: stamp(step.started_at), end: stamp(step.completed_at) };
     });
     return { job_id: c.job_id, execution_ms: duration(stamp(job.started_at), stamp(job.completed_at)),
@@ -149,6 +151,17 @@ function reportCapacity(spec, rows, controllers = [], { calls = 0, parentMatches
   const intervals = unique.filter((r) => r.assignment_profile === r.requested_profile && r.workflow_revision_matches)
     .map((r) => ({ profile: r.assignment_profile, start: stamp(r.started_at), end: stamp(r.completed_at) }));
   const overlap = overlapMetrics(intervals);
+  const controllerTimings = controllers.map((c) => {
+    let knownWait = c.wait_spans == null ? null : 0;
+    if (knownWait != null) {
+      let end = -Infinity;
+      for (const span of [...c.wait_spans].sort((a, b) => a.start - b.start)) {
+        knownWait += Math.max(0, span.end - Math.max(span.start, end)); end = Math.max(end, span.end);
+      }
+    }
+    return { job_id: c.job_id, execution_ms: c.execution_ms, declared_wait_ms: knownWait,
+      non_wait_execution_ms: c.execution_ms != null && knownWait != null && knownWait <= c.execution_ms ? c.execution_ms - knownWait : null };
+  });
   const waitOverlap = controllers.some((c) => c.wait_spans == null) || !controllers.length ? null : controllers.reduce((sum, c) => sum + c.wait_spans.reduce((total, span) => {
     // Union external execution windows before measuring: two children cannot double-count one waiting millisecond.
     const windows = intervals.filter((i) => i.profile !== 'standard-hosted').map((i) => [Math.max(i.start ?? Infinity, span.start), Math.min(i.end ?? -Infinity, span.end)])
@@ -167,7 +180,7 @@ function reportCapacity(spec, rows, controllers = [], { calls = 0, parentMatches
   return {
     version: 1, repository: REPOSITORY, evidence_scope: 'github_metadata_only', live_capacity_proof: 'not_verified',
     requested_candidate_sha: spec.candidate_sha, requested_executor_sha: spec.executor_sha, requested_plan_sha: spec.plan_sha,
-    parent: { run_id: spec.parent.run_id, attempt: spec.parent.attempt, conclusion: parentConclusion }, parent_revision_matches: parentMatches, github_reads: calls, attempts: unique, logical_results: logical,
+    parent: { run_id: spec.parent.run_id, attempt: spec.parent.attempt, conclusion: parentConclusion }, parent_revision_matches: parentMatches, github_reads: calls, attempts: unique, controllers: controllerTimings, logical_results: logical,
     metrics: { ...overlap, known_controller_wait_overlap_ms: waitOverlap, resource_headroom: null, provider_metered_cost: null, controller_availability: null },
     blockers: ['trusted source/plan/receipt binding from #7886/#7887 is not integrated', 'resource headroom and provider metering are not recorded',
       ...(!overlap.three_pool_overlap_ms ? ['no completed three-pool overlap in this observation set'] : []),

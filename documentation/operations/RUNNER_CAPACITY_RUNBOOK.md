@@ -75,7 +75,8 @@ a private version-1 report manifest with:
   `controllers` with `job_id` and recorded numeric `wait_steps`. Unknown wait
   phases are null, not an empty declaration of no waiting.
 
-Run the available GET-only reader:
+Use Node 22 and the GitHub CLI authenticated for Actions metadata reads in the
+operator environment. Run the available GET-only reader:
 
 ```sh
 node scripts/ci/runners/verify-capacity.mjs --manifest /private/capacity-manifest.json
@@ -84,7 +85,10 @@ node scripts/ci/runners/verify-capacity.mjs --manifest /private/capacity-manifes
 It bounds the entire collection to 100 API reads, fully paginates attempt jobs,
 checks exact run/job identities and prints only an allowlisted report with
 pseudonymous runner references. A page failure or cap yields unavailable evidence,
-never a partial count presented as complete. It makes no dispatch, cancellation,
+never a partial count presented as complete. Controller rows separate total job
+execution, the union of declared wait phases and remaining non-wait execution.
+These are elapsed metadata measurements, not CPU time or controller availability;
+unknown or out-of-job phases leave the remainder null. It makes no dispatch, cancellation,
 registration, provider, check-publication or permission call.
 
 The current reader intentionally reports `live_capacity_proof: not_verified` and
