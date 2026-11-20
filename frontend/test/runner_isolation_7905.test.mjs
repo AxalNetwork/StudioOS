@@ -6,9 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { JobContainer,readContainerPolicy,containerIsolationAdapter } from '../../scripts/ci/runners/job-container.mjs';
-const IMAGE='sha256:'+'a'.repeat(64),CID='b'.repeat(64),DEADLINE=Date.now()+60000;
+const IMAGE='sha256:'+'a'.repeat(64),CID='b'.repeat(64),NOW=1800000000000,DEADLINE=NOW+60000;
+const clocked=new WeakSet();
 const receipt=()=>({version:1,repository:'AxalNetwork/StudioOS',profile:'linux-x64',requestId:'00000000-0000-4000-8000-000000000001',logicalShard:'worker-1-of-6',childRunId:202,childAttempt:1,generation:1,executionDeadline:DEADLINE,event:'push',sourceSha:'e'.repeat(40)});
 function fixture(t){
+ if(!clocked.has(t)){t.mock.timers.enable({apis:['Date'],now:NOW});clocked.add(t);}
  const root=mkdtempSync(join(tmpdir(),'isolation-7905-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const source=join(root,'source'),plan=join(root,'plan.json');mkdirSync(source);writeFileSync(plan,'{}');
  const calls=[],runtime={node:"22.23.3",python:"3.11.18"};let state;
@@ -119,7 +121,7 @@ test('D7905 the container lifetime survives host loss and its init identity diff
  for(const call of f.calls.filter(c=>c.args[0]==='exec'))assert.equal(call.args[call.args.indexOf('--user')+1],'10000:10000');
  f.state().Config.Env=f.state().Config.Env.map(v=>v.startsWith('STUDIOOS_JOB_MAX_SECONDS=')?'STUDIOOS_JOB_MAX_SECONDS=999999':v);
  assert.equal(f.job.verifyIsolation({receipt:receipt()}),false);
- for(const executionDeadline of [Date.now()-1,Date.now()+1592000]){
+ for(const executionDeadline of [NOW,NOW-1,NOW+1590001]){
   const expired=fixture(t);assert.throws(()=>expired.job.create({...receipt(),executionDeadline},{source:expired.source,plan:expired.plan}),/invalid_container_deadline/);
   assert.equal(expired.calls.length,0);
  }
