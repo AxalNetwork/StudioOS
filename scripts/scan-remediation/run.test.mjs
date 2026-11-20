@@ -11,7 +11,7 @@ import { selectScope } from '../scan-scope.mjs';
 const options = { owner: 'AxalNetwork', repo: 'StudioOS', defaultBranch: 'main', runNumber: 1, botLogin: 'github-actions[bot]' };
 const ref = 'refs/heads/main';
 const alert = (number, state = 'open') => ({ number, state, tool: { name: 'CodeQL' }, most_recent_instance: { ref, state } });
-function fixture(rows, { tracked = [], pulls = [], claimed = [], fix = 'manual' } = {}) {
+function fixture(rows, { tracked = [], pulls = [], claimed = [] } = {}) {
   const calls = [];
   const api = {
     pages: async path => {
@@ -29,13 +29,11 @@ function fixture(rows, { tracked = [], pulls = [], claimed = [], fix = 'manual' 
     trackedNumbers: () => tracked,
     ensure: async n => { calls.push(['ensure', n]); return { issue: { number: 500 + n }, actionable: !claimed.includes(n) }; },
     closeFixed: async a => calls.push(['fixed', a.number]),
-    linkPrepared: async (i, branch) => calls.push(['prepared', i.number, branch]),
     markReady: async i => calls.push(['ready', i.number]),
     linkPull: async (i, p) => calls.push(['linked', i.number, p]),
   };
   const deps = {
     loadTrackers: async () => trackers,
-    prepareFix: async (_api, ctx) => { calls.push(['proposed', ctx.number]); return { status: fix, prNumber: 77, branch: 'alert-autofix-' + ctx.number }; },
   };
   return { calls, run: (extra = {}) => reconcile(api, { ...options, ...extra }, deps) };
 }
@@ -60,36 +58,66 @@ test('explicit alert respects dismissed, wrong-ref, assigned and claimed work', 
   assert.deepEqual(f.calls, [['ensure', 3], ['ensure', 4]]);
   await assert.rejects(f.run({ alertNumber: 0 }), /Invalid/);
 });
-test('manual fallback, pending, and confirmed PR outcomes have distinct issue transitions', async () => {
-  const unsupported = alert(1); unsupported.tool.name = 'Semgrep';
-  const f = fixture([unsupported, alert(2)]);
+test('every scanner hands unassigned findings to S21 without requesting a generated fix', async () => {
+  const semgrep = alert(1); semgrep.tool.name = 'Semgrep';
+  const thirdParty = alert(3); thirdParty.tool.name = 'another scanner';
+  const f = fixture([semgrep, alert(2), thirdParty]);
   await f.run();
-  assert.deepEqual(f.calls, [['ensure', 1], ['ready', 501], ['ensure', 2], ['proposed', 2], ['ready', 502]]);
-  for (const [fix, expected] of [['pending', []], ['pull_request', [['linked', 501, 77]]]]) {
-    const g = fixture([alert(1)], { fix });
-    await g.run(); assert.deepEqual(g.calls.slice(2), expected);
-  }
+  assert.deepEqual(f.calls, [['ensure', 1], ['ready', 501], ['ensure', 2], ['ready', 502], ['ensure', 3], ['ready', 503]]);
 });
-test('a confirmed PR policy refusal links the prepared branch and continues to the next alert', async () => {
-  const f = fixture([alert(1), alert(2)], {fix:'pr_permission'});
-  await f.run();
-  assert.deepEqual(f.calls.filter(([name]) => name === 'prepared'),
-    [['prepared',501,'alert-autofix-1'], ['prepared',502,'alert-autofix-2']]);
-});
-test('links human same-repo custom PR, ignores a fork, and recovers bot PR missing its label', async () => {
+test('links human and legacy bot PRs without editing them and ignores fork PRs', async () => {
   const pr = (number, repo, ref, n) => ({ number, base: {ref:'main'}, head: {ref, repo:{full_name:repo}},
     body: '(https://github.com/AxalNetwork/StudioOS/security/code-scanning/' + n + ')', user: { login: options.botLogin } });
   const pulls = [pr(77, 'AxalNetwork/StudioOS', 'custom', 1), pr(78, 'fork/StudioOS', 'custom', 2),
-    pr(79, 'AxalNetwork/StudioOS', 'alert-autofix-3', 3)];
-  const f = fixture([alert(1), alert(2), alert(3)], {pulls, fix: 'pending'});
+    pr(79, 'AxalNetwork/StudioOS', 'alert-autofix-3', 3), pr(80, 'AxalNetwork/StudioOS', 'alert-fix-4', 4)];
+  pulls[0].user.login = 'maintainer';
+  const f = fixture([alert(1), alert(2), alert(3), alert(4)], {pulls});
   await f.run();
-  assert.deepEqual(f.calls, [['ensure',1],['linked',501,77],['ensure',2],['proposed',2],['ensure',3],['proposed',3]]);
+  assert.deepEqual(f.calls, [['ensure',1],['linked',501,77],['ensure',2],['ready',502],
+    ['ensure',3],['linked',503,79],['ensure',4],['linked',504,80]]);
+});
+test('real tracker reconciliation writes only one issue and its ready label across repeat CodeQL sweeps', async () => {
+  const requests = [];
+  let issue;
+  const api = githubApi(options.owner, options.repo, 'test', async (url, request) => {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace('/repos/AxalNetwork/StudioOS', '');
+    const method = request.method;
+    requests.push([method, path]);
+    if (method === 'GET') {
+      if (path === '/issues') return Response.json(issue ? [issue] : []);
+      if (path === '/search/issues') return Response.json({ total_count: 0, incomplete_results: false, items: [] });
+      if (path === '/code-scanning/alerts') return Response.json([alert(42)]);
+      if (path === '/code-scanning/alerts/42') return Response.json(alert(42));
+      if (path === '/pulls') return Response.json([]);
+      if (path === '/issues/900') return Response.json(issue);
+      if (path === '/git/ref/heads/claim/900') return new Response(null, { status: 404 });
+    }
+    if (method === 'POST' && path === '/issues') {
+      const body = JSON.parse(request.body);
+      issue = { ...body, number: 900, state: 'open', user: { login: options.botLogin },
+        labels: body.labels.map(name => ({ name })), assignees: [] };
+      return Response.json(issue);
+    }
+    if (method === 'POST' && path === '/issues/900/labels') {
+      issue.labels.push(...JSON.parse(request.body).labels.map(name => ({ name })));
+      return Response.json(issue.labels);
+    }
+    throw Error('Unexpected reconciliation request: ' + method + ' ' + path);
+  });
+  assert.equal(await reconcile(api, options), 1);
+  assert.equal(await reconcile(api, options), 1);
+  assert.deepEqual(issue.labels.map(label => label.name), ['bug', 'slot:S21', 'state:ready']);
+  assert.deepEqual(requests.filter(([method]) => method !== 'GET'), [
+    ['POST', '/issues'], ['POST', '/issues/900/labels'],
+  ]);
+  assert.ok(requests.every(([, path]) => !path.includes('/autofix') && !path.includes('/commits')));
 });
 test('REST transport accepts triple-dot comparison; pagination is complete and errors redact responses', async () => {
   const seen = [];
   const api = githubApi('AxalNetwork','StudioOS','test', async (url, options) => {
     seen.push(url); assert.equal(options.redirect, 'error');
-    if (url.endsWith('/autofix')) return new Response(null, {status:202});
+    if (url.endsWith('/labels/state%3Aready')) return new Response(null, {status:204});
     if (url.includes('/compare/')) return Response.json({ahead_by:1});
     if (url.includes('/forbidden')) return new Response('sensitive error detail', {status:403});
     if (url.includes('/search/issues')) return Response.json({total_count:1,items:[{number:1}],incomplete_results:false});
@@ -97,7 +125,7 @@ test('REST transport accepts triple-dot comparison; pagination is complete and e
     return Response.json(page === '1' ? Array(100).fill(1) : [2]);
   });
   assert.deepEqual(await api.request('GET','/compare/'+'a'.repeat(40)+'...'+'b'.repeat(40)), {ahead_by:1});
-  assert.equal(await api.request('POST','/code-scanning/alerts/1/autofix'), null);
+  assert.equal(await api.request('DELETE','/issues/1/labels/state%3Aready'), null);
   assert.equal((await api.pages('/issues?state=all')).length,101);
   assert.equal((await api.searchIssues('is:issue')).length,1);
   assert.throws(() => api.request('GET','/../other'), /Invalid/);

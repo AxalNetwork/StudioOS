@@ -7,18 +7,26 @@ or production routing is enabled by this document.
 
 ## Current baseline and ownership
 
-Main inspected: `43d43132b8a8df475b2d994759daa846fe2a0f87` on 20 November 2026.
-PR #7882 remains open at `ec9eb07ced2ea69b31dd6f025a3a465d21313c84`.
-Its exact-source/plan admission, child result/failure preservation, bounded
-cancellation and native Mac evidence are groundwork. Its hosted parent waits
-while the Mac runs, so it does not release a hosted concurrency slot. It is not
-the completed capacity solution.
+Main inspected: `8a97b2890b51` on 20 November 2026. PR #7882 merged at
+`595b2d26145c35806ef9483393836a4098e360f4`; its hosted controller still waits
+while the Mac runs. The trusted inactive executor #7892 merged at
+`dd87916744bf31259ae1cc21310aedb68ef30bd4`, and bootstrap #7893 is also on main.
+Publication alone does not enable durable routing: its receipt/catalog/isolation
+adapters remain unconfigured and the executor CLI denies execution.
+
+At the review snapshot, all Worker execution remained on standard ubuntu-latest.
+The optional Mac flag was enabled, but an orphaned queued child prevented further
+handoffs (#7902). The included-compute GitHub-hosted 8-core runner passed only a
+[branch readiness probe](https://github.com/AxalNetwork/StudioOS/actions/runs/44780366843)
+at `0d4c847fc5cfe387ce6cf02fb5fa8eb335df10a3`. That probe is not a full Worker
+shard or proof of routing, overlap, native compatibility or fallback. No durable
+pool routing is active. Live state can change; #7902 and #7888 own follow-up evidence.
 
 | Owner | Deliverable | Boundary |
 | --- | --- | --- |
 | #7885 / s38 | Shared profile/bootstrap and one approved Linux pilot | No CI caller, reusable executor or group-access edits |
 | #7886 / s39 | Trusted main-published direct executor and admission | Caller activation stays disabled; group access must name the job-defining workflow |
-| #7887 / S32 | Durable routing, fencing, bounded fallback and authoritative aggregate | Initial draft #7890 is an isolated coordinator core, not deployed authority |
+| #7887 / S32 | Durable routing, fencing, bounded fallback and authoritative aggregate | Merged #7890 is an isolated coordinator core, not deployed authority |
 | #7888 | Measured overlap, failure/drain/teardown and 1 → 5–10 evidence | Additional machines need separate approval |
 | #7889 | Optional 50-runner/provider adapter | Blocked on small-pool proof; no scale-out now |
 | #6677 / #7882 | Existing runner-lane/caller groundwork | Coordinate exclusive ownership before any ci.yml/caller/gate change |
@@ -30,7 +38,7 @@ in this planning PR. #5600 remains the broader landing-capacity epic.
 ## Pool and profile contract
 
 Use `scripts/ci/runners/profiles.json` from #7885, schema v1. The agreed candidate
-IDs are **hosted**, **linux-x64**, **macos-arm64**; hosted maps to the fixed standard
+IDs are **hosted**, **linux-x64**, **macos-arm64**; #7907 adds the separate **github-8** included-compute profile; hosted maps to the fixed standard
 ubuntu-latest target and is never a self-hosted group member. External profiles
 include real OS/native architecture, GitHub AND labels, exact tool/archive pins
 and the shared studioos-worker-v1 capability. Names are unique inventory IDs,
@@ -69,8 +77,11 @@ run when resources permit. Retain several hosted Worker jobs in the initial
 six-part plan and a permanent floor of at least one hosted Worker shard in later
 stages. Standard hosted remains both an active share and the fallback pool.
 Respect the actual organization hosted concurrency limit, which is not observed
-from this integration; do not substitute a paid larger-runner label or assume
-that runner registration increases that quota. More external machines increase
+from this integration. The owner has authorized the GitHub-hosted 8-core pool
+using included compute only, with no overage. #7907 must add its separate
+profile, verify the allowed main workflow and prove bounded fallback before use.
+Other paid larger labels remain excluded. Runner registration does not increase
+the standard hosted quota. More external machines increase
 capacity across simultaneous runs, not the shard count inside one run.
 
 ## Durable authority and exact-result rules
@@ -147,10 +158,11 @@ does not automatically transfer pools; the durable coordinator owns fallback.
 | Standard hosted baseline remains active | Workflow diff and exact six-shard plan coverage | Preserved; no caller/workflow changes here |
 | Reviewed group/profile | Administrator read of exact repository/workflow restrictions and approved numeric ID | Unverified; integration reads return 403 |
 | Bootstrap/tool integrity | Offline lifecycle cases plus actual pinned Linux artifact probe | #7885 implementation; local proof is distinct from live node |
-| Trusted executor on main | Immutable SHA, direct-job workflow and refusal canaries | #7886 in progress; not established on inspected main |
-| Native Mac baseline | D7881 benchmark/tracing links and workload limits | Reported groundwork in #7882, not newly exercised here |
+| Trusted executor on main | Immutable SHA, direct-job workflow and refusal canaries | #7892 merged at dd87916744bf31259ae1cc21310aedb68ef30bd4; live refusal/group checks pending |
+| Native Mac baseline | D7881 benchmark/tracing links and workload limits | Merged #7882; enabled but orphaned queued child blocks handoffs at review (#7902) |
+| Included-compute 8-core pool | Main-defined workflow, full pinned Worker shard, timing and bounded fallback | Branch readiness pass only; #7907, no routing |
 | Independent durable authority | Deployment/version/status, restart/recovery and controlled permissions | Not verified; no authority URL activated |
-| Linux pilot and budget | Private node/runbook, time/spend limits and scheduled provider teardown | Owner supplied existing runner 44451/group 5 and an 18:00 Europe/Zurich stop; run 44746099004 reached its 40-minute limit; it was cancelled, with artifact upload and owned-file cleanup successful |
+| Linux pilot and budget | Private node/runbook, time/spend limits and scheduled provider teardown | Approved temporary pilot stop was 20 November at 18:00 Europe/Zurich; run 44746099004 reached its 40-minute limit; it was cancelled, with artifact upload and owned-file cleanup successful |
 | Result/gate authority | Exact candidate aggregate + producer/App and all consumer review | Pending staged #7887 cutover |
 | Additive overlap and fallback | Public owned run/job/source/executor links, timings, failure/drain proof | Pending #7888 after prerequisites |
 | Later scale | Controller/provider measurements and separate approved expansion | #7889 blocked; no scale-out |
@@ -163,12 +175,17 @@ private operator record. The approved cost cap is not a claim of unused credit.
 The owner-approved standalone Linux pilot uses the smoke definition at
 fe1c1ce6b48260e90a0c1049f0c0216701125758 on ci/linux-runner-test, testing source
 c6d0d48a984847a2b14325c82e9616da4c3dfdcf. GitHub job metadata independently
-matches runner 44451, group 5 and the expected Linux/X64/shared capability labels.
+matches the expected Linux/X64/shared capability labels.
 Its runtime/dependency setup passed; Worker/cleanup result must remain truthful.
 The branch definition is not on inspected main and its smoke-only group is not
 approval for production routing or bootstrap re-enrollment. No duplicate pilot is
-started here. The 40-minute job and 17:00 UTC node stop limits apply; provider
+started here. The 40-minute job and approved node stop limits applied; provider
 stop/teardown remains an operator action, not something inferred from job exit.
+
+#7903 owns coordinator correctness and storage-bound repair; #7904 and #7905 own
+executor admission/identity isolation; #7906 owns catalog/group reconciliation;
+#7909 owns authenticated transport, deployment, producer/caller and all-consumer
+cutover. None is implied complete by the merged preparatory modules.
 
 This epic stays open until the actual initial milestone is proved. Bootstrap
 installation, an open draft, a dispatch acknowledgement or documentation alone
@@ -180,5 +197,5 @@ Worker execution was cancelled; setup/runtime/source/plan/dependencies, artifact
 upload and owned-file cleanup passed. Trace summary was skipped. No Worker pass,
 complete process drain, provider teardown or additional capacity milestone is
 inferred. Full overlap and bounded-failure acceptance remain with #7888. The
-owner's 17:00 UTC node stop remains an operator action, not an effect of this
-planning/observational work.
+approved stop time has passed; provider teardown remains unverified and requires
+operator evidence. Job cancellation does not prove provider teardown.

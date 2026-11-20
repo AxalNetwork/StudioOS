@@ -1,4 +1,5 @@
 /** D5572 (#5572): disabled, unmounted control protocol for a customer-owned outbound-only `axal-runner`: enrollment, signed requests, D5565-fenced leases and the capability, egress, residency and consent decisions. */
+import type { ContainmentEvidence } from './workspaceContainment';
 import { z } from 'zod';
 import { WORKLOADS } from './compute';
 import { createRunnerControl, type RunnerIdentity, type RunnerStore } from './runnerProtocol';
@@ -176,9 +177,9 @@ export function byocCapabilities(runner: Pick<EnrolledRunner, 'cluster' | 'limit
 }
 
 /** The same runner as D5567 provider evidence, for `createWorkspaceSecurity`'s eligibility gate. */
-export function byocProviderEvidence(runner: Pick<EnrolledRunner, 'cluster' | 'limits' | 'manifest' | 'conformance_at'>, now: number, conformanceMaxAgeMs: number): WorkspaceProviderEvidence {
+export function byocProviderEvidence(runner: Pick<EnrolledRunner, 'cluster' | 'limits' | 'manifest' | 'conformance_at'>, now: number, conformanceMaxAgeMs: number, containment: ContainmentEvidence | null = null): WorkspaceProviderEvidence {
   const m = runner.manifest;
-  return { capabilities: byocCapabilities(runner, now, conformanceMaxAgeMs), non_root: has(m, 'run_as_non_root'),
+  return { containment, capabilities: byocCapabilities(runner, now, conformanceMaxAgeMs), non_root: has(m, 'run_as_non_root'),
     no_new_privileges: has(m, 'no_privilege_escalation'), immutable_image: has(m, 'digest_pinned_pulls') && has(m, 'image_signature_verification'),
     ephemeral_scratch: has(m, 'ephemeral_scratch'), resource_limits: has(m, 'resource_quotas'),
     host_socket: !has(m, 'deny_container_runtime_socket'), privileged: !has(m, 'deny_privileged'),
