@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { CiCapacity, SqlCapacityStore } from '../src/ciCapacity.ts';
+import { CiCapacity, SqlCapacityStore, CAPACITY_RETENTION_MS } from '../src/ciCapacity.ts';
 import type { CapacityPorts } from '../src/ciCapacity.ts';
 import {
   CI_CAPACITY_BUDGETS, activeAttempt, aggregateCapacity, receiptMatches, selectPools, submissionMatches, validateCapacityPolicy,
@@ -17,7 +17,7 @@ const input = (): CiSubmission => ({
   version: 1, requestId: '00000000-0000-4000-8000-000000000001', repository,
   parentRunId: 12, parentAttempt: 1, parentWorkflowId: 9, event: 'push',
   sourceSha: 'a'.repeat(40), queueBaseSha: null, executorSha: 'b'.repeat(40), planDigest: `sha256:${'c'.repeat(64)}`, planArtifactId: 45,
-  shards: ['rest', 'frontend-1-of-2', 'frontend-2-of-2', ...Array.from({ length: 6 }, (_, i) => `worker-${i + 1}-of-6`)],
+  shards: Array.from({ length: 6 }, (_, i) => `worker-${i + 1}-of-6`),
   prerequisites: ['fast', 'test deps', 'api ↔ worker drift'],
 });
 const policy = (): CapacityPolicy => ({
@@ -107,10 +107,10 @@ test('unknown, stale, offline, busy, draining and unapproved inventory all selec
     { ...inventory(100), runners: [inventory(100).runners[0], inventory(100).runners[0]] },
   ];
   for (const inv of cases) assert.equal(selectPools(s, true, inv, {}, p, 100).every(a => a.profile === 'hosted'), true);
-  for (const event of ['push', 'merge_group', 'pull_request'] as const) {
+  for (const event of ['push', 'merge_group'] as const) {
     assert.equal(selectPools({ ...s, event }, false, inventory(100), {}, p, 100).every(a => a.profile === 'hosted'), true);
   }
-  assert.equal(selectPools({ ...s, event: 'pull_request' }, true, inventory(100), {}, p, 100).every(a => a.profile === 'hosted'), true);
+  assert.equal(selectPools({ ...s, event: 'pull_request' as CiSubmission['event'] }, true, inventory(100), {}, p, 100).every(a => a.profile === 'hosted'), true);
   assert.equal(selectPools(s, true, inventory(100), { 'linux-x64': 2, 'macos-arm64': 1 }, p, 100).every(a => a.profile === 'hosted'), true);
 });
 
@@ -137,7 +137,7 @@ test('submission binds provenance, artifact and the exact expected set', () => {
   for (const patch of [{ executorOnMain: false }, { parentLive: false }]) {
     assert.equal(submissionMatches(s, { ...proof, ...patch }, repository), false);
   }
-  for (const patch of [{ requestId: '../invalid' }, { shards: ['rest', 'rest'] }, { shards: ['shell-command'] },
+  for (const patch of [{ requestId: '../invalid' }, { shards: ['worker-3-of-6', 'worker-3-of-6'] }, { shards: ['shell-command'] },
     { prerequisites: [] }, { planArtifactId: null }]) assert.equal(submissionMatches({ ...s, ...patch }, proof, repository), false);
   const merge = { ...s, event: 'merge_group' as const, planArtifactId: null, queueBaseSha: 'e'.repeat(40) };
   assert.equal(submissionMatches(merge, { ...proof, ...merge }, repository), true);
@@ -179,32 +179,32 @@ test('inventory outage chooses hosted and unreadable parent blocks dispatch and 
   assert.equal(f.get().shards.every(shard => activeAttempt(shard).profile === 'hosted'), true);
   f.state.parentDown = true; await c.tick(); assert.equal(f.dispatched.length, 0);
   f.state.parentDown = false; await c.tick();
-  const a = f.attempt('rest');
-  assert.equal((await c.receipt(s.requestId, 'rest', a.childRunId!, 1))?.childRunId, a.childRunId);
-  f.state.parentDown = true; assert.equal(await c.receipt(s.requestId, 'rest', a.childRunId!, 1), null);
+  const a = f.attempt('worker-3-of-6');
+  assert.equal((await c.receipt(s.requestId, 'worker-3-of-6', a.childRunId!, 1))?.childRunId, a.childRunId);
+  f.state.parentDown = true; assert.equal(await c.receipt(s.requestId, 'worker-3-of-6', a.childRunId!, 1), null);
   f.state.parentDown = false; f.state.live = false;
-  assert.equal(await c.receipt(s.requestId, 'rest', a.childRunId!, 1), null);
+  assert.equal(await c.receipt(s.requestId, 'worker-3-of-6', a.childRunId!, 1), null);
   await c.tick();
   assert.equal(c.status(s.requestId)?.status, 'cancelled');
   assert.equal(f.cancelled.length, s.shards.length);
 });
 
 test('ambiguous dispatch and interrupted durable intent are reconciled without repeating the remote effect', async t => {
-  const f = fixture(t), c = f.create(), s = { ...input(), shards: ['rest'] };
+  const f = fixture(t), c = f.create(), s = { ...input(), shards: ['worker-3-of-6'] };
   f.state.dispatchDown = true;
   await c.submit(s); await c.tick();
-  assert.equal(f.attempt('rest').phase, 'dispatch_unknown');
+  assert.equal(f.attempt('worker-3-of-6').phase, 'dispatch_unknown');
   const restarted = f.create(); await restarted.tick();
   assert.equal(f.dispatched.length, 1);
   const request = f.get(); activeAttempt(request.shards[0]).phase = 'dispatching'; f.store.save(request);
   await f.create().tick(); assert.equal(f.dispatched.length, 1);
   f.state.discovered = 812;
   await restarted.tick();
-  assert.equal(f.attempt('rest').childRunId, 812);
+  assert.equal(f.attempt('worker-3-of-6').childRunId, 812);
   assert.equal(f.dispatched.length, 1);
-  assert.equal(await restarted.receipt(s.requestId, 'rest', 811, 1), null);
-  assert.equal(await restarted.receipt(s.requestId, 'rest', 812, 2), null);
-  assert.equal((await restarted.receipt(s.requestId, 'rest', 812, 1))?.childRunId, 812);
+  assert.equal(await restarted.receipt(s.requestId, 'worker-3-of-6', 811, 1), null);
+  assert.equal(await restarted.receipt(s.requestId, 'worker-3-of-6', 812, 2), null);
+  assert.equal((await restarted.receipt(s.requestId, 'worker-3-of-6', 812, 1))?.childRunId, 812);
 });
 
 test('external start timeout fences only its child and waits for verified terminal cancellation before hosted fallback', async t => {
@@ -264,7 +264,7 @@ test('verified test failure cannot become infrastructure fallback or be overwrit
   f.outcomes.set(a.childRunId!, f.observation(a)); await c.tick();
   assert.equal(f.attempt(a.logicalShard).phase, 'failed');
   assert.equal(f.attempt(a.logicalShard).generation, 1);
-  assert.equal(await c.receipt(s.requestId, 'rest', f.attempt('rest').childRunId!, 1), null);
+  assert.equal(await c.receipt(s.requestId, 'worker-3-of-6', f.attempt('worker-3-of-6').childRunId!, 1), null);
   assert.equal(c.status(s.requestId)?.status, 'failure');
 });
 
@@ -285,7 +285,7 @@ test('late old-generation success cannot satisfy a replacement, and contradictor
 
 test('unowned events, wrong workflow, child attempt, profile and altered receipt are rejected', async t => {
   const f = fixture(t), c = f.create(), s = input(); await c.submit(s); await c.tick();
-  const a = f.attempt('rest');
+  const a = f.attempt('worker-3-of-6');
   assert.equal(await c.reconcileChild(s.requestId, 999999), false);
   for (const patch of [{ workflowPath: '.github/workflows/deploy.yml' }, { workflowAttempt: 2 },
     { runnerProfile: 'linux-x64' as const }, { jobId: 0 },
@@ -296,7 +296,7 @@ test('unowned events, wrong workflow, child attempt, profile and altered receipt
     f.outcomes.set(a.childRunId!, f.observation(a, patch));
     assert.equal(await c.reconcileChild(s.requestId, a.childRunId!), false);
   }
-  assert.equal(f.attempt('rest').phase, 'queued');
+  assert.equal(f.attempt('worker-3-of-6').phase, 'queued');
   assert.equal(c.status(s.requestId)?.status, 'pending');
 });
 
@@ -306,7 +306,7 @@ test('every expected logical shard and prerequisite is required, independent of 
     const a = activeAttempt(shard); f.outcomes.set(a.childRunId!, f.observation(a));
   }
   await c.tick(); assert.equal(c.status(s.requestId)?.status, 'pending');
-  const a = f.attempt('rest'); f.outcomes.set(a.childRunId!, f.observation(a));
+  const a = f.attempt('worker-1-of-6'); f.outcomes.set(a.childRunId!, f.observation(a));
   await c.tick(); assert.equal(c.status(s.requestId)?.status, 'pending');
   f.state.prerequisites = s.prerequisites.map(name => ({ name, conclusion: 'success' as const }));
   await c.tick(); assert.equal(c.status(s.requestId)?.status, 'success');
@@ -325,31 +325,32 @@ test('every expected logical shard and prerequisite is required, independent of 
 
 test('later parent attempt supersedes durable ownership and fences older receipt', async t => {
   const f = fixture(t), c = f.create(), s = input(); await c.submit(s); await c.tick();
-  const a = f.attempt('rest');
+  const a = f.attempt('worker-3-of-6');
   const replacement = { ...s, requestId: '00000000-0000-4000-8000-000000000002', parentAttempt: 2 };
   await c.submit(replacement);
   assert.equal(c.status(s.requestId)?.status, 'cancelled');
-  assert.equal(await c.receipt(s.requestId, 'rest', a.childRunId!, 1), null);
+  assert.equal(await c.receipt(s.requestId, 'worker-3-of-6', a.childRunId!, 1), null);
   await c.tick(); assert.equal(f.cancelled.some(r => r.childRunId === a.childRunId), true);
   assert.equal(c.status(replacement.requestId)?.status, 'pending');
 });
 
 test('deadline expiry and late success never publish a false pass', async t => {
-  const f = fixture(t), c = f.create(), s = { ...input(), shards: ['rest'] }; await c.submit(s); await c.tick();
-  const a = f.attempt('rest'); f.state.now = a.executionDeadline;
+  const f = fixture(t), c = f.create(), s = { ...input(), shards: ['worker-3-of-6'] }; await c.submit(s); await c.tick();
+  const a = f.attempt('worker-3-of-6'); f.state.now = a.executionDeadline;
   f.outcomes.set(a.childRunId!, f.observation(a)); await c.tick();
-  assert.notEqual(f.attempt('rest').phase, 'passed');
+  assert.notEqual(f.attempt('worker-3-of-6').phase, 'passed');
   f.state.now = f.get().deadline;
   assert.equal(c.status(s.requestId)?.status, 'failure');
 });
 
 test('a crash before the old superseded flag commits cannot revive the previous parent attempt', async t => {
   const f = fixture(t), c = f.create(), s = input(); await c.submit(s); await c.tick();
-  const a = f.attempt('rest');
+  const a = f.attempt('worker-3-of-6');
   const next = { ...structuredClone(f.get()), submission: { ...s, parentAttempt: 2, requestId: '00000000-0000-4000-8000-000000000002' } };
+  for (const shard of next.shards) for (const attempt of shard.attempts) attempt.childRunId = null;
   f.store.save(next); // Represents the committed new identity, before the old cached flag update.
   assert.equal(f.get().superseded, false);
-  assert.equal(await f.create().receipt(s.requestId, 'rest', a.childRunId!, 1), null);
+  assert.equal(await f.create().receipt(s.requestId, 'worker-3-of-6', a.childRunId!, 1), null);
   assert.equal(f.create().status(s.requestId)?.status, 'cancelled');
 });
 
@@ -384,11 +385,11 @@ test('failed or incomplete prerequisites do not clear the aggregate', async t =>
 
 test('late-starting or job-only success is insufficient verified test evidence', async t => {
   const f = fixture(t), c = f.create(), s = input(); await c.submit(s); await c.tick();
-  const a = f.attempt('rest');
+  const a = f.attempt('worker-3-of-6');
   f.outcomes.set(a.childRunId!, f.observation(a, { testStep: 'unknown' }));
   await c.reconcileChild(s.requestId, a.childRunId!);
-  assert.equal(f.attempt('rest').phase, 'failed');
-  const other = f.attempt('frontend-1-of-2');
+  assert.equal(f.attempt('worker-3-of-6').phase, 'cancellation_unknown');
+  const other = f.attempt('worker-4-of-6');
   f.outcomes.set(other.childRunId!, f.observation(other, { startedAt: other.startDeadline + 1 }));
   await c.reconcileChild(s.requestId, other.childRunId!);
   assert.notEqual(f.attempt(other.logicalShard).phase, 'passed');
@@ -402,17 +403,104 @@ test('successful prerequisites cannot substitute for a missing logical shard', a
     const a = activeAttempt(shard); f.outcomes.set(a.childRunId!, f.observation(a));
   }
   await c.tick(); assert.equal(c.status(s.requestId)?.status, 'pending');
-  const last = f.attempt('rest'); f.outcomes.set(last.childRunId!, f.observation(last));
+  const last = f.attempt('worker-1-of-6'); f.outcomes.set(last.childRunId!, f.observation(last));
   await c.tick(); assert.equal(c.status(s.requestId)?.status, 'success');
 });
 
 test('every immutable receipt field participates in equality', async t => {
   const f = fixture(t), c = f.create(); await c.submit(input()); await c.tick();
-  const receipt = f.observation(f.attempt('rest')).receipt;
+  const receipt = f.observation(f.attempt('worker-3-of-6')).receipt;
   assert.equal(receiptMatches(receipt, structuredClone(receipt)), true);
   for (const field of Object.keys(receipt) as (keyof ExecutionReceipt)[]) {
     if (['phase', 'cancelDeadline', 'reason'].includes(field)) continue;
     const changed = { ...receipt, [field]: typeof receipt[field] === 'number' ? Number(receipt[field]) + 1 : `${receipt[field]}-other` };
     assert.equal(receiptMatches(receipt, changed as ExecutionReceipt), false, field);
   }
+});
+
+
+test('D7903 terminal infrastructure failure gets one hosted fallback while unknown test truth stays fenced', async t => {
+  const f = fixture(t), c = f.create(); await c.submit(input()); await c.tick();
+  const a = f.attempt('worker-1-of-6'), unknown = f.attempt('worker-2-of-6');
+  f.outcomes.set(a.childRunId!, f.observation(a, { conclusion: 'failure', jobConclusion: 'failure', testStep: 'not_run' }));
+  f.outcomes.set(unknown.childRunId!, f.observation(unknown, { conclusion: 'failure', jobConclusion: 'failure', testStep: 'unknown' }));
+  await c.tick();
+  const current = f.attempt(a.logicalShard);
+  assert.equal(current.generation, 2); assert.equal(current.profile, 'hosted');
+  assert.equal(f.get().shards[0].attempts[0].reason, 'infrastructure_failed');
+  assert.equal(f.attempt(unknown.logicalShard).generation, 1);
+  assert.equal(f.cancelled.some(r => r.childRunId === unknown.childRunId), true);
+  assert.equal(c.status(input().requestId)?.status, 'pending');
+  f.outcomes.set(current.childRunId!, f.observation(current, { conclusion: 'failure', jobConclusion: 'failure', testStep: 'not_run' }));
+  await c.tick(); assert.equal(f.attempt(a.logicalShard).generation, 2);
+  assert.equal(c.status(input().requestId)?.status, 'failure');
+});
+
+test('D7903 running attempts are represented by busy inventory, not subtracted twice', async t => {
+  const f = fixture(t), c = f.create();
+  f.ports.inventory = async () => ({observedAt:f.state.now,complete:true,runners:[
+    {id:1,profile:'linux-x64',groupId:77,online:true,busy:false,draining:false},
+    {id:2,profile:'linux-x64',groupId:77,online:true,busy:false,draining:false},
+  ]});
+  await c.submit(input()); const first=f.get();
+  for (const shard of first.shards) { const a=activeAttempt(shard); if(a.profile==='linux-x64') a.phase='running'; }
+  f.store.save(first);
+  f.ports.inventory = async () => ({observedAt:f.state.now,complete:true,runners:[
+    {id:1,profile:'linux-x64',groupId:77,online:true,busy:true,draining:false},
+    {id:2,profile:'linux-x64',groupId:77,online:true,busy:false,draining:false},
+  ]});
+  const second={...input(),requestId:'00000000-0000-4000-8000-000000000002',parentRunId:13};
+  await c.submit(second);
+  assert.equal(f.get(second.requestId).shards.filter(s=>activeAttempt(s).profile==='linux-x64').length,1);
+});
+
+test('D7903 only the six agreed Worker shards on push or merge_group enter the coordinator', () => {
+  for(const patch of [{shards:['rest']},{shards:['frontend-1-of-2']},{shards:['worker-7-of-6']},
+    {shards:['worker-1-of-7']},{event:'pull_request' as CiSubmission['event']}]) {
+    const s={...input(),...patch};
+    assert.equal(submissionMatches(s,{...s,parentLive:true,trustedSource:true,executorOnMain:true},repository),false);
+  }
+});
+
+test('D7903 full retained storage refuses admission but continues active reconciliation and retains identity fences after pruning', async t => {
+  const f=fixture(t),c=new CiCapacity(f.store,f.ports,repository,policy(),()=>f.state.now); await c.submit(input());
+  const base=f.get();
+  for(let i=2;i<=1000;i++) {
+    const old=structuredClone(base);old.submission.requestId=`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`;
+    old.submission.parentRunId=i+100;old.completedAt=f.state.now;
+    for(const shard of old.shards) for(const a of shard.attempts) {
+      a.requestId=old.submission.requestId;a.parentRunId=old.submission.parentRunId;a.phase='passed';a.childRunId=i*10+Number(shard.name.split('-')[1]);
+    }
+    f.store.save(old);
+  }
+  const next={...input(),requestId:'00000000-0000-4000-8000-000000001001',parentRunId:9999};
+  const overflow=structuredClone(base); overflow.submission=next;
+  assert.throws(()=>f.store.save(overflow),/capacity_storage_bound/);
+  await assert.rejects(c.submit(next),/capacity_storage_bound/);
+  assert.equal(f.store.count(),1000);
+  // A full history cannot halt a currently owned child, nor trigger historical table scans.
+  f.store.list=()=>{throw Error('unexpected full scan');};
+  await c.tick(); assert.equal(f.dispatched.length,6);
+  assert.equal(f.store.pending().length,1);
+  f.state.now += CAPACITY_RETENTION_MS+1;
+  await c.submit(next);
+  assert.equal(f.store.count(),2);
+  assert.equal(f.store.get('00000000-0000-4000-8000-000000000002'),null);
+  assert.equal(f.store.ownsChild(21),true);
+  assert.equal(f.store.newerParent(102,0),true);
+  await assert.rejects(c.submit({...next,requestId:'00000000-0000-4000-8000-000000000002',parentRunId:9998}),/expired_request/);
+  await assert.rejects(c.submit({...next,requestId:'00000000-0000-4000-8000-000000001002',parentRunId:102}),/parent_conflict/);
+});
+
+test('D7903 child uniqueness is transactional and old receipts acquire durable indexes on upgrade', async t=>{
+  const f=fixture(t),c=f.create(); await c.submit(input()); await c.tick();
+  const before=f.get(),bad=structuredClone(before);
+  activeAttempt(bad.shards[1]).childRunId=activeAttempt(bad.shards[0]).childRunId;
+  assert.throws(()=>f.store.save(bad),/child_conflict/);
+  assert.deepEqual(f.get(),before);
+  f.db.exec('DELETE FROM ci_capacity_index; DELETE FROM ci_capacity_children; DELETE FROM ci_capacity_parents; DELETE FROM ci_capacity_seen');
+  const upgraded=new SqlCapacityStore(f.storage);
+  assert.equal(upgraded.pending().length,1);
+  assert.equal(upgraded.ownsChild(activeAttempt(before.shards[0]).childRunId!),true);
+  assert.equal(upgraded.newerParent(12,0),true);
 });

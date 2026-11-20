@@ -8,33 +8,97 @@ import type {
   CiProvenance, CiSubmission, ExecutionReceipt, PrerequisiteResult,
 } from './lib/ciCapacityPolicy.ts';
 
+export const CAPACITY_REQUEST_LIMIT = 1000;
+export const CAPACITY_RETENTION_MS = 7 * 24 * 60 * 60_000;
 export interface CapacityStore {
   get(id: string): CapacityRequest | null;
   list(): CapacityRequest[];
+  pending(): CapacityRequest[];
+  count(): number;
+  seen(id: string): boolean;
+  newerParent(parentRunId: number, attempt: number): boolean;
+  ownsChild(childRunId: number): boolean;
+  prune(before: number): void;
   save(request: CapacityRequest): void;
 }
 
-/** Own table and transaction boundary, independent of issue leases and merge cancellation. */
+/** Bounded full receipts, indexed work and compact permanent identity fences. */
 export class SqlCapacityStore implements CapacityStore {
   private readonly storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>;
   constructor(storage: Pick<DurableObjectStorage, 'sql' | 'transactionSync'>) {
     this.storage = storage;
-    storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_requests (
-      id TEXT PRIMARY KEY, parent TEXT NOT NULL UNIQUE, state TEXT NOT NULL)`);
+    storage.transactionSync(() => {
+      storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_requests (
+        id TEXT PRIMARY KEY, parent TEXT NOT NULL UNIQUE, state TEXT NOT NULL)`);
+      storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_index (
+        id TEXT PRIMARY KEY, pending INTEGER NOT NULL, completed_at INTEGER)`);
+      storage.sql.exec('CREATE INDEX IF NOT EXISTS ci_capacity_pending ON ci_capacity_index(pending, id)');
+      storage.sql.exec('CREATE INDEX IF NOT EXISTS ci_capacity_retention ON ci_capacity_index(pending, completed_at)');
+      storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_children (
+        child INTEGER PRIMARY KEY, owner TEXT NOT NULL)`);
+      storage.sql.exec(`CREATE TABLE IF NOT EXISTS ci_capacity_parents (
+        parent INTEGER PRIMARY KEY, attempt INTEGER NOT NULL)`);
+      storage.sql.exec('CREATE TABLE IF NOT EXISTS ci_capacity_seen (id TEXT PRIMARY KEY)');
+      // One-time upgrade of existing receipts; subsequent constructors do not rescan them.
+      const missing = storage.sql.exec<{ state: string }>(`SELECT r.state FROM ci_capacity_requests r
+        LEFT JOIN ci_capacity_index i ON i.id = r.id WHERE i.id IS NULL`).toArray();
+      for (const row of missing) this.index(JSON.parse(row.state) as CapacityRequest);
+    });
   }
   get(id: string): CapacityRequest | null {
     const rows = this.storage.sql.exec<{ state: string }>('SELECT state FROM ci_capacity_requests WHERE id = ?', id).toArray();
     return rows.length ? JSON.parse(rows[0].state) as CapacityRequest : null;
   }
   list(): CapacityRequest[] {
-    // Fail closed at the storage bound. Reviewed archival is required before reaching it.
-    const rows = this.storage.sql.exec<{ state: string }>('SELECT state FROM ci_capacity_requests ORDER BY id LIMIT 1001').toArray();
-    if (rows.length > 1000) throw new Error('capacity_storage_bound');
-    return rows.map(row => JSON.parse(row.state) as CapacityRequest);
+    return this.storage.sql.exec<{ state: string }>('SELECT state FROM ci_capacity_requests ORDER BY id LIMIT 1000')
+      .toArray().map(row => JSON.parse(row.state) as CapacityRequest);
+  }
+  pending(): CapacityRequest[] {
+    return this.storage.sql.exec<{ state: string }>(`SELECT r.state FROM ci_capacity_index i
+      JOIN ci_capacity_requests r ON r.id = i.id WHERE i.pending = 1 ORDER BY i.id LIMIT 1000`)
+      .toArray().map(row => JSON.parse(row.state) as CapacityRequest);
+  }
+  count(): number {
+    return this.storage.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM ci_capacity_requests').toArray()[0].n;
+  }
+  seen(id: string): boolean {
+    return this.storage.sql.exec('SELECT id FROM ci_capacity_seen WHERE id = ?', id).toArray().length > 0;
+  }
+  newerParent(parentRunId: number, attempt: number): boolean {
+    return this.storage.sql.exec('SELECT parent FROM ci_capacity_parents WHERE parent = ? AND attempt > ?', parentRunId, attempt).toArray().length > 0;
+  }
+  ownsChild(childRunId: number): boolean {
+    return this.storage.sql.exec('SELECT child FROM ci_capacity_children WHERE child = ?', childRunId).toArray().length > 0;
+  }
+  prune(before: number): void {
+    this.storage.transactionSync(() => {
+      this.storage.sql.exec(`DELETE FROM ci_capacity_requests WHERE id IN
+        (SELECT id FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?)`, before);
+      this.storage.sql.exec('DELETE FROM ci_capacity_index WHERE pending = 0 AND completed_at <= ?', before);
+      // Parent, request and child tombstones survive receipt retention: no identity can be reused.
+    });
+  }
+  private index(request: CapacityRequest): void {
+    const s = request.submission;
+    const settled = request.completedAt !== null && request.shards.every(shard => shard.attempts.every(terminal));
+    this.storage.sql.exec(`INSERT INTO ci_capacity_index (id, pending, completed_at) VALUES (?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET pending = excluded.pending, completed_at = excluded.completed_at`,
+    s.requestId, settled ? 0 : 1, settled ? request.completedAt : null);
+    this.storage.sql.exec('INSERT OR IGNORE INTO ci_capacity_seen (id) VALUES (?)', s.requestId);
+    this.storage.sql.exec(`INSERT INTO ci_capacity_parents (parent, attempt) VALUES (?, ?)
+      ON CONFLICT(parent) DO UPDATE SET attempt = MAX(attempt, excluded.attempt)`, s.parentRunId, s.parentAttempt);
+    for (const shard of request.shards) for (const a of shard.attempts) if (a.childRunId !== null) {
+      const owner = JSON.stringify([s.requestId, shard.name, a.generation]);
+      this.storage.sql.exec('INSERT OR IGNORE INTO ci_capacity_children (child, owner) VALUES (?, ?)', a.childRunId, owner);
+      const rows = this.storage.sql.exec<{ owner: string }>('SELECT owner FROM ci_capacity_children WHERE child = ?', a.childRunId).toArray();
+      if (rows[0].owner !== owner) throw new Error('capacity_child_conflict');
+    }
   }
   save(request: CapacityRequest): void {
     const s = request.submission;
     this.storage.transactionSync(() => {
+      if (!this.get(s.requestId) && (this.seen(s.requestId) || this.count() >= CAPACITY_REQUEST_LIMIT)) throw new Error('capacity_storage_bound');
+      this.index(request);
       this.storage.sql.exec(`INSERT INTO ci_capacity_requests (id, parent, state) VALUES (?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET state = excluded.state`,
       s.requestId, `${s.repository}:${s.parentRunId}:${s.parentAttempt}`, JSON.stringify(request));
@@ -92,7 +156,11 @@ export class CiCapacity {
         if (identity(previous.submission) !== identity(input)) throw new Error('capacity_request_conflict');
         return { accepted: true, requestId: input.requestId };
       }
-      const requests = this.store.list();
+      if (this.store.seen(input.requestId)) throw new Error('capacity_expired_request');
+      this.store.prune(this.now() - CAPACITY_RETENTION_MS);
+      if (this.store.count() >= CAPACITY_REQUEST_LIMIT) throw new Error('capacity_storage_bound');
+      if (this.store.newerParent(input.parentRunId, input.parentAttempt - 1)) throw new Error('capacity_parent_conflict');
+      const requests = this.store.pending();
       if (requests.some(r => r.submission.parentRunId === input.parentRunId
         && r.submission.parentAttempt >= input.parentAttempt)) throw new Error('capacity_parent_conflict');
       const now = this.now();
@@ -103,7 +171,7 @@ export class CiCapacity {
       try { inventory = await this.ports.inventory(); } catch { /* Unknown inventory chooses hosted before delegation. */ }
       const reservations: Record<string, number> = {};
       for (const request of requests) for (const shard of request.shards) for (const attempt of shard.attempts) {
-        if (!terminal(attempt)) reservations[attempt.profile] = (reservations[attempt.profile] ?? 0) + 1;
+        if (['reserved', 'dispatching', 'dispatch_unknown', 'queued'].includes(attempt.phase)) reservations[attempt.profile] = (reservations[attempt.profile] ?? 0) + 1;
       }
       const acceptedAt = this.now();
       const assignments = selectPools(input, proof.trustedSource, inventory, reservations, this.policy, acceptedAt);
@@ -173,8 +241,7 @@ export class CiCapacity {
   private superseded(request: CapacityRequest): boolean {
     // Derived from committed parent identities as well as the cached flag. A crash between
     // accepting the new attempt and writing the old flag must never revive an old child.
-    return request.superseded || this.store.list().some(r => r.submission.parentRunId === request.submission.parentRunId
-      && r.submission.parentAttempt > request.submission.parentAttempt);
+    return request.superseded || this.store.newerParent(request.submission.parentRunId, request.submission.parentAttempt);
   }
 
   private bound(a: CiAttempt): ExecutionReceipt {
@@ -195,11 +262,13 @@ export class CiCapacity {
     return this.ordered(async () => {
       let pending = false;
       // Bounded accepted population. The future adapter must also cap API calls per tick.
-      for (const request of this.store.list()) {
+      for (const request of this.store.pending()) {
         request.superseded = this.superseded(request);
         if (aggregateCapacity(request, this.now()).status === 'success') continue;
         if (aggregateCapacity(request, this.now()).status !== 'pending'
-            && request.shards.every(s => s.attempts.every(terminal))) continue;
+            && request.shards.every(s => s.attempts.every(terminal))) {
+          request.completedAt ??= this.now(); this.store.save(request); continue;
+        }
         pending = true;
         try { request.parentLive = request.parentLive && await this.ports.parent(request.submission); }
         catch { continue; } // No new dispatch/admission on unreadable parent metadata.
@@ -230,7 +299,7 @@ export class CiCapacity {
             try {
               const id = await this.ports.discover(structuredClone(a));
               if (id !== null && validRunId(id)
-                  && !this.store.list().some(r => r.shards.some(s => s.attempts.some(a => a.childRunId === id)))) { a.childRunId = id; a.phase = 'queued'; a.reason = null; this.store.save(request); }
+                  && !this.store.ownsChild(id)) { a.childRunId = id; a.phase = 'queued'; a.reason = null; this.store.save(request); }
             } catch { /* Never repeat a dispatch with an uncertain outcome. */ }
           }
           if (a.childRunId !== null && !terminal(a)) {
@@ -270,7 +339,7 @@ export class CiCapacity {
             this.store.save(request); // Durable reservation and dispatch intent precede the remote effect.
             try {
               const id = await this.ports.dispatch(structuredClone(a));
-              if (!validRunId(id) || this.store.list().some(r => r.shards.some(s => s.attempts.some(a => a.childRunId === id)))) {
+              if (!validRunId(id) || this.store.ownsChild(id)) {
                 throw new Error('capacity_dispatch_id_refused');
               }
               a.childRunId = id; a.phase = 'queued'; a.reason = null;
@@ -279,7 +348,7 @@ export class CiCapacity {
           }
           this.store.save(request);
         }
-        if (aggregateCapacity(request, this.now()).status === 'success') {
+        if (aggregateCapacity(request, this.now()).status !== 'pending' && request.shards.every(s => s.attempts.every(terminal))) {
           request.completedAt ??= this.now();
           this.store.save(request);
         }
