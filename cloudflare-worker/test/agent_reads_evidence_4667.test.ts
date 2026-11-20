@@ -131,7 +131,9 @@ test('the ten skills: an input matrix, and a preflight through the actual reader
       assert.notEqual(full.state, 'ready', `${slug}: the built readers do not carry its typed evidence, so it is not ready`);
       assert.equal(none.state, 'not_ready', `${slug}: with no project it cannot run`);
       assert.ok(full.limits.length > 0, `${slug}: what is missing is named`);
-      const carried = ['cash-runway-snapshot', 'board-meeting-brief', 'monthly-investor-update', 'legal-due-diligence-coordination', 'pipeline-health-diagnostics', 'customer-interview-summary'].includes(slug);
+      // D4667-p3: the data room's document text is built, so the two skills whose required inputs it completes are supported.
+      const carried = ['cash-runway-snapshot', 'board-meeting-brief', 'monthly-investor-update', 'contract-clause-extraction', 'safe-convertible-instrument-review',
+        'legal-due-diligence-coordination', 'pipeline-health-diagnostics', 'customer-interview-summary'].includes(slug);
       assert.equal(full.paths.default_context, carried ? 'supported' : 'unsupported', `${slug}: which paths can supply its required evidence`);
       assert.equal(full.paths.manual, 'approved_tool_reads_not_exercised_here');
     }

@@ -8,20 +8,18 @@
  *
  * THE FAKE BINDING. No model is called. Each call takes a latency drawn,
  * from a fixed seed, from 1.5 s to 6 s, skewed to its low end (median about
- * 2.6 s), the range a short text run on the routed models answers in. The
- * run's own work (D1, the claims, the usage rows) is charged `STATEMENT_MS`
- * simulated milliseconds per SQL statement it prepares, so the figures read
- * high, never low.
+ * 2.6 s), the range a short text run on the routed models answers in. Each
+ * D1 round trip the runtime makes (a statement's `all`, `first` or `run`, a
+ * `batch`) waits `D1_MS` before it runs, well above a Worker's D1 latency, so
+ * the figures read high, never low.
  *
  * THE CLOCK (#7579, #7583). The figures are read on a simulated clock, not the
- * wall clock: each call waits its drawn latency there, and the runtime's own
- * work is charged a fixed cost per SQL statement. On the wall clock a busy
- * runner put both into the result (a second of starvation was 20 simulated
- * seconds), which failed the gate on two PRs that touch no deck code. #7590
- * moved it to this process's CPU time × 20, which still moved with the runner:
- * the same code read p50 24.8 s, 41.0 s and 59.8 s on three CI runs and failed
- * the merge queue for PRs that touch no deck code. A statement count does not
- * depend on the machine, so the gate now reads the same on every run.
+ * wall clock: each model call and each D1 round trip waits its time there, and
+ * nothing else moves it. On the wall clock a busy runner put its starvation into
+ * the result, which failed the gate on two PRs that touch no deck code. The first
+ * simulated clock (#7590) still charged this process's CPU time × 20, so a slow
+ * runner read nearly three times what a fast one did (p50 67.5 s on #7519's CI against
+ * 24 s locally). Now the same seed gives the same figures on any host.
  * What this measures is the runtime: the fan-out, the order of drafts before
  * second passes, and one hold per run. The AiGovernor's pacing has its own
  * tests and is stubbed open here. The capped staging run with real models
@@ -41,8 +39,8 @@ import { DRIVERS } from '../src/durable-objects/deck-gen-room.ts';
 
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const FOUNDERS = 5, CARDS = 12;
-/** Simulated milliseconds charged per SQL statement the run prepares (D1 work on a fixed scale, not the runner's CPU). */
-const STATEMENT_MS = 4;
+/** Simulated milliseconds per D1 round trip. */
+const D1_MS = 25;
 const P50_S = 45, P95_S = 90;
 
 const M716 = readFileSync('cloudflare-worker/sql/migrations/716_deck_area_batches.sql', 'utf8');
@@ -78,21 +76,18 @@ function planCtx(founder: number, cards: any[]): PlanCtx {
 }
 
 /**
- * A simulated clock in milliseconds. `sleep` waits on it; once the event loop has
- * nothing else to run, it charges the SQL statements run since the last advance
- * (`work()`, times `STATEMENT_MS`) and moves to the next wake-up. The runtime's
- * work between calls is synchronous D1 and promises, so every driver is asleep
+ * A simulated clock in milliseconds. `sleep` waits on it. Once the event loop
+ * has nothing else to run, it moves to the next wake-up. The runtime waits only
+ * on the model and on D1, both of which sleep here, so every driver is asleep
  * when it advances; a driver that is not yet asleep only wakes later, so the
  * clock never reads low.
  */
-function simClock(work: () => number) {
-  let now = 0, seen = work(), armed = false;
+function simClock() {
+  let now = 0, armed = false;
   const sleepers: Array<{ at: number; wake: () => void }> = [];
-  const charge = () => { const n = work(); now += (n - seen) * STATEMENT_MS; seen = n; };
   const advance = () => {
     armed = false;
     if (!sleepers.length) return;
-    charge();
     sleepers.sort((a, b) => a.at - b.at);
     now = Math.max(now, sleepers[0].at);
     while (sleepers.length && sleepers[0].at <= now) sleepers.shift()!.wake();
@@ -100,8 +95,28 @@ function simClock(work: () => number) {
   };
   const arm = () => { if (!armed && sleepers.length) { armed = true; setImmediate(advance); } };
   return {
-    now: () => { charge(); return now; },
+    now: () => now,
     sleep: (ms: number) => new Promise<void>((wake) => { sleepers.push({ at: now + ms, wake }); arm(); }),
+  };
+}
+
+/**
+ * The fixture's D1 with a round trip's latency: every `all`, `first`, `run`,
+ * `batch` and `exec` first waits `trip()`, then runs as before, so a batch is
+ * still one transaction. Drivers wait their trips side by side, as Workers do.
+ */
+function chargedD1(DB: any, trip: () => Promise<void>) {
+  return {
+    prepare(sql: string) {
+      const st = DB.prepare(sql);
+      for (const k of ['all', 'first', 'run'] as const) {
+        const call = st[k];
+        st[k] = async (...a: any[]) => { await trip(); return call(...a); };
+      }
+      return st;
+    },
+    batch: async (stmts: any[]) => { await trip(); return DB.batch(stmts); },
+    exec: async (sql: string) => { await trip(); return DB.exec(sql); },
   };
 }
 
@@ -115,11 +130,7 @@ test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first f
   setFixtureAllowance(f.db, 0);
   try {
     const draw = rng(3798);
-    // Every statement the D1 shim (and this test's usage rows) prepares is one unit of work.
-    let statements = 0;
-    const prepare = f.db.prepare.bind(f.db);
-    (f.db as any).prepare = (sql: string) => { statements++; return prepare(sql); };
-    const clock = simClock(() => statements);
+    const clock = simClock();
     const firstDraftAt = new Map<string, number>(); // run uid → when its last draft landed (simulated ms)
     const draftsLeft = new Map<string, number>();
     const run = async (_env: any, o: any) => {
@@ -137,7 +148,9 @@ test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first f
       return { ok: true, output: refining ? 'Kestrel flags what matters in hours.' : 'Kestrel reads the ledger.', usage: { model: o.model ?? MODEL }, usageLogId: Number(row.lastInsertRowid), attempts: [] };
     };
     const governor = { acquire: async () => ({ ok: true, lease: { id: 'open' } }), release: async () => {} } as any;
-    const runtime = new D1GenRuntime({ DB: f.DB } as any, stepExecutor({ DB: f.DB } as any, { run, governor, sleep: async () => {} }));
+    let trips = 0;
+    const DB = chargedD1(f.DB, () => { trips++; return clock.sleep(D1_MS); });
+    const runtime = new D1GenRuntime({ DB } as any, stepExecutor({ DB } as any, { run, governor, sleep: async () => {} }));
 
     const runs: Array<{ uid: string; quote: number; drafts: number }> = [];
     for (let k = 1; k <= FOUNDERS; k++) {
@@ -173,7 +186,7 @@ test(`load: ${CARDS} cards × ${FOUNDERS} founders, drafted and refined, first f
       return (at! - t0) / 1000;
     });
     const p50 = pct(seconds, 50), p95 = pct(seconds, 95);
-    console.log(`first full draft, simulated: ${seconds.map((s) => s.toFixed(1)).join(' s, ')} s; p50 ${p50.toFixed(1)} s, p95 ${p95.toFixed(1)} s`);
+    console.log(`first full draft, simulated: ${seconds.map((s) => s.toFixed(1)).join(' s, ')} s; p50 ${p50.toFixed(1)} s, p95 ${p95.toFixed(1)} s; ${trips} D1 round trips`);
     assert.ok(p50 <= P50_S, `p50 ${p50.toFixed(1)} s is over ${P50_S} s`);
     assert.ok(p95 <= P95_S, `p95 ${p95.toFixed(1)} s is over ${P95_S} s`);
 

@@ -1,0 +1,4 @@
+{
+  "await liveFiles(c.env.DB) @ routes/room_library.ts": 1,
+  "await liveFiles(c.env.DB, 'f') @ routes/room_library.ts": 1
+}
