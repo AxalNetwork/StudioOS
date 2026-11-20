@@ -81,23 +81,6 @@ regexes = [
   '''[a-f0-9]{8}\.(js|css|woff2?)''',
   # Bundler-emitted Symbol.keyFor reference — false positive on generic-api-key.
   '''(?i)Symbol2?\.keyFor''',
-  # Application-level identifier names that gitleaks' generic-api-key
-  # regex flags as `<word>_key = "..."` patterns. None of these are
-  # secrets — they are DB column names, JS variable names, or contract
-  # field labels:
-  #   - obligation_key  → `legal_obligations.obligation_key` D1 column
-  #   - REPROMPT_KEY    → localStorage key constant in MarketIntelPage
-  #   - fileKey         → R2 object key local variable in admin_contracts
-  #   - file_key        → contracts/documents.file_key D1 column
-  #   - entity_key      → cap-table entity identifier
-  '''\b(obligation_key|REPROMPT_KEY|fileKey|file_key|entity_key)\b''',
-  # Snake-case versioned enum values used throughout the trust-score and
-  # contract-template subsystems (`investor_nda_v1`, `mentor_disclaimer_v1`,
-  # `kyc_v1`, `investor_signals_reprompt_dismissed_v1`, …). The `_vN`
-  # suffix is the project-wide enum-version convention and is NOT used
-  # for any real credential. NB: real secrets are random hex/base64 with
-  # high entropy and never end in `_v\d+`.
-  '''\b[a-z][a-z0-9_]*_v\d+\b''',
   # Literal property assignment from a row reference — `ref.row.<col>` is
   # a TypeScript object-property access, not a value. Gitleaks' generic
   # heuristic treats the right-hand side of `let foo = ref.row.bar` as a
@@ -226,4 +209,19 @@ commits = [
   # rejects any `JWT_SECRET = "..."` line in `.replit` so this stops
   # recurring.
   "11e262ebc153a3540e80fd5c39a56ae479fccbad",  # historical: JWT_SECRET re-leaked in .replit (MI analysis task)
+]
+
+# D7899: extend, rather than replace, the upstream generic-api-key rule.
+# These false positives are application field names and versioned enum
+# values, such as investor_nda_v1 and mentor_disclaimer_v1. A random secret
+# can contain the same words or end in _vN, so these exemptions belong only
+# to the generic heuristic, never to Axal bearer, JWT or provider rules.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "Application field names and versioned enum values"
+regexTarget = "secret"
+regexes = [
+  '''\b(obligation_key|REPROMPT_KEY|fileKey|file_key|entity_key)\b''',
+  '''\b[a-z][a-z0-9_]*_v\d+\b''',
 ]

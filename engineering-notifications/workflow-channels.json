@@ -112,7 +112,7 @@
       "channel": "#axalvc-actions-deck-visual"
     },
     {
-      "id": null,
+      "id": 425238679,
       "path": ".github/workflows/dependency-review.yml",
       "channel": "#axalvc-actions-dependency-review"
     },

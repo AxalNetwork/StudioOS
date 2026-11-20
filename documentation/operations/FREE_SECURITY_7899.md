@@ -89,8 +89,10 @@ implement a scoped fix and run the relevant tests. Keep credential values and
 private evidence out of public issue/PR bodies. Leaked real credentials require
 revocation/rotation; deleting a literal alone is not remediation.
 
-The Axal Gitleaks rule matches a complete bearer, not its public prefix. Existing
-global allowlists still apply. Add new exceptions only for demonstrably synthetic
+The Axal Gitleaks rule matches a complete bearer, not its public prefix.
+Identifier-name and versioned-enum exemptions are scoped to the inherited
+generic-key detector so they cannot suppress the dedicated bearer/JWT rules.
+Other existing global allowlists still apply. Add new exceptions only for demonstrably synthetic
 exact fixtures; do not reinstate the removed blanket JWT-header exemption.
 
 ## Sources and maintenance
@@ -103,7 +105,8 @@ exact fixtures; do not reinstate the removed blanket JWT-header exemption.
 - [Dependency Review v5 event resolver](https://github.com/actions/dependency-review-action/blob/a1d282b36b6f3519aa1f3fc636f609c47dddb294/src/git-refs.ts).
 - [Scorecard action v2.6.0](https://github.com/ossf/scorecard-action/releases/tag/v2.6.0) and [Scorecard v5.7.0 security/failure fixes](https://github.com/ossf/scorecard/releases/tag/v5.7.0).
 
-The new workflows have pending local notification-registry identities (`id: null`).
-Resolve workflow IDs after GitHub registers them. This task does not create Slack
+Dependency Review has its registered workflow ID in the local notification
+registry. Scorecard remains pending (`id: null`) until GitHub registers it on
+main; resolve that ID after registration. This task does not create Slack
 channels or send messages to them. Existing Claude/Codex integrations are outside
 the GitHub-AI setting scope; no new model integration is enabled here.
