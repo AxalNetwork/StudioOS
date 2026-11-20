@@ -98,9 +98,17 @@ export function planFleet(previous: FleetState, config: ScaleConfig, inventory: 
   if (demand.some((d) => d.oldestAt > now)) throw Error('invalid_demand_time');
   const fresh = inventory.complete && integer(inventory.observedAt) && inventory.observedAt <= now && now - inventory.observedAt <= config.heartbeatMs;
   const live = state.nodes.filter((n) => !(n.phase === 'deleted' && n.deleteConfirmed && n.holdUnits === 0));
+  const keep = new Set<string>(); const profileKept = new Map<string, number>();
+  const candidates = live.filter((n) => ['reserved', 'booting', 'ready', 'busy'].includes(n.phase))
+    .sort((a, b) => Number(b.assignment === 'owned') - Number(a.assignment === 'owned') || a.createdAt - b.createdAt || a.reservation.localeCompare(b.reservation));
+  for (const node of candidates) {
+    if (keep.size < config.approvedCap && (profileKept.get(node.profile) ?? 0) < (config.profiles[node.profile]?.max ?? 0)) {
+      keep.add(node.reservation); profileKept.set(node.profile, (profileKept.get(node.profile) ?? 0) + 1);
+    }
+  }
   const orphans = inventory.instances.filter((i) => !state.nodes.some((n) => n.providerId === i.providerId || n.reservation === i.reservation));
   const budget = config.budget;
-  const finishReserveMs = budget.maxJobMs + budget.terminationMs + budget.billingLagMs;
+  const finishReserveMs = config.lifetimeMs + budget.maxJobMs + budget.terminationMs + budget.billingLagMs;
   const perNodeUnits = budget.unitsPerNodeMinute == null ? null : Math.ceil(finishReserveMs / 60000) * budget.unitsPerNodeMinute;
   const canAdmit = config.enabled && config.approvedCap > 0 && budget.approved && budget.meterVerified
     && perNodeUnits != null && Number.isSafeInteger(perNodeUnits) && budget.expiresAt != null && budget.remainingUnits != null
@@ -125,7 +133,7 @@ export function planFleet(previous: FleetState, config: ScaleConfig, inventory: 
     const idleExpired = node.idleSince != null && now - node.idleSince >= config.idleMs;
     const profileLive = live.filter((n) => n.profile === node.profile && n.phase !== 'draining' && n.phase !== 'stopping').length;
     const desired = Math.min(config.profiles[node.profile]?.max ?? 0, Math.max(config.profiles[node.profile]?.min ?? 0, pending[node.profile] ?? 0));
-    const shouldDrain = !canAdmit || now - node.createdAt >= config.lifetimeMs || bootExpired
+    const shouldDrain = !canAdmit || (candidates.includes(node) && !keep.has(node.reservation)) || now - node.createdAt >= config.lifetimeMs || bootExpired
       || (idleExpired && profileLive > desired) || (node.phase === 'ready' && !healthy)
       || (node.jobStartedAt != null && now - node.jobStartedAt >= budget.maxJobMs);
     if (missing || node.phase === 'uncertain') { node.phase = 'uncertain'; add(node, 'inspect'); continue; }
@@ -192,8 +200,9 @@ export function recordFleetEvent(previous: FleetState, event: { id: string; rese
     state.revision++; state.recentEvents = [...state.recentEvents.slice(-255), event.id]; return state;
   }
   if (event.kind === 'created' && node.phase === 'reserved' && event.providerId) { node.providerId = event.providerId; node.phase = 'booting'; }
-  else if (event.kind === 'reconciled' && node.phase === 'uncertain' && event.providerVerified === true && event.providerId && event.assignment === 'none') {
-    node.providerId = event.providerId; node.phase = 'booting'; node.registered = false; node.runnerId = null; node.assignment = 'none'; node.jobStartedAt = null;
+  else if (event.kind === 'reconciled' && node.phase === 'uncertain' && event.providerVerified === true && event.registrationVerified === true && event.providerId && event.assignment === 'none') {
+    node.generation++; node.providerId = event.providerId; node.phase = 'booting'; node.registered = false; node.runnerId = null; node.assignment = 'none'; node.jobStartedAt = null;
+    node.bootVerified = false; node.observedImage = null; node.eligibilityRemoved = false;
   }
   else if (event.kind === 'ready' && (node.phase === 'booting' || (node.phase === 'ready' && !node.registered)) && event.bootVerified === true && integer(event.runnerId ?? 0, 1)
       && event.registrationVerified === true && event.online === true && !!config.profiles[node.profile] && imageMatches(config.profiles[node.profile].image, event.observedImage)) {
@@ -202,10 +211,10 @@ export function recordFleetEvent(previous: FleetState, event: { id: string; rese
     node.phase = node.phase === 'ready' ? 'busy' : 'draining';
     node.assignment = event.assignment ?? 'unknown'; node.jobStartedAt = event.at; node.idleSince = null;
   } else if (event.kind === 'job-finished' && ['busy', 'draining'].includes(node.phase) && event.runnerId === node.runnerId) {
-    node.assignment = 'none'; node.jobStartedAt = null; node.registered = false; node.runnerId = null; node.idleSince = event.at;
-    if (node.phase !== 'draining') node.phase = 'ready';
+    // One-job machines drain; completion is not proof that GitHub removed the registration.
+    node.assignment = 'none'; node.jobStartedAt = null; node.idleSince = event.at; node.phase = 'draining';
   } else if (event.kind === 'drained' && node.phase === 'draining') { node.eligibilityRemoved = true; node.assignment = event.assignment ?? 'unknown'; if (node.assignment === 'none') node.jobStartedAt = null; }
-  else if (event.kind === 'unregistered' && node.phase === 'draining' && node.eligibilityRemoved && node.assignment === 'none' && event.registrationVerified === true) { node.registered = false; }
+  else if (event.kind === 'unregistered' && node.phase === 'draining' && node.eligibilityRemoved && node.assignment === 'none' && event.registrationVerified === true && event.runnerId === node.runnerId) { node.registered = false; }
   else if (event.kind === 'deleted' && event.providerVerified === true && node.phase === 'stopping' && node.eligibilityRemoved && !node.registered && node.assignment === 'none') { node.phase = 'deleted'; node.deleteConfirmed = true; node.registered = false; node.runnerId = null; node.lastHeartbeat = event.at; }
   else if (event.kind === 'uncertain') node.phase = 'uncertain';
   else return previous;

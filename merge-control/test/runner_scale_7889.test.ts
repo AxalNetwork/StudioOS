@@ -78,9 +78,9 @@ test('burst, cooldown and cost/expiry headroom constrain starts without changing
   assert.equal(second.state.nodes.length, 2);
   c.maxNewPerInterval = 10;
   const cooldown = planFleet(first.state, c, inventory(first.state, NOW + 1), demands(), NOW + 1); assert.equal(cooldown.state.nodes.length, 2);
-  const limited = config(50); limited.budget.remainingUnits = 3;
+  const limited = config(50); limited.budget.remainingUnits = 13;
   assert.equal(planFleet(emptyFleet(), limited, inventory(), demands(), NOW).state.nodes.length, 1);
-  limited.budget.expiresAt = NOW + 180_000;
+  limited.budget.expiresAt = NOW + 780_000;
   assert.equal(planFleet(emptyFleet(), limited, inventory(), demands(), NOW).state.nodes.length, 0);
   const fair = fairDemand([{ run: 'a', profile: 'linux-x64', queued: 6, oldestAt: NOW }, { run: 'b', profile: 'linux-x64', queued: 6, oldestAt: NOW }], config(10));
   assert.deepEqual(fair, { 'linux-x64': 4 });
@@ -96,6 +96,11 @@ test('failed boot and node loss quarantine real capacity; image/native/runtime a
   let state = ready(c); assert.equal(planFleet(state, c, inventory(state, NOW + 3), [], NOW + 3).publicStatus.healthy, 1);
   const lost = planFleet(state, c, inventory(emptyFleet(), NOW + 3), demands(), NOW + 3);
   assert.equal(lost.state.nodes[0].phase, 'uncertain'); assert.deepEqual(lost.operations.map((o) => o.kind), ['inspect']);
+  const reconcile = { id: 'reconciled', kind: 'reconciled' as const, reservation: lost.state.nodes[0].reservation, generation: 1, at: NOW + 4, providerVerified: true, providerId: 'private-provider-0', assignment: 'none' as const };
+  assert.equal(recordFleetEvent(lost.state, reconcile, c), lost.state, 'provider presence alone cannot prove old registration cleanup');
+  const recovered = recordFleetEvent(lost.state, { ...reconcile, registrationVerified: true }, c);
+  assert.deepEqual([recovered.nodes[0].generation, recovered.nodes[0].registered, recovered.nodes[0].bootVerified], [2, false, false]);
+  assert.equal(recordFleetEvent(recovered, { ...reconcile, id: 'late-old', kind: 'uncertain', at: NOW + 5 }, c), recovered);
   assert.equal(imageMatches(IMAGE, { ...IMAGE, arch: 'arm64' }), false);
   assert.equal(imageMatches(IMAGE, { ...IMAGE, nodeVersion: '22.0.0' }), false);
   assert.equal(imageEligible(JSON.parse(readFileSync(new URL('../../infra/runners/linux-x64.image.template.json', import.meta.url), 'utf8'))), false);
@@ -104,12 +109,23 @@ test('failed boot and node loss quarantine real capacity; image/native/runtime a
 });
 
 test('drain removes eligibility first, preserves busy/unowned work and rejects an assignment-race stale deletion fence', () => {
+  const fleetConfig = config(5); const fleet = ready(fleetConfig); fleetConfig.approvedCap = 1;
+  const reduced = planFleet(fleet, fleetConfig, inventory(fleet, NOW + 3), [], NOW + 3);
+  assert.deepEqual([reduced.publicStatus.healthy, reduced.publicStatus.draining, reduced.operations.map((o) => o.kind)], [1, 4, Array(4).fill('remove-eligibility')]);
+  fleetConfig.approvedCap = 5; fleetConfig.profiles['linux-x64'].max = 1;
+  const profileReduced = planFleet(fleet, fleetConfig, inventory(fleet, NOW + 3), [], NOW + 3);
+  assert.deepEqual([profileReduced.publicStatus.healthy, profileReduced.publicStatus.draining], [1, 4]);
+  const jobConfig = config(); let finished = ready(jobConfig); const reservation = finished.nodes[0].reservation;
+  finished = recordFleetEvent(finished, { id: 'started', kind: 'job-started', reservation, generation: 1, runnerId: 100, assignment: 'owned', at: NOW + 3 }, jobConfig);
+  finished = recordFleetEvent(finished, { id: 'finished', kind: 'job-finished', reservation, generation: 1, runnerId: 100, at: NOW + 4 }, jobConfig);
+  assert.deepEqual([finished.nodes[0].phase, finished.nodes[0].registered, finished.nodes[0].runnerId], ['draining', true, 100]);
   const c = config(); let state = ready(c); c.enabled = false;
   let p = planFleet(state, c, inventory(state, NOW + 3), [], NOW + 3);
   assert.deepEqual(p.operations.map((o) => o.kind), ['remove-eligibility']); state = p.state;
   state = recordFleetEvent(state, { id: 'removed', kind: 'drained', reservation: state.nodes[0].reservation, generation: 1, assignment: 'none', at: NOW + 4 }, c);
   p = planFleet(state, c, inventory(state, NOW + 5), [], NOW + 5); assert.equal(p.operations[0].kind, 'unregister');
-  state = recordFleetEvent(p.state, { id: 'unregistered', kind: 'unregistered', registrationVerified: true, reservation: state.nodes[0].reservation, generation: 1, at: NOW + 5 }, c);
+  assert.equal(recordFleetEvent(p.state, { id: 'wrong-registration', kind: 'unregistered', runnerId: 9999, registrationVerified: true, reservation: state.nodes[0].reservation, generation: 1, at: NOW + 5 }, c), p.state);
+  state = recordFleetEvent(p.state, { id: 'unregistered', kind: 'unregistered', runnerId: 100, registrationVerified: true, reservation: state.nodes[0].reservation, generation: 1, at: NOW + 5 }, c);
   p = planFleet(state, c, inventory(state, NOW + 5), [], NOW + 5); assert.equal(p.operations[0].kind, 'stop-delete');
   const raced = recordFleetEvent(p.state, { id: 'raced-assignment', kind: 'job-started', reservation: state.nodes[0].reservation, generation: 1, runnerId: 100, assignment: 'owned', at: NOW + 6 }, c);
   // The event must fence the old operation even if the provider effect has not started.
@@ -126,7 +142,7 @@ test('confirmed teardown retains billing headroom until verified meter lag settl
   const c = config(); let state = ready(c); c.enabled = false;
   state = planFleet(state, c, inventory(state, NOW + 3), [], NOW + 3).state;
   state = recordFleetEvent(state, { id: 'drained', kind: 'drained', reservation: state.nodes[0].reservation, generation: 1, assignment: 'none', at: NOW + 4 }, c);
-  state = recordFleetEvent(state, { id: 'unregistered', kind: 'unregistered', registrationVerified: true, reservation: state.nodes[0].reservation, generation: 1, at: NOW + 5 }, c);
+  state = recordFleetEvent(state, { id: 'unregistered', kind: 'unregistered', runnerId: 100, registrationVerified: true, reservation: state.nodes[0].reservation, generation: 1, at: NOW + 5 }, c);
   state = planFleet(state, c, inventory(state, NOW + 5), [], NOW + 5).state;
   state = recordFleetEvent(state, { id: 'deleted', kind: 'deleted', providerVerified: true, reservation: state.nodes[0].reservation, generation: 1, at: NOW + 6 }, c);
   assert.equal(state.nodes[0].phase, 'deleted'); assert.ok(state.reservedUnits > 0);
