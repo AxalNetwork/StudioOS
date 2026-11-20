@@ -8,6 +8,7 @@ required checks, provider resources or shard counts.
 | --- | --- |
 | `bootstrap.sh` | Prepare pinned tools, verify native capabilities, and manage privately approved organization registration and service lifecycle. |
 | `profiles.json` | Schema v1 profile enums, shared AND labels and reviewed archive digests; hosted Ubuntu is a separate pool. |
+| `ephemeral-supervisor.mjs` | D7889: pure one-job enrollment/drain proposals and filtered environment; no live issuer or process launcher. |
 
 Start at [RUNNER_BOOTSTRAP.md](../../../documentation/operations/RUNNER_BOOTSTRAP.md).
 Install/verify need no runner token, provider API or fleet manager. Register/start
