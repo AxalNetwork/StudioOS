@@ -132,6 +132,8 @@ jobs:
 
       - name: Run worker-1-of-6 with timing
         id: benchmark
+        env:
+          TEST_TRACE_DIR: ${{ runner.temp }}/macbook-traces-${{ github.run_id }}-${{ github.run_attempt }}
         working-directory: macbook-worker-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           metrics="$RUNNER_TEMP/macbook-worker-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.time"
@@ -163,5 +165,6 @@ jobs:
           rm -rf -- "$RUNNER_TEMP/macbook-npm-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           rm -rf -- "$RUNNER_TEMP/macbook-python-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           rm -rf -- "$RUNNER_TEMP/macbook-uv-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          rm -rf -- "$RUNNER_TEMP/macbook-traces-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           rm -f -- "$RUNNER_TEMP/macbook-worker-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.time"
 
