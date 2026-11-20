@@ -113,6 +113,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   // D6118 (#6118): Partner network and Partnerships are one page at /grow/partnerships. Sent digests and
   // mail drafts carry the old module address, so it is kept; its records (/grow/partner-network/:id) are pages.
   { path: '/grow/partner-network', keep: true },
+  // D6117: Talent is the landing; role records and /new remain module pages. Keep old bookmarks.
+  { path: '/grow/team-expansion', keep: true },
   { path: '/admin/spinout-lab', keep: true }, // D937 (#2374): the Lab moved under Programs; sent cohort notices carry it (#2375)
   ...ADMIN_TAB_REDIRECTS,
   ...ROLE_REDIRECTS,
