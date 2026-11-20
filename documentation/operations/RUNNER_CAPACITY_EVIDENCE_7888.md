@@ -24,9 +24,9 @@ was inferred from successful setup, upload or cleanup step metadata.
 
 | Required new proof | State and reason |
 | --- | --- |
-| Approved temporary Linux executor with completed compatibility canary | Not recorded: the existing Linux pilot was cancelled; #7885/#7886 have not landed. |
-| Verified shared organization group/profile and second-node onboarding | Not recorded: bootstrap/profile contract is pending. |
-| Exact immutable executor revision and trusted source/plan receipt | Not recorded: #7886/#7887 are pending. |
+| Approved temporary Linux executor with completed compatibility canary | Not recorded: the existing Linux pilot was cancelled; landed bootstrap/executor code still requires corrections and isolation proof (#7903–#7905). |
+| Verified organization group/profile and second-node onboarding | Not recorded: the landed bootstrap/profile contract has no completed second-machine exercise. |
+| Exact immutable executor revision and trusted source/plan receipt | Not recorded: the report is not integrated with the landed executor/coordinator's receipt authority. |
 | Real three-pool compatible-work overlap and no hosted wait occupancy | Not recorded: no approved three-pool canary is available. |
 | Failure, fallback, cancellation, missed-event/restart and drain exercises | Not recorded live: deterministic reader/model fixtures are preparation only. |
 | CPU/memory headroom, controller availability and actual provider cost | Not recorded: no approved resource samples or private provider meter were supplied. |

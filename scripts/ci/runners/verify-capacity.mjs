@@ -20,12 +20,17 @@ export function validateManifest(input) {
   if (!input || input.version !== 1 || input.repository !== REPOSITORY
       || !/^[a-f0-9]{40}$/.test(input.candidate_sha ?? '') || !/^[a-f0-9]{40}$/.test(input.executor_sha ?? '')
       || !/^[a-f0-9]{64}$/.test(input.plan_sha ?? '') || !positive(input.parent?.run_id) || !positive(input.parent?.attempt)) fail('invalid_manifest');
-  const allowed = ['version', 'repository', 'candidate_sha', 'executor_sha', 'plan_sha', 'parent', 'requests', 'approved_group_id', 'capability_label', 'controllers'];
+  const allowed = ['version', 'repository', 'candidate_sha', 'executor_sha', 'plan_sha', 'parent', 'requests', 'approved_group_id', 'capability_label', 'profile_contracts', 'controllers'];
   if (Object.keys(input).some((key) => !allowed.includes(key))) fail('unknown_manifest_field');
   if (Object.keys(input.parent).some((key) => !['run_id', 'attempt'].includes(key))) fail('unknown_parent_field');
   if (!Array.isArray(input.requests) || !input.requests.length || input.requests.length > 32) fail('request_bound');
   if (input.approved_group_id != null && !positive(input.approved_group_id)) fail('invalid_group');
   if (input.capability_label != null && !/^studioos-[a-z0-9-]{1,64}$/.test(input.capability_label)) fail('invalid_capability');
+  if (Object.hasOwn(input, 'profile_contracts') && (!input.profile_contracts || Array.isArray(input.profile_contracts)
+      || typeof input.profile_contracts !== 'object' || Object.entries(input.profile_contracts).some(([profile, contract]) =>
+        !['linux-x64', 'macos-arm64'].includes(profile) || !contract || !positive(contract.group_id)
+        || !/^studioos-[a-z0-9-]{1,64}$/.test(contract.capability_label ?? '')
+        || Object.keys(contract).some((key) => !['group_id', 'capability_label'].includes(key))))) fail('invalid_profile_contracts');
   const seen = new Map(); const requests = [];
   for (const r of input.requests) {
     if (!r || !/^worker-[1-6]-of-6$/.test(r.shard ?? '') || !positive(r.generation) || !positive(r.run_id)
@@ -49,10 +54,12 @@ function assignedProfile(job, spec) {
   const labels = new Set(Array.isArray(job.labels) ? job.labels : []);
   if (!positive(job.runner_id)) return null;
   if (!labels.has('self-hosted')) return labels.has('ubuntu-latest') && labels.size === 1 ? 'standard-hosted' : null;
-  if (!spec.approved_group_id || job.runner_group_id !== spec.approved_group_id || !spec.capability_label || !labels.has(spec.capability_label)) return null;
-  if (labels.has('Linux') && labels.has('X64')) return 'linux-x64';
-  if (labels.has('macOS') && labels.has('ARM64')) return 'macos-arm64';
-  return null;
+  const profile = labels.has('Linux') && labels.has('X64') ? 'linux-x64'
+    : labels.has('macOS') && labels.has('ARM64') ? 'macos-arm64' : null;
+  const contract = spec.profile_contracts?.[profile] ?? { group_id: spec.approved_group_id, capability_label: spec.capability_label };
+  if (!profile || !contract.group_id || job.runner_group_id !== contract.group_id
+      || !contract.capability_label || !labels.has(contract.capability_label)) return null;
+  return profile;
 }
 
 /** Completed intervals only; equal end/start timestamps do not prove overlap. */
@@ -116,6 +123,9 @@ export function collectCapacity(read, manifest, { requestCap = 100 } = {}) {
     if (!job) fail('requested_job_unavailable');
     const step = job.steps?.find((s) => s.number === r.test_step);
     const start = stamp(job.started_at); const end = stamp(job.completed_at); const queued = stamp(job.created_at);
+    const testStart = stamp(step?.started_at); const testEnd = stamp(step?.completed_at);
+    const testTiming = start != null && end != null && testStart != null && testEnd != null
+      && testStart >= start && testEnd <= end && testEnd >= testStart;
     return {
       logical_shard: r.shard, generation: r.generation, run_id: r.run_id, attempt: r.attempt, job_id: r.job_id,
       run_url: `https://github.com/${REPOSITORY}/actions/runs/${r.run_id}/attempts/${r.attempt}`,
@@ -126,6 +136,8 @@ export function collectCapacity(read, manifest, { requestCap = 100 } = {}) {
       workflow_revision_matches: run.head_sha === (r.run_id === spec.parent.run_id ? spec.candidate_sha : spec.executor_sha),
       queued_at: queued == null ? null : job.created_at, started_at: start == null ? null : job.started_at, completed_at: end == null ? null : job.completed_at,
       queue_wait_ms: duration(queued, start), execution_ms: duration(start, end),
+      test_started_at: testTiming ? step.started_at : null, test_completed_at: testTiming ? step.completed_at : null,
+      test_execution_ms: testTiming ? testEnd - testStart : null,
       run_conclusion: conclusion(run.conclusion), job_conclusion: conclusion(job.conclusion), test_conclusion: conclusion(step?.conclusion),
       timing_state: start != null && end != null && end < start ? 'unavailable' : 'recorded_or_pending',
     };
@@ -148,8 +160,9 @@ export function collectCapacity(read, manifest, { requestCap = 100 } = {}) {
 
 function reportCapacity(spec, rows, controllers = [], { calls = 0, parentMatches = false, parentConclusion = null } = {}) {
   const unique = [...new Map(rows.map((r) => [`${r.run_id}:${r.attempt}:${r.job_id}`, r])).values()];
-  const intervals = unique.filter((r) => r.assignment_profile === r.requested_profile && r.workflow_revision_matches)
-    .map((r) => ({ profile: r.assignment_profile, start: stamp(r.started_at), end: stamp(r.completed_at) }));
+  const compatible = unique.filter((r) => r.assignment_profile === r.requested_profile && r.workflow_revision_matches);
+  const jobs = compatible.map((r) => ({ profile: r.assignment_profile, start: stamp(r.started_at), end: stamp(r.completed_at) }));
+  const intervals = compatible.map((r) => ({ profile: r.assignment_profile, start: stamp(r.test_started_at), end: stamp(r.test_completed_at) }));
   const overlap = overlapMetrics(intervals);
   const controllerTimings = controllers.map((c) => {
     let knownWait = c.wait_spans == null ? null : 0;
@@ -181,7 +194,9 @@ function reportCapacity(spec, rows, controllers = [], { calls = 0, parentMatches
     version: 1, repository: REPOSITORY, evidence_scope: 'github_metadata_only', live_capacity_proof: 'not_verified',
     requested_candidate_sha: spec.candidate_sha, requested_executor_sha: spec.executor_sha, requested_plan_sha: spec.plan_sha,
     parent: { run_id: spec.parent.run_id, attempt: spec.parent.attempt, conclusion: parentConclusion }, parent_revision_matches: parentMatches, github_reads: calls, attempts: unique, controllers: controllerTimings, logical_results: logical,
-    metrics: { ...overlap, known_controller_wait_overlap_ms: waitOverlap, resource_headroom: null, provider_metered_cost: null, controller_availability: null },
+    metrics: { ...overlap, peak_completed_job_overlap: overlapMetrics(jobs).peak_completed_job_overlap,
+      peak_completed_test_overlap: overlap.peak_completed_job_overlap,
+      known_controller_wait_overlap_ms: waitOverlap, resource_headroom: null, provider_metered_cost: null, controller_availability: null },
     blockers: ['trusted source/plan/receipt binding from #7886/#7887 is not integrated', 'resource headroom and provider metering are not recorded',
       ...(!overlap.three_pool_overlap_ms ? ['no completed three-pool overlap in this observation set'] : []),
       ...(waitOverlap == null ? ['controller wait-phase evidence is incomplete'] : waitOverlap > 0 ? ['observed hosted waiting overlaps external execution'] : [])],

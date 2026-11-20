@@ -46,7 +46,7 @@ test('records exact requested identities separately from observed timing and ano
   assert.deepEqual(report.attempts.map((r) => [r.logical_shard, r.assignment_profile, r.queue_wait_ms, r.execution_ms]), [
     ['worker-1-of-6', 'standard-hosted', 5000, 110000], ['worker-2-of-6', 'macos-arm64', 5000, 90000], ['worker-3-of-6', 'linux-x64', 5000, 70000],
   ]);
-  assert.deepEqual(report.metrics, { peak_completed_job_overlap: 3, three_pool_overlap_ms: 70000, known_controller_wait_overlap_ms: 80000, resource_headroom: null, provider_metered_cost: null, controller_availability: null });
+  assert.deepEqual(report.metrics, { peak_completed_job_overlap: 3, peak_completed_test_overlap: 3, three_pool_overlap_ms: 70000, known_controller_wait_overlap_ms: 80000, resource_headroom: null, provider_metered_cost: null, controller_availability: null });
   assert.deepEqual(report.controllers, [{ job_id: 102, execution_ms: 80000, declared_wait_ms: 80000, non_wait_execution_ms: 0 }]);
   assert.equal(report.live_capacity_proof, 'not_verified');
   assert.ok(report.logical_results.every((r) => r.authoritative_result === null));
@@ -68,6 +68,61 @@ test('completes paginated jobs with a shared request budget and refuses truncate
   assert.throws(() => collectCapacity(f.read, f.spec, { requestCap: 1 }), /github_request_cap/);
   assert.throws(() => collectCapacity((p) => p.endsWith('page=2') ? { total_count: 101, jobs: [] } : f.read(p), f.spec), /incomplete_job_pages/);
   assert.throws(() => collectCapacity((p) => { if (p.endsWith('page=2')) throw Error('private credential'); return f.read(p); }, f.spec), /github_read_unavailable/);
+});
+
+test('measures test-step overlap separately from setup and refuses missing or out-of-job test times', () => {
+  const f = fixture();
+  f.jobs.get(10)[0].steps[0].completed_at = date(20);
+  f.jobs.get(20)[0].steps[0].started_at = date(20);
+  f.jobs.get(20)[0].steps[0].completed_at = date(30);
+  f.jobs.get(30)[0].steps[0].started_at = date(40);
+  f.jobs.get(30)[0].steps[0].completed_at = date(90);
+  const setupOnly = f.report();
+  assert.deepEqual([setupOnly.metrics.peak_completed_job_overlap, setupOnly.metrics.peak_completed_test_overlap,
+    setupOnly.metrics.three_pool_overlap_ms, setupOnly.metrics.known_controller_wait_overlap_ms], [3, 1, 0, 60000]);
+  const linux = f.jobs.get(30)[0];
+  assert.deepEqual([setupOnly.attempts[2].test_started_at, setupOnly.attempts[2].test_completed_at,
+    setupOnly.attempts[2].test_execution_ms], [date(40), date(90), 50000]);
+  for (const [start, end] of [[null, date(100)], [date(10), date(100)], [date(30), date(121)], [date(100), date(30)]]) {
+    linux.steps[0].started_at = start; linux.steps[0].completed_at = end;
+    const unavailable = f.report();
+    assert.deepEqual([unavailable.attempts[2].test_started_at, unavailable.attempts[2].test_completed_at,
+      unavailable.attempts[2].test_execution_ms, unavailable.metrics.three_pool_overlap_ms], [null, null, null, 0]);
+  }
+  const noTestOverlap = fixture();
+  for (const id of [20, 30]) {
+    noTestOverlap.jobs.get(id)[0].steps[0].started_at = date(100);
+    noTestOverlap.jobs.get(id)[0].steps[0].completed_at = date(100);
+  }
+  assert.equal(noTestOverlap.report().metrics.known_controller_wait_overlap_ms, 0);
+  const missing = fixture(); const epochJob = missing.jobs.get(30)[0];
+  // A missing timestamp must not be coerced to Unix zero by numeric comparisons.
+  epochJob.started_at = '1970-01-01T00:00:00Z'; epochJob.completed_at = '1970-01-01T00:00:01Z';
+  epochJob.steps[0].started_at = null; epochJob.steps[0].completed_at = epochJob.completed_at;
+  assert.equal(missing.report().attempts[2].test_execution_ms, null);
+});
+
+test('uses separate reviewed group/capability contracts for Linux and Mac, rejecting malformed or unknown profile contracts', () => {
+  const f = fixture();
+  f.spec.profile_contracts = {
+    'linux-x64': { group_id: 8, capability_label: 'studioos-linux-v1' },
+    'macos-arm64': { group_id: 9, capability_label: 'studioos-mac-v1' },
+  };
+  for (const [id, group, label] of [[20, 9, 'studioos-mac-v1'], [30, 8, 'studioos-linux-v1']]) {
+    f.jobs.get(id)[0].runner_group_id = group;
+    f.jobs.get(id)[0].labels.splice(3, 1, label);
+  }
+  assert.deepEqual(f.report().attempts.map((r) => r.assignment_profile), ['standard-hosted', 'macos-arm64', 'linux-x64']);
+  f.jobs.get(30)[0].runner_group_id = 7;
+  assert.equal(f.report().attempts[2].assignment_profile, null);
+  f.jobs.get(30)[0].runner_group_id = 8; f.jobs.get(30)[0].labels.splice(3, 1, 'studioos-worker-v1');
+  assert.equal(f.report().attempts[2].assignment_profile, null);
+  for (const profile_contracts of [null, [], 1, 'text', { 'standard-hosted': { group_id: 8, capability_label: 'studioos-linux-v1' } },
+    { 'linux-x64': { group_id: 0, capability_label: 'studioos-linux-v1' } },
+    { 'linux-x64': { group_id: 8, capability_label: 'arbitrary' } },
+    { 'linux-x64': { group_id: 8, capability_label: 'studioos-linux-v1', secret: 'private' } }]) {
+    assert.throws(() => validateManifest({ ...f.spec, profile_contracts }), /invalid_profile_contracts/);
+  }
 });
 
 test('queued/offline jobs, wrong scope, missing timing and paid hosted labels never look like measured compatible capacity', () => {

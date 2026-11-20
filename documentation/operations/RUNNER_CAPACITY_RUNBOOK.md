@@ -2,14 +2,16 @@
 
 D7888 / #7888, under #7884. **Preparation, not an activation record.** The
 bootstrap/profile (#7885), trusted executor (#7886), and asynchronous router
-(#7887) are not on the main revision used for this preparation. The live
+(#7887) have landed. Their corrections and isolation proof (#7903–#7905,
+[draft #7937](https://github.com/AxalNetwork/StudioOS/pull/7937)) still gate activation. The live
 three-pool proof, private budget and provider meter are **Not recorded**.
 Existing observations are in [the evidence record](RUNNER_CAPACITY_EVIDENCE_7888.md).
 
 ## Boundaries before any canary
 
 The approved starting scope is one temporary Linux executor, an optional native
-Mac, and the existing standard GitHub-hosted pool. This document authorizes no
+Mac, and the existing standard GitHub-hosted pool. The current owner decision
+keeps Mac off and permits independent preparation only. This document authorizes no
 machine creation, registration privilege, permission change, paid larger runner,
 new workflow run or rollout. The queue-pressure policy in AGENTS.md still applies.
 Do not create a fleet or repeat full CI to obtain a benchmark.
@@ -40,9 +42,8 @@ runner-process stop does not stop a cloud bill.
 ## Bootstrap and compatibility
 
 Start at the StudioOS repository's Settings → Actions → Runners page. Follow
-#7885's reviewed organization-scoped enrollment and published command/profile
-sequence once it exists. **No executable bootstrap command is recorded here
-yet:** its interface has not landed. Do not invent flags or enroll at repository
+#7885's [published command/profile sequence](RUNNER_BOOTSTRAP.md). Those commands
+do not waive the outstanding isolation and bounded-pilot gates. Do not enroll at repository
 scope to bypass the restricted group. A repository-only registration is not proof
 of group membership; drain and correct it through the reviewed operator flow.
 
@@ -52,7 +53,8 @@ advertising the capability label. Begin with one runner process per machine.
 Use unique private inventory identity but the same approved group/capability
 profile; no per-host label or workflow edit. Unsupported machines stay ineligible.
 
-The Mac must remain awake and online; sleep/offline is optional lost capacity,
+Keep Mac disabled until its isolation is proved. After separately approved enablement,
+it must remain awake and online; sleep/offline is optional lost capacity,
 never a merge prerequisite. On Linux, exercise service restart/status using the
 published bootstrap service, then reverify dependencies and group enrollment.
 An image/runtime update is a new pinned profile with a bounded compatibility
@@ -71,7 +73,10 @@ a private version-1 report manifest with:
   exact `run_id`, `attempt`, `job_id`, numeric `test_step` and `profile`
   (`standard-hosted`, `linux-x64`, `macos-arm64`). These are declarations, not
   authorization. No field named `verified` can establish trust.
-- Private `approved_group_id` and `capability_label`, and up to 16 parent
+- Private `profile_contracts`, keyed by `linux-x64` and/or `macos-arm64`, each
+  with only `group_id` and `capability_label`. These may differ between profiles;
+  the original common `approved_group_id`/`capability_label` pair remains supported.
+  Up to 16 parent
   `controllers` with `job_id` and recorded numeric `wait_steps`. Unknown wait
   phases are null, not an empty declaration of no waiting.
 
@@ -85,7 +90,10 @@ node scripts/ci/runners/verify-capacity.mjs --manifest /private/capacity-manifes
 It bounds the entire collection to 100 API reads, fully paginates attempt jobs,
 checks exact run/job identities and prints only an allowlisted report with
 pseudonymous runner references. A page failure or cap yields unavailable evidence,
-never a partial count presented as complete. Controller rows separate total job
+never a partial count presented as complete. Rows expose actual test-step times
+separately from whole-job times. Only ordered test intervals inside their owning
+jobs contribute to test overlap; overlapping setup is not test execution.
+Controller rows separate total job
 execution, the union of declared wait phases and remaining non-wait execution.
 These are elapsed metadata measurements, not CPU time or controller availability;
 unknown or out-of-job phases leave the remainder null. It makes no dispatch, cancellation,
@@ -98,6 +106,14 @@ needed. Do not wire this report to a required check or treat its exit 0 as a
 passed shard. It proves a report could be read, nothing more.
 
 ## Bounded proof matrix
+
+The [independent audit](https://github.com/AxalNetwork/StudioOS/issues/7888#issuecomment-7053069925)
+proposes making the first milestone two separate Linux machines plus hosted
+execution, leaving Mac out. Its one-minute overlap threshold is a proposal,
+not an authorization or implemented pilot contract. Distinct runner IDs alone
+cannot prove distinct machines. A second machine, trusted plan/receipt verifier,
+reviewed pilot workflow, execution budget and independent teardown remain needed
+before that exercise. This preparation does not dispatch it or claim it passed.
 
 Once the prerequisites and canary are approved, collect public run/job links and
 exact times for compatible standard-hosted, Mac and Linux test work overlapping
