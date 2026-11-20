@@ -1,3 +1,4 @@
+import BuildFacts from './BuildFacts.jsx';
 import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EadwynButton, PhoneBar, PhoneRows, Unreadable } from '../../ui';
@@ -235,6 +236,7 @@ export default function PhoneModulePage({
         {interviewLine && <p className="m-0 mt-2.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
       </section>
 
+      <BuildFacts cycle={cycle} slug={slug} data={data} status={status} />
       {/* Partnerships can have a pending proposal before the first partner exists. */}
       {showRecords && aboveRecords && (!zero || showAboveRecordsWhenEmpty) && <div className="mt-[22px]">{aboveRecords}</div>}
       {showRecords && <>{!zero && <>

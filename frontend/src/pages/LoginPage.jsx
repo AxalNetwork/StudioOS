@@ -757,7 +757,8 @@ export default function LoginPage() {
     // Turnstile still gates the request when the widget is working; when it
     // failed to load, the magic link is deliberately the recovery path
     // (the endpoint has its own per-IP + per-email rate limits server-side).
-    if (TURNSTILE_SITE_KEY && !turnstileFailed && !turnstileToken) {
+    // #6959: only the link form has a widget; Resend on "Check your email" has none, so it is not gated on one.
+    if (TURNSTILE_SITE_KEY && step === 'link' && !turnstileFailed && !turnstileToken) {
       setError('Please complete the verification challenge first.');
       return;
     }

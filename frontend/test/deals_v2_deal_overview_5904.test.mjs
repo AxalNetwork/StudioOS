@@ -191,7 +191,7 @@ test('mounted, an investor at /deals/4: DE04\'s four blocks in order, each from 
     assert.match(v.textOf('deal-case-fit'), /^Fit to my thesis 75 \(High\)Sector matches your thesisTicket is outside your thesis$/);
     assert.equal(v.propOf('deal-case-evidence', 'children')[1].props.to, '/deals/4/evidence');
     assert.match(v.textOf('deal-case-notes'), /^Risk: Key-person risk on the CTOQuestion: Unit economics at 50 units\?$/);
-    assert.equal(v.textOf('deal-case-notes-more'), '2 more in Notes');
+    assert.equal(v.textOf('deal-case-notes-more'), '2 more in Firm notes', 'D6164 part 3: the notes are Activity\'s Firm notes');
     assert.equal(v.textOf('deal-case-missing'), 'Missing: Geographic, Legal and IP (not enough recorded).');
     // Your position, with the route the read does not carry.
     assert.match(v.textOf('deal-position-amount'), /\$50,000 · Pending/);

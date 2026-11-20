@@ -203,7 +203,7 @@ export default function WorkspaceShell({
       */}
       <div className="p-5">
         {bucket && (
-          <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-faint">
+          <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-muted">
             <Link to={crumbTo} className="hover:underline" data-testid="link-workspace-crumb">
               {bucket.label}
             </Link>
