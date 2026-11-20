@@ -212,7 +212,7 @@ test('4. missing credentials and out-of-scope refs are refused without a call; u
   x = live(w);
   const pages = RELEASE_ADAPTER_LIMITS.githubCommentPages;
   for (let i = 0; i < pages * RELEASE_ADAPTER_LIMITS.githubPageSize; i++) x.gh.comments.push({ id: i + 1, body: 'lgtm' });
-  r = await drain(x.env);
+  await drain(x.env);
   assert.equal(effectRows(w)[0].last_error_code, 'lookup_incomplete');
   assert.equal(x.gh.count('GET'), pages);
   assert.equal(x.gh.count('POST'), 0);

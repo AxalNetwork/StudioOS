@@ -1,0 +1,49 @@
+# D7899: weekly repository supply-chain posture, reported without AI or external publication.
+name: OpenSSF Scorecard
+
+on:
+  schedule:
+    - cron: '23 4 * * 6'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ossf-scorecard-main
+  cancel-in-progress: false
+
+jobs:
+  analysis:
+    name: OpenSSF Scorecard (advisory)
+    # Only scan the trusted public default branch. A visibility change stops
+    # this free-only advisory instead of assuming a paid Code Security license.
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out trusted main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Analyze repository posture
+        # v2.6.0 includes Scorecard 5.7.0's credential-redirect security fixes
+        # and restores failure exit codes for failed scans/writes. D7899 uses
+        # this security release instead of retaining vulnerable v2.5.0.
+        uses: ossf/scorecard-action@23f22cd43608bae7a1f1fa2603d7314dee9538a5 # v2.6.0
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: false
+      # Default success() is deliberate. A failed/cancelled scan must never
+      # replace the Security tab's existing findings with incomplete output.
+      - name: Upload successful posture scan
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: scorecard.sarif
+          category: ossf-scorecard
