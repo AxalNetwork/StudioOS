@@ -11,7 +11,7 @@ import {
   readCompanyPublishers,
   companyPublishersLabel,
 } from '../src/services/researchCompanyPublishers.ts';
-const SECRET = 'publishers-7810-synthetic-test-key';
+const SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 function fixture() {
   const db = new DatabaseSync(':memory:', SCHEMA_OPTIONS);
   loadSchema(db);
