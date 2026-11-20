@@ -125,7 +125,7 @@ test('D7904 target startup may finish after pickup deadline only with independen
  f.map.set(key,{total_count:1,jobs:[job]});
  f.deps.now=()=>NOW+500;assert.equal((await admit(f)).reason,'target_pickup_not_verified');f.deps.now=()=>NOW+90000;
  f.calls.length=0;
- const {context,...deps}=f.deps;
+ const {context,phase,...deps}=f.deps;
  assert.equal(await main({REQUEST_ID:f.request.requestId,LEASE_GENERATION:'3',PART:f.request.shard,PROFILE:'hosted',GITHUB_REPOSITORY:REPO,GITHUB_WORKFLOW_SHA:EXEC,GITHUB_RUN_ID:'202',GITHUB_RUN_ATTEMPT:'1'},deps),0);
  assert.ok(f.calls.includes(key));
 });
