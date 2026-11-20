@@ -151,10 +151,12 @@ _CONTENT_RE = re.compile(
     r"|\[((?:\((?:\\.|[^\\()])*\)|[^\[\]\\(]|\\.)*)\]\s*TJ"
     # Number sub-pattern is linear (no `\d*…\d+` overlap) to avoid polynomial
     # backtracking (CodeQL py/polynomial-redos) while matching the same set.
-    # A number starts only where no digit or "." precedes it: otherwise each
-    # digit of a long run started its own scan of the run (quadratic; 20,000
-    # digits took four seconds).
-    r"|(?<![\d.])(-?(?:\d+\.\d+|\.\d+|\d+))\s+(-?(?:\d+\.\d+|\.\d+|\d+))\s+(Td|TD)"
+    # A number starts the stream or follows the whitespace it consumes, as
+    # content-stream operands do: otherwise each digit of a long run started
+    # its own scan of the run (quadratic; 20,000 digits took four seconds).
+    # CodeQL does not read a lookbehind as that boundary; a consumed "\s"
+    # it does (py/polynomial-redos).
+    r"|(?:\A|\s)(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(Td|TD)"
     r"|(T\*)"
     # An escape outside a literal is consumed whole, so its "(" never starts a
     # literal: a "(" followed by many "\(" was quadratic, each "\(" starting a

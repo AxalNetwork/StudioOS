@@ -4,12 +4,14 @@ const marker = /\n?<!-- studioos-health:v1 ([^\n]+) -->/g;
 const locks = new Map();
 export function safeHealthFacts(facts = {}) {
   const out = {};
-  for (const key of ['pr', 'queued', 'waitedMin', 'days', 'failedCount', 'ignored', 'identityCount']) if (Number.isSafeInteger(Number(facts[key])) && Number(facts[key]) >= 0) out[key] = Number(facts[key]);
+  for (const key of ['pr', 'queued', 'waitedMin', 'days', 'failedCount', 'ignored', 'identityCount', 'ageHours', 'objectCount', 'byteCount']) if (Number.isSafeInteger(Number(facts[key])) && Number(facts[key]) >= 0) out[key] = Number(facts[key]);
+  if (['run_failed', 'heartbeat_missing', 'heartbeat_invalid', 'run_reported_failure', 'copy_missing', 'missed_run', 'healthy'].includes(facts.backupReason)) out.backupReason = facts.backupReason;
   if (/^[a-f0-9]{40}$/.test(facts.sha || '')) out.sha = facts.sha;
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(facts.cutoff || '')) out.cutoff = facts.cutoff; // #6463: the queue cutoff, as parseQueueCutoff writes it
   if (['budget_refused', 'configuration_error', 'reviewed', 'duplicate'].includes(facts.outcome)) out.outcome = facts.outcome;
   if (/^[a-zA-Z0-9_ ()/.@:-]{1,200}$/.test(facts.fingerprint || '')) out.fingerprint = facts.fingerprint.replaceAll('@', ' at ');
   if (/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/[1-9]\d*$/.test(facts.runUrl || '')) out.runUrl = facts.runUrl;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(facts.breakDate || '') && Number.isFinite(Date.parse(facts.breakDate))) out.breakDate = facts.breakDate; // D7124: the future-clock break date
   const identities = safeStallIdentities(facts.identities); // D7125: the queue-stall failures, sanitized
   if (identities.length) out.identities = identities;
   return out;
