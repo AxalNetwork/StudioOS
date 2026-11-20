@@ -531,9 +531,6 @@ export function ShowProofLink({ dealId }) {
   );
 }
 
-/** The stage a decision is at, as the store spells it. */
-const STAGE_TONE = { draft: 'neutral', voting: 'info', decided: 'ok' };
-
 /** `GET /api/ic/conditions`' rows by uid: the owner's name and who recorded and resolved each. */
 function byUid(items) {
   const out = {};
@@ -927,7 +924,21 @@ export default function InvestorCommitZone() {
           )}
 
           {/* ══ EVERY DECISION ══ */}
-          {view === 'decisions' && <ICDecisionsList items={decisionRows} onReload={load} />}
+          {view === 'decisions' && (
+            <ICDecisionsList
+              items={decisionRows}
+              onReload={load}
+              // D1424: a row that names its deal links its deal room and, unless
+              // the committee passed, the Commitment tab's proof door. Partners
+              // enter Commit only (D6154), so they get no link into a deal room.
+              dealLinks={(r) => (user?.role === 'partner' ? null : r.deal_id ? (
+                <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <OpenDeal id={r.deal_id} onOpen={navigate} />
+                  {r.decision !== 'pass' ? <ShowProofLink dealId={r.deal_id} /> : null}
+                </span>
+              ) : null)}
+            />
+          )}
 
           <ZoneDraft
             surface="deals/commit"

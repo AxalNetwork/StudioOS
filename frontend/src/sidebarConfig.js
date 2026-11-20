@@ -924,8 +924,8 @@ export const SHARED_FULL_BLEED = [
  * this list.
  */
 export const SHARED_FULL_BLEED_PREFIXES = [
-  '/deals/commit/', // D6154: records own the Deals shell’s gutter.
   '/spinout-lab/',
+  '/deals/commit/', // D6154: records own the Deals shell’s gutter.
   // Pitch pages own the cycle gutter and dock their rail for founders and admins.
   '/raise/pitch/',
   // A researched fund's own page. The list `/research/funds` is already full

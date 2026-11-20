@@ -9,7 +9,7 @@ const field='w-full rounded-lg border border-gray-300 bg-white p-2 text-sm text-
 const button='min-h-11 rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700';
 const itemsOf=r=>Array.isArray(r)?r:r?.items??r?.projects??[];
 export default function ICDecisionsPage(){return <Navigate to="/deals/commit?view=decisions" replace/>;}
-export function ICDecisionsList({items=[],onReload}){
+export function ICDecisionsList({items=[],onReload,dealLinks}){
  const {user,role}=useAuth();const navigate=useNavigate();
  const [view,setView]=useState('All'),[venture,setVenture]=useState(''),[open,setOpen]=useState(false);
  const [choices,setChoices]=useState(null),[choiceError,setChoiceError]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -36,7 +36,7 @@ export function ICDecisionsList({items=[],onReload}){
   <label className="block text-sm">Venture <select className={field} value={venture} onChange={e=>setVenture(e.target.value)}><option value="">Any venture</option>{ventures.map(v=><option key={v}>{v}</option>)}</select></label>
   <p className="text-xs text-gray-600 dark:text-gray-400">Mine to vote: roster members without a vote, of the 100 most recent decisions. No roster means eligibility is not recorded.</p>
   {!shown.length?<p className="rounded-xl border border-gray-200 p-6 dark:border-gray-800">{items.length?'No decisions match this view.':'No investment decision is open. Open a decision when a deal is ready for the committee.'}</p>:<div className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">{shown.map(d=><article key={d.uid} className="grid gap-2 p-4 md:grid-cols-[2fr_1fr_2fr]">
-   <div><Link className="font-bold text-violet-700 underline dark:text-violet-300" to={`/deals/commit/${encodeURIComponent(d.uid)}`}>{d.title||'Untitled decision'}</Link><p className="text-sm text-gray-600 dark:text-gray-400">{d.project_name||'Venture not recorded'}</p></div>
+   <div><Link className="font-bold text-violet-700 underline dark:text-violet-300" to={`/deals/commit/${encodeURIComponent(d.uid)}`}>{d.title||'Untitled decision'}</Link><p className="text-sm text-gray-600 dark:text-gray-400">{d.project_name||'Venture not recorded'}</p>{dealLinks?.(d)}</div>
    <div className="text-sm"><p>{d.status}</p><p>{d.decision||'Not decided'}</p><p>To vote: {d.roster?.available?d.roster.to_vote:'Not recorded'}</p></div>
    <div className="text-sm"><p>{tallyText(d.tally)}</p><p>Rationales: {ballotOf(d).rationales} of {ballotOf(d).voted} votes cast</p><p>My vote: {d.votes?.find(v=>Number(v.user_id)===Number(user?.id))?.vote||'Not voted yet'}</p></div>
   </article>)}</div>}
