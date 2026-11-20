@@ -99,10 +99,10 @@ export function originalTestContext(admitted, paths, baseEnv = process.env) {
 /** Both the exact real test step and its owning job AND run must pass. No dispatcher/upload status is authority. */
 export function childResult({ run, jobs }, owned) {
   const same = (a,b) => ID.test(String(a)) && String(a) === String(b);
-  const wrapper=owned.childWorkflowPath==='.github/workflows/runner-dispatch.yml',expectedSha=owned.childWorkflowSha??owned.executorSha;
-  if(wrapper&&owned.workflowAttested!==true)return {outcome:'unknown',reason:'callee_not_attested'};
-  if (!same(run?.id,owned.childRunId) || !same(run?.run_attempt,owned.childAttempt) || run?.path !== (wrapper?'.github/workflows/runner-dispatch.yml':'.github/workflows/runner-executor.yml') || run?.repository?.full_name !== 'AxalNetwork/StudioOS' || run?.head_sha !== expectedSha) return { outcome:'unknown',reason:'child_run_identity_mismatch' };
-  const selected=Array.isArray(jobs)?jobs.filter(job=>job.name===(wrapper?'execute / '+TEST_JOB:TEST_JOB)):[];
+  const expectedSha=owned.childWorkflowSha??owned.executorSha;
+  if(owned.childWorkflowPath && owned.childWorkflowPath!=='.github/workflows/runner-executor.yml')return {outcome:'unknown',reason:'child_run_identity_mismatch'};
+  if (!same(run?.id,owned.childRunId) || !same(run?.run_attempt,owned.childAttempt) || run?.path !== '.github/workflows/runner-executor.yml' || run?.repository?.full_name !== 'AxalNetwork/StudioOS' || run?.head_sha !== expectedSha) return { outcome:'unknown',reason:'child_run_identity_mismatch' };
+  const selected=Array.isArray(jobs)?jobs.filter(job=>job.name===TEST_JOB):[];
   if (selected.length !== 1 || jobs.some(job=>!same(job.run_id,run.id)||!same(job.run_attempt,run.run_attempt)||job.head_sha!==expectedSha)) return { outcome:'unknown',reason:'child_job_identity_mismatch' };
   const job=selected[0],steps=job.steps?.filter(step=>step.name===TEST_STEP);
   if (!steps || steps.length !== 1) return {outcome:'unknown',reason:'test_step_not_unique'};

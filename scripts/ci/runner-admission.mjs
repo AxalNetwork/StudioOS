@@ -6,7 +6,6 @@ import { pathToFileURL } from 'node:url';
 const REPOSITORY = 'AxalNetwork/StudioOS';
 const CI_PATH = '.github/workflows/ci.yml';
 const EXECUTOR_PATH = '.github/workflows/runner-executor.yml';
-const DISPATCH_PATH = '.github/workflows/runner-dispatch.yml';
 const SHA = /^[a-f0-9]{40}$/;
 const ID = /^[1-9][0-9]*$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -208,10 +207,20 @@ export async function admitRunnerJob(request,{api,readReceipt,resolveProfile,ver
   parentIdentity(parent,input,repoId);parentIdentity(await get(`${runPath}/attempts/${receipt.parentAttempt}`),input,repoId);
   // V1 dispatches this trusted definition directly; no same-branch wrapper or candidate workflow is admitted.
   const child=await get(`${prefix}/actions/runs/${context.childRunId}`);
-  requireThat(sameId(child?.id,context.childRunId)&&sameId(child.run_attempt,context.childAttempt)&&child.event==='workflow_dispatch'&&child.path===(context.childWorkflowPath??EXECUTOR_PATH)&&[EXECUTOR_PATH,DISPATCH_PATH].includes(child.path)&&child.head_branch==='main'&&child.head_sha===(context.childWorkflowSha??context.executorSha)&&child.status==='in_progress'&&child.conclusion==null&&sameRepo(child.repository,REPOSITORY,repoId)&&sameRepo(child.head_repository,REPOSITORY,repoId),'child_workflow_identity_mismatch');
+  requireThat(sameId(child?.id,context.childRunId)&&sameId(child.run_attempt,context.childAttempt)&&child.event==='workflow_dispatch'&&child.path===(context.childWorkflowPath??EXECUTOR_PATH)&&child.path===EXECUTOR_PATH&&child.head_branch==='main'&&child.head_sha===(context.childWorkflowSha??context.executorSha)&&child.status==='in_progress'&&child.conclusion==null&&sameRepo(child.repository,REPOSITORY,repoId)&&sameRepo(child.head_repository,REPOSITORY,repoId),'child_workflow_identity_mismatch');
+  if(context.targetPickupRequired===true){
+   // Pickup is the target job's independently observed start, not admission completion.
+   const page=await get(`${prefix}/actions/runs/${context.childRunId}/jobs?per_page=100`);
+   requireThat(Array.isArray(page?.jobs)&&Number.isSafeInteger(page.total_count)&&page.total_count===page.jobs.length&&page.total_count<=100,'target_pickup_not_verified');
+   const jobs=page.jobs.filter(job=>job.name==='Admitted Worker shard');
+   requireThat(jobs.length===1,'target_pickup_not_verified');
+   const job=jobs[0],started=Date.parse(job.started_at);
+   requireThat(sameId(job.run_id,context.childRunId)&&sameId(job.run_attempt,context.childAttempt)&&job.head_sha===child.head_sha
+     &&job.status==='in_progress'&&Number.isFinite(started)&&started<=now()&&started<=receipt.startDeadline,'target_pickup_not_verified');
+  }
   const workflow=await get(`${prefix}/actions/workflows/runner-executor.yml`);
   requireThat(workflow?.path===EXECUTOR_PATH&&workflow.state==='active','executor_workflow_unavailable');
-  const childWorkflow=child.path===EXECUTOR_PATH?workflow:await get(`${prefix}/actions/workflows/runner-dispatch.yml`);
+  const childWorkflow=workflow;
   requireThat(childWorkflow?.path===child.path&&childWorkflow.state==='active'&&sameId(child.workflow_id,childWorkflow.id),'child_workflow_definition_mismatch');
   const main=await get(`${prefix}/git/ref/heads/main`);
   requireThat(main?.ref==='refs/heads/main'&&main.object?.type==='commit'&&SHA.test(main.object.sha??''),'trusted_main_ref_unavailable');
@@ -243,7 +252,8 @@ export function githubReadApi(token, fetcher = globalThis.fetch) {
 /** Stage-one CLI deliberately has no coordinator credential or guessed trust endpoint. #7887 must supply the reviewed transport. */
 export async function main(env=process.env,dependencies={}){
  const result=await admitRunnerJob({requestId:env.REQUEST_ID,generation:env.LEASE_GENERATION,shard:env.PART,profile:env.PROFILE},{
-  context:{repository:env.GITHUB_REPOSITORY,executorSha:env.EXECUTOR_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowSha:env.CHILD_WORKFLOW_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowPath:env.CHILD_WORKFLOW_PATH??EXECUTOR_PATH,childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT},
+  context:{repository:env.GITHUB_REPOSITORY,executorSha:env.EXECUTOR_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowSha:env.CHILD_WORKFLOW_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowPath:env.CHILD_WORKFLOW_PATH??EXECUTOR_PATH,childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT,targetPickupRequired:true},
+  phase:'execute',
   api:githubReadApi(env.GH_TOKEN),signal:AbortSignal.timeout(60000),...dependencies,
  });
  const values={allowed:String(result.allowed),reason:result.reason};
