@@ -235,3 +235,5 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
 | `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
+
+`company_source_7810.test.mjs` checks stored publisher provenance and explicit unreviewed licence terms (D7810).
