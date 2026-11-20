@@ -1,0 +1,45 @@
+# D7899: block newly introduced high/critical dependency vulnerabilities without GitHub AI.
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+# Review uses the dependency graph API only: no candidate checkout, package
+# install, application credentials, PR comments or generated fixes.
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # The combined queue commit must be compared with the queue's base,
+          # not a single PR head or whichever main happens to point to later.
+          base-ref: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          head-ref: ${{ github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+          fail-on-severity: high
+          # Build tools execute code too; the action's runtime-only default
+          # would leave development and unclassified packages out of the gate.
+          fail-on-scopes: runtime, development, unknown
+          vulnerability-check: true
+          warn-only: false
+          # D7899 establishes vulnerability policy, not a new license policy.
+          license-check: false
+          comment-summary-in-pr: never
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 120
+          # Keep the required check independent of the external Scorecard API;
+          # repository posture has its own weekly advisory workflow.
+          show-openssf-scorecard: false

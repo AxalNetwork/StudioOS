@@ -291,7 +291,7 @@ function ScopeExpansion({ s, masked, dealId, ndaHref, onDetail }) {
         </>
       )}
       {view && dealId != null && (
-        <Link to={tabHref(dealId, view)} className={LINK} data-testid={`scorecard-context-${s.key}`}>{s.label} on the Evidence tab</Link>
+        <Link to={tabHref(dealId, view)} className={LINK} data-testid={`scorecard-context-${s.key}`}>{s.label} in full, under Scorecard</Link>
       )}
     </div>
   );
@@ -665,7 +665,7 @@ export default function VentureScorecard({ audience = 'investor', dealId = null,
                 ))}
               </div>
               <p className={`m-0 ${SUB}`} data-testid="scorecard-context">
-                Each scope’s change since your last visit is not recorded yet. The context for Team, Market and Traction is on the Evidence tab:{' '}
+                Each scope’s change since your last visit is not recorded yet. Team, Market and Traction each read in full under this tab:{' '}
                 {Object.values(CONTEXT_VIEW).map((v, i) => (
                   <React.Fragment key={v}>{i ? ', ' : ''}<Link to={tabHref(dealId, v)} className={LINK} data-testid={`scorecard-context-link-${v}`}>{v[0].toUpperCase() + v.slice(1)}</Link></React.Fragment>
                 ))}.

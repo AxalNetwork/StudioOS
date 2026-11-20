@@ -53,7 +53,11 @@ function fixture() {
   const api = async (path, init = {}) => {
     const body = init.body && JSON.parse(init.body);
     if (init.method === 'POST') { const row = { ...body, number: rows.length + 1, state: 'open', user: { login: 'github-actions[bot]' } }; rows.push(row); return structuredClone(row); }
-    if (init.method === 'PATCH') { const row = rows.find(row => row.number === Number(path.split('/').at(-1))); Object.assign(row, body); return structuredClone(row); }
+    if (init.method === 'PATCH') {
+      const index = rows.findIndex(row => row.number === Number(path.split('/').at(-1)));
+      rows[index] = { ...rows[index], ...body };
+      return structuredClone(rows[index]);
+    }
     return structuredClone(rows.filter(row => path.includes('state=all') || row.state === 'open'));
   };
   const monitor = createHealthMonitor({ repo: 'AxalNetwork/StudioOS', api, now: () => now,

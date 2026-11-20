@@ -52,9 +52,10 @@ test('the eight tabs, in the canvas order, and every view a role held before sit
   }
   for (const view of Object.keys(TAB_DEFS)) assert.equal(DEAL_TABS.filter((g) => g.views.includes(view)).length, 1, view);
   assert.deepEqual(Object.fromEntries(Object.keys(TAB_DEFS).map((v) => [v, groupOf(v)])), {
-    overview: 'overview', scorecard: 'scorecard', evidence: 'evidence', team: 'evidence', market: 'evidence', traction: 'evidence',
+    // D6164 part 3 (the owner's answer A): Team, Market and Traction sit under Scorecard; Notes is Activity's filter, not a view.
+    overview: 'overview', scorecard: 'scorecard', evidence: 'evidence', team: 'scorecard', market: 'scorecard', traction: 'scorecard',
     diligence: 'diligence', documents: 'dataroom', terms: 'terms', commitment: 'investment', invitations: 'investment',
-    transfers: 'investment', notes: 'activity', activity: 'activity',
+    transfers: 'investment', activity: 'activity',
   });
   assert.equal(groupOf('closing'), 'investment', 'the closing room sits under Investment');
   assert.ok(Object.keys(SUB_PAGES).every((k) => DEAL_TABS.some((g) => g.subPages?.includes(k))));
@@ -67,7 +68,7 @@ test('old tab addresses still open their view; the two new addresses open their 
   }
   assert.equal(tabOf('data-room', 'investor'), 'documents');
   assert.equal(tabOf('investment', 'investor'), 'commitment');
-  assert.equal(tabOf('activity', 'investor'), 'notes', 'an investor\'s Activity is their Notes view, which carries the feed');
+  assert.equal(tabOf('activity', 'investor'), 'activity', 'D6164 part 3: an investor holds Activity, with Firm notes as its filter');
   assert.equal(tabOf('activity', 'founder'), 'activity');
   assert.equal(tabOf('investment', 'partner'), 'commitment');
   assert.equal(tabOf('closing', 'investor'), 'closing');
@@ -76,7 +77,8 @@ test('old tab addresses still open their view; the two new addresses open their 
   assert.equal(groupHref(4, 'dataroom'), '/deals/4/data-room');
   assert.equal(groupHref(4, 'overview'), '/deals/4');
   assert.equal(groupHref('4x', 'investment'), '/deals//investment', 'a bad id never reaches the address');
-  assert.deepEqual(dealViewsIn('evidence', 'investor').map((v) => v.label), ['Shared evidence', 'Team', 'Market', 'Traction']);
+  assert.deepEqual(dealViewsIn('scorecard', 'investor').map((v) => v.label), ['Eleven scopes', 'Team', 'Market', 'Traction'], 'D6164 part 3: under Scorecard');
+  assert.deepEqual(dealViewsIn('evidence', 'investor'), [], 'Evidence is one view now');
   assert.deepEqual(dealViewsIn('investment', 'admin').map((v) => v.id), ['commitment', 'invitations', 'transfers']);
   assert.deepEqual(dealViewsIn('investment', 'investor'), [], 'one view, no second row');
 });
@@ -231,8 +233,8 @@ test('mounted, old addresses open under their tab: Documents, Commitment, Notes 
     ['/deals/4/commitment', ['deal-tab-investment'], /\/api\/deals\/4\/commitments/],
     ['/deals/4/investment', ['deal-tab-investment'], /\/api\/deals\/4\/round/],
     ['/deals/4/notes', ['deal-tab-activity'], /\/api\/deals\/4\/notes/],
-    ['/deals/4/activity', ['deal-tab-activity'], /\/api\/deals\/4\/notes/],
-    ['/deals/4/team', ['deal-tab-evidence', 'deal-subtab-team'], /\/api\/deals\/4\/team/],
+    ['/deals/4/activity', ['deal-tab-activity'], /\/api\/deals\/4\/activity/],
+    ['/deals/4/team', ['deal-tab-scorecard', 'deal-subtab-team'], /\/api\/deals\/4\/team/],
     ['/deals/4/overview', ['deal-tab-overview'], /\/api\/deals\/4\/whats-new/],
   ];
   for (const [url, lit, reads] of cases) {

@@ -1,12 +1,11 @@
 /**
  * Research › Markets global sourced observations (D7318, #7318): the market-data sources, one country's observations,
- * the CSV export and the World Bank refresh, under /api/research/market-data. Mounts itself (#4105) just ahead of
+ * and the CSV export (operator imports are in admin_market_observation_imports.ts), under /api/research/market-data. Mounts itself (#4105) just ahead of
  * research_sectors, where its hand-written line sat.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { ingestWorldBank } from '../services/researchMarketData';
 import researchSectors from './research_sectors';
 import type { RouteMount } from '../util/routeRegistry';
 
@@ -43,11 +42,6 @@ app.get('/market-data/export.csv',async c=>{
   const rows=r.results ?? []; const cols=['source_id','source_name','source_url','source_dataset_or_edition','metric_key','metric_label','geography_type','geography_code','period','value','unit','observation_status','published_at','retrieved_at','methodology_url','license_or_usage_note','confidence','vintage','supersedes_observation_id'];
   const esc=(v:any)=>'"'+String(v??'').replace(/"/g,'""')+'"';
   return new Response([cols.join(','),...rows.map((x:any)=>cols.map(k=>esc(x[k])).join(','))].join('\n'),{headers:{'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="research-market-data.csv"'}});
-});
-app.post('/market-data/refresh/world-bank',async c=>{
-  await requireAuth(c);
-  const body=await c.req.json().catch(()=>({})) as any;
-  return c.json(await ingestWorldBank(c.env,{from:Number.isInteger(body.from)?body.from:undefined,to:Number.isInteger(body.to)?body.to:undefined}),202);
 });
 export default app;
 export const mount: RouteMount = { path: '/api/research', router: app, before: [researchSectors] };
