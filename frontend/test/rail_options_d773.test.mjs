@@ -91,7 +91,7 @@ const BOARDS = {
 const INVENTORY = { Advisor: ADVISOR_RAIL_OPTIONS, 'Operating Partner': PARTNER_RAIL_OPTIONS };
 
 /** The model-running controls a board's files hold, each as the marker its option must cite. */
-const MODEL_CALL = /\bapi\.(?:research\.(?:ask|reindex)|aiWorkspaceExplain|competitors\.(?:analyze|rerun|refresh)|advisor\.(?:transcribe|toolAuto))\(/g;
+const MODEL_CALL = /\bapi\.(?:research\.(?:ask|reindex)|aiWorkspaceExplain|competitors\.(?:analyze|rerun)|advisor\.(?:transcribe|toolAuto))\(/g;
 function controlsIn(file) {
   const s = src(file);
   const found = new Set();

@@ -40,4 +40,8 @@ export const researchMarketsApi = {
   geographies: (params) => request(`/research/geographies${qs(params)}`),
   geography: (code) => request(`/research/geographies/${encodeURIComponent(code)}`),
   listedCompanies: (params) => request(`/research/listed-companies${qs(params)}`),
+  marketDataSources: () => request('/research/market-data/sources'),
+  countryMarketData: (iso3) => request(`/research/market-data/countries/${encodeURIComponent(iso3)}`),
+  refreshWorldBank: (body = {}) => request('/research/market-data/refresh/world-bank', { method: 'POST', body: JSON.stringify(body) }),
+  marketDataCsvUrl: (params = {}) => `/api/research/market-data/export.csv${qs(params)}`,
 };

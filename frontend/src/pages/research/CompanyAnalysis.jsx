@@ -279,8 +279,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   const [decision, setDecision] = useState(null); // export format awaiting the dirty-draft decision
   const [sheetOpen, setSheetOpen] = useState(false);
   // D771 (#2097): `busy` names the run at the model, so the rail names that option; an Add runs one only with a site to crawl.
+  // D7652: Refresh sources runs no model (D7176), so it names no option.
   useRailOption(busy === 'rerun' ? 'analyse:again' : null, 'Re-run');
-  useRailOption(busy === 'refresh' ? 'analyse:sources' : null, 'Refresh sources');
   useRailOption(busy === 'add' && manual.crawl && manual.url.trim() ? 'extract:candidate' : null, 'Add');
   const [preview, setPreview] = useState('');
   // D7175: the subject's directory record, read for the subject bar.
@@ -462,7 +462,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     setFailure(null);
     setResult(null);
     try {
-      const full = await api.competitors.refresh(id, railPressHeaders('analyse:sources'));
+      const full = await api.competitors.refresh(id);
       if (runFor.current !== mine) return;
       mergeIn(before, full);
       const r = full?.refresh || {};

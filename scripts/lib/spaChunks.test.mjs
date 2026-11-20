@@ -114,6 +114,8 @@ test('#3590: capture CLI preserves entry identity and distinguishes an absent ca
       0, { entries: ['/assets/index-new.js'], reason: null }, 0, { entries: ['/assets/index-old.js'], reason: null },
       0, { entries: [], reason: 'cache-miss' },
     ]);
+    // Fixture pages in a temporary folder.
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     writeFileSync(join(dir, 'docs/index.html'), '<script type="module" src="/assets/exact-entry.js"></script>');
     const withShell = command();
     const shellManifest = JSON.parse(readFileSync(output, 'utf8'));
@@ -176,7 +178,9 @@ globalThis.fetch=async(input,init={})=>{
 function smoke(fault = '', stale = false, malformed = false, absent = false, nested = false, artifact = false) {
   const dir = mkdtempSync(join(tmpdir(), 'spa-live-3590-'));
   try {
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     writeFileSync(join(dir, 'fake.mjs'), FAKE_FETCH);
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     writeFileSync(join(dir, 'index.html'), '<script type="module" src="/assets/index-current.js"></script>');
     mkdirSync(join(dir, 'assets'));
     writeFileSync(join(dir, 'assets/index-current.js'), map(['assets/lazy-current.js','assets/lazy-current.css','assets/shared.js']));

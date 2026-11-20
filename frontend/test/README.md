@@ -42,6 +42,7 @@ also exercises a `project_id` deep link.
 | `account_regressions_4618.test.mjs` | D4618: the real Account page (and auto-reload card, `useConnectors`) with `fetch` stubbed and answered late: overlapping privacy, category and public-profile saves, session rows by status, Display name, the shared billing overview and its invalidation, degraded card reads, either auto-reload read order, pack retry, and a failed connection list. |
 | `grow_overview_4862.test.mjs` | #4862: taxonomy, context, primary actions, zero values, failed reads and read-only Grow states. |
 | `landing_gate_classifier_5606.test.mjs` | D5606: coexisting aggregate gates preserve setup fingerprints, leaf inheritance and queue-stall diagnosis while deleted refs and test/fast-check failures remain excluded. |
+| `queue_stall_chains_7125.test.mjs` | D7125: the queue-stall alert opens only when one failure identity is in two merge-queue chains on three heads, names the base or the PR it starts at, replays 2026-11-17 (`fixtures/queue_stall_7125.json`), and `test-drift-parts.mjs` writes the escaped `ci-failure-id` annotations only under `merge_group`. |
 | `build_parts_contract_5507.test.mjs` | D5507: THE contract for Build's connector parts: every module's complete, ordered list, written by hand; provider suites assert only their own key. Update it, once, when a part is added, removed or moved. |
 | `_buildParts.mjs` | D5507: a provider suite's view of `BUILD_PARTS`: the modules its key sits on, before/after a named neighbour, and what its part mounts. |
 | `_storageAreasContract.mjs` | D5507: THE contract for the storage areas: key, kind and where its file opens, written by hand; read by the two suites below and the Worker's `usage_storage_d1169`. |
@@ -232,6 +233,8 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `scan_remediation_6935.test.mjs` | D6935 automated tracking, Autofix publishing, retries and default-branch verification. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+| `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
 `capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.
+`build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
