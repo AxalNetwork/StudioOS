@@ -20,6 +20,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
 import { createHealthMonitor, runSource } from './health-alert-episodes.mjs';
 import { webhookDelivery } from './health-alert-transport.mjs';
+import { fileRecoveryHealth, latestFileSnapshotRun } from './lib/fileRecoveryHealth.mjs';
 import { futureClockReport } from './future-clock-report.mjs';
 import { breakDate, futureClockLogLines, futureClockSummary, withFutureClockRunLine } from './lib/futureClockNames.mjs';
 
@@ -118,6 +119,19 @@ async function main() {
     return;
   }
   monitor = createHealthMonitor({ api: gh, repo, deliver: webhookDelivery({ url: env.SLACK_GITHUB_WEBHOOK_URL }), log: value => console.log(JSON.stringify(value)) });
+  if (mode === 'file-backup') {
+    if (env.FILE_RECOVERY_ENABLED !== 'true') return console.log('file-backup: disabled; no observation or transition');
+    let observation;
+    try { observation = JSON.parse(readFileSync(env.FILE_RECOVERY_HEARTBEAT_FILE, 'utf8')); }
+    catch { observation = { read: 'unavailable' }; }
+    const listing = await gh(`/repos/${repo}/actions/workflows/file-recovery.yml/runs?branch=main&status=completed&per_page=10`);
+    if (!Array.isArray(listing?.workflow_runs)) throw new Error('file_backup_run_inventory_unreadable');
+    const latestRun = latestFileSnapshotRun(listing.workflow_runs);
+    const state = fileRecoveryHealth({ enabled: true, independentRequired: env.FILE_DR_SECOND_COPY_ENABLED === 'true',
+      observation, latestRun, now: Date.now() });
+    if (state.active === null) process.exitCode = 1;
+    return apply('file-backup', state.active, { ...state, backupReason: state.reason, runUrl: safeGithubUrl(latestRun?.html_url) }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
+  }
   if (mode === 'queue-stalled') {
     // D7125: every status, so a chain links through candidates still running or green; the newest 100 runs.
     const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?event=merge_group&per_page=100`);
@@ -196,7 +210,7 @@ async function main() {
     }
     return apply('future-clock', active, { days: 7, failedCount: evidence.failed, runUrl: env.RUN_URL, breakDate: broke }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
   }
-  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled, future-clock or scan`);
+  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled, future-clock, file-backup or scan`);
 }
 
 main().catch(() => {

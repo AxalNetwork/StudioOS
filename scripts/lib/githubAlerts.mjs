@@ -25,6 +25,7 @@ export const ALERT_KINDS = Object.freeze({
   'review-blocked': { title: '[alert] the PR reviewer is not reviewing', label: 'PR reviewer' },
   queue: { title: '[alert] the Actions queue is backed up', label: 'Actions queue' },
   'queue-stalled': { title: '[alert] merge queue stalled', label: 'Merge queue' },
+  'file-backup': { title: '[alert] file recovery backup unhealthy', label: 'File recovery backup' },
   scan: { title: SCAN_ALERT_TITLE, label: 'Main scan' },
   // D5398: the nightly future-clock run is stateful too. It used to post on every failing night and keep no issue,
   // so a date-bound test was announced again each night and nothing said when it was fixed.
@@ -400,6 +401,7 @@ export function message(kind, action, facts = {}) {
     }
     return `:warning: *Merge queue stalled.* Two different queue commits failed during ${facts.fingerprint}.${run}${issue}\nPause new queue entries until a queue CI run passes (D5604).`;
   }
+  if (kind === 'file-backup') return `:warning: *File recovery backup unhealthy* (${facts.backupReason || 'unavailable'}).${run}${issue} Check the private heartbeat and both copies; no live object content is included in this alert.`;
   if (kind === 'scan') return `New unsuppressed scan fingerprints on main.${run}`;
   if (kind === 'future-clock') {
     // D7124: a break date and where the names are; the names themselves stay in the run summary (D5663).
