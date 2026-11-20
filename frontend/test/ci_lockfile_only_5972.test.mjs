@@ -91,8 +91,9 @@ test('no workflow runs a bare npm install where a lockfile exists', () => {
   assert.deepEqual(hits, [], 'use `npm ci` in a directory that has a package-lock.json');
 });
 
-test('the four steps #5972 named now run npm ci only', () => {
-  for (const file of ['ci.yml', 'copilot-setup-steps.yml', 'github-alerts.yml', 'runner-benchmark.yml']) {
+test('the remaining root-dependency steps #5972 named run npm ci only', () => {
+  // D7899 retires the Copilot workflow; keep strict coverage of every surviving step.
+  for (const file of ['ci.yml', 'github-alerts.yml', 'runner-benchmark.yml']) {
     const src = readFileSync(join(WF_DIR, file), 'utf8');
     const lines = src.split('\n');
     const i = lines.findIndex((l) => /-\s+name:\s*Install root deps\s*$/.test(l));

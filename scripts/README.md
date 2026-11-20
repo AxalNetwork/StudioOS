@@ -335,6 +335,8 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 
 | `future-clock-report.mjs` | D5663: trusted same-attempt producer evidence verification. |
 
+| `future-clock-changed.mjs` | D7124: a PR's added or edited test files under libfaketime at +7d and +9d 11h (ci.yml, `suite (rest)` on non-draft PRs); fails on a test that fails ahead and passes today. `--offset +7d <file>` reproduces one. |
+
 | `health-alert-episodes.mjs` | D5663: paginated health episodes with persistent transition delivery intents. |
 
 | `health-alert-transport.mjs` | D5663: explicit legacy webhook receipts, retries and uncertain delivery. |
