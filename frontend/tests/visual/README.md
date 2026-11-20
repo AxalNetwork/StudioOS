@@ -63,6 +63,7 @@ and StudioHome at `/raise/pitch`).
 | `prospect_paging_6316.spec.mjs` | #6316: real Worker/SPA reads 250 prospects at desktop and phone widths after an edit between pages; no duplicate or skipped cards. |
 
 | `grow_proposal_undo_6315.spec.mjs` | #6315: built SPA Mercury confirmation, destination and undo at desktop/phone widths with synthetic source responses; no bank account is accessed. |
+| `login_journeys_6959.spec.mjs` | #6959: /login's Sign In v2 journeys (#6958, D6957) on the desktop card at 1440 and the phone sheet under the iPhone 13, iPhone SE and Pixel 7 descriptors at 390 and 320 (Chromium, not Safari): three actions, the Email methods, Apple and Google returns through mocked callbacks, the sheet's focus, axe, keyboard-open and 200% text, destination continuity; screenshots only to `LOGIN_EVIDENCE_DIR`, no baselines. |
 
 ### Run it
 

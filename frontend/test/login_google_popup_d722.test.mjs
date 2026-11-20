@@ -464,3 +464,22 @@ test('?next= is parsed against this origin: a backslash, a tab or a newline cann
   assert.match(fn, /sameOriginNextPath\(new URLSearchParams\(window\.location\.search\)\.get\('next'\), window\.location\.origin\)/);
 });
 
+
+// ───────────────────────────────────── #6959: how each way back reads ──
+
+test('#6959: a closed or denied window, or a cancelled return, reads as information; a refused exchange as an error', () => {
+  // The browser half is frontend/tests/visual/login_journeys_6959.spec.mjs (mocked callbacks on five layouts).
+  const { body: fail } = handler(LOGIN, 'failGooglePopup');
+  const closed = fail.slice(fail.indexOf('return;'));
+  assert.match(closed, /if \(isCancellation\(type\)\) setNotice\(GOOGLE_ERROR_COPY\[type\]\);\s*else setError\(/,
+    'a closed or denied Google window must say "cancelled" as a status, not raise an alert');
+  // The redirect's return (`?google_error=`) splits the same way.
+  const returned = LOGIN.slice(LOGIN.indexOf("const google = params.get('google_error');"));
+  assert.match(returned.slice(0, 300), /if \(isCancellation\(google\)\) setNotice\(GOOGLE_ERROR_COPY\[google\]\);\s*else setError\(/);
+  // And the two banners carry those roles.
+  assert.match(LOGIN, /\{error && \(\s*<div id="login-error" role="alert"/);
+  assert.match(LOGIN, /\{notice && <div role="status"/);
+  // The fallback and the redirect both carry the kept destination to the Worker.
+  const { body: cwg } = handler(LOGIN, 'continueWithGoogle');
+  assert.match(cwg, /api\.googleStartUrl\(\{ action: 'signin', redirect: safeNextPath\(\) \|\| '\/studio' \}\)/);
+});

@@ -1,6 +1,5 @@
-/** D6935: reconcile trusted default-branch alert state with issues and reviewable changes. */
+/** D7899: reconcile trusted default-branch alerts with S21 trackers without GitHub AI or code writes. */
 import { pathToFileURL } from 'node:url';
-import { prepareFix } from './fix.mjs';
 import { githubApi } from './github.mjs';
 import { loadTrackers } from './trackers.mjs';
 
@@ -51,7 +50,6 @@ export async function reconcile(api, options, dependencies = {}) {
     ? await api.pages(`/pulls?state=open&base=${encodeURIComponent(defaultBranch)}`) : [];
   const existingPulls = sameRepoAlertPRs(pulls, options);
   let failed = 0;
-  let prepared = 0;
   for (const number of candidates) {
     try {
       const alert = await api.request('GET', `/code-scanning/alerts/${number}`);
@@ -66,35 +64,20 @@ export async function reconcile(api, options, dependencies = {}) {
       if (!actionable) continue;
       const existing = existingPulls.get(number);
       if (existing) {
-        // The publisher repairs the label on its own canonical PR after an interrupted run.
-        const ownBranch = [`alert-fix-${number}`, `alert-autofix-${number}`].includes(existing.head.ref);
-        if (!ownBranch || ![options.botLogin, 'github-actions[bot]'].includes(existing.user?.login)) {
-          await trackers.linkPull(issue, existing.number);
-          continue;
-        }
-      }
-      if (alert.assignees?.length) continue;
-      if (alert.tool?.name !== 'CodeQL') {
-        await trackers.markReady(issue);
+        // Keep existing human and legacy bot work linked; never regenerate its patch.
+        await trackers.linkPull(issue, existing.number);
         continue;
       }
-      const result = await (dependencies.prepareFix ?? prepareFix)(api, { ...options, number, issueNumber: issue.number });
-      if (result.prNumber && ['pull_request', 'existing_pr'].includes(result.status)) {
-        await trackers.linkPull(issue, result.prNumber);
-      } else if (result.status === 'pr_permission') {
-        await trackers.linkPrepared(issue, result.branch);
-        prepared++;
-      } else if (['manual', 'prior_pr', 'existing_work'].includes(result.status)) {
-        await trackers.markReady(issue);
-      }
+      if (alert.assignees?.length) continue;
+      // CodeQL and third-party findings share the same non-AI handoff to S21.
+      await trackers.markReady(issue);
     } catch (error) {
-      // The private alert body, Autofix description and API error payload stay out of public logs.
+      // The private alert body and API error payload stay out of public logs.
       console.error(`Alert ${number}: reconciliation failed${Number.isInteger(error.status) ? ` (HTTP ${error.status})` : ''}.`);
       if (error.limited || [401, 403, 429].includes(error.status)) throw error;
       failed++;
     }
   }
-  if (prepared) console.log(`::warning::${prepared} fix branches are ready. GitHub Actions PR creation is disabled. See the tracking issues and D6935.`);
   if (failed) throw new Error(`${failed} alert operations need retry`);
   return candidates.length;
 }
