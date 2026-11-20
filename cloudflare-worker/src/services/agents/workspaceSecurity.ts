@@ -90,7 +90,7 @@ export function createWorkspaceSecurity(deps: WorkspaceSecurityDeps) {
     if (!provider || provider.non_root !== true || provider.no_new_privileges !== true || provider.immutable_image !== true || provider.ephemeral_scratch !== true || provider.resource_limits !== true
       || provider.host_socket !== false || provider.privileged !== false || provider.metadata_denied !== true || provider.network_connect_fence !== true) return refuse('provider_security_denied', 403);
     if (spec.workload_class === 'coding_untrusted' && !['microvm', 'gvisor'].includes(provider.isolation)) return refuse('hostile_workload_denied', 403);
-    const containment = containmentEligibility(spec, provider.capabilities.provider, provider.containment, { now: now() });
+    const containment = containmentEligibility(spec, provider.capabilities?.provider ?? 'cloudflare', provider.containment, { now: now() });
     if (!containment.eligible) return containmentRefusal(containment)!;
     const caps = executorEligibility(spec, provider.capabilities);
     return caps.ok ? { ok: true, value: true } : caps;

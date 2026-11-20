@@ -208,7 +208,7 @@ test('broker requires trusted current containment on admission, grant issue and 
  for(const bad of [null,undefined,{}, {...evidence,source:'runner_report'}, {...evidence,provider:'aws'}, {...evidence,verified_at:1001}, {...evidence,localhost_blocked:false}, {...evidence,guest:{...evidence.guest,secret_bindings:true}}]){
   f.provider.containment=bad as any;assert.equal((await f.security.register(f.spec,f.sponsor)).ok,false);assert.equal(f.inspect().size,0);
  }
- f.provider.containment=structuredClone(evidence);await f.register();
+ f.provider.containment=structuredClone(evidence);const caps=f.provider.capabilities;f.provider.capabilities=null as any;assert.equal((await f.security.eligibility(f.spec)).ok,false);f.provider.capabilities=caps;await f.register();
  const token=await f.issue();f.provider.containment=null;
  assert.equal((await f.security.issue(f.target())).ok,false);
  assert.equal((await f.security.redeem(token,f.target())).ok,false);
