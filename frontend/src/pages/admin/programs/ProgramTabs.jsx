@@ -64,10 +64,12 @@ export function ReferTabs({ queue }) {
   return (
     <Strip label="Refer & Earn">
       <Tab to="/admin/programs/refer-and-earn" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/refer-and-earn/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/refer-and-earn/queue" count={queue} testId="programs-tab-queue">Queue</Tab>
+      <Tab to="/admin/programs/refer-and-earn/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/refer-and-earn/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/refer-and-earn/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/refer-and-earn/queue" count={queue} testId="programs-tab-queue">Referral queue</Tab>
+      <Tab to="/admin/programs/refer-and-earn/activity" testId="programs-tab-activity">History</Tab>
       <Tab to="/admin/programs/refer-and-earn/settings" testId="programs-tab-settings">Settings</Tab>
-      <Tab to="/admin/programs/refer-and-earn/activity" testId="programs-tab-activity">Activity</Tab>
     </Strip>
   );
 }

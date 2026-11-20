@@ -134,7 +134,7 @@ test('#6988 the homepage, its title and its share cards say nothing untrue', asy
   assert.match(home.description, /^Axal VC is a venture studio platform: founders validate an idea with customer interviews/);
   const index = read('frontend/index.html');
   assert.match(index, /<title>Axal VC — StudioOS, the founder workspace<\/title>/);
-  const meta = (attr) => index.match(new RegExp(`<meta (?:name|property)="${attr}" content="([^"]*)"`))[1];
+  const meta = (attr) => [...index.matchAll(/<meta (?:name|property)="([^"]*)" content="([^"]*)"/g)].find((m) => m[1] === attr)[2];
   assert.equal(meta('og:description'), meta('description'), 'og:description takes the meta description');
   assert.equal(meta('twitter:description'), meta('description'), 'twitter:description takes the meta description');
 });

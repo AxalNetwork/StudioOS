@@ -138,12 +138,28 @@ def _decode_pdf_literal(s: str) -> str:
 
 
 _CONTENT_RE = re.compile(
-    r"\(((?:\\.|[^\\)])*)\)\s*(Tj|')"
-    r"|\[((?:[^\]\\]|\\.)*)\]\s*TJ"
+    # A literal's body stops at an unescaped "(" as well as ")": otherwise every
+    # "(" of an unclosed run starts a scan to the end of the stream, which is
+    # quadratic (CodeQL py/polynomial-redos; 20,000 "(" took ten seconds).
+    # Real streams escape unbalanced parentheses, and a nested balanced pair
+    # never matched here anyway, because the body could not hold its ")".
+    r"\(((?:\\.|[^\\()])*)\)\s*(Tj|')"
+    # A TJ array's body takes its string literals whole and never a bare "[":
+    # with "[" allowed, every "[" of an unclosed run started a scan to the end
+    # of the stream, which is quadratic (20,000 "[" took twelve seconds). A
+    # literal may still hold "[" or "]", as real arrays' strings can.
+    r"|\[((?:\((?:\\.|[^\\()])*\)|[^\[\]\\(]|\\.)*)\]\s*TJ"
     # Number sub-pattern is linear (no `\d*…\d+` overlap) to avoid polynomial
     # backtracking (CodeQL py/polynomial-redos) while matching the same set.
-    r"|(-?(?:\d+\.\d+|\.\d+|\d+))\s+(-?(?:\d+\.\d+|\.\d+|\d+))\s+(Td|TD)"
-    r"|(T\*)",
+    # A number starts only where no digit or "." precedes it: otherwise each
+    # digit of a long run started its own scan of the run (quadratic; 20,000
+    # digits took four seconds).
+    r"|(?<![\d.])(-?(?:\d+\.\d+|\.\d+|\d+))\s+(-?(?:\d+\.\d+|\.\d+|\d+))\s+(Td|TD)"
+    r"|(T\*)"
+    # An escape outside a literal is consumed whole, so its "(" never starts a
+    # literal: a "(" followed by many "\(" was quadratic, each "\(" starting a
+    # scan to the end (CodeQL py/polynomial-redos). No group: the loop skips it.
+    r"|\\.",
     re.DOTALL,
 )
 _LIT_RE = re.compile(r"\(((?:\\.|[^\\)])*)\)", re.DOTALL)
@@ -165,6 +181,8 @@ def _content_to_lines(content: str, out: list) -> None:
 
     guard = 0
     for m in _CONTENT_RE.finditer(content):
+        if m.lastindex is None:
+            continue
         guard += 1
         if guard > 500000:
             break

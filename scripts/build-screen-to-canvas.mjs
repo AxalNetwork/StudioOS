@@ -76,7 +76,7 @@ function main() {
   const ids = [...new Set(decisionFiles.map((f) => /^D(\d+)/.exec(basename(f))[1]))];
   const citing = ids.length
     ? walk('frontend/src', (n) => /\.(jsx?|tsx?|css)$/.test(n))
-      .filter((f) => ids.some((id) => new RegExp(`\\bD${id}\\b`).test(readFileSync(f, 'utf8'))))
+      .filter((f) => { const cited = new Set([...readFileSync(f, 'utf8').matchAll(/\bD(\d+)\b/g)].map((m) => m[1])); return ids.some((id) => cited.has(id)); })
     : [];
   const cov = coverage(boards, source);
 

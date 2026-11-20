@@ -121,7 +121,7 @@ test('the module reads: "N of M modules read", only when one failed; loading car
 test('each state draws one chip with its own word, glyph and border, and every colour has its dark pair (BD14 C)', () => {
   const marks = BUILD_STATES.map((s) => renderToStaticMarkup(h(BuildStateTag, { state: s })));
   BUILD_STATES.forEach((s, i) => {
-    assert.match(marks[i], new RegExp(`data-build-state="${s}"`), s);
+    assert.ok(marks[i].includes(`data-build-state="${s}"`), s);
     assert.ok(text(marks[i]).includes(BUILD_STATE_WORDS[s]), `${s} says ${BUILD_STATE_WORDS[s]}`);
   });
   // The three platform states draw D5129's StateChip, the other three Build's own shape.

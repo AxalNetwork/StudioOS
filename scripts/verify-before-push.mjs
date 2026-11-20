@@ -115,6 +115,8 @@ function tail(path, bytes = 64 * 1024) {
 
 function runOne(step, logDir, timeoutMin) {
   const log = join(logDir, `${step.id}.log`);
+  // The log directory reaches `sh -c`, so it is a plain path or nothing: no quote, space or shell character.
+  if (!/^[\w./-]+$/.test(logDir)) throw new Error(`verify-before-push: refusing log directory ${JSON.stringify(logDir)}`);
   const cmd = step.cmd.replaceAll('<log-dir>', logDir);
   const fd = openPrivateOutput(log);
   writeFileSync(fd, `> ${cmd}\n\n`);

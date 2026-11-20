@@ -28,7 +28,8 @@ import MarketsBack from '../src/pages/research/MarketsBack.jsx';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const at = (path, el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, el));
-const words = (markup) => String(markup).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+// &amp; is decoded last, so no entity is decoded twice (Code Scanning js/double-escaping).
+const words = (markup) => String(markup).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 const p = (s) => new URLSearchParams(s);
 
 // Fictional markets. Read time 16 Nov 2026.

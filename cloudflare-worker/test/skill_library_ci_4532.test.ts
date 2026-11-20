@@ -62,10 +62,11 @@ test('the committed library passes with no error, and the manifest covers every 
   // #4531 slice 2: the new assertions are judged too, and a malformed one is the runtime's case_invalid error.
   const withMore = JSON.parse(CASE);
   const key = Object.keys(withMore.input.records)[0];
-  Object.assign(withMore.expect, {
+  withMore.expect = {
+    ...withMore.expect,
     structure: { sections: ['Summary', 'Risks'] }, evidence: { cite: [key] }, refusal: { mode: 'not_recorded', subject: 'runway' },
     claims: { required: [{ subject: 'cash', object: 'recorded' }] }, output_schema: { format: 'json', schema: { type: 'object' } },
-  });
+  };
   const more = await check({ cases: { [`${SLUG}.json`]: JSON.stringify(withMore) } });
   assert.deepEqual(errors(more.findings), []);
   assert.ok(!more.findings.some((f) => f.rule === 'expect_key_unknown'));
