@@ -14,6 +14,7 @@
  * The cache and log probes are enforced by this mock's sandbox (tenant prefixes); the file, ref and credential probes
  * are refused by the real contract code. Every value is synthetic.
  */
+import { containmentFixture } from './_containment_fixture_5567.ts';
 import { createHash } from 'node:crypto';
 import { createRunnerControl, workspaceArtifactPrefix, type RunnerCall, type RunnerIdentity } from '../src/services/agents/runnerProtocol.ts';
 import { createWorkspaceSecurity, type GrantTarget, type WorkspaceObject, type WorkspaceProviderEvidence,
@@ -131,7 +132,7 @@ export async function runValidation(input: Partial<ValidationConfig> = {}, commi
 
   // --- D5567 broker security with synthetic evidence ---
   const providerEvidence: WorkspaceProviderEvidence = { capabilities: caps, non_root: true, no_new_privileges: true, immutable_image: true,
-    ephemeral_scratch: true, resource_limits: true, host_socket: false, privileged: false, isolation: 'microvm', network_connect_fence: true, metadata_denied: true };
+    ephemeral_scratch: true, resource_limits: true, host_socket: false, privileged: false, isolation: 'microvm', network_connect_fence: true, metadata_denied: true, containment: containmentFixture(clock()) };
   const rootKey = await crypto.subtle.importKey('raw', new Uint8Array(32).fill(73), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   let secRows = new Map<string, WorkspaceSecurityRun>(), secQueue: Promise<unknown> = Promise.resolve(), nonce = 0;
   const security = createWorkspaceSecurity({

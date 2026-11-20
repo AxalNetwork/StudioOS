@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // D5531: reviewed scanner pins and job-private installation; load from trusted base in CI.
-import { readFile, appendFile } from 'node:fs/promises';
+import { appendFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { archiveName, installScanner } from './scanner-acquisition.mjs';
+// The pins are part of this module's source, imported with it, never read as
+// data at run time, so a release URL is only ever one reviewed with the code.
+import pins from './scanner-tools.json' with { type: 'json' };
 
 const [name, mode] = process.argv.slice(2);
 try {
   if (process.argv.length > 4 || !['gitleaks', 'codeql'].includes(name) || (mode && mode !== '--metadata')) throw Error('Usage: install-scanner.mjs <gitleaks|codeql> [--metadata]');
-  const pins = JSON.parse(await readFile(new URL('./scanner-tools.json', import.meta.url), 'utf8'));
   const tool = pins[name];
   const temporary = resolve(process.env.RUNNER_TEMP || tmpdir());
   const cacheDir = join(temporary, 'studioos-scanner-archives');
