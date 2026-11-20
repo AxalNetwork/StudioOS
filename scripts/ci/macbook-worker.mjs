@@ -469,6 +469,7 @@ export async function main(env = process.env, argv = process.argv.slice(2)) {
         } })
       : fallback(configurationProblem(config) || 'token_unavailable');
     writeOutputs(result, env.GITHUB_OUTPUT);
+    for (const diagnostic of result.diagnostics || []) console.log(`MacBook diagnostic: ${JSON.stringify(diagnostic)}`);
     for (const line of result.annotations || []) console.log(line);
     if (result.annotationWarning) console.warn('::warning::Could not mirror Mac test failure identities; the shard remains failed.');
     console.log(`MacBook delegation: ${result.reason}${result.childRunId ? ` (child run ${result.childRunId})` : ''}.`);
