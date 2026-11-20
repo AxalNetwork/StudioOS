@@ -72,7 +72,7 @@ test("EX-11's own sample agrees: its Needs you and With editors figures are the 
   const byLabel = Object.fromEntries(ARTICLE_STAGE_KEYS.map((k) => [articleStage({ id: 1, status: k === 'scheduled' ? 'approved' : k, publish_at: k === 'scheduled' ? '2026-12-01' : null, slug: 's' }).label, k]));
   const keys = states.map((s) => byLabel[s]);
   assert.ok(keys.every(Boolean), `every canvas state is one of the shelf's: ${states.join(', ')}`);
-  const drawn = (chip) => Number(canvas.match(new RegExp(`aria-checked="false">${chip}<span>(\\d+)</span>`))[1]);
+  const drawn = (chip) => { const head = `aria-checked="false">${chip}<span>`; const at = canvas.indexOf(head); return Number(/^(\d+)<\/span>/.exec(canvas.slice(at + head.length))[1]); };
   assert.equal(keys.filter((k) => THINKING_VIEWS.needs_you.includes(k)).length, drawn('Needs you'));
   assert.equal(keys.filter((k) => THINKING_VIEWS.with_editors.includes(k)).length, drawn('With editors'));
 });
@@ -83,7 +83,7 @@ test('the Worker counts the same sets over the whole shelf', () => {
   const src = read('cloudflare-worker/src/routes/advisors_cohorts.ts');
   const route = src.slice(src.indexOf("advisors.get('/me/thinking'"));
   const clause = (name) => {
-    const m = route.match(new RegExp(`SUM\\(CASE WHEN ((?:(?!CASE WHEN)[^])*?) THEN 1 ELSE 0 END\\), 0\\) AS ${name}\\b`));
+    const m = [...route.matchAll(/SUM\(CASE WHEN ((?:(?!CASE WHEN)[^])*?) THEN 1 ELSE 0 END\), 0\) AS (\w+)\b/g)].find((x) => x[2] === name);
     assert.ok(m, `the Worker counts ${name}`);
     return m[1].replace(/\s+/g, ' ');
   };
