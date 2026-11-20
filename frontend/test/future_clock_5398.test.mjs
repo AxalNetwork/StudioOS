@@ -13,7 +13,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { RUNS_UNSHIFTED, clockVars, withClock, withoutPreload } from '../../scripts/future-clock.mjs';
+import { execFile, exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import { RUNS_UNSHIFTED, clockVars, withClock, withoutPreload, wrapForClock } from '../../scripts/future-clock.mjs';
 import { clockReport } from '../../scripts/future-clock-check.mjs';
 
 const root = resolve(process.cwd());
@@ -61,6 +63,26 @@ test('workerd alone starts without the preload: it dies under libfaketime and wr
   assert.deepEqual(withoutPreload(['workerd', ['serve']], inherited)[2], { env: { FAKETIME: '+7d', PATH: '/bin' } });
   // spawn(cmd, opts): the options sit second.
   assert.deepEqual(withoutPreload(['workerd', { cwd: '/w' }], inherited)[1], { cwd: '/w', env: { FAKETIME: '+7d', PATH: '/bin' } });
+});
+
+test('a wrapped execFile or exec still promisifies to { stdout, stderr }, with the clock in a child that set its own env (#7664)', async () => {
+  // On the nightly, cached_route_fixtures_5503's two child-process tests read
+  // `(await promisify(execFile)(...)).stdout` as undefined: the bare wrapper
+  // had lost util.promisify.custom, so the promise resolved stdout alone.
+  const vars = { FAKETIME: '+7d' };
+  const print = 'process.stdout.write(String(process.env.FAKETIME)); process.stderr.write("e")';
+  const runFile = promisify(wrapForClock(execFile, vars));
+  const pending = runFile(process.execPath, ['-e', print], { env: { PATH: process.env.PATH } });
+  assert.equal(typeof pending.child?.pid, 'number', 'the promise carries its child, as Node\'s does');
+  assert.deepEqual(await pending, { stdout: '+7d', stderr: 'e' });
+  const runShell = promisify(wrapForClock(exec, vars));
+  assert.deepEqual(await runShell(`"${process.execPath}" -e 'process.stdout.write(String(process.env.FAKETIME))'`, { env: { PATH: process.env.PATH } }), { stdout: '+7d', stderr: '' });
+  // A failing child rejects with its output attached, as the unwrapped one does.
+  const failure = await runFile(process.execPath, ['-e', 'process.stdout.write("out"); process.exit(3)']).then(() => null, (error) => error);
+  assert.equal(failure?.code, 3);
+  assert.equal(failure.stdout, 'out');
+  // A function without a custom promisify gets none.
+  assert.equal(wrapForClock(function plain() {}, vars)[promisify.custom], undefined);
 });
 
 test('clockReport passes only when JavaScript, SQLite and a clean-env shell all lead by the same days', () => {

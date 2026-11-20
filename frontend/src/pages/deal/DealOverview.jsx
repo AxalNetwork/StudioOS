@@ -20,7 +20,7 @@ import { Unreadable } from '../../ui';
 import { reportError } from '../../lib/log';
 import { dealContextApi } from '../../lib/api/dealContext.js';
 import { dealViewsApi } from '../../lib/api/dealViews.js';
-import { tabHref } from '../dealPageModel';
+import { notesHref, tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3 } from './DealFrame';
 import {
   CASE_TAGS, caseNotes, missingEvidence, scoreSummary, termsAtGlance, thesisFitOf, whatsNewList, whatsNewOf,
@@ -219,13 +219,13 @@ function InvestmentCase({ deal, strips, className = '' }) {
               <TryAgain onClick={retryNotes} testId="deal-case-notes-retry" />
             </>
           )}
-          {notes.state === 'none' && <p className={`m-0 ${SUB}`} data-testid="deal-case-notes-none">No note at your firm is tagged {CASE_TAGS.join(' or ')}. <Link to={tabHref(id, 'notes')} className={LINK}>Add one in Notes</Link></p>}
+          {notes.state === 'none' && <p className={`m-0 ${SUB}`} data-testid="deal-case-notes-none">No note at your firm is tagged {CASE_TAGS.join(' or ')}. <Link to={notesHref(id)} className={LINK}>Add one in Firm notes</Link></p>}
           {notes.state === 'some' && (
             <ul className="m-0 list-disc pl-4 text-axal-ink dark:text-gray-100" data-testid="deal-case-notes">
               {notes.rows.map((n) => <li key={n.uid}><span className="text-axal-muted dark:text-gray-400">{n.tag}: </span>{n.text}</li>)}
             </ul>
           )}
-          {notes.state === 'some' && notes.more > 0 && <Link to={tabHref(id, 'notes')} className={LINK_ALONE} data-testid="deal-case-notes-more">{notes.more} more in Notes</Link>}
+          {notes.state === 'some' && notes.more > 0 && <Link to={notesHref(id)} className={LINK_ALONE} data-testid="deal-case-notes-more">{notes.more} more in Firm notes</Link>}
           <div data-testid="deal-case-missing">
             {missing.state === 'loading' && <p className={`m-0 ${SUB}`}>Reading the scorecard…</p>}
             {missing.state === 'unreadable' && (

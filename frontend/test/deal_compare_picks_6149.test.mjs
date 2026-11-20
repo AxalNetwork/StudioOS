@@ -24,6 +24,7 @@ import { api } from '../src/lib/api.js';
 import { dealFlowApi } from '../src/lib/api/dealFlow.js';
 import { dealViewsApi } from '../src/lib/api/dealViews.js';
 import { ventureScoresApi } from '../src/lib/api/ventureScores.js';
+import { tagHolding } from './_tagHolding.mjs';
 
 const h = React.createElement;
 const sc = (scope, band, conf = 'High', state = 'scored') => ({ scope, state, band, confidence_word: conf });
@@ -49,7 +50,7 @@ const screenRows = (html) => {
   return [...table.matchAll(/<tr[^>]*>(<th scope="row".*?)<\/tr>/g)].map(([, tr]) => [...tr.matchAll(/<t[hd][^>]*>(.*?)<\/t[hd]>/g)].map(([, cell]) => strip(cell)));
 };
 /** The href of the link with this test id (React writes `href` after the other props). */
-const hrefOf = (html, id) => html.match(new RegExp(`<a[^>]*data-testid="${id}"[^>]*>`))?.[0]?.match(/href="([^"]*)"/)?.[1]?.replace(/&amp;/g, '&');
+const hrefOf = (html, id) => (tagHolding(html, `data-testid="${id}"`, (t) => t.startsWith('<a')) || null)?.match(/href="([^"]*)"/)?.[1]?.replace(/&amp;/g, '&');
 const csvRows = (csv) => csv.split('\n').slice(1).map((line) => line.split(','));
 
 test('Remove: each venture card links to the same address without it, keyboard-reachable and 44px on a phone', () => {

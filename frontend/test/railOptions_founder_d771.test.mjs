@@ -47,7 +47,8 @@ const MODEL_CALLS = [
   'shareUpdateApi.draftLines(',
   'api.brandAutofillLanding(', 'api.brandLogo(', 'api.brandSuggestPalette(', 'api.brandSuggestTaglines(',
   'api.research.ask(', 'api.research.upload(', 'api.research.reindex(',
-  'api.competitors.analyze(', 'api.competitors.rerun(', 'api.competitors.refresh(',
+  // D7652: `api.competitors.refresh(` runs no model since D7176.
+  'api.competitors.analyze(', 'api.competitors.rerun(',
   'api.competitors.addCandidate(', 'api.competitors.crawlCandidate(',
 ];
 

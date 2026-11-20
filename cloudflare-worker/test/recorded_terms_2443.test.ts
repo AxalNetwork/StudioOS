@@ -138,6 +138,8 @@ test('retired legal signing refuses even a matching completed envelope',async()=
 });
 async function share(f:ReturnType<typeof fixture>) {
   const body=Buffer.from(JSON.stringify({k:'deck:1:v1',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url');
+  // A test-only secret signing a synthetic token.
+  // nosemgrep: javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key
   const token=`${body}.${createHmac('sha256',secret).update(body).digest('base64url')}`;
   f.db.exec("INSERT INTO pitch_decks(id,project_id,title,slides) VALUES(1,1,'Synthetic deck','[]')");
   f.db.prepare("INSERT INTO pitch_deck_share_tokens(id,deck_id,token_hash,expires_at,created_by,allow_forwarding) VALUES(1,1,?,datetime('now','+1 day'),3,1)").run(createHash('sha256').update(token).digest('hex'));

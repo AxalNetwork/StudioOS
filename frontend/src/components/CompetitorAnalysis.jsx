@@ -180,22 +180,20 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   // D771 (#2097): which run is at the model, so the rail names that option.
   const [running, setRunning] = useState(null);
   // D773 (#2099): the advisor's Companies board keys these runs its own way
-  // (`analyze:competitors`, `rerun:analysis`, `refresh:sources`); the founder's
-  // keys stay the default, read from the same inventories.
+  // (`analyze:competitors`, `rerun:analysis`); the founder's keys stay the
+  // default, read from the same inventories. D7652: Refresh sources runs no
+  // model (D7176), so it names no option and sends none.
   const railPage = useRailPage()?.page;
   const analyzeOption = railOptionFor(railPage, { file: 'components/CompetitorAnalysis.jsx', control: 'competitors.analyze' });
   const rerunOption = railOptionFor(railPage, { file: 'components/CompetitorAnalysis.jsx', control: 'competitors.rerun' });
-  const refreshOption = railOptionFor(railPage, { file: 'components/CompetitorAnalysis.jsx', control: 'competitors.refresh' });
   useRailOption(running === 'analyze' ? (analyzeOption?.key ?? 'analyse:competitors') : null, analyzeOption?.label ?? 'Analyze competitors');
   useRailOption(running === 'rerun' ? (rerunOption?.key ?? 'analyse:again') : null, rerunOption?.label ?? 'Re-run');
-  useRailOption(running === 'refresh' ? (refreshOption?.key ?? 'analyse:sources') : null, refreshOption?.label ?? 'Refresh sources');
   useRailOption(running === 'add' ? 'extract:candidate' : null, 'Add');
   // D778 part 9 (#2103): each press sends its own option with the run, keeping
   // the mounted rail's page, before the busy render hands it to the rail.
   const pressKey = {
     analyze: analyzeOption?.key ?? 'analyse:competitors',
     rerun: rerunOption?.key ?? 'analyse:again',
-    refresh: refreshOption?.key ?? 'analyse:sources',
     add: 'extract:candidate',
   };
   // A run answers only the analysis it was pressed on. Opening another one, or
@@ -428,7 +426,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     setError('');
     const run = ++runFor.current;
     try {
-      const full = await api.competitors.refresh(analysis.id, railPressHeaders(pressKey.refresh));
+      const full = await api.competitors.refresh(analysis.id);
       if (runFor.current !== run) return;
       // D7176: a refresh changes sources only, so the panel takes the sources
       // and the version and keeps any unsaved edit on screen.

@@ -273,8 +273,8 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   // Research
   'ask:research': 'RE1', 'ask:library': 'RE1', 'ask:evidence': 'RE1', 'ask:question': 'RE1',
   'draft:research/ask': 'RE3', 'draft:research/funds': 'RE3', 'draft:research/library': 'RE3', 'draft:index-gaps': 'RE3',
-  'analyse:competitors': 'RE3', 'analyse:again': 'RE3', 'analyse:sources': 'RE3', 'extract:candidate': 'RE3', 'extract:site': 'RE3',
-  'analyze:competitors': 'RE3', 'rerun:analysis': 'RE3', 'refresh:sources': 'RE3',
+  'analyse:competitors': 'RE3', 'analyse:again': 'RE3', 'extract:candidate': 'RE3', 'extract:site': 'RE3',
+  'analyze:competitors': 'RE3', 'rerun:analysis': 'RE3', // D7652: Refresh sources runs no model (D7176), so no job
   'upload:document': 'RE2', 'upload:reindex': 'RE2', 'reindex:document': 'RE2',
   'draft:session-brief': 'CA2', 'draft:checkpoint-brief': 'CA2',
   // Invest, the fund and the portfolio
