@@ -13,6 +13,8 @@ const enumCollision = 'a'.repeat(40) + '_v4';
 const nameCollision = 'A'.repeat(15) + '-entity_key-' + 'B'.repeat(15) + 'A';
 const namePattern = String.raw`\b(obligation_key|REPROMPT_KEY|fileKey|file_key|entity_key)\b`;
 const enumPattern = String.raw`\b[a-z][a-z0-9_]*_v\d+\b`;
+const AXAL_PATTERN = /(?:^|[^A-Za-z0-9_-])(axk_[a-z0-9]{12}_[A-Za-z0-9_-]{43})(?:$|[^A-Za-z0-9_-])/;
+const AXAL_PATTERN_SOURCE = AXAL_PATTERN.source;
 
 // These targeted readers cover the literal TOML fields used by the rules.
 // Real Gitleaks v8.21.2 also exercises the config against synthetic files in
@@ -33,7 +35,10 @@ function axalRule(source) {
   const keywords = /^keywords\s*=\s*(\[[^\n]+\])\s*$/m.exec(block)?.[1];
   assert.ok(keywords, 'read the prefilter used by Gitleaks');
   assert.doesNotMatch(block, /^entropy\s*=/m, 'a precise bearer format needs no probabilistic threshold');
-  return { regex: new RegExp(pattern), group, keywords: JSON.parse(keywords) };
+  // Pinned rather than compiled from the file: the rule must be exactly the
+  // reviewed expression, and any edit to it fails here as a regression.
+  assert.equal(pattern, AXAL_PATTERN_SOURCE, 'the Axal bearer rule is the reviewed expression');
+  return { regex: AXAL_PATTERN, group, keywords: JSON.parse(keywords) };
 }
 
 function regexesIn(block) {
