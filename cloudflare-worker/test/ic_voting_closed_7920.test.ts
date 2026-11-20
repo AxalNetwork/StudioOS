@@ -5,7 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {SignJWT} from 'jose';
 import ic from '../src/routes/ic.ts';
 import {d1Over} from './_d1_sqlite.mjs';
-const JWT_SECRET='synthetic-closed-vote-fixture-key-7920';
+const JWT_SECRET='unit-test-jwt-secret-0123456789-abcdef';
 const AUTHOR=10,COLLEAGUE=11,ADMIN=12,OUTSIDER=13,CO=21,PROJ=7,DEAL=71,DEC='dec-alpha',MTG='mtg-alpha';
 function freshDb() {
   const db = new DatabaseSync(':memory:', {
