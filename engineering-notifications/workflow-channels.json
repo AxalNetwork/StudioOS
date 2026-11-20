@@ -197,6 +197,11 @@
       "channel": "#axalvc-actions-lfs-budget"
     },
     {
+      "id": null,
+      "path": ".github/workflows/macbook-worker.yml",
+      "channel": "#axalvc-actions-macbook-worker"
+    },
+    {
       "id": 356755115,
       "path": ".github/workflows/magic-link-insert-probe.yml",
       "channel": "#axalvc-actions-magic-link-insert-probe"
