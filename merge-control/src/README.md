@@ -10,3 +10,4 @@
 | `policyCheck.ts` | D5620: fail-closed `evaluate({base, head})` over the compare file list; cap, missing patch, API error, exception and timeout are T2. |
 | `types.ts` | Delivery/run contracts and generated bindings plus owner-installed secrets. |
 | `lib/` | Pure cancellation and fencing policies. |
+| `runnerScaleProvider.ts` | D7889: unavailable live-provider boundary and bounded, checkpointed inventory collection; no provisioning API is enabled. |

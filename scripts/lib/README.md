@@ -114,3 +114,4 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 
 | `fileRecoveryHealth.mjs` | D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. |
 | `fileRecoveryHealth.test.mjs` | D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. |
+| `runnerSupervisor.test.mjs` | D7889: ephemeral enrollment, credential inheritance and eligibility-first drain actions; kept outside the Merge Control import boundary. |
