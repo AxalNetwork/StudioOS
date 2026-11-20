@@ -513,6 +513,7 @@ export const SIDEBAR_GROUPS = {
       // render stay in `match` so a deep link still lights the right row, and
       // each retired /partner/operations address is replaced by the successor
       // D395 redirects it to (D505).
+      { to: '/deals/commit', icon: Handshake, label: 'Deals', match: ['/deals/commit', '/ic'] },
       { to: '/pipeline', icon: Route, label: 'Pipeline',
         match: ['/pipeline', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'] },
       // The retired Overview's job went to `/company-settings` (the firm
@@ -829,6 +830,7 @@ export const INVESTOR_FULL_BLEED = [
 export const ADVISOR_FULL_BLEED = [...workspaceRoutes('advisor')];
 
 export const PARTNER_FULL_BLEED = [
+  '/deals/commit', // D6154: the partner’s Commit-only Deals page.
   ...workspaceRoutes('partner'),
   // Legacy mounts of the same bodies, kept at the same width so this change
   // moves nothing that a partner already had. The six /partner/operations
@@ -922,6 +924,7 @@ export const SHARED_FULL_BLEED = [
  * this list.
  */
 export const SHARED_FULL_BLEED_PREFIXES = [
+  '/deals/commit/', // D6154: records own the Deals shell’s gutter.
   '/spinout-lab/',
   // Pitch pages own the cycle gutter and dock their rail for founders and admins.
   '/raise/pitch/',
