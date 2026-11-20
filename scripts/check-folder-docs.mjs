@@ -180,6 +180,8 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/duediligence',         'Due diligence (D1244): the list and case tabs as addresses, and the list tabs D1250 draws — Cases, Templates and their dialogs'],
   ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
   ['frontend/src/pages/programs',             'program presentations (D6966): the kit, the key → page → PDF map with one file per program, /programs and /programs/:key'],
+  ['frontend/src/pages/programs/catalog',     'the program map (D6966): one entry per program, registry key → canonical page → committed PDF'],
+  ['frontend/src/pages/programs/content',     'each program\'s page sections, panel and slides (D6966), one file per program'],
   ['frontend/src/pages/admin/contentQueue',   'Content queue (D1290): Pipeline (D1295), Calendar (D1296), Authors and Performance (D1297)'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
   ['frontend/src/pages/admin/accounts',       'Admin › Accounts: the Overview (D1304), All accounts (D1305), the account drawer (D1306) and its Licences block (D4473)'],
