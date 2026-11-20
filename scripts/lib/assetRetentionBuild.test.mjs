@@ -31,6 +31,8 @@ function fixture({ assets=2, publicFiles=0, history=false, smallCaps=false }={})
       .replace(/export const STATIC_FILE_LIMIT = [\d_]+;/,'export const STATIC_FILE_LIMIT = 32;'));
   }
   const fake=path.join(dir,'bin/npm');
+  // A fake npm in a temporary folder, written by the test itself.
+  // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
   fs.writeFileSync(fake,`#!/usr/bin/env node
 const fs=require('node:fs'),path=require('node:path');
 const docs=path.resolve(process.cwd(),'../docs');fs.rmSync(docs,{recursive:true,force:true});fs.mkdirSync(path.join(docs,'assets'),{recursive:true});
@@ -46,6 +48,8 @@ fs.writeFileSync(path.join(docs,'index.html'),'<script src="/assets/current.js">
     const builds=(Array.isArray(history)?history:[1,2,3]).map(h=>({ts:new Date(Date.now()-h*3_600_000).toISOString(),deployedAt:new Date(Date.now()-h*3_600_000).toISOString(),files:[`old-${h}.js`,`lazy-${h}.js`]}));
     for(const b of builds){fs.writeFileSync(path.join(assetsDir,b.files[0]),`import './${b.files[1]}'`);fs.writeFileSync(path.join(assetsDir,b.files[1]),'');}
     fs.writeFileSync(path.join(dir,'docs/.asset-retention.json'),JSON.stringify({version:2,builds}));
+    // Fixture pages in a temporary folder; the file names are the test's own.
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     fs.writeFileSync(path.join(dir,'docs/index.html'),`<script src="/assets/${builds[0].files[0]}"></script>`);
     fs.writeFileSync(path.join(dir,'docs/.build-source'),'last-successful-source');
   }
@@ -107,6 +111,7 @@ process.exit(7);
     const result=f.run();
     assert.equal(result.status,1);
     assert.equal(JSON.parse(fs.readFileSync(path.join(f.dir,'docs/.asset-retention.json'),'utf8')).builds[0].files[0],'old-1.js');
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     assert.equal(fs.readFileSync(path.join(f.dir,'docs/index.html'),'utf8'),'<script src="/assets/old-1.js"></script>');
     assert.equal(fs.existsSync(path.join(f.dir,'docs/assets/lazy-1.js')),true);
   } finally {f.remove();}

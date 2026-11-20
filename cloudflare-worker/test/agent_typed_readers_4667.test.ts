@@ -118,13 +118,18 @@ test('the preflight through the typed readers: complete, partial and withheld ev
     const outsider = await preflight(f.env, 'monthly-investor-update', f.ctx(3), READERS, NOW);
     assert.equal(outsider!.inputs.find((i) => i.read === 'mercury.balances')!.status, 'withheld');
 
-    // The instrument's text from a stand-in document reader, so the cap table is the only thing in question.
-    const withDoc = { ...READERS, 'data_room.index': async () => ({ ref: 'data_room_file:synthetic', text: 'Synthetic SAFE.' }) } as any;
-    const provides = { ...(await import('../src/services/agents/reads.ts')).READER_PROVIDES, 'data_room.index': 'document_text' } as any;
-    const founder = await preflight(f.env, 'safe-convertible-instrument-review', f.ctx(), withDoc, NOW, provides);
+    // The instrument's text through the real data room reader (D4667-p3), so the cap table is the only thing in question.
+    const uid = 'a'.repeat(32);
+    f.db.prepare("INSERT INTO data_room_files(id, uid, project_id, name, r2_key, updated_at) VALUES (90, ?, 1, 'Synthetic SAFE.pdf', 'data-room/x/a', '2026-11-01 09:00:00')").run(uid);
+    f.db.exec("INSERT INTO data_room_search_state(file_id, project_id, status, passages, indexed_at) VALUES (90, 1, 'indexed', 1, '2026-11-01 10:00:00')");
+    f.db.exec("INSERT INTO data_room_passages(project_id, file_id, seq, text, vector_id) VALUES (1, 90, 0, 'Synthetic SAFE.', 'drf:90:0')");
+    const doc = (sponsor: number) => ({ ...f.ctx(sponsor), document: `data_room_file:${uid}` });
+    const founder = await preflight(f.env, 'safe-convertible-instrument-review', doc(2), READERS, NOW);
+    assert.equal(founder!.inputs.find((i) => i.read === 'data_room.index')!.status, 'available');
     assert.notEqual(founder!.state, 'not_ready', 'with the text and a cap table the founder may read, the review can run');
-    const safe = await preflight(f.env, 'safe-convertible-instrument-review', f.ctx(3), withDoc, NOW, provides);
+    const safe = await preflight(f.env, 'safe-convertible-instrument-review', doc(3), READERS, NOW);
     assert.equal(safe!.inputs.find((i) => i.read === 'cap_table.read')!.status, 'withheld');
+    assert.equal(safe!.inputs.find((i) => i.read === 'data_room.index')!.status, 'withheld', 'an outsider reads neither the cap table nor the room');
     assert.equal(safe!.state, 'not_ready', 'a required input the sponsor may not read leaves nothing to brief from');
 
     f.db.prepare("UPDATE mercury_grow_facts SET as_of = '2026-08-01'").run();

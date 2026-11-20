@@ -14,12 +14,13 @@ import { MemoryRouter } from 'react-router-dom';
 import FundPage, { fundHandoffs, periodIssue } from '../src/pages/FundPage.jsx';
 import { fundFactsEditHref } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
 import { page } from './fund_reports_d631.test.mjs';
+import { tagHolding } from './_tagHolding.mjs';
 
 const ready = (data) => ({ loading: false, error: null, data, reload() {} });
 const render = (data, role = 'investor') => renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: ['/funds/10'] },
   React.createElement(FundPage, { reading: ready(data), role })));
 const href = (html, testid) => {
-  const tag = html.match(new RegExp(`<a[^>]*data-testid="${testid}"[^>]*>`))?.[0];
+  const tag = tagHolding(html, `data-testid="${testid}"`, (t) => t.startsWith('<a')) || undefined;
   return tag ? tag.match(/href="([^"]*)"/)?.[1] ?? null : null;
 };
 const lp = { ...page, can_manage: false, periods: [{ id: 7, period: 'Q1 2026', status: 'issued', issued_at: '2026-04-15 09:30:00' }] };

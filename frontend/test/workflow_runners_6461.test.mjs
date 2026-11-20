@@ -28,7 +28,7 @@ const code = (src) => src.split('\n').map((l) => l.replace(/(^|\s)#.*$/, '')).jo
 /** A top-level block: the lines after `^key:` up to the next top-level key. */
 function block(src, key) {
   const lines = code(src).split('\n');
-  const at = lines.findIndex((l) => new RegExp(`^${key}:`).test(l));
+  const at = lines.findIndex((l) => l.startsWith(`${key}:`));
   if (at < 0) return null;
   const out = [lines[at].slice(key.length + 1)];
   for (let i = at + 1; i < lines.length && !/^\S/.test(lines[i]); i++) out.push(lines[i]);

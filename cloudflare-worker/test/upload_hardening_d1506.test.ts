@@ -216,7 +216,9 @@ test('an external image is copied in through the safe fetcher; private hosts and
 test('the export browser loads only the page\'s own origin, the font hosts, data: and blob:', async () => {
   // Mutation checked: renderUrl without allowRequestPattern lets the export load any origin.
   const patterns = exportAllowPatterns('https://axal.vc/deck/print-export/t');
-  const res = patterns.map((p) => new RegExp(p.slice(1, -1)));
+  // Production hands Browser Run these exact pattern strings; the literals below are them, and are what the URLs are tried on.
+  const res = [/^https:\/\/axal\.vc\//, /^https:\/\/fonts\.googleapis\.com\//, /^https:\/\/fonts\.gstatic\.com\//, /^data:/, /^blob:/];
+  assert.deepEqual(patterns, res.map(String));
   const allowed = (u: string) => res.some((r) => r.test(u));
   assert.ok(allowed('https://axal.vc/api/decks/images/u/file'));
   assert.ok(allowed('https://fonts.gstatic.com/s/inter.woff2'));

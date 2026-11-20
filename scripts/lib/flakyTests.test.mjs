@@ -192,8 +192,9 @@ test('D6464: a failed queue run would pass with the retry only when every failur
 test('D6464: the runner watches only node:test commands under merge_group, and only a retry reaches the job summary', () => {
   const src = readFileSync(resolve(ROOT, 'scripts/test-drift-parts.mjs'), 'utf8');
   assert.match(src, /const watch = event === 'merge_group' && isNodeTest\(cmd\);/);
-  assert.match(src, /if \(!watch\) return r\.status \|\| 1;/);
-  assert.match(src, /if \(retried\.status !== 0\) return r\.status \|\| 1;/);
+  // D7125: both exits first print the failure's ci-failure-id annotation (frontend/test/queue_stall_chains_7125.test.mjs).
+  assert.match(src, /if \(!watch\) \{[\s\S]*?return r\.status \|\| 1;/);
+  assert.match(src, /if \(retried\.status !== 0\) \{[\s\S]*?return r\.status \|\| 1;/);
   assert.match(src, /if \(env\.GITHUB_STEP_SUMMARY && retried\.lines\[0\]\.startsWith\('###'\)\) appendFileSync/);
   assert.doesNotMatch(src, /writeFileSync\([^)]*flaky-tests\.json/, 'the runner never writes the list');
 });

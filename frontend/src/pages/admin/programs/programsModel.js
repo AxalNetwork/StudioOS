@@ -405,10 +405,12 @@ export const PAGES = Object.freeze({
     facts: ['Who: Founders, investors, advisors and partners', 'Join: Open'],
     tabs: [
       { key: 'overview', label: 'Overview', path: REFER_PATH },
-      { key: 'how', label: 'How it runs', path: REFER_HOW_PATH },
-      { key: 'queue', label: 'Queue', path: REFER_QUEUE_PATH },
+      { key: 'how', label: 'Playbook', path: REFER_HOW_PATH },
+      { key: 'availability', label: 'Availability & grants', path: `${REFER_PATH}/availability` },
+      { key: 'participation', label: 'Participation', path: `${REFER_PATH}/participation` },
+      { key: 'queue', label: 'Referral queue', path: REFER_QUEUE_PATH, module: 'referral_queue' },
+      { key: 'activity', label: 'History', path: REFER_ACTIVITY_PATH },
       { key: 'settings', label: 'Settings', path: REFER_SETTINGS_PATH },
-      { key: 'activity', label: 'Activity', path: REFER_ACTIVITY_PATH },
     ],
   },
   perks: {
