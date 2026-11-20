@@ -309,7 +309,7 @@ test('D7881 wiring guards reject actual unsafe regressions and accept restored f
     ['cancellation', 'ci', "if: cancelled() && steps.macbook.outputs.child_run_id != ''", "if: success() && steps.macbook.outputs.child_run_id != ''"],
     ['cleanup', 'mac', 'rm -rf -- "$GITHUB_WORKSPACE/macbook-source-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"', 'rm -rf -- "$GITHUB_WORKSPACE"'],
     ['cleanup', 'mac', '[[ "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]\n          rm', 'true\n          rm'],
-    ['budget', 'ci', '&& 75 || 40', '&& 40 || 40'],
+    ['budget', 'ci', '&& 83 || 50', '&& 50 || 50'],
     ['budget', 'mac', '    timeout-minutes: 28', '    timeout-minutes: 80'],
   ];
   for (const [name, file, from, to] of mutants) {
