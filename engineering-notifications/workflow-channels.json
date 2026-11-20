@@ -112,6 +112,11 @@
       "channel": "#axalvc-actions-deck-visual"
     },
     {
+      "id": 425238679,
+      "path": ".github/workflows/dependency-review.yml",
+      "channel": "#axalvc-actions-dependency-review"
+    },
+    {
       "id": 280437837,
       "path": ".github/workflows/dr-drill.yml",
       "channel": "#axalvc-actions-dr-drill"
@@ -197,6 +202,11 @@
       "channel": "#axalvc-actions-lfs-budget"
     },
     {
+      "id": null,
+      "path": ".github/workflows/macbook-worker.yml",
+      "channel": "#axalvc-actions-macbook-worker"
+    },
+    {
       "id": 356755115,
       "path": ".github/workflows/magic-link-insert-probe.yml",
       "channel": "#axalvc-actions-magic-link-insert-probe"
@@ -235,6 +245,11 @@
       "id": 366792790,
       "path": ".github/workflows/migration-immutability.yml",
       "channel": "#axalvc-actions-migration-immutability"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/ossf-scorecard.yml",
+      "channel": "#axalvc-actions-ossf-scorecard"
     },
     {
       "id": 295717983,
@@ -300,6 +315,11 @@
       "id": 416139951,
       "path": ".github/workflows/runner-benchmark.yml",
       "channel": "#axalvc-actions-runner-benchmark"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/runner-executor.yml",
+      "channel": "#axalvc-actions-runner-executor"
     },
     {
       "id": null,

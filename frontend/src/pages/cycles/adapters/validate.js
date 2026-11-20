@@ -487,7 +487,7 @@ export const RECORDS = {
       updated: typeof r.updated === 'string' ? r.updated.slice(0, 10) : null,
     } }),
     filters: [{ key: 'evidence', label: 'Evidence', options: [{ value: 'anecdote', label: 'Anecdote' }, { value: 'pattern', label: 'Pattern' }, { value: 'not_recorded', label: 'Not recorded' }] }],
-    sorts: [{ key: 'interviews', label: 'Interviews' }, { key: 'strong', label: 'Strong fit' }, { key: 'name', label: 'Name' }],
+    sorts: [{ key: 'evidence', label: 'Evidence' }, { key: 'interviews', label: 'Interviews' }, { key: 'strong', label: 'Strong fit' }, { key: 'name', label: 'Name' }],
   },
   'market-intelligence': {
     keys: ['company', 'kind', 'latest_signal', 'date', 'source'],

@@ -18,6 +18,11 @@ They do not change production application state.
 | `test-tracer-sqlite.mjs` | Record file-database dependencies while preserving the SQLite module interface (D5608). |
 | `test-tracer.mjs` | Collect opt-in dependency and timing evidence from test processes (D5608). |
 | `runners/` | Runner capacity evidence and lifecycle policy preparation; bootstrap/executor stages own activation. |
+| `runners/` | Verified native runner bootstrap/profile contract and private enrollment runbook (D7885). |
+| `runner-admission.mjs` | D7886: independently verify durable receipt, original source/plan, every merge-group constituent and exact child identity; unavailable authority denies. |
+| `runner-execution.mjs` | D7886: exact-plan Worker execution, verified runtime/source, actual test-result truth and owned-run cleanup. |
+| `macbook-admission.mjs` | Verify exact parent CI identity, active delegation and same-repository source provenance before the Mac runs candidate code (D7881). |
+| `macbook-worker.mjs` | Delegate one Worker shard with startup/completion bounds, real-failure propagation and standard hosted fallback (D7881). |
 
 Scanner callers load the installer and pins from the trusted base commit,
 never from a pull request checkout or cached executable. Archive reuse still
