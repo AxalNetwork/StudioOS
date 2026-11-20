@@ -12,6 +12,8 @@ its data, passes it in, and does only what these functions allow.
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
 | `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
 | `ejection.mjs` | The ejection handler's sweep: one GraphQL read of the 100 most recently updated PRs, the CI evidence, labels, one comment, and `enqueuePullRequest`. |
+| `refresh-rules.mjs` | The serial refresh's pure rules (#6478): which PRs inherited main's failure, how many the window allows, and the one-at-a-time loop that stops at a breaker. |
+| `refresh.mjs` | The serial refresh's entry point (`plan`, `apply`): update-branch with the App token, else the keeper's runner merge. |
 | `keeper-plan.mjs` | The branch keeper's plan (#6474): which conflicted PRs a sweep may merge main into, and today's reserved pushes. Pure. |
 | `keeper-merge.mjs` | The branch keeper's merge: git with hooks, filters and LFS off, main's merge rules only, the plain-versus-union comparison and the README duplicate check. |
 | `keeper.mjs` | The branch keeper's entry point (`plan`, `apply`): reads, re-reads, merges, pushes, labels and comments. |
@@ -158,6 +160,23 @@ ejection, then:
   - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
 
 Otherwise it labels `ejected` with the reasons. One sticky comment says which.
+## The serial refresh
+
+`.github/workflows/landing-bot-refresh.yml` (#6478) acts only when main's newest completed CI push run is green
+and an older one in the last 20 was red. It picks open, non-draft PRs whose latest CI run on their current head
+failed, and that `verdictFor()` calls `inherited_main_failure` against that red run. Then, one at a time:
+- **Before each PR,** it re-reads the mode, `bot:off`, the head and `breakers('refresh')`, which includes the
+  queued-runs limit. A breaker stops the run at once.
+- **The update** is GitHub's update-branch with `expected_head_sha`. If that refuses the App token, it uses the
+  branch keeper's runner merge instead.
+- **A conflict** is labelled `conflict` for the keeper and not retried.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_REFRESH_PER_WINDOW` | PRs refreshed per window. Unset is 0. |
+| `LANDING_BOT_REFRESH_WINDOW_MIN` | The window in minutes. Unset is 0, which refreshes nothing. |
+
+Each run reserves its refreshes in an artifact before it makes any, and counts the window's reservations.
 
 ## Main repair
 

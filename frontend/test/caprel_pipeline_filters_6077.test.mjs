@@ -61,7 +61,7 @@ async function mount(url, { signals = 'ok', roundCalls = true, phone = false } =
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const by = (id) => nodes().find((n) => props(n)['data-testid'] === id);
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join(' ') : n?.textContent || '');
-  const ids = (prefix) => nodes().map((n) => props(n)['data-testid']).filter((t) => typeof t === 'string' && new RegExp(`^${prefix}\\d+$`).test(t)).map((t) => Number(t.slice(prefix.length)));
+  const ids = (prefix) => nodes().map((n) => props(n)['data-testid']).filter((t) => typeof t === 'string' && t.startsWith(prefix) && /^\d+$/.test(t.slice(prefix.length))).map((t) => Number(t.slice(prefix.length)));
   return {
     writes, by, props: (id) => props(by(id)),
     has: (id) => Boolean(by(id)),

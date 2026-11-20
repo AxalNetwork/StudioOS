@@ -273,3 +273,48 @@ def test_a_run_of_unclosed_parentheses_is_read_in_linear_time():
     linkedin_import._content_to_lines("(" * 200_000 + " (Ada Lovelace) Tj T* (Analyst\\) Tj) Tj", out)
     assert time.monotonic() - started < 2, "200,000 unclosed ( must not take quadratic time"
     assert out == ["Ada Lovelace", "Analyst) Tj"]
+
+
+def test_a_run_of_escaped_parentheses_is_read_in_linear_time():
+    # CodeQL py/polynomial-redos: a "(" then many "\(" made each "\(" start a
+    # literal scan to the end of the stream.
+    import time
+
+    from backend.app.services import linkedin_import
+
+    out: list = []
+    started = time.monotonic()
+    linkedin_import._content_to_lines("(" + "\\(" * 100_000 + " (Ada Lovelace) Tj T* (Analyst\\) Tj) Tj", out)
+    assert time.monotonic() - started < 2, "100,000 escaped ( must not take quadratic time"
+    assert out == ["Ada Lovelace", "Analyst) Tj"]
+
+
+def test_a_literal_after_an_escaped_backslash_still_reads():
+    from backend.app.services import linkedin_import
+
+    out: list = []
+    linkedin_import._content_to_lines("\\\\(Ada) Tj T* (B\\(c) Tj", out)
+    assert out == ["Ada", "B(c"]
+
+
+@pytest.mark.parametrize("run, what", [("[" * 200_000, "unclosed ["), ("7" * 200_000, "digits")])
+def test_a_run_of_brackets_or_digits_is_read_in_linear_time(run, what):
+    # #7682: each "[" of an unclosed run, and each digit of a long run, used
+    # to start its own scan to the end of the stream (quadratic).
+    import time
+
+    from backend.app.services import linkedin_import
+
+    out: list = []
+    started = time.monotonic()
+    linkedin_import._content_to_lines(run + " (Ada Lovelace) Tj T* 0 -14 Td (Analyst) Tj", out)
+    assert time.monotonic() - started < 2, f"200,000 {what} must not take quadratic time"
+    assert out == ["Ada Lovelace", "Analyst"]
+
+
+def test_a_tj_array_whose_strings_hold_brackets_still_reads():
+    from backend.app.services import linkedin_import
+
+    out: list = []
+    linkedin_import._content_to_lines("[(Series [A] ) -120 (round)] TJ T* (Next) Tj", out)
+    assert out == ["Series [A] round", "Next"]
