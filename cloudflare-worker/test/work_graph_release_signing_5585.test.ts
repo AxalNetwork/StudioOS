@@ -334,8 +334,8 @@ test('8. the release envelope is mailed the release email; the agreement email i
   assert.ok(agreement.text.startsWith('Hi Bo,\n\nSam has verified your partner profile and assigned your Closing Binder:'));
 
   // The line name is the line's uid, which the caller chose: the HTML escapes it, the subject and text carry it as is.
-  const evil = releaseSignEmailContent({ recipientName: '<i>Al</i>', lineAssetUid: `l<script>"&'`, manifestUid: 'm<b>', digest: m.digest, signLink: 'https://l/esign/t' });
-  assert.ok(evil.html.includes('l&lt;script&gt;&quot;&amp;&#39;') && evil.html.includes('m&lt;b&gt;') && evil.html.includes('&lt;i&gt;Al&lt;/i&gt;'));
-  assert.ok(!/<script>|<b>|<i>/.test(evil.html), 'unescaped markup in the HTML');
-  assert.equal(evil.subject, `Sign release l<script>"&' (sha256:${m.digest.slice(0, 12)})`);
+  const evil = releaseSignEmailContent({ recipientName: '<i>Al</i>', lineAssetUid: `l<u>"&'`, manifestUid: 'm<b>', digest: m.digest, signLink: 'https://l/esign/t' });
+  assert.ok(evil.html.includes('l&lt;u&gt;&quot;&amp;&#39;') && evil.html.includes('m&lt;b&gt;') && evil.html.includes('&lt;i&gt;Al&lt;/i&gt;'));
+  assert.ok(!/<u>|<b>|<i>/.test(evil.html), 'unescaped markup in the HTML');
+  assert.equal(evil.subject, `Sign release l<u>"&' (sha256:${m.digest.slice(0, 12)})`);
 });
