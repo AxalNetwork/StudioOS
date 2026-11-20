@@ -214,3 +214,15 @@ export function backTo(state) {
   const back = state && typeof state.back === 'string' ? state.back : '';
   return back.startsWith('/research/funds?') ? back : '/research/funds?view=directory';
 }
+
+/**
+ * D7167 part 2 (FND-P10, focus return): after Back to results, where focus
+ * goes once the list answers. The row of the fund just viewed when it is on
+ * this page of results (it also keeps its selected style), else the results
+ * heading, since the row has left the results. `null` while there is nothing
+ * to restore.
+ */
+export function returnTarget(uid, items) {
+  if (!uid || !Array.isArray(items)) return null;
+  return items.some((x) => x && x.uid === uid) ? { focus: 'row', uid } : { focus: 'heading', uid: null };
+}

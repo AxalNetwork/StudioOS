@@ -127,13 +127,27 @@ export type ToolDeps = {
 export type Disconnected = { ok: false; disconnected: { uid: string; name: string } } ;
 
 /**
+ * D4667-p4 — what one approved MCP read is as evidence, beside the native readers' (`reads.ts`). It differs from a
+ * native read in three ways, and says so: its answer has no typed contract the platform checked (no coverage, period
+ * or currency it can vouch for), so it meets no input of a first-ten skill (`skillInputs.ts` readiness reads native
+ * readers only, before any MCP call); an answer over `TOOL_RESULT_MAX` is cut to a JSON prefix (`capResult`), so
+ * `complete` is false and `bytes` is its whole length; and its identity is the sponsor's own connection and the tool
+ * approved on it (`ref: mcp_tool:<integration_uid>:<tool>`), read at `fetched_at`, not a record's own reference.
+ * A read the tool refused is `outcome: 'refused'` and carries nothing. Never its arguments or its words.
+ */
+export type McpEvidence = {
+  source: 'approved_mcp'; ref: string; server: { uid: string; name: string }; tool: string; read: number;
+  fetched_at: string; outcome: 'data' | 'refused'; complete: boolean; bytes: number | null; typed: false;
+};
+
+/**
  * Check every read's connection first (nothing is called when one is gone),
  * then run them in order, each metered. Answers the wrapped block for the
  * prompt, or the server that disconnected, or a refusal.
  */
 export async function readTools(env: Env, a: Pick<AgentRow, 'uid' | 'sponsor_user_id'>, reads: ToolRead[], executionId: string, deps: ToolDeps = {}):
-  Promise<{ ok: true; block: string | null; calls: number } | Disconnected | No> {
-  if (!reads.length) return { ok: true, block: null, calls: 0 };
+  Promise<{ ok: true; block: string | null; calls: number; evidence: McpEvidence[] } | Disconnected | No> {
+  if (!reads.length) return { ok: true, block: null, calls: 0, evidence: [] };
   if (!customMcpEnabled(env)) return no(409, 'custom_mcp_off', 'Connected tools are switched off, so this run cannot read them.');
   for (const r of reads) {
     const denied = await agentMcpRefusal(env, a.sponsor_user_id, { agent_uid: a.uid, integration_uid: r.integration_uid }, r.tool);
@@ -149,6 +163,7 @@ export async function readTools(env: Env, a: Pick<AgentRow, 'uid' | 'sponsor_use
   const call = deps.call ?? callCustomTool;
   const metered = deps.metered ?? meteredCall;
   const results: EadwynToolResult[] = [];
+  const evidence: McpEvidence[] = [];
   let n = 0;
   for (const r of reads) {
     const denied = await agentMcpRefusal(env, a.sponsor_user_id, { agent_uid: a.uid, integration_uid: r.integration_uid }, r.tool);
@@ -160,13 +175,22 @@ export async function readTools(env: Env, a: Pick<AgentRow, 'uid' | 'sponsor_use
         userId: a.sponsor_user_id, executionId, operation: AGENT_TOOL_OPERATION, component: `read${n}`, quoteMicrousd: 0, surface: 'mcp',
       }, async () => call(env, row, r.tool, r.arguments, { ...deps.custom, agentContext: { agent_uid: a.uid, integration_uid: r.integration_uid } }));
       results.push({ name: r.tool, outcome: 'data', data: capResult(value.data) });
+      let bytes: number | null = null;
+      try { bytes = JSON.stringify(value.data ?? null).length; } catch { bytes = null; }
+      evidence.push({ ...mcpRef(r, row, n), outcome: 'data', complete: bytes !== null && bytes <= TOOL_RESULT_MAX, bytes });
     } catch (e) {
       // A schema changed at the server since it was pinned, or the sign-in was refused: the server is disconnected for this agent.
       if (e instanceof CustomMcpError && (e.code === 'tool_not_approved' || e.code === 'unauthorized' || e.code === 'not_found')) {
         return { ok: false, disconnected: serverOf(r.integration_uid, row) };
       }
       results.push({ name: r.tool, outcome: 'refused', error: 'The tool could not be read.' });
+      evidence.push({ ...mcpRef(r, row, n), outcome: 'refused', complete: false, bytes: null });
     }
   }
-  return { ok: true, block: toolResultsForModel(results), calls: n };
+  return { ok: true, block: toolResultsForModel(results), calls: n, evidence };
 }
+
+const mcpRef = (r: ToolRead, row: IntegrationRow, n: number) => ({
+  source: 'approved_mcp' as const, ref: `mcp_tool:${r.integration_uid}:${r.tool}`, server: serverOf(r.integration_uid, row), tool: r.tool, read: n,
+  fetched_at: new Date().toISOString(), typed: false as const,
+});

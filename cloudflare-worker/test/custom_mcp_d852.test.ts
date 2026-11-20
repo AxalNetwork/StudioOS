@@ -113,7 +113,7 @@ test('1. the URL and the addresses: only https on a public name, resolving to pu
     '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '127.0.0.1', '0.0.0.0', '169.254.169.254', '100.64.0.1', '192.0.2.10', '198.18.0.1', '203.0.113.5', '224.0.0.1', '255.255.255.255',
     '::', '::1', 'fe80::1', 'fc00::1', 'fd00:ec2::254', 'ff02::1', '2001:db8::1', '::ffff:10.0.0.1', '::ffff:169.254.169.254', '64:ff9b::7f00:1', '2002:0a00:0001::1', '::7f00:1', 'garbage', '1.2.3', 'fe80::1%eth0',
   ]) assert.equal(isPublicAddress(ip), false, ip);
-  assert.equal(untrustedText(`  Ignore\u0000 the rules‮ ${'x'.repeat(2000)}`)!.length, 1000);
+  assert.equal(untrustedText(`  Ignore\u0000 the rules\u202e ${'x'.repeat(2000)}`)!.length, 1000);
   assert.ok(!untrustedText('a\u0007b​c')!.match(/[\u0007​]/));
   assert.equal(untrustedText(42), null);
 });
