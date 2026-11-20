@@ -1,0 +1,168 @@
+# Owner-controlled readiness check for one GitHub-hosted larger runner.
+# The existing benchmark flags and standard ubuntu-latest CI are unchanged.
+name: Included compute runner readiness
+run-name: Included compute readiness | ${{ github.run_id }} | attempt ${{ github.run_attempt }}
+
+on:
+  push:
+    branches: [ci/included-compute-runner-test]
+    paths: [.github/workflows/included-compute-smoke.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: included-compute-runner-readiness
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Fixed Worker tests on the 8-core runner
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' &&
+      github.actor == 'guillaumelauzier' &&
+      github.triggering_actor == 'guillaumelauzier' &&
+      github.ref == 'refs/heads/ci/included-compute-runner-test' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: studioos-bench-linux-8
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      TZ: UTC
+      REVIEWED_SOURCE_SHA: dd87916744bf31259ae1cc21310aedb68ef30bd4
+    steps:
+      - name: Select native Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          architecture: x64
+          package-manager-cache: false
+
+      - name: Select native Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+          architecture: x64
+
+      - name: Check out the fixed reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: AxalNetwork/StudioOS
+          ref: dd87916744bf31259ae1cc21310aedb68ef30bd4
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify runner, source, Node and SQLite
+        env:
+          PILOT_RUNNER_NAME: ${{ runner.name }}
+          PILOT_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          test -x /usr/bin/time
+          /usr/bin/time --version
+          node --no-warnings --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { writeFileSync } from 'node:fs';
+          import os from 'node:os';
+          import { join } from 'node:path';
+          import { DatabaseSync } from 'node:sqlite';
+          assert.equal(process.env.PILOT_RUNNER_ENVIRONMENT, 'github-hosted', 'expected a GitHub-hosted runner');
+          assert.equal(process.platform, 'linux', 'expected native Linux');
+          assert.equal(process.arch, 'x64', 'expected native x64 Node');
+          assert.equal(process.versions.node.split('.')[0], '22', 'expected Node 22');
+          assert.equal(os.availableParallelism(), 8, 'expected the configured 8-core runner');
+          const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          assert.equal(sourceSha, process.env.REVIEWED_SOURCE_SHA, 'checkout must match the reviewed source');
+          const db = new DatabaseSync(':memory:');
+          const sqliteVersion = db.prepare('SELECT sqlite_version() AS version').get().version;
+          assert.equal(db.prepare('SELECT 1 AS ok').get().ok, 1);
+          db.close();
+          const runtime = {
+            runner: process.env.PILOT_RUNNER_NAME,
+            environment: process.env.PILOT_RUNNER_ENVIRONMENT,
+            platform: process.platform,
+            architecture: process.arch,
+            available_cpus: os.availableParallelism(),
+            reported_cpus: os.cpus().length,
+            total_memory_gib: Number((os.totalmem() / 2 ** 30).toFixed(2)),
+            image_os: process.env.ImageOS || null,
+            image_version: process.env.ImageVersion || null,
+            source_sha: sourceSha,
+            node: process.version,
+            node_sqlite: sqliteVersion,
+          };
+          writeFileSync(join(process.env.RUNNER_TEMP, 'included-compute-runtime.json'), JSON.stringify(runtime, null, 2) + '\n');
+          console.log(JSON.stringify(runtime, null, 2));
+          NODE
+          python3 - <<'PY'
+          import json, os, pathlib, platform, sqlite3, sys
+          assert sys.version_info[:2] == (3, 11), 'expected Python 3.11'
+          assert platform.machine() == 'x86_64', 'expected native x64 Python'
+          with sqlite3.connect(':memory:') as db:
+              assert db.execute('SELECT 1').fetchone() == (1,)
+              sqlite_version = db.execute('SELECT sqlite_version()').fetchone()[0]
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'included-compute-runtime.json'
+          runtime = json.loads(path.read_text())
+          runtime.update(python=platform.python_version(), python_sqlite=sqlite_version)
+          path.write_text(json.dumps(runtime, indent=2) + '\n')
+          print(json.dumps({'python': runtime['python'], 'python_sqlite': sqlite_version}, indent=2))
+          PY
+
+      - name: Install Worker dependencies
+        working-directory: cloudflare-worker
+        run: npm ci --no-audit --no-fund
+
+      - name: Install root dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Prepare generated modules for the existing tests
+        run: node scripts/build-generated.mjs
+
+      - name: Run 15 existing Worker test cases
+        id: tests
+        timeout-minutes: 2
+        run: |
+          status=0
+          /usr/bin/time -v -o "$RUNNER_TEMP/included-compute-time.txt" \
+            node --experimental-strip-types --no-warnings \
+            --import ./cloudflare-worker/test/_ts-loader.mjs \
+            --test --test-reporter=tap --test-concurrency=1 \
+            cloudflare-worker/test/capital_relationships_feedback_d1189.test.ts \
+            cloudflare-worker/test/workspace_security_5567.test.ts \
+            cloudflare-worker/test/x_client_shared.test.ts \
+            > "$RUNNER_TEMP/included-compute-tap.txt" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/included-compute-tap.txt"
+          printf 'exit_code=%s\n' "$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Record readiness evidence
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          runtime = root / 'included-compute-runtime.json'
+          tap = root / 'included-compute-tap.txt'
+          timing = root / 'included-compute-time.txt'
+          prefixes = ('# tests ', '# suites ', '# pass ', '# fail ', '# cancelled ', '# skipped ', '# todo ', '# duration_ms ')
+          footer = [line for line in tap.read_text(errors='replace').splitlines() if line.startswith(prefixes)] if tap.exists() else []
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('# Included compute runner readiness\n\n')
+              summary.write('- Runner label: `studioos-bench-linux-8`\n')
+              summary.write('- Reviewed source: `' + os.environ['REVIEWED_SOURCE_SHA'] + '`\n')
+              summary.write('- Test step outcome: `' + (os.environ.get('TEST_OUTCOME') or 'not recorded') + '`\n')
+              summary.write('- Test command exit code: `' + (os.environ.get('TEST_EXIT_CODE') or 'not recorded') + '`\n\n')
+              summary.write('This checks runner readiness with three fixed Worker test files. It is not a full shard or a throughput measurement.\n\n')
+              summary.write('## Runtime\n\n')
+              summary.write('```json\n' + runtime.read_text() + '```\n\n' if runtime.exists() else 'Runtime preflight did not complete.\n\n')
+              summary.write('## Test totals\n\n')
+              summary.write('```text\n' + '\n'.join(footer) + '\n```\n\n' if footer else 'No final TAP totals were recorded.\n\n')
+              summary.write('## GNU time\n\n')
+              summary.write('```text\n' + timing.read_text(errors='replace') + '```\n' if timing.exists() and timing.stat().st_size else 'No completed timing record was produced.\n')
+          PY
