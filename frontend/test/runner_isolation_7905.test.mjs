@@ -5,7 +5,7 @@ import { mkdtempSync,mkdirSync,writeFileSync,rmSync,readFileSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { JobContainer,readContainerPolicy } from '../../scripts/ci/runners/job-container.mjs';
+import { JobContainer,readContainerPolicy,containerIsolationAdapter } from '../../scripts/ci/runners/job-container.mjs';
 const IMAGE='sha256:'+'a'.repeat(64),CID='b'.repeat(64),DEADLINE=Date.now()+60000;
 const receipt=()=>({version:1,repository:'AxalNetwork/StudioOS',profile:'linux-x64',requestId:'00000000-0000-4000-8000-000000000001',logicalShard:'worker-1-of-6',childRunId:202,childAttempt:1,generation:1,executionDeadline:DEADLINE,event:'push',sourceSha:'e'.repeat(40)});
 function fixture(t){
@@ -78,4 +78,32 @@ test('D7905 missing evidence, unpinned images, an operator flag and persistent M
  const py=`import types\nfrom pathlib import Path\nb=types.ModuleType('bootstrap')\nexec(${JSON.stringify(source)},b.__dict__)\ntry:\n b.serve(Path('/not-a-runner'),0)\nexcept b.Refusal as e:\n assert str(e)=='self_hosted_isolation_canary_required_7905'\nelse:\n raise AssertionError('persistent listener started')\n`;
  const result=spawnSync('python3',['-c',py],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
  assert.match(source,/if args\.action in \('register','start'\): isolation_enrollment_gate\(\)/);
+});
+
+
+test('D7905 the admission adapter is bound to actual engine evidence and the exact Linux child',async t=>{
+ const f=fixture(t);f.create();const verify=containerIsolationAdapter(f.job);
+ const value={receipt:receipt(),context:{repository:'AxalNetwork/StudioOS',childRunId:202,childAttempt:1},profile:{id:'linux-x64'}};
+ assert.equal(await verify(value),true);
+ for(const patch of [{context:{...value.context,repository:'Other/Repo'}},{context:{...value.context,childRunId:203}},
+  {context:{...value.context,childAttempt:2}},{profile:{id:'macos-arm64'}},{receipt:{...receipt(),sourceSha:'f'.repeat(40)}}])assert.equal(await verify({...value,...patch}),false);
+ f.state().HostConfig.Privileged=true;assert.equal(await verify({...value,job_isolation_verified:true}),false);
+ assert.throws(()=>containerIsolationAdapter({job_isolation_verified:true}),/supervisor_required/);
+});
+test('D7905 a failed start, rejected isolation or candidate failure cleans up only the recorded container',t=>{
+ for(const failure of ['start','isolation','candidate']){
+  const f=fixture(t),engine=f.job.engine,r=receipt();
+  f.job.engine=(args,options)=>{
+   if(failure==='start'&&args[0]==='start')throw Error('synthetic start failure');
+   if(failure==='isolation'&&args[0]==='inspect')f.state().HostConfig.Privileged=true;
+   if(failure==='candidate'&&args[0]==='exec'&&args.includes('/bin/sh'))throw Error('synthetic test failure');
+   return engine(args,options);
+  };
+  if(failure==='candidate'){
+   f.job.create(r,{source:f.source,plan:f.plan});
+   assert.throws(()=>f.job.runCandidate({receipt:r,admitted:{allowed:true,identity:r,sourceSha:r.sourceSha,originalRunId:101,originalAttempt:1,originalEvent:'push',sourceRef:'refs/heads/main'}}),/synthetic test failure/);
+  }else assert.throws(()=>f.job.create(r,{source:f.source,plan:f.plan}),/container_start_or_isolation_failed/);
+  assert.deepEqual(f.calls.at(-1).args,['rm','--force',CID]);
+  assert.equal(f.job.owned,null);
+ }
 });

@@ -66,7 +66,12 @@ export class JobContainer {
   const id=this.engine(args).trim();need(/^[a-f0-9]{64}$/.test(id),'container_creation_unconfirmed');
   // Persist exact local ownership before start/inspection. A failure never broadens cleanup to a name/pool.
   this.owned={id,owner,source,plan,image:this.policy.image,receipt:receiptIdentity(receipt)};
-  this.engine(['start',id]);need(this.verifyIsolation({receipt}),'execution_isolation_unverified');
+  try { this.engine(['start',id]);need(this.verifyIsolation({receipt}),'execution_isolation_unverified'); }
+  catch {
+   // A start/verification error must not leave a known owned process behind.
+   try { this.cleanup(receipt); } catch { /* Unreadable ownership is never authority to remove a different container. */ }
+   throw Error('container_start_or_isolation_failed');
+  }
   return id;
  }
  verifyIsolation({receipt,profile}={}) {
@@ -103,4 +108,14 @@ export class JobContainer {
   need(rows.length===1&&rows[0].Id===this.owned.id&&rows[0].Config?.Labels?.[LABEL]===this.owned.owner,'container_cleanup_identity_mismatch');
   this.engine(['rm','--force',this.owned.id]);this.owned=null;
  }
+}
+
+/** Bound implementation for admitRunnerJob's verifyIsolation port; no caller flag is evidence. */
+export function containerIsolationAdapter(job) {
+ need(job instanceof JobContainer,'isolation_supervisor_required');
+ return async ({receipt,context,profile}={})=>{
+  if(context?.repository!=='AxalNetwork/StudioOS'||profile?.id!=='linux-x64'
+    ||String(context.childRunId)!==String(receipt?.childRunId)||String(context.childAttempt)!==String(receipt?.childAttempt))return false;
+  return job.verifyIsolation({receipt,profile});
+ };
 }
