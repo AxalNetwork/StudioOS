@@ -32,6 +32,10 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
   --fwr-ink: #29252f;
   --fwr-muted: #6b6473;
   --fwr-faint: #8b8494;
+  /* D7662 (#7662): the "Not recorded" / "Loading…" line. --fwr-faint is 3.60:1
+     on white; this is 5.06:1 on white, 4.58:1 on #f4f3f7 and 4.50:1 on the
+     lightest accent soft (#f5efff). The dark value stays --fwr-faint's. */
+  --fwr-absent: #716c7e;
   --fwr-line: #e7e3eb;
   --fwr-paper: #fff;
   /* The role supplies both pairs inline (see ui/WorkerRail.jsx); these
@@ -95,7 +99,7 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 
 /* Absent is absent. A figure the platform could not read is greyed and named,
    never rendered as a zero. */
-.fwr-absent { color: var(--fwr-faint); font-weight: 600; }
+.fwr-absent { color: var(--fwr-absent); font-weight: 600; }
 
 /*
  * D698 — THE AIRAIL CANVAS'S BLOCKS (design/canvases/integrated/AIRail.dc.html,
@@ -449,6 +453,7 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
   --fwr-ink: #f4f3f7;
   --fwr-muted: #a9a4b8;
   --fwr-faint: #8b849c;
+  --fwr-absent: var(--fwr-faint);
   --fwr-line: #2e2b38;
   --fwr-paper: #1a1822;
   --fwr-accent: var(--fwr-accent-dark, #a78bfa);
