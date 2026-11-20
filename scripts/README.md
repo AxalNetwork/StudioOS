@@ -352,3 +352,5 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `report-incorporation-state.mjs` | #6684: read-only incorporation state by jurisdiction id (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals, ids outside the six, multi-paid projects, a US beneficial-ownership step); counts and yes/no only. |
 
 | `local-files.mjs` | D7255: descriptor-bound regular file reads/edits and private, no-follow operator-state files; rejects symlinks and hard links before truncation. |
+
+| `build-classification-crosswalk.mjs` | D7821: deterministically writes the UK SIC crosswalk seed from its reviewed asset and imported SIC_SECTORS; `--check` verifies it without database access. |
