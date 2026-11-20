@@ -70,6 +70,7 @@ test('scheduled LP letter binds the same selected fund in context and readiness 
     assert.ok((await runStep(s.d, s.uid)).go);
     assert.equal(s.calls.length, 1);
     assert.equal(s.calls[0].readiness.slug, SLUG);
+    assert.equal(s.calls[0].record, `vc_fund:${FUND}`, 'the proposal/run keeps the same selected fund identity');
     assert.ok(s.calls[0].prompt.includes(`vc_fund:${FUND}`) && s.calls[0].prompt.includes('2026-Q3'));
     assert.ok(s.selected.length >= 2 && s.selected.every(x => x === `vc_fund:${FUND}`), 'context and readiness read one identical selection');
     assert.equal(pathsFor(SLUG)?.scheduled, 'supported');

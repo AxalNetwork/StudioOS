@@ -305,6 +305,7 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
   const r = await d.agentRun(d.env, {
     agent: l.agent, module: l.task.module!, option: l.task.option!, prompt: b.prompt, taskId: l.task.id, runUid: uid, engine: true,
     ...(sk.kind === 'skill' ? { skill: sk.uid, skillVersion: sk.version } : {}),
+    ...(b.fund ? { record: b.fund } : {}),
     ...(readiness ? { readiness } : {}),
   });
   if (r.ok) {
