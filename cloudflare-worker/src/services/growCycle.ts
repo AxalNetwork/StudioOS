@@ -423,6 +423,8 @@ export function planMonth(label: string): string | null {
 export async function teamCard(x: Ctx): Promise<CardBody> {
   const company = await companyOf(x.env, x.projectId);
   let actual: Array<number | null> = []; let plan: Array<number | null> = [];
+  let nextPlan: { period: string; target: number } | null = null;
+  let planReason: string | null = null;
   const months = monthsBack(x.now, 6);
   if (company != null) {
     const people = await x.env.DB.prepare(
@@ -432,26 +434,43 @@ export async function teamCard(x: Ctx): Promise<CardBody> {
     actual = months.map((m) => (ps.length ? ps.filter((p) => !p.start_date || p.start_date.slice(0, 7) <= m).length : null));
     const pl = await x.env.DB.prepare('SELECT period_label, target_headcount FROM company_headcount_plan WHERE company_id = ?')
       .bind(company).all<{ period_label: string; target_headcount: number }>();
-    const pm = new Map<string, number>();
-    for (const p of pl.results || []) { const m = planMonth(p.period_label); if (m) pm.set(m, p.target_headcount); }
+    const pm = new Map<string, number | null>();
+    for (const p of pl.results || []) {
+      const m = planMonth(p.period_label);
+      if (m) pm.set(m, pm.has(m) && pm.get(m) !== p.target_headcount ? null : p.target_headcount);
+    }
     plan = months.map((m) => pm.get(m) ?? null);
+    const upcoming = [...pm.keys()].filter((m) => m >= months[months.length - 1]).sort()[0];
+    if (upcoming) {
+      const target = pm.get(upcoming);
+      if (target != null) nextPlan = { period: upcoming, target };
+      else planReason = `Not recorded: conflicting hiring targets for ${upcoming}. Review the hiring plan.`;
+    }
   }
   const apps = await x.env.DB.prepare(
-    `SELECT a.stage FROM job_applications a JOIN job_postings p ON p.id = a.posting_id
-      WHERE p.project_id = ? AND p.status IN ('open', 'published')`,
+    `SELECT CASE WHEN a.stage_changed_at IS NOT NULL THEN a.stage ELSE a.status END AS stage
+       FROM job_applications a JOIN job_postings p ON p.id = a.posting_id
+      WHERE p.project_id = ? AND p.status IN ('draft', 'pending_review', 'open', 'published', 'rejected')`,
   ).bind(x.projectId).all<{ stage: string | null }>();
   const stages = new Map<string, number>();
-  for (const a of apps.results || []) { const s = a.stage || 'applied'; stages.set(s, (stages.get(s) ?? 0) + 1); }
+  for (const a of apps.results || []) {
+    const s = a.stage === 'submitted' ? 'applied' : a.stage;
+    if (s) stages.set(s, (stages.get(s) ?? 0) + 1);
+  }
   const funnel = ['applied', 'screen', 'interview', 'offer'].map((s) => ({ stage: s, count: stages.get(s) ?? 0 }));
   const recorded = actual.filter((v) => v != null).length;
-  const roles = company == null ? null : await x.env.DB.prepare("SELECT 1 FROM job_postings WHERE project_id = ? AND status IN ('open', 'published') LIMIT 1").bind(x.projectId).first();
+  const roles = await x.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM job_postings WHERE project_id = ? AND status IN ('open', 'published')"
+  ).bind(x.projectId).first<{ n: number }>();
   const newApplicants = stages.get('applied') ?? 0;
   return {
     state: company == null ? 'not_recorded' : seriesState(recorded), range: 'Last 6 months',
-    series: { months, headcount: actual, plan, roles_by_stage: funnel },
-    next: company != null && recorded === 0 && !roles ? { text: 'Open a role', href: `/grow/team-expansion/new?project=${x.projectId}` }
+    series: { months, headcount: actual, plan, roles_by_stage: funnel, talent: {
+      headcount: actual.at(-1) ?? null, plan: nextPlan, plan_reason: planReason, open_roles: roles?.n ?? null, offers: stages.get('offer') ?? 0,
+    } },
+    next: company != null && recorded === 0 && roles?.n === 0 ? { text: 'Open a role', href: `/grow/team-expansion/new?project=${x.projectId}` }
       : newApplicants ? { text: `Review the ${newApplicants} new applicant${newApplicants === 1 ? '' : 's'}.`, href: x.href('team-expansion') } : null,
-    reason: company == null ? 'Not recorded: this venture has no company roster yet' : recorded === 0 && !roles ? 'No open roles yet. Headcount against the plan appears here.' : recorded === 0 ? 'No one is on the team roster yet.' : null, source: 'Team roster and open roles', as_of: iso(x.now),
+    reason: company == null ? 'Not recorded: this venture has no company roster yet' : recorded === 0 && roles?.n === 0 ? 'No open roles yet. Headcount against the plan appears here.' : recorded === 0 ? 'No one is on the team roster yet.' : null, source: 'Team roster and open roles', as_of: iso(x.now),
   };
 }
 

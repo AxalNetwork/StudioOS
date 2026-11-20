@@ -153,8 +153,8 @@ dr_compare_counts() {
   : > "${dir}/counts.jsonl"
   while IFS= read -r sql <&4; do
     batch=$(( batch + 1 ))
-    if wrangler d1 execute "${db}" --remote --command "${sql}" --json > "${dir}/count.json" 2>"${dir}/count.err"; then
-      jq -c '.[] .results[]' "${dir}/count.json" >> "${dir}/counts.jsonl"
+    if wrangler d1 execute "${db}" --remote --command "${sql}" --json > "${dir}/count.json" 2>"${dir}/count.err" \
+        && dr_count_rows "${manifest}" "$(( batch - 1 ))" "${dir}/count.json" 2>>"${dir}/count.err" >> "${dir}/counts.jsonl"; then
       continue
     fi
     codes=$(dr_count_codes "${dir}")
@@ -179,7 +179,7 @@ dr_compare_counts() {
   log "${compare}"
 }
 
-# The row-count queries for a manifest. `batch`: one UNION ALL line per 40
+# The row-count queries for a manifest. `batch`: one scalar SELECT per 40
 # tables. `one <i>`: batch i's tables, one `name<TAB>query` line each.
 dr_count_sql() {
   # shellcheck disable=SC2016 # JavaScript, not shell
@@ -191,7 +191,7 @@ dr_count_sql() {
     const count = (t) => `SELECT ${lit(t.name)} AS t, COUNT(*) AS n FROM ${q(t.name)}`;
     const batches = [];
     for (let i = 0; i < m.tables.length; i += 40) batches.push(m.tables.slice(i, i + 40));
-    if (mode === "batch") for (const b of batches) console.log(b.map(count).join(" UNION ALL ") + ";");
+    if (mode === "batch") for (const b of batches) console.log("SELECT " + b.map((t,i) => `(SELECT COUNT(*) FROM ${q(t.name)}) AS c${i}`).join(", ") + ";");
     else for (const t of batches[Number(index)] ?? []) console.log(`${t.name}\t${count(t)};`);
   ' "$1" "$2"
 }
@@ -200,4 +200,17 @@ dr_count_sql() {
 dr_count_codes() {
   grep -ohE 'D1_[A-Z_]+|SQLITE_[A-Z_]+|no such table|not authorized|too many terms in compound SELECT|exceeded [a-zA-Z ]*limit' \
     "$1/count.err" "$1/count.json" 2>/dev/null | sort -u | paste -sd ' ' - || true
+}
+
+# Map only complete scalar-batch results back to manifest table names. Never print backup rows.
+dr_count_rows() {
+  node -e '
+    const fs = require("fs"), m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const tables = m.tables.slice(Number(process.argv[2]) * 40, (Number(process.argv[2]) + 1) * 40);
+    const result = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+    const rows = Array.isArray(result) ? result.flatMap(r => r.results ?? []) : [];
+    if (rows.length !== 1 || Object.keys(rows[0]).length !== tables.length || tables.some((t,i) => !Number.isSafeInteger(rows[0][`c${i}`]) || rows[0][`c${i}`] < 0)) process.exit(1);
+    const counts = tables.map((t,i) => ({t:t.name,n:rows[0][`c${i}`]}));
+    for (const row of counts) console.log(JSON.stringify(row));
+  ' "$1" "$2" "$3"
 }
