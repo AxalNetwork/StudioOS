@@ -51,7 +51,7 @@ export function validateScaleConfig(c: ScaleConfig): void {
   if (!c || ![1, 5, 10, 50].includes(c.stage) || !integer(c.approvedCap) || c.approvedCap > c.stage
       || !integer(c.minHostedShards, 1) || c.minHostedShards > 6 || !integer(c.maxExternalPerRun)
       || c.maxExternalPerRun > 6 - c.minHostedShards || (c.stage === 1 && c.maxExternalPerRun > 2)
-      || !integer(c.perRunPerProfile, 1) || !integer(c.maxNewPerInterval, 1) || c.maxNewPerInterval > 50
+      || !integer(c.perRunPerProfile, 1) || c.perRunPerProfile > 6 || !integer(c.maxNewPerInterval, 1) || c.maxNewPerInterval > 50
       || !integer(c.intervalMs, 1) || !integer(c.cooldownMs) || !integer(c.warmupMs, 1) || !integer(c.heartbeatMs, 1)
       || !integer(c.idleMs, 1) || !integer(c.lifetimeMs, 1) || !integer(c.maxRetries) || c.maxRetries > 5) throw Error('invalid_scale_config');
   if (!c.profiles || !Object.keys(c.profiles).length || Object.keys(c.profiles).length > 8) throw Error('invalid_profiles');

@@ -54,6 +54,7 @@ test('no approval, unverified budget/image, stale inventory or orphan evidence a
   assert.equal(planFleet(emptyFleet(), limited, inventory(), demands(), NOW).state.nodes.length, 5, 'stage availability never replaces the smaller approval');
   assert.throws(() => planFleet(emptyFleet(), { ...config(), minHostedShards: 0 }, inventory(), demands(), NOW), /invalid_scale_config/);
   assert.throws(() => planFleet(emptyFleet(), { ...config(50), maxExternalPerRun: 6 }, inventory(), demands(), NOW), /invalid_scale_config/);
+  assert.throws(() => planFleet(emptyFleet(), { ...config(50), perRunPerProfile: 7 }, inventory(), demands(), NOW), /invalid_scale_config/);
 });
 
 test('CAS and persisted reservations fence concurrent proposals, retain a pending effect on restart and prevent duplicate budget reservation', () => {
