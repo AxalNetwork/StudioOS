@@ -5,6 +5,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { partsOf } from './test-drift-parts.mjs';
 import { assessFutureClock } from './lib/futureClockEvidence.mjs';
+import { tapFailures } from './lib/futureClockNames.mjs';
 
 export async function futureClockReport({ env, api }) {
   if (!/^[1-9]\d*$/.test(env.GITHUB_RUN_ID || '') || !/^[1-9]\d*$/.test(env.GITHUB_RUN_ATTEMPT || '') || !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '')) throw new Error('report_identity_invalid');
@@ -32,5 +33,13 @@ export async function futureClockReport({ env, api }) {
       blobs.push({ part, manifest: JSON.parse(readFileSync(join(base, 'manifest.json'), 'utf8')), tap: readFileSync(join(base, 'future-clock.tap'), 'utf8') });
     } catch { blobs.push({ part }); }
   }
-  return assessFutureClock({ expected, blobs, jobs, runId: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT, sha: env.GITHUB_SHA });
+  const evidence = assessFutureClock({ expected, blobs, jobs, runId: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT, sha: env.GITHUB_SHA });
+  return { ...evidence, failures: verifiedFailures(blobs, evidence), startedAt: run.run_started_at || run.created_at || null };
+}
+
+/** D7124: the failing tests of the parts that verified (no discrepancy names them), each with its part; for the job log and summary only. */
+export function verifiedFailures(blobs, evidence) {
+  const doubted = new Set(evidence.discrepancies.map(d => d.split(':').slice(1).join(':')).filter(Boolean));
+  return blobs.filter(b => b.part && b.part !== 'unexpected' && typeof b.tap === 'string' && !doubted.has(b.part))
+    .flatMap(b => tapFailures(b.tap).map(f => ({ part: b.part, ...f })));
 }

@@ -1,4 +1,5 @@
 /** D4557: synthetic host lifecycle driven by real Workspace grants; no hosted isolation claims. */
+import { containmentFixture } from './_containment_fixture_5567.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createComputeHost, type HostRecord, type HostStore } from '../../agent-compute/host.ts';
@@ -24,7 +25,7 @@ async function world() {
     authorize: async () => ({ allowed: flags.allowed, revision: 1, approved: false }),
     image: async digest => ({ digest, signature_verified: true, provenance_verified: true, sbom_verified: true, scan_passed: true, revoked: false }),
     provider: async () => ({ capabilities: caps, non_root: true, no_new_privileges: true, immutable_image: true, ephemeral_scratch: true,
-      resource_limits: true, host_socket: false, privileged: false, isolation: 'microvm', network_connect_fence: true, metadata_denied: true }),
+      resource_limits: true, host_socket: false, privileged: false, isolation: 'microvm', network_connect_fence: true, metadata_denied: true, containment: containmentFixture(now) }),
     object: async () => null, encryptionKey: async () => null, audit: async () => {},
   });
   const store: HostStore = { async transaction(fn) { const chosen = fn(structuredClone(row)); row = chosen.row; return chosen.value; } };

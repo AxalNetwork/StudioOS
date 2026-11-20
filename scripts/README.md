@@ -243,5 +243,8 @@ D5676: `check-tail-archive.mjs` is an external authenticated metadata-only obser
 D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt before normal production promotion, retaining sanitized stage evidence.
 
 
+| `future-clock-changed.mjs` | D7124: a PR's added or edited test files under libfaketime at +7d and +9d 11h (ci.yml, `suite (rest)` on non-draft PRs); fails on a test that fails ahead and passes today. `--offset +7d <file>` reproduces one. |
+
+| `health-alert-episodes.mjs` | D5663: paginated health episodes with persistent transition delivery intents. |
 
 | `scan-remediation/` | D6935: reconcile default-branch Code Scanning alerts, trackers, suggested fixes and draft PRs. |

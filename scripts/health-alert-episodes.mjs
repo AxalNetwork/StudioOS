@@ -13,6 +13,7 @@ export function safeHealthFacts(facts = {}) {
   if (['budget_refused', 'configuration_error', 'reviewed', 'duplicate'].includes(facts.outcome)) out.outcome = facts.outcome;
   if (/^[a-zA-Z0-9_ ()/.@:-]{1,200}$/.test(facts.fingerprint || '')) out.fingerprint = facts.fingerprint.replaceAll('@', ' at ');
   if (/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/[1-9]\d*$/.test(facts.runUrl || '')) out.runUrl = facts.runUrl;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(facts.breakDate || '') && Number.isFinite(Date.parse(facts.breakDate))) out.breakDate = facts.breakDate; // D7124: the future-clock break date
   const identities = safeStallIdentities(facts.identities); // D7125: the queue-stall failures, sanitized
   if (identities.length) out.identities = identities;
   return out;
