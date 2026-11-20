@@ -28,6 +28,9 @@ also exercises a `project_id` deep link.
 
 | File | Guarantee |
 | --- | --- |
+| `macbook_worker_7881.test.mjs` | D7881: exact dispatch ownership, bounded busy/offline/API fallback, cancellation, failure identities and real Mac test failure propagation. |
+| `macbook_admission_7881.test.mjs` | D7881: active parent delegation, exact source and plan artifact, complete same-repository merge-queue provenance, and final liveness recheck. |
+| `macbook_workflow_7881.test.mjs` | D7881: trusted checkout ordering, plan selection, original gate semantics, trace transfer, owned-child cancellation and run-scoped cleanup, with mutation/restoration cases. |
 | `persona_segment_scopes_4438.test.mjs` | D4438: scope changes update SEG7, waiting suggestions, stale reply guards, failures and missing figures. |
 | `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
@@ -42,11 +45,16 @@ also exercises a `project_id` deep link.
 | `account_regressions_4618.test.mjs` | D4618: the real Account page (and auto-reload card, `useConnectors`) with `fetch` stubbed and answered late: overlapping privacy, category and public-profile saves, session rows by status, Display name, the shared billing overview and its invalidation, degraded card reads, either auto-reload read order, pack retry, and a failed connection list. |
 | `grow_overview_4862.test.mjs` | #4862: taxonomy, context, primary actions, zero values, failed reads and read-only Grow states. |
 | `landing_gate_classifier_5606.test.mjs` | D5606: coexisting aggregate gates preserve setup fingerprints, leaf inheritance and queue-stall diagnosis while deleted refs and test/fast-check failures remain excluded. |
+| `queue_stall_chains_7125.test.mjs` | D7125: the queue-stall alert opens only when one failure identity is in two merge-queue chains on three heads, names the base or the PR it starts at, replays 2026-11-17 (`fixtures/queue_stall_7125.json`), and `test-drift-parts.mjs` writes the escaped `ci-failure-id` annotations only under `merge_group`. |
 | `build_parts_contract_5507.test.mjs` | D5507: THE contract for Build's connector parts: every module's complete, ordered list, written by hand; provider suites assert only their own key. Update it, once, when a part is added, removed or moved. |
 | `_buildParts.mjs` | D5507: a provider suite's view of `BUILD_PARTS`: the modules its key sits on, before/after a named neighbour, and what its part mounts. |
 | `_storageAreasContract.mjs` | D5507: THE contract for the storage areas: key, kind and where its file opens, written by hand; read by the two suites below and the Worker's `usage_storage_d1169`. |
 | `storage_areas_contract_5507.test.mjs` | D5507: the Usage card, the Storage page's places and kinds, and ROUTE_MAP's D642 section each keep the storage-area contract. |
 | `build_overview_v2_6028.test.mjs` | D6028 (#6028): Build Overview V2's states (loading, empty venture, partial read, refused, read only, a failed overview), one primary, Not recorded never 0, and the phone root's parts. |
+| `runner_admission.test.mjs` | D7886: durable receipt bindings, source/queue/child provenance and fail-closed missing authority. |
+| `runner_executor.test.mjs` | D7886: exact plans, fixed profile targets, runtime checks, real test failure, scoped lifecycle and workflow mutation checks. |
+
+| `runner_catalog_7906.test.mjs` | D7906: real catalog translation, approved group refusal, exact pins and native shard limits. |
 
 ## Conventions
 
@@ -229,7 +237,26 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `licence_agreement_replacement_6562.test.mjs` | D6562: rendered replacement readiness, frozen preview and hash, honest unknown comparison and send gating. |
 | `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
 | `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |
-| `scan_remediation_6935.test.mjs` | D6935 automated tracking, Autofix publishing, retries and default-branch verification. |
+| `scan_remediation_6935.test.mjs` | D6935/D7899 alert tracking, S21 handoff, existing-PR linking, retries and default-branch verification without GitHub AI or generated fixes. |
+| `free_security_workflows_7899.test.mjs` | D7899 immutable PR/queue dependency comparisons, read-only review authority, trusted public-main posture admission and successful-only SARIF uploads, with mutation/restoration cases. |
+| `free_secret_detection_7899.test.mjs` | D7899 dedicated Axal bearer detection, public-prefix/placeholder exclusions and refusal of blanket JWT exemptions. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+
+## Observable readiness (D5504)
+
+| File | Guarantee |
+| --- | --- |
+| `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
+| `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+
+Prefer scoped business clocks and explicit observable outcomes to a fixed count
+of event-loop turns. The migration inventory and first changed-test command are
+in `documentation/architecture/decisions/D5504.md`; the coordinated future-clock
+run remains the integration signal for JavaScript, SQLite and child processes.
+| `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
+
+`build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
+
+`runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).

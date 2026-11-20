@@ -26,6 +26,9 @@ import { ReferralReviewBody } from '../ReferralReview';
 import ActivityTab from './ActivityTab';
 import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
 import ProgramFrame from './ProgramFrame';
+import { Availability, Modules, OnRegistry, Participation, Settings } from './ProgramShellSections';
+import { STATUS_WORD } from './catalogueModel';
+import { shellModules } from './genericProgramModel';
 import { ReferTabs } from './ProgramTabs';
 import { RewardsCard, RewardsIssuedTile, useRewardReads } from './ReferRewards';
 import {
@@ -215,11 +218,16 @@ function ReferOverview({ reads, superAdmin }) {
   );
 }
 
-function ReferSettings() {
+function ReferSettings({ superAdmin, detail }) {
+  const rewards = useRewardReads();
   return (
-    <Card title="Who can refer" meta="Read only" testId="programs-refer-settings">
-      <p className="m-0 text-[13.5px] leading-relaxed text-axal-ink dark:text-gray-100">{WHO_CAN_REFER}</p>
-    </Card>
+    <>
+      <Card title="Who can refer" meta="Read only" testId="programs-refer-settings">
+        <p className="m-0 text-[13.5px] leading-relaxed text-axal-ink dark:text-gray-100">{WHO_CAN_REFER}</p>
+      </Card>
+      <RewardsCard rewards={rewards.rewards} superAdmin={superAdmin} onRetry={rewards.reload} />
+      <OnRegistry detail={detail}>{data => <Settings programKey="refer-and-earn" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry>
+    </>
   );
 }
 
@@ -232,11 +240,13 @@ function ReferBody() {
   const open = totalOf(reads.open);
   const queue = open !== null ? { text: nf(open), amber: open > 0, title: 'Every open referral' } : null;
   return (
-    <ProgramFrame detail={detail} program="refer-and-earn" superAdmin={superAdmin} tabs={<ReferTabs queue={queue} />}>
-      {tab === 'overview' ? <ReferOverview reads={reads} superAdmin={superAdmin} /> : null}
+    <ProgramFrame detail={detail} program="refer-and-earn" superAdmin={superAdmin} status={isReady(detail.read) ? STATUS_WORD[detail.read.data?.program?.status] || null : null} tabs={<ReferTabs queue={queue} />}>
+      {tab === 'overview' ? <><ReferOverview reads={reads} superAdmin={superAdmin} /><Modules modules={shellModules('refer-and-earn', detail.read)} /></> : null}
       {tab === 'how' ? <PlaybookEditor program="refer-and-earn" superAdmin={superAdmin} detail={detail} testId="programs-refer-how" /> : null}
       {tab === 'queue' ? <ReferralReviewBody embedded onChanged={reads.reload} /> : null}
-      {tab === 'settings' ? <ReferSettings /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{data => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <Participation /> : null}
+      {tab === 'settings' ? <ReferSettings superAdmin={superAdmin} detail={detail} /> : null}
       {tab === 'activity' ? <ActivityTab program="refer-and-earn" testId="programs-refer-activity" /> : null}
     </ProgramFrame>
   );

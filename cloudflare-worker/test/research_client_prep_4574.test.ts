@@ -42,6 +42,10 @@ const MOVED = [
   'GET /brief-notes', 'POST /brief-notes', 'PATCH /brief-notes/:uid', 'DELETE /brief-notes/:uid',
   'GET /attachments', 'POST /attachments', 'DELETE /attachments/:uid',
 ];
+// D7651 (#7651): the one route this router has gained since the move, the
+// summary of one reading. It is held to the same rules as the moved ones.
+const ADDED = ['GET /market-readings/:uid/summary'];
+const OWN = [...MOVED.slice(0, 4), ...ADDED, ...MOVED.slice(4)];
 const own = (r: any) => (r.routes as Array<{ method: string; path: string }>)
   .filter((x) => x.method !== 'ALL').map((x) => `${x.method} ${x.path}`);
 
@@ -57,14 +61,14 @@ test('the router mounts at /api/research immediately ahead of research.ts', () =
 });
 
 test('each moved route is registered once, by the new router only', () => {
-  assert.deepEqual(own(clientPrep), MOVED);
+  assert.deepEqual(own(clientPrep), OWN);
   const left = own(research).filter((r) => MOVED.includes(r));
   assert.deepEqual(left, [], 'research.ts still registers a moved route');
 });
 
 test('no other route the Worker serves answers a request for a moved route', () => {
   const sample = (p: string) => p.replace(/:[A-Za-z]+/g, 'x1');
-  for (const r of MOVED) {
+  for (const r of OWN) {
     const [method, path] = r.split(' ');
     const url = `/api/research${sample(path)}`;
     const matched = (app.router.match(method, url)[0] as any[]).map((e) => e[0][1]);

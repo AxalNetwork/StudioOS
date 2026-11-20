@@ -37,6 +37,9 @@ import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
 import { deckInstructApi } from '../src/lib/api/deckInstruct.js';
 import { deckNarrativeApi } from '../src/lib/api/deckNarrative.js';
 
+/** The one-line body of `export const NAME = …` in a module's source; '' when it has none. */
+const exportedBody = (src, name) => [...src.matchAll(/^export const (\w+) = ([^\n]*)$/gm)].find((m) => m[1] === name)?.[2] || '';
+
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
@@ -45,7 +48,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // its client (`through(() => <client>Api.<method>(…), SURFACES.<row>.issue)`), and off exactly when the body is
   // `off('<row>')`. D1543's ventureElements chooses `.element` or `.list` inside that call. Mutation checked: turn a
   // swapped row back to `off(...)` (or wire an off row) and the two sets part.
-  const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
+  const body = (src, name) => exportedBody(src, name);
   const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*\b[a-z][A-Za-z]*Api\./.test(body(code, n)));
   const local = methods.filter((n) =>
@@ -242,7 +245,7 @@ test('the seam reaches no network, and no client method exists for a route that 
   assert.ok(imports.length >= 10, 'the seam imports the clients of its swapped rows');
   const files = imports.map((i) => i.file);
   assert.deepEqual(files, [...files].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())), 'the lib/api imports stand in file-name order');
-  const bodies = adapter.SWAPPED.map((n) => (src.match(new RegExp(`^export const ${n} = ([^\\n]*)$`, 'm')) || [])[1] || '').join('\n');
+  const bodies = adapter.SWAPPED.map((n) => exportedBody(src, n)).join('\n');
   for (const { name, file } of imports) {
     assert.equal(name, `${file}Api`, `${file}.js exports ${file}Api`);
     assert.ok(bodies.includes(`${name}.`), `${name} is imported but no swapped row calls it`);

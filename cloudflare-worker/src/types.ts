@@ -207,6 +207,17 @@ export interface Env {
   // owner has registered https://axal.vc and https://app.axal.vc as
   // Authorized JavaScript origins on that client.
   GOOGLE_SIGNIN_POPUP?: string;
+  // D6957 — Sign in with Apple for the web (routes/auth_apple.ts). The
+  // Services ID is the OAuth client_id; the Team ID and Key ID sign the client
+  // secret with the private key (the .p8 file's contents, a wrangler secret).
+  // /api/auth/apple/config answers configured only when all four are set, and
+  // /login shows the Apple button only then. APPLE_SIGNIN_RETURN_BASE_URL
+  // overrides the host of the registered return URL (default PUBLIC_BASE_URL).
+  APPLE_SIGNIN_SERVICES_ID?: string;
+  APPLE_SIGNIN_TEAM_ID?: string;
+  APPLE_SIGNIN_KEY_ID?: string;
+  APPLE_SIGNIN_PRIVATE_KEY?: string;
+  APPLE_SIGNIN_RETURN_BASE_URL?: string;
   // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
   // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the
   // spreadsheets scope never forces calendar users to re-consent. Resolution
@@ -533,6 +544,9 @@ export interface Env {
   STREAM_API_TOKEN?: string;
   // #4176: verifies Stream's Webhook-Signature (owner step B).
   STREAM_WEBHOOK_SECRET?: string;
+  // D5585 part 3 (#5585): `preview` lets `drainReleaseEffects` deliver WorkGraph release effects through the real
+  // provider adapters. Unset (the default) it delivers nothing. Nothing schedules that drain yet.
+  WORK_GRAPH_RELEASE_DELIVERY?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test

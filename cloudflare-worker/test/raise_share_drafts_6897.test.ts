@@ -143,7 +143,9 @@ test('the pack draft keeps only items a pack may hold now, each once, with plain
     // What left Axal: no figure, no Private item, nothing from the private fields.
     assert.equal(w.sent.length >= 1, true);
     const out = w.sent.join('\n');
-    assert.doesNotMatch(out, /987654321|4200|PRIVATE|value_num/);
+    // Item uids and the record-text nonce are 32 random hex characters, which hold "4200" now and then (the merge
+    // queue saw it in one on 2026-11-19); they are not figures, so they are masked before the figure check.
+    assert.doesNotMatch(out.replace(/(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])/g, '<uid>'), /987654321|4200|PRIVATE|value_num/);
     assert.doesNotMatch(out, new RegExp(kept.uid));
     assert.match(out, new RegExp(kpi.uid));
   } finally { w.db.close(); }

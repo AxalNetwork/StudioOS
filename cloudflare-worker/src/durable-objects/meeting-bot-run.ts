@@ -486,7 +486,8 @@ export class MeetingBotRun implements DurableObject {
   }
   private async upload(req: Request, run: BotRun) {
     const seq=Number(req.headers.get('x-bot-chunk')), token=req.headers.get('x-bot-upload')??'';
-    const ticket=await this.state.storage.get<UploadTicket>(`chunk:${seq}`);
+    const ticketKey=`chunk:${seq}`;
+    const ticket=await this.state.storage.get<UploadTicket>(ticketKey);
     if (!ticket || ticket.used || ticket.expires<Date.now() || !constantTimeEqual(token,ticket.token)) throw new BotError(401,'invalid_upload','This upload permission is invalid or has already been used.');
     const draining=await this.draining(run);
     if (run.started_at === null || !draining && (Date.now() >= run.started_at + run.limit_minutes*60_000 || run.status!=='recording') || !await this.allowed(run)) throw new BotError(409,'bot_not_recording','The bot is no longer recording.');

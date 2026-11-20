@@ -77,7 +77,8 @@ test('the editors send their revision, reset from what the server stored, and ha
 
 test('the inputs\' limits are the Worker\'s limits', () => {
   const src = read('../cloudflare-worker/src/services/advisorLimits.ts');
-  const obj = (name) => Object.fromEntries([...src.match(new RegExp(`${name} = \\{([^}]*)\\}`))[1].matchAll(/(\w+): (\d+)/g)].map((m) => [m[1], Number(m[2])]));
+  const literalBody = (name) => { const head = `${name} = {`; const at = src.indexOf(head); return src.slice(at + head.length, src.indexOf('}', at + head.length)); };
+const obj = (name) => Object.fromEntries([...literalBody(name).matchAll(/(\w+): (\d+)/g)].map((m) => [m[1], Number(m[2])]));
   assert.deepEqual(limits.SERVICE_LIMITS, obj('SERVICE_LIMITS'));
   assert.deepEqual(limits.PROFILE_LIMITS, obj('PROFILE_LIMITS'));
   assert.equal(limits.LIST_MAX_ITEMS, Number(src.match(/LIST_MAX_ITEMS = (\d+)/)[1]));

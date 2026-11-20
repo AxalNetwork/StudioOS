@@ -740,3 +740,23 @@ test('#4411: interview facts name both permissions and follow the latest session
   db.exec('DELETE FROM interview_session_chunks WHERE session_id = 4; DELETE FROM interview_sessions WHERE id = 4');
   assert.equal((await facts()).find((f: any) => f.label === 'Recording consent').value, 'Not asked');
 });
+
+test('#6013: demand Edit carries Would pay, currency and period through the record and write', async () => {
+  const db = seeded();
+  const before = await real(db, 10, 'GET', rec('demand-signals', 'signal-7'));
+  assert.equal(before.status, 200);
+  const edit = before.body.actions.find((action: any) => action.key === 'edit').form;
+  assert.ok(edit.fields.find((field: any) => field.key === 'kind').options.some((choice: any) => choice.value === 'would_pay'));
+  assert.ok(edit.fields.some((field: any) => field.key === 'currency'));
+  assert.ok(edit.fields.some((field: any) => field.key === 'period'));
+  const saved = await real(db, 10, 'POST', rec('demand-signals', 'signal-7', '/actions/edit'), {
+    kind: 'would_pay', amount_cents: 1234, currency: 'eur', period: 'month',
+  });
+  assert.equal(saved.status, 200);
+  const row = db.prepare('SELECT kind, amount_cents, currency, period FROM demand_signals WHERE id = 7').get();
+  assert.deepEqual({ ...row }, { kind: 'would_pay', amount_cents: 1234, currency: 'eur', period: 'month' });
+  const after = await real(db, 10, 'GET', rec('demand-signals', 'signal-7'));
+  const fields = after.body.actions.find((action: any) => action.key === 'edit').form.fields;
+  assert.equal(fields.find((field: any) => field.key === 'currency').value, 'eur');
+  assert.equal(fields.find((field: any) => field.key === 'period').value, 'month');
+});

@@ -22,7 +22,11 @@ const DIR = '.github/workflows';
 const SHADOW = Object.freeze({ 'landing gate': 'ci.yml' });
 // The only workflows the queue runs. Adding one here is a decision: nothing in
 // a queue run may deploy, post a comment or touch production.
-const IN_QUEUE = Object.freeze(['ci.yml', 'gitleaks.yml', 'migration-immutability.yml']);
+// D7899: Dependency Review also runs in the queue, comparing the queue's own
+// base and head; it reads only and is advisory until its required-check
+// activation, so its job is exempt from the skip-in-queue rule below.
+const IN_QUEUE = Object.freeze(['ci.yml', 'dependency-review.yml', 'gitleaks.yml', 'migration-immutability.yml']);
+const ADVISORY_QUEUE_WORKFLOWS = Object.freeze({ 'dependency-review.yml': 'D7899' });
 
 const code = (file) => readFileSync(`${DIR}/${file}`, 'utf8').split('\n').filter((l) => !/^\s*#/.test(l));
 const unquote = (v) => v.trim().replace(/^(['"])(.*)\1$/, '$2');
@@ -133,6 +137,7 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
       if (required.has(queueName(j))) continue;
       if (fed.has(j.id) && !SKIPS_IN_QUEUE.includes(j.if)) continue;
       if (f === 'ci.yml' && Object.hasOwn(QUEUE_ADVISORY, j.id)) continue;
+      if (Object.hasOwn(ADVISORY_QUEUE_WORKFLOWS, f)) continue;
       assert.ok(
         SKIPS_IN_QUEUE.includes(j.if),
         `${f} › ${j.name} is not a required check and no required check needs it, so it is skipped in the queue (if: ${j.if})`,

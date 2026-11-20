@@ -172,7 +172,7 @@ const ALLOW = [
     "frontend/src/pages/cycles/distribution/campaignModel.js": 3,
     "frontend/src/pages/cycles/distribution/overviewModel.js": 1,
     "frontend/src/pages/cycles/distribution/resultsModel.js": 2,
-    "frontend/src/pages/cycles/forms.js": 2,
+    "frontend/src/pages/cycles/forms.js": 1,
     "frontend/src/pages/duediligence/ddListModel.js": 1,
     "frontend/src/pages/founder/FounderTeamPage.jsx": 2,
     "frontend/src/pages/founder/RoundCallSheet.jsx": 4,
