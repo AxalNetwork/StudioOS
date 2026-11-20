@@ -48,7 +48,7 @@ refuses: read "In a Claude Code session" below before you run any of them.
    - **landing-policy.yml untouched**: no entry of `GET /pulls/<pr>/files` has `filename` or `previous_filename` equal to `.github/workflows/landing-policy.yml`. A PR that edits the workflow cannot vouch for its own report.
    - **required checks green**: every context in the main rule's `required_status_checks` (today `test:drift (full suite)`, `worker (typecheck)`, `frontend (build)`, `api ↔ worker drift`, `applied migrations unchanged`, `scan`) has a check run on the head SHA, completed with `success`. Skipped, neutral, pending or missing is not green.
    - **landing policy T0/T1 for this head**: see "Reading the landing policy report" below.
-   - **merge queue not stalled**: no open issue titled `[alert] merge queue stalled` (D5604).
+   - **merge queue not stalled**: no open issue titled `[alert] merge queue stalled` (D5604, D7125).
 
    Add `--json` for machine-readable output. Any `FAIL`, or a fact listed
    under `unread:`, means the owner lands.
@@ -167,8 +167,11 @@ without `gh` is the step 4 `DELETE .../ccr/auto_merge`.
 - One head, one decision: a push invalidates the report. Disable auto-merge
   and leave the queue before pushing, then wait for a new eligible report.
   Never push to a PR whose auto-merge you could not turn off.
-- While `[alert] merge queue stalled` is open, add no new queue entries
-  (D5604). While `[alert] main is red` or `[alert] the Actions queue is
+- While `[alert] merge queue stalled` is open, add no new queue entries and
+  do not re-queue a PR the queue ejected (D5604, D7125). The alert names the
+  PR a shared failure starts at, or says it fails on the base; the only
+  exception is the one repair linked on the alert, which the owner moves to
+  the front. While `[alert] main is red` or `[alert] the Actions queue is
   backed up` is open, AGENTS.md § "Red main and a backed-up queue" (D5398)
   also applies: no branch updates or re-runs to chase an inherited failure.
 - The report's `pull_request` workflow runs code from the base, not your PR,

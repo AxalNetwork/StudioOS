@@ -1,4 +1,4 @@
-/** #7771: the mounted More menu offers only an admitted PDF, preserves the
+/** #7771: the mounted Share menu offers only an admitted PDF, preserves the
  * Worker's filename/refusal, and cannot finish a download after unmount. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,6 +20,11 @@ async function fixture(availability, pdfBlob = async () => { throw new Error('Un
   dealSummaryApi.pdfBlob = pdfBlob;
   const v = await mountContracts(React.createElement(React.Fragment, null, React.createElement(DealMoreActions, { dealId: 17, profileUrl: '/startups/harbor' }), React.createElement(NextTab)), '/deals/17');
   return { ...v, calls, async close() { await v.unmount(); Object.assign(dealSummaryApi, original); } };
+}
+async function clickShare(view) {
+  const button = view.nodes().find(node => node.tagName === 'BUTTON' && view.props(node)?.['aria-label'] === 'Share');
+  if (!button) throw new Error('Missing Share button');
+  await act(async () => view.props(button).onClick({ stopPropagation() {} }));
 }
 function downloads() {
   const doc = document;
@@ -43,21 +48,22 @@ test('hidden while loading or refused; only literal available:true offers the ac
   const v = await fixture(() => answer());
   try {
     assert.deepEqual(v.calls, [], 'no availability read before opening');
-    await v.click('⋯');
+    assert.match(v.text(), /Open company profile/, 'the profile remains a separate header link before the menu opens');
+    await clickShare(v);
     assert.doesNotMatch(v.text(), /Download summary/);
     await act(async () => first.resolve({ available: true }));
     assert.match(v.text(), /Download summary \(PDF\)/);
     assert.match(v.text(), /Copy link/);
     assert.match(v.text(), /Open company profile/);
     for (const result of [ { available: false, code: 'nda_required' }, { available: false, code: 'plan_required' }, { available: false, code: 'not_found' }, { available: 'true' }, null ]) {
-      await v.click('⋯');
+      await clickShare(v);
       answer = async () => result;
-      await v.click('⋯');
+      await clickShare(v);
       assert.doesNotMatch(v.text(), /Download summary/);
     }
-    await v.click('⋯');
+    await clickShare(v);
     answer = async () => { throw new Error('Access changed'); };
-    await v.click('⋯');
+    await clickShare(v);
     assert.doesNotMatch(v.text(), /Download summary/);
     assert.ok(v.calls.every(id => id === 17));
     assert.equal(v.calls.length, 7);
@@ -73,7 +79,7 @@ test('selection downloads the returned blob and filename, and releases its objec
   });
   const dl = downloads();
   try {
-    await v.click('⋯');
+    await clickShare(v);
     await v.click('Download summary (PDF)');
     assert.ok(signal instanceof AbortSignal);
     assert.equal(signal.aborted, false);
@@ -89,7 +95,7 @@ test('a download-time refusal shows the Worker message and never saves a file', 
   const v = await fixture(async () => ({ available: true }), async () => { throw new Error('Sign the NDA with this venture to download its summary.'); });
   const dl = downloads();
   try {
-    await v.click('⋯');
+    await clickShare(v);
     await v.click('Download summary (PDF)');
     assert.match(v.text(), /Sign the NDA with this venture to download its summary\./);
     assert.deepEqual(dl.saved, []);
@@ -103,7 +109,7 @@ test('unmount aborts the request; even a late successful response creates no dow
   const v = await fixture(async () => ({ available: true }), async (_id, options) => { signal = options.signal; return pending.promise; });
   const dl = downloads();
   try {
-    await v.click('⋯');
+    await clickShare(v);
     await v.click('Download summary (PDF)');
     assert.equal(signal.aborted, false);
     await v.close();
@@ -119,10 +125,10 @@ test('a late availability reply cannot override the newer menu opening', async (
   let answer = () => old.promise;
   const v = await fixture(() => answer());
   try {
-    await v.click('⋯');
-    await v.click('⋯');
+    await clickShare(v);
+    await clickShare(v);
     answer = async () => ({ available: true });
-    await v.click('⋯');
+    await clickShare(v);
     assert.match(v.text(), /Download summary/);
     await act(async () => old.resolve({ available: false }));
     assert.match(v.text(), /Download summary/);
@@ -135,9 +141,9 @@ test('reopening and selecting during a pending download does not start a second 
   const v = await fixture(async () => ({ available: true }), async () => { requests += 1; return pending.promise; });
   const dl = downloads();
   try {
-    await v.click('⋯');
+    await clickShare(v);
     await v.click('Download summary (PDF)');
-    await v.click('⋯');
+    await clickShare(v);
     await v.click('Download summary (PDF)');
     assert.equal(requests, 1);
     await act(async () => pending.resolve({ blob: new Blob(['pdf']), filename: 'once.pdf' }));
@@ -152,7 +158,7 @@ test('navigation aborts a pending download and reports cancellation on the new t
   const v = await fixture(async () => ({ available: true }), async (_id, options) => { signal = options.signal; return pending.promise; });
   const dl = downloads();
   try {
-    await v.click('⋯');
+    await clickShare(v);
     await v.click('Download summary (PDF)');
     assert.match(v.text(), /Downloading summary/);
     await v.click('Next tab');
@@ -162,4 +168,25 @@ test('navigation aborts a pending download and reports cancellation on the new t
     assert.deepEqual(dl.saved, []);
     assert.match(v.text(), /Summary download cancelled\./);
   } finally { dl.restore(); await v.close(); }
+});
+
+for (const phone of [false, true]) test(`labelled Share reads availability and keeps the canonical ${phone ? 'phone sheet' : 'desktop menu'}`, async () => {
+  const previousMedia = globalThis.matchMedia;
+  globalThis.matchMedia = () => ({ matches: phone, addEventListener() {}, removeEventListener() {} });
+  let v;
+  try {
+    v = await fixture(async () => ({ available: true }));
+    await clickShare(v);
+    const walk = node => [node, ...(node.childNodes || []).flatMap(walk)];
+    const nodes = walk(document.body);
+    const trigger = nodes.find(node => v.props(node)?.['data-testid'] === 'deal-share');
+    const surface = nodes.find(node => v.props(node)?.['data-testid'] === (phone ? 'deal-share-sheet' : 'deal-share-menu'));
+    assert.ok(surface, 'the canonical responsive surface opens');
+    assert.equal(nodes.some(node => v.props(node)?.['data-testid'] === 'deal-share-sheet'), phone);
+    assert.deepEqual([v.props(trigger)['aria-label'], v.props(trigger)['aria-haspopup'], v.props(surface).role, v.calls],
+      ['Share', phone ? 'dialog' : 'menu', phone ? 'dialog' : 'menu', [17]]);
+  } finally {
+    if (v) await v.close();
+    globalThis.matchMedia = previousMedia;
+  }
 });

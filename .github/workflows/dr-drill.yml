@@ -107,3 +107,27 @@ jobs:
           curl -fsS -X POST -H 'Content-Type: application/json' \
             -d "{\"text\":\"🚨 DR DRILL FAILED — investigate immediately. See run #${RUN_ID}.\"}" \
             "${PAGER_WEBHOOK_URL}" || true
+
+  independent-file-drill:
+    name: Synthetic outside file restore
+    if: vars.FILE_DR_PREVIEW_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Restore only a fresh synthetic record from the outside copy
+        env:
+          FILE_DR_SYNTHETIC_PREVIEW: 'true'
+          FILE_DR_SECOND_COPY_ENABLED: ${{ vars.FILE_DR_PREVIEW_ENABLED }}
+          FILE_DR_EXTERNAL_ACCOUNT_CONFIRMED: ${{ vars.FILE_DR_EXTERNAL_ACCOUNT_CONFIRMED }}
+          DR_COPY_ENDPOINT: ${{ vars.FILE_DR_PREVIEW_ENDPOINT }}
+          DR_COPY_BUCKET: ${{ vars.FILE_DR_PREVIEW_BUCKET }}
+          DR_COPY_REGION: ${{ vars.FILE_DR_PREVIEW_REGION }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FILE_DR_COPY_ACCESS_KEY_ID: ${{ secrets.FILE_DR_PREVIEW_COPY_ACCESS_KEY_ID }}
+          FILE_DR_COPY_SECRET_ACCESS_KEY: ${{ secrets.FILE_DR_PREVIEW_COPY_SECRET_ACCESS_KEY }}
+          FILE_DR_RESTORE_ACCESS_KEY_ID: ${{ secrets.FILE_DR_PREVIEW_RESTORE_ACCESS_KEY_ID }}
+          FILE_DR_RESTORE_SECRET_ACCESS_KEY: ${{ secrets.FILE_DR_PREVIEW_RESTORE_SECRET_ACCESS_KEY }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y age >/dev/null
+          python3 scripts/file-recovery-independent.py drill

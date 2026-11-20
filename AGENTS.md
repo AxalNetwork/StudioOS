@@ -229,7 +229,13 @@ applies to everything that is not a fix for a PR's own failure:
 The alert clears only once the queue is well below its thresholds, so wait for
 it to close.
 
-- While `[alert] merge queue stalled` is open, do not add new entries to the merge queue (D5604).
+- While `[alert] merge queue stalled` is open, add no new entries to the merge
+  queue and do not re-queue a PR the queue ejected (D5604, D7125). It opens
+  when one setup step fails twice, or when one test or guard fails in
+  candidates of two different queue chains; it then names the PR the failure
+  starts at (remove it, do not re-queue it) or says it fails on the base. The
+  one exception is the single repair linked on the alert, which the owner
+  moves to the front of the queue.
 
 ### CHANGELOG.md is Session 1's
 

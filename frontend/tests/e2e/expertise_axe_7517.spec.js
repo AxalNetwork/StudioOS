@@ -4,10 +4,11 @@
  * Thinking, Visibility) at 390, 768 and 1440 px, light and dark.
  *
  *   · axe-core finds NO violation, of any impact, under the WCAG 2.0, 2.1 and
- *     2.2 A and AA rules, in Expertise's own column: the h1, the section row
- *     and the zone or Overview body, plus any open dialog. The app around it
- *     (the sidebar, the crumb row WorkspaceShell draws for every workspace,
- *     the Worker rail) is not scanned here; D7517 lists what it fails today;
+ *     2.2 A and AA rules, in Expertise's own column: the crumb row, the h1,
+ *     the section row and the zone or Overview body, plus any open dialog. The
+ *     app around it (the sidebar, the Worker rail) is not scanned here; D7517
+ *     lists what it failed. The crumb row joined the scan once its contrast
+ *     was fixed (D7660);
  *   · no page is wider than its window;
  *   · at 390 the section row is Overview · Profile · Services · Proof · More,
  *     every one a 44 px target inside the window, Thinking and Visibility are
@@ -180,16 +181,18 @@ async function visit(page, path, theme) {
 }
 
 /**
- * Expertise's column: the WorkspaceShell block that holds the h1, the section
- * row and the body, less its crumb row (shared by every workspace).
+ * Expertise's column: the WorkspaceShell block that holds the crumb row, the
+ * h1, the section row and the body. D7517 left the crumb row out while it
+ * failed contrast; D7660 fixed it and brought it back in.
  */
 const COLUMN = 'div:has(> nav[aria-label="Expertise sections"])';
-const CRUMB = 'div:has(> a[data-testid="link-workspace-crumb"])';
 
 /** Every axe violation under the WCAG A and AA tags in that column and any open dialog, one line each. */
 async function violations(page) {
   await expect(page.locator(COLUMN)).toHaveCount(1);
-  const builder = new AxeBuilder({ page }).withTags(TAGS).include(COLUMN).exclude(CRUMB);
+  // The crumb row is inside the scanned column (D7660), not beside it.
+  await expect(page.locator(COLUMN).getByTestId('link-workspace-crumb')).toHaveCount(1);
+  const builder = new AxeBuilder({ page }).withTags(TAGS).include(COLUMN);
   if (await page.locator('[role="dialog"]').count()) builder.include('[role="dialog"]');
   const r = await builder.analyze();
   return r.violations.map((v) => `${v.impact} ${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);

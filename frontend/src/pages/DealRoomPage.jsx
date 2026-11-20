@@ -1,7 +1,7 @@
 import DealFreePlan from '../components/deals/DealFreePlan';
 import { dealMoney } from '../components/deals/dealMoney';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -15,7 +15,7 @@ import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../compo
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
-import { tabHref, tabOf } from './dealPageModel';
+import { forwardOf, tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
 import VentureScorecard from '../components/scoring/scorecard/Scorecard';
 import { EvidenceSummary } from './cycles/evidence/InvestorEvidence';
@@ -27,7 +27,7 @@ import {
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { usePhoneWidth } from '../ui';
 import DealOverview from './deal/DealOverview';
-import DealNotes, { DealActivity } from './deal/DealNotes';
+import { DealActivity, InvestorActivity } from './deal/DealNotes';
 import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
 import { ROUTES, ROUTE_NONE, ROUTE_NOTE, commitAction, commitRefusal, myCommitment, routePreferenceWord } from './deal/dealWorkModel';
 import DealCommitmentsStaff from './deal/DealCommitmentsStaff';
@@ -67,6 +67,8 @@ export default function DealRoomPage() {
   // D1155 (DL15–DL17): the founder's, an Admin's and an Operating Partner's views.
   const isPartner = role === 'partner';
   const tab = tabOf(tabParam, role);
+  // D6164 part 3: an address whose content moved opens where it now sits (`/notes` → Activity, Firm notes on).
+  const forward = forwardOf(tabParam, role, dealId);
   const evidenceNote = isInvestor ? location.state?.evidenceNote : null;
   // D1152 (DL22): an Advisor and an Explorer get their words, and nothing is read.
   const blocked = blockedRole(role);
@@ -141,6 +143,7 @@ export default function DealRoomPage() {
   const tabRow = (id) => <DealTabs dealId={id} role={role} tab={tab} />;
 
   if (blocked) return <NoPermission kind={blocked} />;
+  if (forward) return <Navigate to={forward} replace state={location.state} />;
   // D4633: nothing, an action least of all, is drawn for a deal the address no longer names.
   if (loading || (deal && String(deal.id) !== String(dealId))) return <DealLoading tabs={tabRow(dealId)} />;
   if (error || !deal) {
@@ -232,9 +235,9 @@ export default function DealRoomPage() {
       {tab === 'commitment' && !isInvestor && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
       {tab === 'commitment' && !isInvestor && <DealCommitmentsStaff dealId={deal.id} currency={deal.currency} viewer={viewerOf(role, user, deal)} proof={isAdmin && !branchOfUser(user)} />}
       {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
-      {/* DL14: an investor's Notes tab: their firm's notes, Eadwyn's draft slot and the activity. */}
-      {tab === 'notes' && <DealNotes key={evidenceNote ? location.key : deal.id} dealId={deal.id} userId={user?.id} evidenceNote={evidenceNote} />}
-      {tab === 'activity' && <DealActivity dealId={deal.id} />}
+      {/* D6164 part 3 (DE27): an investor's Activity, with their firm's notes as its Firm notes filter. */}
+      {tab === 'activity' && isInvestor && <InvestorActivity key={evidenceNote ? location.key : deal.id} dealId={deal.id} userId={user?.id} evidenceNote={evidenceNote} />}
+      {tab === 'activity' && !isInvestor && <DealActivity dealId={deal.id} />}
       {tab === 'invitations' && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
       )}
