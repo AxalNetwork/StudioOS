@@ -1,4 +1,5 @@
 /** D4557 part 2: the privileged Worker broker, scoped R2 manifests and existing Workflow handoff; no second scheduler. */
+import { containmentEvidenceSchema } from './workspaceContainment';
 import type { Env, User } from '../../types';
 import { engineMode, haltedAll } from '../../agents/runtime';
 import { runByUid, type RunRow } from '../../agents/engine';
@@ -43,6 +44,8 @@ export function computePolicy(env: ComputeEnv): ComputePolicy | null {
       || policy.template.allowed_regions[0] !== 'global'
       || !['python', 'document_convert', 'spreadsheet'].every(workload => Number.isSafeInteger(policy.job_cost_ceiling_microusd?.[workload as Workload])
         && policy.job_cost_ceiling_microusd[workload as Workload] > 0)) return null;
+    const containment = containmentEvidenceSchema.safeParse(policy.provider.containment);
+    if (!containment.success || containment.data.source !== 'owner_registry' || containment.data.provider !== 'cloudflare') return null;
     return policy;
   } catch { return null; }
 }
