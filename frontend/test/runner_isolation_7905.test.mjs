@@ -17,12 +17,12 @@ function fixture(t){
   if(args[0]==='create'){
    const val=key=>args[args.indexOf(key)+1],all=key=>args.flatMap((v,i)=>v===key?[args[i+1]]:[]);
    state={Id:CID,Image:IMAGE,State:{Running:true,Pid:123},Config:{User:val('--user'),Labels:{'vc.axal.studioos.job':'202-1-1'},Entrypoint:[val('--entrypoint')],Cmd:args.slice(-2),Env:all('--env')},
-    HostConfig:{Privileged:false,ReadonlyRootfs:args.includes('--read-only'),CapDrop:all('--cap-drop'),CapAdd:null,SecurityOpt:all('--security-opt'),PidMode:'',IpcMode:val('--ipc'),CgroupnsMode:val('--cgroupns'),NetworkMode:val('--network'),PortBindings:{},Devices:[],DeviceRequests:null,VolumesFrom:null,ExtraHosts:null,Links:null,PidsLimit:Number(val('--pids-limit')),Memory:Number(val('--memory')),NanoCpus:Number(val('--cpus'))*1e9,Tmpfs:Object.fromEntries(all('--tmpfs').map(v=>[v.slice(0,v.indexOf(':')),v.slice(v.indexOf(':')+1)]))},
+    HostConfig:{Privileged:false,Init:args.includes('--init'),ReadonlyRootfs:args.includes('--read-only'),CapDrop:all('--cap-drop'),CapAdd:null,SecurityOpt:all('--security-opt'),PidMode:'',IpcMode:val('--ipc'),CgroupnsMode:val('--cgroupns'),NetworkMode:val('--network'),PortBindings:{},Devices:[],DeviceRequests:null,VolumesFrom:null,ExtraHosts:null,Links:null,PidsLimit:Number(val('--pids-limit')),Memory:Number(val('--memory')),NanoCpus:Number(val('--cpus'))*1e9,Tmpfs:Object.fromEntries(all('--tmpfs').map(v=>[v.slice(0,v.indexOf(':')),v.slice(v.indexOf(':')+1)]))},
     Mounts:[{Type:'bind',Source:source,Destination:'/input',RW:false,Propagation:'rprivate'},{Type:'bind',Source:plan,Destination:'/input-plan.json',RW:false,Propagation:'rprivate'}]};return CID+'\n';
   }
   if(args[0]==='inspect')return JSON.stringify([state]);
-  if(args[0]==='exec'&&args[2]==='/usr/local/bin/node')return runtime.node+'\n';
-  if(args[0]==='exec'&&args[2]==='/usr/local/bin/python3')return runtime.python+'\n';
+  if(args[0]==='exec'&&args.includes('/usr/local/bin/node'))return runtime.node+'\n';
+  if(args[0]==='exec'&&args.includes('/usr/local/bin/python3'))return runtime.python+'\n';
   return '';
  };
  const job=new JobContainer({version:1,image:IMAGE,nodeVersion:'22.23.3',pythonVersion:'3.11.18'},{engine,namespace:()=>true});
@@ -39,8 +39,8 @@ test('D7905 creates a per-run unprivileged container with only read-only inputs 
 test('D7905 actual engine metadata and namespaces must prove the boundary, not labels or receipt claims',t=>{
  const f=fixture(t);f.create();const baseline=structuredClone(f.state());
  const patches=[i=>i.State.Running=false,i=>i.State.Pid=0,i=>i.Id='c'.repeat(64),i=>i.Image='sha256:'+'d'.repeat(64),i=>i.Config.User='0:0',
-  i=>i.Config.Env.push('ACTIONS_ID_TOKEN_REQUEST_TOKEN=synthetic'),i=>i.Config.Labels['vc.axal.studioos.job']='other',i=>i.Config.Entrypoint=['/evil'],
-  i=>i.HostConfig.Privileged=true,i=>i.HostConfig.ReadonlyRootfs=false,i=>i.HostConfig.CapDrop=[],i=>i.HostConfig.CapAdd=['SYS_ADMIN'],
+  i=>i.Config.Env.push('ACTIONS_ID_TOKEN_REQUEST_TOKEN=synthetic'),i=>i.Config.Labels['vc.axal.studioos.job']='other',i=>i.Config.Entrypoint=['/evil'],i=>i.Config.Cmd=['-c','sleep 999999'],
+  i=>i.HostConfig.Privileged=true,i=>i.HostConfig.Init=false,i=>i.HostConfig.ReadonlyRootfs=false,i=>i.HostConfig.CapDrop=[],i=>i.HostConfig.CapAdd=['SYS_ADMIN'],
   i=>i.HostConfig.SecurityOpt=[],i=>i.HostConfig.PidMode='host',i=>i.HostConfig.IpcMode='host',i=>i.HostConfig.CgroupnsMode='host',i=>i.HostConfig.NetworkMode='host',
   i=>i.HostConfig.PortBindings={'1/tcp':[{}]},i=>i.HostConfig.Devices=[{}],i=>i.HostConfig.DeviceRequests=[{}],i=>i.HostConfig.VolumesFrom=['foreign'],
   i=>i.HostConfig.ExtraHosts=['host:host-gateway'],i=>i.HostConfig.Links=['foreign'],i=>i.HostConfig.PidsLimit=-1,i=>i.HostConfig.Memory=0,i=>i.HostConfig.NanoCpus=0,
@@ -59,7 +59,7 @@ test('D7905 fixed installs and tests run inside the same container, and timeout 
  const admitted={allowed:true,identity:r,sourceSha:'e'.repeat(40),originalRunId:101,originalAttempt:1,originalEvent:'push',sourceRef:'refs/heads/main'};
  assert.throws(()=>f.job.runCandidate({receipt:r,admitted:{...admitted,sourceSha:'f'.repeat(40)}}),/invalid_isolated_execution/);
  f.job.runCandidate({receipt:r,admitted});
- const run=f.calls.find(c=>c.args[0]==='exec'&&c.args.includes('/bin/sh'));assert.equal(run.args[run.args.indexOf(CID)+1],'/bin/sh');
+ const run=f.calls.find(c=>c.args[0]==='exec'&&c.args.includes('/bin/sh'));assert.equal(run.args[run.args.indexOf('--user')+1],'10000:10000');assert.equal(run.args[run.args.indexOf(CID)+1],'/bin/sh');
  assert.match(run.args.at(-1),/npm ci --prefix cloudflare-worker; npm ci; exec node scripts\/test-drift-parts.mjs/);
  assert.doesNotMatch(run.args.join(' '),/GH_TOKEN|ACTIONS_ID_TOKEN|docker\.sock/);
  assert.ok(run.options.timeout>0&&run.options.timeout<=60000);
@@ -105,5 +105,22 @@ test('D7905 a failed start, rejected isolation or candidate failure cleans up on
   }else assert.throws(()=>f.job.create(r,{source:f.source,plan:f.plan}),/container_start_or_isolation_failed/);
   assert.deepEqual(f.calls.at(-1).args,['rm','--force',CID]);
   assert.equal(f.job.owned,null);
+ }
+});
+
+
+test('D7905 the container lifetime survives host loss and its init identity differs from every candidate process',t=>{
+ const f=fixture(t);f.create();const args=f.calls[0].args;
+ assert.equal(args[args.indexOf('--user')+1],'10001:10001');
+ assert.ok(args.includes('--init'));
+ assert.deepEqual(args.slice(-2),['-c','sleep "$STUDIOOS_JOB_MAX_SECONDS"']);
+ const lease=args.find(v=>v.startsWith('STUDIOOS_JOB_MAX_SECONDS='));
+ assert.ok(Number(lease.split('=')[1])>0&&Number(lease.split('=')[1])<=60);
+ for(const call of f.calls.filter(c=>c.args[0]==='exec'))assert.equal(call.args[call.args.indexOf('--user')+1],'10000:10000');
+ f.state().Config.Env=f.state().Config.Env.map(v=>v.startsWith('STUDIOOS_JOB_MAX_SECONDS=')?'STUDIOOS_JOB_MAX_SECONDS=999999':v);
+ assert.equal(f.job.verifyIsolation({receipt:receipt()}),false);
+ for(const executionDeadline of [Date.now()-1,Date.now()+1592000]){
+  const expired=fixture(t);assert.throws(()=>expired.job.create({...receipt(),executionDeadline},{source:expired.source,plan:expired.plan}),/invalid_container_deadline/);
+  assert.equal(expired.calls.length,0);
  }
 });

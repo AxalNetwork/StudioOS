@@ -6,7 +6,7 @@ import { lstatSync, readFileSync, realpathSync, readlinkSync } from 'node:fs';
 const DIGEST=/^sha256:[a-f0-9]{64}$/;
 const ID=n=>Number.isSafeInteger(n)&&n>0;
 const need=(v,reason)=>{if(!v)throw Error(reason);};
-const SHELL='trap "exit 0" TERM INT; while :; do sleep 1; done';
+const SHELL='sleep "$STUDIOOS_JOB_MAX_SECONDS"';
 const ENV=['PATH=/usr/local/bin:/usr/bin:/bin','HOME=/work/home','LANG=C.UTF-8','CI=true','TZ=UTC'];
 const LABEL='vc.axal.studioos.job';
 const safePath=path=>{need(typeof path==='string'&&/^\/[A-Za-z0-9_./-]+$/.test(path)&&!path.split('/').includes('..')&&path!=='/','unsafe_container_input');return realpathSync(path);};
@@ -29,12 +29,13 @@ export function readContainerPolicy(path) {
 }
 const same=isDeepStrictEqual;
 /** Inspect actual engine state on the trusted host; caller/operator booleans never prove a boundary. */
-export function verifiedContainer(info,{owner,source,plan,image,pidNamespace,mountNamespace}) {
+export function verifiedContainer(info,{owner,source,plan,image,pidNamespace,mountNamespace,maxSeconds}) {
  const h=info?.HostConfig,c=info?.Config;
- return Boolean(info?.State?.Running===true&&ID(info.State.Pid)&&info.Image===image&&c?.User==='10000:10000'
+ return Boolean(info?.State?.Running===true&&ID(info.State.Pid)&&info.Image===image&&c?.User==='10001:10001'
    &&c.Labels?.[LABEL]===owner&&same(c.Entrypoint,['/bin/sh'])&&same(c.Cmd,['-c',SHELL])
-   &&Array.isArray(c.Env)&&c.Env.length===ENV.length&&ENV.every(v=>c.Env.includes(v))
-   &&h?.Privileged===false&&h.ReadonlyRootfs===true&&same(h.CapDrop,['ALL'])&&!(h.CapAdd?.length)
+   &&Array.isArray(c.Env)&&c.Env.length===ENV.length+1&&ENV.every(v=>c.Env.includes(v))
+   &&ID(maxSeconds)&&maxSeconds<=1590&&c.Env.includes(`STUDIOOS_JOB_MAX_SECONDS=${maxSeconds}`)
+   &&h?.Privileged===false&&h.Init===true&&h.ReadonlyRootfs===true&&same(h.CapDrop,['ALL'])&&!(h.CapAdd?.length)
    &&same(h.SecurityOpt,['no-new-privileges'])&&h.PidMode===''&&h.IpcMode==='private'&&h.CgroupnsMode==='private'
    &&h.NetworkMode==='bridge'&&!(h.PortBindings&&Object.keys(h.PortBindings).length)&&!(h.Devices?.length)&&!(h.DeviceRequests?.length)
    &&!(h.VolumesFrom?.length)&&!(h.ExtraHosts?.length)&&!(h.Links?.length)
@@ -53,19 +54,21 @@ export class JobContainer {
  }
  create(receipt,{source,plan}) {
   need(this.owned===null,'container_already_owned');const owner=ownerOf(receipt);
+  const remaining=receipt.executionDeadline-Date.now();need(Number.isSafeInteger(remaining)&&remaining>0&&remaining<=1590000,'invalid_container_deadline');
+  const maxSeconds=Math.ceil(remaining/1000);
   source=safePath(source);plan=safePath(plan);
   need(lstatSync(source).isDirectory()&&lstatSync(plan).isFile()&&source!==plan,'unsafe_container_input');
   const args=['create','--pull=never','--name',`studioos-job-${owner}`,'--label',`${LABEL}=${owner}`,
-   '--user','10000:10000','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
+   '--user','10001:10001','--init','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
    '--ipc','private','--cgroupns','private','--network','bridge','--pids-limit','256','--memory','4294967296','--cpus','2',
    '--tmpfs','/work:rw,nosuid,nodev,size=4294967296,uid=10000,gid=10000,mode=0700',
    '--tmpfs','/tmp:rw,nosuid,nodev,noexec,size=268435456,uid=10000,gid=10000,mode=0700',
    '--mount',`type=bind,src=${source},dst=/input,readonly,bind-propagation=rprivate`,
    '--mount',`type=bind,src=${plan},dst=/input-plan.json,readonly,bind-propagation=rprivate`,
-   ...ENV.flatMap(e=>['--env',e]),'--entrypoint','/bin/sh',this.policy.image,'-c',SHELL];
+   ...[...ENV,`STUDIOOS_JOB_MAX_SECONDS=${maxSeconds}`].flatMap(e=>['--env',e]),'--entrypoint','/bin/sh',this.policy.image,'-c',SHELL];
   const id=this.engine(args).trim();need(/^[a-f0-9]{64}$/.test(id),'container_creation_unconfirmed');
   // Persist exact local ownership before start/inspection. A failure never broadens cleanup to a name/pool.
-  this.owned={id,owner,source,plan,image:this.policy.image,receipt:receiptIdentity(receipt)};
+  this.owned={id,owner,source,plan,image:this.policy.image,receipt:receiptIdentity(receipt),maxSeconds};
   try { this.engine(['start',id]);need(this.verifyIsolation({receipt}),'execution_isolation_unverified'); }
   catch {
    // A start/verification error must not leave a known owned process behind.
@@ -82,8 +85,8 @@ export class JobContainer {
    if(!Array.isArray(rows)||rows.length!==1||rows[0].Id!==this.owned.id)return false;
    const info=rows[0],pid=info.State?.Pid;
    if(!verifiedContainer(info,{...this.owned,pidNamespace:ID(pid)&&this.namespace(pid,'pid'),mountNamespace:ID(pid)&&this.namespace(pid,'mnt')}))return false;
-   return this.engine(['exec',this.owned.id,'/usr/local/bin/node','-p','process.versions.node']).trim()===this.policy.nodeVersion
-     &&this.engine(['exec',this.owned.id,'/usr/local/bin/python3','-c','import platform; print(platform.python_version())']).trim()===this.policy.pythonVersion;
+   return this.engine(['exec','--user','10000:10000',this.owned.id,'/usr/local/bin/node','-p','process.versions.node']).trim()===this.policy.nodeVersion
+     &&this.engine(['exec','--user','10000:10000',this.owned.id,'/usr/local/bin/python3','-c','import platform; print(platform.python_version())']).trim()===this.policy.pythonVersion;
   }catch{return false;}
  }
  /** Installs and tests share the same isolated writable tmpfs; no candidate command runs on the host. */
@@ -98,7 +101,7 @@ export class JobContainer {
   const script='mkdir -p /work/source /work/home /work/traces; cp -R /input/. /work/source/; chmod -R u+rwX /work/source; cd /work/source; printf "%s" "$ORIGINAL_EVENT" > /work/event.json; unset ORIGINAL_EVENT; export GITHUB_EVENT_PATH=/work/event.json TEST_TRACE_DIR=/work/traces TEST_TRACE_ROOT=/work/source TMPDIR=/tmp; npm ci --prefix cloudflare-worker; npm ci; exec node scripts/test-drift-parts.mjs "$PART" --plan-file /input-plan.json';
   const deadlineRemaining=receipt.executionDeadline-Date.now();need(Number.isSafeInteger(deadlineRemaining)&&deadlineRemaining>0&&deadlineRemaining<=25*60000+90000,'invalid_container_deadline');
   const remaining=Math.min(deadlineRemaining,25*60000);
-  try { return this.engine(['exec',...Object.entries(env).flatMap(([k,v])=>['--env',`${k}=${v}`]),this.owned.id,'/bin/sh','-ec',script],{timeout:remaining}); }
+  try { return this.engine(['exec','--user','10000:10000',...Object.entries(env).flatMap(([k,v])=>['--env',`${k}=${v}`]),this.owned.id,'/bin/sh','-ec',script],{timeout:remaining}); }
   finally { this.cleanup(receipt); }
  }
  cleanup(receipt) {
