@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { tagHolding } from './_tagHolding.mjs';
 
 const page = (name) => codeOnly(readFileSync(path.resolve(import.meta.dirname, `../src/pages/${name}`), 'utf8'));
 const LOGIN = page('LoginPage.jsx');
@@ -25,14 +26,17 @@ const labels = (src) => [...src.matchAll(/<label\b([^>]*)>\s*([^<{]+?)\s*<\/labe
   .map((m) => ({ attrs: m[1], text: m[2], id: /\bhtmlFor="([^"]+)"/.exec(m[1])?.[1] || null }));
 /** The `<input …>` element carrying `id="X"`, as written. */
 const inputOf = (src, id) => {
-  const at = src.search(new RegExp(`<input\\b[^>]*?\\bid="${id}"`, 's'));
+  const tag = tagHolding(src, ` id="${id}"`, (t) => /^<input\b/.test(t)) || tagHolding(src, `\nid="${id}"`, (t) => /^<input\b/.test(t));
+  const at = tag ? src.indexOf(tag) : -1;
   if (at < 0) return null;
   return src.slice(at, src.indexOf('/>', at) + 2);
 };
 
-test('sign-in: Email and Authenticator code are visible labels with a matching input id', () => {
+// #6958 (Sign In v2): the email field is one element shared by the link and code
+// steps (one is mounted at a time), and the code field is labelled "6-digit code".
+test('sign-in: Email and 6-digit code are visible labels with a matching input id', () => {
   const found = labels(LOGIN);
-  assert.deepEqual(found.map((l) => l.text), ['Email', 'Authenticator code']);
+  assert.deepEqual(found.map((l) => l.text), ['Email', '6-digit code']);
   assert.deepEqual(found.map((l) => l.id), ['login-email', 'login-totp']);
   const email = inputOf(LOGIN, 'login-email');
   assert.ok(email, 'an input carries login-email');
@@ -64,10 +68,16 @@ test('registration: Full Name and Email are associated and keep their types and 
 test('an error above the form is described to the inputs; the field it is about is aria-invalid', () => {
   assert.match(LOGIN, /id="login-error"\s+role="alert"/, 'the sign-in error is an alert with an id');
   assert.match(REGISTER, /id="register-error"\s+role="alert"/);
-  for (const [src, id, error] of [[LOGIN, 'login-email', 'login-error'], [LOGIN, 'login-totp', 'login-error'], [REGISTER, 'register-name', 'register-error'], [REGISTER, 'register-email', 'register-error']]) {
+  for (const [src, id, error] of [[LOGIN, 'login-email', 'login-error'], [REGISTER, 'register-name', 'register-error'], [REGISTER, 'register-email', 'register-error']]) {
     const input = inputOf(src, id);
     assert.match(input, new RegExp(`aria-describedby=\\{error \\? '${error}' : undefined\\}`), `${id} is described by ${error}`);
     assert.match(input, /aria-invalid=\{error && errorField === '/, `${id} says when it is the invalid one`);
+  }
+  // #6958: the code field is also described by its help line ("Paste works…").
+  {
+    const input = inputOf(LOGIN, 'login-totp');
+    assert.match(input, /aria-describedby=\{error \? 'login-error login-totp-help' : 'login-totp-help'\}/, 'login-totp is described by login-error and its help');
+    assert.match(input, /aria-invalid=\{error && errorField === '/, 'login-totp says when it is the invalid one');
   }
   // The field a message is about is set where the message is: an empty email, a bad email, a missing name.
   assert.match(LOGIN, /setErrorField\('email'\);\s*setError\('Enter your email\.'\)/);

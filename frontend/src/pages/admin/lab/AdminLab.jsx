@@ -20,10 +20,15 @@ import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
 import LabParticipants from './LabParticipants';
 import { participantsCount } from './participantsModel';
 import LabCohorts from './LabCohorts';
+import LabParticipation from './LabParticipation';
+import { useProgramDetail } from '../programs/PlaybookEditor';
+import { Availability, Modules, OnRegistry } from '../programs/ProgramShellSections';
+import { shellModules } from '../programs/genericProgramModel';
+import { STATUS_WORD } from '../programs/catalogueModel';
 import { ByCohortBlock, CalendarBlock, FunnelBlock, HeatBlock, PerWeekBlock } from './LabOverviewBlocks';
 import { buildByCohort, buildFunnel, buildHeat, buildPerWeek, buildTimeline, cohortOf } from './labOverviewModel';
 import {
-  FACTS, LAB_PATH, LAB_TITLE, MOVED_NOTICES, PAGE_LINE, PROGRAMS_PATH, TABS,
+  FACTS, LAB_KEY, LAB_PATH, LAB_TITLE, MOVED_NOTICES, PAGE_LINE, PROGRAMS_PATH, TABS,
   buildNeeds, buildTiles, pageFailed, tabOf,
 } from './labModel';
 
@@ -66,10 +71,13 @@ const idle = { status: 'loading', data: null };
  * on every tab; Overview reads five more. Each settles alone, so a slow or
  * failed read holds back only its own blocks.
  */
-function useLabReads(overview) {
-  const keys = useMemo(() => (overview
-    ? ['glance', 'hosts', 'people', 'applications', 'timeline', 'review', 'certificates', 'overview']
-    : ['glance', 'hosts', 'people']), [overview]);
+function useLabReads(tab) {
+  const keys = useMemo(() => {
+    if (tab === 'overview') return ['glance', 'hosts', 'people', 'applications', 'timeline', 'review', 'certificates', 'overview'];
+    // D5893: Participation draws the cohort calendar's founder counts beside the participants read.
+    if (tab === 'participation') return ['glance', 'hosts', 'people', 'timeline'];
+    return ['glance', 'hosts', 'people'];
+  }, [tab]);
   const [reads, setReads] = useState({});
   const [asOf, setAsOf] = useState(null);
   const [tick, setTick] = useState(0);
@@ -235,23 +243,30 @@ function AdminLabBody({ onImpersonate }) {
   const superAdmin = isSuperAdminUser(user);
   const loc = useLocation();
   const tab = tabOf(loc.pathname) || 'overview';
-  const { reads, asOf, reload } = useLabReads(tab === 'overview');
+  const { reads, asOf, reload } = useLabReads(tab);
+  // D5893: the registry read is the shell's (D5313): it feeds the header's status, Capability modules,
+  // Availability & grants and Settings' member access. A failed read marks only those; the Lab's own reads still draw.
+  const detail = useProgramDetail(LAB_KEY);
+  const status = detail.read.status === 'ready' ? STATUS_WORD[detail.read.data?.program?.status] || null : null;
   const notice = useMovedNotice(MOVED_NOTICES);
   const counts = tabCounts(reads);
   const current = TABS.find((t) => t.key === tab);
-  // Literal doors, one per tab (D936), so the reachability walk finds each.
+  // Literal doors, one per tab (D936), so the reachability walk finds each; in TABS' order (D5893, PG03a).
+  // Applications, Cohorts and Participants own a deep link each (`/:id`, `/:ym`, `/:uid`), so they stay lit on it.
   const tabs = (
     <>
       <HeaderTab to="/admin/programs/spinout-lab" data-testid="lab-tab-overview">Overview</HeaderTab>
-      <HeaderTab to="/admin/programs/spinout-lab/applications" count={counts.applications} data-testid="lab-tab-applications">Applications</HeaderTab>
-      <HeaderTab to="/admin/programs/spinout-lab/cohorts" data-testid="lab-tab-cohorts">Cohorts</HeaderTab>
-      <HeaderTab to="/admin/programs/spinout-lab/participants" count={counts.participants} data-testid="lab-tab-participants">Participants</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/how-it-runs" data-testid="lab-tab-how-it-runs">Playbook</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/availability" data-testid="lab-tab-availability">Availability &amp; grants</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/participation" data-testid="lab-tab-participation">Participation</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/applications" count={counts.applications} end={false} data-testid="lab-tab-applications">Applications</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/cohorts" end={false} data-testid="lab-tab-cohorts">Cohorts</HeaderTab>
       <HeaderTab to="/admin/programs/spinout-lab/hosts" count={counts.hosts} data-testid="lab-tab-hosts">Hosts</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/participants" count={counts.participants} end={false} data-testid="lab-tab-participants">Participants</HeaderTab>
       <HeaderTab to="/admin/programs/spinout-lab/formation" data-testid="lab-tab-formation">Formation</HeaderTab>
       <HeaderTab to="/admin/programs/spinout-lab/graduation" data-testid="lab-tab-graduation">Graduation</HeaderTab>
-      <HeaderTab to="/admin/programs/spinout-lab/how-it-runs" data-testid="lab-tab-how-it-runs">How it runs</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/activity" data-testid="lab-tab-activity">History</HeaderTab>
       <HeaderTab to="/admin/programs/spinout-lab/settings" data-testid="lab-tab-settings">Settings</HeaderTab>
-      <HeaderTab to="/admin/programs/spinout-lab/activity" data-testid="lab-tab-activity">Activity</HeaderTab>
     </>
   );
 
@@ -275,7 +290,7 @@ function AdminLabBody({ onImpersonate }) {
         crumb={{ label: 'Programs', to: PROGRAMS_PATH, current: tab === 'overview' ? LAB_TITLE : `${LAB_TITLE} › ${current.label}` }}
         title={LAB_TITLE}
         pills={[
-          { label: 'Live', tone: 'live' },
+          ...(status ? [{ label: status, tone: status === 'Live' ? 'live' : 'hq', testId: 'lab-status' }] : []),
           { label: branchOfUser(user) ? 'Granted' : 'HQ-held', tone: 'held', title: branchOfUser(user) ? 'The studio’s Lab grant is in force.' : 'The Lab runs on HQ-held accounts.' },
         ]}
         actions={actions}
@@ -286,8 +301,16 @@ function AdminLabBody({ onImpersonate }) {
         tabs={tabs}
         data-testid="lab-header"
       />
-      {tab === 'overview' ? <Overview reads={reads} reload={reload} /> : null}
-      {DESKS[tab] ? React.createElement(DESKS[tab], { superAdmin }) : null}
+      {tab === 'overview' ? (
+        <>
+          <Overview reads={reads} reload={reload} />
+          <Modules modules={shellModules(LAB_KEY, detail.read)} />
+        </>
+      ) : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <LabParticipation reads={reads} reload={reload} /> : null}
+      {/* D5893: Settings is handed the registry read for the shell's member-access editor (D5313 step 3). */}
+      {DESKS[tab] ? React.createElement(DESKS[tab], { superAdmin, detail }) : null}
       {tab === 'applications' ? <LabApplications /> : null}
       {tab === 'participants' ? <LabParticipants onImpersonate={onImpersonate} /> : null}
       {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} onImpersonate={onImpersonate} /> : null}

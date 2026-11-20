@@ -80,7 +80,8 @@ test('the workers.dev subdomain fixes the preview vars that name a host that doe
   assert.ok(TOML.includes(BARE_PREVIEW_HOST), 'main still names the bare host');
   const { src } = writePreviewIds(TOML, { ...IDS, subdomain: 'synthetic-sub' });
   assert.equal(previewBlock(src).lines.slice(previewBlock(src).start, previewBlock(src).end).join('\n').includes(BARE_PREVIEW_HOST), false);
-  assert.ok(src.includes('https://studioos-preview.synthetic-sub.workers.dev'));
+  // The whole quoted value, so no other host can sit before or after it (CodeQL incomplete-url-substring-sanitization).
+  assert.match(src, /= "https:\/\/studioos-preview\.synthetic-sub\.workers\.dev"/);
   assert.equal(outsidePreview(src), outsidePreview(TOML));
   assert.throws(() => writePreviewIds(TOML, { ...IDS, subdomain: 'Bad_Sub' }), /not a workers.dev subdomain/);
 });

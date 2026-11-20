@@ -7,6 +7,8 @@ import { hashEmail } from '../util/hashEmail';
 import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, ADMIN_FROZEN, stepUpRefusalBody, branchSuspendedBody, adminFrozenBody } from '../util/authErrors';
 import { maskFor } from '../services/sensitiveFields';
 import { requireCfAccess } from '../middleware/cfAccess';
+import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 type Ctx = Context<{ Bindings: Env }>;
 type Row = Record<string, any>;
@@ -357,7 +359,8 @@ kyb.patch('/:id/reject', async c => {
   ]);
   if (!changed) return conflict(c);
   if ((docs.results || []).length && !c.env.FILES) return c.json({ error: 'kyb_cleanup_pending', detail: 'Rejected. Document deletion is incomplete. Try again.' }, 503);
-  for (const doc of docs.results || []) await c.env.FILES!.delete(doc.file_key);
+  // D6651: a rejected case's documents are purged through the one record-erasure path.
+  for (const doc of docs.results || []) await eraseRecordObjects(c.env.FILES!, doc.file_key, 'purge');
   return c.json({ uid: row.uid, status: 'rejected' });
 });
 
@@ -423,7 +426,11 @@ kyb.post('/:id/documents', async c => {
   if (!c.env.FILES) return c.json({ error: 'document_storage_unavailable', detail: 'Unreadable. Document storage is unavailable. Try again.' }, 503);
   await materialize(c, row);
   const documentUid = uid(), key = `kyb/${scope(c.env)}/${row.uid}/${documentUid}.${MIME[match[1]]}`;
-  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: match[1] } });
+  // D6651: a verification document is a record, written once under a fresh key. When the row is not
+  // written, the file this request just stored is named by nothing and leaves through the one
+  // record-erasure path as `unreferenced`; a cleanup failure never masks the answer.
+  const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: match[1] } });
+  if (!stored.ok) return conflict(c);
   try {
     const changed = await commit(c, user, row, c.env.DB.prepare(
       `UPDATE kyb_cases SET status = 'in_review', source_revision = ?, expires_at = NULL,
@@ -433,9 +440,9 @@ kyb.post('/:id/documents', async c => {
         SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`)
         .bind(documentUid, row.uid, b.kind, key, match[1], bytes.length, user.id),
     ]);
-    if (!changed) { await c.env.FILES.delete(key); return conflict(c); }
+    if (!changed) { await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {}); return conflict(c); }
   } catch {
-    await c.env.FILES.delete(key);
+    await eraseRecordObjects(c.env.FILES, key, 'unreferenced').catch(() => {});
     return c.json({ error: 'document_not_saved', detail: 'The document was not saved. Try again.' }, 503);
   }
   return c.json({ uid: documentUid, kind: b.kind, size_bytes: bytes.length }, 201);

@@ -218,7 +218,7 @@ rerank: Rank supplied research passages and relationship matches by relevance.
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Partner network"`; `railMatrix.json option draft:grow/talent`
 - Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 16 more
-- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 31 more
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 29 more
 - Studio / Eadwyn: **wired**, `services/advisor/rerank.ts (rerank)`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 10 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Expertise · Visibility"`; `/api/ai/modules on "Advisor · Practice · Opportunities"`; `/api/ai/modules on "Investor · Axal VC Fund"`; and 8 more
@@ -601,7 +601,7 @@ chat: Long-document research and cross-source synthesis.
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `/api/ai/modules on "Founder · Raise"`; and 4 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `ST2 on "Founder · Grow · Product improvement"`
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 58 more
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 56 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 4 more

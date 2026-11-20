@@ -8,7 +8,7 @@
  *   - each shown version's detail, for its programs: its own cell state, so one failed detail leaves the table;
  *   - the chosen package's versions, for the history card: its own block state.
  *
- * The row's rules are `packageCatalogueModel.js`. Preview pricing and the comparison are part 1 (c).
+ * The row's rules are `packageCatalogueModel.js`.
  *
  * D5897 (#5897, part 1 (b)) — the writes, as L29 draws them:
  *   - the header's "Create draft version…": the next draft of a chosen key, starting from its newest version, or
@@ -18,8 +18,12 @@
  *     (`publishConsequence`, `retireConsequence`), through `LicenceReasonDialog`.
  * After every write, success or not, the catalogue, the shown programs and the history are read again, so the page
  * shows what is recorded. A refusal is the Worker's sentence; any other failure says the outcome is not known.
+ *
+ * D5898 (#5898, part 1 (c)): each row's Preview pricing opens the comparison narrowed to that version, and
+ * the header links the full comparison (`PackageCompare.jsx`).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { licencePackagesApi } from '../../../lib/api/licencePackages';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader } from '../../../ui';
@@ -34,6 +38,7 @@ import {
   retireConsequence, rowActions, writeFailure,
 } from './packageDraftModel';
 import PackageDraftEditor from './PackageDraftEditor';
+import { previewHref } from './packageCompareModel';
 
 const CARD = 'rounded-xl border border-gray-200 bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100';
@@ -141,7 +146,7 @@ function CatalogueTable({ rows, details, chosen, onChoose, busy, onAct }) {
                 <td className={TD}><Cell word={c.standalone} /></td>
                 <td className={TD}><Cell word={c.saving} /></td>
                 <td className={TD}><Cell word={c.effective} mono={!absent(c.effective) && c.effective !== 'Not in force'} /></td>
-                <td className={TD}><RowActions v={v} busy={busy} onAct={onAct} /></td>
+                <td className={TD}><span className="inline-flex flex-wrap items-center gap-3"><Link to={previewHref(v)} className="whitespace-nowrap text-[12.5px] font-semibold text-indigo-700 hover:underline dark:text-indigo-300" data-testid="package-preview-pricing">Preview pricing</Link><RowActions v={v} busy={busy} onAct={onAct} /></span></td>
               </tr>
             );
           })}
@@ -324,7 +329,7 @@ export function PackageCatalogueView() {
             <>
               <section className={`${CARD} flex flex-col gap-2 !px-0 !pb-2`}>
                 <CatalogueTable rows={rows} details={details} chosen={chosen} onChoose={setPicked} busy={busy} onAct={onAct} />
-                <p className={`${SUB} m-0 px-[18px]`} data-testid="package-catalogue-note">Standalone sum and Bundle saving: {PER_LICENCE_REASON}</p>
+                <p className={`${SUB} m-0 px-[18px]`} data-testid="package-catalogue-note">Standalone sum and Bundle saving: {PER_LICENCE_REASON} <Link to="/admin/licences/packages/compare" className="font-semibold text-indigo-700 hover:underline dark:text-indigo-300">Compare Axal VC packages for one licence</Link></p>
               </section>
               {chosen ? <VersionHistory key={chosen} packageKey={chosen} name={chosenName} reload={reload} /> : null}
             </>

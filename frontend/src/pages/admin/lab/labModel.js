@@ -42,21 +42,30 @@ export const MOVED_NOTICES = {
   'spinout-lab': 'Spin-Out Lab has a new address. Update your bookmark.',
 };
 
+/** The registry key the Lab's shell sections read (`GET /api/admin/programs/spinout-lab`, D4873 part 2). */
+export const LAB_KEY = 'spinout-lab';
+
 /**
- * The tabs this integration draws: the canvas's order, only those whose
- * console exists (D937 §1, D970 and D971). Each tab has its mounted read.
+ * D5893 (#5893) — the strip: the generic shell's six core sections in PG03's
+ * order and words (D5313), with Applications, Cohorts and Hosts as module tabs
+ * at their `MODULE_PATHS['spinout-lab']` addresses (`module` names each), and
+ * the Lab's own Participants, Formation and Graduation, which no registry
+ * module names, before History. Every path the Lab had keeps its address and
+ * its key: `how-it-runs` is Playbook and `activity` is History in words only.
  */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: '' },
-  { key: 'applications', label: 'Applications', path: '/applications' },
-  { key: 'cohorts', label: 'Cohorts', path: '/cohorts' },
+  { key: 'how-it-runs', label: 'Playbook', path: '/how-it-runs' },
+  { key: 'availability', label: 'Availability & grants', path: '/availability' },
+  { key: 'participation', label: 'Participation', path: '/participation' },
+  { key: 'applications', label: 'Applications', path: '/applications', module: 'applications' },
+  { key: 'cohorts', label: 'Cohorts', path: '/cohorts', module: 'cohorts' },
+  { key: 'hosts', label: 'Hosts', path: '/hosts', module: 'hosts' },
   { key: 'participants', label: 'Participants', path: '/participants' },
-  { key: 'hosts', label: 'Hosts', path: '/hosts' },
   { key: 'formation', label: 'Formation', path: '/formation' },
   { key: 'graduation', label: 'Graduation', path: '/graduation' },
-  { key: 'how-it-runs', label: 'How it runs', path: '/how-it-runs' },
+  { key: 'activity', label: 'History', path: '/activity' },
   { key: 'settings', label: 'Settings', path: '/settings' },
-  { key: 'activity', label: 'Activity', path: '/activity' },
 ];
 
 /** Which tab an address opens, or null when the address is not one of them. */
@@ -329,4 +338,62 @@ export function buildNeeds(reads) {
 /** Every read failed: the page says nothing here is a zero. */
 export function pageFailed(reads) {
   return ['glance', 'applications', 'timeline', 'review', 'hosts', 'certificates'].every((k) => failed(reads[k]));
+}
+
+/* ------------------------------------------------------------------ *
+ * D5893 (#5893) — Participation, from the Lab's own records
+ * ------------------------------------------------------------------ */
+
+export const PARTICIPATION_STANDING = [
+  { key: 'on_track', label: 'On track' }, { key: 'at_risk', label: 'At risk' }, { key: 'grace', label: 'In grace' },
+  { key: 'failed', label: 'Failed a week' }, { key: 'graduated', label: 'Graduated' }, { key: 'not_in_cohort', label: 'Not in a cohort' },
+];
+export const PARTICIPANTS_UNREAD = 'The participants list could not be read. That is not the same as no one taking part.';
+export const COHORTS_UNREAD = 'The cohort calendar could not be read. That is not the same as empty cohorts.';
+export const COHORT_COUNT_UNRECORDED = 'Not recorded: the calendar did not carry this cohort’s founder count.';
+
+/**
+ * The Lab records who takes part, so Participation is its own figures, never
+ * the shell's "No participation store" line (D5313 step 4):
+ *   - `people`   D946's participants read: everyone it lists and how each
+ *                stands this week (`standing`); a founder whose week could
+ *                not be read is counted apart (`not_read`), never in a bar;
+ *   - `timeline` the twelve newest cohorts, each with its `participant_count`.
+ * Each part answers alone. A count the read did not carry is "Not recorded"
+ * with its reason, never 0.
+ */
+export function labParticipation(people, timeline) {
+  let founders;
+  if (!people || people.status === 'loading') founders = { state: 'loading' };
+  else if (people.status !== 'ready' || !people.data?.standing || !Number.isFinite(Number(people.data.standing.everyone))) {
+    founders = { state: 'unreadable', reason: PARTICIPANTS_UNREAD };
+  } else {
+    const st = people.data.standing;
+    const notRead = Number(st.not_read) || 0;
+    founders = {
+      state: 'ready',
+      value: nf(Number(st.everyone)),
+      rows: PARTICIPATION_STANDING.map((t) => ({
+        key: t.key, label: t.label,
+        value: Number.isFinite(Number(st[t.key])) ? nf(Number(st[t.key])) : null,
+      })),
+      notRead: notRead ? `${plural(notRead, 'founder’s week', 'founders’ weeks')} could not be read, so ${notRead === 1 ? 'it is' : 'they are'} in no row above.` : null,
+      partial: people.data.unreadable && Object.keys(people.data.unreadable).length
+        ? 'Part of the Lab’s records could not be read, so some founders’ standing may be missing.' : null,
+    };
+  }
+  let cohorts;
+  if (!timeline || timeline.status === 'loading') cohorts = { state: 'loading' };
+  else if (timeline.status !== 'ready' || !Array.isArray(timeline.data?.cycles)) cohorts = { state: 'unreadable', reason: COHORTS_UNREAD };
+  else {
+    cohorts = {
+      state: 'ready',
+      rows: timeline.data.cycles.map((c) => {
+        const n = c.participant_count;
+        const known = n !== null && n !== undefined && Number.isFinite(Number(n));
+        return { key: `${c.year}-${String(c.month).padStart(2, '0')}`, label: cohortLabel(c), value: known ? nf(Number(n)) : null, unrecorded: known ? null : COHORT_COUNT_UNRECORDED };
+      }),
+    };
+  }
+  return { founders, cohorts };
 }

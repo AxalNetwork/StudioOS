@@ -258,7 +258,7 @@ test('the client is wired, and nothing is stored in the browser', () => {
   const client = read('frontend/src/lib/api/fundNotices.js');
   assert.ok(client.includes("request('/fund-notices/mine')"));
   assert.ok(client.includes('request(`/fund-notices/mine/${encodeURIComponent(uid)}`)'));
-  assert.match(read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx'), /<MyNotices portal=\{portal\} \/>/);
+  assert.match(read('frontend/src/pages/investor/fund/FundParticipationSection.jsx'), /<MyNotices portal=\{portal\} \/>/);
   for (const f of ['frontend/src/pages/SpinoutLabLpNotices.jsx', 'frontend/src/lib/lpNoticesModel.js']) {
     assert.doesNotMatch(read(f), /localStorage|sessionStorage|indexedDB|document\.cookie/, f);
   }

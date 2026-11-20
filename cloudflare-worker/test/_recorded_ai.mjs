@@ -49,9 +49,16 @@ const stretch = (v) => (typeof v === 'string' ? `${v} `.repeat(OVER_CAPACITY_REP
   : Array.isArray(v) ? v.map(stretch)
     : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === 'number' ? x : stretch(x)])) : v);
 
-/** The recording for a call: the first whose model and prompt pattern both match. */
+/**
+ * Whether a recording's `prompt` answers a call: null answers any; '' any prompt with at least one character; any
+ * other text, a prompt with a line that starts with it (what the multiline `^text` patterns matched).
+ */
+const promptMatches = (want, prompt) => want == null
+  || (want === '' ? String(prompt).length > 0 : String(prompt).split(/[\n\r\u2028\u2029]/).some((line) => line.startsWith(want)));
+
+/** The recording for a call: the first whose model and prompt both match. */
 export function recordingFor(model, prompt, recordings = RECORDINGS) {
-  return recordings.find((r) => (r.model == null || r.model === model) && (r.prompt == null || new RegExp(r.prompt, 'm').test(prompt))) ?? null;
+  return recordings.find((r) => (r.model == null || r.model === model) && promptMatches(r.prompt, prompt)) ?? null;
 }
 
 /** The recorded reply, as the binding returns it: `{ response, usage }` for text, `{ image }` for a drawing. */

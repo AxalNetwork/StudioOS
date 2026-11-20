@@ -36,9 +36,9 @@ const MASKED_READ = { masked: true, reason: 'no_pairwise_nda', project: { name: 
 const TEAM = {
   masked: false,
   people: { state: 'recorded', data: [
-    { uid: 'u1', name: 'Ana Ruiz', role: 'founder', prior_roles: [{ title: 'Head of operations', company: 'Robo Co', start: '2019', end: '2024' }], archetype: { slug: 'builder', label: 'Builder' }, full_time_since: null, full_time_reason: 'Not recorded', founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' },
-    { uid: 'u2', name: 'Ben Kim', role: 'cofounder', prior_roles: null, prior_roles_state: 'unreadable', archetype: null, full_time_since: null, full_time_reason: 'Not recorded', founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' },
-    { uid: 'u3', name: 'Cy', role: 'member', prior_roles: [], archetype: null, full_time_since: null, full_time_reason: 'Not recorded', founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' },
+    { uid: 'u1', name: 'Ana Ruiz', role: 'founder', prior_roles: [{ title: 'Head of operations', company: 'Robo Co', start: '2019', end: '2024' }], archetype: { slug: 'builder', label: 'Builder' } },
+    { uid: 'u2', name: 'Ben Kim', role: 'cofounder', prior_roles: null, prior_roles_state: 'unreadable', archetype: null },
+    { uid: 'u3', name: 'Cy', role: 'member', prior_roles: [], archetype: null },
   ] },
   coverage: { state: 'recorded', data: [
     { slug: 'product', label: 'Product', coverage_band: 'covered', reason: null },
@@ -46,6 +46,8 @@ const TEAM = {
     { slug: 'finance', label: 'Finance', coverage_band: 'gap', reason: null },
     { slug: 'legal', label: 'Legal and IP', coverage_band: null, reason: 'Not recorded for at least two published team members' },
   ] },
+  advisors: { state: 'recorded', data: { count: 2, roles: [{ role: 'Advisor', count: 2 }], source: 'Accepted project memberships' } },
+  founder_market_fit: { state: 'recorded', data: { groups: [{ area: 'Fundraising readiness', kind: 'skill-actions', source_label: 'recorded', count: 1, newest: '2026-10-01' }], partial: false } },
   values_band: { value: null, state: 'not_recorded', reason: 'No recorded consent to share a team values band' },
 };
 
@@ -108,7 +110,8 @@ test('a read is masked, unreadable or open; a masked read shows only the basics'
 test('a person as published: unreadable roles said, unpublished ones said, nothing invented', () => {
   const [a, b, c] = TEAM.people.data.map(personView);
   assert.deepEqual([a.name, a.initials, a.role, a.archetype, a.roles], ['Ana Ruiz', 'AR', 'Founder', 'Builder', { state: 'recorded', rows: ['Head of operations at Robo Co, 2019–2024'] }]);
-  assert.deepEqual([a.fullTime, a.fullTimeReason, a.fit, a.fitReason], [null, 'Not recorded', null, 'No published evidence recorded']);
+  assert.equal(Object.hasOwn(a, 'fullTime'), false);
+  assert.equal(Object.hasOwn(a, 'fit'), false);
   assert.deepEqual([b.role, b.roles.state, b.archetype], ['Co-founder', 'unreadable', null]);
   assert.deepEqual([c.role, c.roles.state], ['Team member', 'not_published']);
 });
@@ -233,6 +236,10 @@ test('Team: each person as published, coverage as bands with the gap named, valu
     // D6164 part 2 (DE23): the canvas's words for what a member did not publish.
     assert.ok(v.textOf('deal-team-person-u3').includes('No prior roles published'));
     assert.ok(v.textOf('deal-team-person-u3').includes('No archetype published'));
+    assert.doesNotMatch(v.textOf('deal-team-person-u1'), /Full time|Founder-market fit/);
+    assert.match(v.textOf('deal-team-fit'), /Recorded team actions.*1 shared.*Recorded/);
+    assert.match(v.textOf('deal-team-fit'), /Open the Evidence tab/);
+    assert.match(v.textOf('deal-team-advisors'), /2 accepted advisors.*Advisor.*2.*Accepted project memberships/);
     const coverage = v.textOf('deal-team-coverage');
     assert.ok(coverage.includes('Gaps: Finance.'));
     assert.ok(coverage.includes('Not recorded for at least two published team members'));
@@ -299,7 +306,7 @@ test('Traction: the gap month drawn as a gap and tabled as Not reported, never $
     assert.ok(v.textOf('deal-traction-row-burn-2026-03').includes('$0'), 'a recorded zero is a zero');
     assert.ok(v.textOf('deal-traction-row-customers-2025-11').includes(NOT_REPORTED));
     assert.equal(v.hrefOf('deal-traction-evidence-link'), '/deals/4/evidence');
-    assert.deepEqual(v.ids().filter((id) => /^deal-traction-scorecard-[a-z_]+$/.test(id) && !/-(score|value|coverage|open|retry)-|-scorecard-(unreadable|masked)$/.test(id)),
+    assert.deepEqual(v.ids().filter((id) => /^deal-traction-scorecard-[a-z_]+$/.test(id) && !/(?:-(?:score|value|coverage|open|retry)-)|(?:-scorecard-(?:unreadable|masked)$)/.test(id)),
       ['deal-traction-scorecard-traction', 'deal-traction-scorecard-financial'], 'Traction and Financial');
   } finally { await v.close(); }
 });

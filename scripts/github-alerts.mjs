@@ -7,13 +7,14 @@
  *   node scripts/github-alerts.mjs review-blocked  OUTCOME, PR, RUN_URL
  *   node scripts/github-alerts.mjs queue           QUEUE_ALERT_QUEUED, QUEUE_ALERT_OLDEST_MIN, QUEUE_ALERT_IGNORE_BEFORE (optional)
  *   node scripts/github-alerts.mjs future-clock    FUTURE_CLOCK_DAYS, FUTURE_CLOCK_DIR (attempt-bound artifacts), RUN_URL
+ *   node scripts/github-alerts.mjs queue-stalled   (reads merge_group runs, their jobs and `ci-failure-id` annotations: checks: read, D7125)
  *
  * Always: GITHUB_TOKEN (issues: write for the three alert kinds; actions: read
  * for `main-red` and `queue`), GITHUB_REPOSITORY, and SLACK_GITHUB_WEBHOOK_URL. Without the
  * webhook, the issue is still opened or closed and the job warns; the trusted reporter fails visibly on unreadable evidence without changing the watched result.
  */
-import { ALERT_KINDS, QUEUE_DEFAULTS, mainState, parseQueueCutoff, queueAfterCutoff, queueStallState, queueState, reviewState, withQueueCutoffLine } from './lib/githubAlerts.mjs';
-import { safeGithubUrl } from './lib/ciClassify.mjs';
+import { ALERT_KINDS, FAILURE_ID_TITLE, QUEUE_DEFAULTS, mainState, parseQueueCutoff, possibleRepairs, queueAfterCutoff, queueStallState, queueState, reviewState, stallEvidence, stallRunsToRead, stallTestFile, withQueueCutoffLine } from './lib/githubAlerts.mjs';
+import { SUMMARY_JOBS, safeGithubUrl } from './lib/ciClassify.mjs';
 import { readFileSync } from 'node:fs';
 import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
 import { createHealthMonitor, runSource } from './health-alert-episodes.mjs';
@@ -48,6 +49,46 @@ const apply = async (kind, active, facts, source) => {
   return result;
 };
 
+/**
+ * D7125: a queue run's jobs, each failed job outside the summaries with its `ci-failure-id` annotation messages.
+ * An annotation read that fails leaves that job's `annotations` null: its run is unknown, never a transition.
+ */
+async function stallJobs(runId) {
+  const { jobs } = await gh(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100&filter=latest`);
+  return Promise.all((jobs || []).map(async job => {
+    if (!['failure', 'timed_out'].includes(job?.conclusion) || SUMMARY_JOBS.has(job.name) || !Number.isSafeInteger(job.id)) return job;
+    try {
+      const rows = await gh(`/repos/${repo}/check-runs/${job.id}/annotations?per_page=50`);
+      return { ...job, annotations: Array.isArray(rows) ? rows.filter(a => a?.title === FAILURE_ID_TITLE).map(a => String(a.message || '')) : null };
+    } catch {
+      return { ...job, annotations: null };
+    }
+  }));
+}
+
+/** D7125, best effort at open only: open PRs that change a failing test file and whose required checks are green. */
+async function withRepairs(identities) {
+  try {
+    const files = new Set(identities.map(i => stallTestFile(i.id)).filter(Boolean));
+    if (!files.size) return identities;
+    const rules = await gh('/repos/' + repo + '/rules/branches/main');
+    const required = (Array.isArray(rules) ? rules : []).filter(r => r?.type === 'required_status_checks')
+      .flatMap(r => r.parameters?.required_status_checks || []).map(c => c?.context).filter(Boolean);
+    const open = await gh(`/repos/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=30`);
+    const prs = [];
+    for (const pr of (Array.isArray(open) ? open : []).slice(0, 30)) {
+      if (!Number.isSafeInteger(pr?.number) || !/^[0-9a-f]{40}$/.test(pr.head?.sha || '')) continue;
+      const changed = (await gh(`/repos/${repo}/pulls/${pr.number}/files?per_page=100`) || []).map(f => f?.filename);
+      if (!changed.some(f => files.has(f))) continue;
+      const checks = await gh(`/repos/${repo}/commits/${pr.head.sha}/check-runs?per_page=100`);
+      prs.push({ number: pr.number, files: changed, checks: checks?.check_runs || [] });
+    }
+    return possibleRepairs(identities, prs, required);
+  } catch {
+    return identities;
+  }
+}
+
 async function main() {
   const mode = process.argv[2];
   if (!env.GITHUB_TOKEN) throw new Error('github_token_missing');
@@ -76,17 +117,20 @@ async function main() {
   }
   monitor = createHealthMonitor({ api: gh, repo, deliver: webhookDelivery({ url: env.SLACK_GITHUB_WEBHOOK_URL }), log: value => console.log(JSON.stringify(value)) });
   if (mode === 'queue-stalled') {
-    const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?event=merge_group&status=completed&per_page=30`);
-    const runs = (list.workflow_runs || []).filter(run => run.head_branch?.startsWith('gh-readonly-queue/main/')).slice(0, 2);
-    if (!runs[0]) return;
-    const withJobs = await Promise.all(runs.map(async run => ({
-      ...run,
-      jobs: run.conclusion === 'failure' && Number.isSafeInteger(run.id)
-        ? (await gh(`/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100&filter=latest`)).jobs
-        : [],
-    })));
+    // D7125: every status, so a chain links through candidates still running or green; the newest 100 runs.
+    const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?event=merge_group&per_page=100`);
+    const runs = (list.workflow_runs || []).filter(run => run.head_branch?.startsWith('gh-readonly-queue/main/'));
+    const newest = runs.find(run => run.status === 'completed');
+    if (!newest) return;
+    const read = new Set(stallRunsToRead(runs).map(run => run.id));
+    const withJobs = await Promise.all(runs.map(async run => (read.has(run.id) && Number.isSafeInteger(run.id) ? { ...run, jobs: await stallJobs(run.id) } : run)));
     const state = queueStallState(withJobs);
-    return apply('queue-stalled', state.active, { ...state, runUrl: safeGithubUrl(runs[0].html_url) });
+    const evidence = stallEvidence(withJobs);
+    console.log(JSON.stringify({ kind: 'queue-stalled', read: read.size, unknown: evidence.unknown, chains: evidence.chains,
+      identities: evidence.identities.map(({ id, active, candidates, chains, heads, start }) => ({ id, active, candidates, chains, heads, start })) }));
+    let identities = state.identities || [];
+    if (state.active && identities.length && !(await openIssue('queue-stalled'))) identities = await withRepairs(identities);
+    return apply('queue-stalled', state.active, { ...state, identities, identityCount: identities.length, runUrl: safeGithubUrl(newest.html_url) });
   }
   if (mode === 'main-red') {
     const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?branch=main&event=push&status=completed&per_page=1`);

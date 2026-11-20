@@ -210,7 +210,7 @@ test('media onboarding is dismissed without granting input before the guest asks
         'meeting_bot.meet_prejoin_result', 'meeting_bot.meet_join_click_started',
         'meeting_bot.meet_join_clicked', 'meeting_bot.meet_join_result',
       ]);
-      assert.ok(lines.every(line => !/private-fixture|Private fixture name|meet.google.com/.test(line)));
+      assert.ok(lines.every(line => !/private-fixture|Private fixture name|meet\.google\.com/.test(line)));
     } finally { await bot.leave(); }
   });
 });

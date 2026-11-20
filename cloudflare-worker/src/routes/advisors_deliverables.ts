@@ -19,6 +19,8 @@ import {
 } from '../services/advisorPractice';
 import { ALLOWED_DECLARED, MAX_UPLOAD_BYTES, sniffType } from './company_documents';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { putRecord } from '../services/recordStore';
+import { eraseRecordObjects } from '../services/recordErasure';
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -180,7 +182,9 @@ async function storeVersionFile(c: Context<{ Bindings: Env }>, advisorId: number
   // answers 413 `storage_full` (thrown as a Response, like the checks above) and nothing is stored.
   const room = await assertStorageRoom(c.env, { userId: advisorId }, bytes.length, { id: advisorId });
   try {
-    await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { advisorId: String(advisorId) } });
+    // D6651: a deliverable original is a record, written once.
+    const stored = await putRecord(c.env.FILES, key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { advisorId: String(advisorId) } });
+    if (!stored.ok) throw new Error('record_exists');
   } catch {
     throw c.json({ detail: 'The file could not be stored. Try again.', code: 'storage_failed' }, 502);
   }
@@ -193,9 +197,17 @@ async function storeVersionFile(c: Context<{ Bindings: Env }>, advisorId: number
   return { key, name, type: sniffed, size: bytes.length, sha256 };
 }
 
-/** The row write failed after the bytes were stored: take them back out (best effort), then fail as the write did. */
+/**
+ * A write failed after the bytes were stored: take them back out (best effort), then fail as the write did.
+ * D6651: only while no version row names the key (a later statement can fail after the version row landed),
+ * and through the one record-erasure path as `unreferenced` — this request created the object under a fresh key.
+ */
 async function dropStored(c: Context<{ Bindings: Env }>, stored: StoredFile | null) {
-  if (stored) { try { await c.env.FILES?.delete(stored.key); } catch { /* orphaned bytes, never a row pointing nowhere */ } }
+  if (!stored || !c.env.FILES) return;
+  try {
+    const named = await c.env.DB.prepare('SELECT 1 AS x FROM advisor_deliverable_versions WHERE file_key = ?').bind(stored.key).first();
+    if (!named) await eraseRecordObjects(c.env.FILES, stored.key, 'unreferenced');
+  } catch { /* orphaned bytes, never a row pointing nowhere */ }
 }
 
 /**
