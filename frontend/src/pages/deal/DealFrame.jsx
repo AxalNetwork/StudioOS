@@ -146,7 +146,13 @@ export function DealTabs({ dealId, role, tab }) {
   );
 }
 
-/** Sharing actions for the authorized deal header. */
+/**
+ * Sharing actions for the authorized deal header. D6164 part 3 (DE28, the
+ * owner's answer A): a Share menu that offers only Copy link, which copies
+ * this page's address and grants nothing. The company profile (#6175) is its
+ * own link beside it. A download of the deal summary joins the menu when it
+ * is offered (#6629, S33); the menu holds one item until then.
+ */
 export function DealMoreActions({ profileUrl }) {
   const { key } = useLocation();
   const [feedback, setFeedback] = useState(null);
@@ -154,16 +160,16 @@ export function DealMoreActions({ profileUrl }) {
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
-      setFeedback({ key, text: 'Link copied.' });
+      setFeedback({ key, text: 'Link copied. Only people this deal admits can open it.' });
     } catch {
       setFeedback({ key, text: 'Could not copy the link. Copy it from the address bar.' });
     }
   };
 
   return (
-    <div className="relative">
-      <MoreMenu className="" testId="deal-more">
-        {profileUrl && <HeaderMenuItem to={profileUrl} data-testid="deal-open-company-profile">Open company profile</HeaderMenuItem>}
+    <div className="relative flex flex-wrap items-center gap-2">
+      {profileUrl && <Link to={profileUrl} className={BTN_S} data-testid="deal-open-company-profile">Open company profile</Link>}
+      <MoreMenu className="" testId="deal-share" label="Share">
         <HeaderMenuItem onSelect={copyLink} data-testid="deal-copy-link">Copy link</HeaderMenuItem>
       </MoreMenu>
       <span role="status" className={`absolute right-0 top-full z-20 mt-1 w-max max-w-56 rounded-axal-sm bg-white text-[12px] text-axal-ink dark:bg-gray-900 dark:text-gray-100 ${feedback?.key === key ? 'border border-axal-hairline px-2 py-1 dark:border-gray-700' : 'sr-only'}`}>
