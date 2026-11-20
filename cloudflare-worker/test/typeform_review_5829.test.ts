@@ -159,6 +159,16 @@ test('two ventures have isolated review reads and decisions', async () => {
   await assert.rejects(decideTypeformReview(w.env, other, w.one('typeform_reviews').id, 'confirm'), /not on this venture/);
 });
 
+test('private review history is paginated without losing older pending answers or duplicating a page', async () => {
+  const w = await world(); await w.prepare();
+  const insert = w.db.prepare(`INSERT INTO typeform_reviews
+    (project_id, integration_id, source_key, evidence_mapping_id, mapping_version) VALUES (41, 501, ?, 1, 1)`);
+  for (let n = 1; n <= 101; n++) insert.run(`synthetic-page-${n}`);
+  const first = await typeformReviews(w.env, scope);
+  const second = await typeformReviews(w.env, scope, first.next_before!);
+  assert.deepEqual([first.rows.length, second.rows.length, new Set([...first.rows, ...second.rows].map(r => r.id)).size, second.next_before], [100, 3, 103, null]);
+});
+
 test('legacy unsigned answers and changed rule signatures are never retroactively attested', async () => {
   const w = await world(); await w.map(); w.db.exec("UPDATE typeform_answers SET mapping_signature = NULL");
   await prepareTypeformReviews(w.env, scope);

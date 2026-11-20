@@ -121,13 +121,13 @@ export async function decideTypeformReview(env: Env, scope: ReviewScope, id: num
 }
 
 /** Private source read; never used as a public quotation or a permission to publish. */
-export async function typeformReviews(env: Env, scope: ReviewScope) {
+export async function typeformReviews(env: Env, scope: ReviewScope, before = 0) {
   const rows = (await env.DB.prepare(`SELECT q.id, q.status, q.mapping_version, q.source_key, q.signal_id,
       a.answer_text AS private_answer, e.hypothesis_id, e.experiment_id, e.direction, e.strength
     FROM typeform_reviews q LEFT JOIN typeform_answers a ON a.id = q.answer_id
       LEFT JOIN typeform_evidence_mappings e ON e.id = q.evidence_mapping_id
-    WHERE q.project_id = ? AND q.integration_id = ? ORDER BY q.id DESC LIMIT 100`)
-    .bind(scope.projectId, scope.integrationId).all<any>()).results || [];
+    WHERE q.project_id = ? AND q.integration_id = ? AND (? = 0 OR q.id < ?) ORDER BY q.id DESC LIMIT 100`)
+    .bind(scope.projectId, scope.integrationId, before, before).all<any>()).results || [];
   const counts = await env.DB.prepare(`SELECT
     (SELECT COUNT(*) FROM typeform_responses r JOIN typeform_form_syncs s ON s.id = r.sync_id
       WHERE s.project_id = ? AND s.integration_id = ? AND r.response_type = 'completed' AND r.status <> 'provider_deleted') AS completed,
@@ -136,5 +136,6 @@ export async function typeformReviews(env: Env, scope: ReviewScope) {
     (SELECT COUNT(*) FROM typeform_reviews q JOIN demand_signals d ON d.id = q.signal_id
       WHERE q.project_id = ? AND q.integration_id = ? AND q.status = 'confirmed' AND d.status IN ('confirmed', 'counted')) AS confirmed_signals`)
     .bind(scope.projectId, scope.integrationId, scope.projectId, scope.integrationId, scope.projectId, scope.integrationId).first();
-  return { rows, counts, quote_audience: 'private', publication_permission: 'not_recorded' };
+  return { rows, counts, next_before: rows.length === 100 ? Number(rows.at(-1).id) : null,
+    quote_audience: 'private', publication_permission: 'not_recorded' };
 }

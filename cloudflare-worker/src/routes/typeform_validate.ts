@@ -33,7 +33,12 @@ async function scope(c: Context<{ Bindings: Env }>, raw: unknown) {
   return { projectId: pid, integrationId: Number(binding.id), userId: Number(user.id) };
 }
 
-r.get('/reviews', async c => c.json(await typeformReviews(c.env, await scope(c, c.req.query('project')))));
+r.get('/reviews', async c => {
+  const s = await scope(c, c.req.query('project')); const raw = c.req.query('before');
+  const before = raw == null ? 0 : Number(raw);
+  if (raw != null && (!Number.isSafeInteger(before) || before <= 0)) throw new WriterError(400, 'Choose a valid review cursor');
+  return c.json(await typeformReviews(c.env, s, before));
+});
 r.get('/form-counts', async c => {
   const s = await scope(c, c.req.query('project'));
   return c.json({ forms: await typeformReviewCounts(c.env, s.projectId, s.integrationId) });
