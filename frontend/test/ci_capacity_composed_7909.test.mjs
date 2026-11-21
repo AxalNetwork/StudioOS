@@ -9,7 +9,7 @@ import { PassThrough } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { fixture, config, submission, token, claims, options, unlock, REPO, SOURCE, EXEC, SHARDS } from './ci_capacity_fixture_7909.mjs';
+import { fixture as capacityFixture, config, submission, token, claims, options, unlock, REPO, SOURCE, EXEC, SHARDS } from './ci_capacity_fixture_7909.mjs';
 import { main as bridge, resultStore, supervisorResult } from '../../scripts/ci/capacity-executor.mjs';
 import { JobContainer, containerIsolationAdapter } from '../../scripts/ci/runners/job-container.mjs';
 import { recoveryStore } from '../../scripts/ci/runners/recovery-store.mjs';
@@ -19,6 +19,7 @@ import * as client from '../../scripts/ci/capacity-client.mjs';
 import { ownedPaths } from '../../scripts/ci/runner-execution.mjs';
 import { buildPlan } from '../../scripts/test-drift-parts.mjs';
 import { SqlCapacityStore } from '../../merge-control/src/ciCapacity.ts';
+function fixture(t){t.mock.timers.enable({apis:['Date'],now:1_800_000_000_000});return capacityFixture(t,{callbackResults:true,clockInstalled:true});}
 const CID='c'.repeat(64),POLICY={version:1,image:'sha256:'+'d'.repeat(64),nodeVersion:'22.23.3',pythonVersion:'3.11.18'};
 function archive(){
  const name='traces/1-1800000000000.trace.json',bytes=Buffer.from('{}'),h=Buffer.alloc(512);
@@ -31,7 +32,7 @@ function engineFixture(exit=0){
  const engine=args=>{
   control.calls.push(args);const value=k=>args[args.indexOf(k)+1],all=k=>args.flatMap((v,i)=>v===k?[args[i+1]]:[]);
   if(args[0]==='create'){
-   const owner=value('--label').split('=')[1];info={Id:CID,Name:'/studioos-job-'+owner,Image:POLICY.image,State:{Running:true,Pid:123},Config:{User:value('--user'),Labels:{'vc.axal.studioos.job':owner},Entrypoint:[value('--entrypoint')],Cmd:args.slice(-2),Env:all('--env')},HostConfig:{Privileged:false,Init:true,ReadonlyRootfs:true,CapDrop:['ALL'],CapAdd:null,SecurityOpt:['no-new-privileges'],PidMode:'',IpcMode:'private',CgroupnsMode:'private',NetworkMode:'bridge',PortBindings:{},Devices:[],DeviceRequests:null,VolumesFrom:null,ExtraHosts:null,Links:null,PidsLimit:256,Memory:4294967296,NanoCpus:2e9,Tmpfs:Object.fromEntries(all('--tmpfs').map(v=>[v.slice(0,v.indexOf(':')),v.slice(v.indexOf(':')+1)]))},Mounts:all('--mount').map(v=>({Type:'bind',Source:/src=([^,]+)/.exec(v)[1],Destination:/dst=([^,]+)/.exec(v)[1],RW:false,Propagation:'rprivate'}))};return CID+'\n';
+   const owner=value('--label').split('=')[1];info={Id:CID,Name:'/studioos-job-'+owner,Image:POLICY.image,State:{Running:true,Pid:123},Config:{User:value('--user'),Labels:{'vc.axal.studioos.job':owner},Entrypoint:[value('--entrypoint')],Cmd:args.slice(-2),Env:all('--env')},HostConfig:{Privileged:false,Init:true,ReadonlyRootfs:true,CapDrop:['ALL'],CapAdd:null,SecurityOpt:['no-new-privileges'],PidMode:'',IpcMode:'private',CgroupnsMode:'private',NetworkMode:'bridge',PortBindings:{},Devices:[],DeviceRequests:null,VolumesFrom:null,ExtraHosts:null,Links:null,PidsLimit:256,Memory:4294967296,NanoCpus:2e9,Tmpfs:Object.fromEntries(all('--tmpfs').map(v=>[v.slice(0,v.indexOf(':')),v.slice(v.indexOf(':')+1)]))},Mounts:all('--mount').map(v=>({Type:'bind',Source:/src=([^,]+)/.exec(v)[1],Destination:/dst=([^,]+)/.exec(v)[1],RW:false,Propagation:'rprivate'}))};if(control.loseCreateAck)throw Error('fixture create acknowledgement lost');return CID+'\n';
   }
   if(args[0]==='inspect'){if(removed)throw Error('No such object: '+CID);return JSON.stringify([info]);}
   if(args[0]==='rm'){if(control.failRemoval)throw Error('fixture unavailable');removed=true;return '';}
@@ -124,4 +125,13 @@ test('D7909 genuine test failure is durable and delivered when S09 skips export 
  const state=x.results.read();assert.equal(state.result.testStep,'failure');assert.equal(state.result.exportComplete,false);assert.equal(state.result.cleanupConfirmed,true);
  const stored=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(stored.testStep,'failure');assert.equal(stored.exportComplete,false);
  assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+});
+
+test('D7909 ambiguously created resource cannot become cleanup proof or release a reservation',async t=>{
+ const x=await setup(t);x.e.control.loseCreateAck=true;
+ assert.equal(await bridge('run',x.env,x.ports),1);assert.equal(x.e.control.starts,0);assert.equal(x.store.list().length,0);
+ const row=x.results.read();assert.equal(row.removed,false);assert.equal(row.container,null);assert.equal(row.result.cleanupConfirmed,false);assert.equal(row.result.testStep,'unknown');
+ assert.equal(x.e.control.calls.filter(args=>args[0]==='rm').length,0);
+ await bridge('cleanup',x.env,x.ports);assert.notEqual(x.results.read(),null,'acknowledgement cannot retire uncertain creation');
+ x.f.result('failure');await x.f.tick();const a=new SqlCapacityStore(x.f.storage).get(x.s.requestId).shards[0].attempts[0];assert.equal(a.generation,1);assert.ok(['cancelling','cancellation_unknown'].includes(a.phase));
 });
