@@ -420,7 +420,7 @@ async function executorTestDependencies({env,verifyIsolation,fetcher}) {
   return {...common,...await trustedAuthority(env)};
  }
  // Main before #7972: exercise the same real reader/catalog ports without copying its production adapter.
- return {...common,resolveProfile:resolveCatalogProfile,readReceipt:createReceiptReader({url:env.CAPACITY_AUTHORITY_URL,audience:env.CAPACITY_AUTHORITY_AUDIENCE,oidcToken:githubOidcToken(env,fetcher),fetcher})};
+ return {...common,resolveProfile:resolveCatalogProfile,readReceipt:createReceiptReader({url:env.CI_CAPACITY_URL,audience:env.CI_CAPACITY_AUDIENCE,oidcToken:githubOidcToken(env,fetcher),fetcher})};
 }
 
 const linuxMember=()=>({id:5,os:'linux',status:'online',busy:false,labels:['self-hosted','Linux','X64','studioos-worker-v1'].map(name=>({name}))});
@@ -462,7 +462,7 @@ test('composed Linux catalog and trusted executor preserve success, failures, re
   const dir=mkdtempSync(join(tmpdir(),'capacity-composed-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const oldCapability=process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN='fixture-trusted-boundary-only';t.after(()=>{if(oldCapability===undefined)delete process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;else process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN=oldCapability;});
   const profile=resolveCatalogProfile('linux-x64');
-  const env={REQUEST_ID:s.requestId,LEASE_GENERATION:'1',PART:SHARDS[0],PROFILE:'linux-x64',GITHUB_REPOSITORY:REPO,GITHUB_RUN_ID:'100',GITHUB_RUN_ATTEMPT:'1',EXECUTOR_SHA:EXEC,GH_TOKEN:'fixture-read-only',GITHUB_OUTPUT:join(dir,'admission-output'),CAPACITY_AUTHORITY_URL:'https://capacity.invalid',CAPACITY_AUTHORITY_AUDIENCE:'fixture-capacity',ACTIONS_ID_TOKEN_REQUEST_URL:'https://pipelines.actions.githubusercontent.com/oidc',ACTIONS_ID_TOKEN_REQUEST_TOKEN:'fixture-trusted-boundary-only'};
+  const env={REQUEST_ID:s.requestId,LEASE_GENERATION:'1',PART:SHARDS[0],PROFILE:'linux-x64',GITHUB_REPOSITORY:REPO,GITHUB_RUN_ID:'100',GITHUB_RUN_ATTEMPT:'1',EXECUTOR_SHA:EXEC,GH_TOKEN:'fixture-read-only',GITHUB_OUTPUT:join(dir,'admission-output'),CI_CAPACITY_URL:'https://capacity.invalid',CI_CAPACITY_AUDIENCE:'fixture-capacity',ACTIONS_ID_TOKEN_REQUEST_URL:'https://pipelines.actions.githubusercontent.com/oidc',ACTIONS_ID_TOKEN_REQUEST_TOKEN:'fixture-trusted-boundary-only'};
   let isolationChecks=0,started=0,oidcReads=0;
   // Test double for S09's trusted Linux boundary; this is not an actual-node isolation proof.
   const boundary={ready:outcome!=='isolation-denied',generation:1,childRunId:100};
