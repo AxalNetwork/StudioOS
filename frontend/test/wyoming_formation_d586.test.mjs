@@ -16,7 +16,6 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { charterName, entityLabel, formationJurisdiction } from '../src/lib/incorporationPricing.js';
 import { LAB_JURISDICTIONS } from '../src/lib/spinoutLab.js';
-import { JURISDICTIONS as BRIEF_JURISDICTIONS } from '../src/lib/spinoutBrief.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnly(read('frontend/src/pages/SpinoutLabIncorporatePage.jsx'));
@@ -37,15 +36,14 @@ test('a Wyoming application forms a Wyoming C-Corp, and only a C-Corp', () => {
 
 test('every jurisdiction a Lab list calls live maps to one the Worker can order', () => {
   const live = [
+    // D6966: the Programme Brief's own jurisdiction list went with its print document.
     ...LAB_JURISDICTIONS.filter((j) => !j.soon).map((j) => `${j.entity} — ${j.label}`),
-    ...BRIEF_JURISDICTIONS.filter((j) => !j.soon).map((j) => j.name),
   ];
   assert.ok(live.some((l) => /Wyoming/.test(l)), 'Wyoming is no longer drawn live');
   for (const label of live) {
     const { jurisdictionId } = formationJurisdiction(label, 'ccorp');
     assert.ok(jurisdictionId && WORKER_IDS.has(jurisdictionId), `${label} is drawn live but cannot be ordered`);
   }
-  for (const j of BRIEF_JURISDICTIONS) assert.equal(/· live$/.test(j.sub), !j.soon, `${j.name}: "${j.sub}" disagrees with soon`);
 });
 
 test('the entity and the charter take the state\'s names', () => {

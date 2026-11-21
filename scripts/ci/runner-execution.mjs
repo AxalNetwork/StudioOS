@@ -41,7 +41,7 @@ export function verifiedPlan({ event, part, expectedDigest, artifactBytes, scrip
 
 /** Actual runtime facts, not runner names/labels supplied by the caller. */
 export function verifyRuntime(profile, { platform = process.platform, arch = process.arch, node = process.versions.node, sqlite } = {}) {
-  need(profile && ['hosted', 'linux-x64', 'macos-arm64'].includes(profile.id), 'unknown_profile');
+  need(profile && ['hosted', 'github-8', 'linux-x64', 'macos-arm64'].includes(profile.id), 'unknown_profile');
   need(platform === profile.platform && arch === profile.arch, 'runtime_platform_mismatch');
   need(/^22\.[0-9]+\.[0-9]+$/.test(node), 'unsupported_node_runtime');
   if (profile.nodeVersion) need(node === profile.nodeVersion, 'runtime_node_pin_mismatch');
@@ -99,10 +99,10 @@ export function originalTestContext(admitted, paths, baseEnv = process.env) {
 /** Both the exact real test step and its owning job AND run must pass. No dispatcher/upload status is authority. */
 export function childResult({ run, jobs }, owned) {
   const same = (a,b) => ID.test(String(a)) && String(a) === String(b);
-  const wrapper=owned.childWorkflowPath==='.github/workflows/runner-dispatch.yml',expectedSha=owned.childWorkflowSha??owned.executorSha;
-  if(wrapper&&owned.workflowAttested!==true)return {outcome:'unknown',reason:'callee_not_attested'};
-  if (!same(run?.id,owned.childRunId) || !same(run?.run_attempt,owned.childAttempt) || run?.path !== (wrapper?'.github/workflows/runner-dispatch.yml':'.github/workflows/runner-executor.yml') || run?.repository?.full_name !== 'AxalNetwork/StudioOS' || run?.head_sha !== expectedSha) return { outcome:'unknown',reason:'child_run_identity_mismatch' };
-  const selected=Array.isArray(jobs)?jobs.filter(job=>job.name===(wrapper?'execute / '+TEST_JOB:TEST_JOB)):[];
+  const expectedSha=owned.childWorkflowSha??owned.executorSha;
+  if(owned.childWorkflowPath && owned.childWorkflowPath!=='.github/workflows/runner-executor.yml')return {outcome:'unknown',reason:'child_run_identity_mismatch'};
+  if (!same(run?.id,owned.childRunId) || !same(run?.run_attempt,owned.childAttempt) || run?.path !== '.github/workflows/runner-executor.yml' || run?.repository?.full_name !== 'AxalNetwork/StudioOS' || run?.head_sha !== expectedSha) return { outcome:'unknown',reason:'child_run_identity_mismatch' };
+  const selected=Array.isArray(jobs)?jobs.filter(job=>job.name===TEST_JOB):[];
   if (selected.length !== 1 || jobs.some(job=>!same(job.run_id,run.id)||!same(job.run_attempt,run.run_attempt)||job.head_sha!==expectedSha)) return { outcome:'unknown',reason:'child_job_identity_mismatch' };
   const job=selected[0],steps=job.steps?.filter(step=>step.name===TEST_STEP);
   if (!steps || steps.length !== 1) return {outcome:'unknown',reason:'test_step_not_unique'};
@@ -142,18 +142,68 @@ export async function executeShard({admitted,paths,testDriver,planPath,readRecei
   });
 }
 
+/** SIGINT/SIGTERM abort the returned signal for the whole body instead of killing the supervisor mid-run. */
+export async function withCancellation(body,{signals=process}={}){
+ const cancellation=new AbortController(),cancel=()=>cancellation.abort();
+ signals.once('SIGINT',cancel);signals.once('SIGTERM',cancel);
+ try{return await body(cancellation.signal);}
+ finally{signals.removeListener('SIGINT',cancel);signals.removeListener('SIGTERM',cancel);}
+}
+
+/** The exact container this run owns, recorded before start so the workflow's cleanup step can remove it after process loss. */
+export const containerRecordPath=paths=>join(paths.temp,'container-owner.json');
+const EXIT={execution_cancelled:130,execution_timed_out:124};
+
+/** Create, re-admit against the live container, run interruptibly, and remove the exact container on every path. */
+export async function runInContainer({job,executionIsolation,admit,current,paths,planPath,signal,log=console.error}){
+ need(current?.profile?.id==='linux-x64'&&typeof executionIsolation==='function'&&typeof admit==='function','container_profile_mismatch');
+ const record=containerRecordPath(paths);
+ job.onOwned=owned=>writeFileSync(record,JSON.stringify(owned)+'\n',{mode:0o600,flag:'wx'});
+ let code=1;
+ try{
+  need(!signal?.aborted,'execution_cancelled');
+  job.create(current.identity,{source:paths.source,plan:planPath});
+  need(!signal?.aborted,'execution_cancelled');
+  const live=await admit(executionIsolation);
+  need(live?.allowed===true&&JSON.stringify(live.identity)===JSON.stringify(current.identity),'receipt_superseded_before_execution');
+  await job.runCandidateInterruptible({receipt:current.identity,admitted:live,signal});
+  code=0;
+ }catch(error){
+  const reason=signal?.aborted?'execution_cancelled':error?.message;
+  code=EXIT[reason]??1;log(`container_execution_${code===0?'ok':'failed'}: ${/^[a-z_]+$/.test(reason??'')?reason:'unexpected'}`);
+ }finally{
+  try{job.cleanup(current.identity);if(job.owned===null)rmSync(record,{force:true});}
+  catch{log('container_cleanup_failed: the record stays for the cleanup step');code=code||1;}
+ }
+ return code;
+}
+
+/** Workflow cleanup: remove a container a lost supervisor left behind, by its exact record only, then this run's files. */
+export async function recoverOwned(paths,{recover}){
+ const record=containerRecordPath(paths);let text=null;
+ try{text=readFileSync(record,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
+ if(text===null)return 'none';
+ const outcome=recover(JSON.parse(text));rmSync(record,{force:true});return outcome;
+}
+
 /** A reviewed adapter may be supplied by trusted code; no environment/request field injects receipt JSON as authority. */
 export async function main(mode,env=process.env,dependencies={}){
  const paths=ownedPaths({runnerTemp:env.RUNNER_TEMP,workspace:env.GITHUB_WORKSPACE,childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT});
  if(mode==='prepare'){prepareOwned(paths);return 0;}
- if(mode==='cleanup'){cleanupOwned(paths);return 0;}
+ if(mode==='cleanup'){
+  // Recovery failure must not leave this run's files; it still fails the step so the leftover is visible.
+  let failure=null;
+  if(dependencies.recover){try{await recoverOwned(paths,dependencies);}catch(error){failure=error;}}
+  cleanupOwned(paths);if(failure)throw failure;return 0;
+ }
  need(mode==='verify-plan'||mode==='run','invalid_execution_mode');
  const initial=JSON.parse(env.ADMITTED_JSON??'null');
  need(initial?.allowed===true&&initial.identity,'initial_admission_missing');
  const {admitRunnerJob,githubReadApi}=await import('./runner-admission.mjs');
  const request={requestId:initial.identity.requestId,generation:initial.identity.generation,shard:initial.identity.logicalShard,profile:initial.identity.profile};
  const context={repository:env.GITHUB_REPOSITORY,executorSha:env.EXECUTOR_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowSha:env.CHILD_WORKFLOW_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowPath:env.CHILD_WORKFLOW_PATH??'.github/workflows/runner-executor.yml',childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT};
- const readReceipt=()=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...dependencies,context,phase:'execute',signal:AbortSignal.timeout(60000)});
+ const {job:_job,executionIsolation:_exec,admissionIsolation,...admission}=dependencies;
+ const readReceipt=()=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),verifyIsolation:admissionIsolation,...admission,context,phase:'execute',signal:AbortSignal.timeout(60000)});
  const current=await readReceipt();need(current.allowed&&JSON.stringify(current.identity)===JSON.stringify(initial.identity),'receipt_superseded_before_execution');
  const sqlite=await import('node:sqlite');
  verifyRuntime(current.profile,{sqlite:()=>{const db=new sqlite.DatabaseSync(':memory:');try{return db.prepare('SELECT 1 AS ok').get().ok===1;}finally{db.close();}}});
@@ -168,11 +218,28 @@ export async function main(mode,env=process.env,dependencies={}){
   console.log(JSON.stringify({profile:current.profile.id,runner:env.RUNNER_NAME??'unknown',source:current.sourceSha,executor:context.executorSha,part:current.shard,event:current.originalEvent,parentRun:current.originalRunId,parentAttempt:current.originalAttempt,planDigest:current.plan.digest,node:process.version,python:python[1],pythonSqlite:python[2],os:process.platform,arch:process.arch,cpu:availableParallelism(),memoryBytes:totalmem()}));
   return 0;
  }
- const cancellation=new AbortController(),cancel=()=>cancellation.abort();
- process.once('SIGINT',cancel);process.once('SIGTERM',cancel);
- try{const result=await executeShard({admitted:current,paths,testDriver:join(paths.source,'scripts','test-drift-parts.mjs'),planPath,readReceipt,signal:cancellation.signal});return result.code;}
- finally{process.removeListener('SIGINT',cancel);process.removeListener('SIGTERM',cancel);}
+ // Cancellation is live before any container exists, so a stop during create, re-admission or the run cleans up.
+ return await withCancellation(async signal=>{
+  if(dependencies.job){
+   // Linux self-hosted: installs and tests both run inside the per-run container; nothing candidate-controlled runs on the host.
+   const {job,executionIsolation,admissionIsolation:_pre,...rest}=dependencies;
+   return runInContainer({job,executionIsolation,current,paths,planPath,signal,
+    admit:verifyIsolation=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...rest,verifyIsolation,context,phase:'execute',signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])})});
+  }
+  const result=await executeShard({admitted:current,paths,testDriver:join(paths.source,'scripts','test-drift-parts.mjs'),planPath,readReceipt,signal});return result.code;
+ });
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
- try{process.exitCode=await main(process.argv[2]);}catch{console.error('runner_execution_denied_or_failed');process.exitCode=1;}
+ try{
+  const mode=process.argv[2];let dependencies={};
+  if(mode==='run'||mode==='verify-plan'){
+   const { isolationFor }=await import('./runners/executor-isolation.mjs');
+   const { trustedAuthority }=await import('./executor-authority.mjs');
+   dependencies={...await trustedAuthority(process.env),...(isolationFor(JSON.parse(process.env.ADMITTED_JSON??'null')?.identity?.profile)??{})};
+  }
+  if(mode==='cleanup'){
+   const { JobContainer }=await import('./runners/job-container.mjs');
+   dependencies={recover:record=>JobContainer.recover(record)};
+  }
+  process.exitCode=await main(mode,process.env,dependencies);}catch{console.error('runner_execution_denied_or_failed');process.exitCode=1;}
 }

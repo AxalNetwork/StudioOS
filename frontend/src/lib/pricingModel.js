@@ -208,11 +208,14 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
     if (plan && (month || year)) sold.push(plan);
     const offered = !!(spec.free || spec.custom || month || year);
     const current = held !== null && held === spec.id;
+    // D4653 part 3 (#4653, owner answer A): a card with `limits` shows those lines, and its AI allowance, above its button.
+    const limited = Array.isArray(spec.limits);
+    const isLimit = (line) => limited && spec.limits.includes(line);
     const card = {
       id: spec.id, name: spec.name, kick: spec.kick || '', tag: spec.tag, highlight: !!spec.highlight, current,
       allowanceComparison: planIntervalAllowance(plan),
       lead: i > 0 ? `Everything in ${specs[i - 1].name}, plus:` : '',
-      feats: spec.feats.slice(), offered, price: null, unit: '', note: '', yearlyMissing: false,
+      limits: spec.feats.filter(isLimit), feats: spec.feats.filter((line) => !isLimit(line)), offered, price: null, unit: '', note: '', yearlyMissing: false,
       button: { label: '', to: null, disabled: false },
       selection: spec.free ? { plan: spec.storage, interval: null } : null,
     };
@@ -233,7 +236,7 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
         if (yearly) { card.yearlyMissing = true; card.note = 'Yearly not offered yet'; }
       }
       card.unit = `/ month ${LICENCE_PRICE_UNIT}`;
-      if (shown.allowance_microusd > 0) card.feats.push(`${usd(Math.floor(shown.allowance_microusd / 10_000))} of AI tokens a month`);
+      if (shown.allowance_microusd > 0) (limited ? card.limits : card.feats).push(`${usd(Math.floor(shown.allowance_microusd / 10_000))} of AI tokens a month`);
     }
     if (current) card.button = { label: 'Current plan', to: null, disabled: true };
     else if (!offered) card.button = { label: 'Not offered yet', to: null, disabled: true };

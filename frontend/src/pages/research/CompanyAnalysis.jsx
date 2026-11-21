@@ -5,12 +5,13 @@ import { api } from '../../lib/api';
 import { competitorReviewApi } from '../../lib/api/competitorReview.js';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
-import { download, fetchExport } from '../../components/CompetitorAnalysis';
+import { download, fetchExport, loadExport } from '../../components/CompetitorAnalysis';
+import ExportPreview from './ExportPreview.jsx';
 import { useEscapeClose } from '../../components/useEscapeClose.js';
 import { PhoneSheet, SheetRow } from '../../ui/phone/PhoneSheet.jsx';
 import {
   analysisTiles, candidateSupport, classificationWord, failedReads, featureGrid, findingsOf, inputsRow, landscapeRead,
-  notesWithRead, reviseHref, signalColumns, sourceFetched,
+  notesWithRead, reviseHref, runStartedAt, runSteps, signalColumns, sourceFetched,
 } from './companyAnalysisRead';
 import { EvidenceChip, SubjectBar, useSubjectRecord } from './AnalysisSubject.jsx';
 import {
@@ -62,10 +63,18 @@ import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
  * Insufficient evidence, No candidates and Sources unavailable each have
  * their own shape. Preview Markdown, in the Export menu, shows the saved
  * version's file before it is downloaded.
+ *
+ * D7175 part 2 (`D7175-p2.md`): the preview has Markdown and JSON tabs
+ * (`ExportPreview.jsx`) and returns focus to what opened it; the competitor
+ * table has the canvas's columns (Company, Classification, Why · support,
+ * Sources, Relevance) and the inputs row a Region; loading draws the tiles
+ * with skeleton values; a running analysis says when it started
+ * (`created_at`); "What the run did" prints each step's time when the run
+ * recorded it (`output.run_steps`); and a run opened from setup lands focus
+ * on the page's h1.
  */
 
 const STATUS_TONE = { complete: 'ok', running: 'info', error: 'danger', draft: 'neutral' };
-const ORIGIN_TONE = { known: 'neutral', discovered: 'info', manual: 'warn' };
 const eyebrow = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
 const th = 'pb-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint';
 const inputClass = 'w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] text-axal-ink '
@@ -111,6 +120,17 @@ function FindingRow({ f, urlOf }) {
       </span>
     </li>
   );
+}
+/**
+ * Focus the page's h1 (RS-13 C4). The shell draws one h1 per page (D593); it
+ * is made focusable for this, and only this, move.
+ */
+export function focusPageHeading(doc = typeof document === 'undefined' ? null : document) {
+  const h = doc?.querySelector?.('h1');
+  if (!h) return false;
+  h.setAttribute?.('tabindex', '-1');
+  h.focus?.();
+  return true;
 }
 const stamp = (v) => {
   if (!v) return null;
@@ -285,8 +305,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   const [preview, setPreview] = useState('');
   // D7175: the subject's directory record, read for the subject bar.
   const { read: subjectRead, retry: retrySubject } = useSubjectRecord(analysis?.subject_uid || null);
-  // RS-13 B5: the saved version's Markdown, shown before it is downloaded.
-  const [mdPreview, setMdPreview] = useState(null); // { text, name, version }
+  // RS-13 B5: the saved version's file, Markdown or JSON, shown before it is downloaded (D7175 part 2).
+  const [filePreview, setFilePreview] = useState(null); // 'md' | 'json' | null
   const addNameRef = useRef(null);
 
   // Focus targets (RS-14 G): each control a sheet, dialog, retry or result returns focus to.
@@ -355,7 +375,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     runFor.current += 1; setBusy(''); setNotice(null); setPreview(''); setManual(EMPTY_MANUAL);
     setSaveError(null); setFailure(null); setResult(null); setRefreshed(null);
     setProposal(null); setSelection(null); setReviewError(''); setMenuOpen(false); setDecision(null); setSheetOpen(false);
-    setMdPreview(null);
+    setFilePreview(null);
   }, [id]);
   useEffect(() => () => { runFor.current += 1; }, []);
 
@@ -371,6 +391,15 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, current, location.state]);
+
+  // D7175 part 2 (RS-13 C4): a run started on setup opens here with focus on
+  // the results h1 (the shell's one h1, D593), once per arrival.
+  const focusedFor = useRef(null);
+  useEffect(() => {
+    if (state !== 'ready' || !current || !location.state?.focusResults || focusedFor.current === location.key) return;
+    focusedFor.current = location.key;
+    setTimeout(() => focusPageHeading(), 0);
+  }, [state, current, location.state, location.key]);
 
   /** The row-level actions (Add, Remove, category, Accept the read): their answer merges into the draft. */
   const run = async (key, fn, ok) => {
@@ -549,8 +578,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   };
 
   // Export (RS-14 C1): the saved version, checked before anything is downloaded.
-  // `preview` (RS-13 B5, D7175): the checked Markdown is shown first, and Download writes it.
-  const doExport = async (format, at = version, opener = exportOpener.current, preview = false) => {
+  // The preview (RS-13 B5, D7175 part 2) reads through `loadExport` on its own; see `openPreview`.
+  const doExport = async (format, at = version, opener = exportOpener.current) => {
     const mine = ++runFor.current;
     setBusy('export');
     setFailure(null);
@@ -564,7 +593,6 @@ export default function CompanyAnalysis({ role = 'founder' }) {
         setFailure({
           kind: 'export',
           format,
-          preview,
           title: problem.kind === 'status'
             ? `${label} export failed. Nothing was downloaded.`
             : `The export did not return ${label}. Nothing was downloaded.`,
@@ -577,16 +605,12 @@ export default function CompanyAnalysis({ role = 'founder' }) {
       }
       const v = got.version || at;
       const name = exportFilename(id, v, format);
-      if (preview && format === 'md') {
-        setMdPreview({ text: got.text, name, version: v });
-        return;
-      }
       download(name, got.text, format === 'md' ? 'text/markdown' : 'application/json');
       setResult({ kind: 'export', title: `Downloaded version ${v}`, text: name });
       (opener || exportRef.current)?.focus?.();
     } catch (e) {
       if (runFor.current !== mine) return;
-      setFailure({ kind: 'export', format, preview, title: `${format === 'md' ? 'Markdown' : 'JSON'} export failed. Nothing was downloaded.`, text: `${e?.message || 'The server did not answer.'} Your dossier is open and unchanged.` });
+      setFailure({ kind: 'export', format, title: `${format === 'md' ? 'Markdown' : 'JSON'} export failed. Nothing was downloaded.`, text: `${e?.message || 'The server did not answer.'} Your dossier is open and unchanged.` });
       focusLater(failRef);
     } finally {
       if (runFor.current === mine) setBusy('');
@@ -601,18 +625,26 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     else doExport(format, version, exportOpener.current);
   };
   // Preview shows the saved version, so unsaved changes need no decision first.
-  const previewMd = (opener) => {
+  // D7175 part 2 (RS-13 B5): Markdown and JSON tabs, each read and checked as a
+  // download is; closing it returns focus to Export (or Actions ⋯ on a phone).
+  const openPreview = (opener, format = 'md') => {
     setMenuOpen(false);
     setSheetOpen(false);
+    setFailure(null);
+    setResult(null);
     exportOpener.current = opener || exportRef.current;
-    doExport('md', version, exportOpener.current, true);
+    setFilePreview(format);
   };
-  const downloadPreview = () => {
-    if (!mdPreview) return;
-    download(mdPreview.name, mdPreview.text, 'text/markdown');
-    setResult({ kind: 'export', title: `Downloaded version ${mdPreview.version}`, text: mdPreview.name });
-    setMdPreview(null);
-    focusLater(exportOpener);
+  const loadPreview = async (format) => {
+    const got = await loadExport(`${api.competitors.exportUrl(id, format)}&version=${encodeURIComponent(version)}`, format);
+    const v = got.version || version;
+    return { text: got.text, version: v, name: exportFilename(id, v, format) };
+  };
+  const closePreview = () => { setFilePreview(null); focusLater(exportOpener); };
+  const downloadPreview = ({ format, text, name, version: v }) => {
+    download(name, text, format === 'md' ? 'text/markdown' : 'application/json');
+    setResult({ kind: 'export', title: `Downloaded version ${v}`, text: name });
+    closePreview();
   };
   const closeDecision = () => { setDecision(null); focusLater(exportOpener); };
   const exportSaved = () => { const f = decision; setDecision(null); doExport(f, version, exportOpener.current); };
@@ -656,6 +688,9 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   // D7175: with no source, no summary, gap or wedge is stated (RS-13 B3); the
   // run's next steps are Suggested research questions, drawn apart below.
   const generatedShown = GENERATED_SECTIONS.filter(([f]) => f !== 'next_actions' && !insufficient);
+  // D7175 part 2 (RS-13 B1): what each competitor row rests on, read once per row.
+  const supportBy = useMemo(() => Object.fromEntries((analysis?.candidates || []).map((c) => [c.id, candidateSupport(c, analysis?.sources || [])])), [analysis]);
+  const attachedTo = (cid) => (sourcesBy[cid] || []).some((s) => s.origin === 'manual');
   const sourcesBy = useMemo(() => {
     const m = {};
     for (const s of analysis?.sources || []) {
@@ -681,8 +716,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
         JSON<small className="font-mono text-[11px] font-medium text-axal-muted">{`saved version ${version} · ${dayTime(analysis?.updated_at) || 'date not recorded'}`}</small>
       </button>
       <button type="button" role="menuitem" className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-semibold hover:bg-axal-ground focus:bg-axal-ground dark:hover:bg-gray-800 dark:focus:bg-gray-800"
-        onClick={() => previewMd()}>
-        Preview Markdown<small className="font-mono text-[11px] font-medium text-axal-muted">{`the file for saved version ${version}, before it is downloaded`}</small>
+        onClick={() => openPreview()}>
+        Preview the file<small className="font-mono text-[11px] font-medium text-axal-muted">{`Markdown or JSON for saved version ${version}, before it is downloaded`}</small>
       </button>
     </>
   );
@@ -827,8 +862,24 @@ export default function CompanyAnalysis({ role = 'founder' }) {
           </p>
         </Card>
 
+        {/* D7175 part 2 (RS-13 B4): loading keeps the tile labels and draws their values as skeletons, never 0. */}
         {state === 'loading' && (
-          <Card variant="dashed" padding="lg"><p className="text-[12.5px] text-axal-muted" role="status">Loading this analysis.</p></Card>
+          <div aria-busy="true" data-testid="analysis-loading" className="space-y-3">
+            <p className="text-[12.5px] text-axal-muted" role="status">Loading this analysis.</p>
+            <div aria-hidden="true" className="h-[86px] rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+              <div className="h-5 w-6/12 rounded bg-gray-200 dark:bg-gray-800" />
+              <div className="mt-3 h-3 w-4/12 rounded bg-gray-200 dark:bg-gray-800" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="analysis-loading-tiles">
+              {['Competitors', 'Direct', 'Adjacent', 'Sources fetched'].map((k) => (
+                <Card key={k}>
+                  <div className={eyebrow}>{k}</div>
+                  <div aria-hidden="true" className="mt-2.5 h-5 w-10 rounded bg-gray-200 dark:bg-gray-800" />
+                  <div aria-hidden="true" className="mt-2 h-2.5 w-8/12 rounded bg-gray-200 dark:bg-gray-800" />
+                </Card>
+              ))}
+            </div>
+          </div>
         )}
 
         {state === 'unreadable' && (
@@ -936,23 +987,13 @@ export default function CompanyAnalysis({ role = 'founder' }) {
               )}
             </Card>
 
-            <SubjectBar uid={analysis.subject_uid || null} read={subjectRead} onRetry={retrySubject} evidence={evidence} running={running} />
+            <SubjectBar uid={analysis.subject_uid || null} read={subjectRead} onRetry={retrySubject} evidence={evidence} running={running}
+              startedAt={clock(runStartedAt(analysis))} />
 
-            {mdPreview && (
-              <Card data-testid="analysis-export-preview" role="dialog" aria-label="Export preview">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className={eyebrow}>{`Export preview · saved version ${mdPreview.version}`}</div>
-                    <p className="text-[12px] text-axal-muted">What the file will say, before it is downloaded · the same evidence words as the page</p>
-                  </div>
-                  <EvidenceChip evidence={evidence} />
-                </div>
-                <pre className="mt-2.5 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-axal-hairline bg-axal-ground p-3 font-mono text-[11.5px] leading-relaxed text-axal-ink dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100">{mdPreview.text}</pre>
-                <div className="mt-2.5 flex justify-end gap-2">
-                  <button type="button" className={ghostBtn} onClick={() => { setMdPreview(null); focusLater(exportOpener); }}>Cancel</button>
-                  <button type="button" className={primaryBtn} onClick={downloadPreview}>Download .md</button>
-                </div>
-              </Card>
+            {filePreview && (
+              <ExportPreview initialFormat={filePreview} load={loadPreview} onDownload={downloadPreview} onClose={closePreview}
+                evidence={<EvidenceChip evidence={evidence} short />}
+                note={dirty ? 'Exports write the saved version. Your unsaved changes are not in this file.' : null} />
             )}
 
             {!running && !errored && failed.length > 0 && evidence?.status !== 'unavailable' && (
@@ -981,7 +1022,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                     )}
                     {failure.kind === 'export' && (
                       <>
-                        <button type="button" className={ghostBtn} onClick={() => doExport(failure.format, version, exportOpener.current, !!failure.preview)} disabled={acting}>Retry export</button>
+                        <button type="button" className={ghostBtn} onClick={() => doExport(failure.format, version, exportOpener.current)} disabled={acting}>Retry export</button>
                         <button type="button" className={ghostBtn} onClick={() => { setFailure(null); focusLater(exportOpener); }}>Dismiss</button>
                       </>
                     )}
@@ -1000,7 +1041,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
 
             {!proposal && (
               <>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="analysis-inputs">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-testid="analysis-inputs">
                   {inputs.map((i) => (
                     <div key={i.k} className="rounded-lg border border-axal-hairline px-3 py-2 dark:border-gray-800">
                       <div className={eyebrow}>{i.k}</div>
@@ -1012,6 +1053,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                 {running && (
                   <Card variant="dashed" padding="lg" data-testid="analysis-running">
                     <p className="text-[13px] font-bold">Discovering candidates, crawling public sites…</p>
+                    {runStartedAt(analysis) ? <p className="mt-1 font-mono text-[12px] text-axal-muted">{`Started ${dayTime(runStartedAt(analysis))}`}</p> : null}
                     <p className="mt-1 text-[12px] text-axal-muted">Nothing is listed until the run returns. No names appear while it is working.</p>
                   </Card>
                 )}
@@ -1056,14 +1098,26 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                           <button type="button" className={`${primaryBtn} min-h-[44px] sm:min-h-0`} onClick={focusAdd}>Add a source</button>
                           <Link to={reviseHref(analysis)} className={`${ghostBtn} inline-flex min-h-[44px] items-center sm:min-h-0`}>Revise the search</Link>
                         </div>
-                        <div className="mt-3 border-t border-axal-hairline pt-2.5 text-[11.5px] text-axal-muted dark:border-gray-800">
-                          <div className={eyebrow}>What the run did</div>
-                          <ul className="mt-1 space-y-0.5">
-                            <li>{`Searched “${analysis.inputs?.market || ''}”${analysis.inputs?.region_focus ? `, ${analysis.inputs.region_focus}` : ''}, ${analysis.inputs?.depth === 'deep' ? 'Deep dive' : 'Quick scan'}`}</li>
-                            <li>{`Discovery returned ${candidates.length} ${candidates.length === 1 ? 'company' : 'companies'} · ${evidence.sources_tried} ${evidence.sources_tried === 1 ? 'read' : 'reads'} tried`}</li>
-                            <li>Saved as complete · Insufficient evidence</li>
-                          </ul>
-                        </div>
+                        {/* D7175 part 2 (RS-13 B3): each step with the time the run recorded for it. */}
+                        {(() => {
+                          const did = runSteps(analysis);
+                          return (
+                            <div className="mt-3 border-t border-axal-hairline pt-2.5 text-[11.5px] text-axal-muted dark:border-gray-800" data-testid="analysis-run-steps">
+                              <div className={eyebrow}>What the run did</div>
+                              <ul className="mt-1 space-y-0.5">
+                                {did.lines.map((l) => (
+                                  <li key={l.k} className="flex gap-2">
+                                    {did.timed ? <span className="w-11 shrink-0 font-mono text-axal-ink dark:text-gray-100">{clock(l.at) || '—'}</span> : null}
+                                    <span>{l.text}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {!did.timed && (
+                                <p className="mt-1"><Unrecorded /> <span className="ml-1">step times: this run is older than the record of them</span></p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </Card>
                     )}
 
@@ -1245,11 +1299,16 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                           <table className="w-full min-w-[760px] text-left text-[12px]">
                             <caption className="sr-only">Classification and the evidence behind it · the subject is excluded</caption>
                             <thead>
-                              <tr>{['Company', 'Category', 'Origin', 'Relevance', 'Sources', 'Summary', ''].map((h) => <th key={h || 'x'} className={th}>{h}</th>)}</tr>
+                              {/* D7175 part 2 (RS-13 B1): the canvas's five columns; Remove stays as the row's action. */}
+                              <tr>
+                                {['Company', 'Classification', 'Why · support', 'Sources'].map((h) => <th key={h} scope="col" className={th}>{h}</th>)}
+                                <th scope="col" className={`${th} text-right`}>Relevance</th>
+                                <th scope="col" className={th}><span className="sr-only">Remove</span></th>
+                              </tr>
                             </thead>
                             <tbody>
                               {candidates.map((c) => (
-                                <tr key={c.id} className={`border-t border-axal-hairline align-top dark:border-gray-800 ${c.origin === 'manual' ? 'bg-violet-50/60 dark:bg-violet-950/20' : ''}`}>
+                                <tr key={c.id} data-testid={`competitor-row-${c.id}`} className={`border-t border-axal-hairline align-top dark:border-gray-800 ${c.origin === 'manual' ? 'bg-violet-50/60 dark:bg-violet-950/20' : ''}`}>
                                   <td className="py-2.5 pr-2">
                                     <Link
                                       to={`/research/companies/${encodeURIComponent(id)}/${encodeURIComponent(c.id)}`}
@@ -1257,7 +1316,9 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                                     >
                                       {c.name}
                                     </Link>
-                                    <div className="text-[11px] text-axal-muted">{c.domain || <Unrecorded />}</div>
+                                    <div className="text-[11px] text-axal-muted">
+                                      {c.domain || 'Website: Not recorded'} · {ORIGIN_WORD[c.origin] || ORIGIN_WORD.known}
+                                    </div>
                                     {/* D593 (the C0 board): the directory profile, only when exactly
                                         one directory company has this site or this name. A name
                                         with no profile gets no link. */}
@@ -1270,7 +1331,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                                   </td>
                                   <td className="py-2.5 pr-2">
                                     <select
-                                      aria-label={`Category for ${c.name}`}
+                                      aria-label={`Classification for ${c.name}`}
                                       className="rounded-md border border-axal-hairline bg-white px-1.5 py-1 text-[11.5px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
                                       value={c.category === 'adjacent' ? 'adjacent' : 'direct'}
                                       disabled={busy !== ''}
@@ -1279,30 +1340,31 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                                       <option value="direct">Direct</option>
                                       <option value="adjacent">Adjacent</option>
                                     </select>
-                                    {candidateSupport(c, allSources).unconfirmed
+                                    {supportBy[c.id].unconfirmed
                                       ? <div className="mt-1 text-[10.5px] font-semibold text-amber-800 dark:text-amber-300">unconfirmed · no source read</div>
                                       : null}
                                   </td>
-                                  <td className="py-2.5 pr-2"><Pill tone={ORIGIN_TONE[c.origin] || 'neutral'}>{ORIGIN_WORD[c.origin] || ORIGIN_WORD.known}</Pill></td>
-                                  <td className="py-2.5 pr-2 font-mono">
-                                    {c.relevance_score == null ? <Unrecorded /> : `${c.relevance_score} / 100`}
+                                  <td className="max-w-[340px] py-2.5 pr-2">
+                                    <span className="text-axal-ink dark:text-gray-100">{c.summary || <Unrecorded />}</span>
+                                    <small className="mt-0.5 block text-[11px] text-axal-muted">
+                                      {supportBy[c.id].tried
+                                        ? `Read from ${supportBy[c.id].fetched} of ${supportBy[c.id].tried} ${supportBy[c.id].tried === 1 ? 'source' : 'sources'}`
+                                        : <StateChip kind="not_applicable" label={supportBy[c.id].notAttempted ? 'Not attempted · no website' : 'No source read'} />}
+                                    </small>
                                   </td>
                                   <td className="py-2.5 pr-2">
-                                    {(() => {
-                                      // D7175: numbered when read, Unavailable with the status when not.
-                                      const sup = candidateSupport(c, allSources);
-                                      const attached = (sourcesBy[c.id] || []).some((s) => s.origin === 'manual');
-                                      return sup.chips.length || attached
-                                        ? (
-                                          <span className="flex flex-wrap gap-1">
-                                            {sup.chips.map((x, i) => <SourceChip key={i} chip={x} />)}
-                                            {attached ? <KindTag kind="man">attached</KindTag> : null}
-                                          </span>
-                                        )
-                                        : <StateChip kind="not_applicable" label={sup.notAttempted ? 'Not attempted · no website' : 'No source read'} />;
-                                    })()}
+                                    {supportBy[c.id].chips.length || attachedTo(c.id)
+                                      ? (
+                                        <span className="flex flex-wrap gap-1">
+                                          {supportBy[c.id].chips.map((x, i) => <SourceChip key={i} chip={x} />)}
+                                          {attachedTo(c.id) ? <KindTag kind="man">attached</KindTag> : null}
+                                        </span>
+                                      )
+                                      : <span className="text-[11px] text-axal-muted">none attempted</span>}
                                   </td>
-                                  <td className="py-2.5 pr-2 text-axal-muted">{c.summary || <Unrecorded />}</td>
+                                  <td className="py-2.5 pr-2 text-right font-mono">
+                                    {c.relevance_score == null ? <Unrecorded /> : `${c.relevance_score} / 100`}
+                                  </td>
                                   <td className="py-2.5">
                                     <button type="button" className="text-[11.5px] font-semibold text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
                                       disabled={busy !== ''}
@@ -1498,8 +1560,8 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                   onClick={() => startExport('md', actionsRef.current)} />
                 <SheetRow title="Export JSON" description={`Saved version ${version}.${dirty ? ' Asks first.' : ''}`}
                   onClick={() => startExport('json', actionsRef.current)} />
-                <SheetRow title="Preview Markdown" description={`The file for saved version ${version}, before it is downloaded.`}
-                  onClick={() => previewMd(actionsRef.current)} />
+                <SheetRow title="Preview the file" description={`Markdown or JSON for saved version ${version}, before it is downloaded.`}
+                  onClick={() => openPreview(actionsRef.current)} />
                 <button type="button" className={`${ghostBtn} mt-3 min-h-[48px] w-full`} onClick={() => setSheetOpen(false)}>Close</button>
               </PhoneSheet>
             )}
