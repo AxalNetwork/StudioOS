@@ -1,0 +1,1837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Funds Source Import Console · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.st-bh{display:flex;gap:14px;align-items:flex-start}
+.st-bh h1{font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.st-bh p{font-size:13px;color:var(--mu);margin-top:4px;max-width:1060px;line-height:1.55}
+.st-id{font:700 11px var(--mo);padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--bg);white-space:nowrap;margin-top:2px}
+.st-sec{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px}
+.st-sh{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.st-note{font-size:12px;color:var(--mu)}
+.st-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.st-sep{width:1px;height:20px;background:var(--hair2);margin:0 6px}
+.st-gray{filter:grayscale(1)}
+/* chips */
+.st-c{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu);vertical-align:middle}
+.st-c svg{flex:none}
+.st-nr{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-na{color:var(--mu);background:transparent;border-color:transparent;padding-left:2px}
+.st-un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed;border-width:1.5px}
+.st-un svg{color:var(--neg)}
+.st-rf{color:var(--ink);background:var(--raised);border-color:var(--ink);border-width:1px}
+.st-stale{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed;border-width:1.5px}
+.st-part{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-pv{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dashed;border-width:1.5px;font-style:italic}
+.st-nc{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-l-ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.st-l-am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-l-mu{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.st-l-fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.st-retry{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);color:var(--vt);background:transparent;border:0;padding:2px 4px;border-radius:6px;vertical-align:middle}
+.st-unin{display:inline-flex;align-items:center;gap:4px;color:var(--neg);font-weight:800}
+.st-nrin{color:var(--mu);font-style:italic;font-weight:600}
+.st-nain{color:var(--mu)}
+.st-why{display:block;font-size:12px;color:var(--mu);line-height:1.45}
+.st-route{font:700 12px var(--sg)}
+.st-zero{color:var(--ink)!important;font-weight:800}
+.st-cellnr{color:var(--mu)}
+.st-stack{font:800 20px var(--mo);letter-spacing:-.02em}
+.st-eng{display:inline-flex;font:700 11px var(--mo);color:var(--vt);background:var(--lav);border:1px dashed var(--lavE);border-radius:6px;padding:1px 6px}
+.st-spec{font:500 11px var(--mo)}
+/* tiles */
+.st-tiles{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+.st-t5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.st-tw{display:flex;flex-direction:column;gap:6px;min-width:0}
+.st-cap2{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.st-tile{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px;min-height:150px;align-items:flex-start}
+.st-tl{font-size:12px;color:var(--mu);font-weight:600}
+.st-tv{font:800 26px var(--mo);letter-spacing:-.03em;line-height:1.1;color:var(--ink)}
+.st-ts{display:flex;flex-direction:column;gap:5px;align-items:flex-start;font-size:12px}
+.st-tna{opacity:1}
+.st-big-nr{color:var(--mu);font-weight:500}
+.st-big-un{display:inline-grid;place-items:center;width:30px;height:30px;border:1.5px dashed var(--hair2);border-radius:8px;font:800 18px var(--sg);color:var(--neg)}
+.st-big-rf{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid var(--ink);border-radius:8px;font:700 18px var(--sg);color:var(--ink);background:var(--raised)}
+.st-provv{color:var(--mu);font-style:italic}
+.st-wh{font:700 15px var(--sg);color:var(--mu);font-style:italic}
+.st-withheld{border-style:dashed}
+.st-mini{min-height:120px}
+.st-sk{display:inline-block;height:12px;border-radius:5px;background:var(--skel)}
+/* prose */
+.st-prose{font-size:14px;line-height:1.7;padding:6px 0;border-bottom:1px solid var(--hair)}
+.st-prose:last-child{border-bottom:0}
+/* tables */
+.st-tb{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.45}
+.st-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1.5px solid var(--ink)}
+.st-tb td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.st-tb .n{text-align:right;font-family:var(--mo)}
+.st-tb code,.st-dict code,.st-sec code,.st-bh code,.st-rules code,.st-opt code,.st-foot2 code{font:500 11px var(--mo);background:var(--raised);border:1px solid var(--hair);padding:0 4px;border-radius:4px}
+.st-dict{background:var(--card);border-radius:12px;overflow:hidden}
+.st-dict td:first-child{font-weight:800;white-space:nowrap}
+.st-dict td:first-child small{display:block;font:600 10px var(--mo);color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+.st-dict td:nth-child(4){font:700 13px var(--mo);color:var(--mu);white-space:nowrap}
+.st-modrow td{background:var(--raised)}
+.st-in th{border-bottom:1px solid var(--hair2)}
+.st-none-ex{font-size:12px;color:var(--mu)}
+.st-foot2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;font-size:12px;color:var(--mu);line-height:1.5}
+.st-foot2 b{color:var(--ink)}
+/* lists */
+.st-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair)}
+.st-list li:first-child{border-top:0}
+.st-list li>span:first-child{display:flex;flex-direction:column}
+.st-list small{font-size:12px;color:var(--mu)}
+.st-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.st-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.st-lb{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-height:190px}
+.st-lbh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-lbh b{font-size:14px}
+.st-cnt{font:700 11px var(--mo);padding:1px 7px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--ink)}
+.st-none{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:9px;background:var(--raised);font-size:13px}
+.st-unbox,.st-rfbox{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.5}
+.st-unbox{border:1.5px dashed var(--hair2);background:var(--card)}
+.st-unbox svg{color:var(--neg);margin-top:3px}
+.st-unbox div,.st-rfbox div{display:flex;flex-direction:column;gap:3px;flex:1}
+.st-unbox span,.st-rfbox span{color:var(--mu)}
+.st-rfbox{border:1px solid var(--ink);background:var(--raised)}
+.st-rfbox svg{margin-top:3px}
+.st-pb{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;background:var(--amBg);border:1px solid var(--amE);color:var(--ink);font-size:12.5px;line-height:1.45}
+.st-pb svg{color:var(--amT);flex:none}
+.st-pb>span{flex:1}
+.st-skl>div{display:flex;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.st-skl>div:first-child{border-top:0}
+/* charts */
+.st-ch{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.st-chh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-chh b{font-size:14px}
+.st-ch svg{font-family:var(--sg)}
+.st-rule{font:700 13px var(--sg);padding:12px 14px;border-left:3px solid var(--vi);background:var(--card);border-radius:0 9px 9px 0}
+/* composite */
+.st-comp{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.st-ch2{display:flex;justify-content:space-between;align-items:flex-end}
+.st-ch2 h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.st-comp .st-tile{background:var(--raised)}
+.st-rules{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5;list-style:disc!important;padding-left:18px!important}
+.st-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:500 11.5px var(--mo);color:var(--mu)}
+/* phone */
+.st-pt{display:flex;justify-content:space-between;padding:12px 18px 8px;font:700 12px var(--sg);border-bottom:1px solid var(--hair);background:var(--card)}
+.st-plist{background:var(--card);border:1px solid var(--hair);border-radius:12px}
+.st-plist>div{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:12px;border-top:1px solid var(--hair)}
+.st-plist>div:first-child{border-top:0}
+.st-plist span{font-size:12.5px}
+/* do / don't */
+.st-dd{display:flex;flex-direction:column;gap:8px}
+.st-ddt{font:800 14px var(--sg)}
+.st-ddp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st-dn,.st-do{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px}
+.st-dn{border:1.5px solid var(--negE);background:var(--negBg)}
+.st-do{border:1.5px solid var(--posE);background:var(--posBg)}
+.st-ddl{display:inline-flex;align-items:center;gap:5px;font:800 11px var(--mo);text-transform:uppercase;letter-spacing:.05em}
+.st-dn .st-ddl{color:var(--neg)}
+.st-do .st-ddl{color:var(--pos)}
+/* options */
+.st-opt{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.st-opt p{font-size:12.5px;line-height:1.55;color:var(--mu)}
+.st-opt b{font-size:15px}
+.st-on{border:2px solid var(--vi)}
+.st-ol{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt)}
+.st-code{font:500 12px/1.6 var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;white-space:pre-wrap;margin:0;color:var(--ink)}
+.st-whyi{font-size:12px;color:var(--mu)}
+.st-ch svg text{font-family:'Space Grotesk',system-ui,sans-serif}
+.st-ch svg text[font-family]{font-family:'Roboto Mono',ui-monospace,monospace}
+.st-plist~.st-lb{min-height:0}
+
+.adp-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.adp-kbd{margin-left:auto;font:600 10px var(--mo);color:var(--mu);border:1px solid var(--hair);border-radius:5px;padding:1px 5px}
+.adp-navn{margin-left:auto;font:700 10px var(--mo);color:var(--mu);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 6px}
+.sd nav a{gap:6px}
+/* indicators */
+.adp-p-dr{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.adp-p-rv{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.adp-p-sa{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed;border-width:1.5px}
+.adp-p-np{color:var(--neg);background:var(--card);border-color:var(--negE);border-style:dashed;border-width:1.5px}
+.adp-r-nr{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.adp-r-pub{color:#fff;background:var(--pos);border-color:var(--pos)}
+.adp-r-wd{color:var(--ink);background:var(--raised);border-color:var(--ink)}
+.adp-r-ar{color:var(--mu);background:var(--raised);border-color:var(--hair)}
+.adp-d-acc{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.adp-stage{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--sg);color:var(--mu);white-space:nowrap}
+.adp-stage .eye{padding:0 5px;border:1px solid var(--hair);border-radius:4px}
+.adp-stg2{font:600 12.5px var(--sg);color:var(--mu)}
+.adp-ver{display:inline-flex;align-items:center;font:700 11px var(--mo);padding:2px 8px;border-radius:6px;border:1px solid var(--hair2);background:var(--card);color:var(--ink);white-space:nowrap}
+.adp-ver.ed{border-color:var(--vi);color:var(--vt);background:var(--lav)}
+.adp-ann{display:inline-flex;align-items:center;gap:4px;font:600 10.5px var(--mo);color:#7c3aed;background:repeating-linear-gradient(135deg,rgba(124,58,237,.07) 0 6px,transparent 6px 12px);border:1px dashed #a78bfa;border-radius:5px;padding:1px 6px;white-space:nowrap;vertical-align:middle}
+.adp-pol{display:inline-flex;align-items:center;gap:4px;font:600 10.5px var(--mo);color:#b45309;background:#fff7ed;border:1px dashed #f59e0b;border-radius:5px;padding:1px 6px;white-space:nowrap;vertical-align:middle}
+.adp-src{display:inline-flex;align-items:center;gap:4px;font:700 10px var(--mo);letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);color:var(--mu);white-space:nowrap;margin-right:4px}
+.adp-src em{font-style:normal;text-transform:none;letter-spacing:0;font-weight:500;color:var(--mu)}
+.adp-src-c{color:var(--vt)}.adp-src-s{color:var(--pos)}.adp-src-t{border-style:dashed}
+.adp-ntb{display:flex;gap:6px;flex:none;align-items:center}
+.nt .ic{font-weight:800;flex:none}
+.btn.sm{min-height:28px;padding:0 10px;font-size:12px}
+.btn.dng{color:var(--neg)!important;border-color:var(--negE)}
+.btn.p.sm{min-height:28px}
+/* page header + queue */
+.adp-ph{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+.adp-ph h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2;margin-top:2px}
+.adp-ph p{font-size:13px;color:var(--mu);margin-top:3px}
+.adp-phr{display:flex;gap:10px;align-items:center}
+.adp-views{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.adp-views a{display:inline-flex;align-items:center;gap:6px;padding:8px 12px 9px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.adp-views a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.adp-views a .mo{font-size:11px;padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised)}
+.adp-views.sm a{padding:7px 8px;font-size:12.5px}
+.adp-fil{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.adp-fb{font-weight:600}
+.adp-q td{vertical-align:top;padding:11px 10px}
+.adp-q td small{margin-top:2px}
+.adp-vn{font-weight:800;color:var(--ink)!important}
+.adp-st3{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.adp-own{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.adp-blk{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--mu)}
+.adp-blk.a{color:var(--amT)}.adp-blk.g{color:var(--pos)}.adp-blk.r{color:var(--neg)}
+.adp-nw{white-space:nowrap;font-size:12px}
+.adp-qf{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-top:1px solid var(--hair)}
+.adp-pg{display:flex;gap:8px;align-items:center;font-size:12px}
+.adp-card{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.adp-ch{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)}
+.adp-ch h2{font-size:14px;font-weight:800}
+.adp-cb{padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.adp-row{display:flex;align-items:center;gap:8px}
+.adp-sep{height:1px;background:var(--hair);margin:4px 0}
+.adp-g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.adp-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.adp-g5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.adp-g2w{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+.adp-side2{display:flex;flex-direction:column;gap:10px}
+.adp-crop{padding:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;align-content:start}
+.adp-crop>.adp-g2,.adp-crop>.adp-g3,.adp-crop>.adp-g5,.adp-crop>.adp-card,.adp-crop>p,.adp-crop>.adp-row,.adp-crop>.adp-mstat,.adp-crop>.adp-ead,.adp-crop>section{grid-column:1/-1}
+.adp-cell{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.adp-cell.sm{min-height:0}
+.adp-empty{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:10px 0;width:100%}
+.adp-sk{display:block;border-radius:6px;background:linear-gradient(90deg,var(--skel),var(--skel2),var(--skel))}
+/* workspace */
+.adp-wh{display:flex;flex-direction:column;gap:8px}
+.adp-crumb{display:flex;gap:6px;font:600 12px var(--sg);color:var(--mu)}
+.adp-crumb a{color:var(--mu)!important}
+.adp-crumb span:last-child{color:var(--ink)}
+.adp-wr{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.adp-wr h1{font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.adp-ind{display:flex;gap:18px;margin-top:8px;flex-wrap:wrap}
+.adp-indc{display:inline-flex;align-items:center;gap:7px}
+.adp-wa{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:640px}
+.adp-actor{font-size:12px;color:var(--mu)}
+.adp-actor b{color:var(--ink)}
+.adp-tabs{gap:22px}
+.adp-save{display:inline-flex;align-items:center;gap:6px;font:700 11.5px var(--sg);color:var(--mu);padding:4px 9px;border-radius:7px;border:1px solid var(--hair);background:var(--card);white-space:nowrap}
+.adp-save.ok{color:var(--pos);border-color:var(--posE);background:var(--posBg)}
+.adp-save.bad{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.adp-save.am{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.adp-spin{width:12px;height:12px;border-radius:999px;border:2px solid var(--hair2);border-top-color:var(--vi);display:inline-block;flex:none}
+.adp-ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+.adp-ws.one{grid-template-columns:minmax(0,1fr)}
+.adp-wm{display:flex;flex-direction:column;gap:14px;min-width:0}
+.adp-wsd{display:flex;flex-direction:column;gap:12px}
+.adp-rl{display:flex;flex-direction:column}
+.adp-rl li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.adp-rl li:first-child{border-top:0}
+.adp-rl small{display:block;color:var(--mu);font-size:11.5px}
+.adp-ri{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);color:var(--mu);font-size:11px}
+.adp-ri.ok{color:var(--pos);border-color:var(--posE);background:var(--posBg)}
+.adp-ri.blk{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.adp-ri.un{color:var(--neg);border-color:var(--hair2);border-style:dashed;background:var(--card)}
+.adp-bs{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.adp-bs.miss{border-color:var(--amE)}
+.adp-bs header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.adp-bs h3{font-size:13.5px;font-weight:800}
+.adp-srcs{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.adp-ta{border:1px solid var(--hair);border-radius:8px;padding:9px 11px;font-size:13px;line-height:1.55;background:var(--card);color:var(--ink)}
+.adp-ta.fv{outline:2px solid var(--vi);outline-offset:1px}
+.adp-ph2{color:var(--mu)}
+.adp-lk2{font:700 11.5px var(--sg)}
+.adp-bs .foot{display:flex;align-items:center;gap:5px;color:var(--amT)}
+.adp-h2{font-size:15px;font-weight:800}
+/* terms */
+.adp-tr{display:grid;grid-template-columns:130px minmax(0,1fr);gap:4px 12px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.adp-tr:first-child{border-top:0}
+.adp-tr label{font-size:12.5px;font-weight:600;padding-top:6px}
+.adp-tv{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.adp-ts{grid-column:2}
+.adp-ts:empty{display:none}
+.adp-in{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink);min-width:180px}
+.adp-in.err{border-color:var(--neg);border-width:1.5px}
+.adp-cur{font:700 10px var(--mo);color:var(--mu)}
+.adp-req{color:var(--neg);font-weight:800}
+.adp-fe{display:flex;align-items:center;gap:5px;color:var(--neg);font-size:12px;font-weight:600}
+.adp-cmp{display:flex;flex-direction:column;gap:8px}
+.adp-cmp dl,.adp-kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:7px 12px;font-size:12.5px}
+.adp-cmp dt,.adp-kv dt{color:var(--mu)}
+.adp-kv dd{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+/* evidence */
+.adp-evh{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.adp-acc{font-size:12px;display:inline-flex;align-items:center;gap:5px}
+.adp-acc.nda{color:var(--ink);font-weight:600}
+.adp-drw{position:absolute;top:0;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 50px rgba(0,0,0,.18);display:flex;flex-direction:column;z-index:9}
+.adp-pkl li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.adp-pkl small{display:flex;align-items:center;gap:5px;color:var(--mu)}
+/* audience */
+.adp-aud li{display:grid;grid-template-columns:minmax(0,1fr) auto 30px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.adp-aud li:first-child{border-top:0}
+.adp-aud small{display:block;color:var(--mu);font-size:11px}
+.adp-disc{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.adp-disc small{display:block;color:var(--mu);font-size:11.5px}
+.adp-ap{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:10px 0;border-top:1px solid var(--hair);justify-items:start}
+.adp-ap:first-child{border-top:0}
+/* review */
+.adp-cmph{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.adp-tog{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
+.adp-diff th[scope=row]{font:600 12.5px var(--sg);text-transform:none;letter-spacing:0;color:var(--ink);white-space:normal}
+.adp-chg{background:var(--amBg)}
+.adp-mat{font:700 9.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);border:1px solid var(--amE);border-radius:4px;padding:0 4px;white-space:nowrap}
+.adp-cm li{display:flex;flex-direction:column;gap:3px;padding:8px 0;font-size:12.5px}
+.adp-dec{display:flex;gap:8px}
+.adp-oc{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.5}
+.adp-oc.g{border-left:3px solid var(--pos)}.adp-oc.a{border-left:3px solid var(--amD)}.adp-oc.r{border-left:3px solid var(--neg)}
+.adp-och{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.adp-och b{font-size:13px}
+/* preview */
+.adp-pvbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--ink);color:var(--card);font-size:12.5px}
+.adp-pvt{display:flex;align-items:flex-start;gap:7px;min-width:0;flex:1}.adp-pvt svg{margin-top:4px;flex:none}
+.adp-pvbar .adp-in{background:transparent;color:var(--card);border-color:rgba(255,255,255,.35);min-width:0}
+.adp-pvbar .btn,.cv .adp-pvbar a.btn{background:transparent;color:var(--card)!important;border-color:rgba(255,255,255,.35)}
+.adp-pvbar .adp-row{flex:none}
+.adp-pvf{border:2px dashed var(--hair2);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px;background:var(--bg)}
+.adp-pvh h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.adp-pvh p{color:var(--mu);margin:3px 0 8px}
+.adp-pk{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.adp-pk b{font-size:20px;font-weight:700}
+.adp-docs li{display:flex;align-items:center;gap:7px;padding:5px 0;font-size:12.5px}
+.adp-docs li svg{color:var(--pos)}
+.adp-docs li.lk{color:var(--mu)}.adp-docs li.lk svg{color:var(--mu)}
+.adp-nocta{font-size:12px;color:var(--mu);border-top:1px dashed var(--hair2);padding-top:10px}
+/* preflight */
+.adp-pfl{display:flex;flex-direction:column}
+.adp-pf{display:grid;grid-template-columns:20px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.adp-pf:first-child{border-top:0}
+.adp-pf small{display:block;color:var(--mu);font-size:11.5px}
+.adp-dim{position:absolute;inset:0;background:var(--dim);z-index:8}
+.adp-mdl{position:absolute;left:50%;top:110px;transform:translateX(-50%);width:560px;background:var(--card);border:1px solid var(--hair);border-radius:14px;box-shadow:0 30px 60px rgba(0,0,0,.25);z-index:9;display:flex;flex-direction:column}
+.adp-mh{padding:16px 18px 10px;display:flex;flex-direction:column;gap:4px}
+.adp-mh h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.adp-mb{padding:4px 18px 14px;display:flex;flex-direction:column;gap:12px;flex:1;overflow:hidden}
+.adp-mf{padding:12px 18px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px}
+.adp-mstat{position:relative}
+.adp-mstat .adp-mdl{position:static;transform:none;width:100%}
+.adp-toast{display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:10px;background:var(--posBg);border:1px solid var(--posE);color:var(--ink);font-size:13px}
+.adp-toast.w{background:var(--amBg);border-color:var(--amE)}
+.adp-toast svg{color:var(--pos)}
+.adp-pubh{display:flex}
+/* history */
+.adp-hl li{display:grid;grid-template-columns:70px 14px minmax(0,1fr);gap:10px;align-items:center;padding:10px 16px;border-top:1px solid var(--hair);font-size:12.5px}
+.adp-hl li:first-child{border-top:0}
+.adp-hd{width:9px;height:9px;border-radius:999px;background:var(--hair2)}
+.adp-hl li.pub .adp-hd{background:var(--pos)}.adp-hl li.ok .adp-hd{background:var(--vi)}.adp-hl li.am .adp-hd{background:var(--amD)}
+.adp-vl li{display:grid;grid-template-columns:34px auto;gap:4px 8px;align-items:center;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.adp-vl li:first-child{border-top:0}
+.adp-vl small{grid-column:2;color:var(--mu);font-size:11.5px}
+.adp-bl{display:flex;flex-direction:column;gap:5px;font-size:12.5px;line-height:1.5}
+.adp-bl li{padding-left:14px;position:relative}
+.adp-bl li::before{content:'';position:absolute;left:2px;top:8px;width:5px;height:5px;border-radius:999px;background:var(--mu)}
+.adp-lbl{font-size:12.5px;font-weight:700}
+/* conflict */
+.adp-cf{border:1.5px solid var(--amE);background:var(--amBg);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.adp-cfs{display:flex;flex-direction:column;gap:6px}
+.adp-cfs .adp-ta{background:var(--card)}
+.adp-cfs.mine .adp-ta,.adp-ta.mine{border-color:var(--vi)}
+.adp-cf ins{background:var(--posBg);text-decoration:none;border-bottom:1.5px solid var(--pos)}
+.adp-cf del{color:var(--neg)}
+/* create */
+.adp-pick{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.adp-pick .inp{border:0;border-bottom:1px solid var(--hair);border-radius:0}
+.adp-pick li{padding:8px 12px;font-size:12.5px;border-top:1px solid var(--hair)}
+.adp-pick li:first-child{border-top:0}
+.adp-pick li[aria-selected=true]{background:var(--lav)}
+.adp-pick small{display:block;color:var(--mu);font-size:11.5px}
+.adp-radio{display:flex;align-items:center;gap:8px;font-size:13px}
+.adp-cons{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border:1px dashed var(--hair2);border-radius:10px;font-size:12.5px;background:var(--raised)}
+.adp-cons svg{margin-top:3px;flex:none}
+.adp-flow{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}
+.adp-flow li{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:12.5px;font-weight:700}
+.adp-flow li .mo{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font-size:11px}
+.adp-flow.sm{grid-template-columns:1fr}
+.adp-flow.sm li{flex-direction:row;align-items:center}
+/* Eadwyn */
+.adp-ead{width:auto;align-items:stretch;padding:0;gap:0}
+.adp-eadc{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column}
+.adp-eh{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--hair)}
+.adp-eb{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px}
+.adp-ebd{padding:14px;display:flex;flex-direction:column;gap:8px;flex:1;font-size:12.5px}
+.adp-eq{justify-content:flex-start;white-space:normal;text-align:left;min-height:34px;padding:6px 10px;font-weight:600}
+.adp-prop{border:1.5px dashed var(--hair2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;background:var(--raised)}
+.adp-prop p{line-height:1.55}
+.adp-cit{font-size:11px;color:var(--mu);display:flex;flex-direction:column;gap:2px}
+.adp-ef{padding:12px 14px;border-top:1px solid var(--hair)}
+/* phone + tablet */
+.adp-phone{width:390px;height:844px;display:flex;flex-direction:column;border:1px solid var(--hair);overflow:hidden;position:relative}
+.adp-pst{display:flex;justify-content:space-between;padding:10px 18px 4px;font-size:11px}
+.adp-ptb{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--hair);background:var(--card);font-size:14px}
+.adp-ptb .ib{width:44px;height:44px}
+.adp-pb{flex:1;padding:14px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.adp-pt{font-size:20px;font-weight:800}
+.adp-pbar{display:flex;gap:8px;padding:12px 14px 22px;border-top:1px solid var(--hair);background:var(--card)}
+.adp-pbar .btn{flex:1;min-height:44px}
+.adp-qc{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--hair);border-radius:12px;background:var(--card);color:var(--ink)!important}
+.adp-qc small{color:var(--mu);font-size:12px}
+.adp-pstat{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.adp-pseg{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.adp-pseg a{flex:1;text-align:center;padding:10px 0;min-height:44px;font:600 12.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent}
+.adp-pseg a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.adp-psheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);padding:10px 16px 26px;display:flex;flex-direction:column;gap:12px;z-index:5}
+.adp-psheet h2{font-size:17px;font-weight:800}
+.adp-psheet .btn{min-height:44px}
+.adp-psheet .adp-kv{grid-template-columns:80px minmax(0,1fr)}
+.adp-grab{align-self:center;width:40px;height:4px;border-radius:999px;background:var(--hair2)}
+.adp-conf{padding:10px;border:1px solid var(--hair);border-radius:10px;min-height:44px}
+.adp-tab{width:834px;height:1112px;border:1px solid var(--hair);display:flex;flex-direction:column;overflow:hidden}
+.adp-ttb{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--hair);background:var(--card);font-size:15px}
+.adp-tbd{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.adp-tg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* docs */
+.adp-doc{padding:36px 40px;display:flex;flex-direction:column;gap:22px}
+.adp-dh{display:flex;gap:14px;align-items:flex-start}
+.adp-id{font:700 11px var(--mo);background:var(--ink);color:var(--card);padding:3px 8px;border-radius:5px;margin-top:5px;white-space:nowrap}
+.adp-dh h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
+.adp-dh p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:980px}
+.adp-ds{display:flex;flex-direction:column;gap:10px}
+.adp-ds>h2{font:700 11px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.adp-dt td{vertical-align:top;line-height:1.5}
+.adp-dt code,.adp-why code,.adp-doc code{font:600 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:4px;padding:0 4px}
+.adp-why{font-size:13px;line-height:1.7;max-width:1200px}
+.adp-crop,.adp-doc,.adp-phone,.adp-tab{box-sizing:border-box}
+.cv table{color:inherit}
+/* ---- 10 Nov amendments: Deals, transaction families, parties, authority ---- */
+.adp-idn{display:flex;flex-wrap:wrap;gap:8px 28px;margin-top:2px;align-self:flex-start;padding:8px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card)}
+.adp-idn>span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.adp-idn b{font-size:13px}
+.adp-idn small{font-size:11.5px;color:var(--mu)}
+.adp-cop{color:var(--mu);font-size:11.5px}
+.adp-q td small{display:block}
+.adp-famg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.adp-ds .adp-famg{grid-template-columns:repeat(3,minmax(0,1fr))}
+.adp-fam{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:12.5px;line-height:1.45}
+.adp-fam>span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.adp-fam b{font-size:13px}
+.adp-fam small{color:var(--mu);font-size:12px}
+.adp-fam input{margin-top:3px}
+.adp-fam.on{border-color:var(--vi);background:var(--lav)}
+.adp-fam.gate{background:var(--raised);border-style:dashed}
+.adp-fam.gate b{color:var(--mu)}
+.adp-reg{display:inline-flex;flex-direction:column;gap:1px;padding:3px 7px;border:1px dashed var(--hair2);border-radius:6px;background:var(--raised)}
+.adp-reg b{font-size:12px}
+.adp-reg small{font-size:11px;color:var(--mu)}
+.adp-auth td,.adp-amt td{vertical-align:top;font-size:12.5px;line-height:1.45}
+.adp-auth td small,.adp-amt td small{display:block;color:var(--mu);font-size:11.5px}
+.adp-amt td:not(:first-child),.adp-amt th:not(:first-child){font-family:var(--mo)}
+.adp-amt .adp-tot td{border-top:1.5px solid var(--hair2);font-weight:700}
+.adp-flush>.adp-cb{padding:0;gap:0}
+.adp-flush .tbl{margin:0}
+.adp-al{display:flex;flex-direction:column}
+.adp-al li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.adp-al li:first-child{border-top:0}
+.adp-al li small{display:block;color:var(--mu);font-size:11.5px}
+.adp-lp{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:6px}
+.adp-lp.six{grid-template-columns:repeat(6,minmax(0,1fr))}
+.adp-lp li{display:flex;flex-direction:column;gap:5px;padding:8px;border:1px solid var(--hair);border-radius:9px;background:var(--card);font-size:11.5px;font-weight:700;line-height:1.3}
+.adp-lp li .mo{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:var(--raised);color:var(--mu);font-size:10.5px}
+.adp-lp li.d .mo{background:var(--lav);color:var(--vt)}
+.adp-ho{display:flex;flex-direction:column}
+.adp-ho li{padding:8px 0;border-top:1px solid var(--hair);font-size:13px;font-weight:700}
+.adp-ho li:first-child{border-top:0}
+.adp-ho li small{display:block;font-weight:500;color:var(--mu);font-size:11.5px}
+.adp-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.adp-pr{padding:9px 10px;border:1px solid var(--hair);border-radius:10px;background:var(--card);flex-wrap:wrap}
+.adp-pr.gate{background:var(--raised);color:var(--mu);border-style:dashed}
+.adp-pf2{display:flex;flex-direction:column;gap:1px;padding:9px 10px;border:1px solid var(--hair);border-radius:10px;background:var(--card)}
+.adp-pf2 small{color:var(--mu);font-size:11.5px}
+.adp-phr .scp{white-space:nowrap}
+.adp-q th:first-child,.adp-q td:first-child{width:250px}
+.adp-auth td:first-child{min-width:150px}
+.adp-ho.h{flex-direction:row;gap:0}
+.adp-ho.h li{flex:1;border-top:0;border-left:1px solid var(--hair);padding:4px 14px}
+.adp-ho.h li:first-child{border-left:0;padding-left:0}
+/* RFG · Research Funds · Google Sheets Sync (#7035) */
+.rfg-fn{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 10px var(--mo);flex:none}
+.cv .rfg-fv{outline:2px solid var(--vi);outline-offset:2px}
+.rfg-sm{font-size:11.5px;color:var(--mu)}
+.rfg-rt{font-size:11.5px;color:var(--mu)}
+.rfg-sa{color:var(--vt);border-color:var(--lavE);background:var(--lav)}
+.rfg-pend{color:var(--amT);background:var(--amBg);border:1px dashed var(--amD)}
+.rfg-fail{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.rfg-run{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--sg);color:var(--mu)}
+.rfg-card .adp-ch{flex-wrap:wrap}
+.rfg-cg{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.2fr) minmax(0,1.1fr);gap:0;border:1px solid var(--hair);border-radius:10px}
+.rfg-cg.one{grid-template-columns:1fr}
+.rfg-cc{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:12px 14px;min-width:0;font-size:12.5px}
+.rfg-cc+.rfg-cc{border-left:1px solid var(--hair)}
+.rfg-cc b{font-size:13px}
+.rfg-cc .lk{padding:0}
+.rfg-tabx{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--mo);color:var(--neg)}
+.rfg-lr{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;line-height:1.45}
+.rfg-lr svg{margin-top:3px;color:var(--mu);flex:none}
+.rfg-can{display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.rfg-can li{display:flex;align-items:center;gap:8px}
+.rfg-can li b{min-width:52px}
+.rfg-can li span{color:var(--mu)}
+.rfg-can li.ok svg{color:var(--pos)}
+.rfg-can li.no svg{color:var(--neg)}
+.rfg-can li.am svg{color:var(--amD)}
+.rfg-first{display:flex;gap:8px;font-size:12.5px}
+.rfg-first li{display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--hair);border-radius:999px;color:var(--mu)}
+.rfg-first li.on{border-color:var(--vi);color:var(--ink);font-weight:700}
+.rfg-first li .mo{font-size:10.5px}
+/* the shared Sheet as a side panel */
+.rfg-sht{position:absolute;top:0;right:0;bottom:0;background:var(--card);border-left:1px solid var(--hair);box-shadow:-24px 0 50px rgba(0,0,0,.18);z-index:9;display:flex;flex-direction:column;box-sizing:border-box}
+.rfg-shh{padding:18px 22px 12px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:12px}
+.rfg-shh h2{font-size:18px;font-weight:800;letter-spacing:-.01em;margin-top:2px}
+.rfg-shb{flex:1;overflow:hidden;padding:16px 22px;display:flex;flex-direction:column;gap:14px;font-size:13px;line-height:1.5}
+.rfg-shf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rfg-steps{display:flex;gap:6px;font:600 12px var(--sg);color:var(--mu);flex-wrap:wrap}
+.rfg-steps li{display:flex;align-items:center;gap:6px;padding:4px 10px 4px 5px;border-radius:999px;border:1px solid var(--hair)}
+.rfg-steps li .mo{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:var(--raised);font-size:10px}
+.rfg-steps li.on{border-color:var(--vi);color:var(--ink);font-weight:800}
+.rfg-steps li.on .mo{background:#7c3aed;color:#fff}
+.rfg-steps li.done .mo{background:var(--posBg);color:var(--pos)}
+.rfg-dir{display:grid;grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);align-items:center;gap:8px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.rfg-dir>span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rfg-dir b{font-size:13.5px}
+.rfg-dir small{font:500 11.5px var(--mo);color:var(--mu)}
+.rfg-arr{font-size:20px;color:var(--vt);text-align:center;font-weight:800}
+.rfg-fs{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin:0}
+.rfg-fs legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:0 4px}
+.rfg-cb{display:flex;gap:9px;align-items:flex-start;font-size:13px}
+.rfg-cb input{margin-top:3px;accent-color:#7c3aed;width:15px;height:15px;flex:none}
+.rfg-cb>span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.rfg-cb>span>b{display:inline}
+.rfg-cb small{font-size:11.5px;color:var(--mu)}
+.rfg-cb.dis{color:var(--mu)}
+.rfg-cb.conf{padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px}
+.rfg-priv{display:inline-flex;align-items:center;gap:3px;font:700 9.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);border:1px solid var(--amE);background:var(--amBg);border-radius:4px;padding:0 5px;vertical-align:middle;white-space:nowrap}
+.rfg-box{border:1px solid var(--hair);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.rfg-box h3,.rfg-h3{font-size:13px;font-weight:800}
+.rfg-warn{display:flex;gap:7px;align-items:flex-start;color:var(--amT);font-size:12.5px}
+.rfg-warn svg{margin-top:4px;flex:none}
+.rfg-cnt{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+.rfg-cnt>div{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border:1px solid var(--hair);border-radius:9px;min-width:0}
+.rfg-cnt>div.g{border-left:3px solid var(--pos)}
+.rfg-cnt>div.a{border-left:3px solid var(--amD)}
+.rfg-cnt b{font-size:17px;letter-spacing:-.01em}
+.rfg-cnt small{font-size:11px;color:var(--mu)}
+.rfg-g2{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px;align-items:start}
+.rfg-map td,.rfg-map th,.rfg-pv td,.rfg-pv th{padding:6px 8px;font-size:12px;vertical-align:top}
+.rfg-map tr.hl td{background:var(--amBg)}
+.rfg-pv th[scope=row]{font-weight:700;color:var(--ink);text-align:left;width:56px}
+.rfg-pv tr.a-b td,.rfg-pv tr.a-b th{background:var(--raised);color:var(--mu)}
+.rfg-pv tr.a-r td,.rfg-pv tr.a-r th{background:var(--amBg)}
+.rfg-act{display:inline-flex;align-items:center;gap:4px;font:700 11px var(--sg);padding:1px 7px;border-radius:999px;border:1px solid var(--hair);white-space:nowrap}
+.rfg-act.c{color:var(--pos);border-color:var(--posE);background:var(--posBg)}
+.rfg-act.u{color:var(--vt);border-color:var(--lavE);background:var(--lav)}
+.rfg-act.s,.rfg-act.n,.rfg-act.b{color:var(--mu)}
+.rfg-act.b{border-style:dashed}
+.rfg-act.r{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.rfg-sl td,.rfg-sl th{padding:9px 12px}
+.rfg-lbl{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:700}
+.rfg-tabs{display:flex;flex-direction:column;gap:6px;border:0;padding:0;margin:0}
+.rfg-tab{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--hair);border-radius:9px;font-size:13px;background:var(--card)}
+.rfg-tab.on{border-color:var(--vi);background:var(--lav)}
+.rfg-tab input{margin-top:3px;accent-color:#7c3aed}
+.rfg-tab>span{display:flex;flex-direction:column;gap:1px}
+.rfg-tab small{font-size:11px;color:var(--mu)}
+.rfg-res{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.rfg-conf{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.rfg-conf li{display:flex;gap:7px;align-items:flex-start}
+.rfg-conf li svg{margin-top:4px;flex:none}
+.rfg-conf li.ok svg{color:var(--pos)}
+.rfg-conf li.q svg{color:var(--amD)}
+.rfg-ol{list-style:decimal;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.rfg-log{border:1px solid var(--hair);border-radius:9px;padding:8px 12px;font-size:12px}
+.rfg-log summary{font-weight:700;cursor:pointer}
+.rfg-log ol{margin-top:6px;display:flex;flex-direction:column;gap:3px;color:var(--mu)}
+.rfg-log li{display:flex;gap:8px}
+.adp-phone .rfg-cnt{grid-template-columns:repeat(2,minmax(0,1fr))}
+.adp-phone .rfg-steps{font-size:11px}
+.adp-phone .adp-psheet .adp-kv{grid-template-columns:86px minmax(0,1fr)}
+.adp-phone .adp-pbar[style*=column] .btn{flex:none;width:100%}
+.adp-phone .rfg-can li{align-items:flex-start;flex-wrap:wrap}
+.adp-phone .rfg-can li span{flex-basis:100%;padding-left:19px}
+.rfg-box .adp-ann,.rfg-sht .foot .adp-ann,.adp-card .foot .adp-ann{white-space:normal}
+.rfg-map td:last-child{word-break:break-all}
+.rfg-map{width:100%}.rfg-map th{white-space:normal}
+.rfg-cc .adp-sk{max-width:100%}
+.rfg-dn{font-size:11.5px;color:var(--vt);font-style:italic}
+/* RFI · Research Funds · Source Import Console (#7738, FND-I) */
+.sh.rfi-nr{grid-template-columns:196px minmax(0,1fr)}
+.rfi-h2{font-size:14px;font-weight:800}
+.rfi-big{font-size:34px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+.rfi-noai{font-size:13px;font-weight:700;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);margin-top:8px}
+.rfi-route{font-size:11.5px;color:var(--vt)}
+.rfi-voc{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
+.rfi-voc>div{display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;font-size:12.5px;align-items:start}
+.rfi-voc>div>span{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.rfi-five{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.rfi-five>div{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;min-width:0;background:var(--card)}
+.rfi-five b{font-size:22px;letter-spacing:-.01em}
+.rfi-five small{font-size:11px;color:var(--mu)}
+.rfi-five.sm b{font-size:16px}
+.rfi-five.ph{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rfi-five .cr{border-left:3px solid var(--pos)}
+.rfi-five .li{border-left:3px solid var(--vi)}
+.rfi-five .re{border-left:3px solid var(--mu)}
+.rfi-five .un{border-left:3px dashed var(--amD)}
+.rfi-five .rj{border-left:3px solid var(--neg)}
+.rfi-sum{font-size:12.5px;color:var(--mu)}
+.rfi-sum b{color:var(--ink)}
+.rfi-t th,.rfi-t td{padding:7px 9px}
+.rfi-t.sm th,.rfi-t.sm td{padding:5px 7px;font-size:12px}
+.rfi-t th.n{text-align:right}
+.rfi-tot tbody tr:last-child td{font-weight:800;border-top:2px solid var(--hair2)}
+.rfi-v-co{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.rfi-v-no{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.rfi-cl{display:inline-flex;align-items:center;gap:3px;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--hair2);border-radius:4px;padding:0 5px;white-space:nowrap}
+.rfi-cl.p{border-style:dashed}
+.rfi-cl.c{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.rfi-cl.n{color:var(--neg);border-color:var(--negE);border-style:dotted}
+.rfi-wh,.rfi-he{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--sg);white-space:nowrap}
+.rfi-wh{color:var(--mu)}
+.rfi-he{color:var(--amT)}
+.rfi-o-cr{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.rfi-o-li{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.rfi-o-re{color:var(--mu);border-color:var(--hair2)}
+.rfi-o-rj{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.rfi-o-un{color:var(--amT);background:var(--amBg);border:1px dashed var(--amD)}
+.rfi-fl{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--sg);color:var(--amT);border:1px solid var(--amE);border-radius:999px;padding:0 7px;white-space:nowrap;vertical-align:middle}
+.rfi-kd{display:inline-flex;font:600 11px var(--sg);border:1px solid var(--hair2);border-radius:999px;padding:0 7px;margin-right:3px;white-space:nowrap}
+.rfi-mask{display:inline-block;font:600 11.5px var(--mo);color:var(--mu);background:var(--raised);border:1px solid var(--hair2);border-radius:5px;padding:1px 7px;letter-spacing:.02em}
+.rfi-sha{word-break:break-all;font-size:12px}
+.rfi-dis{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rfi-dis .btn{opacity:.55}
+.rfi-g2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.rfi-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.rfi-rec{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px;align-items:start}
+.rfi-prog{height:10px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.rfi-prog span{display:block;height:100%;background:var(--vi)}
+.rfi-stat{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.rfi-fixed{font-weight:700;margin-top:6px}
+.rfi-typed{display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.rfi-typed .inp{min-width:0}
+.rfi-typed .inp.on{color:var(--ink);border-color:var(--vi)}
+.rfi-in{min-width:0;color:var(--ink)}
+.rfi-seg{display:inline-flex;width:auto}
+.rfi-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--vi)}
+.rfi-hist{display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.rfi-hist li{display:flex;gap:10px}
+.rfi-hist .mo{color:var(--mu);min-width:96px}
+.rfi-cands{display:flex;flex-direction:column;gap:8px}
+.rfi-cands li{padding:8px 10px;border:1px solid var(--hair);border-radius:9px}
+.rfi-cands li.am{border-color:var(--amE);background:var(--amBg)}
+.rfi-cands small svg{color:var(--amD)}
+.rfi-pv{border:2px solid var(--amE)}
+.rfi-pv .rfi-h2{display:inline-flex;gap:6px;align-items:center;color:var(--amT)}
+.rfi-fls{display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+.rfi-fls li{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.rfi-fbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rfi-sel{display:inline-flex;gap:6px;align-items:center;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12.5px var(--sg)}
+.rfi-chip{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:1px solid var(--hair2);border-radius:999px;background:var(--card);color:var(--ink)!important;font:600 12px var(--sg)}
+.rfi-chip.on{border-color:var(--vi);background:var(--lav);color:var(--vt)!important}
+.rfi-zero{font-size:14px}.rfi-zero b{font-size:20px}
+.rfi-empty{align-items:flex-start;padding:28px}
+.rfi-ei{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--lav);color:var(--vt)}
+.rfi-door-g{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start}
+.rfi-lk{font-weight:700}
+.rfi-dlg{border:1px solid var(--hair2);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 10px 30px rgba(0,0,0,.12)}
+.rfi-dlg h3{font-size:14px;font-weight:800}
+.rfi-sep{border-top:1px solid var(--hair);padding-top:10px;margin-top:4px}
+.rfi-sk{display:block;height:12px;border-radius:6px;background:var(--skel);margin:3px 0}
+.rfi-on{padding:8px 10px;border:1px solid var(--vi);border-radius:9px;background:var(--lav)}
+.rfi-crop{grid-template-columns:1fr}
+.rfi-pc{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;font-size:12.5px;min-height:24px}
+.rfi-pc>span:last-child{text-align:right;min-width:0}
+.rfi-ph .btn{min-height:44px}
+.rfi-ph .adp-psheet .btn{width:100%}
+.rfi-ph .rfi-chip{min-height:44px}
+.rfi-pvd summary{display:flex;gap:6px;align-items:center;color:var(--amT);min-height:44px}
+.rfi-ph .adp-pbar .btn{flex:1}
+.rfg-box .rfi-t{table-layout:auto}.rfi-t td .st-c{white-space:nowrap}
+.rfi-ph .adp-psheet{z-index:9}
+.rfi-five,.rfi-five>div{box-sizing:border-box}
+.rfi-ph .rfi-five{width:100%;max-width:100%}
+.rfi-ph .adp-pb>*{max-width:100%;box-sizing:border-box}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "RFI01", "options": ["RFI00", "RFI01", "RFI01B", "RFI01C", "RFI02", "RFI02B", "RFI02C", "RFI03", "RFI03B", "RFI04", "RFI04B", "RFI04C", "RFI04D", "RFI05", "RFI06", "RFI06B", "RFI06C", "RFI07", "RFI07B", "RFI08", "RFI08B", "RFI08C", "RFI09", "RFI09B", "RFI09C", "RFI09D", "RFI10", "RFI10B", "RFI11", "RFI11B", "RFI11C", "RFI12", "RFI13", "RFI13B", "RFI13C", "RFI13D", "RFI14A", "RFI14B", "RFI14C", "RFI14D", "RFI14E", "RFI14F", "RFI14G", "RFI14H", "RFI15", "RFI15B", "RFI15C", "RFI15D", "RFI16", "RFI17"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'RFI01';
+    const dark = ['RFI15', 'RFI15B', 'RFI15C', 'RFI15D'].includes(B);
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', skel2: '#111827' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f3effe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.38)', skel: '#ebe9f1', skel2: '#f4f3f7' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const N = (n) => Number(n).toLocaleString('en-US');
+
+    /* ---------- Platform States glyphs and chips (D5129), as FND-G ---------- */
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const G = {
+      nr: SV('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"/>'),
+      un: SV('<path d="M6 1.6v6" stroke="currentColor" stroke-width="2.2"/><circle cx="6" cy="10.2" r="1.2" fill="currentColor"/>'),
+      rf: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/>'),
+      stale: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.2V6l1.9 1.3" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      part: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.4a4.6 4.6 0 0 1 0 9.2z" fill="currentColor"/>'),
+      prov: SV('<path d="M6 1.2L10.8 6 6 10.8 1.2 6z" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      tri: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      x: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      lock: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      re: SV('<path d="M9.8 4.4A4.2 4.2 0 1 0 10 7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 1.6v3.2H7.2" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      dot: SV('<circle cx="6" cy="6" r="3" fill="currentColor"/>'),
+      ring: SV('<circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      plus: SV('<path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="2"/>'),
+      pen: SV('<path d="M2 10l1-3 5-5 2 2-5 5z" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      link: SV('<path d="M5 7l2-2M4.2 5.6L3 6.8a1.9 1.9 0 0 0 2.7 2.7L6.9 8.3M7.8 6.4L9 5.2A1.9 1.9 0 0 0 6.3 2.5L5.1 3.7" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      skip: SV('<path d="M2 6h6M6 3l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      q: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.6 4.6a1.5 1.5 0 1 1 1.9 1.4c-.4.2-.5.5-.5.9" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="6" cy="9" r=".8" fill="currentColor"/>'),
+      flag: SV('<path d="M3 11V1.5M3 2h6l-1.5 2.2L9 6.5H3" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      file: SV('<path d="M3 1h4l2.5 2.5V11H3z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 1v2.5h2.5" fill="none" stroke="currentColor" stroke-width="1.3"/>'),
+      eye: SV('<path d="M1 6s2-3.5 5-3.5S11 6 11 6 9 9.5 6 9.5 1 6 1 6z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="6" cy="6" r="1.5" fill="currentColor"/>'),
+      pause: SV('<path d="M4 2.5v7M8 2.5v7" stroke="currentColor" stroke-width="2"/>'),
+      up: SV('<path d="M6 10V2M2.5 5.5L6 2l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>')
+    };
+    const K = {
+      nr: ['st-nr', 'nr', 'Not recorded'], na: ['st-na', '', 'Not applicable'], un: ['st-un', 'un', 'Unavailable'],
+      rf: ['st-rf', 'rf', 'Refused'], stale: ['st-stale', 'stale', 'Stale'], part: ['st-part', 'part', 'Partial'], prov: ['st-pv', 'prov', 'Provisional']
+    };
+    const chip = (k, label) => { const x = K[k]; return '<span class="st-c ' + x[0] + '">' + (x[1] ? G[x[1]] : '') + (label || x[2]) + '</span>'; };
+    const lab = (cls, g, t) => '<span class="st-c ' + cls + '">' + (g ? G[g] : '') + t + '</span>';
+    const retry = (t) => '<button type="button" class="st-retry">' + G.re + (t || 'Try again') + '</button>';
+    const ann = (t) => '<span class="adp-ann" title="Design annotation: needs backend work">◇ ' + t + '</span>';
+    const pol = (t) => '<span class="adp-pol" title="Design annotation: owner decision, option A drawn">⚑ ' + t + '</span>';
+    const note = (tone, icon, html) => '<div class="nt ' + (tone || '') + '"><span class="ic" aria-hidden="true">' + icon + '</span><div style="min-width:0;flex:1">' + html + '</div></div>';
+    const btn = (t, cls, extra) => '<button type="button" class="btn ' + (cls || '') + '"' + (extra || '') + '>' + t + '</button>';
+    const dis = (t, why, cls) => '<span class="rfi-dis">' + btn(t, cls, ' aria-disabled="true"') + '<span class="foot">' + why + '</span></span>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const fn = (n) => '<span class="rfg-fn" title="Focus order (design annotation)">' + n + '</span>';
+    const kv = (rows, cls) => '<dl class="adp-kv ' + (cls || '') + '">' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl>';
+    const mo = (t) => '<span class="mo">' + t + '</span>';
+    const tbl = (h, rows, cls) => '<table class="tbl adp-dt ' + (cls || '') + '"><thead><tr>' + J(h.map(x => '<th scope="col"' + (x[0] === '#' ? ' class="n"' : '') + '>' + (x[0] === '#' ? x.slice(1) : x) + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr' + (r.cls ? ' class="' + r.cls + '"' : '') + '>' + J(r.map((c, i) => (i === 0 && r.th ? '<th scope="row">' + c + '</th>' : '<td' + (typeof c === 'number' || /^[0-9][0-9,]*$/.test(c) ? ' class="n"' : '') + '>' + (typeof c === 'number' ? N(c) : c) + '</td>'))) + '</tr>')) + '</tbody></table>';
+
+    /* result vocabulary: taken from FND-G (Complete only when read back) */
+    const RES = {
+      complete: lab('st-l-ok', 'ok', 'Complete · stored equals read back'),
+      partial: chip('part', 'Partial'),
+      pending: lab('rfg-pend', 'stale', 'Outcome uncertain · Reconcile'),
+      failed: lab('rfg-fail', 'x', 'Failed · nothing written'),
+      running: '<span class="rfg-run"><span class="adp-spin" aria-hidden="true"></span>Running</span>',
+      waiting: lab('st-l-mu', 'pause', 'Waiting, then continuing'),
+      stopped: lab('st-l-am', 'pause', 'Stopped · connection lost')
+    };
+    /* terms verdicts (research_fund_sources.verdict) */
+    const V = {
+      ra: lab('st-l-ok', 'ok', 'Republish allowed'),
+      co: lab('rfi-v-co', 'ring', 'Cite only'),
+      no: lab('rfi-v-no', 'x', 'Not allowed'),
+      nr: chip('nr', 'Terms not reviewed')
+    };
+    /* column class */
+    const CL = {
+      fact: '<span class="rfi-cl f">Fact</span>', prose: '<span class="rfi-cl p">Prose</span>',
+      contact: '<span class="rfi-cl c">' + G.lock + 'Contact</span>', none: '<span class="rfi-cl n">' + G.q + 'No class</span>'
+    };
+    const WH = '<span class="rfi-wh">' + G.x + 'Withheld · not sent, only counted</span>';
+    const HE = '<span class="rfi-he">' + G.lock + 'Held · encrypted, apart</span>';
+    /* decisions and outcomes */
+    const D = {
+      create: '<span class="rfg-act c">' + G.plus + 'Create</span>', link: '<span class="rfg-act u">' + G.link + 'Link</span>',
+      retain: '<span class="rfg-act s">' + G.lock + 'Retain privately</span>', reject: '<span class="rfg-act s">' + G.x + 'Reject</span>',
+      none: chip('nr', 'No decision')
+    };
+    const O = {
+      created: lab('rfi-o-cr', 'plus', 'Created'), linked: lab('rfi-o-li', 'link', 'Linked'), retained: lab('rfi-o-re', 'lock', 'Retained privately'),
+      rejected: lab('rfi-o-rj', 'x', 'Rejected'), nod: lab('rfi-o-un', 'q', 'Unresolved · no decision'), awa: lab('rfi-o-un', 'stale', 'Unresolved · awaiting promotion')
+    };
+    const flag = (t) => '<span class="rfi-fl">' + G.flag + t + '</span>';
+    const kindc = (t) => t ? '<span class="rfi-kd">' + t + '</span>' : chip('nr', 'Kind not decided');
+    const priv = '<span class="rfg-priv">' + G.lock + 'Private</span>';
+    const mask = '<span class="rfi-mask" aria-label="Masked private value">[contact field, masked]</span>';
+
+    /* ---------- sample data (fictional, internally consistent) ---------- */
+    const SA = '[Iris Chen]';
+    const RUN = 'run_0006';
+    const WHEN = '19 Nov 2026, 10:14 UTC';
+    const FILE = '[investor-sources-2026-11-19.json]';
+    const SHA = '9b07 3f1a 52c8 d0e4 7a61 0c9b 18f2 e41d';
+    const SHA_S = 'sha256:9b07…e41d';
+    const LIST_D = 'sha256:4c1e…a92f';
+    const COMMIT = 'a41c09e2f1';
+    /* sources: key, name, lists, period, records, columns [fact, prose, contact], verdict, reviewed, list name, kinds */
+    const SRC = [
+      { k: 'A', n: '[Source A · investor directory]', l: 'Investor directory', p: '[2016 to 2025]', r: 1264, c: [10, 1, 3], v: 'co', rev: '12 Nov 2026', ln: '[Source A list]', kinds: 'manager, vehicle', blank: 1930, wh: 2, held: 1180 },
+      { k: 'B', n: '[Source B · accelerator and resource list]', l: 'Investor directory', p: '[2020 to 2025]', r: 310, c: [6, 2, 1], v: 'ra', rev: '12 Nov 2026', ln: '[Source B list]', kinds: 'accelerator, resource', blank: 212, wh: 1, held: 0 },
+      { k: 'C', n: '[Source C · manager list]', l: 'Investor directory', p: '[2018 to 2024]', r: 450, c: [7, 1, 3], v: 'no', rev: '13 Nov 2026', ln: null, kinds: 'manager, vehicle', blank: 405, wh: 3, held: 0 },
+      { k: 'D', n: '[Source D · funding rounds, 2011 to 2019]', l: 'Funding rounds', p: '[2011 to 2019]', r: 1620, c: [6, 1, 1], v: 'nr', rev: null, ln: null, kinds: 'none · rounds are never promoted', blank: 1044, wh: 1, held: 0 }
+    ];
+    SRC.forEach(s => { s.cols = s.c[0] + s.c[1] + s.c[2]; s.cells = s.cols * s.r; s.whc = s.wh * s.r; s.stored = s.cells - s.whc - s.blank; });
+    const TOT = { r: SRC.reduce((a, s) => a + s.r, 0), cols: SRC.reduce((a, s) => a + s.cols, 0), cells: SRC.reduce((a, s) => a + s.cells, 0), whc: SRC.reduce((a, s) => a + s.whc, 0), blank: SRC.reduce((a, s) => a + s.blank, 0), stored: SRC.reduce((a, s) => a + s.stored, 0) };
+    const sname = (k) => SRC.find(s => s.k === k).n;
+    const vOf = (k) => V[SRC.find(s => s.k === k).v];
+    /* outcomes: created, linked, retained privately, rejected, unresolved no decision, unresolved awaiting promotion */
+    const OUT = { A: [412, 538, 46, 38, 174, 56], B: [64, 21, 12, 9, 190, 14], C: [0, 0, 120, 30, 300, 0], D: [0, 0, 1400, 20, 200, 0] };
+    const KIND = [['Manager', [120, 210, 70, 20, 0, 20]], ['Vehicle', [292, 328, 0, 20, 0, 36]], ['Accelerator', [40, 15, 0, 5, 0, 10]], ['Resource', [24, 6, 0, 4, 0, 4]], ['Company', [0, 0, 30, 4, 0, 0]], ['Funding round', [0, 0, 1400, 20, 0, 0]], ['Individual', [0, 0, 78, 24, 0, 0]], [chip('nr', 'Kind not decided'), [0, 0, 0, 0, 864, 0]]];
+    const sum6 = (a) => a.reduce((x, y) => x + y, 0);
+    const TO = [0, 1, 2, 3, 4, 5].map(i => Object.keys(OUT).reduce((a, k) => a + OUT[k][i], 0));
+    /* preview of the file for run_0006: new, unchanged, changed, removed */
+    const PREV = { A: [24, 1232, 8, 0], B: [0, 310, 0, 0], C: [0, 444, 6, 0], D: [0, 1620, 0, 0] };
+    const BATCHES = Math.ceil(TOT.r / 50);
+    /* runs */
+    const RUNS = [
+      ['run_0006', '19 Nov 2026, 10:05', SA, 'complete', TOT.r, TOT.r, '24 · 3,606 · 14 · 0'],
+      ['run_0005', '18 Nov 2026, 16:20', SA, 'complete', 3620, 3620, '0 · 3,592 · 28 · 0'],
+      ['run_0004', '16 Nov 2026, 12:02', SA, 'complete', 3620, 3620, '120 · 3,500 · 0 · 0'],
+      ['run_0003', '16 Nov 2026, 11:40', SA, 'partial', 3570, 3570, '120 · 3,500 · 0 · 0'],
+      ['run_0002', '14 Nov 2026, 15:05', SA, 'failed', 0, 0, '—'],
+      ['run_0001', '12 Nov 2026, 09:30', SA, 'complete', 3500, 3500, '3,500 · 0 · 0 · 0']
+    ];
+    const runStatus = (s) => s === 'complete' ? lab('st-l-ok', 'ok', 'Complete') : s === 'partial' ? chip('part', 'Partial · Source C short by 50, applied again in run_0004') : s === 'failed' ? lab('rfg-fail', 'x', 'Failed before any write') : s === 'uncertain' ? RES.pending : RES.running;
+
+    /* ---------- HQ admin shell (FND-G / adp.js); the console mounts no Eadwyn rail ---------- */
+    const NAV = ['Studio', 'Deals', 'Research', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Licences'];
+    const rail = (ctx) => '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">' + (ctx || 'Ask about these funds') + '</span></aside>';
+    const shell = (body, o) => { o = o || {};
+      return '<div class="sh' + (o.rail ? '' : ' rfi-nr') + '" style="min-height:' + (o.h || 900) + 'px">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">Admin</span><nav aria-label="Admin">' + J(NAV.map(t => '<a href="#"' + (t === 'Research' ? ' aria-current="page"' : '') + '>' + t + (t === 'Approvals' ? '<span class="adp-navn">3</span>' : '') + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS <span class="adp-kbd">⌘K</span></div><div style="display:flex;align-items:center;gap:12px"><span class="scp">HQ-held · axal.vc · Super admin</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account: ' + SA + '">IC</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail ? rail() : '') + (o.overlay || '') + '</div>'; };
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + ';overflow:hidden;position:relative">' + shell(body, o) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv adp-crop rfi-crop" style="' + VARS + ';width:' + (w || 1300) + 'px">' + inner + '</div>';
+    const doc = (inner) => '<div class="cv adp-doc" style="' + VARS + ';width:1200px">' + inner + '</div>';
+    const head = (id, t, d) => '<header class="adp-dh"><span class="adp-id">' + id + '</span><div><h1>' + t + '</h1>' + (d ? '<p>' + d + '</p>' : '') + '</div></header>';
+    const sec = (t, inner) => '<section class="adp-ds"><h2>' + t + '</h2>' + inner + '</section>';
+    const card = (t, inner, o) => { o = o || {}; return '<section class="adp-card' + (o.cls ? ' ' + o.cls : '') + '"' + (o.role ? ' role="' + o.role + '"' : '') + '><header class="adp-ch"><h2 class="rfi-h2">' + t + '</h2>' + (o.right || '') + '</header><div class="adp-cb">' + inner + '</div></section>'; };
+
+    /* console header and sub-navigation */
+    const SUB = [['runs', 'Runs and sources', ''], ['records', 'Staged records', N(TOT.r)], ['columns', 'Columns', ''], ['promote', 'Promote', '70'], ['report', 'Report', '']];
+    const crumb = (tail) => '<nav class="adp-crumb" aria-label="Breadcrumb"><a href="#">Research</a><span aria-hidden="true">›</span><a href="#">Funds</a><span aria-hidden="true">›</span>' + (tail ? '<a href="#">Source imports</a><span aria-hidden="true">›</span><span>' + tail + '</span>' : '<span>Source imports</span>') + '</nav>';
+    const subnav = (cur) => '<nav class="adp-views" aria-label="Source imports">' + J(SUB.map(s => '<a href="#"' + (s[0] === cur ? ' aria-current="page"' : '') + '>' + s[1] + (s[2] ? ' <span class="mo">' + s[2] + '</span>' : '') + '</a>')) + '</nav>';
+    const gate = lab('rfg-sa', 'lock', 'Super admin only') + lab('st-l-mu', '', 'HQ only');
+    const conHead = (cur, o) => { o = o || {};
+      return crumb(o.tail) + '<header class="adp-ph"><div><h1>' + (o.h1 || 'Source imports') + '</h1><p>' + (o.sub || 'Private source records, staged exactly as captured. A source record is not a fund.') + '</p></div><div class="adp-row">' + gate + (o.act || '') + '</div></header>' + (o.nosub ? '' : subnav(cur)); };
+    const route = (r) => '<span class="rfi-route mo">' + r + '</span>';
+
+    /* the shared Sheet (FND-G side panel) */
+    const steps = (cur, list) => '<ol class="rfg-steps" aria-label="Steps">' + J((list || ['Scope', 'Review', 'Result']).map((s, i) => '<li' + (i === cur ? ' aria-current="step" class="on"' : i < cur ? ' class="done"' : '') + '><span class="mo">' + (i < cur ? '✓' : i + 1) + '</span>' + s + '</li>')) + '</ol>';
+    const sheet = (o) => '<div class="adp-dim" aria-hidden="true"></div><div class="rfg-sht" role="dialog" aria-modal="true" aria-labelledby="s-t" style="width:' + (o.w || 640) + 'px"><div class="rfg-shh"><div class="adp-row" style="justify-content:space-between;align-items:flex-start"><div><span class="eye">' + o.eye + '</span><h2 id="s-t">' + o.title + '</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div>' + (o.step !== undefined ? steps(o.step, o.steps) : '') + '</div><div class="rfg-shb">' + o.body + '</div><div class="rfg-shf">' + (o.left || '<span></span>') + '<span class="adp-row">' + o.foot + '</span></div></div>';
+    const counts = (arr) => '<div class="rfg-cnt">' + J(arr.map(c => '<div class="' + (c[2] || '') + '"><span class="eye">' + c[0] + '</span><b class="mo">' + c[1] + '</b>' + (c[3] ? '<small>' + c[3] + '</small>' : '') + '</div>')) + '</div>';
+    const typed = (word, val) => '<label class="rfi-typed"><span>Type <b class="mo">' + word + '</b> to confirm</span><span class="inp mo' + (val ? ' on' : '') + '">' + (val || '') + '</span></label>';
+
+    /* the five outcomes, never one headline number without the five beside it */
+    const five = (a, o) => { o = o || {}; const s = sum6(a);
+      return '<div class="rfi-five' + (o.sm ? ' sm' : '') + '" role="group" aria-label="Five outcomes">'
+        + J([['Created', a[0], 'cr', 'a create that has been promoted'], ['Linked', a[1], 'li', 'to an existing catalogue row'], ['Retained privately', a[2], 're', 'stored, never served'], ['Unresolved', a[4] + a[5], 'un', N(a[4]) + ' no decision · ' + N(a[5]) + ' decided, awaiting promotion'], ['Rejected', a[3], 'rj', 'kept staged, never promoted']].map(f => '<div class="' + f[2] + '"><span class="eye">' + f[0] + '</span><b class="mo">' + N(f[1]) + '</b>' + (o.sm ? '' : '<small>' + f[3] + '</small>') + '</div>'))
+        + '</div><p class="rfi-sum"><span class="mo">' + N(a[0]) + ' + ' + N(a[1]) + ' + ' + N(a[2]) + ' + ' + N(a[4] + a[5]) + ' + ' + N(a[3]) + ' = <b>' + N(s) + '</b></span> records staged' + (o.of ? ' · ' + o.of : '') + '</p>'; };
+
+    /* ---------- phone ---------- */
+    const phone = (inner, o) => { o = o || {}; return '<div class="cv adp-phone rfi-ph" style="' + VARS + '"><div class="adp-pst"><span class="mo">9:41</span><span class="mo">●●●</span></div><div class="adp-ptb"><span class="logo" aria-hidden="true"></span><b>' + (o.t || 'Source imports') + '</b><span style="flex:1"></span><button type="button" class="ib" aria-label="Menu">≡</button></div><div class="adp-pb">' + inner + '</div>' + (o.bar || '') + (o.over || '') + '</div>'; };
+    const pcard = (rows, foot) => '<div class="adp-qc">' + rows + (foot ? '<p class="foot">' + foot + '</p>' : '') + '</div>';
+    const pc = (t, v) => '<div class="rfi-pc"><span class="foot">' + t + '</span><span>' + v + '</span></div>';
+    const pbar = (inner) => '<div class="adp-pbar">' + inner + '</div>';
+
+    /* ---------- FND-G01 Sheets card, unchanged, for the entry frame ---------- */
+    const WB = 'Axal HQ · Fund shortlist';
+    const sheetsCardG = () => '<section class="adp-card rfg-card" aria-labelledby="gs-h"><header class="adp-ch"><div class="adp-row"><h2 id="gs-h">Google Sheets</h2>' + lab('rfg-sa', 'lock', 'Super admin only') + '</div><span class="foot">A copy of My funds. Axal stays the record.</span></header><div class="adp-cb">'
+      + '<div class="rfg-cg"><div class="rfg-cc"><span class="eye">Connection</span>' + lab('st-l-ok', 'ok', 'Connected') + '<span class="mo rfg-sm">hq.research@example.com</span><button type="button" class="lk">Disconnect</button></div>'
+      + '<div class="rfg-cc"><span class="eye">Destination</span><b>' + WB + '</b><span class="mo rfg-sm">Tab “Shortlist” · gid 100</span><span class="adp-row" style="flex-wrap:wrap;gap:4px 12px"><a href="#" class="lk">Open in Google Sheets ↗</a></span></div>'
+      + '<div class="rfg-cc"><span class="eye">Last confirmed result</span><span class="rfg-lr"><span><b>Export</b> · <span class="mo">12 Nov, 09:14 UTC</span><br><span class="foot">211 funds written · read back · Complete</span></span></span></div></div>'
+      + '<div class="adp-row">' + btn('Export Axal funds to Sheets', 'p') + btn('Import from Sheets') + '<span class="foot">Nothing transfers until you review it and confirm.</span></div></div></section>';
+    const doorCard = (fv) => '<section class="adp-card rfi-door" aria-labelledby="si-h"><header class="adp-ch"><h2 id="si-h">Source imports</h2>' + lab('rfg-sa', 'lock', 'Super admin only') + '</header><div class="adp-cb"><p>Private source records: load a file as captured, review what each record is, promote fund-side records into the shared Funds catalogue.</p>'
+      + '<p class="foot">' + N(TOT.r) + ' records staged · last run ' + RUN + ' · Complete</p><a href="#" class="lk rfi-lk' + (fv ? ' rfg-fv' : '') + '">Open source imports →</a><p class="foot">' + pol('Q3 door: one link beside the Sheets card') + ' ' + ann('#7745 route') + '</p></div></section>';
+
+    /* ---------- I01 pieces ---------- */
+    const srcTable = (o) => { o = o || {};
+      return tbl(['Source', 'Lists', 'Period covered', '#Records staged', '#Columns', 'Terms verdict', 'List name', 'Last run'],
+        SRC.map(s => [ '<b>' + s.n + '</b>', s.l, mo(s.p), s.r, s.cols, V[s.v] + (s.rev ? '<small>reviewed ' + s.rev + '</small>' : '<small>no review row</small>'), s.ln ? s.ln : chip('nr'), mo(RUN) + '<small>Complete · ' + N(s.r) + ' read back</small>']), 'rfi-t');
+    };
+    const runTable = (n) => tbl(['Run', 'Started (UTC)', 'Who', 'Status', '#Stored', '#Read back', 'New · unchanged · changed · removed'],
+      RUNS.slice(0, n || 6).map(r => ['<a href="#" class="lk mo">' + r[0] + '</a>', mo(r[1]), r[2], runStatus(r[3]), r[4], r[5], mo(r[6]) + (r[0] === 'run_0005' ? '<small>2 records refused · duplicate_source_id</small>' : '')]), 'rfi-t');
+    const fiveCard = (o) => { o = o || {}; return card('Everything staged · five outcomes', five(TO, { of: 'after ' + RUN + ', ' + WHEN }) + (o.foot === false ? '' : '<p class="foot">Counts are of source records, not funds. The same organisation can appear in more than one source. ' + ann('#7746 outcome counts') + '</p>'), { right: '<a href="#" class="lk">Open the report</a>' }); };
+
+    /* ---------- I02 pieces ---------- */
+    const fileBox = (o) => { o = o || {}; return '<section class="rfg-box"><div class="adp-row" style="justify-content:space-between"><h3>' + G.file + ' The chosen file</h3><button type="button" class="lk">Choose another file</button></div>'
+      + kv([['Name', mo(o.name || FILE)], ['Size', mo(o.size || '6.8 MB')], ['SHA-256', '<span class="mo rfi-sha">' + (o.sha || SHA) + '</span>']])
+      + '<p class="foot">Worked out in this browser. The file is never sent whole and never kept in the browser. ' + ann('#7753 browser digest') + '</p></section>'; };
+    const MAN = SRC.map(s => [s.k, s.r, s.cols, s.k === 'D' ? null : s.r]);
+    const manifest = () => '<section class="rfg-box"><h3>Manifest check · the file against its own manifest</h3>'
+      + tbl(['Source', '#Records', '#Columns', 'Row hashes', 'Check'], MAN.map(m => ['<b>' + m[0] + '</b>', m[1], m[2], m[3] ? mo(N(m[3])) : chip('nr', 'None · read back only'), lab('st-l-ok', 'ok', 'Matches')]), 'rfi-t sm')
+      + '<p class="foot">Records, columns and row hashes per source, as the manifest declares and as counted in this browser. ' + ann('#7745 manifest shape') + '</p></section>';
+    const classSummary = () => '<section class="rfg-box"><h3>Column classes · set at each source’s first run, read-only</h3>'
+      + tbl(['Source', '#Fact', '#Prose', '#Contact', 'Treatment', '#Cells out'], SRC.map(s => ['<b>' + s.k + '</b>', s.c[0], s.c[1], s.c[2], (s.k === 'A' ? '<span class="rfi-he">' + G.lock + '1 held</span> · ' : '') + '<span class="rfi-wh">' + G.x + s.wh + ' withheld</span>', s.whc]), 'rfi-t sm')
+      + '<p class="foot">Withheld: not sent, only counted (' + mo(N(TOT.whc)) + ' cells in this file). Held: stored encrypted, apart. A class changes only by removing the source and applying again. ' + ann('#7745 column class') + ' ' + pol('#7739 Q3 withheld by default') + '</p></section>';
+    const previewTable = (P2) => tbl(['Source', '#New', '#Unchanged', '#Changed', '#Removed', '#Records in file'], Object.keys(P2).map(k => ['<b>' + k + '</b>', P2[k][0], P2[k][1], P2[k][2], P2[k][3], P2[k][0] + P2[k][1] + P2[k][2]]).concat([[ '<b>All</b>', 24, 3606, 14, 0, TOT.r ]]), 'rfi-t sm rfi-tot');
+    const runSteps = ['Scope · file and check', 'Review · preview', 'Apply', 'Result'];
+    const runSheet = (o) => sheet(Object.assign({ eye: 'Source imports · new run', w: 1040, steps: runSteps }, o));
+
+    /* ---------- I03 pieces ---------- */
+    const prog = (done, total, lbl) => '<div class="rfi-prog" role="progressbar" aria-valuemin="0" aria-valuemax="' + total + '" aria-valuenow="' + done + '" aria-label="' + lbl + '"><span style="width:' + (100 * done / total).toFixed(1) + '%"></span></div>';
+
+    /* ---------- run_0005 for the run page ---------- */
+    const R5 = SRC.map(s => { const r = s.k === 'A' ? 1240 : s.r; const ref = s.k === 'A' ? 2 : 0; const blank = s.k === 'A' ? 1902 : s.blank; const decl = (r + ref) * s.cols; const wh = s.wh * r; return { k: s.k, file: r + ref, r: r, ref: ref, decl: decl, wh: wh, blank: blank, refc: ref * s.cols, stored: r * s.cols - wh - blank, ver: s.k === 'D' ? 0 : r }; });
+    const R5T = ['file', 'r', 'ref', 'decl', 'wh', 'blank', 'refc', 'stored', 'ver'].reduce((a, f) => { a[f] = R5.reduce((x, y) => x + y[f], 0); return a; }, {});
+
+    const STATES = {
+      RFI00: () => doc(head('FND-I00', 'Source import console · journey, routes, vocabulary and key', 'A Super Admin loads a private file of source records exactly as captured, proves that what is stored equals the file, decides what each record is, and promotes only reviewed fund-side records into the shared Funds catalogue. It is not the Sheets sync, which moves the owner’s own My funds. No founder or investor sees anything here.')
+        + '<p class="rfi-big">A source record is not a fund.</p>'
+        + sec('Journey', '<ol class="adp-flow" style="grid-template-columns:repeat(8,minmax(0,1fr))">' + J([['File', 'Choose it; name, size, SHA-256 in the browser'], ['Check', 'Records, columns, row hashes per source'], ['Preview', 'New, unchanged, changed, removed · writes nothing'], ['Run', 'Batches of 50 at most, paced'], ['Read back', 'Complete only when stored equals read back'], ['Review', 'Kind, decision, target, reason'], ['Promotion', 'Scope → Review → Result'], ['Report', 'Five outcomes and their sum']].map((s, i) => '<li><span class="mo">' + (i + 1) + '</span>' + s[0] + '<span class="foot" style="font-weight:500">' + s[1] + '</span></li>')) + '</ol>'
+          + '<ul class="adp-bl"><li><b>Check fails</b> → the fixed sentence names the check; no Apply; choose another file (FND-I02)</li><li><b>Paced wait or expired step-up</b> → never a failure; confirm again and the run continues (FND-I03)</li><li><b>Connection lost</b> → Resume with the same file sends only the batches the Worker does not hold (FND-I03)</li><li><b>Partial</b> → Apply again · <b>Outcome uncertain</b> → Reconcile, and no new run until then (FND-I04)</li><li><b>A wrong decision</b> → a new decision, the old one kept in history (FND-I09) · <b>a wrong promotion</b> → Undo one record, or Withdraw a source (FND-I11)</li><li><b>Data that must go</b> → Remove private fields, a record or a source (FND-I06)</li></ul>')
+        + sec('Routes · question 1, option A', tbl(['Board', 'Route', 'What it shows', 'Backend'], [
+          ['FND-I01', route('/research/source-imports'), 'Runs and sources; the five outcomes', ann('#7742 #7745')],
+          ['FND-I02 – I04', route('/research/source-imports') + ' + Sheet', 'Choose a file, check, classes, preview, apply, result', ann('#7753 #7745')],
+          ['FND-I05', route('/research/source-imports/runs/:run'), 'One run, no record content', ann('#7742')],
+          ['FND-I06', 'Sheet on a record or a source', 'Remove private fields, a record, a source', ann('#7745')],
+          ['FND-I07', route('/research/source-imports/records'), 'Staged records, filtered', ann('#7746')],
+          ['FND-I08, I09', route('/research/source-imports/records/:id'), 'One record as captured; its decision. <code>:id</code> is the store’s own id, never the source’s', ann('#7746')],
+          ['FND-I10', route('/research/source-imports/columns/:source'), 'Column rules, list name, kinds, flags', ann('#7747')],
+          ['FND-I11', route('/research/source-imports/promote'), 'Promotion, undo, withdraw', ann('#7751')],
+          ['FND-I12', route('/research/source-imports/report'), 'Reconciliation report', ann('#7746')]]) + '<p class="foot">Nothing from the file appears in any address. Super Admins only, on HQ ' + pol('Q2 A') + '; reached from one link on /research/funds ' + pol('Q3 A') + '; board prefix FND-I ' + pol('Q4 A') + '.</p>')
+        + sec('Vocabulary', '<div class="rfi-voc">' + J([
+          ['Source record', 'One row of a source as captured. Not a fund, not a manager, until a person decides and it is promoted.'],
+          ['Staged', 'Held in the private store with its source, ids and row hash. Never served.'],
+          ['Decisions', D.create + ' ' + D.link + ' ' + D.retain + ' ' + D.reject],
+          ['Outcomes', O.created + ' ' + O.linked + ' ' + O.retained + ' ' + O.nod + ' ' + O.awa + ' ' + O.rejected],
+          ['Kinds (samples)', J(['manager', 'vehicle', 'accelerator', 'resource', 'company', 'funding round', 'individual'].map(kindc)) + ' ' + kindc(null)],
+          ['Column class', CL.fact + ' ' + CL.prose + ' ' + CL.contact],
+          ['Withheld', WH + ' The default for a contact column.'],
+          ['Held', HE + ' Never shown to members, never promoted.'],
+          ['Complete', RES.complete + ' Only when what is stored is read back and equals the file.']].map(v => '<div><b>' + v[0] + '</b><span>' + v[1] + '</span></div>')) + '</div>')
+        + sec('Result words · from FND-G', '<div class="adp-row" style="flex-wrap:wrap;gap:10px">' + RES.complete + RES.partial + RES.pending + RES.failed + RES.waiting + RES.stopped + '</div>')
+        + sec('Key', '<div class="adp-row" style="flex-wrap:wrap;gap:10px">' + ann('#7745 needs backend work') + pol('owner decision · option A drawn') + fn(1) + '<span class="foot">focus order</span>' + chip('nr') + chip('un') + chip('rf') + chip('na') + '</div><p class="rfi-noai">This console has no Eadwyn rail and no AI action. Candidates come from fixed rules; the Super Admin accepts, edits or discards each one. Nothing in the private store is read by Eadwyn or sent to a model.</p>')),
+
+      RFI01: () => page(conHead('runs', { act: btn('Choose a file', 'p') })
+        + fiveCard()
+        + card('Sources · ' + SRC.length, srcTable() + '<p class="foot">Period covered is what each source says it covers. A list with no review row reads “Terms not reviewed” and nothing from it is promoted. ' + ann('#7742 source rows') + ' ' + ann('#7752 verdicts after #7740') + '</p>')
+        + card('Runs · newest first', runTable() + '<p class="foot">' + ann('#7745 run record') + '</p>'), { h: 1240 }),
+
+      RFI01B: () => page(conHead('runs', { act: btn('Choose a file', 'p') })
+        + '<section class="adp-card"><div class="adp-cb rfi-empty"><span class="rfi-ei" aria-hidden="true">' + G.file + '</span><h2 class="rfi-h2">Nothing is staged yet</h2><p>A file must hold, per source, its records exactly as captured, its columns in source order, a record id per row and a manifest of counts and row hashes. Nothing is written until you review the preview and press Apply.</p>' + '<p class="foot">Sources ' + mo('0') + ' · runs ' + mo('0') + ' · records staged ' + mo('0') + '. The five outcomes appear after the first run.</p></div></section>', { h: 620 }),
+
+      RFI01C: () => page('<nav class="adp-crumb" aria-label="Breadcrumb"><a href="#">Research</a><span aria-hidden="true">›</span><span>Funds</span></nav>'
+        + '<header class="adp-ph"><div><h1>Funds</h1><p>Your fund shortlist and the public directory. Notes and pass reasons are private to you.</p></div></header>'
+        + '<div class="adp-views" role="tablist" aria-label="Funds views"><a href="#" role="tab" aria-selected="true" aria-current="page">My funds <span class="mo">214</span></a><a href="#" role="tab" aria-selected="false">Directory</a></div>'
+        + '<div class="rfi-door-g">' + sheetsCardG() + doorCard(1) + '</div>'
+        + '<p class="foot">The Sheets card is FND-G01, unchanged. The link mounts behind <code>isSuperAdminUser</code> beside it; a founder or an administrator without the elevation sees neither.</p>', { h: 640, rail: 1 }),
+
+      RFI02: () => page(conHead('runs', { act: btn('Choose a file', 'p') }) + fiveCard({ foot: false }), { h: 960, overlay: runSheet({ title: 'Review: apply ' + N(TOT.r) + ' records from 4 sources', step: 1,
+        body: '<div class="rfg-g2 rfi-g2">' + '<div class="rfi-col">' + fileBox() + manifest() + '</div><div class="rfi-col">' + classSummary()
+          + '<section class="rfg-box"><h3>Preview · against what is staged now</h3>' + previewTable(PREV) + '<p class="foot">A preview writes nothing. Changed records keep their decisions; a changed record is re-flagged. ' + ann('#7745 preview') + '</p></section></div></div>'
+          + note('', 'ⓘ', '<b>Nothing has been written.</b> Apply sends ' + mo(N(TOT.r)) + ' records in ' + mo(BATCHES) + ' batches of 50 at most, then reads every record back. Contact cells marked withheld are not sent.'),
+        left: '<span class="foot">Nothing has been written.</span>', foot: btn('Cancel') + btn('Apply ' + N(TOT.r) + ' records', 'p') }) }),
+
+      RFI02B: () => crop('<div class="adp-g3">'
+        + card('The file fails its check', '<div role="alert">' + lab('rfg-fail', 'x', 'Check failed') + '<p class="rfi-fixed">The file does not match its manifest: <b>Source C</b> declares <span class="mo">450</span> records and the file holds <span class="mo">449</span>.</p></div>'
+          + '<p class="foot">Other fixed sentences: “The file is not a source package (no manifest).” · “Source A: <span class="mo">3</span> row hashes do not match their rows.” · “Source B declares <span class="mo">9</span> columns; row <span class="mo">41</span> has <span class="mo">10</span>.”</p>'
+          + '<div class="adp-row">' + btn('Choose another file') + '</div><p class="foot">No Apply is offered. Nothing has been written.</p>')
+        + card('First run of a source · a column with no class', '<p class="foot">[Source E · regional fund list] · first run · 12 columns. Set each column’s class once.</p>'
+          + tbl(['Column', 'Class'], [['[Fund name]', CL.fact], ['[Thesis]', CL.prose], ['[Contact email]', CL.contact], ['[Notes 2]', CL.none]], 'rfi-t sm')
+          + '<p class="foot"><b>1 column has no class.</b></p>' + dis('Apply', 'Set a class for [Notes 2] first'))
+        + card('The same file chosen again', counts([['New', '0'], ['Unchanged', N(TOT.r), 'g'], ['Changed', '0'], ['Removed', '0']])
+          + '<p><b>Every record unchanged.</b> SHA-256 <span class="mo">' + SHA_S + '</span> is the file of ' + mo(RUN) + '.</p><div class="adp-row">' + btn('Close') + '</div><p class="foot">Nothing to apply. Nothing has been written.</p>')
+        + '</div>', 1300),
+
+      RFI02C: () => crop('<div class="adp-g2">'
+        + card('[Contact email] · Source E · Contact', '<fieldset class="rfg-fs"><legend>Treatment · set once with the class</legend>'
+          + '<label class="rfg-cb"><input type="radio" name="tr"><span><b>Withheld</b> (default)<small>Left out of what is sent and only counted. Nothing of it reaches the Worker.</small></span></label>'
+          + '<label class="rfg-cb rfi-on"><input type="radio" name="tr" checked><span><b>Held</b><small>Stored encrypted, apart from the record. Never shown to members, never promoted, never sent to a model. Visible only to a Super Admin on one record, masked until Show.</small></span></label></fieldset>'
+          + '<p class="foot">' + pol('#7739 Q3 · withheld is the default') + ' ' + ann('#7745 encrypted held fields') + '</p>')
+        + card('What Held means for this run', kv([['Column', '[Contact email] · ' + CL.contact + ' ' + HE], ['Cells sent', mo('380') + ' of ' + mo('412') + ' · ' + mo('32') + ' blank'], ['Stored', 'Encrypted, apart · not in any list, count by value, report or address'], ['Removable', 'Per record or per source (FND-I06)'], ['Changed later', 'Only by removing the source and applying again']])
+          + '<p class="foot">Sample: [Source E] holds 412 records. Its other contact column, [Phone], stays Withheld.</p>')
+        + '</div>', 1300),
+
+      RFI03: () => page(conHead('runs', { act: btn('Choose a file', 'p', ' aria-disabled="true"') }) + fiveCard({ foot: false }), { h: 1000, overlay: runSheet({ title: 'Applying ' + N(TOT.r) + ' records · batch 41 of ' + BATCHES, step: 2,
+        body: '<div role="status" aria-live="polite" class="rfi-stat">' + RES.waiting + '<p>The Worker allows <span class="mo">60</span> requests a minute. Continuing in <b class="mo">18 s</b>. A wait is never a failure.</p></div>'
+          + '<section class="rfg-box"><h3>Batches sent</h3>' + prog(41, BATCHES, 'Batches sent') + '<p class="mo">41 of ' + BATCHES + ' batches · 2,050 of ' + N(TOT.r) + ' records stored · 2,000 read back</p></section>'
+          + '<section class="rfg-box"><h3>Per source</h3>' + tbl(['Source', '#In file', '#Stored', '#Read back', 'State'], [['<b>A</b>', 1264, 1264, 1264, lab('st-l-ok', 'ok', 'Read back')], ['<b>B</b>', 310, 310, 310, lab('st-l-ok', 'ok', 'Read back')], ['<b>C</b>', 450, 450, 426, RES.running], ['<b>D</b>', 1620, 26, 0, lab('st-l-mu', 'ring', 'Queued')]], 'rfi-t sm') + '</section>'
+          + note('', 'ⓘ', 'Keep this page open. Leaving asks first; the run stops after the batch in flight and can be resumed with the same file. ' + ann('#7745 batches, pace, resume')),
+        left: '<span class="foot">' + mo(RUN) + ' · started 10:05 UTC · ' + SA + '</span>', foot: btn('Pause after this batch') }) }),
+
+      RFI03B: () => crop('<div class="adp-g3">'
+        + card('Step-up expired at batch 52', '<div role="alert">' + lab('st-l-am', 'lock', 'Confirm it is you') + '<p>Your step-up is older than <span class="mo">15</span> minutes. Batches 1–51 are stored. Nothing is written while you confirm.</p></div>' + '<label class="rfg-lbl">Authenticator code<span class="inp mo rfg-fv">··· ···</span></label><div class="adp-row">' + btn('Confirm and continue', 'p') + '</div><p class="foot">Never shown as Failed or Outcome uncertain. The run continues from batch 52.</p>')
+        + card('Stopped · connection lost after batch 58', '<div role="alert">' + RES.stopped + '<p>Batches 1–58 are stored and read back (<span class="mo">2,900</span> records). The Worker holds no batch after 58.</p></div>'
+          + kv([['Resume sends', 'Batches 59–' + BATCHES + ' only · ' + mo('744') + ' records'], ['Needs', 'The same file · SHA-256 ' + mo(SHA_S)]]) + '<div class="adp-row">' + btn('Resume with the same file', 'p') + '</div><p class="foot">A different file is refused by its digest.</p>')
+        + card('Leaving mid-run', '<div class="rfi-dlg" role="alertdialog" aria-labelledby="lv"><h3 id="lv">Leave while the run is going?</h3><p>The run stops after batch 44, the one in flight. Batches 1–44 stay stored. Resume later with the same file.</p><div class="adp-row">' + btn('Stay on this page', 'p') + btn('Leave') + '</div></div><p class="foot">Asked by the page on route change and by the browser on close.</p>')
+        + '</div>', 1300),
+
+      RFI04: () => page(conHead('runs', { act: btn('Choose a file', 'p') }) + fiveCard({ foot: false }), { h: 1040, overlay: runSheet({ title: 'Run complete: ' + N(TOT.r) + ' records stored and read back', step: 3,
+        body: '<div role="status" aria-live="polite" class="rfi-stat">' + RES.complete + '<p>Every source: what is stored was read back and equals the file.</p></div>'
+          + tbl(['Source', '#In file', '#Stored', '#Read back', '#Verified vs file hashes', '#Only read back'], SRC.map(s => ['<b>' + s.k + '</b>', s.r, s.r, s.r, s.k === 'D' ? 0 : s.r, s.k === 'D' ? s.r : 0]).concat([['<b>All</b>', TOT.r, TOT.r, TOT.r, 2024, 1620]]), 'rfi-t sm rfi-tot')
+          + '<section class="rfg-box"><h3>Cells · ' + N(TOT.cells) + ' declared by the file</h3>' + counts([['Stored', N(TOT.stored), 'g', 'of them ' + N(1180) + ' held privately'], ['Withheld', N(TOT.whc), 'a', 'not sent, only counted'], ['Blank', N(TOT.blank), '', 'blank in the source'], ['Sum', N(TOT.stored + TOT.whc + TOT.blank), '', '= declared']]) + '</section>'
+          + '<p class="foot">Source D’s manifest has no row hashes, so its 1,620 records were read back but not verified against the file. ' + ann('#7745 read-back') + '</p>',
+        left: '<span class="foot">' + mo(RUN) + ' · ' + WHEN + '</span>', foot: btn('Open the run') + btn('Open staged records', 'p') }) }),
+
+      RFI04B: () => crop('<div class="adp-g2">'
+        + card('Partial · Source C is short', '<div role="alert">' + RES.partial + '<p><b>Source C</b>: <span class="mo">400</span> of <span class="mo">450</span> records stored and read back. Short by <b class="mo">50</b>. Sources A, B and D are complete.</p></div>'
+          + tbl(['Source', '#In file', '#Stored = read back', '#Short'], [['A', 1264, 1264, 0], ['B', 310, 310, 0], ['C', 450, 400, 50], ['D', 1620, 1620, 0]], 'rfi-t sm')
+          + '<div class="adp-row">' + btn('Apply again', 'p') + '</div><p class="foot">Apply again sends Source C’s missing records only. Never shown as Complete: 400 ≠ 450.</p>')
+        + card('Failed before any write', '<div role="alert">' + RES.failed + '<p class="rfi-fixed">The Worker refused the run before any write: the list digest it computed does not match the manifest.</p></div>'
+          + kv([['Stored', mo('0') + ' records · confirmed'], ['Changed', 'Nothing. What was staged before is as it was.']]) + '<div class="adp-row">' + btn('Choose a file', 'p') + '</div>')
+        + '</div>', 1300),
+
+      RFI04C: () => page(conHead('runs', { act: dis('Choose a file', 'Refused until the open run is reconciled') }) + fiveCard({ foot: false }), { h: 1000, overlay: runSheet({ title: 'Outcome uncertain: 144 records not confirmed', step: 3,
+        body: '<div role="status" aria-live="polite" class="rfi-stat">' + RES.pending + '<p>All ' + BATCHES + ' batches were sent. The Worker did not answer for batches 71–73, so we cannot say whether those 144 records are stored.</p></div>'
+          + '<section class="rfg-box"><h3>Confirmed</h3><ul class="rfg-conf"><li class="ok">' + G.ok + '<span>Batches 1–70 · <b>3,500</b> records stored and read back</span></li><li class="ok">' + G.ok + '<span>Sources A, B and C complete; Source D <span class="mo">1,476</span> of <span class="mo">1,620</span></span></li></ul></section>'
+          + '<section class="rfg-box"><h3>Not confirmed</h3><ul class="rfg-conf"><li class="q">' + G.q + '<span>Batches 71–73 · <b>144</b> records of Source D</span></li></ul></section>'
+          + '<p class="rfg-warn">' + G.tri + '<span>A new run is refused until this one is reconciled. Applying now could store these records twice. ' + ann('#7745 uncertain state, reconcile') + '</span></p>',
+        left: '<span class="foot">' + mo(RUN) + ' · 10:13 UTC</span>', foot: btn('Close') + btn('Reconcile', 'p') }) }),
+
+      RFI04D: () => crop('<div class="adp-g2">'
+        + card('Reconcile · what is re-read', '<ol class="rfg-ol"><li>Ask the Worker which of batches 71–73 it holds.</li><li>Read back every record in those batches and compare each with its row in the file.</li><li>Count stored per source again.</li></ol><p class="foot">Re-reading writes nothing. The file must be the same (SHA-256 ' + mo(SHA_S) + ').</p>' + prog(2, 3, 'Batches re-read') + '<p class="mo foot">2 of 3 batches re-read</p>')
+        + '<div class="rfi-col">' + card('Reconciled · Complete', '<div role="status">' + RES.complete + '</div>' + counts([['Stored', N(TOT.r), 'g'], ['Read back', N(TOT.r), 'g'], ['Short', '0']]) + '<p class="foot">Batches 71–73 were stored. A new run is allowed again.</p>')
+          + card('Reconciled · still short', '<div role="alert">' + RES.partial + '</div><p>Batch 73 is not held: Source D is short by <b class="mo">44</b>.</p><div class="adp-row">' + btn('Apply again', 'p') + '</div>') + '</div>'
+        + '</div>', 1300),
+
+      RFI05: () => page(conHead('', { tail: 'run_0005', h1: 'Run run_0005', sub: 'Complete · 18 Nov 2026, 16:20–16:24 UTC. Counts only: no record content on this page.', nosub: 1, act: '' })
+        + '<div class="adp-g2">' + card('Who, when, what', kv([['Run by', SA + ' · Super Admin · step-up 16:19 UTC'], ['Started', mo('18 Nov 2026, 16:20:04 UTC')], ['Finished', mo('18 Nov 2026, 16:24:41 UTC')], ['Worker commit', mo(COMMIT) + ' · deployed'], ['List digest', mo('sha256:71d0…3b5c') + ' · checked by the Worker'], ['File digest', mo('sha256:e2a8…07f4') + ' · as declared by the browser'], ['Batches', mo('73') + ' of at most 50 records']]) + '<p class="foot">' + ann('#7742 run record') + '</p>')
+          + card('Status history', '<ol class="rfi-hist">' + J([['16:20:04', 'Started · preview 0 new, 3,592 unchanged, 28 changed, 0 removed'], ['16:20:31', 'Waiting · paced by the Worker'], ['16:20:49', 'Continuing'], ['16:24:12', 'All 73 batches sent · 2 records refused'], ['16:24:40', 'Read back · 3,620 of 3,620'], ['16:24:41', 'Complete']].map(h => '<li><span class="mo">' + h[0] + '</span>' + h[1] + '</li>')) + '</ol>') + '</div>'
+        + card('Per source', tbl(['Source', '#In file', '#Refused', '#Stored', '#Read back', '#Verified', '#Only read back', '#Cells stored', '#Withheld', '#Blank', '#In refused records', '#Declared'], R5.map(r => ['<b>' + r.k + '</b>', r.file, r.ref, r.r, r.r, r.ver, r.r - r.ver, r.stored, r.wh, r.blank, r.refc, r.decl]).concat([['<b>All</b>', R5T.file, R5T.ref, R5T.r, R5T.r, R5T.ver, R5T.r - R5T.ver, R5T.stored, R5T.wh, R5T.blank, R5T.refc, R5T.decl]]), 'rfi-t sm rfi-tot') + '<p class="foot">Cells stored + withheld + blank + in refused records = cells the file declares.</p>')
+        + card('Refused records · 2', tbl(['Store id', 'Source', 'Reason code'], [[mo('sr_A_7f3c91'), 'A', mo('duplicate_source_id')], [mo('sr_A_7f3c92'), 'A', mo('duplicate_source_id')]], 'rfi-t sm') + '<p class="foot">Ids and reason codes only. The source’s own record id is not shown in an address. ' + ann('#7745 refusal codes') + '</p>'), { h: 980 }),
+
+      RFI06: () => page(conHead('runs', { act: btn('Choose a file', 'p') }) + card('Sources · ' + SRC.length, srcTable()), { h: 960, overlay: sheet({ eye: 'Remove · one source', title: 'Remove every record of Source C', step: 1, w: 640,
+        body: kv([['Source', '<b>' + sname('C') + '</b> · ' + V.no], ['Records that would go', mo('450') + ' records · their fields as captured, flags, private notes'], ['Held private fields', mo('0') + ' · Source C’s contact columns were withheld'], ['Decisions', '<span>150 decided: 120 retained privately, 30 rejected. Notes go; counts stay.</span>']])
+          + '<section class="rfg-box"><h3>What stays</h3><ul class="adp-bl"><li>Store ids, source record ids’ hashes and row hashes</li><li>Run records and every count on the report</li><li>The column classes, so the source cannot be re-applied with other classes without removing it again</li></ul></section>'
+          + '<p class="rfg-warn">' + G.tri + '<span><b>Applying the same file again will not restore them.</b> Its records would arrive as removed and be refused.</span></p>'
+          + typed('remove source C', 'remove source C')
+          + '<p class="foot">A removal clears the live store. Earlier backup copies age out on their own schedule. ' + ann('#7745 removal') + ' ' + ann('#7742') + '</p>',
+        left: btn('Back'), foot: btn('Cancel') + btn('Remove 450 records', 'p') }) }),
+
+      RFI06B: () => crop('<div class="adp-g3">'
+        + card('Private fields · Scope', '<p>Record ' + mo('sr_A_51b2e0') + ' · [Northbank Seed I] · Source A</p>' + kv([['Would go', mo('1') + ' held field · [Contact email]'], ['Stays', 'The record, its fields as captured, ids, hash, decision']]) + '<div class="adp-row">' + btn('Review', 'p') + '</div>')
+        + card('Private fields · Review', kv([['Removes', '1 held field · encrypted value deleted'], ['Stays', 'Ids, hashes and counts']]) + '<p class="rfg-warn">' + G.tri + '<span>Applying the same file again will not restore it.</span></p>' + typed('remove', 'remove') + '<div class="adp-row">' + btn('Back') + btn('Remove private fields', 'p') + '</div>')
+        + card('Private fields · Result', '<div role="status">' + lab('st-l-ok', 'ok', 'Removed · read back') + '</div>' + counts([['Held fields gone', '1', 'g'], ['Left on record', '0']]) + '<p class="foot">The private part now reads “Removed · 1 field, 19 Nov 2026”. Applying the same file again will not restore it.</p>')
+        + '</div>', 1300),
+
+      RFI06C: () => crop('<div class="adp-g3">'
+        + card('One record · Scope and Review', '<p>Record ' + mo('sr_C_0a77d1') + ' · [Quayside Partners] · Source C</p>' + kv([['Would go', 'Its fields as captured, flags, its private note'], ['Stays', 'Store id, row hash, the decision’s outcome in the counts']]) + typed('remove', '') + dis('Remove record', 'Type remove to confirm', 'p'))
+        + card('One record · Result', '<div role="status">' + lab('st-l-ok', 'ok', 'Removed') + '</div>' + counts([['Records gone', '1', 'g'], ['Ids kept', '1']]) + '<p class="foot">Applying the same file again will not restore it: the record arrives as removed and is refused.</p>')
+        + card('One source · Result', '<div role="status">' + lab('st-l-ok', 'ok', 'Removed · read back') + '</div>' + counts([['Records gone', '450', 'g'], ['Ids and hashes kept', '450'], ['Report counts', 'unchanged']]) + '<p class="foot">Source C stays listed as “Removed · 19 Nov 2026” with its counts. Applying the same file again will not restore it.</p>')
+        + '</div>', 1300),
+
+      RFI07: () => page(conHead('records', { act: '' })
+        + '<div class="rfi-fbar" role="group" aria-label="Filters">' + J([['Source', 'All 4'], ['Kind', 'All'], ['Decision', 'All'], ['Outcome', 'All'], ['Flag', 'Any']].map(f => '<button type="button" class="rfi-sel"><span class="foot">' + f[0] + '</span><b>' + f[1] + '</b> ▾</button>')) + '<span class="foot">No free-text search and no export: records are found by source, kind, decision, outcome and flag.</span></div>'
+        + card('Staged records · ' + N(TOT.r) + ' · page 1 of 146', tbl(['Label · from the name column', 'Store id', 'Source', 'Kind', 'Decision', 'Outcome', '#Flags', '#Candidates'], [
+          ['<a href="#" class="lk"><b>[Fjordline Capital III]</b></a>', mo('sr_A_3c90aa'), 'A', kindc('vehicle'), D.none, O.nod, 2, 3],
+          ['<a href="#" class="lk"><b>[Northbank Seed I]</b></a>', mo('sr_A_51b2e0'), 'A', kindc('vehicle'), D.create, O.awa, 0, 1],
+          ['<a href="#" class="lk"><b>[Harbour Row Capital]</b></a>', mo('sr_A_0e4471'), 'A', kindc('manager'), D.link, O.linked, 1, 2],
+          ['<a href="#" class="lk"><b>[Larchmont Ventures II]</b></a>', mo('sr_A_8d12c3'), 'A', kindc('vehicle'), D.link, O.linked, 0, 1],
+          ['<a href="#" class="lk"><b>[Aurelia Seed Fund I]</b></a>', mo('sr_A_29f0b8'), 'A', kindc('vehicle'), D.create, O.created, 0, 0],
+          ['<a href="#" class="lk"><b>[Harbor &amp; Pine Partners]</b></a>', mo('sr_A_6a5d17'), 'A', kindc('manager'), D.create, O.created, 1, 2],
+          ['<a href="#" class="lk"><b>[Beacon Foundry]</b></a>', mo('sr_B_11c08e'), 'B', kindc('accelerator'), D.link, O.linked, 1, 1],
+          ['<a href="#" class="lk"><b>[Kestrel Founder Toolkit]</b></a>', mo('sr_B_4b7e20'), 'B', kindc('resource'), D.retain, O.retained, 0, 0],
+          ['<a href="#" class="lk"><b>[Quayside Partners]</b></a>', mo('sr_C_0a77d1'), 'C', kindc('manager'), D.reject, O.rejected, 0, 1],
+          ['<a href="#" class="lk"><b>[Northwind Labs · seed round]</b></a>', mo('sr_D_90c3f5'), 'D', kindc('funding round'), D.retain, O.retained, 1, 0],
+          ['<a href="#" class="lk"><b>[Round · row label blank]</b></a>', mo('sr_D_90c3f6'), 'D', kindc(null), D.none, O.nod, 0, 0]], 'rfi-t')
+          + '<div class="adp-row" style="justify-content:space-between"><span class="foot">Showing 1–11 of ' + N(TOT.r) + '. No private field appears in this list. ' + ann('#7746 staged list') + '</span><span class="adp-row">' + btn('Previous', '', ' aria-disabled="true"') + btn('Next') + '</span></div>'), { h: 1000 }),
+
+      RFI07B: () => crop(card('Staged records · 0 match', '<div class="adp-row" style="flex-wrap:wrap;gap:6px"><span class="foot">Filtered by</span>' + J(['Source: D', 'Kind: vehicle', 'Outcome: created'].map(c => '<button type="button" class="rfi-chip">' + c + ' <span aria-label="Remove filter">✕</span></button>')) + '<button type="button" class="lk">Clear all</button></div>'
+        + '<p class="rfi-zero"><b class="mo">0</b> staged records match. ' + N(TOT.r) + ' are staged in all.</p><p class="foot">A zero here is a Value: the store was read and nothing matches. A funding-round source creates no vehicles, by design.</p>'), 1100),
+
+      RFI08: () => page(conHead('records', { tail: '[Northbank Seed I]', h1: '[Northbank Seed I]', sub: 'Source record ' + mo('sr_A_51b2e0') + ' · ' + sname('A') + ' · as captured. Not a fund until promoted.', act: btn('Decide what this record is', 'p') })
+        + '<div class="rfi-rec"><div class="rfi-col">' + card('Fields in the source’s own words', tbl(['Column', 'Class', 'As captured'], [
+          ['[Fund name]', CL.fact, '[Northbank Seed I]'], ['[Manager]', CL.fact, '[Harbour Row Capital]'], ['[Fund size]', CL.fact, mo('[EUR 40m?]') + ' ' + flag('Money text ends with ?')], ['[Stage]', CL.fact, '[Pre-seed, Seed]'], ['[Geography]', CL.fact, '[Nordics, Baltics]'], ['[Ticket]', CL.fact, mo('[€250k–€1m]')], ['[Vintage]', CL.fact, mo('[2024]')], ['[Website]', CL.fact, mo('[northbank.example]')], ['[Lead?]', CL.fact, chip('nr', 'Blank in the source')], ['[Description]', CL.prose, '[An early-stage fund for B2B software teams.]'], ['[Tags]', CL.fact, '[saas, saas, b2b] ' + flag('Repeated tag')]], 'rfi-t sm')
+          + '<p class="foot">Blank, null and absent are kept apart: “Blank in the source” is an empty cell; a column the row did not have reads “Not in this row”. ' + ann('#7746 record read') + '</p>')
+          + '</div><div class="rfi-col">' + card('Flags · 2', '<ul class="rfi-fls"><li>' + flag('Money text ends with ?') + '<span>[Fund size] ends with a question mark. The value is kept as written.</span></li><li>' + flag('Repeated tag') + '<span>[Tags] lists “saas” twice. Nothing is changed.</span></li></ul><p class="foot">Computed by rule, recomputable, never changing a value.</p>')
+          + '<section class="adp-card rfi-pv" aria-labelledby="pv-h"><header class="adp-ch"><h2 class="rfi-h2" id="pv-h">' + G.lock + ' Private · never shown to members</h2></header><div class="adp-cb">'
+          + kv([['[Contact email]', mask + ' <button type="button" class="lk">' + G.eye + ' Show</button>'], ['[Contact phone]', '<span class="rfi-wh">' + G.x + 'Withheld</span>'], ['[Partner name]', '<span class="rfi-wh">' + G.x + 'Withheld</span>']])
+          + '<p class="foot"><b>Withheld · [2] cells were not sent.</b> Each Show is logged with who and when.</p>' + btn('Remove private fields') + '</div></section>'
+          + card('Decision', kv([['Kind', kindc('vehicle')], ['Decision', D.create], ['Outcome', O.awa], ['By', SA + ' · 18 Nov 2026, 17:02 UTC']]))
+          + '</div></div><p class="foot">Each opening of a full record is logged. No export, download or copy-all.</p>', { h: 900 }),
+
+      RFI08B: () => crop('<div class="adp-g2">' + card('[Northwind Labs · seed round] · ' + sname('D'), '<p>' + lab('rfi-hist-c', 'stale', 'History · [2011 to 2019]') + '</p>'
+        + tbl(['Column', 'As captured'], [['[Company]', '[Northwind Labs]'], ['[Round]', '[Seed]'], ['[Amount]', mo('[USD 1.2m]') + '<small>a round’s size, not a fund’s size or a cheque</small>'], ['[Date]', mo('[Mar 2014]') + ' ' + flag('Period contradicts its month')], ['[Investors]', '[Larchmont Ventures II; Beacon Foundry]']], 'rfi-t sm')
+        + '<p class="foot">Kind funding round: retained privately or rejected only. Nothing from a round is promoted into Funds.</p>')
+        + '<section class="adp-card rfi-pv"><header class="adp-ch"><h2 class="rfi-h2">' + G.lock + ' Private · never shown to members</h2></header><div class="adp-cb"><p><b>Withheld · [1] cell was not sent.</b> Source D’s contact column was withheld at its first run.</p><p class="foot">No held field on this record, so there is nothing to remove.</p></div></section></div>', 1300),
+
+      RFI08C: () => crop('<div class="adp-g2">' + card('[Quayside Partners] · ' + sname('C'), note('a', '!', '<b>This source’s terms verdict is Not allowed</b> (reviewed 13 Nov 2026). Nothing from it is served or promoted. The record stays staged for review and the report.')
+        + tbl(['Column', 'As captured'], [['[Manager]', '[Quayside Partners]'], ['[Focus]', '[Climate hardware]'], ['[HQ]', '[Oslo]']], 'rfi-t sm') + '<p class="foot">Decisions offered: Retain privately or Reject. Create and Link are not offered while the verdict is Not allowed.</p>')
+        + '<section class="adp-card rfi-pv"><header class="adp-ch"><h2 class="rfi-h2">' + G.lock + ' Private · never shown to members</h2></header><div class="adp-cb"><p><b>Withheld · [3] cells were not sent.</b></p></div></section></div>', 1300),
+
+      RFI09: () => page(conHead('records', { tail: '[Fjordline Capital III]', h1: '[Fjordline Capital III]', sub: 'Source record ' + mo('sr_A_3c90aa') + ' · ' + sname('A') + ' · no decision yet.', act: '' })
+        + card('Fields as captured · excerpt', kv([['[Fund name]', '[Fjordline Capital III]'], ['[Manager]', '[Fjordline Capital]'], ['[Website]', mo('[fjordline.example]') + ' ' + flag('Website on 3 records')]])), { h: 1040, overlay: sheet({ eye: 'Decide what this record is', title: '[Fjordline Capital III]', w: 760,
+        body: '<section class="rfg-box"><h3>Candidates · from fixed rules, suggestions only</h3><ul class="rfi-cands">'
+          + '<li><label class="rfg-cb"><input type="radio" name="c" checked><span><b>[Fjordline Capital III]</b> · catalogue row ' + mo('/research/funds/catalog/[fc-3]') + '<small>Grounds: same name · manager plus fund number ([Fjordline] · III)</small></span></label></li>'
+          + '<li class="am"><label class="rfg-cb dis"><input type="checkbox" disabled><span><b>[Fjordline Capital II]</b> · catalogue row<small>' + G.tri + ' Ground: same website host only · <b>shared website</b>: this host is on 3 records. It cannot be the only ground and cannot be accepted in bulk.</small></span></label></li>'
+          + '<li><label class="rfg-cb"><input type="radio" name="c"><span><b>[Fjordline Capital 3]</b> · staged in Source C<small>Ground: another staged record · same manager, number written differently</small></span></label></li></ul></section>'
+          + '<fieldset class="rfg-fs"><legend>Decision</legend>' + kv([['Kind', '<span class="inp rfi-in">Vehicle ▾</span>'], ['Decision', '<span class="seg rfi-seg"><button type="button">Create</button><button type="button" aria-checked="true">Link</button><button type="button">Retain privately</button><button type="button">Reject</button></span>'], ['Target', '[Fjordline Capital III] · catalogue'], ['Reason code', '<span class="inp rfi-in mo">same_vehicle ▾</span>'], ['Private note', '<span class="inp rfi-in">[Same fund; list spells the manager in full.]</span>']]) + '</fieldset>'
+          + '<section class="rfg-box"><h3>History · newest first</h3><ol class="rfi-hist"><li><span class="mo">18 Nov 17:10</span>' + SA + ' · kind set to vehicle · no decision</li><li><span class="mo">12 Nov 09:31</span>Staged by run_0001</li></ol></section>'
+          + '<p class="foot">' + ann('#7746 decisions, candidates, reason codes') + '</p>',
+        left: btn('Cancel'), foot: btn('Save decision', 'p') }) }),
+
+      RFI09B: () => crop('<div class="adp-g3">'
+        + card('No decision → Link', kv([['Before', D.none + ' ' + O.nod], ['After', D.link + ' to [Fjordline Capital III]'], ['Outcome', O.awa]]) + '<p class="foot">A link becomes Linked when it is promoted.</p>')
+        + card('No decision → Reject', kv([['Before', D.none], ['After', D.reject + ' · ' + mo('not_fund_side')], ['Outcome', O.rejected]]) + '<p class="foot">Kept staged, never promoted; can be decided again.</p>')
+        + card('Create · decided, awaiting promotion', kv([['Record', '[Northbank Seed I]'], ['Decision', D.create + ' · ' + mo('new_vehicle')], ['Outcome', O.awa]]) + '<p class="foot">Counted as Unresolved · decided, awaiting promotion until FND-I11 runs.</p>')
+        + '</div>', 1300),
+
+      RFI09C: () => crop(card('A manager with two vehicles · three records, three decisions', tbl(['Record', 'Kind', 'Decision', 'Target'], [['[Harbor &amp; Pine Partners]', kindc('manager'), D.create, 'new catalogue manager row'], ['[Larchmont Ventures II]', kindc('vehicle'), D.link, '[Larchmont Ventures II] · catalogue'], ['[Aurelia Seed Fund I]', kindc('vehicle'), D.create, 'new catalogue row']], 'rfi-t sm') + '<p class="foot">Each vehicle is its own record and its own decision. Deciding the manager decides nothing for its vehicles.</p>'), 1100),
+
+      RFI09D: () => crop('<div class="adp-g2">' + card('A company or funding-round record', kv([['Record', '[Northwind Labs · seed round] · ' + kindc('funding round')], ['Offered', D.retain + ' ' + D.reject + ' or leave unresolved']]) + '<p class="foot">Create and Link are not offered. Creating or linking companies and rounds is done elsewhere (Research Companies).</p>')
+        + card('Bulk mapping from a private file on this device', '<p>' + mo('[mapping-2026-11-19.csv]') + ' · read in this browser, not uploaded whole.</p>' + counts([['Rows', '42'], ['Link', '30'], ['Reject', '12']]) + '<p class="foot">Preview by store id and count only.</p>'
+          + '<div role="alert">' + lab('rfg-fail', 'x', 'Refused whole') + '<p class="rfi-fixed">The mapping names a shared-website record (' + mo('sr_A_7d02b4') + '). Nothing is applied.</p></div>' + dis('Apply mapping', 'Remove the shared-website row and choose the file again', 'p'))
+        + '</div>', 1300),
+
+      RFI10: () => page(conHead('columns', { act: '' })
+        + '<div class="adp-row">' + J(SRC.map(s => '<a href="#" class="rfi-chip' + (s.k === 'A' ? ' on' : '') + '"' + (s.k === 'A' ? ' aria-current="page"' : '') + '>Source ' + s.k + '</a>')) + '</div>'
+        + '<div class="rfi-rec"><div class="rfi-col">' + card(sname('A') + ' · 14 columns', tbl(['Column', 'Class · treatment', 'Role', 'Destination', 'Serve'], [
+          ['[Fund name]', CL.fact, 'name', 'directory · name', lab('st-l-ok', 'ok', 'Yes')], ['[Manager]', CL.fact, 'manager', 'fact · manager name', lab('st-l-ok', 'ok', 'Yes')], ['[Fund size]', CL.fact, 'money text', 'fact · stated fund capital', lab('st-l-ok', 'ok', 'Yes')], ['[Ticket]', CL.fact, 'money text', 'fact · cheque', lab('st-l-ok', 'ok', 'Yes')], ['[AUM]', CL.fact, 'money text', 'fact · manager AUM', lab('st-l-ok', 'ok', 'Yes')], ['[Min revenue]', CL.fact, 'money text', 'fact · revenue threshold', lab('st-l-mu', 'x', 'No')], ['[Stage]', CL.fact, 'stage', 'fact · investment stage', lab('st-l-ok', 'ok', 'Yes')], ['[Geography]', CL.fact, 'geography', 'fact · investment geography', lab('st-l-ok', 'ok', 'Yes')], ['[Vintage]', CL.fact, 'year', 'directory · vintage', lab('st-l-ok', 'ok', 'Yes')], ['[Website]', CL.fact, 'website', 'directory · website', lab('st-l-ok', 'ok', 'Yes')],
+          ['[Description]', CL.prose, 'description', 'fact · description', dis('Serve', 'Cite only: prose is not served')], ['[Contact email]', CL.contact + ' ' + HE, '—', 'held privately', '<span class="foot">never offered</span>'], ['[Contact phone]', CL.contact + ' ' + WH, '—', 'not sent', '<span class="foot">never offered</span>'], ['[Partner name]', CL.contact + ' ' + WH, '—', 'not sent', '<span class="foot">never offered</span>']], 'rfi-t sm')
+          + '<p class="foot">Cheque, stated fund capital, manager AUM and revenue threshold are four different destinations. Class and treatment are read-only here. ' + ann('#7747 column rules') + '</p>') + '</div>'
+          + '<div class="rfi-col">' + card('Terms and list', kv([['Verdict', V.co], ['Reviewed', mo('12 Nov 2026')], ['List name', '<span class="inp rfi-in">[Source A list] ▾</span><small class="foot">chosen from the reviewed lists</small>'], ['Allowed kinds', kindc('manager') + ' ' + kindc('vehicle')], ['Held privately', '1 column · [Contact email]']]) + '<p class="foot">Serve is offered for a fact column only under cite only or republish allowed, for prose only under republish allowed, never for contact. ' + ann('#7752 verdict row') + '</p>')
+          + card('Flags · by rule', tbl(['Rule', '#Records'], [['One website on more than one record', 18], ['Two checkbox answers contradict', 5], ['Money text: two units, wrong symbol or trailing ?', 23], ['Contact-shaped value in a non-contact column', 2], ['Period contradicts its own month', 0], ['Repeated tag', 1]], 'rfi-t sm') + '<div class="adp-row">' + btn('Recompute flags') + '<span class="foot">Last computed 19 Nov, 10:15 UTC · values never change</span></div>')
+          + '</div></div>', { h: 1100 }),
+
+      RFI10B: () => crop('<div class="adp-g2">' + card(sname('D'), kv([['Verdict', V.nr + ' · no review row'], ['List name', chip('nr')], ['Allowed kinds', 'none · rounds are never promoted']]) + tbl(['Column', 'Class', 'Serve'], [['[Amount]', CL.fact, dis('Serve', 'No review, no serve')], ['[Company]', CL.fact, dis('Serve', 'No review, no serve')]], 'rfi-t sm'))
+        + card(sname('C'), kv([['Verdict', V.no + ' · reviewed 13 Nov 2026'], ['List name', chip('nr')]]) + '<p>Every column is held privately or not sent. Serve is off for all 11 columns: the terms forbid republishing.</p>')
+        + '</div>', 1300),
+
+      RFI11: () => page(conHead('promote', { act: '' }) + fiveCard({ foot: false }), { h: 1040, overlay: sheet({ eye: 'Promote · reviewed records into the Funds catalogue', title: 'Review: promote 70 decided records', step: 1, w: 760,
+        body: counts([['Rows to create', '44', 'g'], ['Rows to link', '22'], ['Statements to write', '118'], ['Refused', '3', 'a'], ['Held back for a person', '1', 'a']])
+          + '<p class="rfi-sum"><span class="mo">44 + 22 + 3 + 1 = <b>70</b></span> decided, awaiting promotion (Source A 56, Source B 14)</p>'
+          + '<section class="rfg-box"><h3>Refused · 3</h3>' + tbl(['Store id', 'Reason code'], [[mo('sr_A_2b4c10'), mo('target_not_in_catalogue')], [mo('sr_A_2b4c11'), mo('target_not_in_catalogue')], [mo('sr_B_70e3a9'), mo('kind_not_allowed_for_source')]], 'rfi-t sm') + '</section>'
+          + '<section class="rfg-box"><h3>Held back for a person · 1</h3><p><b>[Northbank Seed I]</b> · a catalogue row with the same name now exists. Decide again: link to it, or create anyway.</p></section>'
+          + '<p class="foot">Sources C and D offer nothing to promote: Not allowed, and terms not reviewed. ' + ann('#7751 promotion') + '</p>',
+        left: btn('Back'), foot: btn('Cancel') + btn('Promote 66 records', 'p') }) }),
+
+      RFI11B: () => crop('<div class="adp-g2">' + card('Promotion result', '<div role="status">' + lab('st-l-ok', 'ok', 'Complete · read back') + '</div>' + counts([['Created', '44', 'g'], ['Linked', '22'], ['Statements', '118'], ['Refused', '3', 'a'], ['Held back', '1', 'a']])
+          + tbl(['New profile', 'From'], [['<a href="#" class="lk">[Aurelia Seed Fund I] ↗</a>', mo('sr_A_29f0b8')], ['<a href="#" class="lk">[Harbor &amp; Pine Partners] ↗</a>', mo('sr_A_6a5d17')], ['<span class="foot">+ 42 more</span>', '']], 'rfi-t sm') + '<p class="foot">Open profile goes to ' + mo('/research/funds/catalog/:id') + '.</p>')
+        + card('Undo one record', '<p><b>[Harbor &amp; Pine Partners]</b> · created 19 Nov 10:33 UTC.</p><p class="foot">The row is hidden from members, the decision returns to awaiting promotion.</p>' + btn('Undo', 'p')
+          + '<div role="alert" class="rfi-sep">' + chip('rf', 'Refused') + '<p><b>[Aurelia Seed Fund I]</b>: <b class="mo">[3]</b> saved references name this row; nothing was changed.</p></div>') + '</div>', 1300),
+
+      RFI11C: () => crop('<div class="adp-g2">' + card('Withdraw a source', '<p><b>' + sname('A') + '</b></p>' + kv([['Hidden at once', mo('412') + ' created rows · ' + mo('2,860') + ' statements from this source'], ['Linked rows', mo('538') + ' keep their other sources'], ['Deleted', 'Nothing. Staged records stay.']]) + typed('withdraw source A', 'withdraw source A') + btn('Withdraw source A', 'p') + '<p class="foot">' + pol('#7740 Q6 A · withdrawal exists') + '</p>')
+        + card('A source with no reviewed terms', '<p><b>' + sname('D') + '</b> · ' + V.nr + '</p><p>No promotion is offered: nothing is promoted from a source with no permitting review.</p>' + dis('Promote', 'Terms not reviewed') + '<p class="foot">' + pol('#7740 Q4') + '</p>') + '</div>', 1300),
+
+      RFI12: () => page(conHead('report', { act: btn('Export summary counts') })
+        + '<p class="foot">Describes ' + mo(RUN) + ' · ' + WHEN + ' · file ' + mo(SHA_S) + ' · <a href="#" class="lk">Back to the run</a></p>'
+        + card('Five outcomes · all sources', five(TO, { of: 'equals the records staged' }) + '<p class="foot">“Retained privately”: stored, never served. <a href="#" class="lk">Unresolved → open the list</a>. These are source records, not funds; the same organisation can appear more than once.</p>')
+        + card('By source', tbl(['Source', '#Created', '#Linked', '#Retained', '#Unresolved · none', '#Unresolved · awaiting', '#Rejected', '#Sum'], Object.keys(OUT).map(k => ['<b>' + k + '</b>', OUT[k][0], OUT[k][1], OUT[k][2], OUT[k][4], OUT[k][5], OUT[k][3], sum6(OUT[k])]).concat([['<b>All</b>', TO[0], TO[1], TO[2], TO[4], TO[5], TO[3], sum6(TO)]]), 'rfi-t sm rfi-tot'))
+          + card('By kind', tbl(['Kind', '#Created', '#Linked', '#Retained', '#Unresolved', '#Rejected', '#Sum'], KIND.map(k => [k[0], k[1][0], k[1][1], k[1][2], k[1][4] + k[1][5], k[1][3], sum6(k[1])]).concat([['<b>All</b>', TO[0], TO[1], TO[2], TO[4] + TO[5], TO[3], sum6(TO)]]), 'rfi-t sm rfi-tot') + '<p class="foot">Company and funding round: zero created and zero linked, by design.</p>')
+        + '<div class="adp-g2">' + card('Stored against the manifest', kv([['Records', mo(N(TOT.r) + ' of ' + N(TOT.r))], ['Columns', mo(TOT.cols + ' of ' + TOT.cols)], ['Cells', mo(N(TOT.stored) + ' stored + ' + N(TOT.whc) + ' withheld + ' + N(TOT.blank) + ' blank = ' + N(TOT.cells))], ['Held privately', '1 column · [Contact email], Source A']]))
+          + card('Flags', kv([['Shared website', mo('18')], ['Money text', mo('64') + ' · A 23, D 41'], ['Repeated tag', mo('12') + ' · A 1, B 11'], ['Contradicting checkboxes', mo('5')], ['Period vs month', mo('7')], ['Contact-shaped value', mo('5') + ' · A 2, C 3']]) + '<p class="foot">Export gives the summary counts only. ' + ann('#7746 report') + '</p>') + '</div>', { h: 1560 }),
+
+      RFI13: () => crop('<div class="adp-g2">'
+        + card('Loading · skeleton in the real layout', '<div class="rfi-five sm">' + J([1, 2, 3, 4, 5].map(() => '<div><span class="rfi-sk" style="width:60%"></span><span class="rfi-sk" style="width:40%;height:18px"></span></div>')) + '</div>' + J([1, 2, 3].map(() => '<span class="rfi-sk" style="width:100%;height:14px"></span>')) + '<p class="foot" role="status">Loading runs and sources…</p>')
+        + '<div class="rfi-col">' + card('Empty · report with no run yet', '<p>No run has been applied, so there is nothing to report.</p>' + btn('Choose a file', 'p'))
+          + card('Empty · Promote with no decided record', '<p><span class="mo">0</span> records are decided and awaiting promotion.</p>' + btn('Open staged records', 'p')) + '<p class="foot">Nothing staged at all: FND-I01, second frame.</p></div>'
+        + '</div>', 1300),
+
+      RFI13B: () => crop('<div class="adp-g2">'
+        + card('Not recorded', kv([['Kind', kindc(null)], ['Terms verdict', V.nr], ['A source field', chip('nr', 'Blank in the source')], ['Three wordings', '[Seed] · [seed stage] · [early] <small class="foot">kept as written; not merged</small>']]))
+        + '<div class="rfi-col">' + card('Unavailable · a record could not be read', '<div role="alert">' + chip('un', 'Unavailable · record not read') + '<p>We could not read ' + mo('sr_A_3c90aa') + ' at 10:41 UTC. The list, runs and report still work.</p>' + retry() + '</div>')
+          + card('Unavailable · outcome counts', '<div role="alert">' + chip('un', 'Unavailable · counts not read') + '<p>The five outcomes could not be counted. The sum is withheld: no partial sum is shown.</p>' + retry() + '</div>') + '</div>'
+        + '</div>', 1300),
+
+      RFI13C: () => crop('<div class="adp-g3">'
+        + '<div class="adp-oc a"><div class="adp-och"><b>Administrator, not a Super Admin</b>' + chip('rf') + '</div><p>The existing Super Admin only notice: “This page needs the Super Admin elevation. A Super Admin can grant it.”</p></div>'
+        + '<div class="adp-oc a"><div class="adp-och"><b>Not an administrator</b>' + chip('rf') + '</div><p>The existing Admin only notice. No hint of the console.</p></div>'
+        + '<div class="adp-oc a"><div class="adp-och"><b>Branch deployment</b>' + chip('rf') + '</div><p>“This console is HQ only.” <code>requireSuperAdmin</code> refuses a branch before it checks the flag.</p></div>'
+        + '<div class="adp-oc a"><div class="adp-och"><b>Support session</b>' + chip('rf') + '</div><p>“Not available during a support session.” Nothing is read or written.</p></div>'
+        + '<div class="adp-oc a"><div class="adp-och"><b>Write without a recent step-up</b>' + chip('rf', 'Step-up needed') + '</div><p>Asks for the authenticator code; writes nothing until confirmed (<code>requireSuperAdminWriteBar</code>, 15 min).</p></div>'
+        + '<div class="adp-oc a"><div class="adp-och"><b>Bulk mapping fails its check</b>' + lab('rfg-fail', 'x', 'Check failed') + '</div><p class="rfi-fixed">Row 12 names a store id that is not staged. Nothing applied.</p></div>'
+        + '</div>', 1300),
+
+      RFI13D: () => crop('<div class="adp-g2">'
+        + card('Saving a decision', '<div role="status">' + RES.running.replace('Running', 'Saving…') + '</div>' + kv([['Decision', D.link + ' to [Fjordline Capital III]']]) + btn('Save decision', 'p', ' aria-disabled="true"'))
+        + card('Save failed', '<div role="alert">' + chip('un', 'Not saved') + '<p>The decision was not saved. Your entry is kept below.</p></div>' + kv([['Decision', D.link + ' to [Fjordline Capital III]'], ['Reason code', mo('same_vehicle')], ['Note', '[Same fund; list spells the manager in full.]']]) + btn('Try saving again', 'p'))
+        + '</div>', 1300),
+
+      RFI14A: () => phone('<h1 class="adp-pt">Source imports</h1>' + '<div class="rfi-five sm ph">' + J([['Created', TO[0]], ['Linked', TO[1]], ['Retained privately', TO[2]], ['Unresolved', TO[4] + TO[5]], ['Rejected', TO[3]]].map(f => '<div><span class="eye">' + f[0] + '</span><b class="mo">' + N(f[1]) + '</b></div>')) + '</div><p class="rfi-sum"><span class="mo">= <b>' + N(TOT.r) + '</b></span> staged · ' + RUN + '</p>'
+        + J(RUNS.slice(0, 3).map(r => pcard(pc('<b class="mo">' + r[0] + '</b>', runStatus(r[3])) + pc('Started', mo(r[1])) + pc('Stored · read back', mo(N(r[4]) + ' · ' + N(r[5])))))), { bar: pbar(btn('Choose a file', 'p')) }),
+
+      RFI14B: () => phone('<span class="eye">New run · review</span><h1 class="adp-pt" style="font-size:18px">' + N(TOT.r) + ' records · 4 sources</h1>'
+        + pcard(pc('File', mo('6.8 MB')) + pc('SHA-256', '<span class="mo rfi-sha">9b07…e41d</span>') + pc('Manifest', lab('st-l-ok', 'ok', 'Matches')))
+        + J(SRC.slice(0, 2).map(s => pcard(pc('<b>Source ' + s.k + '</b>', V[s.v]) + pc('Classes', s.c[0] + ' fact · ' + s.c[1] + ' prose · ' + s.c[2] + ' contact') + pc('Withheld', mo(N(s.whc)) + ' cells'))))
+        + pcard('<span class="eye">Applying</span>' + prog(41, BATCHES, 'Batches sent') + pc('Batches', mo('41 of ' + BATCHES)) + '<p>' + RES.waiting + '</p>'), { bar: pbar(btn('Pause after this batch')) }),
+
+      RFI14C: () => phone('<h1 class="adp-pt">Staged records</h1><div class="adp-row" style="flex-wrap:wrap;gap:6px"><button type="button" class="rfi-chip">Source: A ✕</button><button type="button" class="rfi-chip">Outcome: unresolved ✕</button></div>'
+        + pcard('<b>[Fjordline Capital III]</b>' + pc('Kind', kindc('vehicle')) + pc('Outcome', O.nod) + pc('Flags · candidates', mo('2 · 3')))
+        + pcard('<b>[Northbank Seed I]</b>' + pc('Kind', kindc('vehicle')) + pc('Outcome', O.awa) + pc('Flags · candidates', mo('0 · 1')))
+        + '<p class="foot">230 match · page 1 of 10</p>', { bar: pbar(btn('Next page')) }),
+
+      RFI14D: () => phone('<span class="eye">Source A · as captured</span><h1 class="adp-pt" style="font-size:18px">[Northbank Seed I]</h1>'
+        + pcard(pc('[Fund size]', mo('[EUR 40m?]')) + pc('[Stage]', '[Pre-seed, Seed]') + pc('[Lead?]', chip('nr', 'Blank in the source')))
+        + '<details class="rfg-log rfi-pvd"><summary>' + G.lock + ' Private · never shown to members</summary><p>' + mask + '</p></details>'
+        + pcard(pc('Flags', flag('Money text ends with ?') + ' ' + flag('Repeated tag'))), { bar: pbar(btn('Decide what this record is', 'p')) }),
+
+      RFI14E: () => phone('<h1 class="adp-pt" style="font-size:18px">[Fjordline Capital III]</h1>', { over: '<div class="adp-dim" aria-hidden="true"></div><div class="adp-psheet" role="dialog" aria-modal="true" aria-labelledby="pd"><span class="adp-grab" aria-hidden="true"></span><span class="eye">Decide</span><h2 id="pd">Link to [Fjordline Capital III]</h2>'
+        + kv([['Kind', 'Vehicle'], ['Decision', D.link], ['Ground', 'same name · manager plus number'], ['Reason', mo('same_vehicle')]]) + '<p class="foot">' + G.tri + ' [Fjordline Capital II]: shared website only, cannot be accepted.</p>' + btn('Save decision', 'p') + btn('Cancel') + '</div>' }),
+
+      RFI14F: () => phone('<h1 class="adp-pt">Columns · Source A</h1>' + pcard(pc('Verdict', V.co) + pc('List name', '[Source A list]'))
+        + J([['[Ticket]', 'fact · cheque', 'Yes'], ['[Fund size]', 'fact · stated fund capital', 'Yes'], ['[Description]', 'prose', 'No · cite only'], ['[Contact email]', 'held privately', 'never']].map(c => pcard('<b>' + c[0] + '</b>' + pc('Destination', c[1]) + pc('Serve', c[2])))), {}),
+
+      RFI14G: () => phone('<span class="eye">Promote · review</span><h1 class="adp-pt" style="font-size:18px">70 decided records</h1>' + counts([['Create', '44', 'g'], ['Link', '22'], ['Refused', '3', 'a'], ['Held back', '1', 'a']]) + '<p class="foot">118 statements to write.</p>', { bar: pbar(btn('Promote 66 records', 'p')) }),
+
+      RFI14H: () => phone('<h1 class="adp-pt">Report</h1><p class="foot">' + RUN + ' · 19 Nov 10:14 UTC</p>' + J([['Created', TO[0]], ['Linked', TO[1]], ['Retained privately', TO[2]], ['Unresolved', TO[4] + TO[5]], ['Rejected', TO[3]]].map(f => pcard(pc(f[0], '<b class="mo">' + N(f[1]) + '</b>')))) + '<p class="rfi-sum">Sum <b class="mo">' + N(TOT.r) + '</b> = records staged</p>', {}),
+
+      RFI15: () => page(conHead('runs', { act: btn('Choose a file', 'p rfg-fv') }) + fiveCard() + card('Sources · ' + SRC.length, srcTable()), { h: 900 }),
+      RFI15B: () => page(conHead('records', { tail: '[Fjordline Capital III]', h1: '[Fjordline Capital III]', sub: 'Source record ' + mo('sr_A_3c90aa') + ' · no decision yet.', act: '' }), { h: 900, overlay: sheet({ eye: 'Decide what this record is', title: '[Fjordline Capital III]', w: 760, body: '<section class="rfg-box"><h3>Candidates</h3><ul class="rfi-cands"><li><label class="rfg-cb"><input type="radio" checked><span><b>[Fjordline Capital III]</b><small>same name · manager plus fund number</small></span></label></li><li class="am"><label class="rfg-cb dis"><input type="checkbox" disabled><span><b>[Fjordline Capital II]</b><small>' + G.tri + ' shared website only · cannot be accepted alone</small></span></label></li></ul></section>' + kv([['Kind', 'Vehicle'], ['Decision', D.link], ['Reason code', mo('same_vehicle')]]), left: btn('Cancel'), foot: btn('Save decision', 'p rfg-fv') }) }),
+      RFI15C: () => phone('<h1 class="adp-pt">Source imports</h1>' + J(RUNS.slice(0, 3).map(r => pcard(pc('<b class="mo">' + r[0] + '</b>', runStatus(r[3])) + pc('Stored · read back', mo(N(r[4]) + ' · ' + N(r[5])))))), { bar: pbar(btn('Choose a file', 'p')) }),
+      RFI15D: () => phone('<h1 class="adp-pt" style="font-size:18px">[Fjordline Capital III]</h1>', { over: '<div class="adp-dim" aria-hidden="true"></div><div class="adp-psheet" role="dialog" aria-modal="true"><span class="adp-grab" aria-hidden="true"></span><h2>Link to [Fjordline Capital III]</h2>' + kv([['Decision', D.link], ['Reason', mo('same_vehicle')]]) + btn('Save decision', 'p') + '</div>' }),
+
+      RFI16: () => doc(head('FND-I16', 'Keyboard, focus and announcements', 'Native buttons, links, radios and checkboxes, each named by its visible text. Every Sheet is a modal dialog: focus moves in, is trapped, and returns. The primary is never the first focus.')
+        + sec('Focus order · a new run', tbl(['#', 'Focus on', 'Then'], [['1', '“Choose a file” (FND-I01)', 'The browser file picker; on return focus goes to the Sheet heading'], ['2', 'File, manifest check, classes, preview, read in order', 'A failed check is the first thing read (<code>role=alert</code>)'], ['3', '“Apply”', 'Focus to the progress heading; progress is a <code>progressbar</code> with value text'], ['4', 'Result heading', 'Announced; Close returns focus to “Choose a file”']]))
+        + sec('Where focus returns', '<ul class="adp-bl"><li>Run Sheet closed → “Choose a file”</li><li>Decision saved → the record’s heading, then the new outcome chip</li><li>Removal or Promote result closed → the page heading, so the changed counts are read next</li><li>Leave-page dialog → “Stay on this page”</li><li>Phone bottom sheet → the button that opened it</li></ul>')
+        + sec('Live region sentences', tbl(['Event', 'Region', 'Sentence'], [['Waiting', 'status', '“Waiting, then continuing. Batch 41 of 73 sent.”'], ['Step-up expired', 'alert', '“Confirm it is you to continue. Nothing is written meanwhile.”'], ['Stopped', 'alert', '“Run stopped after batch 58. Resume with the same file.”'], ['Complete', 'status', '“Run complete. 3,644 records stored and read back.”'], ['Partial', 'alert', '“Run partial. Source C short by 50. Apply again.”'], ['Outcome uncertain', 'alert', '“Outcome uncertain. 144 records not confirmed. Reconcile before a new run.”'], ['Failed', 'alert', '“Run failed before any write. Nothing changed.”'], ['Decision saved', 'status', '“Saved. Link to Fjordline Capital III, awaiting promotion.”'], ['Promoted', 'status', '“Promoted. 44 created, 22 linked, 3 refused, 1 held back.”'], ['Removed', 'status', '“Removed 450 records of Source C. Ids and counts kept.”']]))
+        + sec('Other', '<ul class="adp-bl"><li>Masked private values have a name (“Masked private value”); Show is a button whose press is logged</li><li>Disabled actions use <code>aria-disabled</code> with the reason beside them</li><li>Typed confirmations are labelled inputs; the destructive primary stays disabled until the text matches</li><li>Phone: 44 px targets, no table wider than the screen</li></ul>')),
+
+      RFI17: () => doc(head('FND-I17', 'Handoff · routes, stores and issues', 'Checked against main 58ee9d1b73 (19 Nov 2026) and re-checked at a2677f7615 (21 Nov): nothing on these boards exists on main, so every board is ◇ backend required.')
+        + sec('Board → route → store → issue', tbl(['Board', 'Route', 'Store', 'Builds it'], [['FND-I01', route('/research/source-imports'), 'sources, runs (#7742)', ann('#7742 #7745')], ['FND-I02 – I04', 'same + Sheet', 'browser digest; run record', ann('#7753 #7745')], ['FND-I05', route('…/runs/:run'), 'run record', ann('#7742')], ['FND-I06', 'Sheet', 'staged records, held fields', ann('#7745 #7742')], ['FND-I07 – I09', route('…/records') + ', ' + route('…/records/:id'), 'staged records (#7742), decisions and candidates', ann('#7746')], ['FND-I10', route('…/columns/:source'), 'rule and flag tables; verdict row', ann('#7747 #7752')], ['FND-I11', route('…/promote'), 'catalogue rows, statements (#7743)', ann('#7751')], ['FND-I12', route('…/report'), 'derived, never stored', ann('#7746')]]))
+        + sec('Checked on main', '<ul class="adp-bl"><li>No <code>source-imports</code> route, page or table on main; no staging store.</li><li><code>research_fund_sources</code> (migration 406, 413) holds <code>verdict</code> and <code>reviewed_on</code>; one row per list served today (three reviewed public lists plus the D7326 and D7325 manager evidence).</li><li><code>research_fund_vehicle_facts</code> exists with no rows and no writer.</li><li><code>requireSuperAdmin</code> refuses a branch (“HQ only”) before the flag; <code>requireSuperAdminWriteBar</code> adds TOTP and a 15-minute step-up.</li><li>The Sheets card (<code>SheetsSyncCard.jsx</code>) mounts behind <code>isSuperAdminUser</code> in <code>FundsZone.jsx</code>; the door link goes beside it.</li></ul>')
+        + sec('Pending the owner ⚑', '<ul class="adp-bl"><li>' + pol('Q1 address A') + ' /research/source-imports and sub-routes</li><li>' + pol('Q2 gate A') + ' Super Admins only, on HQ</li><li>' + pol('Q3 door A') + ' one link beside the Sheets card</li><li>' + pol('Q4 prefix A') + ' FND-I, frames RFI</li><li>#7739 Q1 A, Q2 A, Q3 withheld default assumed; if Q1 is B, C or D, FND-I02 – I04 and Choose a file are dropped</li></ul>')
+        + sec('Shared components and where they came from', tbl(['Component', 'From'], [['HQ admin shell, Sheet side panel, step list, result words', 'Research Funds Google Sheets Sync (FND-G, rfg.js)'], ['State chips, Retry', 'Platform States (D5129)'], ['Run steps, review row, result receipt', 'FND-G; the NSI canvas (#7679) has not landed, so these are drawn here and NSI cites them'], ['Phone bottom sheet', 'FND-G07']]))
+        + sec('Frontend only', '<ul class="adp-bl"><li>SHA-256, size and manifest check in the browser (with #7753)</li><li>Sheet steps, focus, live regions, leave-page guard</li></ul><p class="foot">Every source, record, fund and person here is a bracketed sample. Design only.</p>'))
+    };
+    const html = (STATES[B] || STATES.RFI01)();
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

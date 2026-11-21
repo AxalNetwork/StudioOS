@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Funds Directory Mandate Filters · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Funds · #7738 prompt 2 · continues Research Funds Directory and Discovery (#7031, RFD-00 to RFD-07)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Funds directory — pick a stage, a place and a cheque, and see what a cited source says, with an honest count of what states nothing</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Boards RFD-08 to RFD-17 continue the Directory and Discovery canvas (RFD-00 to RFD-07 are not redrawn) at /research/funds?view=directory, for founders, admins and active Spin-Out Lab participants. Three filters join the RFD-02 row: Investment stage, Invests in (where a record invests, told apart from Manager HQ, where the manager is based) and Cheque (one named currency, no default). Every option has a count; each filter says how many records state nothing or cannot be compared, with Show them. Rows carry their kind as a word (vehicle, manager, accelerator, resource, kind not recorded), each stated fact with a source chip and year, the cheque in the source’s own terms, and the reported date as an age in words. No amount is converted and no bound is invented. States follow the Platform States vocabulary (Unavailable on screen; Stale is not used for age). Violet dashed ◇ tags mark backend work with its issue; amber ⚑ tags mark owner questions (option A drawn). Board keys RFD map to the brief’s FND-D ids.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 19 Nov 2026 · checked against main 58ee9d1b73 · every record, source, stage, place, cheque, size, date and count is invented and bracketed; no row is a real fund</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="10">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Funds Directory Mandate Filters Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RFD-08', 'Mandate filters · FND-D08', 'The RFD-02 filter row with Investment stage, Invests in and Cheque added, a count beside every option, active chips, and under the count what each filter leaves out (states no stage, no geography, no cheque, cannot be compared in USD) with Show them. Invented rows only.', [F('RFD08', false, 1580), C('RFD08B', 'The three new filters open', 1400, 560), C('RFD08C', 'After Show them on the stage line', 1300, 520)]],
+      ['RFD-09', 'Mandate facts on a row · FND-D09', 'Stage, invests in and cheque on a row, each with one source chip and reported year; six cheques as stated (range, typical, average, from, up to, currency not verified) and which can match; a row that states none reads Not recorded once; mandate coverage.', [C('RFD09', false, 1400, 760), C('RFD09B', 'Coverage disclosure · mandate', 1300, 420), P('RFD09P', 'Phone card')]],
+      ['RFD-10', 'Record kinds · FND-D10', 'One row each for a vehicle, a manager, an accelerator, a resource and a kind not recorded; the Kind filter with counts; the count line by kind (question 3); the heading and zero line no longer say fund vehicle; the search label. The Sheet header for a manager and a vehicle side by side.', [C('RFD10', false, 1400, 960), C('RFD10B', 'Sheet header · manager and vehicle', 1300, 620)]],
+      ['RFD-11', 'Size currency · FND-D11', 'The size-currency control with EUR, USD and GBP on offer, one at a time; the sentence naming the asked currency; a GBP size, a size with no currency recorded (counted, never filtered or sorted) and no size. Nothing converted.', [C('RFD11', false, 1400, 560)]],
+      ['RFD-12', 'Record age and coverage · FND-D12', 'Sort by reported date with undated rows last and counted; age in plain words with no mark (question 2); a missing and an implausible date; coverage by Manager HQ region, kind and reported year; the Old record label as it would look under B or C.', [C('RFD12', false, 1400, 640), C('RFD12B', 'Coverage by region, kind and year', 1400, 560), C('RFD12C', 'Old record under option B or C', 1000, 260)]],
+      ['RFD-13', 'Empty, zero and failed · FND-D13', 'Nothing recorded yet for a founder and for a Super Admin, zero results with no summed hint, loading, mandate parts Unavailable, a filtered request that failed (never an unfiltered list), Not recorded on a row, a role without Funds and a list taken down mid-filter.', [C('RFD13', false, 1400, 860)]],
+      ['RFD-14', 'Phone 390 · FND-D14', 'Cards with the kind word and the stage, invests in and cheque line; the filter sheet with Kind, stage, Invests in and Cheque in one currency, its button by question 3; the bottom sheet for a manager record.', [P('RFD14A', 'Results'), P('RFD14B', 'Filters sheet'), P('RFD14C', 'Manager record')]],
+      ['RFD-15', 'Dark · FND-D15', 'RFD-08 and the phone results on the dark tokens; states keep their words and shapes.', [F('RFD15', 'RFD-08 dark', 1500), P('RFD15P', 'Phone dark')]],
+      ['RFD-16', 'Keyboard, focus and announcements · FND-D16', 'Focus order through the new controls, the announced count after each filter, and Show them.', [W('RFD16')]],
+      ['RFD-17', 'Handoff · FND-D17', 'Each board with its route and the field behind every value, ◇ with the issue that builds it, the owner questions and the Eadwyn rail task (◇, no issue yet).', [W('RFD17')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
