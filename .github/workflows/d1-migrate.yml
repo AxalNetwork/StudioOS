@@ -23,7 +23,7 @@ name: D1 migrations
 # `branch-provision.yml` from the baseline, so there is no legacy ledger to
 # adopt and nothing to baseline.
 #
-# Required repository secrets:
+# Required secrets for production:
 #   CLOUDFLARE_API_TOKEN  — D1:Edit (plus Workers Scripts:Edit for the deploy
 #                           workflow, which now runs this same step first)
 #   CLOUDFLARE_ACCOUNT_ID — the account holding `studioos-db`
@@ -53,6 +53,7 @@ permissions:
 
 jobs:
   migrate:
+    environment: production
     name: ${{ inputs.mode }} against ${{ inputs.branch && format('studioos-{0}', inputs.branch) || 'studioos-db' }}
     if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -94,7 +95,7 @@ jobs:
           if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then MISSING+=("CLOUDFLARE_API_TOKEN"); fi
           if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then MISSING+=("CLOUDFLARE_ACCOUNT_ID"); fi
           if [[ ${#MISSING[@]} -gt 0 ]]; then
-            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            echo "::error::Required secret(s) are missing or empty: ${MISSING[*]}"
             exit 1
           fi
 

@@ -5,12 +5,22 @@
  * value) once and replicates it across every sector as an honest macro
  * backdrop. Set MI_FLAG_WORLD_BANK=live to engage fetchLive; otherwise the
  * deterministic stub keeps the pipeline exercisable in dev.
+ *
+ * D7707 — the stored figure is gross capital formation (series
+ * NE.GDI.TOTL.ZS, % of GDP, World), under the key `capital`. Its period is
+ * the row's `date` (the year measured, not the fetch time) and its
+ * `published_at` the header's `lastupdated`. A `date` that cannot be read
+ * stores a null period.
  */
 import { registerSource, type CommonRow } from '../registry';
 import { row, seededAround, doy } from './_helpers';
-import { buildUniformRows, clamp01, fetchJson, UA } from './_live';
+import { buildUniformRows, clamp01, fetchJson, normalisePeriod, publishedDate, UA } from './_live';
 
 const KEY = 'world_bank';
+const SERIES = 'NE.GDI.TOTL.ZS';
+const SERIES_NAME = 'Gross capital formation (% of GDP)';
+/** Fixed divisor: 50 % of GDP maps to 1.0 before clamping to 0.05..0.95. */
+const DIVISOR = 50;
 
 function buildRows(sectors: string[], now: Date): CommonRow[] {
   const day = doy(now);
@@ -41,20 +51,27 @@ registerSource({
       key: KEY,
       metric_key: 'capital',
       unit: 'pct',
+      coverage_area: 'World',
       fetchOne: async () => {
         const url =
-          'https://api.worldbank.org/v2/country/WLD/indicator/NE.GDI.TOTL.ZS' +
+          `https://api.worldbank.org/v2/country/WLD/indicator/${SERIES}` +
           '?format=json&per_page=1&mrv=1';
-        const j = await fetchJson<[unknown, Array<{ value: number | null }> | null]>(
+        const j = await fetchJson<[{ lastupdated?: string } | null, Array<{ value: number | null; date?: string }> | null]>(
           url,
           { headers: { 'User-Agent': UA, Accept: 'application/json' } },
         );
-        const v = j?.[1]?.[0]?.value;
+        const obs = j?.[1]?.[0];
+        const v = obs?.value;
         if (v == null || !isFinite(v)) return null;
+        const period = normalisePeriod(obs?.date);
         return {
-          value: clamp01(v / 50),
+          value: clamp01(v / DIVISOR),
           raw: v,
-          citation_url: 'https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS',
+          citation_url: `https://data.worldbank.org/indicator/${SERIES}`,
+          observed_period: period?.observed_period ?? null,
+          observed_period_end: period?.observed_period_end ?? null,
+          published_at: publishedDate(j?.[0]?.lastupdated),
+          payload: { series: SERIES, series_name: SERIES_NAME, divisor: DIVISOR },
         };
       },
     }),

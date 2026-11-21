@@ -7,6 +7,7 @@ required checks, provider resources or shard counts.
 | File | Purpose |
 | --- | --- |
 | `bootstrap.sh` | Prepare pinned tools, verify native capabilities, and manage privately approved organization registration and service lifecycle. |
+| `job-container.mjs` | D7905: inactive trusted-host Linux container boundary, actual inspection adapter and exact-ID cleanup; Mac and enrollment remain blocked pending canary. |
 | `profiles.json` | Schema v1 profile enums, shared AND labels and reviewed archive digests; hosted Ubuntu is a separate pool. |
 | `ephemeral-supervisor.mjs` | D7889: pure one-job enrollment/drain proposals and filtered environment; no live issuer or process launcher. |
 
