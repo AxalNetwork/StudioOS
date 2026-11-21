@@ -12,10 +12,13 @@ and the expert's practice is `../ExpertEditorPage.jsx`.
 | `WellbeingBookPage.jsx` | Book an expert in four steps. No rail, as the canvas draws none. | `/wellbeing/book` |
 | `PracticeZones.jsx` | The practice's three zones: services, the weekly grid, upcoming bookings. Bodies only; `ExpertEditorPage.jsx` reads and writes. | `/wellbeing/practice` |
 | `WellbeingResourceLibrary.jsx` | The admin resource library: list, publish, delete. | `/admin/wellbeing/resources` |
+| `WellnessPresentationPage.jsx` | The public, signed-out Wellness presentation (D7121, PGW01–PGW03), in the public site's frame. Reads nothing live. Registered by `frontend/src/routes/programsWellness.jsx`. | `/programs/wellness` |
+| `wellnessPresentation.js` | That page's map entry (key, page, PDF path, availability, edition) and every word it shows. No React, no API. | — |
+| `wellnessPresentation.css` | That page's styles, scoped under `.pgw-page`; light only, as the public site is. | — |
 
 ## Rules
 
-- **What the Worker stores decides what is drawn.** `routes/wellbeing.ts` keeps a
+- **What the Worker stores decides what is drawn.** `cloudflare-worker/src/routes/wellbeing.ts` keeps a
   check-in as one row per day with six optional scores; the canvas's support and
   decisions are drawn as "Not recorded", and "one per week" is kept by re-saving
   onto this week's day. D570 lists every such gap with its route.
@@ -25,3 +28,4 @@ and the expert's practice is `../ExpertEditorPage.jsx`.
   builder in `wellbeingModel.js` that takes only counts, because coverage lines are
   sent to a model on a read-back.
 - `frontend/test/wellbeing_d570.test.mjs` pins all of the above.
+- **The public presentation shows no one.** `/programs/wellness` names no expert, member, session or entry, and links the workspace only through sign-in; `frontend/test/wellness_presentation_d7121.test.mjs` pins that, the PDF href and its content type.

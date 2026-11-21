@@ -88,6 +88,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/ui',                 'the design-system primitives everything else composes'],
   ['frontend/src/ui/phone',           'the founder phone primitives (D699) and the width tiers: phone, tablet (D4846 part 2) and desktop'],
   ['frontend/src/pages/work',         'Work and company compliance (D1614): the board, backlog, burn-up, run sheet, activity feed and Workload, and the one adapter seam'],
+  ['frontend/src/pages/wellbeing',    'the Wellbeing screens (D570) and the public Wellness presentation (D7121)'],
   ['frontend/src/pages/hq',           'the Super Admin tier — one page per HQ sidebar row, and which canvas each draws'],
   ['frontend/src/pages/hq/security', 'HQ › Security v2 (D4800, D4801): the workspace registry, the shared state vocabulary, the Overview, and the Access workspace with its Scope → Review → Result dialogs'],
   ['frontend/src/pages/hq/team', 'HQ › Team (D5044): the one supervision read, the roster, the branch search, each action on its shared state model, and what each act invalidates'],
