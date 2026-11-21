@@ -114,6 +114,7 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `scanTrackerIssueBody.test.mjs` | D7283: private export arguments, local file modes, failure handling, coordinate rejection and finding-payload non-disclosure. Uses a local CLI stub without network access. |
 
 | `localFiles7255.test.mjs` | D7255: private-file permissions, link refusals, descriptor-bound edits and CLI recovery regressions with disposable local fixtures. |
+| `networkDirectoryPlan.mjs` | D7672: pure source-classified Network directory planner; emits parameterized batches, provenance, held conflicts and aggregate reconciliation without accounts, memberships, ties or book writes. |
 
 | `fileRecoveryHealth.mjs` | D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. |
 | `fileRecoveryHealth.test.mjs` | D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. |
