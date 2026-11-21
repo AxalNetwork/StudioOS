@@ -316,8 +316,20 @@ jobs:
       # every event.
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
         env:
+          CI_FAILURE_DIR: ${{ runner.temp }}/ci-failures
+          CI_FAILURE_PART: ${{ matrix.part }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           TEST_TRACE_DIR: ${{ (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('{0}/test-traces', runner.temp) || '' }}
         if: steps.macbook.outputs.delegated != 'true'
+      - name: Upload bounded failure evidence (D5502)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-failures-${{ matrix.part }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-failures/failures.json
+          if-no-files-found: ignore
+          retention-days: 3
       # D7124: the test files this pull request adds or edits, run again with
       # the clock 7 days and 9 days 11 hours ahead under libfaketime (as the
       # nightly does, D5398), so a date-bound test fails here and not on main
@@ -419,27 +431,52 @@ jobs:
             cloudflare-worker/package-lock.json
         id: node
         if: ${{ !cancelled() }}
-      - name: Install gitleaks
+      - name: Load trusted scanner installer
+        id: scanner_pins
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          MAIN_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        shell: bash
         run: |
           set -euo pipefail
-          GITLEAKS_VERSION=8.21.2
-          URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          for attempt in 1 2 3 4 5; do
-            if curl -sSfL --connect-timeout 10 --max-time 120 -o /tmp/gitleaks.tar.gz "$URL"; then
-              break
-            fi
-            if [ "$attempt" = 5 ]; then
-              echo "::error::Could not download gitleaks ${GITLEAKS_VERSION} after 5 attempts — this is a network failure, not a secret finding."
-              exit 1
-            fi
-            echo "gitleaks download attempt ${attempt} failed; retrying in $((attempt * 5))s"
-            sleep $((attempt * 5))
+          case "$EVENT" in
+            pull_request) trusted="$PR_BASE" ;;
+            merge_group) trusted="$GROUP_BASE" ;;
+            push|schedule)
+              [[ "$REF" == refs/heads/main ]] || exit 1
+              trusted="$MAIN_SHA" ;;
+            *) echo "Unsupported scanner acquisition event" >&2; exit 1 ;;
+          esac
+          [[ "$trusted" =~ ^[0-9a-f]{40}$ ]] || { echo "Missing trusted scanner base" >&2; exit 1; }
+          git cat-file -e "$trusted^{commit}" || git fetch --no-tags origin "$trusted" --depth=1
+          installer="$RUNNER_TEMP/trusted-scanner-installer"
+          mkdir -p "$installer"
+          for source in install-scanner.mjs scanner-acquisition.mjs scanner-tools.json; do
+            git show "$trusted:scripts/ci/$source" > "$installer/$source"
           done
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
-          gitleaks version
-        id: install_scanner
+          echo "installer=$installer/install-scanner.mjs" >> "$GITHUB_OUTPUT"
+          node "$installer/install-scanner.mjs" gitleaks --metadata
         if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Restore pinned gitleaks archive
+        id: scanner_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.scanner_pins.outcome == 'success' }}
+      - name: Install gitleaks
+        id: install_scanner
+        run: node "${{ steps.scanner_pins.outputs.installer }}" gitleaks
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.scanner_pins.outcome == 'success' }}
+      - name: Save verified gitleaks archive on main only
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.install_scanner.outcome == 'success' && steps.scanner_cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
       - name: Determine scan range
         id: range
         run: |
@@ -477,7 +514,7 @@ jobs:
             --no-banner \
             --exit-code=1
         id: scan
-        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.install_scanner.outcome == 'success' && steps.range.outcome == 'success' }}
       - name: Load static checkers from the trusted base
         shell: bash
         env:
@@ -799,8 +836,8 @@ jobs:
 
   classify:
     name: why CI failed (D5398)
-    needs: suite
-    if: failure() && github.event_name == 'pull_request'
+    needs: [frontend, worker, verified, plan, suite, fast, landing, visual, drift, og-tags, dev-backend]
+    if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true
@@ -816,7 +853,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: node scripts/ci-classify.mjs
+      - name: Upload classified evidence (D5502)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-failures-classified-attempt-${{ github.run_attempt }}
+          path: ci-failures-classified.json
+          if-no-files-found: ignore
+          retention-days: 3
 
   # -------------------------------------------------------------------------
   # D1511 (#3762): the Pitch deck editor's visual regression and axe suites
@@ -1010,6 +1057,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |

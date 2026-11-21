@@ -79,7 +79,8 @@ const SPECS: Spec[] = [
   {
     key: 'founder:studio', family: 'founder', name: 'Raise + Grow', tagline: 'Raise the money, then grow the company.', licence_key: 'founder:studio', matches: { tier: 'studio' },
     sellable: true,
-    included: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
+    // D4653 part 3 (#4653): Studio states its startup and interview limits, so the founder cards compare without reading the one before.
+    included: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
   },
   {
     key: 'investor:free', family: 'investor', name: 'Investor Basic', tagline: 'Browse the network.', licence_key: 'investor:free', matches: null,
@@ -121,7 +122,8 @@ const SPECS: Spec[] = [
   {
     key: 'partner:pro', family: 'partner', name: 'Operating Partner Pro', tagline: 'Manage client work from proposal to delivery.', licence_key: 'partner', matches: { plan_group: 'partner' },
     sellable: true,
-    included: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports'],
+    // D4653 part 3 (#4653): no "views"; nothing counts a profile view (D676).
+    included: ['Proposals, pipeline and delivery', 'Partner insights: leads and conversion', 'Client status reports'],
   },
   {
     key: 'other', family: 'other', name: 'No plan yet', tagline: 'Choose a profile to see its plans.', licence_key: 'other', matches: null,

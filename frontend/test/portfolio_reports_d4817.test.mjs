@@ -269,7 +269,8 @@ test('4. Unreadable: each failed source labels its own cells with a Retry for th
 });
 
 test('5. the two addendum actions stay on the company Reports (rebuilt by part 9); the chase is today’s', async () => {
-  const view = await mount(worker());
+  // D7650: the Worker's answer names what it chased; a company counts as asked only when it is in `chased`.
+  const view = await mount(worker({ 'POST /api/portfolio/chase': () => json({ chased: [{ project_id: 1, uid: 'ch1', already: false }], skipped: [], skips: [] }) }));
   try {
     assert.doesNotMatch(view.text(), /Ask for this report|Waive this period/, 'PF-04 draws neither action: they live on the company Reports');
     assert.ok(view.hrefs().includes('/portfolio/companies/pelican/reports'), 'the signed-duty row still opens the company Reports');

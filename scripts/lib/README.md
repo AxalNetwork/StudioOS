@@ -108,6 +108,8 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `flakyTests.test.mjs` | D6464: classification, expiry, the one-retry rule and the runner's reporter wiring. |
 | `sectionIncidentIssue.mjs` | D5984 (#5984): the one public template for a section-incident GitHub bug: the fixed cases, the marker, the title, body and labels, the power-of-two count milestone and its receipt comment. No episode, Slack or customer field reaches it. Owned by `../section-triage.mjs` and `cloudflare-worker/src/services/sectionIncidentIssue.ts` (typed by `sectionIncidentIssue.d.mts`). |
 | `sectionDraftGate.mjs` | D5985 (#5985): whether a reproduced section defect may get one automatic draft fix: section-triage's `cases` as the allowlist, trusted reproduced evidence, #5681's excluded inputs, no self-generated events, existing claims and PRs, the attempt, branch, PR and concurrency budget, and the stop switch. Emits five fixed job fields or one reason code. Tested in `sectionDraftGate.test.mjs`. |
+| `productionCredentials.test.mjs` | D7145 tests the credential inventory, deployment environments and the temporary PR preview exception. |
+| `productionEnvironment.test.mjs` | D7145 runtime-policy response and release-step ordering regression fixtures. |
 | `scanTrackerIssueBody.mjs` | D7283: public Code Scanning tracker instructions from validated coordinates; finding evidence stays in a private export or protected alert. Owned by `../scan-remediation/trackers.mjs`. |
 | `scanTrackerIssueBody.test.mjs` | D7283: private export arguments, local file modes, failure handling, coordinate rejection and finding-payload non-disclosure. Uses a local CLI stub without network access. |
 
@@ -115,3 +117,7 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 
 | `fileRecoveryHealth.mjs` | D6653: pure heartbeat/workflow health decisions without inferring recovery from unavailable evidence. |
 | `fileRecoveryHealth.test.mjs` | D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. |
+| `ciFailures.mjs` | D5502: bounded test identities, safe reproductions and exact-base evidence attribution. |
+| `ciFailureReporter.mjs` | D5502: node:test JSONL evidence beside TAP without assertion values or stacks. |
+| `ciFailureCollector.mjs` | D5502: bounded Actions artifact reads, archive validation and tested-base comparison. |
+| `ciFailures.test.mjs` | D5502: identity, missing evidence, archive, cancellation and real runner exit regressions. |

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
@@ -6,7 +6,7 @@ import { AssignDialog, OwnerCell, UrgencyPill } from './AdminApprovals';
 import { DECIDED_HERE, afterDecision, boardCrumb, boardStep, boardStrip, slaOfBand } from './boardGrammar';
 import {
   BOARDS, INTAKE_PAUSED, INTAKE_PAUSED_LINE, PROFILES, TESTER_TABS,
-  answerPairs, dayText, decisionCopy, doneLine, profileChart, profileWord, reasonReady, tabPath, testerActions, testerHistory, testerRows,
+  answerPairs, dayText, decisionCopy, doneLine, profileChartFromCounts, profileWord, reasonReady, tabPath, testerActions, testerHistory, testerRows,
 } from './approvalsModel';
 import {
   BTN, BTN_PRIMARY, BoardStrip, CARD, DrawerStep, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SELECT, SUB,
@@ -26,22 +26,7 @@ import Sheet from '../../../ui/Sheet.jsx';
 
 const CRUMB = boardCrumb('Product testers');
 const NEW_PILL = { label: 'New lane', tone: 'held' };
-export const TESTER_READ_PAGES = 10;
 const FACTS = 'Who can apply: Founders, Investors, Advisors, Operating Partners, Explorers · Who decides: any Admin or Super Admin · Admins cannot apply';
-
-/** Every tester, a hundred a page, up to a thousand: what the tiles, chart, counts and table read. */
-export async function readAllTesters(client = approvalBoardsApi, signal) {
-  let rows = [];
-  let reply = null;
-  for (let page = 1; page <= TESTER_READ_PAGES; page += 1) {
-    signal?.throwIfAborted();
-    reply = await client.testers({ page, pageSize: 100, signal });
-    rows = rows.concat(Array.isArray(reply?.rows) ? reply.rows : []);
-    if (rows.length >= Number(reply?.matching || 0) || !(reply?.rows || []).length) break;
-  }
-  const matching = Number(reply?.matching || 0);
-  return { rows, totals: reply?.totals || null, matching, complete: rows.length >= matching };
-}
 
 const SORTS = { waiting: 'Waiting longest', newest: 'Newest first', name: 'Name' };
 
@@ -52,23 +37,6 @@ function useTesterFilters() {
   const [consent, setConsent] = useState('');
   const [sort, setSort] = useState('waiting');
   return { q, setQ, profile, setProfile, verified, setVerified, consent, setConsent, sort, setSort };
-}
-
-/** The toolbar's filters over the tab's rows, in memory. */
-export function filterTesters(rows, f) {
-  const needle = String(f.q || '').trim().toLowerCase();
-  const out = rows.filter((r) => {
-    if (needle.length >= 2 && !`${r.name} ${r.email || ''}`.toLowerCase().includes(needle)) return false;
-    if (f.profile && profileWord(f.profile) !== r.profile) return false;
-    if (f.verified === 'yes' && !r.emailVerified) return false;
-    if (f.verified === 'no' && r.emailVerified) return false;
-    if (f.consent === 'yes' && !r.consent) return false;
-    if (f.consent === 'no' && r.consent) return false;
-    return true;
-  });
-  if (f.sort === 'newest') return [...out].sort((a, b) => (a.ageHours ?? Infinity) - (b.ageHours ?? Infinity));
-  if (f.sort === 'name') return [...out].sort((a, b) => a.name.localeCompare(b.name));
-  return out;
 }
 
 function ProfileChart({ chart }) {
@@ -312,19 +280,28 @@ export default function TesterBoard({ at }) {
   const b = BOARDS['product-testers'];
   const loc = useLocation();
   const navigate = useNavigate();
-  const all = useLoad((signal) => readAllTesters(approvalBoardsApi, signal), 'testers', { what: 'approvals:testers' });
-  const inProgram = useLoad((signal) => approvalBoardsApi.testers({ status: 'active', inProgramme: 'yes', pageSize: 1, signal }), 'testers-in-program', { what: 'approvals:testers:in-program' });
+  const summary = useLoad((signal) => approvalBoardsApi.testerSummary({ signal }), 'testers-summary', { what: 'approvals:testers:summary' });
   const f = useTesterFilters();
-  const [page, setPage] = useState(0);
+  const [paging, setPaging] = useState(null);
   const [done, setDone] = useState(null);
   const tab = TESTER_TABS.find((t) => t.key === at.tab) || TESTER_TABS[0];
-  const ready = all.status === 'ready';
-  const totals = ready ? all.reply.totals : null;
-  const tabRows = useMemo(() => (ready ? testerRows(all.reply.rows.filter((r) => r.status === tab.status)) : []), [ready, all.reply, tab.status]);
-  const shown = filterTesters(tabRows, f);
-  const chart = ready ? profileChart(all.reply.rows, { complete: all.reply.complete }) : null;
+  const page = paging?.tab === tab.key ? paging.page : 0;
+  const setPage = (next) => setPaging({ tab: tab.key, page: next });
+  const q = f.q.trim().length >= 2 ? f.q.trim() : '';
+  const filtered = !!(q || f.profile || f.verified || f.consent);
+  const query = { status: tab.status, role: f.profile, q, verified: f.verified, consent: f.consent,
+    sort: f.sort, page: page + 1, pageSize: PAGE };
+  const read = useLoad((signal) => approvalBoardsApi.testers({ ...query, signal }),
+    JSON.stringify(query), { what: 'approvals:testers:page' });
+  const totals = summary.status === 'ready' ? summary.reply?.counts : null;
+  const recent = summary.status === 'ready' ? summary.reply?.recent_by_role : null;
+  const chart = Array.isArray(recent) ? profileChartFromCounts(recent) : null;
   const from = at.item ? (loc.state?.from || tabPath('product-testers', 'waiting')) : loc.pathname;
-  const count = (status) => (all.status === 'loading' ? { kind: 'load' } : !totals ? { kind: 'dash', tip: 'The testers could not be read.' } : { kind: 'num', value: nf(totals[status] || 0) });
+  const count = (key) => {
+    if (summary.status === 'loading') return { kind: 'load' };
+    return Number.isSafeInteger(totals?.[key]) ? { kind: 'num', value: nf(totals[key]) }
+      : { kind: 'dash', tip: 'The tester counts could not be read.' };
+  };
   // Literal paths, so the reachability walk finds every tab.
   const tabs = (
     <>
@@ -335,24 +312,28 @@ export default function TesterBoard({ at }) {
       <HeaderTab to="/admin/approvals/product-testers/removed" count={count('removed')} data-testid="testers-tab-removed">Removed</HeaderTab>
     </>
   );
-  const decided = (line) => { setDone(line); all.reload(); inProgram.reload(); };
+  const reload = () => { summary.reload(); read.reload(); };
+  const decided = (line) => { setDone(line); setPage(0); reload(); };
   const own = useBoardOwners('product-testers', setDone);
-  const pageRows = shown.slice(page * PAGE, page * PAGE + PAGE);
-  const pick = useBoardPick([tab.key, page, f.q, f.profile, f.verified, f.consent, f.sort].join('|'));
-  const waitingRows = ready ? testerRows(all.reply.rows.filter((r) => r.status === 'applied')) : [];
-  const strip = boardStrip({ status: all.status, label: 'Pending', total: totals ? totals.applied || 0 : null, rows: waitingRows, complete: ready && all.reply.complete, owners: own.owners, noun: 'applications' });
+  const pageRows = read.status === 'ready' ? testerRows(read.reply?.rows) : [];
+  const pick = useBoardPick(JSON.stringify(query));
+  const waitingRows = tab.key === 'waiting' && page === 0 && !filtered ? pageRows : [];
+  const waiting = Number.isSafeInteger(totals?.applied) ? totals.applied : null;
+  const strip = boardStrip({ status: summary.status, label: 'Pending', total: waiting, rows: waitingRows,
+    complete: waiting !== null && waiting === waitingRows.length, owners: own.owners, noun: 'applications' });
   return (
     <div className="flex flex-col gap-5" data-testid="approvals-board-product-testers">
       <AdminPageHeader crumb={CRUMB} title={b.title} pills={[NEW_PILL]} line={b.line} scope tabs={tabs} data-testid="approvals-board-header" />
       {INTAKE_PAUSED ? <p role="note" className={`${CARD} m-0 px-4 py-3 text-[13px] font-semibold text-amber-800 dark:text-amber-200`} data-testid="testers-intake-paused">{INTAKE_PAUSED_LINE}</p> : null}
-      <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { all.reload(); setDone(null); }} />
+      <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { reload(); setDone(null); }} />
       <BoardStrip cells={strip} testId="testers-strip" />
-      {all.status === 'error' ? <Failed what="The product testers" onRetry={all.reload} testId="testers-failed" />
-        : all.status === 'loading' ? <Skeleton.Text lines={4} />
+      {summary.status === 'error' ? <Failed what="The tester counts" onRetry={summary.reload} testId="testers-summary-failed" /> : null}
+      {read.status === 'error' ? <Failed what="The product testers" onRetry={read.reload} testId="testers-failed" />
+        : read.status === 'loading' ? <Skeleton.Text lines={4} />
           : (
             <section className={`${CARD} flex flex-col`} data-testid="testers-table">
               <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="testers-toolbar">
-                <input type="search" className={`${SELECT} w-56`} placeholder="Search name or email" aria-label="Search name or email" value={f.q} onChange={(e) => { f.setQ(e.target.value); setPage(0); }} data-testid="testers-search" />
+                <input type="search" className={`${SELECT} w-56`} placeholder="Search name or email" aria-label="Search name or email" maxLength={200} value={f.q} onChange={(e) => { f.setQ(e.target.value); setPage(0); }} data-testid="testers-search" />
                 <select className={SELECT} aria-label="Profile" value={f.profile} onChange={(e) => { f.setProfile(e.target.value); setPage(0); }} data-testid="testers-profile">
                   <option value="">Profile: all</option>
                   {PROFILES.map((p) => <option key={p.role} value={p.role}>{p.one}</option>)}
@@ -363,18 +344,17 @@ export default function TesterBoard({ at }) {
                 <select className={SELECT} aria-label="Email consent" value={f.consent} onChange={(e) => { f.setConsent(e.target.value); setPage(0); }} data-testid="testers-consent">
                   <option value="">Email consent: any</option><option value="yes">Given</option><option value="no">Not given</option>
                 </select>
-                <select className={SELECT} aria-label="Sort" value={f.sort} onChange={(e) => f.setSort(e.target.value)} data-testid="testers-sort">
+                <select className={SELECT} aria-label="Sort" value={f.sort} onChange={(e) => { f.setSort(e.target.value); setPage(0); }} data-testid="testers-sort">
                   {Object.entries(SORTS).map(([k, label]) => <option key={k} value={k}>{`Sort: ${label}`}</option>)}
                 </select>
               </div>
-              {!all.reply.complete ? <p className={`m-0 px-3 py-2 ${SUB}`} data-testid="testers-partial">{`This list is the first ${nf(all.reply.rows.length)} of ${nf(all.reply.matching)} testers. Search and filters cover those only.`}</p> : null}
-              {shown.length ? (
+              {pageRows.length ? (
                 <>
                   <div className="relative overflow-x-auto"><TesterTable tab={tab.key} rows={pageRows} from={from} own={own} pick={pick} onCopy={(href) => copyBoardLink(href, setDone)} /></div>
                   {tab.key === 'waiting' ? <BoardBulkBar pick={pick} rows={pageRows} onAssign={(rows) => own.assign(rows.map((r) => ({ ...r, who: r.name })))} testId="testers-bulk" /> : null}
-                  <Pager page={page} total={shown.length} onPage={setPage} testId="testers-pager" />
+                  <Pager page={page} total={read.reply.matching} onPage={setPage} testId="testers-pager" />
                 </>
-              ) : tabRows.length ? <p className={`m-0 px-3 py-4 ${SUB}`} data-testid="testers-none-match">No tester matches these filters.</p>
+              ) : filtered ? <p className={`m-0 px-3 py-4 ${SUB}`} data-testid="testers-none-match">No tester matches these filters.</p>
                 : tab.key === 'waiting' && INTAKE_PAUSED ? (
                   <div className="flex flex-col items-start gap-1 px-4 py-5" data-testid="testers-empty">
                     <h2 className={H2}>No product tester is waiting.</h2>
@@ -389,12 +369,12 @@ export default function TesterBoard({ at }) {
         <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="testers-facts">{FACTS}</p>
         <p className={`m-0 ${SUB}`} data-testid="testers-info">Approved testers form the tester pool. Testing programs recruit from it on Platform › Product testing, at HQ. This board decides applications and the pool only.</p>
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Tile label="Active testers" testId="testers-tile-active"><Figure status={all.status} value={totals?.active} /></Tile>
-          <Tile label="In a testing program now" testId="testers-tile-in-program"><Figure status={inProgram.status} value={inProgram.reply?.matching} /></Tile>
+          <Tile label="Active testers" testId="testers-tile-active"><Figure status={summary.status} value={totals?.active} /></Tile>
+          <Tile label="In a testing program now" testId="testers-tile-in-program"><Figure status={summary.status} value={summary.reply?.in_programme} /></Tile>
         </div>
         {chart ? <ProfileChart chart={chart} /> : null}
       </section>
-      {at.item ? <TesterDrawer id={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={boardStep(shown, at.item)} from={from} /> : null}
+      {at.item ? <TesterDrawer id={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={boardStep(pageRows, at.item)} from={from} /> : null}
       {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={(t) => { pick.clear(); own.finish(t); }} /> : null}
     </div>
   );

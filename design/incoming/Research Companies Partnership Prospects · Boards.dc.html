@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Partnership Prospects · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies · #7809 page 5 of 5 · group H · addendum to RS-15 A and RS-18 A (D7043, D7046)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Turn one company into one owned partnership prospect, see the people for it, and hand off to Network and Grow</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A founder tracks a directory company as a partnership prospect from its profile, a directory selection or a resolved analysis candidate: one objective, a next action, a private rationale. The prospect list and detail show the saved company with its publisher and date, the Partnership state (Proposed, Publicly reported with a link and passage, Privately confirmed with your own dated note), what the record supports for the objective in words, and possible overlap as a clue. People come from two labelled sources, never mixed: NPD rows where a reviewed link exists, clues from your own book with their reason where none does; nobody is linked without Confirm. Hand-off goes to Introductions (NIE), the Network organisation (NPO), the Who knows name match and Grow › Partnerships, and says when the company is not carried. A partnership prospect is not the partner book Prospect (NW4-P) and not a Network relationship. No fit score, rank or completeness figure. Eadwyn proposes nothing on these boards. Shell of RS-18 (company/project switcher top-left, Research zones, Eadwyn as the one rail). Platform States (D5129). Violet dashed ◇ tags name the issue that builds the backend; amber ⚑ tags mark owner questions, drawn to option A and not for build until answered. NPD, NIE and NPO boards are cited as grey placeholders. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · [Maya Ruiz], [Northwind Labs], every bracketed company, person, analysis and source, and every date and count (6 prospects, 5 open) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Partnership Prospects Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RCN-00', 'Journey and vocabulary', 'The journey from a profile to hand-off. Partnership prospect beside the partner book Prospect (NW4-P) with the difference stated; Partnership state and Status, each a glyph and a word; Authorized overlap refused and drawn on no screen; why it is not a Network relationship; the words mapped to Platform States.', [C('RCN00', false, 1480, 795)]],
+      ['RCN-01', 'Track as partnership prospect · the action and the Sheet', 'RS-18 A as landed with one new control in the research actions row. The Sheet: eight objectives (Other needs a description), For venture as a label, owner, next action with an optional due date, private rationale; Nobody is contacted; primary Track. Variants: already tracked (also closed) opens that prospect; save failed keeps what was typed and a retry makes no second prospect. ◇K17 #7846 · ⚑ who is offered it, drawn to A, not for build until answered.', [F('RCN01', 'The action on the profile', 760), F('RCN01S', 'The Sheet', 900), F('RCN01C', 'Save failed · typed text kept', 980), C('RCN01B', 'Already tracked, Other, after Track, who is offered it', 1480, 475)]],
+      ['RCN-02', 'Prospect list', 'Company (saved name, with renamed, On hold or Withdrawn), objective, Partnership state, status, owner, next action and due, sorted overdue first; filters by status and objective with counts; Export as CSV with its scope and count on the control. ◇K17 #7846 · ⚑ Q2 drawn to A, not for build until answered.', [F('RCN02', '5 open of 6', 900)]],
+      ['RCN-03', 'Prospect detail', 'The company with publisher, licence and date; the Partnership state and what each other state requires; what the record supports for the objective, in words (◇K6); possible overlap or Overlap not assessed (◇K11); next action; rationale and notes, Only you see this. Close and Reopen are explicit; changing the state, saved and refused. ◇K17 #7846 · ⚑ Q2, Q3 drawn to A, not for build until answered.', [F('RCN03', '[Halden Grid] · Integration', 1480), C('RCN03B', 'Change partnership state, close, overlap not assessed', 1480, 600)]],
+      ['RCN-04', 'People for this prospect', 'Two labelled sources, never mixed. With no reviewed link: confirmed people and clues from your own book, each with its reason, Confirm or Not this organisation, a dismissed clue stays dismissed. With a reviewed link: NPD person rows (#7676), cited, and a person removed from your book. ◇K17 #7847, #7672, #7674.', [F('RCN04', 'Clues from your own book', 1060), C('RCN04B', 'With a reviewed link · NPD rows', 1000, 550)]],
+      ['RCN-05', 'Hand-off to Network and Grow Partnerships', 'Open Introductions until Request an introduction exists (◇ #7673, into NIE #7678); Add follow-up in NWR4 words; Ask who knows someone here as a Name match on your press with Ask a teammate; Add to Partnerships; The company is not carried; Add person annotated not built. With a reviewed link: Open in Network (NPO, ◇ #7674) and no name match.', [F('RCN05', 'No reviewed link · after Ask who knows', 1100), C('RCN05B', 'With a reviewed link · before the press', 1000, 440)]],
+      ['RCN-06', 'Track from a directory selection and from a resolved candidate', 'One action in the RS-17 A selection bar: one objective, one prospect per company, each outcome reported apart (Tracked, Already tracked, No longer available: not tracked). On an analysis candidate only where it carries a directory record ▣ (◇K11); a ◎ lead cannot be tracked and says why.', [C('RCN06', 'Directory selection', 1480, 490), C('RCN06B', 'Analysis candidate', 1480, 330)]],
+      ['RCN-07', 'States', 'Loading, Empty (no prospect yet; nobody you know there), Not recorded, Unavailable (list, detail, your book, the Network read, each with what still works and Try again), Refused (an Advisor, another member’s prospect), then saving and save failed for Track, Confirm and an edit on an older copy.', [C('RCN07', 'Data states', 1480, 640), C('RCN07B', 'Saving and save failed', 1480, 330)]],
+      ['RCN-08', 'Tablet 768 and phone 390', 'The list as cards; the detail as sections with the next action pinned; people one per card with two 44 px buttons; the Track Sheet as a bottom sheet.', [C('RCN08T', 'Tablet · list', 768, 900), C('RCN08T2', 'Tablet · detail', 768, 1280), P('RCN08A', 'List'), P('RCN08B', 'Detail · next action pinned'), P('RCN08C', 'People'), P('RCN08D', 'Track · bottom sheet')]],
+      ['RCN-09', 'Dark', 'RCN-02 and RCN-03 on the dark tokens, and the phone detail. States keep their words and shapes.', [F('RCN09', 'List · dark', 900), F('RCN09B', 'Detail · dark', 1180), P('RCN09P', 'Phone detail · dark')]],
+      ['RCN-10', 'Keyboard, focus and handoff', 'Focus order, focus return and announcements per new block; then what main does today, each ◇ with its issue, each ⚑ with option A, the BUILD ISSUES line (#7857: RCN-01 to RCN-03; #7858: RCN-04 to RCN-06; shared: RCN-00, RCN-07 to RCN-10), and what is cited from NPD, NIE and NPO.', [W('RCN10'), W('RCN10H')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

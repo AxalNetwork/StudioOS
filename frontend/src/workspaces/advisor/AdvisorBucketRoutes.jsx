@@ -345,6 +345,18 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   };
   const zoneHead = prefix === '/expertise' && !isRoot ? EXPERTISE_ZONE_HEAD[slug] : null;
 
+  /**
+   * #4833 part 4 (D4833-p4): a Practice zone's own line under its heading, from
+   * `Practice v2 Page.dc.html`'s `hdr(…)`. The heading stays the pill's label,
+   * which is the canvas's h1 for every Practice zone. Only Delivery is listed:
+   * the other zones still head their bodies themselves, and each is owned by
+   * its own issue, so they keep the bucket sentence until they move.
+   */
+  const PRACTICE_ZONE_HEAD = {
+    delivery: { sub: 'Work products sent to clients, with every version kept.' },
+  };
+  const practiceHead = prefix === '/practice' && !isRoot ? PRACTICE_ZONE_HEAD[slug] : null;
+
   // The Worker AI rail, absent from all fifteen of these routes until now: the
   // shell has taken a `rail` slot since the founder pass and this caller never
   // filled it, so every Practice, Cohorts and Expertise zone rendered with an
@@ -427,7 +439,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       // attribute-only pattern missed. The shell fills that slot from
       // `ActiveCompanyContext`, so the badge names the company instead of
       // restating the rule.
-      intro={isRoot && prefix === '/practice' ? <span className="dark:text-gray-400">{INTRO[prefix]}</span> : zoneHead?.sub || INTRO[prefix]}
+      intro={isRoot && prefix === '/practice' ? <span className="dark:text-gray-400">{INTRO[prefix]}</span> : zoneHead?.sub || practiceHead?.sub || INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}
       rail={RAIL && (
         <WorkerRail

@@ -105,8 +105,10 @@ if (a[0] === 'd1' && a[1] === 'execute' && a.includes('--file')) {
   console.log('🚣 Executed 5 queries in 1.00ms (0 rows read, 5 rows written)'); process.exit(0);
 }
 if (a[0] === 'd1' && a[1] === 'execute' && a.includes('--command')) {
-  // FAIL_UNION: D1 refuses the batched row-count query, as a limit on it would.
-  if (e.FAIL_UNION && a[a.indexOf('--command') + 1].includes(' UNION ALL ')) { console.error('✘ [ERROR] D1_ERROR: the batched query was refused'); process.exit(1); }
+  const sql = a[a.indexOf('--command') + 1];
+  if (/UNION ALL/i.test(sql)) { console.error('✘ [ERROR] SQLITE_ERROR too many terms in compound SELECT'); process.exit(1); }
+  if(e.BAD_BATCH && / AS c0/.test(sql)){ console.log(JSON.stringify([{results:[{c0:999}]}]));process.exit(0); }
+  if (e.FAIL_BATCH && / AS c0/.test(sql)) { console.error('✘ [ERROR] D1_ERROR: the batched query was refused'); process.exit(1); }
   try {
     const db = new DatabaseSync(dbPath);
     console.log(JSON.stringify([{ results: db.prepare(a[a.indexOf('--command') + 1]).all() }])); process.exit(0);
@@ -299,11 +301,11 @@ test('the compare: restored row counts that differ from the manifest fail, namin
 });
 
 test('the compare: a refused batched count falls back to one query per table and still compares every table', () => {
-  const r = restore(R2, { FAIL_UNION: '1' });
+  const r = restore(R2, { FAIL_BATCH: '1' });
   assert.equal(r.status, 0, r.out);
   assert.match(r.out, /row-count batch 1 failed \(wrangler's error codes: D1_ERROR\); counting its tables one at a time/);
   assert.match(r.out, /row counts match in all 5 tables/);
-  const counts = r.wcalls.filter((c) => c[1] === 'execute' && c.includes('--command') && c[c.indexOf('--command') + 1].includes('COUNT(*) AS n'));
+  const counts = r.wcalls.filter((c) => c[1] === 'execute' && c.includes('--command') && c[c.indexOf('--command') + 1].includes('COUNT(*)'));
   assert.equal(counts.length, 1 + 5, 'one refused batch, then one query per table');
   assert.ok(!r.out.includes(SENTINEL), 'a count printed backup content');
 });
@@ -412,4 +414,17 @@ test('the runbook\'s §3 names every reason the script can stop on, and the RTO 
   assert.match(rto, /scripts\/restore-d1\.sh <backup> <target>/);
   assert.match(rto, /DR_SOURCE=independent/);
   assert.match(rto, /D5337/);
+});
+
+
+test('an incomplete successful batch is discarded before per-table fallback',()=>{
+ const r=restore(R2,{BAD_BATCH:'1'});assert.equal(r.status,0,r.out);assert.match(r.out,/row counts match in all 5 tables/);assert.match(r.out,/counting its tables one at a time/);
+});
+
+test('scalar count batches compare 115 real SQLite tables in three queries despite D1 compound limits', () => {
+ const sql=SQL+Array.from({length:110},(_,i)=>`CREATE TABLE "${i===0?'extra_""quoted':'extra_'+i}" (id INTEGER);`).join('\n');
+ const r=restore(R2,{BACKUP_SQL:sql,MANIFEST_JSON:JSON.stringify(manifestOf(sql))});
+ assert.equal(r.status,0,r.out);assert.match(r.out,/row counts match in all 115 tables/);
+ const queries=r.wcalls.filter(c=>c[1]==='execute'&&c.includes('--command')).map(c=>c[c.indexOf('--command')+1]).filter(q=>q.includes('COUNT(*)'));
+ assert.equal(queries.length,3);for(const q of queries){assert.doesNotMatch(q,/UNION ALL/);assert.ok((q.match(/AS c[0-9]+/g)||[]).length<=40);}
 });
