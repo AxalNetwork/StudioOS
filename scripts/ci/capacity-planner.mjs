@@ -1,5 +1,5 @@
 /** D7973: trusted reusable planner validates the exact plan then submits once and exits. */
-import { readFileSync, statSync, appendFileSync } from 'node:fs';
+import { appendFileSync, closeSync, fstatSync, openSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildPlan, validatePlan } from '../test-drift-parts.mjs';
@@ -14,9 +14,13 @@ export function plannerSubmission(env, mode='submit'){
  const root=resolve(env.CAPACITY_SOURCE_ROOT),scripts=JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).scripts;
  let plan;
  if(s.event==='push'){
-  const path=resolve(env.CAPACITY_PLAN_FILE);
-  if(statSync(path).size>8*1024*1024)throw new Error('planner_plan_bound');
-  plan=readFileSync(path,'utf8');
+  // One open handle: the size bound and the read see the same file, so it cannot be swapped between them.
+  const fd=openSync(resolve(env.CAPACITY_PLAN_FILE),'r');
+  try {
+   const st=fstatSync(fd);
+   if(!st.isFile()||st.size>8*1024*1024)throw new Error('planner_plan_bound');
+   plan=readFileSync(fd,'utf8');
+  } finally { closeSync(fd); }
  }else plan=JSON.stringify(buildPlan(scripts,{},root),null,2)+'\n';
  validatePlan(JSON.parse(plan),scripts,root);
  if('sha256:'+createHash('sha256').update(plan).digest('hex')!==s.planDigest)throw new Error('planner_digest_mismatch');

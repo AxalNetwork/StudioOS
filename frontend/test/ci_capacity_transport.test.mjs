@@ -408,7 +408,7 @@ test('capacity App client scopes its token, fixes the API origin and caps authen
  for(let i=0;i<100;i++)await api('GET',PREFIX+'/actions/runs/12');
  await assert.rejects(api('GET',PREFIX+'/actions/runs/12'),/budget/);
  assert.equal(calls.every(c=>String(c.url).startsWith('https://api.github.com/')),true);
- assert.equal(calls.every(c=>c.init.redirect==='error'&&c.init.signal instanceof AbortSignal),true);
+ assert.equal(calls.every(c=>c.init.redirect==='error'&&(c.init.signal instanceof AbortSignal)),true);
 });
 
 const authorityModule=new URL('../../scripts/ci/executor-authority.mjs',import.meta.url);
