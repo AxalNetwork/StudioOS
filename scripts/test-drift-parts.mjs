@@ -78,9 +78,15 @@ export function isNodeTest(cmd) {
 
 /** D6464: the same command, with TAP kept on stdout and failed tests written to `out`. */
 export function withFailureReporter(cmd, out, reporter) {
+  return withFailureReporters(cmd, [{ reporter, out }]);
+}
+
+/** D5502: construct each reporter/destination pair together, once, from the parsed command. */
+export function withFailureReporters(cmd, reporters) {
   const { prefix } = testCommand(cmd);
   const at = prefix.length - ' --test '.length;
-  return `${cmd.slice(0, at)} --test-reporter=tap --test-reporter-destination=stdout --test-reporter=${quote(reporter)} --test-reporter-destination=${quote(out)}${cmd.slice(at)}`;
+  const pairs = reporters.map(({ reporter, out }) => ` --test-reporter=${quote(reporter)} --test-reporter-destination=${quote(out)}`).join('');
+  return `${cmd.slice(0, at)} --test-reporter=tap --test-reporter-destination=stdout${pairs}${cmd.slice(at)}`;
 }
 
 /** D6464: the reporter's file as [{ file, test }]; unreadable or malformed means none. */
@@ -280,17 +286,16 @@ export function runPart({ commands, env = process.env, root = process.cwd(), sh,
     const watch = event === 'merge_group' && isNodeTest(cmd);
     const out = resolve(tmpdir(), `failed-tests-${process.pid}-${i}.jsonl`);
     if (watch && existsSync(out)) rmSync(out);
-    let run = watch ? withFailureReporter(cmd, out, resolve(root, 'scripts/lib/failedTestsReporter.mjs')) : cmd;
     const evidence = resolve(tmpdir(), `ci-evidence-${process.pid}-${i}.jsonl`);
+    const reporters = watch ? [{ reporter: resolve(root, 'scripts/lib/failedTestsReporter.mjs'), out }] : [];
     if (env.CI_FAILURE_DIR && isNodeTest(cmd)) {
       if (existsSync(evidence)) rmSync(evidence);
-      // Add just the additional reporter: the queue retry reporter already supplies TAP.
-      const args = ` --test-reporter=${quote(resolve(root, 'scripts/lib/ciFailureReporter.mjs'))} --test-reporter-destination=${quote(evidence)}`;
-      run = watch ? run.replace(' --test ', `${args} --test `) : withFailureReporter(cmd, evidence, resolve(root, 'scripts/lib/ciFailureReporter.mjs'));
+      reporters.push({ reporter: resolve(root, 'scripts/lib/ciFailureReporter.mjs'), out: evidence });
     }
+    const run = reporters.length ? withFailureReporters(cmd, reporters) : cmd;
     log(`\n> ${run}\n`);
     const r = sh(run);
-    if (r.status === 0) { record(evidence, 0); continue; }
+    if (r.status === 0) { if (isNodeTest(cmd)) record(evidence, 0); continue; }
     error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
     if (!watch) {
       record(evidence, r.status || 1);

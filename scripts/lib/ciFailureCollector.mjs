@@ -82,7 +82,7 @@ export async function collectEvidence({ api, download, runId, baseSha }) {
     if (part && current.some(r => r.part === part && r.complete && r.failures.length)) continue;
     const step = job.steps?.find(s => ['failure', 'cancelled'].includes(s.conclusion));
     const clean = s => String(s || 'Not recorded').replace(/[^\w .():/-]/g, '').slice(0, 150);
-    result.unknown.push({ kind: 'step', file: 'Not recorded', test: `${clean(job.name)} / ${clean(step?.name)}`, part: clean(part), excerpt: 'Setup, build, guard or cancelled-job evidence unavailable.', repro: 'npm run build && npm run test:guards', jobUrl: /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+\/job\/\d+$/.test(job.html_url || '') ? job.html_url : null });
+    result.unknown.push({ kind: 'step', job: clean(job.name), file: 'Not recorded', test: `${clean(job.name)} / ${clean(step?.name)}`, part: clean(part), excerpt: 'Setup, build, guard or cancelled-job evidence unavailable.', repro: 'npm run build && npm run test:guards', jobUrl: /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+\/job\/\d+$/.test(job.html_url || '') ? job.html_url : null });
   }
   for (const group of [result.shared, result.own, result.unknown]) for (const row of group) {
     const job = jobs.find(j => j.name === `suite (${row.part})`);

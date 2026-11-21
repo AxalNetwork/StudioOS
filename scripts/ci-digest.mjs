@@ -5,17 +5,28 @@ import { pathToFileURL } from 'node:url';
 import { collectEvidence, boundedBody } from './lib/ciFailureCollector.mjs';
 import { digest, render, MARKER } from './lib/ciDigest.mjs';
 
-export function githubApi({ repo = process.env.GITHUB_REPOSITORY, token = process.env.GITHUB_TOKEN, fetcher = fetch } = {}) {
+export function githubApi({ repo = process.env.GITHUB_REPOSITORY, token = process.env.GITHUB_TOKEN, fetcher = fetch, maxRequests = 150 } = {}) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('invalid repository');
   let requests = 0;
   return async (method, path, body) => {
-    if (++requests > 150) throw new Error('request cap');
+    if (++requests > maxRequests) throw new Error('request cap');
     const res = await fetcher(`https://api.github.com/repos/${repo}/${path}`, { method,
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
     return res.status === 204 ? null : res.json();
   };
+}
+/** D5502: independent request counters preserve the publication reserve. */
+export function digestClients(options = {}) {
+  return { api: githubApi(options), evidenceApi: githubApi(options) };
+}
+/** D5502: use actual Actions job names for setup/build rows; retain prior evidence on collection failure. */
+export function artifactForDigest(evidence, headSha, previous = null) {
+  if (!evidence) return previous;
+  return { headSha, failures: [...evidence.shared, ...evidence.own, ...evidence.unknown].map(f => ({
+    job: f.job || `suite (${f.part})`, id: f.id, testNames: [f.test], repro: f.repro, excerpt: f.excerpt,
+  })) };
 }
 async function pages(api, path, key) {
   const result = [];
@@ -79,18 +90,18 @@ export async function pushesToGreen({ api, pr }) {
 }
 export async function main(argv = process.argv.slice(2)) {
   try {
-    const api = githubApi();
+    const { api, evidenceApi } = digestClients();
     if (argv[0] === '--report') { console.log(JSON.stringify(await pushesToGreen({ api, pr: argv[1] }))); return 0; }
     let artifact = process.env.CI_DIGEST_ARTIFACT ? JSON.parse(readFileSync(process.env.CI_DIGEST_ARTIFACT, 'utf8')) : null;
     let evidence = null;
     try {
       const repo = process.env.GITHUB_REPOSITORY;
-      evidence = await collectEvidence({ api: path => api('GET', path.slice(1)), runId: process.env.RUN_ID, baseSha: process.env.CI_FAILURE_BASE,
+      evidence = await collectEvidence({ api: path => evidenceApi('GET', path.slice(1)), runId: process.env.RUN_ID, baseSha: process.env.CI_FAILURE_BASE,
         download: async path => boundedBody(await fetch(`https://api.github.com/repos/${repo}${path}`, {
           headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15000),
         })) });
     } catch { /* Advisory API failures leave attribution unknown. */ }
-    if (evidence) artifact = { headSha: process.env.HEAD_SHA, failures: [...evidence.shared, ...evidence.own, ...evidence.unknown].map(f => ({ job: `suite (${f.part})`, id: f.id, testNames: [f.test], repro: f.repro, excerpt: f.excerpt })) };
+    artifact = artifactForDigest(evidence, process.env.HEAD_SHA, artifact);
     return runDigest({ api, evidence, pr: process.env.PR_NUMBER, runId: process.env.RUN_ID, headSha: process.env.HEAD_SHA, artifact });
   } catch { console.log('CI digest unavailable; advisory failure has no effect on CI.'); return 0; }
 }

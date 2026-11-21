@@ -31,7 +31,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { runPart } from '../test-drift-parts.mjs';
+import { runPart, partsOf } from '../test-drift-parts.mjs';
 function zip(entries) {
   const locals = [];
   const centrals = [];
@@ -123,10 +123,12 @@ test('real node reporter preserves exit code, test identity, coverage and bounde
   try {
     writeFileSync(resolve(dir, file), "import { test } from 'node:test'; import assert from 'node:assert/strict'; test('refund is idempotent', () => assert.equal(1, 2));");
     for (const event of ['pull_request', 'merge_group', 'push']) {
-      const status = runPart({ commands: [`node --test ${file}`], env: { GITHUB_EVENT_NAME: event, CI_FAILURE_DIR: dir, GITHUB_SHA: other, GITHUB_RUN_ID: '10', GITHUB_RUN_ATTEMPT: '1', CI_FAILURE_PART: 'rest' }, root: process.cwd(), sh: cmd => { const env = { ...process.env }; delete env.NODE_TEST_CONTEXT; const r = spawnSync('sh', ['-c', cmd], { encoding: 'utf8', env, cwd: dir }); assert.notEqual(r.status, 0, r.stdout + r.stderr); return r; }, flakyList: () => [], changedFiles: () => [], log() {}, error() {} });
+      const lines = [];
+      const status = runPart({ commands: [`node --test ${file}`], env: { GITHUB_EVENT_NAME: event, CI_FAILURE_DIR: dir, GITHUB_SHA: other, GITHUB_RUN_ID: '10', GITHUB_RUN_ATTEMPT: '1', CI_FAILURE_PART: 'rest' }, root: process.cwd(), sh: cmd => { const env = { ...process.env }; delete env.NODE_TEST_CONTEXT; const r = spawnSync('sh', ['-c', cmd], { encoding: 'utf8', env, cwd: dir }); assert.notEqual(r.status, 0, r.stdout + r.stderr); return r; }, flakyList: () => [], changedFiles: () => [], log: line => lines.push(line), error() {} });
       assert.equal(status, 1);
       const rows = JSON.parse(readFileSync(resolve(dir, 'failures.json'), 'utf8'));
       assert.equal(rows[0].complete, true); assert.equal(rows[0].failures[0].file, file); assert.equal(rows[0].failures[0].test, 'refund is idempotent'); assert.ok(rows[0].failures[0].repro.startsWith('npm run build && node'));
+      if (event === 'merge_group') assert.ok(lines.some(l => l.startsWith('::error title=ci-failure-id::') && l.includes('refund is idempotent')));
     }
     const status = runPart({ commands: ['npm run nonexistent'], env: { CI_FAILURE_DIR: dir }, sh: () => ({ status: 7 }), log() {}, error() {} });
     assert.equal(status, 7); assert.equal(JSON.parse(readFileSync(resolve(dir, 'failures.json'), 'utf8'))[0].complete, false);
@@ -161,4 +163,42 @@ test('an API failure on a later inventory page is unknown, never a partial inher
     return api(path);
   };
   const result = await collectEvidence(f); assert.equal(result.verdict, 'main_health_unknown'); assert.ok(result.warnings.some(w => w.includes('Exact-base')));
+});
+import { artifactForDigest, digestClients } from '../ci-digest.mjs';
+test('digest evidence maps setup to its real job and preserves a supplied artifact when collection fails', () => {
+  const previous = { headSha: sha, failures: [{ job: 'worker (typecheck)', id: 'legacy', excerpt: 'preserved' }] };
+  assert.equal(artifactForDigest(null, sha, previous), previous);
+  const artifact = artifactForDigest({ shared: [], own: [], unknown: [{ kind: 'step', job: 'worker (typecheck)', part: 'Not recorded', test: 'Install worker' }] }, sha);
+  assert.equal(artifact.failures[0].job, 'worker (typecheck)');
+});
+test('artifact reads have a separate bounded budget from digest publication', async () => {
+  const { api, evidenceApi } = digestClients({ repo: 'AxalNetwork/StudioOS', token: 'fixture', maxRequests: 2, fetcher: async () => new Response('{}') });
+  await evidenceApi('GET', 'one'); await evidenceApi('GET', 'two');
+  await assert.rejects(() => evidenceApi('GET', 'three'), /cap/);
+  await api('GET', 'comments'); await api('POST', 'comment', { body: 'fixture' });
+});
+test('successful non-test commands add no incomplete test report', () => {
+  const dir = mkdtempSync(resolve(tmpdir(), 'ci5502-command-'));
+  try {
+    assert.equal(runPart({ commands: ['npm run guard'], env: { CI_FAILURE_DIR: dir }, sh: () => ({ status: 0 }), log() {}, error() {} }), 0);
+    assert.throws(() => readFileSync(resolve(dir, 'failures.json')));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('collector accepts every real planned part name, excluding no shard when counts change', async () => {
+  const { scripts } = JSON.parse(readFileSync('package.json', 'utf8'));
+  for (const part of partsOf(scripts)) {
+    const f = fixture(), api = f.api;
+    f.api = async path => {
+      const data = await api(path);
+      return data.artifacts ? { artifacts: data.artifacts.map(a => ({ ...a, name: `ci-failures-${part.name}-attempt-1` })) } : data;
+    };
+    assert.equal((await collectEvidence(f)).verdict, 'inherited_main_failure', part.name);
+  }
+});
+test('missing exact-base run remains unknown rather than falling back to another ancestor', async () => {
+  const f = fixture(), api = f.api;
+  f.api = async path => path.startsWith('/actions/workflows/') ? { workflow_runs: [] } : api(path);
+  const result = await collectEvidence(f);
+  assert.equal(result.verdict, 'main_health_unknown');
+  assert.ok(result.warnings.some(w => w.includes('No completed main run')));
 });
