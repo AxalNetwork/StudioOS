@@ -13,6 +13,13 @@ export type ArmRequest = { method: 'GET' | 'POST'; path: string; body?: unknown 
 export type ArmResponse = { status: number; body: unknown };
 export interface ArmTransport { request(req: ArmRequest): Promise<ArmResponse> }
 
+/** Durable, atomic insert-if-absent, shared by every adapter for this Azure job.
+ * A reservation never expires or releases: even an absent list result cannot prove a start did not land.
+ * Retain it for the lifetime of the execution key, across restarts. Recovery uses a new fenced generation.
+ * The host must supply a transactional D1/DO implementation before enabling this unmounted adapter.
+ */
+export interface AzureStartReservations { reserve(key: string): Promise<boolean> }
+
 /**
  * One pre-provisioned manual-trigger job, as an operator configured it. Every capability defaults to the safe
  * answer: an unset network mode, untrusted-code isolation or checkpoint support is refused, never assumed.
@@ -51,10 +58,11 @@ const TERMINAL: readonly WorkspaceState[] = ['finished', 'failed', 'cancelled'];
 export const executionKey = (spec: Pick<WorkspaceSpec, 'tenant_id' | 'run_id' | 'attempt' | 'execution_generation'>) =>
   `${spec.tenant_id}.${spec.run_id}.a${spec.attempt}.g${spec.execution_generation}`;
 
-export function createAzureJobsExecutor({ config, transport }: { config: AzureJobsConfig; transport: ArmTransport }): ExecutorAdapter {
+export function createAzureJobsExecutor({ config, transport, starts }: { config: AzureJobsConfig; transport: ArmTransport; starts: AzureStartReservations }): ExecutorAdapter {
   const valid = config && typeof config.enabled === 'boolean' && UUID.test(config.subscription_id) && SAFE_NAME.test(config.resource_group)
     && SAFE_NAME.test(config.job_name) && REPOSITORY.test(config.registry_repository) && Array.isArray(config.regions)
     && Number.isSafeInteger(config.replica_timeout_s) && config.replica_timeout_s > 0 && Number.isSafeInteger(config.concurrency_max);
+  if (!starts || typeof starts.reserve !== 'function') throw new Error('Missing Azure start reservation store');
   if (!valid) throw new Error('Invalid Azure Jobs configuration');
   const jobPath = `/subscriptions/${config.subscription_id}/resourceGroups/${config.resource_group}/providers/Microsoft.App/jobs/${config.job_name}`;
   const q = `?api-version=${AZURE_JOBS_API_VERSION}`;
@@ -136,6 +144,12 @@ export function createAzureJobsExecutor({ config, transport }: { config: AzureJo
       if (!prior.ok) return prior;
       if (prior.value.length > 1) return workspaceRefusal('duplicate_execution', 409);
       if (prior.value.length === 1) return read(ref, prior.value[0], key);
+      // Reserve durably before sending a non-idempotent start, including across adapter instances/restarts.
+      // A failed store call may have committed: fail closed and let the next call reconcile.
+      let reserved: boolean;
+      try { reserved = await starts.reserve(`${jobPath}:${key}`); }
+      catch { return workspaceRefusal('start_reservation_unavailable', 503); }
+      if (!reserved) return status(ref, 'unknown', 'start_ambiguous');
       const body = { containers: [{
         name: 'workspace', image: `${config.registry_repository}@${spec.image_digest}`,
         resources: { cpu: spec.cpu, memory: `${spec.memory_mb}Mi`, ephemeralStorage: `${spec.disk_mb}Mi` },
@@ -176,7 +190,7 @@ export function createAzureJobsExecutor({ config, transport }: { config: AzureJo
       const current = await adapter.get(ref);
       if (!current.ok) return current;
       if (TERMINAL.includes(current.value.state)) return current;
-      if (current.value.ref.execution_id.startsWith('pending:')) return workspaceRefusal('execution_not_located', 409);
+      if (current.value.ref.execution_id.startsWith('pending:')) return status(current.value.ref, 'unknown', 'stop_ambiguous');
       let res: ArmResponse;
       try { res = await transport.request({ method: 'POST', path: `${jobPath}/executions/${current.value.ref.execution_id}/stop${q}` }); }
       catch { return status(current.value.ref, 'unknown', 'stop_ambiguous'); }
