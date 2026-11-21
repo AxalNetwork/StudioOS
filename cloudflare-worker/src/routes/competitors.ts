@@ -598,6 +598,8 @@ competitors.post('/analyze', async (c) => {
     // D778 part 9: the press's page and option win; the record is the analysis this route made.
     const rail = railFor(c, { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.analyze }, analysisRecord(id));
     const result = await runCompetitorAnalysis(c.env, user.id, id, inputs, rail);
+    // D7175 part 2 (RS-13 B3): the save is the run's last step, with its time.
+    if (Array.isArray(result.output.run_steps)) result.output.run_steps.push({ step: 'saved', at: nowIso() });
     await persistResult(c.env, id, result);
     await sql`UPDATE competitor_analyses SET status = 'complete', updated_at = ${nowIso()} WHERE id = ${id}`;
     const full = await loadAnalysis(c.env, user.id, id);

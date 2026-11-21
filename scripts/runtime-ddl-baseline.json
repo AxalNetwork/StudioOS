@@ -27,7 +27,6 @@
     "cloudflare-worker/src/services/jobBoardSchema.ts": 12,
     "cloudflare-worker/src/services/landingPageSchema.ts": 39,
     "cloudflare-worker/src/services/legalTemplateStore.ts": 4,
-    "cloudflare-worker/src/services/market_intel/schema.ts": 5,
     "cloudflare-worker/src/services/networkProfilesSchema.ts": 4,
     "cloudflare-worker/src/services/newsSchema.ts": 5,
     "cloudflare-worker/src/services/partnerDirectorySchema.ts": 4,

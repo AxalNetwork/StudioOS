@@ -37,6 +37,7 @@ concurrency:
 
 jobs:
   keys:
+    environment: production-ops
     name: Verify, store and link the account keys
     if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
