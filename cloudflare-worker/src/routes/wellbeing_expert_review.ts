@@ -25,22 +25,77 @@ export async function expertReviewResult(c: Context<{ Bindings: Env }>, fn: () =
 }
 const result = expertReviewResult;
 
+// D5876: the same scoped classification feeds both counts and active pages.
+function boardScope(actor: Awaited<ReturnType<typeof requireAdmin>>) {
+  return [SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, isSuperAdmin(actor) ? 1 : 0, actor.id];
+}
+
+reviews.get('/admin/experts/summary', async (c) => {
+  const actor = await requireAdmin(c);
+  return result(c, async () => {
+    const grouped = await c.env.DB.prepare(`WITH board_experts AS (
+      SELECT e.*, CASE
+        WHEN e.hidden_by_admin <> 0 THEN 'hidden'
+        WHEN e.decision_state = 'declined' THEN 'declined'
+        WHEN e.verified <> 0 OR e.decision_state = 'verified' THEN 'verified'
+        WHEN e.profile_completion_pct >= 70 THEN 'verify'
+        ELSE 'incomplete'
+      END AS board_tab
+      FROM experts e LEFT JOIN users u ON u.id = e.user_id
+      WHERE substr(e.uid, 1, ?) <> ? AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)
+    )
+      SELECT board_tab, COUNT(*) AS n FROM board_experts GROUP BY board_tab`)
+      .bind(...boardScope(actor)).all<{ board_tab: string; n: number }>();
+    if (!grouped.success || !Array.isArray(grouped.results)) throw new Error('Expert summary was not returned');
+    const counts = { verify: 0, incomplete: 0, verified: 0, declined: 0, hidden: 0 };
+    for (const { board_tab, n } of grouped.results) {
+      if (Object.hasOwn(counts, board_tab)) counts[board_tab as keyof typeof counts] = n;
+    }
+    return c.json({ counts });
+  });
+});
+
 reviews.get('/admin/experts', async (c) => {
   const actor = await requireAdmin(c);
   return result(c, async () => {
     const limit = Number(c.req.query('limit') ?? 25); const offset = Number(c.req.query('offset') ?? 0);
     const state = c.req.query('state') ?? 'all';
-    if (!['all', 'pending', 'verified', 'declined'].includes(state) || !Number.isSafeInteger(limit) || limit < 1 || limit > 200 || !Number.isSafeInteger(offset) || offset < 0) {
-      return refuse(c, 400, { code: 'invalid_page', message: 'Choose a review state, a limit from 1 to 200, and a nonnegative offset.' });
+    const tab = c.req.query('board_tab') ?? '';
+    if (!['all', 'pending', 'verified', 'declined'].includes(state) ||
+      !['', 'verify', 'incomplete', 'verified', 'declined', 'hidden'].includes(tab) ||
+      !Number.isSafeInteger(limit) || limit < 1 || limit > 200 || !Number.isSafeInteger(offset) || offset < 0) {
+      return refuse(c, 400, { code: 'invalid_page', message: 'Choose a review state or board tab, a limit from 1 to 200, and a nonnegative offset.' });
     }
-    const elevated = isSuperAdmin(actor) ? 1 : 0;
-    const count = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM experts e LEFT JOIN users u ON u.id = e.user_id
-      WHERE substr(e.uid, 1, ?) <> ? AND (? = 'all' OR e.decision_state = ?) AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)`)
-      .bind(SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, state, state, elevated, actor.id).first<{ n: number }>();
-    const rows = await c.env.DB.prepare(`SELECT e.* FROM experts e LEFT JOIN users u ON u.id = e.user_id
-      WHERE substr(e.uid, 1, ?) <> ? AND (? = 'all' OR e.decision_state = ?) AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)
-      ORDER BY datetime(e.created_at), e.id LIMIT ? OFFSET ?`)
-      .bind(SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, state, state, elevated, actor.id, limit, offset).all<any>();
+    const criteria = [...boardScope(actor), state, state, tab, tab];
+    const [count, rows] = await Promise.all([
+      c.env.DB.prepare(`WITH board_experts AS (
+        SELECT e.*, CASE
+          WHEN e.hidden_by_admin <> 0 THEN 'hidden'
+          WHEN e.decision_state = 'declined' THEN 'declined'
+          WHEN e.verified <> 0 OR e.decision_state = 'verified' THEN 'verified'
+          WHEN e.profile_completion_pct >= 70 THEN 'verify'
+          ELSE 'incomplete'
+        END AS board_tab
+        FROM experts e LEFT JOIN users u ON u.id = e.user_id
+        WHERE substr(e.uid, 1, ?) <> ? AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)
+      )
+        SELECT COUNT(*) AS n FROM board_experts WHERE (? = 'all' OR decision_state = ?) AND (? = '' OR board_tab = ?)`)
+        .bind(...criteria).first<{ n: number }>(),
+      c.env.DB.prepare(`WITH board_experts AS (
+        SELECT e.*, CASE
+          WHEN e.hidden_by_admin <> 0 THEN 'hidden'
+          WHEN e.decision_state = 'declined' THEN 'declined'
+          WHEN e.verified <> 0 OR e.decision_state = 'verified' THEN 'verified'
+          WHEN e.profile_completion_pct >= 70 THEN 'verify'
+          ELSE 'incomplete'
+        END AS board_tab
+        FROM experts e LEFT JOIN users u ON u.id = e.user_id
+        WHERE substr(e.uid, 1, ?) <> ? AND (? = 1 OR COALESCE(u.role, '') <> 'admin' OR u.id = ?)
+      )
+        SELECT * FROM board_experts WHERE (? = 'all' OR decision_state = ?) AND (? = '' OR board_tab = ?)
+        ORDER BY datetime(created_at), id LIMIT ? OFFSET ?`)
+        .bind(...criteria, limit, offset).all<any>(),
+    ]);
     if (!count || !Number.isSafeInteger(count.n) || ('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Review rows were not returned');
     const files = await credentialFilesFor(c.env, rows.results.map((r) => Number(r.id)));
     return c.json({ items: await Promise.all(rows.results.map((r) => reviewDto(c.env, r, files.get(Number(r.id)) ?? [], true))), total: Number(count.n), limit, offset });

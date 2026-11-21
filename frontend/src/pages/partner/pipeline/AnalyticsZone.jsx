@@ -6,6 +6,7 @@ import { useActiveCompany } from '../../../contexts/ActiveCompanyContext';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import { PipelineReadStatus } from './PartialRead';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
 // Through `pages/partner/kit.jsx` rather than reaching into the advisor tree
@@ -190,8 +191,10 @@ export default function PartnerPipelineAnalyticsZone() {
         actions={rowActions}
       />
       <ZoneBody
+        what="Pipeline analytics"
         loading={state.loading}
         error={state.error}
+        notice={<PipelineReadStatus state={read} onRetry={load} />}
         onRetry={load}
         isEmpty={!p || !hasQuotes}
         empty={(

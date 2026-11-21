@@ -231,6 +231,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
 | `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
 | `practice_cockpit_4829.test.mjs` | D4829: source isolation, canonical counts, timezone boundaries, pagination, record destinations, retry and Client Sheet. |
+| `practice_delivery_shell_4833.test.mjs` | D4833-p4: Delivery in the Practice v2 shell: PX-06's heading, line and header primary read from the canvas, the primary in every list state, no chips over an empty or unread list, the PX-06 A order, and the card's Client Sheet. |
 | `network_picker_6637.test.mjs` | D6637: mounted picker selection, eligibility and submission. |
 | `network_picker_6636.test.mjs` | D6636: mounted picker selection, eligibility and submission. |
 
@@ -243,7 +244,10 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `free_secret_detection_7899.test.mjs` | D7899 dedicated Axal bearer detection, public-prefix/placeholder exclusions and refusal of blanket JWT exemptions. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+| `_approvalBoardPages_5876.mjs` | Shared fixtures for the approval board summary and active-page contracts (#5876). |
+| `approval_board_pages_5876.test.mjs` | Mounted regressions for lane counts and active-page reads (#5876). |
 
+`release_phases_5667.test.mjs` verifies release/target isolation, ordered receipt selection, phase failures and the existing publication relay boundary.
 ## Observable readiness (D5504)
 
 | File | Guarantee |
