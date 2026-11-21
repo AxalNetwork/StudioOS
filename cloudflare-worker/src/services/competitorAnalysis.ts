@@ -78,6 +78,21 @@ export interface Finding {
   source_ids: string[];
 }
 
+/**
+ * D7175 part 2 (RS-13 B3): one step of a run, stamped when it finished, so
+ * "What the run did" can print its time. `search` is stamped when the run
+ * starts; `discovery` carries the companies it returned, `read` the reads
+ * tried and fetched, and `saved` is stamped by the route as it stores the
+ * result. A run before this change has none, and the page says so.
+ */
+export interface RunStep {
+  step: 'search' | 'discovery' | 'read' | 'synthesis' | 'saved';
+  at: string;
+  companies?: number;
+  tried?: number;
+  fetched?: number;
+}
+
 /** D7175: what self-match protection kept out of a run's candidates. */
 export interface ExcludedCandidate {
   name: string;
@@ -148,6 +163,8 @@ export interface AnalysisOutput {
   findings?: Finding[];
   /** D7175: the subject, listed as excluded from the candidates. */
   excluded?: ExcludedCandidate[];
+  /** D7175 part 2: when each step of the run finished. */
+  run_steps?: RunStep[];
 }
 
 export interface AnalysisResult {
@@ -691,10 +708,14 @@ export async function runCompetitorAnalysis(
   rail: RailContext = fallbackRail(COMPANIES_OPTIONS.analyze, analysisId),
 ): Promise<AnalysisResult> {
   const depth: 'quick' | 'deep' = inputs.depth === 'deep' ? 'deep' : 'quick';
+  // D7175 part 2: each step's time, for "What the run did".
+  const steps: RunStep[] = [{ step: 'search', at: new Date().toISOString() }];
   // D7175: self-match protection: the subject is never its own competitor,
   // whether the model found it or it was typed as a known competitor.
   const raw = (await discoverCandidates(env, userId, inputs, rail))
     .filter((r) => !isSubjectMatch(inputs.subject, { name: r.name, domain: r.domain || guessDomain(r.name) }));
+
+  steps.push({ step: 'discovery', at: new Date().toISOString(), companies: raw.length });
 
   const sources: SourceRecord[] = [];
   const signals: SignalRecord[] = [];
@@ -732,7 +753,11 @@ export async function runCompetitorAnalysis(
     c.position = i;
   });
 
+  steps.push({ step: 'read', at: new Date().toISOString(), tried: sources.length + failed.length, fetched: sources.filter(sourceFetched).length });
+
   const output = await synthesize(env, userId, inputs, candidates, rail, sources);
+  steps.push({ step: 'synthesis', at: new Date().toISOString() });
+  output.run_steps = steps;
   if (inputs.subject) output.excluded = [{ name: inputs.subject.name, domain: inputs.subject.domain, uid: inputs.subject.uid, reason: 'subject' }];
   sources.push(...failed);
   // Fold discovered activity signals into the output for the UI.

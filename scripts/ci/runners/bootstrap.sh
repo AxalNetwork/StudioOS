@@ -56,7 +56,7 @@ def trusted_file(path, private=False):
 def load_registry(path):
     data = json_file(path)
     require(data.get('schema_version') == 1 and data.get('repository') == REPOSITORY and data.get('organization') == ORGANIZATION, 'unsupported_registry')
-    require(set(data['profiles']) == {'linux-x64', 'macos-arm64', 'hosted'}, 'unsupported_profile_set')
+    require(set(data['profiles']) == {'linux-x64', 'macos-arm64', 'hosted', 'github-8'}, 'unsupported_profile_set')
     require(data.get('self_hosted_group_id') is None or (type(data.get('self_hosted_group_id')) is int and data['self_hosted_group_id'] > 0), 'invalid_group_id')
     require(data.get('processes_per_machine') == 1 and data.get('shared_capability') == 'studioos-worker-v1', 'unsupported_capacity_contract')
     require(re.fullmatch(r'[A-Za-z0-9 -]{1,64}', data.get('self_hosted_group', '')), 'invalid_group')
@@ -65,6 +65,10 @@ def load_registry(path):
         require(p.get('eligibleShards') == expected_shards, 'invalid_eligible_shards')
         if name == 'hosted':
             require({k:p.get(k) for k in ['pool','runs_on','github_os','github_arch']} == {'pool': 'github-hosted', 'runs_on': 'ubuntu-latest', 'github_os': 'Linux', 'github_arch': 'X64'} and re.fullmatch(r'22\.\d+\.\d+',p.get('node_version','')) and re.fullmatch(r'3\.11\.\d+',p.get('python_version','')), 'hosted_pool_must_remain_separate')
+            continue
+        if name == 'github-8':
+            # D7907: GitHub-hosted, ephemeral included compute in its own group. Never a registration target or a linux-x64 alias.
+            require({k:p.get(k) for k in ['pool','runner_group','runner_group_id','runner_label','github_os','github_arch']} == {'pool': 'github-hosted-included', 'runner_group': 'StudioOS Included Compute', 'runner_group_id': 6, 'runner_label': 'studioos-bench-linux-8', 'github_os': 'Linux', 'github_arch': 'X64'} and re.fullmatch(r'22\.\d+\.\d+',p.get('node_version','')) and re.fullmatch(r'3\.11\.\d+',p.get('python_version','')) and p.get('runner_group') != data.get('self_hosted_group'), 'included_pool_must_remain_separate')
             continue
         expected = ('Linux', 'x86_64', 'Linux', 'X64', 'x64') if name == 'linux-x64' else ('Darwin', 'arm64', 'macOS', 'ARM64', 'arm64')
         require(tuple(p.get(k) for k in ['system', 'machine', 'github_os', 'github_arch', 'node_arch']) == expected, 'invalid_platform_contract')
@@ -388,7 +392,13 @@ def install(root, registry, profile, state, os_dependencies=False):
     state['phase']='verified';save_state(root,state)
     return report
 
+def isolation_enrollment_gate():
+    # D7905: no receipt boolean authorizes persistent-host execution.
+    # Reopen only after trusted workflow wiring and a reviewed credential-denial canary.
+    raise Refusal('self_hosted_isolation_canary_required_7905')
+
 def serve(root, deadline):
+    isolation_enrollment_gate()
     require(os.geteuid() == pwd.getpwnam(USERS[0]).pw_uid != 0, 'service_must_use_listener_identity')
     remaining = deadline - time.time();require(0 < remaining <= 86400, 'pilot_deadline_invalid_or_expired')
     child = subprocess.Popen([str(root/'listener/runner/run.sh'),'--startuptype','service'],cwd=root/'listener/runner',env=clean_env(root/'listener',root/'tools'),start_new_session=True)
@@ -446,6 +456,7 @@ def main(directory, argv):
         if args.action=='status':
             existing=registration(root,registry,state)
             print(json.dumps({'identity':state['identity'],'profile':args.profile,'local_registration':bool(existing),'service_active':service(root,state,directory/'bootstrap.sh','status'),'online_idle_eligibility':'unverified_operator_inventory_required'}));return 0
+        if args.action in ('register','start'): isolation_enrollment_gate()
         if args.action=='register':
             existing=registration(root,registry,state)
             if existing:
@@ -457,6 +468,7 @@ def main(directory, argv):
         if args.action in ['register','start']:
             verify_tools(profile,root);published_executor(receipt)
             require(other_listeners(root,service(root,state,directory/'bootstrap.sh','status'))==0,'another_runner_is_present_drain_before_migration')
+        if args.action in ('register','start'): isolation_enrollment_gate()
         if args.action=='register':
             token=token_from_fd(args.token_fd)
             try: listener_command(root,registration_args(root,registry,state),token)
