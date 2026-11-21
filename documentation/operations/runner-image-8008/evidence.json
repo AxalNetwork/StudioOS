@@ -297,6 +297,27 @@
       "exit": 0,
       "stdout": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, bundled_npm, upstream_authentication\n",
       "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 check-folder-docs: 166 folders documented; every name they cite resolves; 4 file list(s) generated, every file described.\n",
+      "stderr": "",
+      "phase": "owner-authorized shared README completion"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "phase": "owner-authorized shared README completion"
     }
   ],
   "tools": {
@@ -334,9 +355,11 @@
   "image_status": "qualification pending",
   "publication": "none; #5719 hold",
   "limitations": [
-    "Folder-doc guard initially failed on absent ignored generated modules. build-generated returned 0 but did not produce skillLibrary in this space-containing workspace (its CLI compares file URL to unencoded argv); invoking its exported generator resolved those missing outputs. Final folder-doc guard still exits 1 solely for the deferred shared operations README registration. Coordinator must integrate the exact row from draft-description.md; this child does not edit the shared file.",
+    "Earlier folder-doc failures are retained as historical evidence. Ignored generated modules were produced using the generator API where necessary. The owner subsequently authorized the shared operations README registration; it is now included, and the latest documentation guard exits 0.",
     "Engine range reconciliation is a static Linux/glibc selection check, not an npm install or native ABI qualification.",
     "No Docker parser/build, SBOM, scan, provenance or node qualification was run.",
     "Decision CLI entry guards also do not execute from this space-containing path; actual decision validation used their exported APIs and recorded output/exits. The initial silent exit-0 calls are not counted as checks."
-  ]
+  ],
+  "updated_utc": "2026-11-21T16:46:29.513605+00:00",
+  "shared_readme_registration": "Completed locally with explicit owner authorization; documentation guard passes."
 }

@@ -30,5 +30,6 @@ by this package. The denied #5566 coding-workspace image is excluded, including
 its recipe, layers, scan exceptions and alternative download routes.
 
 Local patch and bundle checksums are delivered separately on #8008 to avoid a
-self-referential artifact hash. The coordinator owns integration and any later
-publication. A prepared child does not close #7905 or authorize runner activation.
+self-referential artifact hash. The owner-authorized shared operations README
+entry is included. The coordinator owns integration and any later publication.
+A prepared child does not close #7905 or authorize runner activation.

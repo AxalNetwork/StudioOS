@@ -15,20 +15,18 @@ authentication, immutable build evidence and actual-node proof are missing.
 The denied #5566 image is excluded. AGENT_ENGINE remains off.
 
 Validation and actual command exits are recorded in `evidence.json`. The source
-check is not native qualification. Only child files are edited: executor,
+check is not native qualification. Child files and the owner-authorized shared
+operations README registration are edited: executor,
 bootstrap, profiles, workflows, `infra/runners/` and S18 lifecycle are untouched.
 Source hashes/pins, 364 selected Node engine ranges, Python/shell syntax and
 decision checks pass. Build-input preflight refuses with exit 2 as expected.
-The folder-doc guard exits 1 solely for the shared README row deferred below.
+The shared operations README entry is now included; the documentation guard's
+latest result is recorded in `evidence.json`.
 Docker, BuildKit, syft, trivy, cosign and shellcheck are unavailable locally.
 
 Coordinator handoff: integrate the local patch/bundle after review and when the
 publication hold permits. S18 owns builder integration; S09 owns adapter and
-real-node proof. Append this row to documentation/operations/README.md only in
-the coordinator's integration change (shared file deliberately not edited here):
-
-```markdown
-| `runner-image-8008/` | Review the Linux candidate runtime contract, offline image inputs and qualification evidence gates (D8008). |
-```
+real-node proof. The owner explicitly authorized completing the append-only
+`documentation/operations/README.md` entry in this local handoff.
 
 Prepared deliverables do not establish #7905 readiness or close that parent.
