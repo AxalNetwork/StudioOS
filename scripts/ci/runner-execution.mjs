@@ -153,7 +153,8 @@ export async function main(mode,env=process.env,dependencies={}){
  const {admitRunnerJob,githubReadApi}=await import('./runner-admission.mjs');
  const request={requestId:initial.identity.requestId,generation:initial.identity.generation,shard:initial.identity.logicalShard,profile:initial.identity.profile};
  const context={repository:env.GITHUB_REPOSITORY,executorSha:env.EXECUTOR_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowSha:env.CHILD_WORKFLOW_SHA??env.GITHUB_WORKFLOW_SHA,childWorkflowPath:env.CHILD_WORKFLOW_PATH??'.github/workflows/runner-executor.yml',childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT};
- const readReceipt=()=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...dependencies,context,phase:'execute',signal:AbortSignal.timeout(60000)});
+ const {job:_job,executionIsolation:_exec,admissionIsolation,...admission}=dependencies;
+ const readReceipt=()=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),verifyIsolation:admissionIsolation,...admission,context,phase:'execute',signal:AbortSignal.timeout(60000)});
  const current=await readReceipt();need(current.allowed&&JSON.stringify(current.identity)===JSON.stringify(initial.identity),'receipt_superseded_before_execution');
  const sqlite=await import('node:sqlite');
  verifyRuntime(current.profile,{sqlite:()=>{const db=new sqlite.DatabaseSync(':memory:');try{return db.prepare('SELECT 1 AS ok').get().ok===1;}finally{db.close();}}});
@@ -168,11 +169,29 @@ export async function main(mode,env=process.env,dependencies={}){
   console.log(JSON.stringify({profile:current.profile.id,runner:env.RUNNER_NAME??'unknown',source:current.sourceSha,executor:context.executorSha,part:current.shard,event:current.originalEvent,parentRun:current.originalRunId,parentAttempt:current.originalAttempt,planDigest:current.plan.digest,node:process.version,python:python[1],pythonSqlite:python[2],os:process.platform,arch:process.arch,cpu:availableParallelism(),memoryBytes:totalmem()}));
   return 0;
  }
+ if(dependencies.job){
+  // Linux self-hosted: installs and tests both run inside the per-run container; nothing candidate-controlled runs on the host.
+  need(current.profile.id==='linux-x64'&&dependencies.executionIsolation,'container_profile_mismatch');
+  const {job,executionIsolation,admissionIsolation:_pre,...rest}=dependencies;
+  try{
+   job.create(current.identity,{source:paths.source,plan:planPath});
+   const live=await admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...rest,verifyIsolation:executionIsolation,context,phase:'execute',signal:AbortSignal.timeout(60000)});
+   need(live.allowed&&JSON.stringify(live.identity)===JSON.stringify(current.identity),'receipt_superseded_before_execution');
+   job.runCandidate({receipt:current.identity,admitted:live});return 0;
+  }catch(error){console.error('container_execution_failed');return error?.code==='ETIMEDOUT'?124:1;}
+  finally{try{job.cleanup(current.identity);}catch{console.error('container_cleanup_failed');process.exitCode=1;}}
+ }
  const cancellation=new AbortController(),cancel=()=>cancellation.abort();
  process.once('SIGINT',cancel);process.once('SIGTERM',cancel);
  try{const result=await executeShard({admitted:current,paths,testDriver:join(paths.source,'scripts','test-drift-parts.mjs'),planPath,readReceipt,signal:cancellation.signal});return result.code;}
  finally{process.removeListener('SIGINT',cancel);process.removeListener('SIGTERM',cancel);}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
- try{process.exitCode=await main(process.argv[2]);}catch{console.error('runner_execution_denied_or_failed');process.exitCode=1;}
+ try{
+  const mode=process.argv[2];let dependencies={};
+  if(mode==='run'||mode==='verify-plan'){
+   const { isolationFor }=await import('./runners/executor-isolation.mjs');
+   dependencies=isolationFor(JSON.parse(process.env.ADMITTED_JSON??'null')?.identity?.profile)??{};
+  }
+  process.exitCode=await main(mode,process.env,dependencies);}catch{console.error('runner_execution_denied_or_failed');process.exitCode=1;}
 }
