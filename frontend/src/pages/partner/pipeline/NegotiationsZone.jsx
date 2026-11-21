@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { readAllPages } from '../../../lib/pagedRead';
-import PartialRead from './PartialRead';
+import PartialRead, { PipelineReadStatus } from './PartialRead';
 import { usePipelineZone } from './usePipelineZone';
 import NegotiationTermsSheet, {
   STAGE_LABEL, BallMark, whoOf, waitedText,
@@ -328,10 +328,11 @@ export default function PartnerNegotiationsZone() {
         actions={rowActions}
       />
     <ZoneBody
+        what="Negotiations"
       loading={state.loading}
       error={unlinked ? null : state.error}
       onRetry={load}
-      notice={unlinked ? <NoPartnerProfile /> : null}
+      notice={<>{unlinked ? <NoPartnerProfile /> : null}<PipelineReadStatus state={state} onRetry={load} /></>}
       isEmpty={unlinked || (items.length === 0)}
       empty={(
         <NothingYet

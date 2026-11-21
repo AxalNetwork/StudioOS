@@ -20,6 +20,7 @@ import {
 } from '../portfolio/companyModel';
 import CompanyPreview from '../portfolio/CompanyPreview';
 import { CompanyNotes, noteSentence, useCompanyNotes } from '../portfolio/CompanyNotes';
+import OwnershipRights from '../portfolio/OwnershipRights';
 import { isInvestorPreview } from '../portfolio/previewModel';
 import { useViewMode } from '../../contexts/ViewModeContext';
 import '../portfolio/company.css';
@@ -70,6 +71,9 @@ const sourcesFor = (uid) => {
     support: { call: () => api.portfolioSupportList(), shape: COMPANY_SHAPES.support },
   };
 };
+
+/** D6868: the reporting duties row of the rights table reads the duties read: a count, or that read's own state. */
+const dutiesOf = (owed, company) => (owed.state === 'ok' ? { state: 'ok', count: (company?.duties || []).length } : { state: owed.state });
 
 const SOURCE_NAMES = { health: 'Health', support: 'The support ledger', positions: 'Your positions', owed: 'The reports owed to you' };
 const FACT_SOURCE = { invested: 'positions', ownership: 'positions', fmv: 'positions', multiple: 'positions', report: 'owed', support: 'support' };
@@ -284,6 +288,8 @@ function CompanyWorkspace({ uid, tab }) {
               <h2 className="pf-h2" id="pf-co-rights">Ownership &amp; rights</h2>
               <span className="pf-sm">Read only · from the documents you signed</span>
             </div>
+            {/* D6868 (#6868, PRM18–PRM19): the holding line, then the rights under your documents and your requests to record one. */}
+            <OwnershipRights uid={uid} position={position} route={route} duties={dutiesOf(reads.owed, company)} reportsHref={companyTabHref(uid, 'reports')} canAsk={access.can} />
             {ownedBlock((c) => <TermsCard company={c} />, 'What this company owes you', 'company-terms-none')}
             {position ? <InvestorCapTablePanel projectId={position.project_id} venture={position.project?.name} testId="company-captable" /> : null}
             <p className="pf-foot">If a document or the cap table cannot be read, only that section says so.</p>
