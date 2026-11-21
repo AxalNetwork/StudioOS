@@ -18,17 +18,18 @@ const ownerOf=r=>{
 /** Must be a root-owned local policy outside listener/job-writable directories, not workflow JSON. */
 export function readContainerPolicy(path) {
  const actual=safePath(path),parts=actual.split('/');
- for(let i=1;i<=parts.length;i++) {
+ // Every parent directory: root-owned, not group/other-writable, not a link, so no one else can swap the file.
+ for(let i=1;i<parts.length;i++) {
   const current=parts.slice(0,i).join('/')||'/',st=lstatSync(current);
   need(st.uid===0&&!(st.mode&0o022)&&!st.isSymbolicLink(),'untrusted_container_policy');
  }
- const stat=lstatSync(actual);need(stat.isFile()&&stat.nlink===1&&stat.size<=4096,'untrusted_container_policy');
- // Read through one handle, opened without following a link, and check that handle is the file checked above.
- const fd=openSync(actual,constants.O_RDONLY|constants.O_NOFOLLOW);
+ // The file itself is opened once, never through a final link, and every check runs on that open handle.
+ let fd;
+ try { fd=openSync(actual,constants.O_RDONLY|constants.O_NOFOLLOW); } catch { need(false,'untrusted_container_policy'); }
  let text;
  try {
   const opened=fstatSync(fd);
-  need(opened.isFile()&&opened.dev===stat.dev&&opened.ino===stat.ino&&opened.uid===0&&!(opened.mode&0o022)&&opened.nlink===1&&opened.size<=4096,'untrusted_container_policy');
+  need(opened.isFile()&&opened.uid===0&&!(opened.mode&0o022)&&opened.nlink===1&&opened.size<=4096,'untrusted_container_policy');
   text=readFileSync(fd,'utf8');
  } finally { closeSync(fd); }
  const policy=JSON.parse(text);
