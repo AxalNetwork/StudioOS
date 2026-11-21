@@ -121,3 +121,7 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `ciFailureReporter.mjs` | D5502: node:test JSONL evidence beside TAP without assertion values or stacks. |
 | `ciFailureCollector.mjs` | D5502: bounded Actions artifact reads, archive validation and tested-base comparison. |
 | `ciFailures.test.mjs` | D5502: identity, missing evidence, archive, cancellation and real runner exit regressions. |
+| `guardCatalog.mjs` | D5505: ordered catalog access shared by guard readers and wiring tests. |
+| `guardRunner.mjs` | D5505: independent guard execution, prerequisites, process-group interruption and bounded metadata. |
+| `guardRunner.test.mjs` | D5505: multi-failure, prerequisite, real signal, clean-run and preserved-command contracts. |
+| `guardEvidence5505.test.mjs` | D5505: guard evidence normalization, exact-command inheritance and rest-part continuation. |
