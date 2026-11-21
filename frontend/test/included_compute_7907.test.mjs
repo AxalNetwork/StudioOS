@@ -23,8 +23,17 @@ test('the real catalog resolves github-8 to group 6 and its one label, separate 
   assert.equal(p.platform, 'linux'); assert.equal(p.arch, 'x64');
   assert.deepEqual(verifyRuntime(p, { platform: 'linux', arch: 'x64', node: p.nodeVersion, sqlite: () => true }), { platform: 'linux', arch: 'x64', node: p.nodeVersion });
   assert.notEqual(catalog().profiles['github-8'].runner_group, catalog().self_hosted_group);
-  // The self-hosted profiles stay refused until their own group is recorded: github-8 approves nothing else.
-  for (const id of ['linux-x64', 'macos-arm64']) assert.throws(() => resolveCatalogProfile(id), /approved_group_unverified/);
+  for (const id of ['linux-x64', 'macos-arm64']) {
+    const selfHosted = resolveCatalogProfile(id);
+    assert.equal(selfHosted.approvedGroupId, 5);
+    assert.equal(executionTarget(selfHosted).group, 'StudioOS Worker Pool');
+  }
+});
+
+test('included-compute approval does not authorize an unverified self-hosted catalog', () => {
+  const c = catalog(); c.self_hosted_group_id = null;
+  assert.equal(resolveCatalogProfile('github-8', c).approvedGroupId, 6);
+  for (const id of ['linux-x64', 'macos-arm64']) assert.throws(() => resolveCatalogProfile(id, c), /approved_group_unverified/);
 });
 
 test('a changed group, label, pool or platform for github-8 is refused at translation and at admission', () => {

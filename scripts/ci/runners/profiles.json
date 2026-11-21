@@ -125,5 +125,5 @@
     "https://nodejs.org/dist/v22.23.3/SHASUMS256.txt",
     "https://github.com/astral-sh/python-build-standalone/releases/tag/20261110"
   ],
-  "self_hosted_group_id": null
+  "self_hosted_group_id": 5
 }
