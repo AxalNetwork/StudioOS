@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Program AI-native Venture Presentation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Program · AI-native Venture presentation and PDF deck · on the program presentation kit · PGA01 to PGA08 · #6967, #6965</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">AI-native Venture, a proposed programme, as a shareable page and a four-slide PDF</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">AI-native Venture is a proposed programme that is not open: the status is the first words of the page’s opening sentence and the first thing on the PDF cover. A presenter opens Programs, selects AI-native Venture and lands on its public, signed-out page at /programs/ai-native-venture: name, the proposal sentence, “Proposed · not open”, “Download PDF” above the fold as an ink link to a committed file, then the kit’s five sections. The signature visual pairs four questions a founder asks with the proposed role of a StudioOS tool that exists today; a second board separates what Axal VC has recorded (registry: purpose, founders, by application, proposed) from the seven playbook points still unset. No application, dates, places, fees, funding or results; the only action beyond the PDF is a general question, held until the General contact topic ships (Q1, #6987). Kit and entry points from the Spin-Out Lab pilot (#6966, PGS07–PGS08), not redrawn. Frontend only.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · the edition date is a bracketed sample; every other fact is the registry’s own text on main; no founder, company, figure, quote or logo</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program AI-native Venture Presentation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PGA-01', 'AI-native Venture · public page · desktop 1440 · frontend only', '/programs/ai-native-venture signed out. The proposal sentence first (status in its first words), “Proposed · not open”, Download PDF and Print, then the dark panel: status, founders not open, studios not offered, and a quiet general question. Sections: 1 Who it helps, 2 the question-to-tool pairs, 3 defined vs still to be confirmed, 4 Access required, 5 Next step with no violet primary.', [F('PGA01', false, 4957)]],
+      ['PGA-02', 'Availability state · frontend only', 'There is nothing open, so the state is “Proposed”, drawn two ways: with the general question (once #6987 adds the General contact topic, owner decision Q1) and as main stands today, with no enquiry destination and no question action. Nothing reads live, so there is no loading or unavailable state.', [C('PGA02A', 'With the general question', 1440, 659), C('PGA02B', 'No enquiry destination yet', 1440, 1124)]],
+      ['PGA-03', 'AI-native Venture · phone 390 · frontend only', 'Stacked in reading order: name, proposal sentence, audience, Download PDF full width, the Proposed panel, section nav, each pair stacked question over tool, defined over to be confirmed, the next steps and the PDF.', [C('PGA03', false, 390, 8116)]],
+      ['PGA-04', 'The PDF deck · 4 slides at 1920 × 1080', 'axal-vc-ai-native-venture-v1.pdf. 1 Cover (Proposed · not open, the proposal sentence, audience, edition) · 2 The proposal: four questions paired with tools · 3 Defined, and still to be confirmed · 4 Access and next step (conditions, addresses, public URL, edition). One idea per slide, no padding.', [C('PGA04A', '1 · Cover', 1920, 1080), C('PGA04B', '2 · The proposal', 1920, 1080), C('PGA04C', '3 · Where it stands', 1920, 1080), C('PGA04D', '4 · Access and next step', 1920, 1080)]],
+      ['PGA-05', 'Grayscale print sheet', 'The four slides as a black-and-white printer gives them; solid ● vs dashed ◌ carry “defined” vs “to be confirmed” without hue; export settings.', [C('PGA05', false, 1440, 1030)]],
+      ['PGA-06', 'Slide contact sheet', 'The deck in order with each slide’s text alternative, and how the slides map to the page’s sections.', [C('PGA06', false, 1440, 1155)]],
+      ['PGA-07', 'Reading and focus order · frontend only', 'Numbered reading order of the hero at 1440 and 390 (the status is read first), the focus ring on Download PDF, the element each action is, and the pairs’ text alternative.', [C('PGA07A', 'Desktop', 1440, 987), C('PGA07B', 'Phone 390', 390, 1583)]],
+      ['PGA-08', 'Handoff', 'Registry key, canonical URL, PDF path, edition and alt text; what main records (registry row, unset playbook, not_open, notready, contact topics, tool routes) and what changes; claims tied to the registry status; no ◇ of its own; the owner’s open points.', [W('PGA08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

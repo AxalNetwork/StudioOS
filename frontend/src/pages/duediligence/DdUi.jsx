@@ -9,9 +9,9 @@ import { Lightbox } from '../../ui';
 import { refusalText } from './ddListModel.js';
 
 export const inputCls = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-export const btnCls = 'inline-flex h-9 items-center gap-1.5 rounded-lg border border-axal-hairline bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
-export const primaryCls = 'inline-flex h-9 items-center gap-1.5 rounded-lg bg-axal-violet px-3.5 text-[13px] font-bold text-white hover:bg-axal-violet-deep dark:bg-violet-500 dark:hover:bg-violet-400';
-export const dangerCls = 'inline-flex h-9 items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 text-[13px] font-bold text-white hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400';
+export const btnCls = 'inline-flex min-h-11 md:min-h-9 items-center gap-1.5 rounded-lg border border-axal-hairline bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+export const primaryCls = 'inline-flex min-h-11 md:min-h-9 items-center gap-1.5 rounded-lg bg-axal-violet px-3.5 text-[13px] font-bold text-white hover:bg-axal-violet-deep dark:bg-violet-500 dark:hover:bg-violet-400';
+export const dangerCls = 'inline-flex min-h-11 md:min-h-9 items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 text-[13px] font-bold text-white hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400';
 export const fieldCls = 'mb-1 block text-[12.5px] font-semibold text-gray-800 dark:text-gray-200';
 export const muted = 'text-axal-muted dark:text-gray-400';
 export const cardCls = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -55,7 +55,7 @@ export function useSend(explain = refusalText) {
 export function Dialog({ title, sub, testId, onClose, onSubmit, action, actionCls = primaryCls, busy, width = 560, children }) {
   const submit = (e) => { e?.preventDefault?.(); if (!busy) onSubmit(); };
   return (
-    <Lightbox label={title} title={title} sub={sub} width={width} onClose={onClose} testId={testId}
+    <Lightbox label={title} title={title} sub={sub} phone="sheet" width={width} onClose={onClose} testId={testId}
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className={btnCls} onClick={onClose}>Cancel</button>

@@ -37,13 +37,14 @@ const VERSIONS = { versions: [{ id: 31, version: 3, is_current: true, title: 'Sy
  * Mount the studio at `url`, answering every request from synthetic data. `deck` says whether the
  * venture has a current version. Returns the requests, in order, as `METHOD path`.
  */
-async function mount({ url = '/raise/pitch?project_id=7', tab = 'overview', deck = true, user = FOUNDER, phone = false } = {}) {
+async function mount({ url = '/raise/pitch?project_id=7', tab = 'overview', deck = true, user = FOUNDER, phone = false, replies = {} } = {}) {
   const calls = [];
   const fetchBefore = globalThis.fetch;
   const matchBefore = globalThis.matchMedia;
   globalThis.fetch = async (input, init) => {
     const u = String(input);
     calls.push(`${init?.method || 'GET'} ${u}`);
+    if (Object.hasOwn(replies, u)) return replies[u]();
     if (u.endsWith('/auth/me')) return Response.json(user);
     if (/\/api\/projects(\?|$)/.test(u)) return Response.json([{ id: 7, name: 'Synthetic Labs' }]);
     if (u.includes('/decks/by-project/7')) return Response.json(deck ? VERSIONS : { versions: [] });
@@ -64,7 +65,7 @@ async function mount({ url = '/raise/pitch?project_id=7', tab = 'overview', deck
   const by = (id) => walk(document.body).find((n) => props(n)['data-testid'] === id);
   const text = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join(' ') : n.textContent || '');
   return {
-    calls, by, text,
+    calls, by, text, props, walk,
     count: (re) => calls.filter((c) => typeof re === 'string' ? c === re : re.test(c)).length,
     async press(node) { await act(async () => { await props(node).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
     async unmount() {
@@ -127,7 +128,7 @@ test('Overview with a deck: no read for a null deck, one usage and one presets r
     assert.equal(m.count(/GET \/api\/decks\/31\/model-presets$/), 1, 'presets and HQ locks share one read');
     assert.equal(m.count(/\/cycles\/raise\/modules\/pitch-deck/), 0, 'the Overview draws nothing from the module read');
     // What the Overview does draw is still read, once each.
-    for (const path of ['/decks/by-project/7', '/decks/31', '/decks/31/engagement', '/decks/31/rehearsals', '/decks/31/comments', '/decks/31/notes', '/decks/31/investor-links', '/decks/checks?project_id=7', '/decks/sources?project_id=7']) {
+    for (const path of ['/decks/by-project/7', '/decks/31', '/decks/31/engagement', '/decks/31/rehearsals', '/decks/31/comments', '/decks/31/notes', '/decks/31/investor-links', '/decks/31/draft', '/decks/31/figures', '/decks/31/card-status', '/decks/checks?project_id=7']) {
       assert.equal(m.count(`GET /api${path}`), 1, `${path} is read once`);
     }
   } finally { await m.unmount(); }
@@ -150,5 +151,55 @@ test('Decks still reads the Raise module, once', async () => {
   try {
     assert.equal(m.count(/GET \/api\/cycles\/raise\/modules\/pitch-deck\?project=7/), 1);
     assert.equal(m.count(/\/decks\/null\//), 0);
+  } finally { await m.unmount(); }
+});
+
+test('the mounted Overview selects its tab, gives one next step and separates draft and version', async () => {
+  const m = await mount({ replies: {
+    '/api/decks/31/draft': () => Response.json({ cards: [{ uid: 'cover' }], doc: null }),
+    '/api/decks/checks?project_id=7': () => Response.json({ versions: [{ deck_id: 31, checked: false }] }),
+    '/api/decks/31/investor-links': () => Response.json({ version: 3, links: [] }),
+  } });
+  try {
+    assert.equal(m.props(m.by('pitch-studio-tab-overview'))['aria-current'], 'page');
+    const next = m.by('pitch-overview-next');
+    assert.ok(next);
+    const actions = m.walk(next).filter((node) => node.tagName === 'A');
+    assert.equal(actions.length, 1);
+    assert.equal(m.props(actions[0]).href, '/raise/pitch/review?project_id=7&deck=31');
+    assert.match(m.text(m.by('pitch-overview-saved-version')), /Version saved v 3|Version saved v3/);
+    const draft = m.by('pitch-overview-working-draft');
+    assert.match(m.text(draft), /Working draft Draft saved/);
+    assert.notEqual(m.props(draft).className, m.props(m.by('pitch-overview-saved-version')).className);
+  } finally { await m.unmount(); }
+});
+
+test('a refused draft and an unavailable check never yield a next step', async () => {
+  const m = await mount({ replies: {
+    '/api/decks/31/draft': () => Response.json({ error: 'forbidden' }, { status: 403 }),
+    '/api/decks/checks?project_id=7': () => Response.json({ error: 'Unavailable' }, { status: 503 }),
+  } });
+  try {
+    assert.match(m.text(m.by('pitch-overview-working-draft')), /Refused/);
+    assert.match(m.text(m.by('pitch-overview')), /Unavailable/);
+    assert.equal(m.by('pitch-overview-next'), undefined);
+  } finally { await m.unmount(); }
+});
+
+test('first use offers distinct generation and manual destinations for the same venture', async () => {
+  const m = await mount({ deck: false, phone: true });
+  try {
+    assert.equal(m.props(m.by('pitch-overview-start-records')).href, '/raise/pitch/new?project_id=7');
+    assert.equal(m.props(m.by('pitch-overview-start-manual')).href, '/raise/pitch/new?project_id=7&start=manual');
+    assert.ok(m.by('pitch-overview-start-import'));
+  } finally { await m.unmount(); }
+});
+
+test('a saved-version next-step destination does not fall back to the current deck', async () => {
+  const m = await mount({ tab: 'review', url: '/raise/pitch/review?project_id=7&deck=99' });
+  try {
+    assert.ok(m.by('pitch-studio-version-missing'));
+    assert.equal(m.count('GET /api/decks/31'), 0);
+    assert.equal(m.by('pitch-review-tile'), undefined);
   } finally { await m.unmount(); }
 });

@@ -44,7 +44,8 @@ test('every surface that sells tokens draws the custom amount beside its packs',
   assert.match(pricing, /onBuy\(CUSTOM_PACK\)/, 'Pricing\'s card opens the sheet on it');
   assert.match(pricing, /packs\.length \|\| anyAmount \?/, 'no pack: the custom card instead of "isn\'t available"');
   const products = src('components/products/TokenPacksSection.jsx');
-  assert.match(products, /reading\.packs\.length === 0 && !reading\.custom \? <p>\{TOPUP_UNAVAILABLE\}/);
+  // #7000: no pack and no custom amount is its own "empty" state; a custom amount alone is ready.
+  assert.match(products, /if \(data\.packs\.length === 0 && !custom\) return \{ status: 'empty'/);
   assert.match(products, /addTokensHref\(CUSTOM_PACK\)/);
   const billing = src('pages/account/BillingCards.jsx');
   assert.match(billing, /cards\.length === 0 && !anyAmount \?/);

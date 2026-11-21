@@ -230,11 +230,7 @@ export function MyCommitment({ portal, failed, onReload, proof = null }) {
             />
           ))}
           {signErr && <p className="text-[11.5px] text-red-600 dark:text-red-400" role="alert">{signErr}</p>}
-          {/* The rest of the I5 artboard, said rather than drawn empty. */}
-          <div className={`${CARD} p-4 text-[11.5px] text-gray-500 dark:text-gray-400`} data-testid="commitment-not-built">
-            <div><span className="font-semibold text-gray-700 dark:text-gray-300">Co-invest offers</span> · Not recorded: no store holds a co-invest offer, so none can be listed, taken or passed here.</div>
-            <div className="mt-1"><span className="font-semibold text-gray-700 dark:text-gray-300">Ask the report</span> · Not built: Eadwyn has no investor reading surface for issued reports yet.</div>
-          </div>
+          {/* D6140 (#6140): the owner removed both of the I5 artboard's unbuilt lines (offers and the report ask). */}
         </div>
       )}
       {lpaFor && <LPADrawer fundId={lpaFor} onClose={() => setLpaFor(null)} />}

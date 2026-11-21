@@ -7,6 +7,13 @@ on:
 permissions:
   contents: read
 
+# #6461: one run per pull request; a newer push cancels the superseded run.
+# A push to main and a merge-queue entry each get their own group (the run id),
+# so neither is ever cancelled.
+concurrency:
+  group: landing-policy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   policy:
     name: landing policy

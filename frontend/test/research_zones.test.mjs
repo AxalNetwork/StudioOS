@@ -164,15 +164,14 @@ test('every citation names its passage, and one list serves both branches', () =
   assert.match(card, /passage \$\{ct\.chunk \+ 1\}/,
     'a citation does not name the passage it used');
 
-  // ONE LIST, NOT TWO, AND THAT IS THE FIX RATHER THAN THE RISK. This used to
-  // count the same assertion across two branches, because `answered` and
-  // `model_unavailable` each rendered their own citation list and deleting one
-  // still passed on the other (mutation A4). The thread renders `t.citations`
-  // once for every row, so the two cannot disagree — but only while the list
-  // stays outside an outcome test, which is what this holds.
-  const cites = card.slice(card.indexOf('(t.citations || []).map('));
-  assert.ok(cites.length > 0, 'the citation list is gone from the thread card');
-  const before = card.slice(0, card.indexOf('(t.citations || []).map('));
+  // The list is grouped now, so the old direct `.map` selector no longer
+  // exists. A missing selector's -1 offset searched the entire card and
+  // mistook Save to project's answered-only guard for the citation guard.
+  // Anchor on the actual source container; the mounted regression in
+  // research_v2_ask_3701 also checks both outcomes' recorded passages.
+  const start = card.indexOf('(t.citations || []).length ? (');
+  assert.ok(start >= 0, 'the citation list is gone from the thread card');
+  const before = card.slice(0, start);
   assert.doesNotMatch(before.slice(before.lastIndexOf('<div')), /t\.reason === 'answered' &&/,
     'the citation list has been put behind an answered-only guard, so a model failure would list nothing');
 });
@@ -514,7 +513,8 @@ test('funds lists its canvas’s named columns', () => {
   assert.ok(head, 'the funds table no longer declares its column heads');
   assert.deepEqual(
     head[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')),
-    ['Fund', 'Cheque', 'State', 'What the research says'],
+    // D7168 (FND-S01): stage fit, route in and status are three columns.
+    ['Fund · vehicle · identity', 'Their cheque', 'Stage fit', 'Route in', 'Status', 'Your note', 'Updated'],
   );
   // Its own scroller: a narrow viewport must scroll the table, never the page.
   assert.match(code, /overflow-x-auto/, 'the funds table lost its own scroller');
@@ -562,15 +562,18 @@ test('a cheque range that is not recorded is not a cheque of nothing', () => {
 
 test('funds offers Sheets sync to the Super Admin only, not as a fourth canvas op', () => {
   const code = codeOnly(funds);
-  assert.match(code, /function SheetsSyncCard/, 'the Sheets card is gone from the funds zone');
+  // D7170: the card is its own file now; the zone mounts it behind the elevation.
+  const card = codeOnly(read('frontend/src/pages/research/SheetsSyncCard.jsx'));
+  assert.match(code, /import SheetsSyncCard from '\.\/SheetsSyncCard'/, 'the Sheets card is gone from the funds zone');
   assert.match(code, /isSuperAdminUser\(user\)/,
     'the Sheets card must key off the /me elevation, not the browsing role');
   assert.match(code, /canSyncSheets \? <SheetsSyncCard/,
-    'a founder would still see Connect / Pull / Push');
-  assert.match(code, /Pull from Axal/, 'the pull control is gone');
-  assert.match(code, /Push to Axal/, 'the push control is gone');
-  assert.match(code, /it never deletes one/, 'push must still say it does not delete');
-  assert.match(code, /Google Sheets is not configured on this server yet/,
+    'a founder would still see Connect / Export / Import');
+  assert.match(card, /EXPORT_LABEL/, 'the export control is gone');
+  assert.match(card, /IMPORT_LABEL/, 'the import control is gone');
+  assert.doesNotMatch(card, /Pull from Axal|Push to Axal/, 'the old action names came back (D7035)');
+  assert.match(card, /it never deletes one/, 'import must still say it does not delete');
+  assert.match(card, /Google Sheets is not configured on this server yet/,
     'an unconfigured Worker must render as an honest empty, not as a Connect button that cannot finish');
-  assert.match(code, /blank is not zero/, 'the sheet copy must keep blank cheques distinct from zero');
+  assert.match(card, /blank is not zero/, 'the sheet copy must keep blank cheques distinct from zero');
 });

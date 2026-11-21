@@ -93,7 +93,8 @@ test('the quote: the reader\'s own average for each run the choice starts, measu
   const m = await mountSheet({ onStop() {}, ai: SPEND([{ task: 'summarise_interview', calls: 4, spend_usd: 0.02 }]) });
   try { assert.ok(m.text(m.by('stop-quote')).startsWith('Before you choose · your summaries have averaged $0.0050, over 4')); } finally { await m.unmount(); }
   const bad = await mountSheet({ onStop() {}, ai: { loading: false, spendError: new Error('x'), reload() {} } });
-  try { assert.match(bad.text(bad.by('stop-quote')), /^Your average for these runs could not be read\. That is not a claim that they cost nothing\. Retry$/); } finally { await bad.unmount(); }
+  // D5129 (Q2 = A): the shared Unreadable leads with the word Unavailable.
+  try { assert.match(bad.text(bad.by('stop-quote')), /^Unavailable Your average for these runs could not be read\. That is not a claim that they cost nothing\. Retry$/); } finally { await bad.unmount(); }
   const none = await mountSheet({ onStop() {}, ai: { loading: true } });
   try { assert.equal(none.by('stop-quote'), undefined, 'nothing while loading'); } finally { await none.unmount(); }
 });

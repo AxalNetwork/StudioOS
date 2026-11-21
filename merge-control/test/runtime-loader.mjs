@@ -6,3 +6,5 @@ registerHooks({
     return nextResolve(specifier, context);
   },
 });
+// D5620: stands in for `wrangler deploy --define MERGE_CONTROL_POLICY_VERSION:...`; tests that need it unset delete it.
+globalThis.MERGE_CONTROL_POLICY_VERSION ??= 'f'.repeat(40);

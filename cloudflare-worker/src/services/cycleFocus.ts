@@ -28,6 +28,7 @@
 import type { Env, User } from '../types';
 import type { Card, Figure } from './cycleCards';
 import type { BuildFigure } from './buildCycleRecords';
+import type { BuildSignals } from './buildAttention';
 import {
   callsHistory, followUps, loadProspects, parseAllocation, type Ctx as RaiseCtx,
 } from './raiseCycle';
@@ -45,6 +46,8 @@ export type FocusRule =
   // D4589 (#4589): Validate's shared next-action policy (`validateNextAction.ts`).
   | 'stopped' | 'missing_fit' | 'record_result' | 'next_test' | 'decision_ready' | 'plan_build' | 'unavailable'
   | 'first_feature' | 'connect_tools'
+  // D6027 (#6027): Build's canvas order (BD1, BD2).
+  | 'set_mvp_date' | 'unblock_must_haves' | 'filing_due' | 'review_plan' | 'reconnect_tool'
   | 'first_readiness' | 'call_for_capital'
   | 'first_kpi' | 'tell_customers'
   | 'card';
@@ -182,7 +185,19 @@ const pairOf = (f: Figure | undefined): [number, number] | null => {
   return v && num(v[0]) && num(v[1]) ? [v[0], v[1]] : null;
 };
 
-function buildFocus(project: BuildProject, writer: boolean, reads: BuildRead[], figures: Figure[], today: string): Focus | null {
+/**
+ * D6027 (#6027): Build's next action, in the canvas's order (BD1, BD2), for a writer:
+ *   0. nothing in Build is recorded: Add the first feature (#1652, unchanged);
+ *   1. the MVP date is not recorded; 2. a must-have is blocked or overdue;
+ *   3. a filing is overdue or due within 30 days; 4. Build Plan proposals wait
+ *   for a decision; 5. a core system or tool is failing; 6. Connect a tool,
+ *   only when the current step (the first card with a next) is Operating
+ *   systems waiting on its first connection.
+ * A rule fires only on a recorded fact. When none fires and a source a rule
+ * reads could not be read, the focus is Unavailable (no cta), never the card
+ * rule's "nothing else to do". Anyone who is not a writer gets the card rule.
+ */
+function buildFocus(project: BuildProject, writer: boolean, reads: BuildRead[], figures: Figure[], signals: BuildSignals | null): Focus | null {
   const cards = reads.map((r) => r.card);
   const systems = reads[5];
   // #1652's rule (D688 decision 8), moved here unchanged: nothing in Build is recorded.
@@ -190,18 +205,52 @@ function buildFocus(project: BuildProject, writer: boolean, reads: BuildRead[], 
     || (index === 5 && project.company_id == null && entry.state === 'not_recorded' && Number(systems?.facts?.reviews ?? 0) === 0))) {
     return { rule: 'first_feature', eyebrow: 'Build · Next', headline: 'Add the first feature.', why: 'Nothing in Build is recorded yet. Each chart fills as you add to its module.', cta: { label: 'Add feature', href: cards[0].next?.href ?? `/build/solution-design?project=${project.id}&add=1` }, then: null };
   }
+  if (!writer) return cardFocus('build', cards);
+  const eyebrow = 'Build · Next';
+  const href = (slug: string) => `/build/${slug}?project=${project.id}`;
+  if (!signals) return { rule: 'unavailable', eyebrow, headline: 'The next step could not be worked out.', why: 'Build’s records could not be read. Try again.', cta: null, then: null, state: 'unavailable' };
+  const must = pairOf(figureOf(figures, 'must_haves_done'));
+  if (signals.mvpDate.state === 'not_recorded') {
+    return { rule: 'set_mvp_date', eyebrow, headline: 'Set the MVP target date.',
+      why: `No MVP target date is recorded, so Build cannot count the days to it.${must ? ` ${must[0]} of ${must[1]} must-haves done.` : ''}`,
+      cta: { label: 'Set target', href: `${href('prototype-mvp')}#mvp-target-date` }, then: null };
+  }
+  const m = signals.mustHaves.value;
+  if (m && (m.blocked > 0 || m.overdue > 0)) {
+    const parts = [m.blocked ? `${m.blocked} blocked` : null, m.overdue ? `${m.overdue} overdue` : null].filter(Boolean).join(' and ');
+    const date = dayMonth(signals.mvpDate.value);
+    return { rule: 'unblock_must_haves', eyebrow,
+      headline: m.blocked > 0 ? `Unblock ${plural(m.blocked, 'must-have', 'must-haves')}.` : `Finish ${plural(m.overdue, 'overdue must-have', 'overdue must-haves')}.`,
+      why: `${sentence(`${parts} of ${m.total - m.done} open must-haves`)}${date ? ` MVP target ${date}.` : ''}`,
+      cta: { label: 'Open must-haves', href: href('prototype-mvp') }, then: null };
+  }
+  const f = signals.filing.value;
+  if (f) {
+    return { rule: 'filing_due', eyebrow, headline: sentence(`Complete ${f.title}`), why: f.text ? sentence(f.text) : null,
+      cta: { label: 'Open filing', href: href('company-creation') }, then: null };
+  }
+  const plan = signals.plan;
+  if (plan.state === 'ready' && plan.status !== 'paused' && (plan.waiting ?? 0) > 0) {
+    return { rule: 'review_plan', eyebrow, headline: sentence(`Decide on ${plural(plan.waiting!, 'Build Plan proposal', 'Build Plan proposals')}`),
+      why: `${plan.accepted} accepted · ${plan.waiting} waiting for your decision. Nothing lands until you accept it.`,
+      cta: { label: `Review ${plural(plan.waiting!, 'proposal', 'proposals')}`, href: plan.href }, then: null };
+  }
+  const t = signals.tool.value;
+  if (t) {
+    return { rule: 'reconnect_tool', eyebrow, headline: sentence(`Reconnect ${t.name}`),
+      why: t.failing ? `${t.name} is failing${t.since ? ` since ${t.since}` : ''}. Build stops filling from it until it is reconnected.` : `${t.name} is no longer connected. Build stops filling from it until it is reconnected.`,
+      cta: { label: `Reconnect ${t.name}`, href: t.href }, then: null };
+  }
+  // A rule above could not be read: no fallback may imply nothing is waiting there.
+  const failed = [signals.mustHaves, signals.filing, signals.tool].some((e) => e.state === 'unreadable') || plan.state === 'unreadable';
+  if (failed) return { rule: 'unavailable', eyebrow, headline: 'The next step could not be worked out.', why: 'Part of Build could not be read, so this does not mean nothing needs doing. Try again.', cta: null, then: null, state: 'unavailable' };
   // Without a company a connected tool cannot feed the venture (D688 decision 6), so no connect rule.
-  const connected = Number(systems?.facts?.connected), total = Number(systems?.facts?.total);
-  if (writer && project.company_id != null && systems && systems.card.state !== 'unreadable' && num(connected) && num(total) && connected < total) {
-    const sys = pairOf(figureOf(figures, 'systems_connected'));
-    const must = pairOf(figureOf(figures, 'must_haves_done'));
-    const left = must ? must[1] - must[0] : 0;
-    const date = typeof project.mvp_target_date === 'string' && project.mvp_target_date.slice(0, 10) >= today ? dayMonth(project.mvp_target_date) : null;
+  const step = cards.find((c) => c?.next?.text && /^\/(?!\/)/.test(c.next.href));
+  if (step?.slug === 'operating-systems' && project.company_id != null && systems?.card.state === 'empty') {
     return {
-      rule: 'connect_tools', eyebrow: 'Build · Next', headline: 'Connect the tools your company already runs on.',
-      why: `Connected tools fill the roadmap, the MVP burn-up and your KPIs without typing.${sys ? ` ${sys[0]} of ${sys[1]} core systems are connected.` : ''}`,
-      cta: { label: 'Connect a tool', href: `/build/connect?project_id=${project.id}` },
-      then: left > 0 && date ? `Ship the last ${plural(left, 'must-have', 'must-haves')} before ${date}.` : null,
+      rule: 'connect_tools', eyebrow, headline: 'Connect the tools your company already runs on.',
+      why: 'Operating systems is the next step, and it starts with a connection. Connected tools fill the roadmap, the MVP burn-up and your KPIs without typing.',
+      cta: { label: 'Connect a tool', href: `/build/connect?project_id=${project.id}` }, then: null,
     };
   }
   return cardFocus('build', cards);
@@ -259,16 +308,17 @@ function buildIndex(project: BuildProject, reads: BuildRead[], figures: Figure[]
 
 /**
  * Build's focus, meter and index, from the six module reads the overview
- * already holds (`reads`, in MODULES order) and its four figures. The connect
- * rule asks for a write, so it goes only to Build's writers (`canWrite`).
+ * already holds (`reads`, in MODULES order) and its four figures. D6027: the
+ * focus also reads `signals` (`services/buildAttention.ts`); its rules ask for
+ * a write, so they go only to Build's writers (`canWrite`). Null signals (their
+ * part failed) give a writer an Unavailable focus.
  */
-export async function buildPhone(env: Env, project: BuildProject, viewer: User, reads: BuildRead[], buildFigures: BuildFigure[]): Promise<Phone> {
+export async function buildPhone(env: Env, project: BuildProject, viewer: User, reads: BuildRead[], buildFigures: BuildFigure[], signals: BuildSignals | null = null): Promise<Phone> {
   // Build's figures carry "<n> of <m>" as a pair; the readers below take them as they come.
   const figures = buildFigures as unknown as Figure[];
-  const today = new Date().toISOString().slice(0, 10);
   const writer = canWrite(project, viewer);
   const [focus, meter, index] = await Promise.all([
-    part('build focus', async () => buildFocus(project, writer, reads, figures, today)),
+    part('build focus', async () => buildFocus(project, writer, reads, figures, signals)),
     part('build meter', async () => buildMeter(figures)),
     part('build index', async () => buildIndex(project, reads, figures)),
   ]);

@@ -26,7 +26,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import {
   allowanceView, bytes, dayAxis, dayBars, microUsd, modelRows, pageOf, pageRows, filterPages, planLabel,
-  rateRows, receiptView, shortTokens, storageView, surfaceLabel, taskRows, topUpState, untilUtcMidnight, usd,
+  STORAGE_AREAS, rateRows, receiptView, shortTokens, storageView, surfaceLabel, taskRows, topUpState, untilUtcMidnight, usd,
 } from '../src/pages/account/usageModel.js';
 import UsageSection, {
   AllowanceCard, DaysCard, LastRunCard, ModelsCard, StorageCard, WhereCard,
@@ -87,7 +87,8 @@ const STORAGE = {
   areas: [
     area('data_room', 64, 859_832_320), area('diligence_files', 31, null, 3), area('research_library', 22, 50_331_648),
     area('message_attachments', 27, 100_663_296), area('interview_recordings', 4, 32_505_856),
-    ...['data_room_versions', 'session_audio', 'deck_reviews', 'deck_rehearsals', 'deck_recordings', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports', 'articles'].map((k) => area(k, 1, 1024)),
+    // #5507: every other area the card lists, one small file each; the catalogue itself is _storageAreasContract.mjs's.
+    ...STORAGE_AREAS.map(([k]) => k).filter((k) => !['data_room', 'diligence_files', 'research_library', 'interview_recordings'].includes(k)).map((k) => area(k, 1, 1024)),
   ],
 };
 
@@ -298,7 +299,7 @@ test('U4 renders models with "not counted" never as 0 tokens, and the rate card 
   assert.match(ok, /<span title="1,234,567">1\.2M<\/span>/);
   assert.match(ok, /data-testid="usage-model-not-counted"[^>]*>1 run not counted/);
   const whisperRow = ok.slice(ok.lastIndexOf('data-testid="usage-model-row"'));
-  assert.match(whisperRow, /data-testid="usage-model-in"[^>]*><span[^>]*>Not counted</);
+  assert.match(whisperRow, /data-testid="usage-model-in"[^>]*><span[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not counted</); // D5129: the shared chip's aria-hidden glyph precedes its word
   assert.doesNotMatch(whisperRow.slice(0, whisperRow.indexOf('</tr>')), />0<\//, 'no 0 tokens');
   assert.match(ok, /Older model<span[^>]*>Retired</);
   assert.match(ok, /\$0\.0005[\s\S]*per audio minute/);

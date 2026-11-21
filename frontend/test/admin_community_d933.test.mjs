@@ -467,8 +467,9 @@ test('mounted CM10a: a block the Community read could not read costs only that b
   const answer = () => overview({ jobs: gone('The job board'), events: { weekly: gone('The weekly registrations') } });
   const m = await mount(COMMUNITY_PATH, { fail: ['activity'], answer });
   try {
-    assert.match(m.of('community-tile-registrations'), /Unreadable.*could not be read/s);
-    assert.match(m.of('community-tile-applications'), /Unreadable.*could not be read/s);
+    // D5129 (Q2 = A): the screen word for a failed read is Unavailable.
+    assert.match(m.of('community-tile-registrations'), /Unavailable.*could not be read/s);
+    assert.match(m.of('community-tile-applications'), /Unavailable.*could not be read/s);
     assert.match(m.of('community-card-recent'), /Community activity could not be read\. That is not the same as nothing happening\./);
     assert.match(m.of('community-tile-waiting'), /4.*2 events · 2 jobs/s, 'the queues stopped answering');
     assert.match(m.of('community-card-wellbeing'), /9 verified|verified/);

@@ -29,6 +29,7 @@ import { bindingKey } from '../util/schemaBootstrap';
 import { refusalBody } from '../util/refusal';
 import { railFor } from '../util/railContext';
 import { getRail, listRail, proposeRail, decideRail } from '../services/railProposals';
+import { putPublicationRecord } from '../services/recordStore';
 
 type AppCtx = Context<{ Bindings: Env }>;
 const r = new Hono<{ Bindings: Env }>();
@@ -429,7 +430,9 @@ r.post('/:id{[0-9]+}/render', async (c: AppCtx) => {
   let storedKey: string | null = null;
   if (bucket && bytes) {
     try {
-      await bucket.put(storageKey, bytes, { httpMetadata: { contentType } });
+      // D6651: an archived publication is a record, written once.
+      const stored = await putPublicationRecord(bucket, storageKey, bytes, { httpMetadata: { contentType } });
+      if (!stored.ok) throw new Error('record_exists');
       const token = await signPublicationToken(c.env, storageKey, 86400);
       const origin = new URL(c.req.url).origin;
       downloadUrl = `${origin}/api/market-intel-public/publications/download/${token}`;

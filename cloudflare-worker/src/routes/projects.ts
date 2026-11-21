@@ -38,6 +38,8 @@ import {
 } from '../services/marketAssumptions';
 import { fillsForRow, filledColumns } from '../services/fills/provenance';
 import { refuse } from '../util/refusal';
+import { MARKET_FIGURES, MARKET_PROVENANCE_REFUSALS, MarketProvenanceError, recordMarketFigures, resolveMarketProvenance, type MarketFigureKey, type MarketProvenance } from '../services/marketFigures';
+import { logAdminAction } from '../services/adminAudit';
 import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { bindingKey } from '../util/schemaBootstrap';
 import { findableBy, keepFindable } from '../services/investorFindable';
@@ -976,6 +978,17 @@ projects.put('/:id', async (c) => {
       return c.json({ error: 'invalid_market_sizing', detail: 'SOM cannot exceed SAM' }, 400);
     }
   }
+  // D6011 (#6011): where the figures came from, checked before anything is written.
+  let marketProvenance: MarketProvenance | null = null;
+  if (MARKET_FIGURES.some((k) => data[k] !== undefined)) {
+    try {
+      marketProvenance = await resolveMarketProvenance(c.env, id, data.market_figure_source);
+    } catch (e) {
+      await sql.end();
+      if (e instanceof MarketProvenanceError) return refuse(c, 400, { code: e.code, message: MARKET_PROVENANCE_REFUSALS[e.code] });
+      throw e;
+    }
+  }
   const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'icp_definition_meta', 'data_room_url', 'data_room_nda_choice', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
   // D1102 (#2982, migration 608): the NDA choice is `data_room_nda_choice`,
   // Yes or No and nothing else; it is mirrored into the old column for a
@@ -1018,6 +1031,24 @@ projects.put('/:id', async (c) => {
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     await sql.unsafe(`UPDATE projects SET ${updates.join(', ')} WHERE id = ?`, [...values, id]);
   }
+  // D6011: one `market_figures` row per changed figure, after `projects` holds it. A
+  // failure leaves the figure saved and reading "No source recorded", and says so.
+  let marketFigures: { recorded: MarketFigureKey[] } | { recorded: null; reason: string } | undefined;
+  if (marketProvenance) {
+    try {
+      const recorded = await recordMarketFigures(c.env, {
+        projectId: id, before: project as Record<string, unknown>,
+        after: { tam: data.tam, sam: data.sam, som: data.som }, provenance: marketProvenance, setBy: Number(user.id) || null,
+      });
+      marketFigures = { recorded };
+      if (recorded.length && isPrivileged && !isOwner && !isCofounderEditor) {
+        await logAdminAction(c.env, Number(user.id), String(user.email || ''), 'market_figures_set', { project_id: id, figures: recorded });
+      }
+    } catch (e) {
+      console.error('[projects:put] market_figures write failed', id, (e as Error).message);
+      marketFigures = { recorded: null, reason: 'The figures were saved; where they came from was not.' };
+    }
+  }
   // Task #1 — the editable founder company / affiliation lives on the
   // linked `founders` row (not `projects`). Owner + privileged editors may
   // set it; explicit '' clears it. Skipped silently when the project has
@@ -1036,7 +1067,7 @@ projects.put('/:id', async (c) => {
   }
   await sql.end();
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id }); } catch {}
-  return c.json({ ...updated, founder: updatedFounder });
+  return c.json({ ...updated, founder: updatedFounder, ...(marketFigures ? { market_figures: marketFigures } : {}) });
 });
 
 projects.delete('/:id', async (c) => {
@@ -1334,9 +1365,10 @@ projects.put('/:projectId/spinout-deck/overrides', async (c) => {
  *
  * Kept as a local helper rather than folded into `projectAccess`: `canAccessProject`
  * there answers a different and looser question (may they SEE it), and an
- * investor passes that one.
+ * investor passes that one. Exported for `routes/market_sizing.ts` (D7704), so
+ * the sizing versions are gated by this one rule and no copy of it.
  */
-async function canEditProjectData(
+export async function canEditProjectData(
   env: Env, project: { id: number; founder_id: number | null }, user: User,
 ): Promise<boolean> {
   // D889 (#2438): only an admin bypasses membership; a partner edits as an accepted owner or co-founder.

@@ -20,9 +20,9 @@
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -33,17 +33,13 @@ import { GROW_OLD_ROWS } from '../src/services/records/grow.ts';
 import type { Store } from '../src/services/records/types.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import cycleGrow from '../src/routes/cycle_grow.ts';
+import cycleBuild from '../src/routes/cycle_build.ts';
 import { fillKind } from '../src/services/fills/registry.ts';
 import { markFeedbackTold, updateFeedback } from '../src/services/growWriters.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const ROOT = process.cwd();
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 // Assembled at run time, as cycle_activity_d690 does, so no literal reads as a credential.
 const JWT_SECRET = ['fixture', 'key', 'for', 'd691', 'grow', 'records'].join('-');
 
@@ -57,6 +53,12 @@ const PEOPLE: Array<[number, string, string, number | null]> = [
 ];
 const MONTH = new Date().toISOString().slice(0, 7);
 const TODAY = new Date().toISOString().slice(0, 10);
+/**
+ * Obligation 51's due date. The record's state is `due < today` on the real clock, so a date in this
+ * decade turned "Scheduled" into "Overdue" the day after it (2026-11-30 would have, on 2026-12-01).
+ * "Not yet due" is what the fixture means, so it is due far ahead; a quarter on is DUE_NEXT, two DUE_AFTER.
+ */
+const DUE = '2999-11-30', DUE_NEXT = '3000-02-28', DUE_AFTER = '3000-05-28';
 
 /**
  * The baseline and every later migration, built once into a file each test copies (seeds included).
@@ -100,7 +102,7 @@ function fixture() {
     (3, 'chb1', ${A}, 'Search', 'search', NULL, NULL, NULL, ${FOUNDER})`);
   db.exec(`INSERT INTO channel_spend (channel_id, month, spend_cents) VALUES (1, '${MONTH}', 50000)`);
   db.exec(`INSERT INTO contacts (uid, project_id, audience, name, email, utm_json, created_at) VALUES
-    ('ct1', ${A}, 'customer', 'Ines Reyes', 'ines@example.test', '{"utm_source":"newsletter"}', datetime('now'))`);
+    ('ct1', ${A}, 'customer', 'Ines Reyes', 'ines@example.test', '{"utm_source":"newsletter"}', '${TODAY} 00:00:00')`);
   db.exec(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, team, status) VALUES
     (31, 'lantern-engineer', ${FOUNDER}, ${A}, 'Engineer', 'Engineering', 'draft'), (32, 'mill-designer', ${OTHER_FOUNDER}, ${B}, 'Designer', NULL, 'draft'),
     (33, 'lantern-analyst', ${COFOUNDER}, ${A}, 'Analyst', NULL, 'published')`);
@@ -113,7 +115,7 @@ function fixture() {
   db.exec(`INSERT INTO markets (id, uid, project_id, name, demand_score, demand_source, created_by) VALUES
     (1, 'mka1', ${A}, 'Portugal', 7, 'Interviews', ${FOUNDER}), (2, 'mka12', ${B}, 'Chile', NULL, NULL, ${OTHER_FOUNDER})`);
   db.exec(`INSERT INTO compliance_events (id, project_id, jurisdiction, event_type, title, due_date, kind, recurrence, remind_days_json, reminders_sent_json, created_by_user_id) VALUES
-    (51, ${A}, 'Unspecified', 'board_meeting', 'Board meeting', '2026-11-30', 'governance', 'quarterly', '[14]', '[14]', ${FOUNDER}),
+    (51, ${A}, 'Unspecified', 'board_meeting', 'Board meeting', '${DUE}', 'governance', 'quarterly', '[14]', '[14]', ${FOUNDER}),
     (52, ${B}, 'Unspecified', 'annual_report', 'Annual report', '2026-12-01', NULL, 'annual', NULL, '[]', ${OTHER_FOUNDER}),
     (53, ${A}, 'Unspecified', 'other', 'Insurance renewal', '2026-12-15', 'compliance', 'one_time', NULL, '[]', ${FOUNDER})`);
   db.exec(`INSERT INTO obligation_occurrences (id, uid, event_id, held_on, minutes_file_key) VALUES
@@ -128,6 +130,7 @@ const envOf = (db: DatabaseSync, extra: Record<string, unknown> = {}) =>
 
 const app = new Hono<any>();
 app.route('/api/cycles/grow', cycleGrow);
+app.route('/api/cycles/build', cycleBuild);
 app.route('/api/cycles', createCycleRecords());
 app.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
@@ -161,13 +164,13 @@ const actionKeys = (r: any) => r.body.actions.map((a: any) => a.key);
 
 /** CO:382-388: each record's facts, and its main and side section titles. */
 const CANVAS: Array<[string, string, string[], string[], string[]]> = [
-  ['product-improvement', 'fba1', ['Source', 'Theme', 'Roadmap item', 'Status'], ['Theme', 'Closing the loop'], ['Customer']],
+  ['product-improvement', 'fba1', ['Source', 'Theme', 'Roadmap item', 'Status', 'Origin'], ['Theme', 'Closing the loop'], ['Customer']],
   ['distribution', 'cha1', ['Spend · 30 d', 'Customers', 'CAC', 'Bar'], ['Funnel', 'Experiments'], ['Customers acquired']],
   ['revenue-and-traction', 'mrr', ['Value', 'Change · 30 d', 'Source', 'As of'], ['History', 'Split'], ['Alerts', 'Shared']],
   ['team-expansion', '31', ['Team', 'Applicants', 'In interview', 'Target start'], ['Pipeline', 'Shortlist'], ['Compensation', 'Posted on']],
-  ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Terms'], ['Contact', 'Introductions']],
+  ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Revenue by month', 'Terms'], ['Contact', 'Introductions']],
   ['market-expansion', 'mka1', ['Demand evidence', 'Regulation', 'Partners', 'Cost to enter'], ['Entry plan', 'Localisation'], ['Attached', 'Sizing']],
-  ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings'], ['Reminders', 'Documents']],
+  ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings', 'Resolutions'], ['Reminders', 'Documents']],
 ];
 
 test('6: each of the seven reads is in the canvas shape', async () => {
@@ -185,8 +188,8 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   const fb = await rec(db, 'product-improvement', 'fba1');
   assert.equal(fb.body.title, '"Exports are slow"');
   assert.equal(fb.body.sub, 'Customer · Rui Tomas · 1 Sep');
-  assert.deepEqual(sectionOf(fb, 'theme').rows[0], { a: 'Speed', b: '2 items', c: 'Planned', tone: 'vio' });
-  assert.deepEqual(sectionOf(fb, 'customer').rows.map((r: any) => [r.a, r.b]), [['Rui Tomas · Harbour Mill', 'Customers →'], ['Plan', 'Paid']]);
+  assert.deepEqual(sectionOf(fb, 'theme').rows[0], { a: 'Speed', b: '2 items', c: 'Planned', tone: 'vio', action: 'add-to-roadmap' });
+  assert.deepEqual(sectionOf(fb, 'customer').rows.map((r: any) => [r.a, r.b]), [['Rui Tomas · Harbour Mill', 'Customers →'], ['Record', 'Not linked'], ['Plan', 'Paid']]); // D6865: the linked record, or Not linked
   assert.equal(sectionOf(fb, 'closing-the-loop').rows[0].c, 'Due');
   const partner = await rec(db, 'partner-network', 'pta1');
   assert.equal(partner.body.facts[2].value, 'Rev-share 20%');
@@ -198,17 +201,22 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   const ob = await rec(db, 'durable-company-building', 51);
   assert.deepEqual(ob.body.pills.map((p: any) => p.text), ['Scheduled', 'Quarterly']);
   assert.deepEqual(sectionOf(ob, 'reminders').rows[0], { a: '14 days before', c: 'Sent', tone: 'grey' });
-  assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null], ['Resolutions', 'Not recorded']]);
+  assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null]]);
+  // D6113 follow-up: Open minutes and Tick a localisation check run from their rows only (row_only), never as header buttons.
+  assert.equal(ob.body.actions.find((a: any) => a.key === 'open-minutes').row_only, true);
+  assert.equal(market.body.actions.find((a: any) => a.key === 'localisation-check').row_only, true);
+  assert.equal(ob.body.actions.find((a: any) => a.key === 'edit').row_only, undefined);
   // A custom KPI is a record too; another venture's is not.
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpa1')).body.title, 'NPS');
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpb1')).status, 404);
-  assert.equal((await rec(db, 'revenue-and-traction', 'arr')).status, 404);
+  // D6104: arr is now a derived KPI; a KPI the platform does not know is still a 404.
+  assert.equal((await rec(db, 'revenue-and-traction', 'ltv')).status, 404);
 });
 
 test('6: Visits and Shared are Not recorded, with the reason', async () => {
   const db = fixture();
   const ch = await rec(db, 'distribution', 'cha1');
-  assert.deepEqual(sectionOf(ch, 'funnel').rows[0], { a: 'Visits', b: 'No page-visit store', c: 'Not recorded', tone: 'grey' });
+  assert.deepEqual(sectionOf(ch, 'funnel').rows[0], { a: 'Visits', b: 'No per-channel visit count', c: 'Not recorded', tone: 'grey' });
   assert.equal(sectionOf(ch, 'funnel').rows[2].c, '1');
   const kpi = await rec(db, 'revenue-and-traction', 'mrr');
   assert.deepEqual(sectionOf(kpi, 'shared').rows[0], { a: 'Metrics page', b: 'There is no public metrics page', c: 'Not recorded', tone: 'grey' });
@@ -294,7 +302,7 @@ test('6: Edit carries the PATCH\'s fields with their current values', async () =
   const db = fixture();
   const edit = (r: any) => Object.fromEntries(r.body.actions.find((a: any) => a.key === 'edit').form.fields.map((f: any) => [f.key, f.value]));
   const fb = edit(await rec(db, 'product-improvement', 'fba1'));
-  assert.deepEqual(Object.keys(fb), ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship']);
+  assert.deepEqual(Object.keys(fb), ['body', 'source', 'from_name', 'from_email', 'from_company', 'contact_uid', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship']);
   assert.equal(fb.body, 'Exports are slow'); assert.equal(fb.theme, 'Speed'); assert.deepEqual(fb.notify_on_ship, ['1']);
   const ch = edit(await rec(db, 'distribution', 'cha1'));
   assert.equal(ch.name, 'Newsletter'); assert.equal(ch.cac_bar_cents, 20000); assert.equal(ch.spend_cents, 50000);
@@ -305,7 +313,7 @@ test('6: Edit carries the PATCH\'s fields with their current values', async () =
   const mk = edit(await rec(db, 'market-expansion', 'mka1'));
   assert.equal(mk.demand_score, 7); assert.equal(mk.demand_source, 'Interviews');
   const ob = edit(await rec(db, 'durable-company-building', 51));
-  assert.equal(ob.title, 'Board meeting'); assert.equal(ob.due_at, '2026-11-30'); assert.equal(ob.repeats, 'quarterly'); assert.deepEqual(ob.remind_days, ['14']);
+  assert.equal(ob.title, 'Board meeting'); assert.equal(ob.due_at, DUE); assert.equal(ob.repeats, 'quarterly'); assert.deepEqual(ob.remind_days, ['14']);
   // And Edit writes what the PATCH writes.
   assert.equal((await patch(db, 'partner-network', 'pta1', { stage: 'terms', name: 'Lantern Resellers EU', ignored: 'x' })).status, 200);
   assert.deepEqual({ ...db.prepare("SELECT name, stage FROM growth_partners WHERE uid = 'pta1'").get() as any }, { name: 'Lantern Resellers EU', stage: 'terms' });
@@ -313,6 +321,29 @@ test('6: Edit carries the PATCH\'s fields with their current values', async () =
   const refused = await patch(db, 'team-expansion', 31, { title: 'Senior engineer', publish: ['1'] }, { who: COFOUNDER });
   assert.equal(refused.status, 403);
   assert.equal((db.prepare('SELECT title, status FROM job_postings WHERE id = 31').get() as any).title, 'Engineer');
+});
+
+test('D6116: market Edit shares Research country choices and saves their codes with the decision', async () => {
+  const db = fixture();
+  db.exec("DELETE FROM research_countries");
+  const fields = async () => (await rec(db, 'market-expansion', 'mka1')).body.actions
+    .find((action: any) => action.key === 'edit').form.fields;
+  const country = async () => (await fields()).find((field: any) => field.key === 'geography_ref');
+  assert.deepEqual(await country(), {
+    key: 'geography_ref', label: 'Attach a country', kind: 'CH', value: '', options: [{ value: '', label: 'Nothing yet' }],
+  });
+
+  db.exec("INSERT INTO research_countries (code, name, region) VALUES ('CH', 'Switzerland', 'Europe'), ('CA', 'Canada', 'North America')");
+  assert.deepEqual((await country()).options, [
+    { value: '', label: 'Nothing yet' }, { value: 'CA', label: 'Canada' }, { value: 'CH', label: 'Switzerland' },
+  ]);
+  assert.equal((await fields()).find((field: any) => field.key === 'decision')?.kind, 'CH');
+  assert.equal((await patch(db, 'market-expansion', 'mka1', { geography_ref: 'CH', decision: 'enter' })).status, 200);
+  assert.deepEqual({ ...db.prepare("SELECT geography_ref, decision FROM markets WHERE uid = 'mka1'").get() },
+    { geography_ref: 'CH', decision: 'enter' });
+  assert.equal((await country()).value, 'CH');
+  assert.equal((await patch(db, 'market-expansion', 'mka1', { geography_ref: '' })).status, 200);
+  assert.equal((await country()).value, '');
 });
 
 test('6: Open minutes refuses a key outside this venture\'s prefix and opens one inside it', async () => {
@@ -444,7 +475,7 @@ test('7: Mark held moves a quarterly obligation three calendar months and resets
   assert.equal(r.status, 200, JSON.stringify(r.body));
   // 30 Nov + 3 months is clamped to 28 Feb.
   assert.deepEqual({ ...db.prepare('SELECT id, due_date, completion_status, reminders_sent_json FROM compliance_events WHERE id = 51').get() as any },
-    { id: 51, due_date: '2027-02-28', completion_status: 'pending', reminders_sent_json: '[]' });
+    { id: 51, due_date: DUE_NEXT, completion_status: 'pending', reminders_sent_json: '[]' });
   assert.deepEqual({ ...db.prepare("SELECT held_on, notes, minutes_file_key, size_bytes FROM obligation_occurrences WHERE event_id = 51 ORDER BY id DESC LIMIT 1").get() as any },
     { held_on: '2026-11-29', notes: 'Quorum met', minutes_file_key: null, size_bytes: null });
   const once = await act(db, 'durable-company-building', 53, 'mark-held', { held_on: '2026-12-14' });
@@ -474,13 +505,13 @@ test('7: Mark held stores minutes under the venture\'s prefix, and a clash answe
   wrong.set('minutes', new File(['x'], 'minutes.txt', { type: 'text/plain' }));
   assert.equal((await act(db, 'durable-company-building', 51, 'mark-held', undefined, { form: wrong, env: { FILES } })).status, 415);
   // Another governance obligation already due on the next date.
-  db.exec(`INSERT INTO compliance_events (project_id, jurisdiction, event_type, title, due_date, kind, recurrence) VALUES (${A}, 'Unspecified', 'board_meeting', 'Spare board', '2027-05-28', 'governance', 'one_time')`);
+  db.exec(`INSERT INTO compliance_events (project_id, jurisdiction, event_type, title, due_date, kind, recurrence) VALUES (${A}, 'Unspecified', 'board_meeting', 'Spare board', '${DUE_AFTER}', 'governance', 'one_time')`);
   const before = (db.prepare('SELECT COUNT(*) AS n FROM obligation_occurrences').get() as any).n;
   const clash = await act(db, 'durable-company-building', 51, 'mark-held', { held_on: '2027-02-27' });
   assert.equal(clash.status, 409);
-  assert.match(clash.body.detail, /Another governance obligation is already due on 2027-05-28\. Pick another date\./);
+  assert.match(clash.body.detail, new RegExp(`Another governance obligation is already due on ${DUE_AFTER}\\. Pick another date\\.`));
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM obligation_occurrences').get() as any).n, before);
-  assert.equal((db.prepare('SELECT due_date FROM compliance_events WHERE id = 51').get() as any).due_date, '2027-02-28');
+  assert.equal((db.prepare('SELECT due_date FROM compliance_events WHERE id = 51').get() as any).due_date, DUE_NEXT);
 });
 
 test('7: Mark told sets told_at and returns a mailto draft to writers only', async () => {
@@ -549,7 +580,7 @@ test('7: form-options answer each module\'s chips to writers only', async () => 
   assert.equal(fb.status, 200);
   assert.deepEqual(fb.body.themes, [{ value: 'Speed', label: 'Speed', count: 2 }]);
   const kpi = (await fo('revenue-and-traction')).body;
-  assert.deepEqual(kpi.kpis.filter((k: any) => k.disabled).map((k: any) => k.value), ['new_mrr', 'expansion_mrr', 'runway']);
+  assert.deepEqual(kpi.kpis.filter((k: any) => k.disabled).map((k: any) => k.value), ['new_mrr', 'expansion_mrr', 'runway', 'arr', 'burn_multiple']);
   assert.ok(kpi.kpis.some((k: any) => k.value === 'custom-kpa1'));
   assert.ok(kpi.kpis.some((k: any) => k.value === 'custom'));
   assert.equal(kpi.kpis.some((k: any) => k.value === 'custom-kpb1'), false);
@@ -608,4 +639,117 @@ test('9: its apply writes the row PATCH /feedback/:uid writes, and refuses anoth
   // A theme that no longer exists, or a row themed meanwhile, is refused on accept.
   await assert.rejects(kind.apply(ctx(viaFill), { uid: 'fba3', theme: 'Gone', body: '' }, 'x'), /no longer exists/);
   await assert.rejects(kind.apply(ctx(viaFill), { uid: 'fba3', theme: 'Speed', body: '' }, 'x'), /already has a theme/);
+});
+
+// ---------------------------------------------------------------------------
+// #6110 (D6110): the role's host moves an applicant between stages from the record.
+// ---------------------------------------------------------------------------
+
+// Mutation checked: the posting check dropped (Omar on posting 33 moves from posting 31, fails); the host gate on the
+// action dropped (the co-founder sees and runs it, fails); the pipeline back to four stages (fails).
+test('#6110 the host moves an applicant through every stage, and the counts follow on re-read', async () => {
+  const db = fixture();
+  const read = async (who = FOUNDER) => rec(db, 'team-expansion', 31, { who });
+  const r = await read();
+  const rows = sectionOf(r, 'shortlist').rows;
+  assert.deepEqual(rows.map((x: any) => [x.a, x.c]), [['Sol Ito', 'Offer'], ['Lena Park', 'Interview']]);
+  assert.deepEqual(rows.map((x: any) => x.action), [{ key: 'move-applicant', body: { application_id: 43 } }, { key: 'move-applicant', body: { application_id: 41 } }]);
+  const move = r.body.actions.find((a: any) => a.key === 'move-applicant');
+  assert.equal(move.kind, 'form');
+  assert.deepEqual(move.form.fields.map((f: any) => f.key), ['application_id', 'stage']);
+  assert.deepEqual(move.form.fields[0].options, [{ value: '41', label: 'Lena Park · Interview' }, { value: '43', label: 'Sol Ito · Offer' }],
+    'only this role’s applicants, so the action also runs from the record’s own action row');
+  assert.deepEqual(move.form.fields[1].options.map((o: any) => o.value), ['applied', 'screen', 'interview', 'offer', 'hired', 'declined']);
+  assert.deepEqual(sectionOf(r, 'pipeline').rows.map((x: any) => x.a), ['Applied', 'Screen', 'Interview', 'Offer', 'Hired', 'Declined']);
+
+  for (const stage of ['screen', 'interview', 'offer', 'hired']) {
+    const done = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage });
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+  }
+  const after = await read();
+  const pipeline = Object.fromEntries(sectionOf(after, 'pipeline').rows.map((x: any) => [x.a, x.c]));
+  assert.deepEqual(pipeline, { Applied: '0', Screen: '0', Interview: '0', Offer: '1', Hired: '1', Declined: '0' });
+  const hired = sectionOf(after, 'shortlist').rows.find((x: any) => x.a === 'Lena Park');
+  assert.deepEqual([hired.c, hired.b, hired.href], ['Hired', 'Add to the team roster', '/build/team'], 'Hired links the roster and writes nothing there');
+
+  // The applicant must be on THIS role: Omar applied to posting 33.
+  const wrong = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 42, stage: 'hired' });
+  assert.equal(wrong.status, 404);
+  assert.equal((db.prepare('SELECT stage FROM job_applications WHERE id = 42').get() as any).stage, 'applied');
+  assert.equal((await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'nowhere' })).status, 400);
+});
+
+test('#6110 a non-host sees counts only and no Move to…; the move is logged without the applicant’s name', async () => {
+  const db = fixture();
+  // On the role the co-founder hosts (33, Omar), they are the host and are offered Move to….
+  assert.equal(actionKeys(await rec(db, 'team-expansion', 33, { who: COFOUNDER })).includes('move-applicant'), true);
+  const co = await rec(db, 'team-expansion', 31, { who: COFOUNDER });
+  assert.equal(actionKeys(co).includes('move-applicant'), false);
+  assert.deepEqual(sectionOf(co, 'shortlist').rows, [{ a: '1 at interview · 1 at offer', b: 'names are for the role\'s host' }]);
+  const refused = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'hired' }, { who: COFOUNDER });
+  assert.ok([403, 404].includes(refused.status), `refused with ${refused.status}`);
+  assert.equal((db.prepare('SELECT stage FROM job_applications WHERE id = 41').get() as any).stage, 'interview');
+  assert.equal((await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'declined' })).status, 200);
+  const log = db.prepare("SELECT details FROM activity_logs WHERE action = 'grow_application_stage' ORDER BY id DESC LIMIT 1").get() as any;
+  assert.ok(log, 'the move is logged');
+  assert.ok(!String(log.details).includes('Lena'), 'the log does not name the applicant');
+  const counts = sectionOf(await rec(db, 'team-expansion', 31, { who: COFOUNDER }), 'shortlist').rows[0].a;
+  assert.equal(counts, '1 at offer · 1 declined');
+});
+
+// ---------------------------------------------------------------------------
+// D6097 (#6097): Add to roadmap, from a feedback record to Build's Add item
+// ---------------------------------------------------------------------------
+
+test('D6097: Add to roadmap links Build\'s Add item with the theme, for writers of a themed row only', async () => {
+  const db = fixture();
+  db.exec("UPDATE product_feedback SET theme = 'Speed & scale' WHERE uid IN ('fba1', 'fba2')");
+  const fb = await rec(db, 'product-improvement', 'fba1');
+  const add = fb.body.actions.find((a: any) => a.key === 'add-to-roadmap');
+  assert.deepEqual({ key: add.key, label: add.label, kind: add.kind, href: add.href }, { key: 'add-to-roadmap', label: 'Add to roadmap', kind: 'link', href: `/build/product-roadmap/new?project_id=${A}&feedback_theme=Speed%20%26%20scale` });
+  assert.equal(new URL(add.href, 'https://axal.test').searchParams.get('feedback_theme'), 'Speed & scale');
+  assert.equal(sectionOf(fb, 'theme').rows[0].action, 'add-to-roadmap', 'the Theme row draws it');
+  // An Open or Planned theme row is the record's next (`nextFor`); it now carries the step it names.
+  assert.deepEqual(fb.body.next, { text: 'Speed & scale · 2 items', action: 'add-to-roadmap' });
+  // The action answers with the address, as every link action does.
+  const run = await act(db, 'product-improvement', 'fba1', 'add-to-roadmap');
+  assert.equal(run.status, 200);
+  assert.deepEqual(run.body, { ok: true, open: { url: add.href } });
+  // A co-founder and an admin write, so they see it.
+  for (const who of [COFOUNDER, ADMIN]) assert.ok(actionKeys(await rec(db, 'product-improvement', 'fba1', { who })).includes('add-to-roadmap'), `user ${who}`);
+  // A reader (an advisor) sees neither the action nor the row's control, and cannot run it.
+  const adv = await rec(db, 'product-improvement', 'fba1', { who: ADVISOR });
+  assert.equal(actionKeys(adv).includes('add-to-roadmap'), false);
+  assert.equal(sectionOf(adv, 'theme').rows[0].action, undefined);
+  assert.deepEqual(adv.body.next, { text: 'Speed & scale · 2 items', action: null });
+  assert.equal((await act(db, 'product-improvement', 'fba1', 'add-to-roadmap', {}, { who: ADVISOR })).status, 403);
+  // A row with no theme has none, and the Theme section says why.
+  const none = await rec(db, 'product-improvement', 'fba3');
+  assert.equal(actionKeys(none).includes('add-to-roadmap'), false);
+  assert.equal(sectionOf(none, 'theme').empty, 'No theme yet. Add to roadmap needs a theme.');
+  assert.equal(sectionOf(none, 'theme').action, 'change-theme');
+  assert.equal((await act(db, 'product-improvement', 'fba3', 'add-to-roadmap')).status, 404);
+});
+
+test('D6097: saving the Add item it opens shows the item on the theme\'s open, unlinked rows', async () => {
+  const db = fixture();
+  db.exec(`INSERT INTO product_feedback (uid, project_id, body, source, theme, status, roadmap_item_ref, roadmap_item_label, created_by) VALUES
+    ('fba4', ${A}, 'Bulk export', 'customer', 'Speed', 'open', '77', 'Earlier item', ${FOUNDER}),
+    ('fba5', ${A}, 'Cheaper plan', 'customer', 'Pricing', 'open', NULL, NULL, ${FOUNDER})`);
+  const add = (await rec(db, 'product-improvement', 'fba2')).body.actions.find((a: any) => a.key === 'add-to-roadmap');
+  const target = new URL(add.href, 'https://axal.test');
+  assert.equal(target.pathname, '/build/product-roadmap/new');
+  // What Build's Add item sends with that theme chosen (`buildItem.toBody`).
+  const saved = await call(db, 'POST', `/api/cycles/build/roadmap?project=${target.searchParams.get('project_id')}`,
+    { body: { title: 'Faster exports', column: 'next', feedback_theme: target.searchParams.get('feedback_theme') } });
+  assert.equal(saved.status, 201, JSON.stringify(saved.body));
+  const item = (uid: string) => db.prepare('SELECT roadmap_item_ref AS ref, roadmap_item_label AS label FROM product_feedback WHERE uid = ?').get(uid) as any;
+  // fba2 is open and unlinked: linked. fba1 is shipped, fba4 already has an item, fba5 is another theme: unchanged.
+  assert.deepEqual({ ...item('fba2') }, { ref: String(saved.body.id), label: 'Faster exports' });
+  assert.deepEqual({ ...item('fba1') }, { ref: null, label: null });
+  assert.deepEqual({ ...item('fba4') }, { ref: '77', label: 'Earlier item' });
+  assert.deepEqual({ ...item('fba5') }, { ref: null, label: null });
+  const fact = (r: any) => r.body.facts.find((f: any) => f.label === 'Roadmap item');
+  assert.equal(fact(await rec(db, 'product-improvement', 'fba2')).value, 'Faster exports');
+  assert.equal(fact(await rec(db, 'product-improvement', 'fba1')).value, null);
 });

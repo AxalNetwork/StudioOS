@@ -39,6 +39,7 @@ import { admitInScope, markRun, moveTask } from '../src/agents/engine.ts';
 import { decideRail, listRail } from '../src/services/railProposals.ts';
 import { after, type LoopDeps } from '../src/agents/loop.ts';
 import { READERS } from '../src/services/agents/reads.ts';
+import { SETTLED_WITHOUT_USAGE_SQL } from '../src/services/platformCapacitySignals.ts';
 import { seedStatements, SYNTHETIC_DOMAIN, SYNTHETIC_MODULE, SYNTHETIC_OPTION } from '../../scripts/lib/agentSyntheticFixtures.mjs';
 
 export const MIX_KEYS = ['A', 'B', 'C', 'D', 'E'] as const;
@@ -379,6 +380,9 @@ export function invariants(w: World, results: OpResult[]) {
     // A settled hold without its token is already impossible (the reservations table's CHECK); a second spend is not.
     double_settlement: n("SELECT COUNT(*) AS n FROM (SELECT reservation_uid FROM ai_credit_ledger WHERE kind = 'spend' AND reservation_uid IS NOT NULL GROUP BY reservation_uid HAVING COUNT(*) > 1)"),
     missing_charge: n("SELECT COUNT(*) AS n FROM ai_rail_proposals p JOIN ai_usage_logs u ON u.id = p.usage_log_id WHERE u.charged_microusd IS NULL"),
+    // D4569 §1 fact 2: a settled non-zero AI charge with no usage row naming its hold. The capacity
+    // signal's own statement (#4559), over every hold the run took: no window, no settlement grace.
+    settled_without_usage: Number((w.db.prepare(SETTLED_WITHOUT_USAGE_SQL).get('0000-01-01 00:00:00', '9999-12-31 23:59:59', '9999-12-31 23:59:59') as any)?.n),
     orphaned_holds: n("SELECT COUNT(*) AS n FROM ai_budget_reservations WHERE status = 'pending'"),
     // The schema's CHECKs keep both at 0 or more, so a write that would go below zero is refused: counted from the meter.
     negative_balance: n('SELECT COUNT(*) AS n FROM ai_topup_accounts WHERE balance_microusd < 0') + n('SELECT COUNT(*) AS n FROM ai_included_spend WHERE spend_microusd < 0')

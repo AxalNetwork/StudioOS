@@ -212,7 +212,7 @@ export function dueRuleWords(d) {
 export const FIGURE_LABELS = Object.freeze({
   mrr: 'MRR', growth: 'Growth', customers: 'Customers', paying_accounts: 'Customers', arr: 'ARR', revenue: 'Revenue',
   net_retention: 'Net revenue retention', nrr_pct: 'Net revenue retention', gross_margin: 'Gross margin', net_burn: 'Net burn', burn: 'Net burn',
-  cash_balance: 'Cash', cash: 'Cash', headcount: 'Headcount', open_roles: 'Open roles', partners_signed: 'Signed partners',
+  burn_multiple: 'Burn multiple', cash_balance: 'Cash', cash: 'Cash', headcount: 'Headcount', open_roles: 'Open roles', partners_signed: 'Signed partners',
   markets_entering: 'Markets entering', shipped_items: 'Items shipped', runway: 'Runway', runway_months: 'Runway', checklist_done: 'Durability checklist done',
 });
 /** Migration 168's required KPI rules (D1059 §2), which a duty naming no figure requires. A test holds it to the Worker's. */

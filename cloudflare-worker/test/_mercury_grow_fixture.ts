@@ -59,8 +59,10 @@ export async function growDb() {
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(file('443'));
+  db.exec(file('202611161116')); // D6789: durability_checklist's Not applicable mark.
   db.exec(file('462'));
   db.exec(file('507'));
+  db.exec(file('580'));
   db.exec(file('445'));
   db.exec(file('477'));
   db.exec(file('490'));
@@ -69,6 +71,7 @@ export async function growDb() {
   await ensureIntegrationsSchema(env);
   await ensureProjectMetricsSchema(env);
   db.exec(file('521'));
+  db.exec(file('202611151923_6315'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');
   u.run(COFOUNDER, 'founder', 11, 'Cole', 'cole@co.example');

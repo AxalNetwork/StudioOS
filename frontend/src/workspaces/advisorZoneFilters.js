@@ -69,6 +69,11 @@ const NO_INTERACTION_DATE =
 // list while implying a remainder that is not yours exists somewhere.
 const EVERY_ROW_IS_YOURS =
   'every relationship here is already one of yours; the list loads only rows you are a party to, so this would select all of them';
+// D6285: `/research/markets` mounts the market directory, which draws no chip
+// row; only the deleted, never-mounted `MarketZone` body read these keys.
+const MARKETS_DIRECTORY_HAS_NO_CHIPS =
+  'the market directory mounted at this route draws no chip row, so nothing narrows its readings by age; only the unmounted MarketZone body did';
+const MARKETS_DIRECTORY_HOVER = 'The market directory has no age filter yet.';
 
 // `/network/introductions`. FOUR LIVE CHIPS, the partner panel's four (D392).
 // `Gated` was relabelled `Awaiting you` and `Made` was prose, both on the
@@ -165,11 +170,17 @@ export const ADVISOR_ZONE_FILTERS = {
   // one timestamp per run and binds it to every row it touches, so an age
   // predicate over it would put the whole feed in one bucket — a filter that
   // always returns everything or nothing, which is D51 in a new costume.
+  //
+  // D6285 — NOT LIVE, AND THEY HAD NOT BEEN SINCE D593. The four keys were
+  // implemented only by `MarketZone`, a body nothing mounted once the market
+  // directory replaced it; `ResearchWorkspace` hands `MarketDirectoryZone` no
+  // `zoneFilters`, so no chip was drawn. The test that called them live read
+  // the unmounted file. Prose until the directory narrows its readings by age.
   'research/markets': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Current', key: 'current' },
-    { canvas: 'Ageing', key: 'ageing' },
-    { canvas: 'Stale', key: 'stale' },
+    { canvas: 'All', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Current', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Ageing', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Stale', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
   ],
   // The same level mismatch founder's row has, from the other end: this canvas
   // wants a company's standing with you, and the page lists analyses that name
@@ -199,9 +210,9 @@ export const ADVISOR_ZONE_FILTERS = {
   // path updates the state and leaves the number alone. Filtering on the number
   // would silently drop exactly the documents this chip is for.
   // ── Expertise (D392) ─────────────────────────────────────────────────────
-  // Four of the five artboards, sixteen chips, twelve live. Every live chip
-  // reads a column the zone already loads; the four that are not name what is
-  // missing. `expertise/visibility` has no row: its page is the gap card
+  // Four of the five artboards, sixteen chips, fifteen live since D4826 part 2.
+  // Every live chip reads a column the zone already loads; the one that is not
+  // names what is missing. `expertise/visibility` has no row: its page is the gap card
   // ("Nothing counts profile views"), and four controls above a sentence
   // explaining why there is nothing to count would be a filter over nothing.
   //
@@ -235,19 +246,20 @@ export const ADVISOR_ZONE_FILTERS = {
   ],
   // D4826 (#4826): `articles.status` is SEVEN values, not two — draft,
   // submitted, in_review, changes_requested, rejected, approved, published —
-  // and an approved piece with a `publish_at` is Scheduled (D484). The note
-  // here used to say "draft or published", which was wrong when D4681 gave the
-  // shelf a pill per state. These two chips are the canvas's own axis (AX4's
-  // `filters: fil(['All','Published','Drafts','Essays'], 0)`), so Drafts stays
-  // the coarse "not public yet" narrowing the canvas asks for; the row's pill,
-  // its audience line and the export all name the real state
-  // (`expertiseModel.articleStage`). Nothing classifies a piece as an essay
-  // rather than a note or a post — there is no kind column on articles.
+  // and an approved piece with a `publish_at` is Scheduled (D484).
+  //
+  // D4826 part 2: THE ROW IS EX-11's (`design/incoming/Expertise v2
+  // Page.dc.html`, `const thinking = () =>`), which replaced AX4's
+  // `All · Published · Drafts · Essays`. "Drafts" collected six states that
+  // are not drafts, and "Essays" named a kind no article records; EX-11 asks
+  // whose move it is instead. Each chip is a set of the shelf's own states
+  // (`expertiseModel.THINKING_VIEWS`), and `{n}` is the Worker's count over
+  // the whole shelf, dropped when it is absent rather than guessed.
   'expertise/thinking': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Published', key: 'published' },
-    { canvas: 'Drafts', key: 'draft' },
-    { canvas: 'Essays', unbuilt: 'an article records no kind, so nothing tells an essay from any other piece', hover: 'Articles carry no kind, so an essay cannot be told apart.' },
+    { canvas: 'All', key: 'all', label: 'All {n}' },
+    { canvas: 'Needs you', key: 'needs_you', label: 'Needs you {n}' },
+    { canvas: 'With editors', key: 'with_editors', label: 'With editors {n}' },
+    { canvas: 'Published', key: 'published', label: 'Published {n}' },
   ],
 
   // ── Practice ─────────────────────────────────────────────────────────────
@@ -272,65 +284,57 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'All time', key: 'all' },
   ],
 
-  // ALL FIVE RUN, AND ONE OF THEM REORDERS RATHER THAN NARROWS. Migration 238
-  // stores `lane` with five values, so Signed, Renewal due and Ended each read
-  // a column directly — `Signed` covers both signed lanes, because
-  // `renewal_due` is a state inside Signed on the canvas's own board and a chip
-  // that excluded it would hide the contracts most in need of attention.
-  //
-  // `By client` IS A SORT, and saying so matters. Every other chip in these four
-  // tables narrows a set; this one orders the board, the renewal history and the
-  // scope cards by client name and drops nothing. A chip called "By client" that
-  // filtered rows out would be lying about what it did — and this file's own
-  // docblock is about exactly that failure mode, a chip whose empty result reads
-  // as an answer.
+  // #4831 (D4831): THE PRACTICE V2 CANVAS'S ROW (PX-03), which replaced PR2's
+  // `All · Signed · Renewal due · Ended · By client`. Each chip narrows the
+  // board and carries its count over the whole record (`chipRows` and
+  // `chipCounts` in `engagementBoard.js`); `Active` is signed or renewal due,
+  // the same set the Active tile counts. `By client` left with the PR2 row: it
+  // was a sort, and the v2 board draws none.
   'practice/engagements': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Signed', key: 'signed' },
-    { canvas: 'Renewal due', key: 'renewal_due' },
-    { canvas: 'Ended', key: 'ended' },
-    { canvas: 'By client', key: 'by_client' },
+    { canvas: 'Active', key: 'active', label: 'Active {n}' },
+    { canvas: 'Renewal due', key: 'renewal_due', label: 'Renewal due {n}' },
+    { canvas: 'Proposed', key: 'proposed', label: 'Proposed {n}' },
+    { canvas: 'Ended', key: 'ended', label: 'Ended {n}' },
+    { canvas: 'All', key: 'all', label: 'All {n}' },
   ],
 
   // #4833 (D4833): THE PRACTICE V2 CANVAS'S ROW (`Practice v2 Page.dc.html`,
   // PX-06), which replaced PR3's `All · Unopened · Opened · Draft · By client`.
   // Each chip narrows on the LATEST version's own stamps (`cardStatus` in
-  // `deliveryTrail.js`): Draft is a latest version with no `sent_at`, Sent has
+  // `deliveryTrail.js`): Draft is a latest version with no `sent_at` and no
+  // Ready mark, Sent has
   // no receipt yet, Opened has `opened_at`, Accepted has `signed_off_at`. The
   // receipts are written by the client's routes, never an advisor's (D72,
   // D4684).
   //
-  // THE CANVAS ALSO DRAWS `Ready`, AND IT IS LEFT OUT, not drawn disabled: the
-  // canvas itself marks it "isn't recorded today" and D4874 lists it as backend
-  // required. `profile_zone_filters.test.mjs` drops it from the canvas row by
-  // name, citing D4874, the way founder's `Cited in deck` is dropped (D549).
+  // `Ready` IS LIVE since #4833 part 2 (D4833-p2): #5316 (D5316) stores the
+  // mark (`ready_at`, `ready_by_user_id` on the version) and the list carries
+  // `ready_version` per work product and `totals.ready`. The chip narrows on
+  // `ready_version` and its count is `totals.ready`, so the two are one set.
   //
   // `By client` left the chip row with the PR3 artboard. Grouping by client is
   // still `?view=by_client` (D571's `/practice/deliverables`), a toggle beside
   // the cards rather than a chip, because it reorders rather than narrows.
   'practice/delivery': [
     { canvas: 'Draft', key: 'draft', label: 'Draft {n}' },
+    { canvas: 'Ready', key: 'ready', label: 'Ready {n}' },
     { canvas: 'Sent', key: 'sent', label: 'Sent {n}' },
     { canvas: 'Opened', key: 'opened', label: 'Opened {n}' },
     { canvas: 'Accepted', key: 'accepted', label: 'Accepted {n}' },
     { canvas: 'All', key: 'all', label: 'All {n}' },
   ],
 
-  // TWO OF THESE CHANGE THE WINDOW AND TWO NARROW IT, which is unusual enough
-  // to say out loud. `Two weeks` and `Month` ask the server for a different
-  // span — the grid is what came back, and filtering a fortnight down to "a
-  // month" would show FEWER slots under the wider name. `Past sessions` and
-  // `Unpaid held` narrow what is already loaded.
-  //
-  // `Unpaid held` earns its place rather than duplicating a tile: the tile
-  // counts them, this shows them. Otherwise every held slot is one amber card
-  // somewhere in a fortnight, and the artboard's own gate note is about
-  // exactly the case where a reader needs to find them all at once.
+  // #4832 (D4832): THE PRACTICE V2 CANVAS'S ROW (PX-05), which replaced PR4's
+  // `Two weeks · Month · Past sessions · Unpaid held`. The row is over the
+  // SESSIONS now, not the slot grid: each chip narrows the bookings read and
+  // carries its count over every booking (`sessionCounts` in `sessionFeed.js`).
+  // Past is time that has passed (or a session closed as held or no-show),
+  // never a wider forward window. The grid's four windows moved beside the
+  // grid itself, under Your hours, as the page's own control.
   'practice/sessions': [
-    { canvas: 'Two weeks', key: 'two_weeks' },
-    { canvas: 'Month', key: 'month' },
-    { canvas: 'Past sessions', key: 'past' },
-    { canvas: 'Unpaid held', key: 'unpaid_held' },
+    { canvas: 'Upcoming', key: 'upcoming', label: 'Upcoming {n}' },
+    { canvas: 'Past', key: 'past', label: 'Past {n}' },
+    { canvas: 'Cancelled', key: 'cancelled', label: 'Cancelled {n}' },
   ],
 
   // #4834 (D4834): THE PRACTICE V2 CANVAS'S PERIOD SELECTOR (`Practice v2

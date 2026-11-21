@@ -8,6 +8,12 @@ import { refusalError, request } from '../api.js';
  * writes nothing.
  */
 export const fundAdminApi = {
+  /** D6397: deterministic recorded answers, never a model or financial write. */
+  answer: (prompt, fundId = null) => {
+    const query = new URLSearchParams({ prompt });
+    if (fundId != null) query.set('fund', String(fundId));
+    return request(`/fund-admin/ask?${query}`);
+  },
   access: () => request('/fund-admin/access'),
   distributionPreview: (fundId, proceedsCents) =>
     request(`/funds/${fundId}/distributions/preview`, { method: 'POST', body: JSON.stringify({ proceeds_cents: proceedsCents }) }),

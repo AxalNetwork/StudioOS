@@ -7,7 +7,8 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 | File | What it is |
 |---|---|
 | `CapTableTool.jsx` | The tool's tab bar (`CapTableTabBar`) and Overview's tab bar with the Modelled line (`CapTableHomeNav`), drawn under the module page's header, and its tab pages (`CapTableTabPage`), Scenarios drawn here and the others from their own files. |
-| `capTableModel.js` | Pure: the addresses, the tabs, the words, and the shared derivations (money, dates, the 409A, the scenario cards). |
+| `capTableModel.js` | Pure: the addresses, the tabs, the words, and the shared derivations (money, dates, the 409A, the scenario cards); D5081 part 3's header action (`homeAction`) and first-use set-up actions (`setupActions`). |
+| `capTableHomeRead.js` | D5081 part 3 (#5081): the record read (`useCapTableHome`) CycleRoute holds for the module header's Record an issuance and Overview, so both read once. |
 | `InstrumentsTab.jsx` | D1023 (#2860): Instruments (CT3, CT3b): the record's SAFEs and notes with the toolbar, Convert at a price or a scenario, the modelled columns and chart, the over-100% notice; and the instrument drawer (CT4) at `/raise/cap-table/instrument/<uid>`. |
 | `instrumentsModel.js` | D1023, pure: each instrument from the record, the toolbar, Convert at's body, the engine's conversion as columns, bars and steps, MFN and the exit before conversion. |
 | `OptionPoolTab.jsx` | D1023: Option pool (CT5, CT5c): the tiles, the burn-down with the model's target, the 409A with Record a valuation and Record an event, Top up the pool, and the grants (Carta's read only). |
@@ -36,9 +37,9 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 ## Where the tool lives
 
 The tool is the Cap table module, not a page beside it. Overview is
-CycleRoute's module page (`../../cycles/CycleModulePage.jsx`), which already
-draws the Planned round card, the Holders records, From Mercury and Eadwyn's
-two bands. The tab words (`/instruments`, `/option-pool`, `/scenarios`) arrive
+CycleRoute's module page (`../../cycles/CycleModulePage.jsx`). Since D5081
+part 3 the tool owns it (`owned`): the page draws Overview's blocks and Eadwyn's
+two bands, and no generic Planned round card or Holders records. The tab words (`/instruments`, `/option-pool`, `/scenarios`) arrive
 on the module's record route, `/raise/:slug/:id`, and CycleRoute draws
 `CapTableTabPage` for them instead of a record (`isCapTableTab`). A holder's
 address, `h-<n>`, opens the holder drawer over Overview (D1022); `e-<n>` and

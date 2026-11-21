@@ -145,16 +145,17 @@ export function applyPageMeta(tags) {
  * All arguments are optional overrides; anything omitted comes from the route's
  * registry entry. `analytics: false` skips the pageview beacon (a page that never sent one keeps not sending one).
  */
-export function usePageMeta({ title, description, path, image, type, analytics = true } = {}) {
+export function usePageMeta({ title, description, path, image, type, robots, analytics = true } = {}) {
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
     const pathname =
       path || (typeof window !== 'undefined' ? window.location.pathname : '/');
-    const restore = applyPageMeta(ogTagsFor(pathname, { title, description, image, type }));
+    // D6966: a page with no registry entry of its own (a missing programme) may pass its robots directive.
+    const restore = applyPageMeta(ogTagsFor(pathname, { title, description, image, type, robots }));
     // Fire pageview beacon once per mount.
     if (analytics) fireAnalytics(path || window.location.pathname);
     return restore;
-  }, [title, description, path, image, type, analytics]);
+  }, [title, description, path, image, type, robots, analytics]);
 }
 
 export function injectJsonLd(id, payload) {

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Onboarding v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Onboarding · /onboarding/investor · #6128</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Investor onboarding v2 — what you invest in, in under five minutes, then the next steps that matter</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Investor onboarding (/onboarding/investor, no new route): a new investor, or an exploring member who chose the investor licence, says what they invest in so Deals shows thesis fit from the first visit, then sees the two or three next steps that matter: identity check, Trust, and the fund application if they asked for it. It keeps the live onboarding frame (OnboardingCanvas inside the app shell, one white card per step, Step n of 7 with a progress bar, Back / Skip for now / Continue) and replaces board A4 of the old Auth and Onboarding canvas. Seven steps and a review; steps 1 to 4 are required. The "What matters most" sliders are dropped (nothing reads them, D378). Finish saves the profile, then marks onboarding complete, then shows one of three endings. Accreditation is "You told us", never verified. Eadwyn proposes a thesis on the one shared rail; nothing is saved without Accept or Edit, then Continue. States follow the Platform States vocabulary (D5129). Violet dashed ◇ tags mark backend work on #6128; amber ⚑ tags mark owner questions Q1 to Q5, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Mira Halden], [Halden Family Office] and every figure ($50k–$250k per deal, $250,000 target commitment) are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Onboarding v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['IO-0', 'Flow map', 'Seven steps and a review, each with what it stores and who reads it (thesis fit, round calls, event picks, Investor Signals, Trust entity, onboarding checklist). Required steps 1 to 4; optional Entity details, Exclusions, Thesis and Fund interest. The order at Finish, the three endings, and the removed value sliders (Q1).', [W('IOB00')]],
+      ['IO-1', 'Step 1 · Who you are', 'Four type cards and the firm name. Family office opens the optional Entity details block (saved to the entity record Trust Center shows) with Skip for now. Eadwyn has nothing on this step.', [F('IOB01', false, 1080)]],
+      ['IO-2', 'Steps 2 to 5', 'A · Accreditation and country, labelled You told us, not verified. B · Check per deal and stages. C · Sectors from the NFX list with search and a pick count, and regions (◇ the server keeps 11 sectors today). D · Exclusions, optional: thesis sectors and stages show as unavailable with “In your thesis”.', [F('IOB02A', 'A · Accreditation and country', 900), F('IOB02B', 'B · Check size and stages', 900), F('IOB02C', 'C · Sectors and regions', 1020), F('IOB02D', 'D · Exclusions', 1020)]],
+      ['IO-3', 'Step 6 · Thesis, with Eadwyn', 'Optional. The thesis box with its count and the Investor Signals switch (k≥5). Eadwyn, on the shared rail, drafts only from steps 1 to 5: Accept, Edit or Discard. Nothing is saved until Continue (◇ draft endpoint; ⚑ Q4 free for every investor).', [F('IOB03', false, 900)]],
+      ['IO-4', 'Step 7 · Fund interest', 'Optional. Four choices, target commitment for this fund cycle in USD, and a note. “This is not an application.”', [F('IOB04', false, 900)]],
+      ['IO-5', 'Review before finish', 'Every answer by step with Edit and return. Skipped, None picked and Not recorded are written in words; each group says what it powers. Read back from the saved profile (◇). Finish is the one primary action.', [F('IOB05', false, 1860)]],
+      ['IO-6', 'Endings', 'A · Fund interest Yes: the application, prefilled from type, target and note, never accreditation (⚑ Q3, Q5). B · Every other investor: identity check, Trust, deal flow; “Open” adds Read about the fund. C · Exploring member: membership under review, Trust only; no /kyc, /deals or application link. Variants: target outside $50k–$2M, and an existing application.', [F('IOB06A', 'A · Fund application next', 900), F('IOB06B', 'B · Next steps', 900), F('IOB06C', 'C · Exploring member', 900), C('IOB06V', 'Ending A variants', 1400, 260)]],
+      ['IO-7', 'First visit and resume', 'A · Nothing recorded yet: the seven steps, about 4 minutes, Start. B · Welcome back at step 4 of 7 with a collapsed summary. Start over is secondary and asks to confirm.', [F('IOB07A', 'A · First visit', 1000), F('IOB07B', 'B · Resume', 900), C('IOB07C', 'Start over · confirm', 600, 340)]],
+      ['IO-8', 'States', 'Loading; saved answers unreadable (never a silent restart; Start fresh is a choice); save failed on a step (Continue off until saved); finish failed (not marked complete, never lands on Deals); refused for another licence; already completed; Not recorded in words; application status unreadable (never “not applied”).', [C('IOB08', false, 1400, 560)]],
+      ['IO-9', 'Phone 390', 'A · Sectors: search on top, wrapping chips, sticky Back and Continue, 44px targets (Skip for now appears on the optional steps only). B · Thesis with Eadwyn’s draft as a bottom sheet. C · Review as stacked cards with Edit. D · Save failed, picks kept, sticky Try again.', [P('IOB09A', 'A · Sectors'), P('IOB09B', 'B · Thesis · Eadwyn sheet'), P('IOB09C', 'C · Review'), P('IOB09D', 'D · Save failed')]],
+      ['IO-10', 'Dark', 'IO-3 and IO-5 on the dark tokens. States keep their words and shapes.', [F('IOB10A', 'A · Thesis · dark', 900), F('IOB10B', 'B · Review · dark', 1860)]],
+      ['IO-11', 'Handoff', 'Each stored field to its table.column and readers, the reused components, the ◇ work on #6128 (sectors, Eadwyn draft, finish order, application prefill), the owner questions, routes and accessibility.', [W('IOB11')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

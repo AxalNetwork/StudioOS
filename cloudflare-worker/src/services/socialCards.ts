@@ -28,6 +28,7 @@
  */
 import type { Env } from '../types';
 import { DIRECTORY_LISTED_WHERE, authorSlugs, publicPersonCard, publicStartupCard } from '../routes/public';
+import { eventSocialCard } from '../../../frontend/src/lib/eventSocialCard.js';
 import {
   SITE_NAME, SITE_URL, ogEntryFor, ogImageKeys, ogImageUrl, ogTagsFor,
 } from '../../../frontend/src/lib/ogRegistry.js';
@@ -207,19 +208,6 @@ export function sectionTags(kind: CardKind): CardTags {
   };
 }
 
-function when(startsAt: unknown, timezone: unknown): string {
-  const d = new Date(String(startsAt || '').replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(startsAt || '')) ? '' : 'Z'));
-  if (Number.isNaN(d.getTime())) return '';
-  const tz = String(timezone || 'UTC');
-  try {
-    return new Intl.DateTimeFormat('en-GB', { timeZone: tz, dateStyle: 'medium', timeStyle: 'short' }).format(d) + ` ${tz}`;
-  } catch {
-    return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }).format(d) + ' UTC';
-  }
-}
-
-const LOCATION_KIND: Record<string, string> = { virtual: 'Online', online: 'Online', in_person: 'In person', hybrid: 'Hybrid' };
-
 /** The record's card, or null when it is missing or not public. Bound reads only. */
 export async function resolveCard(env: Env, m: SocialMatch): Promise<CardTags | null> {
   const db = env.DB;
@@ -232,9 +220,7 @@ export async function resolveCard(env: Env, m: SocialMatch): Promise<CardTags | 
             AND ((visibility = 'public' AND admin_published = 1) OR visibility = 'unlisted')`,
       ).bind(m.key).first<any>();
       if (!r?.title) return null;
-      const kind = LOCATION_KIND[String(r.location_kind || '').toLowerCase()] || '';
-      const head = [when(r.starts_at, r.timezone), kind].filter(Boolean).join(' · ');
-      return recordTags(m, { title: r.title, description: [head, oneLine(r.summary)].filter(Boolean).join('. '), image: https(r.cover_url), type: 'website' });
+      return { ...eventSocialCard(r), url: `${SITE_URL}${m.path}` };
     }
     case 'article': {
       // articles.ts GET /:slug's gate, without its view count.

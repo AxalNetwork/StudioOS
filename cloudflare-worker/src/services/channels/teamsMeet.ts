@@ -43,11 +43,17 @@ export function teamsCreateAvailable(env: Env): boolean {
   return microsoftOAuthAvailable(env);
 }
 
-/** Whether the member has connected Microsoft (the calendar connection). Unknown table or row: no. */
-export async function microsoftConnected(env: Env, userId: number): Promise<boolean> {
+/**
+ * Whether the member has connected Microsoft (the calendar connection). No row,
+ * or no table yet: no. D5810: any other failed read is null, unknown, so a
+ * caller never draws "not connected" from a read that did not answer.
+ */
+export async function microsoftConnected(env: Env, userId: number): Promise<boolean | null> {
   try {
     return !!(await env.DB.prepare('SELECT 1 AS ok FROM microsoft_oauth_tokens WHERE user_id = ?').bind(userId).first());
-  } catch { return false; }
+  } catch (e) {
+    return /no such table/i.test(e instanceof Error ? e.message : String(e)) ? false : null;
+  }
 }
 
 async function accessToken(env: Env, userId: number): Promise<string> {

@@ -16,6 +16,7 @@ import type { Env } from '../types';
 import { SEARCH_INDEX_MODEL, searchIndexAccepts } from './ai/shapes';
 import { run as aiRun } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
+import { dealHiddenFrom } from './dealPreparation';
 
 // D761 PR 2: the one model whose vectors `axal-search` holds. A rail's
 // embedding (bge-m3, EmbeddingGemma, …) is never written here: the index
@@ -394,6 +395,8 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
     });
   }
   if (type === 'deal') {
+    // D5454: a deal that is not listed (an unreleased, unknown, withdrawn or archived preparation) leaves the index.
+    if (await dealHiddenFrom(env, id, 'discovery')) { await deleteEntity(env, type, id); return false; }
     const row = await env.DB.prepare(
       `SELECT d.id, d.status, d.notes, d.amount, p.name AS project_name, p.sector
          FROM deals d LEFT JOIN projects p ON p.id = d.project_id
@@ -544,6 +547,14 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
   return false;
 }
 
+/** D6869: whether this Library document is a data-room reference that has lapsed. A store that cannot be read is not lapsed. */
+async function roomRefLost(env: Env, id: number): Promise<boolean> {
+  try {
+    const r = await env.DB.prepare('SELECT 1 AS lost FROM research_room_refs WHERE document_id = ? AND lost_at IS NOT NULL').bind(id).first<{ lost: number }>();
+    return Boolean(r);
+  } catch { return false; }
+}
+
 /**
  * A research document becomes MANY vectors, which is what makes it different
  * from every branch above.
@@ -583,6 +594,8 @@ async function indexResearchDocument(env: Env, id: number): Promise<boolean> {
     await deleteEntity(env, 'research_doc', id);
     return false;
   }
+  // D6869: a data-room reference whose grant no longer reaches its file is never indexed again.
+  if (await roomRefLost(env, id)) return false;
 
   const fail = async (state: string, note: string) => {
     await env.DB.prepare(
@@ -652,6 +665,12 @@ async function indexResearchDocument(env: Env, id: number): Promise<boolean> {
       ownerUserId: row.owner_user_id,
     });
     if (ok) written += 1; else failedChunks.push(ch.idx);
+  }
+  // D6869: a room reference that lapsed while this run read its file is not left answerable.
+  if (await roomRefLost(env, id)) {
+    await deleteChunkedEntity(env, 'research_doc', id, span);
+    await env.DB.prepare(`UPDATE research_documents SET chunk_count = NULL, updated_at = datetime('now') WHERE id = ?`).bind(id).run();
+    return false;
   }
 
   if (!written) {

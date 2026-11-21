@@ -148,8 +148,9 @@ export function referencedTables(sql) {
     .replace(/\b(?:BEFORE|AFTER|INSTEAD\s+OF)\s+UPDATE\s+OF\s+[^;]+?\s+ON\s+/gi, ' ');
   // The boundary belongs to WITH, not the comma after a closing parenthesis.
   // SQLite also permits an explicit column list before AS (VALUES CTEs), and
-  // a [NOT] MATERIALIZED hint after it (D5318).
-  const ctes = new Set([...clean.matchAll(/(?:\bWITH|,)\s+(\w+)(?:\s*\([^)]*\))?\s+AS\s*(?:(?:NOT\s+)?MATERIALIZED\s*)?\(/gi)]
+  // a [NOT] MATERIALIZED hint after it (D5318). `WITH RECURSIVE` names its CTE
+  // after the keyword (D5581).
+  const ctes = new Set([...clean.matchAll(/(?:\bWITH(?:\s+RECURSIVE)?|,)\s+(\w+)(?:\s*\([^)]*\))?\s+AS\s*(?:(?:NOT\s+)?MATERIALIZED\s*)?\(/gi)]
     .map((m) => norm(m[1])));
   return [...clean.matchAll(REF)].map((m) => norm(m[1])).filter((t) => !ctes.has(t));
 }

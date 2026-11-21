@@ -110,6 +110,8 @@ test('the firm reads every consent state in its own words, and only an open ask 
   const view = await mountContracts(React.createElement(ProofZone), '/offers/proof');
   try {
     await view.flush();
+    // D4842: the consent record sits behind the card's View proof (OF-03).
+    await press(view, 'View proof'); await view.flush();
     const text = view.text();
     for (const s of ['requested', 'declined', 'superseded', 'expired']) assert.ok(text.includes(CONSENT_ROW_PILL[s].label), `${s} is not worded`);
     assert.match(text, /about an earlier version of the claim/);

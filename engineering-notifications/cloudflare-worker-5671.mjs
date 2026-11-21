@@ -1,7 +1,7 @@
 // D5671: disabled independent Cloudflare receiver/outbox actor, reusing the D5665 authenticated Slack transport.
 import {DurableObject} from 'cloudflare:workers';
 import {CloudflareDelivery} from './cloudflare-outbox-5671.mjs';
-import {receiveCloudflare,authentic} from './cloudflare-receiver-5671.mjs';
+import {BOT_RECEIPT_PATH,receiveBotReceipt,receiveCloudflare,authentic} from './cloudflare-receiver-5671.mjs';
 import {cloudflareTransport} from './cloudflare-transport-5671.mjs';
 export class CloudflareDeliveryActor extends DurableObject {
   constructor(ctx,env){super(ctx,env);ctx.blockConcurrencyWhile(async()=>{ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS cf_runtime (id INTEGER PRIMARY KEY, scheduled_at INTEGER NOT NULL)');this.delivery=new CloudflareDelivery({sql:ctx.storage.sql,transaction:fn=>ctx.storage.transactionSync(fn),registry:JSON.parse(env.ROUTING_REGISTRY),deliver:cloudflareTransport({token:env.SLACK_BOT_TOKEN})})})}
@@ -17,6 +17,13 @@ export default {
     if(request.method==='GET'&&new URL(request.url).pathname==='/health')return Response.json({service:'cloudflare-notifications',enabled:env.CF_DELIVERY_ENABLED==='true'});
     if(request.method==='GET'&&new URL(request.url).pathname==='/status'){if(!await authentic(request.headers.get('cf-observer-auth'),env.CF_OBSERVER_SECRET))return new Response('unauthorized',{status:401});if(env.CF_DELIVERY_ENABLED!=='true')return Response.json({enabled:false});return Response.json(await actor(env).status())}
     if(env.CF_DELIVERY_ENABLED!=='true')return new Response('disabled',{status:503});
+    if (new URL(request.url).pathname === BOT_RECEIPT_PATH) {
+      return receiveBotReceipt(request, {
+        prodSecret: env.CF_BOT_DELIVERY_SECRET,
+        previewSecret: env.CF_BOT_PREVIEW_DELIVERY_SECRET,
+        accept: event => actor(env).accept(event),
+      });
+    }
     try{return await receiveCloudflare(request,{secret:env.CF_WEBHOOK_SECRET,config:JSON.parse(env.PROVIDER_REGISTRY),accept:e=>actor(env).accept(e)})}catch{return new Response('configuration unavailable',{status:503})}
   },
   async scheduled(event,env,ctx){if(env.CF_DELIVERY_ENABLED==='true')ctx.waitUntil(actor(env).recordScheduled())},

@@ -27,6 +27,13 @@
  * "produced four explained passes last quarter". Nothing in this product logs a
  * pass, so the sentence says what the rules are for and stops where the record
  * stops.
+ *
+ * D4842 (#4842) REDRAWS THE ZONE TO OFFERS V2 (OF-04, OF04b): a rank note, one
+ * rules table and a create sheet that asks business questions. The strip, the
+ * profile instrument and the anti-persona card are gone, so the tests that held
+ * them now hold the table and the sheet. The store's guarantees are unchanged
+ * and still pinned: a strength is a profile's alone, nothing is auto-declined,
+ * the chips select over profiles, and a pass note is composed, never invented.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -47,6 +54,9 @@ const filtersRaw = raw('frontend/src/workspaces/partnerZoneFilters.js');
 const actions = read('frontend/src/workspaces/partnerZoneActions.js');
 const actionsRaw = raw('frontend/src/workspaces/partnerZoneActions.js');
 const spec = raw('cloudflare-worker/src/routes/research.ts');
+const V2 = raw('design/incoming/Offers v2 Page.dc.html');
+const V2_FIT = V2.slice(V2.indexOf('const fit = () =>'), V2.indexOf('/* ---------- visibility'));
+assert.ok(V2_FIT.includes("head('Audience fit'"), 'the Offers v2 fit board could not be found');
 
 const PO5 = CANVAS.slice(CANVAS.indexOf("{ id:'po5'"), CANVAS.indexOf('];', CANVAS.indexOf("{ id:'po5'")));
 assert.ok(PO5.includes("route:'/offers/audience-fit'"), 'the po5 artboard could not be found in the canvas');
@@ -76,36 +86,6 @@ function entriesIn(src, after) {
   assert.ok(out.length > 0, `no entry could be read out of ${after}`);
   return out;
 }
-
-/** The cells of the instrument row, split at TOP-LEVEL COMMAS (two are ternaries). */
-function cellsOf(src) {
-  const at = src.indexOf('cells: [');
-  assert.ok(at >= 0, 'the instrument row has no cells');
-  const out = [];
-  let depth = 0;
-  let start = at + 'cells: ['.length;
-  let quote = '';
-  for (let i = start; i < src.length; i += 1) {
-    const ch = src[i];
-    if (quote) {
-      if (ch === '\\') { i += 1; continue; }
-      if (ch === quote) quote = '';
-      continue;
-    }
-    if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }
-    if (ch === '{' || ch === '[' || ch === '(') { depth += 1; continue; }
-    if (ch === '}' || ch === ')') { depth -= 1; continue; }
-    if (ch === ']') {
-      if (depth === 0) { out.push(src.slice(start, i)); break; }
-      depth -= 1;
-      continue;
-    }
-    if (ch === ',' && depth === 0) { out.push(src.slice(start, i)); start = i + 1; }
-  }
-  return out.map((s) => s.trim()).filter(Boolean);
-}
-
-const INST = between(zone, '<Instrument', '/>');
 
 test('the strength is a stored judgement, and it is not a score', () => {
   const sql = migration.replace(/^\s*--.*$/gm, '');
@@ -178,114 +158,62 @@ test('all four chips run, and the two retired reasons are quoted', () => {
     'the strength chips are no longer selecting the firm’s profiles by their signal');
   // The export and the editable list take the rows the chip selects (#4696).
   assert.match(zone, /rows: visible, cells:/, 'the export is no longer the rows the chip selects');
-  assert.match(zone, /\{visible\.map\(\(rule\) => \(/, 'the editable list is no longer the rows the chip selects');
+  assert.match(zone, /rows=\{visible\.map\(\(r\) => \(/, 'the rules table is no longer the rows the chip selects');
   assert.match(read('frontend/src/lib/fitRuleView.js'), /const profiles = all\.filter\(\(r\) => r\.kind === 'best_fit'\);/,
     'the profiles and the exclusions are no longer split');
 });
 
-test('the strip is the artboard’s four tiles, and an absent floor says so', () => {
-  const adds = PO5.slice(PO5.indexOf('adds:['), PO5.indexOf('linkage:'));
-  const labels = [...adds.matchAll(/label:'([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(labels, ['Best fit', 'Budget floor', 'Sectors declined', 'Capabilities absent']);
-  const strip = between(zone, '<div className="grid grid-cols-2 gap-3 md:grid-cols-4">', 'Reads through to Pipeline');
-  assert.deepEqual([...strip.matchAll(/label="([^"]+)"/g)].map((m) => m[1]), labels,
-    'the strip is no longer the artboard’s four tiles in its order');
-  // A firm with no floor and a firm whose floor is zero are different, and an
-  // em dash reads as the second.
-  assert.match(strip, /nr=\{floor\?\.floor_cents == null\}/,
-    'a firm with no floor is being shown an em dash rather than an absence');
-  assert.ok(strip.includes('note="stated, not stretched"'),
-    'the Capabilities tile lost the artboard’s note');
-  // Counted over the record, never over the chip-narrowed list.
-  const counts = between(zone, 'const bestFit = profiles.filter(', 'const ANTI = [');
-  assert.ok(!/\bvisible\b/.test(counts), 'a tile count is reading the chip-narrowed list');
+test('OF-04 is the rank note and one rules table, in the canvas’s columns', () => {
+  const head = [...V2_FIT.matchAll(/<th scope="col">([^<]*)<\/th>/g)].map((m) => m[1]).filter(Boolean);
+  assert.deepEqual(head, ['Rule', 'Who', 'Strength', 'What we say', 'Point them to']);
+  const table = between(zone, 'function FitRulesTable(', 'export default function PartnerAudienceFitZone');
+  assert.ok(table.includes(`{${JSON.stringify(head).replace(/"/g, "'").replace(/,/g, ', ')}.map((h) =>`),
+    'the table head is no longer the canvas’s five columns in its order');
+  assert.ok(!/<Instrument\b|FitTile|const ANTI = \[|Who we are not for/.test(zone), 'the po5 strip, instrument or anti card came back');
+  // THE NOTE IS THE CANVAS'S SENTENCE, and it says rank and explain, never reject.
+  const canvasNote = V2_FIT.match(/<div>(Pipeline uses these rules[^<]+)<\/div>/)[1];
+  assert.ok(zone.includes(canvasNote), 'the rank note left the canvas');
+  assert.match(canvasNote, /never reject/, 'the canvas note no longer says a rule never rejects');
+  assert.match(zone, /<summary[^>]*>How rules affect ranking<\/summary>/, 'the longer account is printed rather than opened from the note');
+  assert.ok(zone.includes('d?.enforcement_note'), 'the longer account no longer reads the Worker’s own enforcement note');
 });
 
-test('the linkage note says what the rules are for, and stops where the record stops', () => {
-  assert.match(PO5, /produced ' \+ nWord\(4\) \+ ' explained passes last quarter/,
-    'the canvas’s pass count has moved');
-  const note = between(zone, 'Reads through to Pipeline:', '<Instrument');
-  assert.ok(note.includes('quotes these sentences to pass a lead with a named reason'),
-    'the linkage note no longer says what Pipeline does with these rules');
-  assert.ok(note.includes('under floor,\n            referred to Ostara Studio') || note.includes('referred to Ostara Studio'),
-    'the linkage note no longer shows the shape of a pass with a reason');
-  assert.ok(!/explained passes last quarter/.test(note),
-    'the linkage note is printing a pass count nothing in this product logs');
-  assert.ok(note.includes('no pass is\n            logged anywhere') || note.includes('no pass is'),
-    'the linkage note no longer says why the count is absent');
+test('each row says Great fit or Not a fit, and a rule with nothing to say carries Add reply', async () => {
+  const { fitRuleRow } = await import('../src/pages/partner/offers/fitRules.js');
+  const money = (c) => `$${(c / 100).toLocaleString('en-US')}`;
+  const profile = fitRuleRow({ kind: 'best_fit', value: 'B2B SaaS', signal: 'best_fit', statement: 'Let’s talk.', is_active: 1 }, money);
+  assert.deepEqual([profile.rule, profile.kind, profile.who, profile.strength, profile.needsReply], ['Great fit', null, 'B2B SaaS', 'Best fit', false]);
+  const floor = fitRuleRow({ kind: 'budget_floor', floor_cents: 2500000, statement: null, referred_to: 'Granite', is_active: 1 }, money);
+  assert.deepEqual([floor.rule, floor.kind, floor.who, floor.strength, floor.pointTo, floor.needsReply],
+    ['Not a fit', 'Below a minimum engagement', 'Projects below $25,000', null, 'Granite', true]);
+  // An exclusion never carries a strength, and an unnamed or unpriced rule reads absent rather than blank.
+  assert.equal(fitRuleRow({ kind: 'sector_declined', value: 'Crypto', signal: 'best_fit' }, money).strength, null);
+  assert.equal(fitRuleRow({ kind: 'budget_floor', floor_cents: null }, money).who, null);
+  assert.equal(fitRuleRow({ kind: 'best_fit', value: 'x', is_active: 0 }, money).inUse, false);
+  const table = between(zone, 'function FitRulesTable(', 'export default function PartnerAudienceFitZone');
+  assert.match(table, /v\.who \|\| <Unrecorded>Not named<\/Unrecorded>/, 'an unnamed rule is drawn blank');
+  assert.match(table, /No reply yet/, 'a rule with nothing to say is drawn blank');
+  assert.match(table, /\{v\.needsReply \? 'Add reply' : 'Edit'\}/, 'a rule with nothing to say is not the primary action');
+  assert.match(table, /md:hidden/, 'the phone has no stacked layout, so the table is wider than the screen');
 });
 
-test('the instrument draws the artboard’s three columns, in its order and at its widths', () => {
-  const head = JSON.parse(`[${PO5.match(/head:\[([^\]]+)\]/)[1].replace(/'/g, '"')}]`);
-  assert.deepEqual(head, ['Profile', 'Signal', 'Why']);
-  assert.ok(INST.includes(`head={${JSON.stringify(head).replace(/"/g, "'").replace(/,/g, ', ')}}`),
-    'the instrument head is no longer the artboard’s three columns in its order');
-  assert.ok(INST.includes(`cols="${PO5.match(/cols:'([^']+)'/)[1]}"`),
-    'the instrument no longer uses the artboard’s column widths');
-  assert.ok(INST.includes(`meta="${PO5.match(/instMeta:'([^']+)'/)[1]}"`),
-    'the instrument’s meta line has left the artboard');
-  assert.ok(INST.includes(`title="${PO5.match(/instTitle:'([^']+)'/)[1]}"`),
-    'the instrument’s title has left the artboard');
-  // IT DRAWS THE PROFILES, not every rule: the exclusions are the card below,
-  // which is how the artboard splits them.
-  // …and the profiles the CHIP selects (#4696), not always the whole library.
-  assert.match(INST, /rows=\{profileRows\.map\(/, 'the instrument is no longer drawing only the selected profiles');
-});
-
-test('an ungraded profile and an unwritten sentence both read absent', () => {
-  const cells = cellsOf(INST);
-  assert.equal(cells.length, 3, 'the row no longer draws one cell per artboard column');
-  assert.match(cells[0], /text: r\.value \|\| undefined/, 'the first column is no longer the profile');
-  assert.match(cells[0], /\.\.\.\(r\.is_active \? \{\} : \{ gate: 'Not in use' \}\)/,
-    'a retired profile no longer says it is not in use');
-  assert.match(cells[1], /r\.signal\s*\n?\s*\? \{ pill: SIGNAL_LABEL\[r\.signal\], pillTone: SIGNAL_TONE\[r\.signal\] \}\s*\n?\s*: \{ nr: true \}/,
-    'an ungraded profile is being given a strength it was never assigned');
-  // A profile with no sentence is the zone's own failure case, so it is named
-  // rather than left blank.
-  assert.match(cells[2], /r\.statement \? \{ text: r\.statement \} : \{ nr: true \}/,
-    'a profile with no sentence no longer says so');
-});
-
-test('the instNote keeps “not yet” apart from a decline, and refuses the meta line’s claim', () => {
-  const note = INST.slice(INST.indexOf('note={'));
-  assert.match(PO5, /Pre-product founders read as weak intent rather than declined/,
-    'the canvas’s instNote has moved');
-  assert.ok(note.includes('A profile graded weak intent is not a decline'),
-    'the instNote no longer keeps a weak profile out of the exclusions');
-  assert.ok(note.includes('ends up saying \\u201cno\\u201d to the same founder twice')
-    || note.includes('to the same founder twice'),
-    'the instNote no longer carries the artboard’s argument for “not yet”');
-  // THE META LINE IS THE ARTBOARD'S AND IT DESCRIBES AN INTENTION. "Signals
-  // feed lead scoring" — nothing scores a lead here, and the note says so
-  // rather than letting the line stand as a claim about this product.
-  // AND IT IS TRUE NOW (#4696): Pipeline reads best fit and weak intent as
-  // receipts on a lead's score, so the note says which signals it reads.
-  assert.ok(note.includes('Pipeline reads the signals in this table when it scores a lead'),
-    'the instNote no longer says which signals scoring reads');
-  assert.ok(note.includes('qualified is a note you keep that scoring does not read'),
-    'the instNote no longer says qualified is not read');
-});
-
-test('the anti-persona card is first-class, and an unwritten kind says so', () => {
-  assert.match(CANVAS, /Who we are not for<\/span>/, 'the canvas’s anti card has moved');
-  assert.match(CANVAS, /First-class — a pass needs a reason, not a shrug/, 'the canvas’s anti note has moved');
-  const card = between(zone, 'Who we are not for', '<ZoneDraft');
-  assert.ok(card.includes('First-class — a pass needs a reason, not a shrug'),
-    'the anti card lost the artboard’s own note');
-  // THREE ACROSS, one per exclusion KIND, which is how the artboard groups it.
-  assert.match(zone, /const ANTI = \[/, 'the anti-persona grouping is gone');
-  const anti = between(zone, 'const ANTI = [', 'const handlers = {');
-  assert.deepEqual([...anti.matchAll(/k: '([^']+)'/g)].map((m) => m[1]),
-    ['Budget floor', 'Sectors declined', 'Capability absent'],
-    'the anti card is no longer the artboard’s three exclusion kinds in its order');
-  assert.match(card, /md:grid-cols-3/, 'the anti card is no longer three across');
-  // A kind the firm has written nothing under is DRAWN and says so — an
-  // exclusion nobody stated is the reason a pass lands silent, so dropping the
-  // card would hide the very gap this zone is about.
-  assert.match(card, /\{an\.v \|\| <NotRecorded>Nothing stated<\/NotRecorded>\}/,
-    'an exclusion nobody has written is being dropped rather than stated');
-  assert.ok(card.includes('No sentence written, so a pass citing this would have nothing to say.'),
-    'an exclusion with no sentence no longer says what that costs');
+test('the sheet asks business questions first, and the rule types are disclosed', async () => {
+  const { fitSheetCopy, FIT_KINDS } = await import('../src/pages/partner/offers/fitRules.js');
+  assert.match(V2, /<h2 id="fth">Who is a great fit\?<\/h2>/, 'the canvas’s sheet title has moved');
+  assert.equal(fitSheetCopy('best_fit').title, 'Who is a great fit?');
+  assert.equal(fitSheetCopy('sector_declined').says, 'When someone isn’t a fit, what should we say?');
+  assert.equal(fitSheetCopy('budget_floor').who, 'Minimum engagement');
+  assert.deepEqual(FIT_KINDS.map(([k]) => k), ['best_fit', 'budget_floor', 'sector_declined', 'capability_absent']);
+  const sheet = between(zone, 'export function FitRuleSheet(', 'function FitRulesTable(');
+  assert.match(sheet, /useState\(initial\?\.kind \|\| 'best_fit'\)/, 'a new rule no longer starts as a great-fit profile');
+  assert.match(sheet, /aria-expanded=\{advanced\}[\s\S]*Advanced rule types/, 'the rule types are no longer behind a disclosure');
+  assert.match(sheet, /\{advanced && \(\s*<Field label="Rule type"/, 'the rule type is shown before it is asked for');
+  assert.ok(sheet.indexOf('copy.who') < sheet.indexOf('copy.says') && sheet.indexOf('copy.says') < sheet.indexOf('Can we point them somewhere else?'),
+    'the questions are no longer in the canvas’s order: who, what to say, where to point them');
+  // “Not yet” stays apart from a decline, and the sheet says which strengths scoring reads.
+  assert.ok(zoneRaw.includes('Weak intent means “not yet”, which is not a decline.'), 'weak intent reads as a decline');
+  assert.ok(zoneRaw.includes('Pipeline reads Best fit and Weak intent when it scores a lead; Qualified is a note you keep.'),
+    'the sheet no longer says which strengths scoring reads');
 });
 
 test('Pass reasons runs, and its reason was wrong about its own store', () => {
@@ -348,10 +276,10 @@ test('the AI band is the artboard’s, and its draft refuses to soften a pass', 
     'the gather is no longer scoped to this firm’s own live exclusions');
 });
 
-test('StatCard went with the four tiles it drew, and the docblock says which', () => {
+test('StatCard went with the tiles it drew, and the docblock says why', () => {
   const at = zone.indexOf("} from '../kit';");
   assert.ok(at > 0, 'the kit import is gone');
-  assert.ok(!/\bStatCard\b/.test(zone.slice(0, at)), 'StatCard is still imported and nothing uses it');
-  assert.ok(zoneRaw.includes('`StatCard` went with the four tiles it drew'),
+  assert.ok(!/\bStatCard\b|\bSection\b/.test(zone.slice(0, at)), 'StatCard or Section is still imported and nothing uses it');
+  assert.ok(zoneRaw.includes('D4842: no tile strip, no profile table and no "who we are not for" card.'),
     'the removal is no longer recorded, so the next reader re-adds it');
 });

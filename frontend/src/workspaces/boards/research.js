@@ -46,7 +46,7 @@ export default function researchBoard(role, api) {
         'One client per brief, assembled from what they opened to you and what you already hold.'),
       // D391 — this card stopped describing the signals feed when the zone was
       // rebuilt. D593 — the zone it opens is `MarketDirectoryZone` now, not
-      // `MarketZone`: the taxonomy's markets by tracked sector, and the readings
+      // `MarketZone` (deleted unmounted, D6285): the taxonomy's markets by tracked sector, and the readings
       // card where a comparable range is recorded (migration 223), each shown
       // with its run date and age. The blurb names both.
       card('markets', 'Markets', 'Comparable ranges you entered for your own work, each with its run date and age, beside the taxonomy’s markets by tracked sector.'),

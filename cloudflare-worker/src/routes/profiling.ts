@@ -161,7 +161,7 @@ PROFILE CATEGORIES (one of):
 - "Operating Partner" (MSA + equity-for-services)
 - "Legal Counsel" (Preferred legal partner, fixed-fee spin-out packages)
 - "Technical Partner" (White-label MVP / product integration)
-- "Liquidity Provider" (Secondary purchases, M&An advisory)
+- "Liquidity Provider" (Secondary purchases, M&A advisory)
 - "Advisor" (Office-hours coach for founders — no equity, capped sessions per month)
 
 WORKFLOW:

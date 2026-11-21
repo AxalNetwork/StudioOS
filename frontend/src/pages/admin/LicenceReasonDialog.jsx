@@ -20,11 +20,14 @@ const TONE = {
 };
 
 export function LicenceReasonDialog({ ask, onDone }) {
-  const [text, setText] = useState('');
+  // D4819 part 11: `initial` carries a reason already written elsewhere (a delegate request's), still editable.
+  const [text, setText] = useState(() => String(ask.initial ?? ''));
   const fieldId = useId();
   const ruleId = useId();
   const field = useRef(null);
-  const check = checkReason(text, { min: ask.min, max: REASON_MAX });
+  // D5897: `max` is the Worker's own ceiling when it is below REASON_MAX (Axal VC packages take 500).
+  const max = ask.max ?? REASON_MAX;
+  const check = checkReason(text, { min: ask.min, max });
   const rule = ask.min === 0
     ? 'Optional.'
     : ask.min === 1 ? 'Required.' : `Required, at least ${ask.min} characters.`;
@@ -57,7 +60,7 @@ export function LicenceReasonDialog({ ask, onDone }) {
       <textarea
         id={fieldId} ref={field} value={text} onChange={(e) => setText(e.target.value)}
         aria-describedby={ruleId} aria-invalid={text.length > 0 && !check.ok ? 'true' : undefined}
-        maxLength={REASON_MAX} rows={4}
+        maxLength={max} rows={4}
         className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
       />
       <p id={ruleId} className="mt-1 text-xs text-gray-600 dark:text-gray-400" aria-live="polite">

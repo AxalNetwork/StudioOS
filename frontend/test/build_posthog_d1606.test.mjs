@@ -5,12 +5,12 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/build_posthog_d1606.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import { OperatingPosthog, PrototypePosthog, flagChip, syncLine } from '../src/pages/cycles/BuildPosthog.jsx';
+import { OperatingPosthog, PrototypePosthog, RoadmapPosthog, flagChip, syncLine } from '../src/pages/cycles/BuildPosthog.jsx';
+import { keysOf, modulesWith, partElement } from './_buildParts.mjs'; // #5507: PostHog's key only; the full list is build_parts_contract_5507's
 
 const h = React.createElement;
 const LINK = { linked: true, active: true, mine: true, uid: 'int-fixture' };
@@ -100,9 +100,13 @@ test('Operating systems: one Tools line with the project, region, last sync and 
   try { assert.equal(ui.by('posthog-tools'), undefined, 'a venture with no PostHog draws nothing here'); } finally { await ui.close(); }
 });
 
-test('wiring: Build\'s three modules draw PostHog last, in their own lines', () => {
-  const parts = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
-  assert.match(parts, /\['posthog', \(_data, ctx\) => <PrototypePosthog projectId=\{ctx\.projectId\} \/>\]/);
-  assert.match(parts, /\['posthog', \(_data, ctx\) => <RoadmapPosthog projectId=\{ctx\.projectId\} \/>\]/);
-  assert.match(parts, /\['posthog', \(_data, ctx\) => <OperatingPosthog projectId=\{ctx\.projectId\} \/>\]/);
+test('wiring: PostHog sits on Build\'s three modules, after their other connectors, in its own lines (D1606)', () => {
+  // #5507: each module's complete list is build_parts_contract_5507's (D5507). Here, only PostHog's key.
+  assert.deepEqual(modulesWith('posthog'), ['operating-systems', 'product-roadmap', 'prototype-mvp']);
+  for (const [slug, Part] of [['prototype-mvp', PrototypePosthog], ['product-roadmap', RoadmapPosthog], ['operating-systems', OperatingPosthog]]) {
+    assert.equal(keysOf(slug).at(-1), 'posthog', `${slug}: D1606 puts PostHog after its other connectors`);
+    const el = partElement(slug, 'posthog', {}, { projectId: 7, reload: () => {} });
+    assert.equal(el.type, Part, slug);
+    assert.deepEqual(el.props, { projectId: 7 }, slug);
+  }
 });

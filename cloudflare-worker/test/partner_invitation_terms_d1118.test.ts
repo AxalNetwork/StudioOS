@@ -2,7 +2,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
@@ -15,7 +15,6 @@ import { readInvitation } from '../src/services/partnerInvitationReads.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const read = (p: string) => readFileSync(p, 'utf8');
 const scratch = mkdtempSync(join(tmpdir(), 'partner-d1118-'));
 const seed = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seed, { enableForeignKeyConstraints: false });

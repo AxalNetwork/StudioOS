@@ -1,3 +1,7 @@
+import { acceptedOfferPeople, offerBetweenTies } from '../services/networkIntroOffers';
+import { selectJwt } from '../auth';
+import { refuse } from '../util/refusal';
+import { notify } from '../services/notify';
 import { holdsLicence } from '../services/accountLicences';
 import { propositionDestination } from '../services/introDestination';
 /**
@@ -8,7 +12,8 @@ import { propositionDestination } from '../services/introDestination';
  *                                       402 with code:'quota_intros_exhausted'
  *                                       when at cap.
  *   GET  /api/introductions/quota     — caller's current usage / cap.
- *   GET  /api/introductions/          — caller's intro history.
+ *   GET  /api/introductions/          — caller's intro history, each ask's
+ *                                       target named only where visible (D6260).
  *
  * The 3-way Founder/Investor/Axal NDA flow is owned by /api/trust/intro/*
  * (T3 Trust Center). This route only enforces the *paid quota* on top.
@@ -44,6 +49,7 @@ import {
   acceptIntroProposition,
 } from '../services/introductions';
 import { hashEmail } from '../util/hashEmail';
+import { askTargets, type AskRow } from '../services/introAskTargets';
 
 const introductions = new Hono<{ Bindings: Env }>();
 
@@ -51,6 +57,34 @@ introductions.use('*', async (c, next) => {
   await requireAuth(c);
   await ensureInvestorPaywallSchema(c.env);
   await next();
+});
+
+// D6637: member offers reuse the two existing proposition response rows.
+introductions.get('/offer-candidates',async c=>{
+ const user=await requireAuth(c);
+ if((await selectJwt(c))?.payload.impersonated_by)return refuse(c,403,{code:'support_session_refused',message:'A support session cannot choose a member’s introduction.'});
+ const after=Number(c.req.query('after')||0);
+ if(!Number.isSafeInteger(after)||after<0)return refuse(c,400,{code:'invalid_cursor',message:'Choose a valid accepted-tie page.'});
+ try{return c.json(await acceptedOfferPeople(c.env,user.id,{after}));}catch{return refuse(c,503,{code:'ties_unreadable',message:'Your accepted ties could not be read. Try again.'});}
+});
+introductions.post('/offers',async c=>{
+ const user=await requireAuth(c);
+ if((await selectJwt(c))?.payload.impersonated_by)return refuse(c,403,{code:'support_session_refused',message:'A support session cannot offer a member’s introduction.'});
+ const data=await c.req.json().catch(()=>null);
+ const first=data?.first_user_id,second=data?.second_user_id;
+ if(!Number.isSafeInteger(first)||!Number.isSafeInteger(second)||first<1||second<1||first===second||first===user.id||second===user.id)
+   return refuse(c,400,{code:'invalid_pair',message:'Choose two different people from your accepted ties.'});
+ try{
+  await ensureIntroNetworkSchema(c.env);
+  const candidates=await acceptedOfferPeople(c.env,user.id,{targets:[first,second]});
+  if(!candidates.people.some(p=>p.id===first)||!candidates.people.some(p=>p.id===second))
+    return refuse(c,403,{code:'accepted_ties_required',message:'Both people must be your accepted ties.'});
+  let made:Awaited<ReturnType<typeof offerBetweenTies>>=null;
+  try{made=await offerBetweenTies(c.env,user.id,first,second);}catch(e){if(!/UNIQUE|constraint/i.test(String(e)))throw e;}
+  if(!made)return refuse(c,409,{code:'offer_unavailable',message:'These people already have an open proposition, or their tie status changed. Reload and try again.'});
+  for(const [target,uid] of [[first,made.first_uid],[second,made.second_uid]] as const)try{await notify(c.env,{userId:target,type:'intro_proposition',category:'network',title:'An introduction was offered to you',body:'Review the proposition and choose whether to accept or decline.',link:propositionDestination(uid),payload:{proposition_uid:uid},channels:['in_app']});}catch{/* The recorded proposition remains in their list. */}
+  return c.json({offered:true},201);
+ }catch{return refuse(c,503,{code:'offer_failed',message:'The introduction could not be offered. Try again.'});}
 });
 
 introductions.get('/quota', async (c) => {
@@ -79,8 +113,16 @@ introductions.get('/', async (c) => {
      FROM investor_introductions
      WHERE investor_user_id = ?
      ORDER BY created_at DESC LIMIT 200`
-  ).bind(user.id).all();
-  return c.json({ introductions: rows.results || [] });
+  ).bind(user.id).all<AskRow & Record<string, unknown>>();
+  const asks = rows.results || [];
+  // D6260: each ask names its target only when the caller may already see
+  // that founder or project (D702's rules, services/introAskTargets.ts);
+  // otherwise `target.available` is false and no name is sent.
+  const named = await askTargets(c.env, user, asks);
+  return c.json({
+    introductions: asks.map((a, i) => ({ ...a, target: named.unreadable ? null : named.targets[i] })),
+    ...(named.unreadable ? { targets_unreadable: true } : {}),
+  });
 });
 
 introductions.post('/request', async (c) => {
@@ -97,6 +139,32 @@ introductions.post('/request', async (c) => {
 
   if (!founderUserId && !founderId && !projectId) {
     return c.json({ error: 'target_required', message: 'Provide founder_user_id, founder_id, or project_id' }, 400);
+  }
+
+  // D6260 (#6260), the owner's choice B: refuse a target the investor could
+  // not see, before any slot is spent. D702 counts an investor's own ask row
+  // as reach, so an ask to a hidden founder or venture would otherwise make
+  // it findable. The check is the Asked view's own join (D702's two rules),
+  // run on each id the ask would store, since each id is reach on its own. A
+  // hidden target and an unknown id get the same answer, so the refusal does
+  // not say whether one exists.
+  const named: AskRow[] = [
+    ...(founderUserId ? [{ founder_user_id: founderUserId }] : []),
+    ...(projectId ? [{ project_id: projectId }] : []),
+    ...(founderId ? [{ founder_id: founderId }] : []),
+  ];
+  const reach = await askTargets(c.env, user, named);
+  if (reach.unreadable) {
+    return c.json({
+      error: 'target_unreadable',
+      message: 'Whether you can reach this founder or venture could not be read. No ask was sent and none was used. Try again.',
+    }, 503);
+  }
+  if (!reach.targets.every((t) => t.available)) {
+    return c.json({
+      error: 'target_not_available',
+      message: 'This founder or venture is not available to you. No ask was sent and none was used.',
+    }, 404);
   }
 
   // Quota check — paywall gate. Free investors get 3/quarter, Plus 10 (D1334), Pro 25, Inst 100.
@@ -182,9 +250,15 @@ const PROPOSITION_SELECT = `
          p.expires_at, p.responded_at, p.created_at,
          (SELECT m.status FROM intro_propositions m
            WHERE m.user_id = p.target_user_id AND m.target_user_id = p.user_id
+             AND ((p.source<>'offered' AND m.source<>'offered') OR (p.source='offered' AND m.source='offered'
+               AND CASE WHEN json_valid(m.breakdown_json) THEN json_extract(m.breakdown_json,'$.offer_uid') END
+                 = CASE WHEN json_valid(p.breakdown_json) THEN json_extract(p.breakdown_json,'$.offer_uid') END))
            ORDER BY m.id DESC LIMIT 1) AS counterpart_status,
          (SELECT m.responded_at FROM intro_propositions m
            WHERE m.user_id = p.target_user_id AND m.target_user_id = p.user_id
+             AND ((p.source<>'offered' AND m.source<>'offered') OR (p.source='offered' AND m.source='offered'
+               AND CASE WHEN json_valid(m.breakdown_json) THEN json_extract(m.breakdown_json,'$.offer_uid') END
+                 = CASE WHEN json_valid(p.breakdown_json) THEN json_extract(p.breakdown_json,'$.offer_uid') END))
            ORDER BY m.id DESC LIMIT 1) AS counterpart_responded_at,
          t.kind AS terms_kind, t.fee_bps AS terms_fee_bps,
          t.made_at AS terms_made_at, t.outcome AS terms_outcome,
@@ -205,7 +279,7 @@ function propositionDto(r: any) {
   return {
     uid: r.uid,
     status: r.status,
-    score: Math.round(Number(r.score) || 0),
+    score: r.source==='offered'?null:Math.round(Number(r.score) || 0),
     source: r.source,
     expires_at: r.expires_at,
     responded_at: r.responded_at,
@@ -227,7 +301,7 @@ function propositionDto(r: any) {
         outcome: r.terms_outcome ?? null,
       }
       : null,
-    breakdown,
+    breakdown: r.source==='offered'?null:breakdown,
     target: {
       uid: r.target_uid,
       name: r.target_name,
@@ -293,9 +367,15 @@ introductions.get('/propositions', async (c) => {
               p.expires_at, p.responded_at, p.created_at,
               (SELECT m.status FROM intro_propositions m
                 WHERE m.user_id = p.target_user_id AND m.target_user_id = p.user_id
+             AND ((p.source<>'offered' AND m.source<>'offered') OR (p.source='offered' AND m.source='offered'
+               AND CASE WHEN json_valid(m.breakdown_json) THEN json_extract(m.breakdown_json,'$.offer_uid') END
+                 = CASE WHEN json_valid(p.breakdown_json) THEN json_extract(p.breakdown_json,'$.offer_uid') END))
                 ORDER BY m.id DESC LIMIT 1) AS counterpart_status,
               (SELECT m.responded_at FROM intro_propositions m
                 WHERE m.user_id = p.target_user_id AND m.target_user_id = p.user_id
+             AND ((p.source<>'offered' AND m.source<>'offered') OR (p.source='offered' AND m.source='offered'
+               AND CASE WHEN json_valid(m.breakdown_json) THEN json_extract(m.breakdown_json,'$.offer_uid') END
+                 = CASE WHEN json_valid(p.breakdown_json) THEN json_extract(p.breakdown_json,'$.offer_uid') END))
                 ORDER BY m.id DESC LIMIT 1) AS counterpart_responded_at,
               t.kind AS terms_kind, t.fee_bps AS terms_fee_bps,
               t.made_at AS terms_made_at, t.outcome AS terms_outcome,
@@ -373,8 +453,14 @@ introductions.post('/propositions/:uid/accept', async (c) => {
     const { notify } = await import('../services/notify');
     const accepterName = (user as any).display_name || user.name || 'A member';
     const mirror = await c.env.DB.prepare(
-      `SELECT uid, status FROM intro_propositions WHERE user_id = ? AND target_user_id = ?`,
-    ).bind(prop.target_user_id, user.id).first<{ uid: string; status: string }>();
+      `SELECT m.uid, m.status FROM intro_propositions m
+       JOIN intro_propositions p ON p.uid=? AND p.user_id=?
+       WHERE m.user_id=p.target_user_id AND m.target_user_id=p.user_id
+         AND ((p.source<>'offered' AND m.source<>'offered') OR (p.source='offered' AND m.source='offered'
+           AND CASE WHEN json_valid(m.breakdown_json) THEN json_extract(m.breakdown_json,'$.offer_uid') END
+             = CASE WHEN json_valid(p.breakdown_json) THEN json_extract(p.breakdown_json,'$.offer_uid') END))
+       ORDER BY m.id DESC LIMIT 1`,
+    ).bind(uid, user.id).first<{ uid: string; status: string }>();
     if (mirror?.status === 'accepted') {
       const targetName = await c.env.DB.prepare(
         `SELECT COALESCE(display_name, name) AS n FROM users WHERE id = ?`,

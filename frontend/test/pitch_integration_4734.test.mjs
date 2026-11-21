@@ -141,10 +141,6 @@ const AREA_ROUTES_WITHOUT_A_ROW = new Set([
   // D4473 (#4473): Account › Licences has no canvas (#3704's two switcher designs were rejected, and none was drawn
   // for the page); its route is described in route-map section 0255.
   'account_licences.jsx /account/licences',
-  'adminInfluencers.jsx /admin/programs/influencer', 'adminInfluencers.jsx /admin/programs/influencer/how-it-runs',
-  'adminInfluencers.jsx /admin/programs/influencer/applications', 'adminInfluencers.jsx /admin/programs/influencer/influencers',
-  'adminInfluencers.jsx /admin/programs/influencer/offers', 'adminInfluencers.jsx /admin/programs/influencer/payouts',
-  'adminInfluencers.jsx /admin/programs/influencer/activity', 'adminInfluencers.jsx /admin/programs/influencer/settings',
   'growDistribution.jsx /grow/distribution/channels', 'growDistribution.jsx /grow/distribution/campaigns',
   'growDistribution.jsx /grow/distribution/campaigns/new', 'growDistribution.jsx /grow/distribution/campaigns/:uid',
   'growDistribution.jsx /grow/distribution/calendar', 'growDistribution.jsx /grow/distribution/ads',
@@ -153,9 +149,9 @@ const AREA_ROUTES_WITHOUT_A_ROW = new Set([
   'hqDecks.jsx /admin/platform/decks', 'hqDecks.jsx /admin/platform/decks/flags', 'hqDecks.jsx /admin/platform/decks/beta',
   'hqDecks.jsx /admin/platform/decks/templates', 'hqDecks.jsx /admin/platform/decks/norms', 'hqDecks.jsx /admin/platform/decks/models',
   'hqDecks.jsx /admin/platform/decks/grid', 'hqDecks.jsx /admin/platform/decks/funnel',
-  'influencer.jsx /influencer', 'influencer.jsx /influencer/links', 'influencer.jsx /influencer/offers',
+  'influencer.jsx /influencer/links',
   'influencer.jsx /influencer/earnings', 'influencer.jsx /influencer/audience', 'influencer.jsx /influencer/resources',
-  'influencerHandle.jsx /:at', 'influencerHandle.jsx /:at/:channel', 'influencerProgram.jsx /influencers',
+  'influencerHandle.jsx /:at', 'influencerHandle.jsx /:at/:channel',
   'learning.jsx /learning/courses/:slug', 'learning.jsx /learning/courses/:slug/:lesson', 'learning.jsx /learning/videos/:uid',
   'learning.jsx /learning/items/:uid', 'learning.jsx /learning/webinars/:slug', 'learning.jsx /learning/exercises/:slug',
   'learning.jsx /learning/exams/:slug', 'learning.jsx /learning/me', 'learning.jsx /learning/plan',

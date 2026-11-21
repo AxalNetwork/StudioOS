@@ -55,10 +55,11 @@ test('the room page renders every element the room canvas draws', () => {
   for (const k of ['Open to you', 'In the room', 'Behind an NDA', 'Last opened']) bothEnds(ROOM_CANVAS, room, k);
   for (const h of ['Company', 'You last opened']) bothEnds(ROOM_CANVAS, room, h);
   for (const h of ['File', 'Size', 'You last downloaded']) bothEnds(ROOM_CANVAS, room, h);
-  // Deal stage is drawn as Not recorded with its reason, and the page renders
-  // the worker's own sentence rather than a copy of it.
+  // D6266: Deal stage draws the room's own deals (stage and Open the deal), and
+  // with none, the worker's own sentence rather than a copy of it.
   bothEnds(ROOM_CANVAS, room, 'Deal stage');
-  assert.match(room, /<Unrecorded reason=\{room\.deal_stage_note\} \/>/);
+  assert.match(room, /<RoomDeals deals=\{room\.deals\} note=\{room\.deal_stage_note\} \/>/);
+  assert.doesNotMatch(room, /no key between them/);
 });
 
 test('the document page renders every element the file canvas draws', () => {
@@ -113,9 +114,9 @@ test('an activity line never re-serves a name the gate withholds', () => {
   assert.deepEqual(activityLine({ action: 'open_room' }), { verb: 'Opened the room', what: null });
 });
 
-test('the pages are routed for admin and investor, and read through the grant-keyed methods', () => {
-  assert.match(app, /path="\/research\/diligence\/:grantUid" element=\{guard\(labRoles\(\['admin', 'investor'\]\), <DiligenceRoom /);
-  assert.match(app, /path="\/research\/diligence\/:grantUid\/files\/:fileUid" element=\{guard\(labRoles\(\['admin', 'investor'\]\), <DiligenceFile /);
+test('the pages are routed for the investor alone (#6265), and read through the grant-keyed methods', () => {
+  assert.match(app, /path="\/research\/diligence\/:grantUid" element=\{adminToResearch\(guard\(\['investor'\], <DiligenceRoom /);
+  assert.match(app, /path="\/research\/diligence\/:grantUid\/files\/:fileUid" element=\{adminToResearch\(guard\(\['investor'\], <DiligenceFile /);
   assert.match(room, /api\.research\.diligenceRoom\(grantUid\)/);
   assert.match(file, /api\.research\.diligenceFile\(grantUid, fileUid\)/);
   // The download is the data room's own route, which re-checks grant and NDA.

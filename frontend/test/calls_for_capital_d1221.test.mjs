@@ -88,7 +88,9 @@ test('empty and unreadable say so; neither draws a list', () => {
  * ------------------------------------------------------------------ */
 
 test('the wiring: Raise’s Calls tab, the one-call route, the redirect, the tab body, the canvas and the docs', () => {
-  assert.deepEqual([CYCLES.raise.history.path, CYCLES.raise.history.hash], ['/raise/capital-relationships/calls', '']);
+  // D5081 part 5 (#5081, RA-12): Calls is Capital relationships' own tab at the same address, not a Raise peer tab.
+  assert.equal(CYCLES.raise.history, undefined);
+  assert.match(read('frontend/src/pages/raise/caprel/capRelModel.js'), /\{ id: 'calls', label: 'Calls', path: '\/calls' \}/);
   const app = read('frontend/src/App.jsx');
   assert.ok(app.includes(`<Route path="/raise/capital-relationships/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />`));
   assert.equal(app.includes('<Route path="/raise/calls"'), false);

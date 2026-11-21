@@ -5,13 +5,23 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   # #4107: the merge queue tests each entry on a `gh-readonly-queue/main/…`
   # branch through this event, and waits for main's required checks there.
   # Four of them are this file's: `frontend (build)`, `worker (typecheck)`,
   # `test:drift (full suite)` and `api ↔ worker drift`. They run on every
-  # entry. The other jobs here are not required, already ran on the pull
-  # request, and would only hold runners the queue needs, so each is skipped
-  # under `merge_group` (`if: github.event_name != 'merge_group'`).
+  # entry, with `suite`, which the full-suite check needs; `plan` is skipped
+  # in the queue, where each suite part plans for itself (D7108 part 2). Three
+  # jobs that are not required also run in the queue: `ci / fast` and
+  # `landing gate` (D5606's shadow checks) and `test deps` (D5608, which
+  # records the traces a pull request's `plan` reads). In the queue, fast runs only the checks
+  # it alone makes, the migration and drift checkers loaded from the trusted
+  # base; its gitleaks, typecheck and build steps are skipped there because
+  # the required `scan`, `worker (typecheck)` and `frontend (build)` run the
+  # same commands on the same candidate (D7108). Every other job here is not
+  # required, already ran on the pull request, and would only hold runners
+  # the queue needs, so each is skipped under `merge_group`
+  # (`if: github.event_name != 'merge_group'`).
   # frontend/test/merge_queue_ci_4107.test.mjs keeps both lists honest.
   merge_group:
     types: [checks_requested]
@@ -149,10 +159,14 @@ jobs:
             echo "No merge-queue run passed on $SHA, so the full suite runs."
           fi
 
+  # D7108 part 2 (#7108): never in the merge queue. There the part list is
+  # always the full nine (prTier), so `suite` lists it literally and each part
+  # computes the same equal-weight plan from its own checkout: no runner hop
+  # before the matrix. On a pull request and a push this job is unchanged.
   plan:
     name: suite plan
     needs: verified
-    if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
+    if: ${{ !cancelled() && needs.verified.outputs.run == '' && github.event_name != 'merge_group' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -169,23 +183,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: |
-          artifact=''
-          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
-            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
-          fi
-          if [ -n "$artifact" ]; then
-            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
-              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
-            fi
-          fi
-          if [ ! -f test-timings.json ]; then
-            echo "::notice::No main timings artifact available; using equal weights."
-          fi
+        run: bash scripts/ci/download-test-timings.sh
       - name: Generate the exact-once plan
         id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          full_parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          parts=$(node --input-type=module -e '
+            import { tierFor } from "./scripts/lib/prTier.mjs";
+            const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
+            console.log(tier.parts === null ? process.argv[1] : JSON.stringify(tier.parts));
+          ' "$full_parts")
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -201,16 +211,25 @@ jobs:
     # where `verified` is skipped, and when its lookup failed).
     if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
     runs-on: ubuntu-latest
-    # #3911 gave the single job 90 minutes. One part is a fraction of it; a
-    # real hang still stops here.
-    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+    # D7881: only the optional Mac part reserves time for its bounded handoff
+    # and a complete hosted fallback. The queue's existing bound is 90 minutes.
+    timeout-minutes: ${{ matrix.part == 'worker-1-of-6' && vars.MACBOOK_WORKER_ENABLED == 'true' && github.event_name != 'pull_request' && 83 || 50 }}
     strategy:
       # Queue entries cannot land after a failure. PRs and pushes report every part.
       fail-fast: ${{ github.event_name == 'merge_group' }}
+      # D7108 part 2: in the queue the parts are the full tier, in partsOf
+      # order (ci_suite_parts_4130 pins this list to SHARDS); elsewhere they
+      # are `plan`'s output, as before.
       matrix:
-        part: ${{ fromJSON(needs.plan.outputs.parts) }}
+        part: ${{ fromJSON(github.event_name == 'merge_group' && '["frontend-1-of-2","frontend-2-of-2","worker-1-of-6","worker-2-of-6","worker-3-of-6","worker-4-of-6","worker-5-of-6","worker-6-of-6","rest"]' || needs.plan.outputs.parts) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Check merge queue ref still exists
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
@@ -224,18 +243,45 @@ jobs:
             cloudflare-worker/package-lock.json
             package-lock.json
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: github.event_name != 'merge_group'
         with:
           name: suite-plan
-      # The suite imports React deck templates and the worker's TypeScript, so
-      # it needs both workspaces' dependencies installed.
+      # D7108 part 2: in the queue no `plan` job runs. Each part writes the
+      # exact-once plan itself from this commit with equal weights (no timings
+      # file, no API, no artifact), so every part writes the same bytes. It
+      # fails this part, never drops one, when ci.yml's literal queue matrix and
+      # the plan's parts differ in number or this part is not in the plan.
+      - name: Exact-once plan from this commit (merge queue)
+        if: github.event_name == 'merge_group'
+        env:
+          PART: ${{ matrix.part }}
+          TOTAL: ${{ strategy.job-total }}
+        run: |
+          names=$(node scripts/test-drift-parts.mjs --plan --equal-weights)
+          node --input-type=module -e '
+            const names = JSON.parse(process.argv[1]);
+            const { PART, TOTAL } = process.env;
+            if (names.length !== Number(TOTAL) || !names.includes(PART)) {
+              console.error(`::error::The queue matrix (${TOTAL} parts, this one "${PART}") does not match the plan: ${names.join(", ")}.`);
+              process.exit(1);
+            }
+            console.log(`Equal-weight plan, ${names.length} parts; this part is ${PART}.`);
+          ' "$names"
+      # Every part installs the worker's and the root dependencies. Only the
+      # frontend-* parts and rest install frontend's: they import React deck
+      # templates through the vite loader and run the root SPA build, which
+      # needs vite. The worker-* parts run test:worker alone, which reads
+      # neither frontend/node_modules nor docs/ (D7108,
+      # frontend/test/ci_worker_parts_7108.test.mjs).
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci
+        if: ${{ !startsWith(matrix.part, 'worker') }}
       - name: Install worker deps
         working-directory: cloudflare-worker
         run: npm ci
       - name: Install root deps
-        run: npm ci || npm install --no-audit --no-fund
+        run: npm ci
       # D5398: D4558's independent-recovery tests require the real age CLI.
       # The Ubuntu 26 security.ubuntu.com mirror has intermittently failed DNS
       # across unrelated PRs; pin a release SHA256 rather than apt-fetching it.
@@ -245,14 +291,108 @@ jobs:
         run: bash scripts/ci/install-age-linux.sh
       # docs/ is not committed (D529), and part of the suite reads the built
       # SPA (check-docs-assets-closure, the tests that open docs/), so build
-      # it first — the same root build the deploy runs.
+      # it first — the same root build the deploy runs. Those tests are all in
+      # test:frontend and rest; the worker-* parts read no docs/ (D7108).
       - name: Build the SPA
         run: npm run build
+        if: ${{ !startsWith(matrix.part, 'worker') }}
       - name: Check merge queue ref still exists
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
         run: bash scripts/ci/queue-ref-alive.sh
+      # D7881: the controller only delegates the selected Worker part. It
+      # preserves a real test failure and returns to hosted on unavailability.
+      - name: Try the MacBook for one Worker shard
+        id: macbook
+        if: vars.MACBOOK_WORKER_ENABLED == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART: ${{ matrix.part }}
+          MACBOOK_WORKER_ENABLED: ${{ vars.MACBOOK_WORKER_ENABLED }}
+        run: node scripts/ci/macbook-worker.mjs
+      # D5608: trace what each test file reads and how long it takes, on the
+      # queue and on main only (never a PR run, never a benchmark branch). An
+      # empty value leaves the tracer inert, so the run line is the same for
+      # every event.
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
+        env:
+          TEST_TRACE_DIR: ${{ (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('{0}/test-traces', runner.temp) || '' }}
+        if: steps.macbook.outputs.delegated != 'true'
+      # D7124: the test files this pull request adds or edits, run again with
+      # the clock 7 days and 9 days 11 hours ahead under libfaketime (as the
+      # nightly does, D5398), so a date-bound test fails here and not on main
+      # (#7108: 6 h 25 min with nothing merged). Non-draft PRs only, in the
+      # `rest` part, which has every install and the built SPA; never under
+      # merge_group. No changed test file: nothing is installed.
+      - name: Changed tests with the clock moved ahead (D7124)
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft && matrix.part == 'rest'
+        env:
+          FUTURE_CLOCK_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files=$(node scripts/future-clock-changed.mjs --list)
+          if [ -z "$files" ]; then exit 0; fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq faketime
+          node scripts/future-clock-changed.mjs
+      - name: Collect the delegated Mac test traces
+        if: always() && steps.macbook.outputs.delegated == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macbook-worker-traces
+          run-id: ${{ steps.macbook.outputs.child_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/test-traces
+      - name: Upload this part's test traces
+        if: always() && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-traces-${{ matrix.part }}
+          path: ${{ runner.temp }}/test-traces
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Cancel the owned Mac run when CI is cancelled
+        if: cancelled() && steps.macbook.outputs.child_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART: ${{ matrix.part }}
+          MACBOOK_WORKER_ENABLED: ${{ vars.MACBOOK_WORKER_ENABLED }}
+          CHILD_RUN_ID: ${{ steps.macbook.outputs.child_run_id }}
+        run: node scripts/ci/macbook-worker.mjs --cancel-owned
+
+  # D5608: one dependency and timing artifact per commit, merged from the
+  # parts' traces. Advisory: neither `landing` nor `gate` needs it, so its
+  # failure never blocks a merge. It runs in the queue on purpose, because a
+  # push that `verified` skips has no traces of its own: the queue run on the
+  # same SHA carries them (a pull request's `plan` job reads its
+  # test-timings.json; the queue plans with equal weights, D7108 part 2).
+  test-deps:
+    name: test deps
+    needs: suite
+    if: always() && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && needs.suite.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: test-traces-*
+          path: ${{ runner.temp }}/test-traces
+      - name: Merge the parts' traces
+        run: |
+          mkdir -p "$RUNNER_TEMP/test-traces"
+          node scripts/ci/merge-test-deps.mjs "$RUNNER_TEMP/test-traces" "$RUNNER_TEMP/test-deps" "$GITHUB_SHA"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-deps-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/test-deps/test-deps.json
+            ${{ runner.temp }}/test-deps/test-timings.json
+          if-no-files-found: error
+          retention-days: 30
 
   # D5606: shadow the replacement for the existing required checks.
   fast:
@@ -279,27 +419,52 @@ jobs:
             cloudflare-worker/package-lock.json
         id: node
         if: ${{ !cancelled() }}
-      - name: Install gitleaks
+      - name: Load trusted scanner installer
+        id: scanner_pins
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          MAIN_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        shell: bash
         run: |
           set -euo pipefail
-          GITLEAKS_VERSION=8.21.2
-          URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          for attempt in 1 2 3 4 5; do
-            if curl -sSfL --connect-timeout 10 --max-time 120 -o /tmp/gitleaks.tar.gz "$URL"; then
-              break
-            fi
-            if [ "$attempt" = 5 ]; then
-              echo "::error::Could not download gitleaks ${GITLEAKS_VERSION} after 5 attempts — this is a network failure, not a secret finding."
-              exit 1
-            fi
-            echo "gitleaks download attempt ${attempt} failed; retrying in $((attempt * 5))s"
-            sleep $((attempt * 5))
+          case "$EVENT" in
+            pull_request) trusted="$PR_BASE" ;;
+            merge_group) trusted="$GROUP_BASE" ;;
+            push|schedule)
+              [[ "$REF" == refs/heads/main ]] || exit 1
+              trusted="$MAIN_SHA" ;;
+            *) echo "Unsupported scanner acquisition event" >&2; exit 1 ;;
+          esac
+          [[ "$trusted" =~ ^[0-9a-f]{40}$ ]] || { echo "Missing trusted scanner base" >&2; exit 1; }
+          git cat-file -e "$trusted^{commit}" || git fetch --no-tags origin "$trusted" --depth=1
+          installer="$RUNNER_TEMP/trusted-scanner-installer"
+          mkdir -p "$installer"
+          for source in install-scanner.mjs scanner-acquisition.mjs scanner-tools.json; do
+            git show "$trusted:scripts/ci/$source" > "$installer/$source"
           done
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
-          gitleaks version
+          echo "installer=$installer/install-scanner.mjs" >> "$GITHUB_OUTPUT"
+          node "$installer/install-scanner.mjs" gitleaks --metadata
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Restore pinned gitleaks archive
+        id: scanner_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.scanner_pins.outcome == 'success' }}
+      - name: Install gitleaks
         id: install_scanner
-        if: ${{ !cancelled() }}
+        run: node "${{ steps.scanner_pins.outputs.installer }}" gitleaks
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.scanner_pins.outcome == 'success' }}
+      - name: Save verified gitleaks archive on main only
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.install_scanner.outcome == 'success' && steps.scanner_cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
       - name: Determine scan range
         id: range
         run: |
@@ -337,7 +502,7 @@ jobs:
             --no-banner \
             --exit-code=1
         id: scan
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' && steps.install_scanner.outcome == 'success' && steps.range.outcome == 'success' }}
       - name: Load static checkers from the trusted base
         shell: bash
         env:
@@ -395,20 +560,20 @@ jobs:
       - run: npm ci
         working-directory: cloudflare-worker
         id: worker_install
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: TypeScript check
         run: npx --no-install tsc --noEmit
         working-directory: cloudflare-worker
         id: worker_typecheck
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - run: npm ci
         working-directory: frontend
         id: frontend_install
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - run: npm run build
         working-directory: frontend
         id: frontend_build
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: npm audit (prod deps, critical fail)
         run: node ../scripts/npm-audit-gate.mjs --level=critical
         id: frontend_audit
@@ -492,10 +657,18 @@ jobs:
           ROUTING_UPLOAD: ${{ steps.routing_upload.outcome }}
         run: |
           required=pass
-          for outcome in "$CHECKOUT" "$NODE" "$INSTALL_SCANNER" "$RANGE" "$SCAN" "$TRUSTED" \
-                         "$MIGRATIONS" "$DRIFT" "$WORKER_INSTALL" "$WORKER_TYPECHECK" \
-                         "$FRONTEND_INSTALL" "$FRONTEND_BUILD"; do
+          # Run on every event, so each must succeed.
+          for outcome in "$CHECKOUT" "$NODE" "$RANGE" "$TRUSTED" "$MIGRATIONS" "$DRIFT"; do
             if [[ "$outcome" != success ]]; then required=fail; fi
+          done
+          # D7108: skipped in the merge queue only, where the required `scan`,
+          # `worker (typecheck)` and `frontend (build)` jobs run the same
+          # commands on the same candidate. Skipped anywhere else is a fail.
+          for outcome in "$INSTALL_SCANNER" "$SCAN" "$WORKER_INSTALL" "$WORKER_TYPECHECK" \
+                         "$FRONTEND_INSTALL" "$FRONTEND_BUILD"; do
+            if [[ "$outcome" == success ]]; then continue; fi
+            if [[ "$EVENT" == merge_group && "$outcome" == skipped ]]; then continue; fi
+            required=fail
           done
           advisory=pass
           if [[ "$EVENT" == pull_request && ( "$LFS_BASE" != success || "$LFS" != success ) ]]; then
@@ -519,6 +692,7 @@ jobs:
       - name: Required fast checks and full suite passed
         env:
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           VERIFIED_RUN: ${{ needs.verified.outputs.run }}
           SUITE: ${{ needs.suite.result }}
           REQUIRED: ${{ needs.fast.outputs.required }}
@@ -532,18 +706,26 @@ jobs:
             exit 0
           fi
           if [ "$SUITE" = "success" ]; then
-            echo "Every part of test:drift passed."
+            if [ "$EVENT" = "pull_request" ] && [ "$DRAFT" = "true" ]; then
+              echo "The draft fast tier passed."
+            else
+              echo "Every part of test:drift passed."
+            fi
             exit 0
           fi
           echo "::error::test:drift did not pass: the suite parts ended '$SUITE'."
           exit 1
 
   gate:
-    name: test:drift (full suite)
+    # A skipped required check would count as passed. The draft run must
+    # publish a different context so the full-suite context stays pending.
+    name: "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'test:drift (draft fast tier)' || 'test:drift (full suite)' }}"
     needs: [verified, plan, suite]
     # Always, never skipped: a skipped required check reports as passed. This
     # job decides, and it passes only when every part passed — or, on a push
     # to main only, when the merge queue already passed this exact commit.
+    # `plan` must have succeeded, except in the merge queue, where it must
+    # have been skipped: there each part plans for itself (D7108 part 2).
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -551,6 +733,7 @@ jobs:
       - name: Every part of test:drift passed
         env:
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           VERIFIED_RUN: ${{ needs.verified.outputs.run }}
           SUITE: ${{ needs.suite.result }}
           PLAN: ${{ needs.plan.result }}
@@ -559,8 +742,12 @@ jobs:
             echo "The merge queue passed the full suite on this commit: $VERIFIED_RUN"
             exit 0
           fi
-          if [ "$PLAN" = "success" ] && [ "$SUITE" = "success" ]; then
-            echo "Every part of test:drift passed."
+          if { { [ "$PLAN" = "success" ] && [ "$EVENT" != "merge_group" ]; } || { [ "$PLAN" = "skipped" ] && [ "$EVENT" = "merge_group" ]; }; } && [ "$SUITE" = "success" ]; then
+            if [ "$EVENT" = "pull_request" ] && [ "$DRAFT" = "true" ]; then
+              echo "The draft fast tier passed."
+            else
+              echo "Every part of test:drift passed."
+            fi
             exit 0
           fi
           echo "::error::test:drift did not pass: the suite parts ended '$SUITE'."
@@ -672,7 +859,7 @@ jobs:
   # -------------------------------------------------------------------------
   visual:
     name: editor visual regression and axe
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -700,6 +887,19 @@ jobs:
       - name: Visual regression and axe on the editor
         working-directory: frontend
         run: npx --no-install playwright test -c tests/visual/playwright.config.mjs
+      # #5933 (D4819-p5933): the Licences console at 390px and 1280px. The spec
+      # serves the docs/ built above itself and answers every /api/* call with
+      # invented fixtures, so it needs no preview and no account.
+      - name: Licences console in the browser (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/licences_console_5933.spec.js --retries=0
+      # #7517 (D7517): Advisor › Expertise, its Overview and five zones, at 390,
+      # 768 and 1440 in light and dark: no WCAG 2.2 AA axe violation in its
+      # column, the phone section row, More and 44px targets. Same docs/ and
+      # fixtures pattern as the step above; no trace is recorded.
+      - name: Expertise axe and phone navigation (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/expertise_axe_7517.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -708,6 +908,7 @@ jobs:
           path: |
             frontend/tests/visual/playwright-report
             frontend/tests/visual/test-results
+            frontend/test-results
           retention-days: 14
 
   # -------------------------------------------------------------------------
@@ -746,7 +947,7 @@ jobs:
   # -------------------------------------------------------------------------
   og-tags:
     name: open graph metadata
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -777,7 +978,7 @@ jobs:
   # -------------------------------------------------------------------------
   dev-backend:
     name: dev backend (import smoke)
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

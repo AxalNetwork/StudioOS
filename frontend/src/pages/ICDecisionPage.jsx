@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Gavel, Save, ShieldCheck, PieChart } from 'lucide-react';
+import { ArrowLeft, Gavel, Save, ShieldCheck, PieChart, RefreshCw } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../lib/fillScoped.js';
+import {
+  canChangeDecision, AUTHOR_ONLY_LINE, recusalBody, RECUSAL_FINAL_LINE, ownRecusal,
+  tallyText, VOTE_WORDS, CONDITION_WORDS, canOpenCommitRoom,
+} from './icDecisionModel.js';
 
 const VOTES = ['yes', 'no', 'abstain'];
 const DECISIONS = ['invest', 'pass', 'defer'];
@@ -13,8 +17,11 @@ const OUTCOMES = ['open', 'vindicated', 'regret'];
 export default function ICDecisionPage() {
   const { uid } = useParams();
   const navigate = useNavigate();
-  const { role } = useAuth();
-  const canWrite = ['admin', 'partner', 'investor'].includes(role);
+  const { user, role } = useAuth();
+  // Every IC member may vote; only the record's author or an Admin may change
+  // it (PUT /api/ic/:uid, #6155). Offering the others Save memo, Record
+  // decision and Outcome only ever ended in 'Forbidden'.
+  const canVote = ['admin', 'partner', 'investor'].includes(role);
   // Task #83 — after an "invest" decision, admins commit it to the cap-table /
   // position ledger. Prefill the position form via router state so they don't
   // re-key the startup + round.
@@ -24,6 +31,8 @@ export default function ICDecisionPage() {
   const [memo, setMemo] = useState('');
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
+  const [recusing, setRecusing] = useState(false);
+  const [declaration, setDeclaration] = useState('');
   // D1329 (#3490, AF17, the owner's answer B): Fill with Eadwyn on the memo's
   // words only, never its terms, decision or outcome. Its author fills it until
   // it is decided; a voter, a colleague and an admin read its marks.
@@ -33,9 +42,10 @@ export default function ICDecisionPage() {
   });
 
   const load = () => {
+    setErr(null);
     api.icGet(uid)
       .then((res) => { setD(res); setMemo(res?.memo || ''); })
-      .catch((e) => setErr(e.message || 'Failed to load'));
+      .catch((e) => setErr(e.message || 'The record could not be read.'));
   };
   useEffect(load, [uid]);
 
@@ -49,14 +59,38 @@ export default function ICDecisionPage() {
     try { await api.icVote(uid, { vote, rationale: rationale || undefined }); setRationale(''); load(); }
     catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
+  // A recusal sends the declared conflict as its rationale (the Worker
+  // refuses one without it) and is final; a later vote is refused in the
+  // Worker's own words, which land in `err`.
+  const recuse = async () => {
+    const body = recusalBody(declaration);
+    if (!body) return;
+    setBusy(true); setErr(null);
+    try { await api.icVote(uid, body); setDeclaration(''); setRecusing(false); load(); }
+    catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
   const setField = async (patch) => {
     setBusy(true); setErr(null);
     try { await api.icUpdate(uid, patch); load(); }
     catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
-  if (err && !d) return <div className="max-w-3xl mx-auto py-16 text-rose-600">{err}</div>;
-  if (!d) return <div className="max-w-3xl mx-auto py-16 text-gray-500">Loading…</div>;
+  if (err && !d) {
+    return (
+      <div className="max-w-3xl mx-auto py-16" role="alert">
+        <p className="text-sm text-rose-700 dark:text-rose-300">Unreadable: this IC record could not be read. {err}</p>
+        <button type="button" onClick={load}
+          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+          <RefreshCw size={13} /> Try again
+        </button>
+      </div>
+    );
+  }
+  if (!d) return <div className="max-w-3xl mx-auto py-16 text-sm text-gray-500" role="status" aria-live="polite">Reading the IC record…</div>;
+
+  const canChange = canChangeDecision(user, d);
+  const recusal = ownRecusal(user, d.votes);
+  const conditions = Array.isArray(d.conditions) ? d.conditions : [];
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -89,7 +123,7 @@ export default function ICDecisionPage() {
           <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">IC Memo</h2>
         </FillLabel>
         <FillFormBar fill={fill} />
-        {canWrite ? (
+        {canChange ? (
           <>
             <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={8}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
@@ -99,16 +133,22 @@ export default function ICDecisionPage() {
             </button>
           </>
         ) : (
-          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{d.memo || '—'}</p>
+          <>
+            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{d.memo || 'No memo written yet.'}</p>
+            <p className="mt-2 text-xs text-gray-500">{AUTHOR_ONLY_LINE}</p>
+          </>
         )}
       </section>
 
       {/* Votes */}
       <section className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
         <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
-          Committee vote · 👍 {d.tally?.yes ?? 0} · 👎 {d.tally?.no ?? 0} · ➖ {d.tally?.abstain ?? 0}
+          Committee vote · {tallyText(d.tally)}
         </h2>
-        {canWrite && (
+        {canVote && recusal && (
+          <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">You recused yourself from this decision. {RECUSAL_FINAL_LINE}</p>
+        )}
+        {canVote && !recusal && (
           <div className="mb-3">
             <input value={rationale} onChange={(e) => setRationale(e.target.value)} placeholder="Rationale (required)"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm mb-2" />
@@ -117,10 +157,35 @@ export default function ICDecisionPage() {
                 <button key={v} onClick={() => castVote(v)} disabled={busy || !rationale.trim()}
                   title={rationale.trim() ? undefined : 'Every vote records its reason: write the rationale first.'}
                   className="px-3 py-1.5 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
-                  Vote {v}
+                  Vote {VOTE_WORDS[v].toLowerCase()}
                 </button>
               ))}
+              <button type="button" onClick={() => setRecusing((x) => !x)} disabled={busy} aria-expanded={recusing}
+                className="px-3 py-1.5 rounded-lg text-sm border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                Recuse…
+              </button>
             </div>
+            {recusing && (
+              <div className="mt-3 p-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+                <label htmlFor="ic-recusal-declaration" className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                  Declare the conflict
+                </label>
+                <textarea id="ic-recusal-declaration" value={declaration} onChange={(e) => setDeclaration(e.target.value)} rows={3}
+                  placeholder="What the conflict is, for example a holding in the company or a family tie to a founder"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{RECUSAL_FINAL_LINE}</p>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={recuse} disabled={busy || !declaration.trim()}
+                    className="px-3 py-1.5 rounded-lg text-sm bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50">
+                    Recuse from this decision
+                  </button>
+                  <button type="button" onClick={() => { setRecusing(false); setDeclaration(''); }} disabled={busy}
+                    className="px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:underline">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             {/* Task #83 — each vote auto-drafts a private journal entry (yes→invest,
                 no→pass, abstain→defer). The Watchlist page that showed those
                 entries was removed (owner, 2026-10-20), so the note that sent
@@ -131,15 +196,37 @@ export default function ICDecisionPage() {
           {(d.votes || []).map((v, i) => (
             <li key={i} className="py-2 text-sm flex justify-between gap-3">
               <span className="text-gray-700 dark:text-gray-300">{v.user_name || `User ${v.user_id}`}</span>
-              <span className="text-gray-500">{v.vote}{v.rationale ? ` — ${v.rationale}` : ''}</span>
+              <span className="text-gray-500">{VOTE_WORDS[v.vote] || v.vote}{v.rationale ? ` — ${v.rationale}` : ''}</span>
             </li>
           ))}
           {(d.votes || []).length === 0 && <li className="py-2 text-sm text-gray-500">No votes yet.</li>}
         </ul>
       </section>
 
+      {/* Conditions, read-only here: they are kept on the commit room. */}
+      <section className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Conditions</h2>
+        {conditions.length === 0 ? (
+          <p className="text-sm text-gray-500">No conditions on this decision.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {conditions.map((cond) => (
+              <li key={cond.uid} className="py-2 text-sm flex justify-between gap-3">
+                <span className="text-gray-700 dark:text-gray-300">{cond.body}</span>
+                <span className="text-gray-500 shrink-0">{CONDITION_WORDS[cond.status] || cond.status}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {canOpenCommitRoom(role) && (
+          <Link to="/deals/commit" className="mt-2 inline-block text-sm text-violet-700 dark:text-violet-300 hover:underline">
+            Manage conditions on the commit room
+          </Link>
+        )}
+      </section>
+
       {/* Decision + outcome */}
-      {canWrite && (
+      {canChange && (
         <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
           <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Record decision</h2>
           <div className="flex flex-wrap gap-2 mb-3">

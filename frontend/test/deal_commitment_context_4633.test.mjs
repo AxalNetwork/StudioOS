@@ -19,7 +19,7 @@ import DealRoomPage from '../src/pages/DealRoomPage.jsx';
 import { forgetVisits } from '../src/pages/deal/dealVisit.js';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { myCommitment, proposedTerms, roundLines } from '../src/pages/deal/dealWorkModel.js';
-import { keyStrip } from '../src/pages/deal/dealFrameModel.js';
+import { financialStrip, viewerCommitment } from '../src/pages/deal/dealFrameModel.js';
 import { roundAsk } from '../src/components/deals/dealMoney.js';
 import { studioRow } from '../src/pages/investor/dealflow/studioLensModel.js';
 import { dealRow } from '../src/pages/investor/dealflow/dealFlowModel.js';
@@ -43,9 +43,10 @@ test('D5355 the commitment is the one in the read\'s firm; the retired pre-firm 
   assert.equal(myCommitment({ status: 'ready', dealId: 4, items: [LEGACY] }, 'USD', 4).state, 'none', 'an out-of-context row alone offers no action');
   assert.equal(myCommitment(read, 'USD', 5).state, 'loading', 'a read for deal 4 is never deal 5\'s commitment');
   assert.equal(myCommitment({ status: 'ready', dealId: 4, items: [{ ...ALDER, company_id: null, company_name: null }] }, 'USD', 4).firm, 'Held in your own name.');
-  // The key strip reads the same row.
-  const tile = keyStrip(deal(4, 'Harbor'), read, 'investor').find((t) => t.key === 'mine');
-  assert.match(String(tile.value), /50,000/);
+  // D4815 part 4: Your position (which replaced the key strip's tile) reads the same row, and only as the viewer's own.
+  const mine = { ...read, items: read.items.map((r) => ({ ...r, investor_user_id: 21 })) };
+  const pos = viewerCommitment(mine, { userId: 21, dealId: 4 });
+  assert.deepEqual([pos.state, pos.amount, pos.firm], ['ready', '$50,000', 'Held for Alder Ventures.']);
 });
 
 test('Ask is the target, else the legacy amount, on every screen; neither recorded is not 0', () => {
@@ -55,7 +56,7 @@ test('Ask is the target, else the legacy amount, on every screen; neither record
   assert.equal(roundAsk({ target_raise: '', amount: null }), null);
   assert.equal(studioRow(d).ask, 2000000, 'the Studio lens');
   assert.equal(dealRow(d).ask, 2000000, 'the Deal Flow table');
-  assert.match(keyStrip(d, null, 'founder').find((t) => t.key === 'round').value, /2,000,000/);
+  assert.match(financialStrip(d).find((t) => t.key === 'round').value, /2,000,000/);
   assert.match(roundLines({ status: 'ready', data: { investors: 1, confirmed_total: 1000000 } }, d).confirmed, /of \$2,000,000/);
   assert.equal(proposedTerms(d).find((r) => r.label === 'Round size').value, '$2,000,000', 'the proposed terms');
   // Editing the target moves all of them together.

@@ -19,6 +19,13 @@ permissions:
 # NOTE: We invoke the gitleaks CLI directly instead of `gitleaks/gitleaks-action`.
 # As of 2024 the Action requires a paid `GITLEAKS_LICENSE` secret for org
 # repos. The CLI is unchanged and remains free + open-source.
+# #6461: one run per pull request; a newer push cancels the superseded run.
+# A push to main and a merge-queue entry each get their own group (the run id),
+# so neither is ever cancelled.
+concurrency:
+  group: gitleaks-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   scan:
     name: scan
@@ -31,37 +38,52 @@ jobs:
         with:
           # Full history so gitleaks can scan any commit that touched the PR.
           fetch-depth: 0
-      - name: Install gitleaks
-        # RETRY, AND DOWNLOAD BEFORE EXTRACTING. This step fetched the release
-        # tarball straight into `tar` with no retry, so any hiccup between the
-        # runner and GitHub's release CDN failed the whole secret scan — with
-        # `gzip: stdin: unexpected end of file` as the visible error, which
-        # reads like a corrupt archive rather than a network fault. It happened
-        # twice on 2026-09-07 alone: a connection reset on #460 and a 504 on
-        # #473. Neither run scanned a single commit; the job died at install.
-        #
-        # A red secret-scan that means "the CDN blinked" is worse than noise —
-        # it trains a reader to wave the check through. Five attempts with
-        # backoff, and the archive lands on disk first so a truncated body is
-        # caught by curl as a failed download rather than by tar as a bad gzip.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Load trusted scanner installer
+        id: scanner_pins
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          MAIN_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        shell: bash
         run: |
           set -euo pipefail
-          GITLEAKS_VERSION=8.21.2
-          URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          for attempt in 1 2 3 4 5; do
-            if curl -sSfL --connect-timeout 10 --max-time 120 -o /tmp/gitleaks.tar.gz "$URL"; then
-              break
-            fi
-            if [ "$attempt" = 5 ]; then
-              echo "::error::Could not download gitleaks ${GITLEAKS_VERSION} after 5 attempts — this is a network failure, not a secret finding."
-              exit 1
-            fi
-            echo "gitleaks download attempt ${attempt} failed; retrying in $((attempt * 5))s"
-            sleep $((attempt * 5))
+          case "$EVENT" in
+            pull_request) trusted="$PR_BASE" ;;
+            merge_group) trusted="$GROUP_BASE" ;;
+            push|schedule)
+              [[ "$REF" == refs/heads/main ]] || exit 1
+              trusted="$MAIN_SHA" ;;
+            *) echo "Unsupported scanner acquisition event" >&2; exit 1 ;;
+          esac
+          [[ "$trusted" =~ ^[0-9a-f]{40}$ ]] || { echo "Missing trusted scanner base" >&2; exit 1; }
+          git cat-file -e "$trusted^{commit}" || git fetch --no-tags origin "$trusted" --depth=1
+          installer="$RUNNER_TEMP/trusted-scanner-installer"
+          mkdir -p "$installer"
+          for source in install-scanner.mjs scanner-acquisition.mjs scanner-tools.json; do
+            git show "$trusted:scripts/ci/$source" > "$installer/$source"
           done
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
-          gitleaks version
+          echo "installer=$installer/install-scanner.mjs" >> "$GITHUB_OUTPUT"
+          node "$installer/install-scanner.mjs" gitleaks --metadata
+      - name: Restore pinned gitleaks archive
+        id: scanner_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
+      - name: Install gitleaks
+        id: install_scanner
+        run: node "${{ steps.scanner_pins.outputs.installer }}" gitleaks
+      - name: Save verified gitleaks archive on main only
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.install_scanner.outcome == 'success' && steps.scanner_cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
       - name: Determine scan range
         id: range
         run: |

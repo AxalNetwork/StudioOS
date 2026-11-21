@@ -6,11 +6,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import RoadmapFromGithub from '../src/pages/cycles/RoadmapFromGithub.jsx';
+import { partElement } from './_buildParts.mjs'; // #5507: this provider's line only; the full list is build_parts_contract_5507's
 import { groupCount, groupTarget, releaseHref, releaseView, releasesCount, shippedMark } from '../src/pages/cycles/roadmapGithub.js';
 
 const h = React.createElement;
@@ -88,7 +88,9 @@ test('the words, alone: a link out only to a release page on github.com', () => 
 
 test('Build draws the part on Product roadmap', () => {
   // Mutation checked: drop the 'product-roadmap' part → this fails.
-  // D1311: Build's parts live in buildParts.jsx, one line per connector.
-  const route = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
-  assert.match(route, /\['github', \(data\) => <RoadmapFromGithub github=\{data\?\.parts\?\.github\} \/>\]/);
+  // D1311: Build's parts live in buildParts.jsx, one line per connector; read through its export (#5507).
+  const github = { state: 'ok' };
+  const el = partElement('product-roadmap', 'github', { parts: { github } });
+  assert.equal(el.type, RoadmapFromGithub);
+  assert.deepEqual(el.props, { github });
 });

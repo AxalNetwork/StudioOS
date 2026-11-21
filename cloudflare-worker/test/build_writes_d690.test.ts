@@ -22,8 +22,6 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -32,14 +30,9 @@ import build from '../src/routes/cycle_build.ts';
 import cycleRecords from '../src/routes/cycle_records.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const ROOT = process.cwd();
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
-const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const FOUNDER = 10, TEAMMATE = 11, PARTNER = 12, ADMIN = 13, OUTSIDER = 14;
 const P = 1, P_OTHER = 2, COMPANY = 5, ENTITY = 7;
 /** Every person-shaped string seeded below: no summary may hold one. */
@@ -86,7 +79,11 @@ function bucket(db: DatabaseSync) {
   if (!BUCKETS.has(db)) BUCKETS.set(db, new Map());
   const store = BUCKETS.get(db)!;
   return { store, binding: {
-    async put(key: string, bytes: Uint8Array, opts?: any) { store.set(key, { bytes, type: opts?.httpMetadata?.contentType }); },
+    // Honours R2's write-once precondition (D6651): a put with `onlyIf.etagDoesNotMatch: '*'` stores nothing over an existing key.
+    async put(key: string, bytes: Uint8Array, opts?: any) {
+      if (opts?.onlyIf?.etagDoesNotMatch === '*' && store.has(key)) return null;
+      store.set(key, { bytes, type: opts?.httpMetadata?.contentType }); return { key };
+    },
     async get(key: string) { return store.get(key) ?? null; },
     async delete(key: string) { store.delete(key); },
   } };
@@ -496,7 +493,7 @@ test('test 2: an obligation- row declares Upload proof and no Mark filed; a lab-
   assert.equal(obligation.status, 200, JSON.stringify(obligation.body));
   assert.deepEqual(keysOf(obligation), ['upload-proof']);
   const step = await rec(db, 'company-creation', 'step-9');
-  assert.deepEqual(keysOf(step), ['mark-filed', 'step-check', 'edit', 'upload-proof']);
+  assert.deepEqual(keysOf(step), ['mark-filed', 'step-check', 'edit', 'delete', 'upload-proof']); // #6041: the venture's own step may be deleted
   const lab = await rec(db, 'company-creation', 'lab-8-0');
   assert.equal(lab.status, 200);
   assert.deepEqual(lab.body.actions, []);
@@ -827,9 +824,15 @@ test('test 9: Mark filed, the step checks and Upload proof, which stores a key w
   assert.deepEqual(after.body.main.find((x: any) => x.key === 'steps').rows.map((x: any) => [x.a, x.c]),
     [['Fill the election', 'Done'], ['Mail by certified post', 'Open'], ['Upload proof of mailing', 'Done']]);
   assert.equal(db.prepare('SELECT state FROM formation_steps WHERE id = 9').get()!.state, 'todo', 'the upload does not mark it filed');
-  // A second upload replaces the object.
-  assert.equal((await act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(PDF(), 'again.pdf'))).status, 200);
-  assert.equal(bucket(db).store.size, 1);
+  // D6651: a second upload is a replace — a new key, the row points at it, and the first proof keeps its bytes.
+  const firstBytes = bucket(db).store.get(key)!.bytes;
+  const again = new TextEncoder().encode('%PDF-1.4\n% a second made-up receipt\n');
+  assert.equal((await act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(again, 'again.pdf'))).status, 200);
+  const replaced = db.prepare('SELECT proof_file_key FROM formation_steps WHERE id = 9').get()!.proof_file_key as string;
+  assert.notEqual(replaced, key, 'a replace writes a new key');
+  assert.equal(bucket(db).store.size, 2, 'the replaced proof is kept, never deleted');
+  assert.deepEqual(bucket(db).store.get(key)!.bytes, firstBytes, 'the first proof is unchanged');
+  assert.deepEqual(bucket(db).store.get(replaced)!.bytes, again);
   assert.equal((await act(db, 'company-creation', 'step-9', 'mark-filed')).status, 200);
   assert.equal(db.prepare('SELECT state FROM formation_steps WHERE id = 9').get()!.state, 'done');
   assert.ok(!keysOf(await rec(db, 'company-creation', 'step-9')).includes('mark-filed'));
@@ -923,7 +926,7 @@ test('form-options: themes, hypotheses, owners, KPIs, feedback themes, items, ki
   const mvp = (await formOptions(db, 'prototype-mvp')).body;
   assert.deepEqual(mvp.owner_user_id.options.map((o: any) => o.value).sort(), [String(FOUNDER), String(TEAMMATE)].sort());
   const road = (await formOptions(db, 'product-roadmap')).body;
-  assert.deepEqual(road.kpi_key.options.map((o: any) => o.value), ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway', 'custom-ownkpi']);
+  assert.deepEqual(road.kpi_key.options.map((o: any) => o.value), ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway', 'arr', 'burn_multiple', 'custom-ownkpi']);
   assert.deepEqual(road.feedback_theme.options, [{ value: 'Onboarding', label: 'Onboarding', open_unlinked: 1 }]);
   assert.deepEqual(road.waits_on_id.options.map((o: any) => o.value), ['6', '7']);
   const cc = (await formOptions(db, 'company-creation')).body;
@@ -993,6 +996,7 @@ test('test 10: a closing write whose log fails is not written, and an upload lea
     const r = await w.run(db);
     assert.equal(r.status, 500, `${w.name}: ${JSON.stringify(r.body)}`);
     assert.equal(one(db, w.state), before, `${w.name}: the write did not land without its log`);
+    // D6651: the object the failed upload just stored, named by no row, leaves through eraseRecordObjects ('unreferenced').
     assert.equal(bucket(db).store.size, 0, `${w.name}: no stored object is left behind`);
     db.close();
   }
@@ -1037,4 +1041,121 @@ test('D1168: a proof pointer edit clears unmeasurable, and an unchanged pointer 
   assert.equal((await call(db,'PATCH','/obligations/12/proof',{proof_file_key:null})).status,200);
   assert.equal(db.prepare('SELECT size_unmeasurable_at FROM entity_obligations WHERE id=12').get()!.size_unmeasurable_at,null);
  }finally{db.close();}
+});
+
+// ---------------------------------------------------------------------------
+// #6041: remove a roadmap item or a filing added by mistake. The PATCH routes' gate and ownership check, the
+// record's Delete action (danger, confirmed), the dependents removed in the same batch, and an activity row.
+// ---------------------------------------------------------------------------
+
+const edgeCount = (db: DatabaseSync, id: number) => count(db, `SELECT COUNT(*) AS n FROM okr_dependencies WHERE okr_id = ${id} OR blocks_okr_id = ${id}`);
+
+test('#6041: deleting a roadmap item removes it and its dependency edges both ways, logs it, and leaves its neighbours', async () => {
+  // Mutation checked: dropping the okr_dependencies DELETE from deleteRoadmapItem leaves the two edges here.
+  const db = recordsA(seeded());
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective, kanban_status) VALUES (60, ${P}, 'Rollout', 'later')`);
+  db.exec(`INSERT INTO okr_dependencies (project_id, okr_id, blocks_okr_id) VALUES (${P}, 6, 7), (${P}, 60, 6), (${P}, 60, 7)`);
+  const r = await call(db, 'DELETE', '/roadmap/6');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE id = 6'), 0);
+  assert.equal(edgeCount(db, 6), 0, 'every edge naming the item is gone');
+  assert.equal(count(db, `SELECT COUNT(*) AS n FROM okr_dependencies WHERE okr_id = 60 AND blocks_okr_id = 7`), 1, 'an edge between two other items stays');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE id IN (7, 60)'), 2);
+  assert.equal(count(db, "SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'roadmap_deleted'"), 1);
+  assert.equal((await call(db, 'DELETE', '/roadmap/6')).status, 404, 'a second delete finds nothing');
+  db.close();
+});
+
+test('#6041: deleting a filing removes it, its checklist and its proof file, and logs it; a Lab step or an obligation cannot be named', async () => {
+  // Mutation checked: dropping the formation_step_checks DELETE leaves the checklist row here.
+  const db = recordsA(seeded());
+  const key = `build-proof/${P}/0123456789abcdef0123456789abcdef.pdf`;
+  db.exec(`UPDATE formation_steps SET proof_file_key = '${key}' WHERE id = 9`);
+  db.exec(`INSERT INTO formation_step_checks (step_id, key, done_at) VALUES (9, 'signed', datetime('now'))`);
+  await bucket(db).binding.put(key, PDF(), { httpMetadata: { contentType: 'application/pdf' } });
+  const r = await call(db, 'DELETE', '/formation-steps/9');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_steps WHERE id = 9'), 0);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_step_checks WHERE step_id = 9'), 0);
+  assert.equal(bucket(db).store.has(key), false, 'the proof file left storage');
+  assert.equal(count(db, "SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'build_formation_step_deleted' AND entity_id = 'step-9'"), 1);
+  // An obligation's id is never a formation step's: the route reads only formation_steps for this venture.
+  assert.equal((await call(db, 'DELETE', '/formation-steps/12')).status, 404);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM entity_obligations WHERE id = 12'), 1, 'the obligation is untouched');
+  db.close();
+});
+
+test('#6041: another venture\'s id is a 404 and deletes nothing; a reader and another founder are refused', async () => {
+  const db = recordsB(recordsA(seeded()));
+  const before = { okrs: count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs'), steps: count(db, 'SELECT COUNT(*) AS n FROM formation_steps'), logs: logCount(db) };
+  assert.equal((await call(db, 'DELETE', '/roadmap/41')).status, 404, "venture B's item under venture A");
+  assert.equal((await call(db, 'DELETE', '/formation-steps/43')).status, 404, "venture B's filing under venture A");
+  assert.equal((await callAs(db, PARTNER, 'DELETE', '/roadmap/6')).status, 403, 'a partner reads, never writes');
+  assert.equal((await callAs(db, PARTNER, 'DELETE', '/formation-steps/9')).status, 403);
+  assert.equal((await callAs(db, OUTSIDER, 'DELETE', '/roadmap/6')).status, 403, 'another venture\'s founder');
+  assert.equal((await callAs(db, OUTSIDER, 'DELETE', '/roadmap/6', undefined, P_OTHER)).status, 404, 'venture A\'s id under their own venture');
+  assert.deepEqual({ okrs: count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs'), steps: count(db, 'SELECT COUNT(*) AS n FROM formation_steps'), logs: logCount(db) }, before);
+  assert.equal(bucket(db).store.size, 0);
+  db.close();
+});
+
+test('#6041: the records offer Delete, in the danger tone and behind a confirmation; a Lab step and an obligation do not', async () => {
+  const db = recordsA(seeded());
+  const item = await rec(db, 'product-roadmap', '6');
+  const del = actionOf(item, 'delete');
+  assert.ok(del, 'the roadmap item offers Delete');
+  assert.equal(del.tone, 'danger');
+  assert.equal(del.confirm.cta, 'Delete');
+  assert.match(del.confirm.title, /^Delete Ship reconciliation\?$/);
+  const step = actionOf(await rec(db, 'company-creation', 'step-9'), 'delete');
+  assert.equal(step.tone, 'danger');
+  assert.match(step.confirm.body, /checklist and its proof file/);
+  assert.ok(!keysOf(await rec(db, 'company-creation', 'obligation-12')).includes('delete'));
+  assert.deepEqual((await rec(db, 'company-creation', 'lab-8-0')).body.actions, []);
+  assert.equal((await rec(db, 'product-roadmap', '6', PARTNER)).body.actions.length, 0, 'a reader is offered no Delete');
+  // Through the record route: the action removes the item, and the record then reads as gone.
+  const r = await act(db, 'product-roadmap', '6', 'delete');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal((await rec(db, 'product-roadmap', '6')).status, 404, 'the page re-reads a 404 and goes back to the module');
+  assert.equal((await act(db, 'company-creation', 'step-9', 'delete')).status, 200);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_steps WHERE id = 9'), 0);
+  db.close();
+});
+
+// #6041 (owner's answer A): remove a founder added by mistake, only with nothing attached.
+test('#6041: a founder with nothing attached is removed through the cap table code; anything attached refuses, naming it', async () => {
+  const db = seeded();
+  db.exec(`UPDATE users SET subscription_tier = 'studio' WHERE id = ${FOUNDER}`);
+  // Ana Wren (8) enters the founding table through updateHolder, as an edit of her split does.
+  assert.equal((await call(db, 'PATCH', '/founders/h-8', { equity_pct: 60 })).status, 200);
+  const added = await call(db, 'POST', '/founders', { name: 'Mis Take', equity_pct: 10 });
+  assert.equal(added.status, 201, JSON.stringify(added.body));
+  const hid = Number(added.body.id.slice(2));
+  const base = () => JSON.parse(String((db.prepare("SELECT inputs_json FROM cap_table_scenarios WHERE project_id = ? ORDER BY id DESC LIMIT 1").get(P) as any)?.inputs_json ?? '{}'));
+  assert.ok((base().founders || []).some((f: any) => Number(f.holder_id) === hid), 'the founding table holds the new founder');
+  const r = await call(db, 'DELETE', `/founders/${added.body.id}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(db.prepare('SELECT 1 FROM cap_table_holders WHERE id = ?').get(hid), undefined, 'the register row is gone');
+  assert.ok(!(base().founders || []).some((f: any) => Number(f.holder_id) === hid), 'and its founding entry with it');
+  const actions = (db.prepare('SELECT action FROM activity_logs ORDER BY id').all() as any[]).map((x) => x.action);
+  assert.ok(actions.includes('build_founder_deleted') && actions.includes('cap_table_holder_removed'), actions.join());
+  assert.equal((await call(db, 'DELETE', `/founders/${added.body.id}`)).status, 404, 'a second delete finds nothing');
+  // The only founder on the cap table stays: it needs one.
+  const only = await call(db, 'DELETE', '/founders/h-8');
+  assert.deepEqual([only.status, /only founder on the cap table/.test(only.body.detail)], [409, true]);
+
+  // Ana Wren (8): each attachment keeps the holder and is named.
+  const refused = async () => (await call(db, 'DELETE', '/founders/h-8'));
+  db.exec(`INSERT INTO founder_contributions (project_id, holder_id, text) VALUES (${P}, 8, 'Built the prototype')`);
+  let x = await refused();
+  assert.equal(x.status, 409);
+  assert.match(x.body.detail, /Ana Wren cannot be removed: they have logged contributions\./);
+  db.exec(`INSERT INTO cap_table_vesting (user_id, project_id, holder_id, start_date, cliff_months, total_months, total_shares, source) VALUES (${FOUNDER}, ${P}, 8, '2026-01-01', 12, 48, 600, 'manual')`);
+  x = await refused();
+  assert.match(x.body.detail, /a vesting schedule and logged contributions/);
+  assert.ok(db.prepare('SELECT 1 FROM cap_table_holders WHERE id = 8').get(), 'nothing was removed');
+  // Another venture's founder reads as missing.
+  db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, founder_role, kind) VALUES (77, ${FOUNDER}, ${P_OTHER}, 'Other Venture Founder', 'CEO', 'founder')`);
+  assert.equal((await call(db, 'DELETE', '/founders/h-77')).status, 404);
+  db.close();
 });

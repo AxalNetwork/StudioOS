@@ -232,6 +232,7 @@ export default function MyEventsPage() {
       <PastTabFull past={past} hosting={explorer ? [] : hosting} now={now} onOlder={readOlder} older={older} onRetry={load} />
     ) : phone ? (
       <PhoneUpcoming attending={attending} hosting={explorer ? [] : hosting} invitations={invites} explorer={explorer} now={now} api={api}
+        recommended={recommended} recommendAct={RECOMMEND_ACT}
         onAnswer={(inv, action) => setAnswer({ invitation: inv, action })}
         onPick={(t, it) => (it.key === 'ticket' || it.key === 'cancel' ? navigate(ticketPath(t.id)) : null)} />
     ) : (

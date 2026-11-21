@@ -143,3 +143,11 @@ test('granting to a non-advisor is refused at the door', () => {
   // nothing rather than believing they had shared something.
   assert.match(routes, /That account is not an advisor/);
 });
+
+test('#4831: the shared list names who granted each record, so a client sheet joins by account, not by name', () => {
+  const at = routes.indexOf("grants.get('/shared/list'");
+  assert.ok(at > -1);
+  const handler = routes.slice(at, routes.indexOf('\n});', at));
+  assert.match(handler, /g\.granted_by_user_id,/);
+  assert.match(handler, /granted_by_user_id: r\.granted_by_user_id \?\? null,/);
+});

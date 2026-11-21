@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CI-only, on-demand CodeBuild project for StudioOS GitHub Actions suite jobs. Webhook activation is a separate operation.
+
+Parameters:
+  ConnectionArn:
+    Type: String
+    Description: ARN of an AVAILABLE CodeConnections GitHub App connection in this Region, installed only on AxalNetwork/StudioOS.
+    AllowedPattern: '^arn:[a-z0-9-]+:codeconnections:[a-z0-9-]+:[0-9]{12}:connection/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    ConstraintDescription: Supply the complete ARN of a CodeConnections connection.
+  ProjectConcurrency:
+    Type: Number
+    Default: 9
+    MinValue: 1
+    MaxValue: 60
+    Description: Project admission cap. It must fit the regional Linux LARGE quota. Nine permits one full suite at once.
+
+Resources:
+  RunnerLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RetentionInDays: 14
+
+  RunnerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref 'AWS::AccountId'
+              ArnEquals:
+                'aws:SourceArn': !Sub 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/studioos-queue-suite'
+      Policies:
+        - PolicyName: SuiteRunner
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: WriteBuildLogStreams
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${RunnerLogs}:log-stream:*'
+              - Sid: ReadStudioOSConnection
+                Effect: Allow
+                Action:
+                  - codeconnections:GetConnection
+                  - codeconnections:GetConnectionToken
+                Resource: !Ref ConnectionArn
+
+  SuiteProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: studioos-queue-suite
+      Description: Ephemeral x86 Linux runners for approved StudioOS suite benchmarking and merge candidates.
+      Visibility: PRIVATE
+      ServiceRole: !GetAtt RunnerRole.Arn
+      ConcurrentBuildLimit: !Ref ProjectConcurrency
+      TimeoutInMinutes: 45
+      QueuedTimeoutInMinutes: 15
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_LARGE
+        Image: aws/codebuild/standard:7.0
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: false
+      Artifacts:
+        Type: NO_ARTIFACTS
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref RunnerLogs
+        S3Logs:
+          Status: DISABLED
+      Source:
+        Type: GITHUB
+        Location: https://github.com/AxalNetwork/StudioOS.git
+        Auth:
+          Type: CODECONNECTIONS
+          Resource: !Ref ConnectionArn
+        # Runner jobs install the Actions runner automatically. Ordinary source builds
+        # must never execute a buildspec supplied by a branch of the public repo.
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - 'echo "This project accepts approved GitHub Actions runner jobs only."; exit 1'
+      Tags:
+        - Key: Project
+          Value: StudioOS
+        - Key: Workload
+          Value: ActionsSuite
+
+Outputs:
+  ProjectName:
+    Value: !Ref SuiteProject
+  ProjectArn:
+    Value: !GetAtt SuiteProject.Arn
+  LogGroup:
+    Value: !Ref RunnerLogs

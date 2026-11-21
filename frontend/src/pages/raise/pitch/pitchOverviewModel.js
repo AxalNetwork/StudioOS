@@ -8,7 +8,7 @@
  * only ever a real count of an answered read.
  */
 
-/** The tiles, in order. The Overview is not a tile: it lights none. */
+/** The Pitch tabs and their addresses. */
 export { STUDIO_PATH as OVERVIEW_PATH, DECKS_PATH, SCRIPT_PATH, SHARE_PATH } from './pitchStudioModel.js';
 
 /** The header's primary, by tile (D4254 §1.4). Review and Notes have Ask only. */
@@ -22,22 +22,14 @@ export const BUILD_YOUR_DECK = 'Build your deck';
 
 /** D4599: what an import gives, in the canvas's words (Pitch Studio v2, "Import a deck or document"). */
 export const IMPORT_LINE = 'A .pptx becomes editable cards. A PDF, DOCX or pasted text becomes an outline you approve card by card.';
-export const NO_DECK_TITLE = 'Build the deck you’ll pitch from';
+export const NO_DECK_TITLE = 'Turn your venture’s data into an investor-ready pitch';
 export const NO_DECK_ITEMS = Object.freeze([
-  { id: 'records', title: 'Start from your records', line: 'A first deck from what StudioOS already knows. Every figure shows its source.' },
-  { id: 'template', title: 'Pick a template', line: 'Start from a layout, then fill it from your records.' },
+  { id: 'records', title: 'Generate from my data', line: 'Fill an investor outline from your records. Review every card before you save.' },
+  { id: 'manual', title: 'Build step by step', line: 'Choose the audience, round, sources and outline before you confirm the price.' },
   // D4599 (#4599): the first-use import, the Pitch Studio v2 canvas's third way in. It opens the
   // Decks tile's own sheet (`DocumentImport.jsx`, #3810) under the same `importDocument` gate. The
   // line says what each kind gives: a .pptx is cards; a PDF is an outline, never a copy of its slides.
   { id: 'import', title: 'Import a deck or document', line: IMPORT_LINE, adapter: 'importDocument' },
-]);
-
-/** What Pitch does, under the no-deck panel: no numbers, only what each part is for. */
-export const WHAT_PITCH_DOES = Object.freeze([
-  ['What to say', 'A script for every card, and the questions investors are likely to ask.'],
-  ['Rehearse', 'Run the pitch against the clock and see where it runs long.'],
-  ['Review', 'Comments from your team, approvals, and a check of every figure.'],
-  ['Share & analytics', 'One link per investor, with or without an NDA, and who read what.'],
 ]);
 
 const slidesOf = (deck) => (Array.isArray(deck?.slides) ? deck.slides : null);
@@ -77,7 +69,7 @@ export function lastRehearsal(list) {
 /** Open threads, from the comments read's own count when it sends one. */
 export function openComments(read) {
   if (!read || typeof read !== 'object') return null;
-  if (Number.isFinite(Number(read.open))) return Number(read.open);
+  if (read.open != null && Number.isFinite(Number(read.open))) return Number(read.open);
   const list = Array.isArray(read.comments) ? read.comments : null;
   return list ? list.filter((c) => c?.parent_uid == null && c?.resolved_at == null).length : null;
 }
@@ -110,7 +102,7 @@ const initialsOf = (name) => String(name || '').split(/\s+/).filter(Boolean).sli
  * recorded. Newest first, at most `ACTIVITY_ROWS`. `null` when the read gave
  * no list, so the page says it could not read it rather than "no activity".
  */
-export function investorActivity(read, limit = ACTIVITY_ROWS) {
+export function investorActivity(read, limit = ACTIVITY_ROWS, { showUnopened = false } = {}) {
   const links = Array.isArray(read?.links) ? read.links : null;
   if (!links) return null;
   const rows = [];
@@ -121,13 +113,21 @@ export function investorActivity(read, limit = ACTIVITY_ROWS) {
     const viewed = Number(l?.analytics?.views) > 0 && stamp(l.analytics.last_viewed_at) != null ? l.analytics.last_viewed_at : null;
     const event = last ? { at: last.at, line: String(last.words || 'Opened') }
       : nda ? { at: nda, line: 'Accepted the NDA' }
-        : viewed ? { at: viewed, line: 'Opened the deck' } : null;
-    if (!event) continue;
+        : viewed ? { at: viewed, line: 'Opened the deck' }
+          : showUnopened && l?.analytics?.views === 0 && stamp(l.created_at) != null
+            ? { at: l.created_at, line: 'Link created · Not opened' } : null;
+    if (!event || !Number.isSafeInteger(Number(l.id))) continue;
     const name = l?.investor?.label || null;
     rows.push({
       id: Number(l.id), name, fund: l?.investor?.fund || null, initials: initialsOf(name || l?.investor?.fund),
       prospectId: l?.investor?.prospect_id == null ? null : Number(l.investor.prospect_id),
       line: event.line, at: event.at,
+      ...(showUnopened ? {
+        t: stamp(event.at),
+        version: read.version ?? null,
+        nda: l.nda?.state === 'accepted' ? 'NDA accepted' : l.nda?.state === 'not_accepted' ? 'NDA pending' : null,
+        views: Number.isSafeInteger(l.analytics?.views) && l.analytics.views > 0 ? l.analytics.views : null,
+      } : {}),
     });
   }
   return rows.sort((a, b) => stamp(b.at) - stamp(a.at) || b.id - a.id).slice(0, limit);

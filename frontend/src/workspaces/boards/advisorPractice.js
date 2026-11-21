@@ -3,6 +3,7 @@ import { bookingView } from '../../pages/advisor/advisory/kit.jsx';
 import { classifyBooking } from '../../pages/advisor/practice/opportunityLog.js';
 import { LANE_LABEL } from '../../pages/advisor/practice/engagementBoard.js';
 import { STATE_LABEL } from '../../pages/advisor/practice/deliveryTrail.js';
+import PracticeSetup from '../../pages/advisor/practice/PracticeSetup.jsx';
 
 /*
  * `/practice` — Advisor Canvas V3, "Run my advisory business".
@@ -81,6 +82,9 @@ function wholeCount(d, cap = null) {
 
 export default function advisorPracticeBoard(role, api) {
   return {
+    // #4830 (D4830), board PX-01: "Set up your practice" leads, and takes the place of these sections while a setup
+    // step is known to be missing.
+    lead: PracticeSetup,
     sources: {
       bookings: () => api.listMyAdvisorBookings(),
       engagements: () => api.listMyAdvisorEngagements(),

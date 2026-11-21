@@ -57,7 +57,8 @@ test('the page reads licence, tab and kind from the URL, and writes them back', 
   assert.match(PAGE, /const wanted = params\.get\('licence'\);/);
   assert.match(PAGE, /tabFromParam\(params\.get\('tab'\), open\?\.kind\)\.key/);
   assert.match(PAGE, /tab=\{tab\} onTab=\{\(t\) => setParam\(\{ tab: t === DEFAULT_TAB \? null : t \}\)\}/);
-  assert.match(PAGE, /const step = stepOfTab\(tab\);/);
+  // D4819 part 20: a phone reads a terms editor's tab as the read-only Terms (`phoneStep`); the tab is still the URL's.
+  assert.match(PAGE, /const step = phone \? phoneStep\(stepOfTab\(tab\)\) : stepOfTab\(tab\);/);
   assert.doesNotMatch(PAGE, /const \[step, setStep\] = useState\(1\);/, 'the tab is not local state any more');
 });
 
@@ -101,7 +102,9 @@ test('tabs are a tablist with selection, roving focus and arrow keys; filters an
   assert.match(PAGE, /role="tablist" aria-label="Licence sections"/);
   assert.match(PAGE, /role="tab"\s+aria-selected=\{step === t\.step\} aria-controls="licence-tabpanel" tabIndex=\{step === t\.step \? 0 : -1\}/);
   assert.match(PAGE, /role="tabpanel" id="licence-tabpanel"/);
-  assert.match(PAGE, /overflow-x-auto whitespace-nowrap/, 'a narrow screen scrolls the tab row rather than wrapping it');
+  assert.match(PAGE, /md:overflow-x-auto md:whitespace-nowrap/, 'from md up, a narrow window scrolls the tab row rather than wrapping it');
+  // D4819 part 20 (L20): below md the six sections are a 3 × 2 grid, so the row never scrolls the page sideways.
+  assert.match(PAGE, /data-testid="licence-tabs"\s+className="mt-6 grid grid-cols-3 /, 'a phone draws the sections as a grid');
   assert.match(PAGE, /aria-pressed=\{kindFilter === id\}/);
   assert.match(PAGE, /aria-pressed=\{form\.kind === id\}/);
   // D4819: the ledger and the open licence are two views now, so the licence
@@ -122,9 +125,15 @@ test('tabs are a tablist with selection, roving focus and arrow keys; filters an
 
 test('no licence write asks with window.prompt or window.confirm any more', () => {
   assert.doesNotMatch(PAGE, /window\.(prompt|confirm)\(/);
-  for (const k of ['demoteAdmin', 'acceptNotice', 'rejectNotice', 'suspendLicence', 'terminateLicence']) {
+  for (const k of ['acceptNotice', 'rejectNotice']) {
     assert.ok(PAGE.includes(`await ask(LICENCE_REASONS.${k})`), k);
   }
+  // D4819 part 11 (#5922): Remove… (the demote) asks through the Access model, which states its
+  // consequence first and keeps demoteAdmin's own minimum; licence_access_d5922 checks the words.
+  // D4819 part 21 (#5928): add and remove go through the one consequence sheet.
+  assert.ok(PAGE.includes("await ask('removeAdmin', licence, { target: a })"), 'demoteAdmin');
+  // D4819 part 4 (#5927): suspend and terminate ask through the consequence sheet.
+  assert.ok(PAGE.includes('await askConsequence(action, d, reads)'));
 });
 
 test('a reason is checked before it is sent, with the Worker\'s own minimums', () => {
@@ -156,10 +165,10 @@ test('a history row names who did it, what changed and how it ended', () => {
     change: { recorded: true, before: { founder: 5, investor: 2 }, after: { founder: 8, investor: 2 } },
   } }));
   const text = renderedText(html);
-  assert.match(text, /seats changed/);
-  assert.match(text, /by Sue/);
+  assert.match(text, /Seats changed/);
+  assert.match(text, /Sue/);
   assert.match(text, /HQ done · branch pending/);
-  assert.match(text, /founder58/, 'before then after');
+  assert.match(text, /founderBefore: 5 → , after: 8/, 'before then after');
   assert.doesNotMatch(text, /investor/, 'an unchanged field is not listed as a change');
 });
 
@@ -171,7 +180,9 @@ test('Not recorded and Unreadable stay two different things', () => {
     [{ field: 'status', label: 'Status', before: 'active', after: 'suspended' }]);
   assert.equal(outcomeLabel(null), 'Not recorded');
   assert.equal(actorLabel({ state: 'unknown', id: 9 }), 'Unknown account');
-  assert.equal(actorLabel({ state: 'none' }), 'System');
+  // D4819 L16 (#5926): a row naming nobody reads Not recorded; only an automatic step is System.
+  assert.equal(actorLabel({ state: 'none' }), 'Not recorded');
+  assert.equal(actorLabel({ state: 'none' }, { automatic: true }), 'System');
   const legacy = renderedText(renderToStaticMarkup(h(HistoryRow, { e: { id: 1, event: 'created', actor: { state: 'none' }, change: { recorded: false }, outcome: null } })));
   assert.match(legacy, /Change: Not recorded\./);
   const broken = renderedText(renderToStaticMarkup(h(HistoryRow, { e: { id: 2, event: 'renewed', actor: { state: 'none' }, change: { recorded: true, readable: false }, outcome: 'committed' } })));

@@ -154,11 +154,37 @@ export async function makeMeetLink(env: Env, userId: number, input: { topic: str
   }
 }
 
-/** The Meet event is the creator's Google copy of the item, so the copy hook updates it in place. */
-export async function adoptMeetCopy(env: Env, userId: number, kind: 'ic_meeting' | 'founder_checkin', sourceId: number, externalRef: string): Promise<void> {
+/**
+ * The Meet event is the creator's Google copy of the item, so the copy hook updates it in place.
+ * #5871: a copy it replaces loses its failed-delete stamp too, so the retry job
+ * that deletes stamped copies never deletes the new Meet event in its place.
+ */
+export async function adoptMeetCopy(env: Env, userId: number, kind: 'ic_meeting' | 'founder_checkin' | 'event_hosted', sourceId: number, externalRef: string): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO calendar_sync_records (user_id, provider, source_kind, source_id, external_event_id, last_synced_at)
      VALUES (?, 'google', ?, ?, ?, ?)
-     ON CONFLICT (user_id, provider, source_kind, source_id) DO UPDATE SET external_event_id = excluded.external_event_id`,
+     ON CONFLICT (user_id, provider, source_kind, source_id) DO UPDATE SET external_event_id = excluded.external_event_id, last_error = NULL`,
   ).bind(userId, kind, sourceId, externalRef, new Date().toISOString()).run();
+}
+
+/**
+ * #5871 (D5871): an event's Meet event becomes its host's Google copy of the
+ * event (`event_hosted`), so the event's Cancel removes it the way it removes
+ * any hosted copy. A Google copy the host already had of this event (an
+ * earlier sync, or an earlier Meet) is the one it replaces: it is deleted from
+ * their calendar after the new one is recorded, best-effort, so the event
+ * keeps one copy there rather than two.
+ */
+export async function adoptEventMeetCopy(env: Env, userId: number, eventId: number, externalRef: string): Promise<void> {
+  const prior = await env.DB.prepare(
+    `SELECT external_event_id FROM calendar_sync_records
+      WHERE user_id = ? AND provider = 'google' AND source_kind = 'event_hosted' AND source_id = ?`,
+  ).bind(userId, eventId).first<{ external_event_id: string | null }>();
+  await adoptMeetCopy(env, userId, 'event_hosted', eventId, externalRef);
+  const old = prior?.external_event_id;
+  if (!old || old === externalRef) return;
+  try {
+    const conn = await googleConnection(env, userId);
+    if (conn) await cancelMeeting(env, conn, old);
+  } catch { /* best-effort: the old copy stays in their calendar */ }
 }

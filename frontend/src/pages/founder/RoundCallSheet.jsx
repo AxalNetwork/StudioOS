@@ -1,11 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundCallsApi } from '../../lib/api/roundCalls';
+import { prospectInvitesApi } from '../../lib/api/prospectInvites';
+import { roundCallFollowThroughApi } from '../../lib/api/roundCallFollowThrough';
+import { Unreadable } from '../../ui/Honesty.jsx';
 import { reportError } from '../../lib/log';
 import { callHref } from '../raise/calls/callsModel';
 import Lightbox from '../../ui/Lightbox';
 import ActionSheet, { primary, ghost } from '../../ui/ActionSheet';
 import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsToCents, callDate } from './roundCallParts';
+import {
+  NOT_RECORDED, SOURCE_FILTERS, SOURCE_ON, SOURCE_OWNER_ONLY, SOURCE_REMATCH, SOURCE_TODAY, SOURCE_WHY, sourceChip, sourceFooter, sourceRows, sourceTicks,
+} from './callFollowThroughModel';
 
 /**
  * D686 §5.6 (#1598) — Raise's Call for Capital: five steps, a draft resumed
@@ -23,6 +29,14 @@ import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsT
  * Axal greyed, the preview with counsel's four states, and Send with what is
  * missing acknowledged one by one, then its result. A saved draft's address is
  * `callHref`'s, under Calls in the Raise shell. A refusal keeps every entry.
+ *
+ * D7513 (#7513, RAC20C, RAC20D) — a draft started from a closed call
+ * (`round_calls.source_call_id`, D6863) opens its Audience step on that call's
+ * chosen investors, read from `GET /round-calls/:uid/source-audience`: each one
+ * still verified and in the pipeline is ticked, the rest are greyed with why.
+ * The draft's own recorded audience always wins over the closed call. Only the
+ * venture's owner sets the audience (D1222's `can.audience`): a co-founder sees
+ * the ticks read only, and the step writes nothing for them.
  */
 export const ROUND_CALL_STEPS=['The round','Materials','Audience','Preview','Send'];
 
@@ -181,12 +195,20 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   const [matches,setMatches]=useState(null),[page,setPage]=useState(null),[editing,setEditing]=useState(null),[choosing,setChoosing]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[outcome,setOutcome]=useState(null),[note,setNote]=useState(null);
   const [dismissed,setDismissed]=useState(false),[acks,setAcks]=useState([]),[cleared,setCleared]=useState(false),[savedDraft,setSavedDraft]=useState(false);
+  const [wording,setWording]=useState(null);
+  // D6052 (#6052): each prospect's invitation state, read on the audience step, and the open invite form.
+  const [invites,setInvites]=useState(null),[inviteRun,setInviteRun]=useState(0),[inviting,setInviting]=useState(null);
+  // D7513: the closed call this draft was started from, read on the audience step; its ticks are applied once.
+  const [source,setSource]=useState(null),[sourceRun,setSourceRun]=useState(0);
+  const preticked=useRef(false);
+  const sourceId=page?.call?.source_call_id??null,canSet=page?.can?.audience!==false;
+  const termsInput=useRef(null);
   const saved=useRef(null),touched=useRef(false),[matchRun,setMatchRun]=useState(0);
   useEffect(()=>{
     if(!context.data||!resume.data)return;
     const p=resume.data.page;
     const seeded=recordedRoundFields(context.data,p?p.call:resume.data.call||null);
-    setFields(seeded);
+    setFields(seeded);setWording(null);
     if(p){
       setUid(p.call.uid);setPage(p);saved.current=seeded;
       const at=resumeStep(p);setStep(at.step);setNote(at.reason);
@@ -197,17 +219,59 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   },[context.data,resume.data]);
   useEffect(()=>{
     if(step!==2||!uid)return;
+    // D1222: the preview is the owner's; a co-founder's step says who re-matches instead of failing a read.
+    if(!canSet){setMatches({off:true});return;}
     let alive=true;setMatches({loading:true});
     roundCallsApi.previewAudience(uid,{chosen_prospect_ids:chosen,include_matches:true}).then(
       data=>{if(alive){setMatches({data});if(!data.matched)setIncludeMatches(false);}},
       e=>{reportError('round-calls:matches',e);if(alive)setMatches({error:e});});
     return()=>{alive=false;};
-  },[step,uid,chosen,matchRun]);
-  function change(key,value){setFields(current=>{
-    const next={...current,[key]:value};
-    // A new instrument takes its own seeded terms where none is typed yet.
-    if(key==='instrument'){const seed=termSeed(context.data,value);for(const k of ['cap','discount','pre_money'])if(!next[k])next[k]=seed[k];}
-    return next;});}
+  },[step,uid,chosen,matchRun,canSet]);
+  useEffect(()=>{
+    if(step!==2||!uid||sourceId==null)return;
+    let alive=true;setSource(current=>current?.data?current:{loading:true});
+    roundCallFollowThroughApi.sourceAudience(uid).then(
+      data=>{
+        if(!alive)return;
+        setSource({data});
+        const ticks=preticked.current?null:sourceTicks(data,page);
+        if(!ticks)return;
+        preticked.current=true;
+        if(!ticks.length)return;
+        setChosen(values=>[...new Set([...values,...ticks])]);
+        // The ticks are an audience the owner has not saved yet: Next writes them.
+        if(canSet)touched.current=true;
+      },
+      e=>{reportError('round-calls:source-audience',e);if(alive)setSource({error:e});});
+    return()=>{alive=false;};
+  },[step,uid,sourceId,sourceRun,page,canSet]);
+  useEffect(()=>{
+    if(step!==2)return;
+    let alive=true;setInvites({loading:true});
+    prospectInvitesApi.states(projectId).then(
+      data=>{if(alive)setInvites({data});},
+      e=>{reportError('round-calls:invites',e);if(alive)setInvites({error:e});});
+    return()=>{alive=false;};
+  },[step,projectId,inviteRun]);
+  async function sendInvite(){
+    const form=inviting;if(!form||form.busy)return;
+    setInviting({...form,busy:true,error:''});
+    try{
+      const result=await prospectInvitesApi.send({projectId,prospectId:form.prospectId,email:form.email.trim()});
+      if(!result?.email_sent||!result.invite?.invited_at){setInviting({...form,busy:false,error:INVITE_NOT_SENT});return;}
+      setInvites(current=>current?.data?{data:invitedLocally(current.data,form.prospectId,result.invite.invited_at)}:current);
+      setInviting(null);
+    }catch(e){reportError('round-calls:invite',e);setInviting({...form,busy:false,error:e.status>=500||!e.status?INVITE_NOT_SENT:e.message||INVITE_NOT_SENT});}
+  }
+  function change(key,value){
+    if(fields[key]!==value&&(['amount','instrument','minimum','target'].includes(key)||(TERM_KEYS[fields.instrument]||[]).includes(key)))setWording(null);
+    setFields(current=>{
+      const next={...current,[key]:value};
+      // A new instrument takes its own seeded terms where none is typed yet.
+      if(key==='instrument'){const seed=termSeed(context.data,value);for(const k of ['cap','discount','pre_money'])if(!next[k])next[k]=seed[k];}
+      return next;
+    });
+  }
   async function run(action){setBusy(true);setError('');try{await action();}catch(e){reportError('round-calls:action',e);setError(e.code==='counsel_approval_required'?'Counsel has not approved the terms yet.':
       e.code==='nda_required'?'A signed NDA is required first.':e.code==='round_calls_disabled'?'Coming soon. Round calls are not enabled.':
       e.status>=500||!e.status?'The action could not be confirmed. Check the call before retrying.':e.message||'The action was refused. Check the recorded fields.');}finally{setBusy(false);}}
@@ -230,7 +294,7 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     await run(async()=>{
       if(step===0){await persist(ROUND_KEYS);setNote(null);setStep(1);}
       else if(step===1){await persist(['deck_id','room']);setStep(2);}
-      else if(step===2){if(touched.current||!page)await roundCallsApi.audience(uid,{chosen_prospect_ids:chosen,include_matches:includeMatches});touched.current=false;setPage(await roundCallsApi.page(uid));setStep(3);}
+      else if(step===2){if(canSet&&(touched.current||!page))await roundCallsApi.audience(uid,{chosen_prospect_ids:chosen,include_matches:includeMatches});touched.current=false;setPage(await roundCallsApi.page(uid));setStep(3);}
       else if(step===3){setPage(await roundCallsApi.page(uid));setStep(4);}
     });
   }
@@ -240,15 +304,33 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     const gap=firstMissingRow(fields);if(gap){setError('Complete the round name, amounts, instrument, terms and target close to save a draft.');return;}
     await run(async()=>{await persist(ROUND_KEYS);setSavedDraft(true);});
   }
+  async function draftTerms() {
+    const request={uid,projectId,loading:true};
+    setWording(request);
+    const finish=(answer)=>setWording(current=>current===request?{...request,loading:false,...answer}:current);
+    try {
+      const result=await roundCallsApi.termsDraft(uid,{
+        project_id:projectId, amount_cents:dollarsToCents(fields.amount), instrument:fields.instrument,
+        minimum_cheque_cents:dollarsToCents(fields.minimum), target_close:fields.target, ...termsBody(fields),
+      });
+      if(typeof result?.draft!=='string'||!result.draft.trim())throw new Error('No draft was returned.');
+      finish({text:result.draft});
+    } catch (e) {
+      finish({error:e.message||'Eadwyn could not draft these words. Try again.'});
+    }
+  }
   const on={change,next,send,saveDraft,
-    acceptTerms:text=>{setFields(f=>acceptPlainTerms(f,text));},dismissTerms:()=>setDismissed(true),
+    draftTerms, termsInput, acceptTerms:(text, edit)=>{setFields(f=>acceptPlainTerms(f,text));if(edit)termsInput.current?.focus?.();},dismissTerms:()=>setDismissed(true),
     ack:key=>setAcks(list=>list.includes(key)?list.filter(k=>k!==key):[...list,key]),back:()=>setStep(n=>Math.max(0,n-1)),goto:n=>setStep(n),edit:setEditing,choosing:()=>setChoosing(v=>!v),
     recheck:()=>run(async()=>setPage(await roundCallsApi.page(uid))),
+    retryInvites:()=>setInviteRun(n=>n+1),inviteOpen:id=>setInviting({prospectId:id,email:'',busy:false,error:''}),
+    inviteEmail:value=>setInviting(form=>form&&{...form,email:value}),inviteCancel:()=>setInviting(null),inviteSend:sendInvite,
+    retrySource:()=>setSourceRun(n=>n+1),
     requestCounsel:()=>run(async()=>{await roundCallsApi.requestCounsel(uid,page.call.revision);setCleared(false);setPage(await roundCallsApi.page(uid));}),retryMatches:()=>setMatchRun(n=>n+1),
     includeMatches:value=>{touched.current=true;setIncludeMatches(value);},
     choose:id=>{touched.current=true;setChosen(values=>values.includes(id)?values.filter(value=>value!==id):[...values,id]);}};
   const ready=context.data&&resume.data;
-  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft}} on={on} onClose={onClose}/>;
+  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,invites,inviting,page,source,sourceId,canSet,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft,wording:wording?.uid===uid&&wording?.projectId===projectId?wording:null}} on={on} onClose={onClose}/>;
   return <ActionSheet {...CALL_SHEET} onClose={onClose}><CallReadState read={context}><CallReadState read={resume}>{ready&&<OpenCallNotice call={resume.data.open}/>}</CallReadState></CallReadState></ActionSheet>;
 }
 
@@ -262,7 +344,7 @@ export function OpenCallNotice({call}) {
  * founder typed or a record filled: the amount, the instrument and its key
  * terms, the minimum cheque and the close. It adds no figure of its own, so a
  * money term is never proposed (#2431 `money_term`); null until every one of
- * those fields is set. Eadwyn's own wording waits for a Worker route (D1224 §3).
+ * those fields is set. This fallback uses only recorded fields (D1224 §3).
  */
 export function plainTerms(f) {
   const amount=wholeDollars(f.amount),minimum=wholeDollars(f.minimum),close=longDate(f.target),kind=INSTRUMENT_PHRASE[f.instrument];
@@ -308,7 +390,7 @@ function Field({label,id,chipText,help,children}) {
 }
 
 function RoundStep({s,on}) {
-  const f=s.fields,chips=seedChips(s.context,f),drafted=plainTerms(f);
+  const f=s.fields,chips=seedChips(s.context,f),fallback=plainTerms(f),drafted=s.wording?.text||fallback;
   return <>
     {s.note&&<p role="alert">{s.note}</p>}
     <Field label="Name" id="call-name"><input id="call-name" className={callInput} value={f.name} maxLength={200} onChange={e=>on.change('name',e.target.value)}/></Field>
@@ -324,13 +406,16 @@ function RoundStep({s,on}) {
     {!f.instrument&&<p className="text-xs text-axal-muted">Choose an instrument for its cap, discount or pre-money.</p>}
     <Field label="Minimum cheque" id="call-minimum" help={MINIMUM_HELP}><input id="call-minimum" className={callInput} inputMode="decimal" value={f.minimum} onChange={e=>on.change('minimum',e.target.value)}/></Field>
     <Field label="Target close" id="call-target" chipText={chips.target}><input id="call-target" type="date" className={callInput} value={f.target} onChange={e=>on.change('target',e.target.value)}/></Field>
-    <Field label="Terms in plain words" id="call-terms"><textarea id="call-terms" className={callInput} maxLength={20000} placeholder="Empty" value={f.terms} onChange={e=>on.change('terms',e.target.value)}/></Field>
+    <Field label="Terms in plain words" id="call-terms"><textarea ref={on.termsInput} id="call-terms" className={callInput} maxLength={20000} placeholder="Empty" value={f.terms} onChange={e=>on.change('terms',e.target.value)}/></Field>
     {!f.terms.trim()&&drafted&&!s.dismissed&&<div className="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3 dark:border-violet-900 dark:bg-violet-950/30" data-testid="call-drafted-terms">
-      <p className="text-xs font-bold text-violet-700 dark:text-violet-300">Drafted from the fields above</p>
+      <p className="text-xs font-bold text-violet-700 dark:text-violet-300">{s.wording?.text?'Proposed by Eadwyn':'Drafted from the fields above'}</p>
+      {s.wording?.error&&<p role="status" className="text-sm">{s.wording.error}</p>}
       <p className="text-sm">{drafted}</p>
       <div className="flex flex-wrap gap-2"><button type="button" className={callButton} onClick={()=>on.acceptTerms(drafted)}>Accept</button>
         <button type="button" className={callButton} onClick={()=>on.acceptTerms(drafted,true)}>Edit</button>
-        <button type="button" className={callButton} onClick={on.dismissTerms}>Dismiss</button></div></div>}
+        {on.draftTerms&&!s.wording?.text&&<button type="button" className={callButton} disabled={s.busy||s.wording?.loading} onClick={on.draftTerms}>{s.wording?.loading?'Drafting…':'Ask Eadwyn to draft'}</button>}
+        <button type="button" className={callButton} onClick={on.dismissTerms}>Dismiss</button></div>
+      {on.draftTerms&&!s.wording?.text&&<p className="text-xs text-axal-muted">AI drafting uses your allowance when the model responds, even if the wording cannot be used.</p>}</div>}
     {s.saved&&<p role="status">Draft saved. <Link className="underline" to={callHref({uid:s.uid,state:'draft'})}>Its address</Link> opens it again.</p>}
   </>;
 }
@@ -369,19 +454,31 @@ export function matchLine(d) {
 
 function AudienceStep({s,on}) {
   const m=s.matches,data=m?.data,others=data?.not_on_axal||[];
+  const fromSource=s.sourceId!=null;
+  // D7513: an investor the closed call already lists is ticked there, not twice.
+  const listed=new Set((s.source?.data?.rows||[]).map(r=>r.prospect_id).filter(id=>id!=null));
+  const pipeline=s.context.chosen.filter(p=>!listed.has(p.prospect_id));
   return <>
-    <div><h3 className="font-semibold">From your pipeline</h3><p className="text-xs text-axal-muted">Investors with a verified Axal account can be chosen.</p></div>
+    {s.canSet===false&&<p role="note" className="rounded-xl border border-axal-hairline bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-800" data-testid="call-audience-owner-only"><span aria-hidden="true">⦸ </span>{SOURCE_OWNER_ONLY}</p>}
+    {fromSource&&<SourceAudience s={s} on={on}/>}
+    <div><h3 className="font-semibold">{fromSource?'Others in your pipeline':'From your pipeline'}</h3><p className="text-xs text-axal-muted">Investors with a verified Axal account can be chosen.</p></div>
     <ul className="divide-y divide-axal-hairline border-y border-axal-hairline" aria-label="Your pipeline">
-      {s.context.chosen.map(p=><li key={p.prospect_id} className="flex items-center gap-3 py-2"><input type="checkbox" aria-label={'Choose '+(p.name||'this investor')} checked={s.chosen.includes(p.prospect_id)} onChange={()=>on.choose(p.prospect_id)}/>
+      {pipeline.map(p=><li key={p.prospect_id} className="flex items-center gap-3 py-2"><input type="checkbox" aria-label={'Choose '+(p.name||'this investor')} checked={s.chosen.includes(p.prospect_id)} disabled={s.canSet===false} onChange={()=>on.choose(p.prospect_id)}/>
         <span className="min-w-0 flex-1 font-semibold">{p.name||'Name not recorded'}</span><span className={chip}>Verified on Axal</span></li>)}
-      {others.map(p=><li key={'n'+p.prospect_id} className="flex items-center gap-3 py-2 text-axal-muted" data-testid="call-not-on-axal"><input type="checkbox" disabled aria-label={(p.name||'This investor')+' is not on Axal'} checked={false} readOnly/>
-        <span className="min-w-0 flex-1">{p.name||'Name not recorded'}</span><span className={chip}>Not on Axal</span>
-        <button type="button" className={callButton} disabled title={INVITE_WAIT}>Invite to Axal</button></li>)}
-      {!s.context.chosen.length&&!others.length&&<li className="py-2">No investor from this venture’s pipeline is available.</li>}
+      {others.map(p=>{const row=inviteRow(s.invites,p.prospect_id),open=s.inviting?.prospectId===p.prospect_id;
+        return <li key={'n'+p.prospect_id} className="py-2 text-axal-muted" data-testid="call-not-on-axal"><div className="flex flex-wrap items-center gap-3"><input type="checkbox" disabled aria-label={(p.name||'This investor')+' is not on Axal'} checked={false} readOnly/>
+          <span className="min-w-0 flex-1">{p.name||'Name not recorded'}</span>
+          {row.kind==='joined'?<span className={chip}>Joined · not verified yet</span>
+            :row.kind==='invited'?<span className={chip}>Invited · {shortDate(row.date)||'date not recorded'}</span>
+            :<><span className={chip}>Not on Axal</span><button type="button" className={callButton} disabled={row.kind!=='open'||open} title={row.reason||undefined} onClick={()=>on.inviteOpen(p.prospect_id)}>Invite to Axal</button></>}</div>
+          {open&&<InviteForm s={s} on={on} name={p.name} hasEmail={row.hasEmail}/>}</li>;})}
+      {!pipeline.length&&!others.length&&<li className="py-2">{fromSource&&s.context.chosen.length?'Every verified investor in your pipeline is listed above.':'No investor from this venture’s pipeline is available.'}</li>}
     </ul>
-    {others.length>0&&<p className="text-xs text-axal-muted">Invite to Axal: {INVITE_WAIT}</p>}
+    {others.length>0&&(s.invites?.error?<p role="alert" className="text-xs">Invitations are unreadable · <button type="button" className={callButton} onClick={on.retryInvites}>Try again</button></p>
+      :<p className="text-xs text-axal-muted">{s.invites?.data&&!s.invites.data.can_invite?'Invite to Axal: '+(s.invites.data.reason||INVITE_ROLE_FALLBACK):INVITE_NOTE}</p>)}
     <div className={card} aria-live="polite">
-      {!m||m.loading?<p role="status">Checking matches…</p>
+      {m?.off?<p data-testid="call-matches-owner">Matching investors are re-matched when the venture’s owner previews the audience.</p>
+        :!m||m.loading?<p role="status">Checking matches…</p>
         :m.error?<p role="alert">Matches are unreadable · <button type="button" className={callButton} onClick={on.retryMatches}>Try again</button></p>
         :data.matched>0?<><div className="flex items-center gap-3"><button type="button" role="switch" aria-checked={!!s.includeMatches} aria-label="Also invite investors whose published focus fits" className={callButton} onClick={()=>on.includeMatches(!s.includeMatches)}>{s.includeMatches?'On':'Off'}</button>
             <span className="font-semibold">Also invite investors whose published focus fits</span></div>
@@ -391,7 +488,72 @@ function AudienceStep({s,on}) {
     </div>
   </>;
 }
-export const INVITE_WAIT='not offered here yet. Axal has no route that invites a pipeline investor; they can sign up and verify, then be chosen.';
+/**
+ * D7513 (RAC20C, RAC20D): the closed call's chosen investors, filtered by how
+ * they answered it, each ticked when still verified and in the pipeline and
+ * greyed with its reason when not. The checkboxes are the sheet's `chosen`.
+ */
+function SourceAudience({s,on}) {
+  const [filter,setFilter]=useState('all');
+  const src=s.source;
+  if(src?.error)return <Unreadable what="The closed call’s investors" claim="Nothing is ticked from it until it can be read." onRetry={on.retrySource} size="block"/>;
+  if(!src?.data)return <section className={card} aria-label="The closed call’s investors" role="status" data-testid="call-source-loading"><p className="text-sm">Reading the closed call’s investors…</p>
+    {[70,55,62].map(w=><span key={w} className="block h-3 rounded bg-gray-100 dark:bg-gray-800" style={{width:`${w}%`}}/>)}</section>;
+  const d=src.data,rows=sourceRows(d,filter),closed=shortDate(d.source?.closed_at);
+  return <section className={card} aria-label={'From '+d.source.name} data-testid="call-source-audience">
+    <div><h3 className="font-semibold">{`From ${d.source.name}${closed?`, closed ${closed}`:''}`}</h3>
+      <p className="text-xs text-axal-muted">Its chosen investors, ticked when still verified on Axal and in your pipeline. {SOURCE_REMATCH}</p></div>
+    <div role="group" aria-label="Filter past recipients" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">{SOURCE_FILTERS.map(([key,label])=>{const n=sourceChip(d,key);
+      return <button key={key} type="button" aria-pressed={filter===key} className={`${filter===key?primary:ghost} shrink-0 whitespace-nowrap`} onClick={()=>setFilter(key)} data-testid={'call-source-chip-'+key}>{`${label} ${n==null?NOT_RECORDED:n}`}</button>;})}</div>
+    {rows.length?<ul className="divide-y divide-axal-hairline border-y border-axal-hairline dark:divide-gray-700 dark:border-gray-700" aria-label={'Chosen on '+d.source.name}>
+      {rows.map(r=>{const why=SOURCE_WHY[r.today],name=r.name||'Name not recorded',id='call-source-why-'+r.recipient_id;
+        const can=s.canSet!==false&&r.ticked===true&&r.prospect_id!=null;
+        return <li key={r.recipient_id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 py-2 ${why?'text-axal-muted dark:text-gray-400':''}`} data-testid={'call-source-row-'+r.recipient_id}>
+          <input type="checkbox" className="h-4 w-4" aria-label={'Include '+name} aria-describedby={why?id:undefined} checked={r.prospect_id!=null&&s.chosen.includes(r.prospect_id)} disabled={!can} onChange={()=>on.choose(r.prospect_id)}/>
+          <span className="min-w-0 flex-1"><b className="block">{name}</b>{why&&<span id={id} className="block text-xs"><span aria-hidden="true">⦸ </span>{why}</span>}</span>
+          <span className="text-xs">{`On ${d.source.name}: ${SOURCE_ON[r.on_source]||NOT_RECORDED}`}</span>
+          <span className={chip}>{SOURCE_TODAY[r.today]||NOT_RECORDED}</span></li>;})}
+    </ul>:<p className="text-sm text-axal-muted">{d.rows.length?'No chosen investor under this filter.':'The closed call had no chosen investors. Choose from your pipeline below.'}</p>}
+    <p className="text-xs text-axal-muted" data-testid="call-source-footer">{sourceFooter(d,rows,s.chosen)}</p>
+  </section>;
+}
+
+/**
+ * D6052 (#6052): Invite to Axal, through Contacts' one invite path. An invited investor is chosen only once
+ * their investor account is verified; inviting adds nobody to the audience.
+ */
+export const INVITE_NOTE='Invite to Axal emails them an invitation from you. They can be chosen once their investor account is verified.';
+export const INVITE_ROLE_FALLBACK='Only the venture’s founder can invite an investor to Axal.';
+export const INVITE_NOT_SENT='The invitation was not sent. Try again.';
+/** One not-on-Axal row's invite state, from the invitations read: joined, invited, open, or why not. */
+export function inviteRow(invites,prospectId) {
+  if(!invites||invites.loading)return {kind:'loading',reason:'Checking invitations…',hasEmail:false};
+  if(invites.error||!invites.data)return {kind:'unreadable',reason:'Invitations are unreadable.',hasEmail:false};
+  const item=(invites.data.items||[]).find(i=>i.prospect_id===prospectId);
+  const hasEmail=!!item?.has_email;
+  if(item?.joined_at)return {kind:'joined',date:item.joined_at,hasEmail};
+  if(item?.invited_at)return {kind:'invited',date:item.invited_at,hasEmail};
+  if(!invites.data.can_invite)return {kind:'refused',reason:invites.data.reason||INVITE_ROLE_FALLBACK,hasEmail};
+  return {kind:'open',reason:null,hasEmail};
+}
+/** The read after a sent invitation: that prospect Invited at the Worker's date, and holding an address. */
+export function invitedLocally(data,prospectId,invitedAt) {
+  const items=data.items||[];
+  const known=items.some(i=>i.prospect_id===prospectId);
+  return {...data,items:known?items.map(i=>i.prospect_id===prospectId?{...i,invited_at:invitedAt,has_email:true}:i)
+    :[...items,{prospect_id:prospectId,has_email:true,invited_at:invitedAt,joined_at:null}]};
+}
+function InviteForm({s,on,name,hasEmail}) {
+  const form=s.inviting,id='call-invite-email';
+  return <div className="mt-2 space-y-2 rounded-xl border border-axal-hairline p-3 text-axal-ink dark:text-gray-100" data-testid="call-invite-form">
+    {hasEmail?<p className="text-sm">Axal emails {name||'this investor'} at the address in your pipeline.</p>
+      :<div className="space-y-1"><label htmlFor={id} className="block text-xs font-semibold">Email for {name||'this investor'}</label>
+        <input id={id} type="email" className={callInput} value={form.email} maxLength={320} onChange={e=>on.inviteEmail(e.target.value)}/></div>}
+    {form.error&&<p role="alert" className="text-sm">{form.error}</p>}
+    <div className="flex flex-wrap gap-2"><button type="button" className={primary} disabled={form.busy||(!hasEmail&&!form.email.trim())} onClick={on.inviteSend}>{form.busy?'Sending…':'Send invitation'}</button>
+      <button type="button" className={ghost} disabled={form.busy} onClick={on.inviteCancel}>Cancel</button></div>
+  </div>;
+}
 
 /** The four counsel states the preview draws, and the button each shows. */
 export function counselState(page,cleared=false) {

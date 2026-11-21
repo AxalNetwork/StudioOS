@@ -64,6 +64,17 @@ test('a recorded zero is shown as evidence; target comparisons do not invent on-
   assert.equal(focusValue(0, 'mrr'), '$0');
 });
 
+test('a recorded reporting period has a venture link and is hidden from read-only views', () => {
+  const report = { key: 'report_due', label: 'Quarterly update · Q4', why: 'Late since 2026-11-10', href: '/grow/reporting?project_id=7', area: 'Reporting' };
+  const attention = { ...sparse, primary: { ...report, label: 'Share an update' }, items: [report] };
+  const html = render(attention);
+  assert.match(html, /grow-attention-report_due/);
+  assert.match(html, /Quarterly update · Q4/);
+  assert.match(html, /href="\/grow\/reporting\?project_id=7"/);
+  assert.doesNotMatch(render(attention, { readOnly: true }), /grow-attention-report_due|Quarterly update · Q4/);
+  assert.match(render({ ...sparse, state: 'partial' }), /grow-attention-partial/);
+});
+
 test('unknown focus and failed overview never pretend that setup is empty', () => {
   const partial = render({ ...sparse, state: 'unreadable', focus: unreadable, primary: null, items: [], signals: {} });
   assert.match(partial, /Focus could not be read/);

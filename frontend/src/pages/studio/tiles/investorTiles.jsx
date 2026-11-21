@@ -1,5 +1,5 @@
 /**
- * D1419 (#3698) — the investor's six module bodies, lifted from
+ * D1419 (#3698) — the investor's module bodies, lifted from
  * `InvestorStudioHome.jsx`'s three grids, over the reads the home already
  * makes (D321's states kept): the dashboard, the lifecycle, positions
  * analytics and calendar events. No read per tile.
@@ -8,72 +8,24 @@
  * an administrator's preview withholds every one (SM11). Quick stats keeps
  * its two sources' own states (`StatGroup`), so one failed source does not
  * blank the other.
+ *
+ * D6129 (#6129): Needs you and Funds are drawn to canvas D6126, and Returns,
+ * Thesis fit on live deals and Arrivals join them (`investorHomeModules.jsx`).
  */
 import { Link } from 'react-router-dom';
 import InvestorQuotaBars from '../../../components/InvestorQuotaBars';
 import { Unreadable, Unrecorded } from '../../../ui';
 import { Row, StatGroup, number } from '../../investor/investorStudioParts';
 import { TILE } from '../studioLayoutModel';
+import { COMMITMENT, LP_WORKSPACE, arrivalsOf, fitOf, fundsOf, needsYouRows, returnsOf, shortDay } from '../../investor/investorHomeModel';
+import { ArrivalsBody, FitBody, FundsBody, NeedsYouBody, ReturnsBody } from './investorHomeModules';
 import { formatRate } from '../../../lib/rate';
-import { parseStamp } from '../../../ui/parseStamp.js';
 
 const readable = (value) => String(value || '').replace(/[_-]/g, ' ').trim() || 'Not recorded';
-const score = (item) => number(item?.score ?? item?.ai_score ?? item?.match_score);
 const formatDate = (value) => {
   const date = value ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date) : 'Date not recorded';
 };
-
-/**
- * D4623 (#4623): what `ai_scored_opportunities` really is. Its rows are
- * `match_scores`, written by the matching engine D378 retired; nothing writes
- * or recalculates them now. The engine stamped `created_at` each time it
- * (re)calculated a score, so that is the calculation time; `model` says how it
- * was scored; `score_type` which kind of match it was. No input version (the
- * thesis answers the score was taken against) was ever stored. Anything absent
- * reads "Not recorded". The dashboard's own answer time is never used.
- */
-export const SCORE_KIND = { deal_flow: 'Deal flow', co_invest: 'Co-invest', referral: 'Referral' };
-export const HISTORICAL_NOTE = 'Historical: these scores came from the retired matching engine, and nothing recalculates them. Each shows when it was calculated and how, as recorded. The answers it was scored against were not recorded.';
-export function scoreProvenance(item) {
-  const at = parseStamp(item?.created_at);
-  const model = typeof item?.model === 'string' ? item.model.trim() : '';
-  return {
-    kind: SCORE_KIND[item?.score_type] || (item?.score_type ? readable(item.score_type) : null),
-    calculated: at == null ? null : `${new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }).format(new Date(at))} UTC`,
-    method: !model ? null : model === 'rule-based' ? 'Rule-based' : 'Language model',
-  };
-}
-
-const Recorded = ({ label, value, testId }) => (
-  <span data-testid={testId}>{label} {value ?? <Unrecorded reason={`The retired matching engine did not record this score’s ${label.toLowerCase()}.`} />}</span>
-);
-
-export function Opportunity({ item, index }) {
-  // `deal_id` holds the project id (D378's note). A score with none (a referral) links to no project.
-  const id = item.deal_id || null;
-  const key = item.id || id || index;
-  const value = score(item);
-  const p = scoreProvenance(item);
-  return (
-    <div className="is-opportunity" data-testid={`row-investor-opportunity-${key}`}>
-      <span className="is-score">{value == null ? <Unrecorded reason="No match score is recorded for this deal.">Unscored</Unrecorded> : Math.round(value)}</span>
-      <div>
-        <b>{item.deal_name || (id ? 'Deal name not recorded' : 'No deal recorded')}</b>
-        <p>{[p.kind, ...[item.sector, item.stage].filter(Boolean).map(readable)].filter(Boolean).join(' · ') || 'Details not recorded'}</p>
-        <p className="is-provenance" data-testid={`text-investor-score-provenance-${key}`}>
-          <span>Historical · </span>
-          <Recorded label="Calculated" value={p.calculated} testId={`text-investor-score-calculated-${key}`} />
-          <span> · </span>
-          <Recorded label="Method" value={p.method} testId={`text-investor-score-method-${key}`} />
-          <span> · </span>
-          <Recorded label="Inputs" value={null} testId={`text-investor-score-inputs-${key}`} />
-        </p>
-        <nav>{id ? <Link to={`/projects/${id}`} data-testid={`link-investor-open-deal-${key}`}>Open</Link> : null}<Link to="/deals" data-testid={`link-investor-request-intro-${key}`}>Request intro</Link></nav>
-      </div>
-    </div>
-  );
-}
 
 export function PortfolioRows({ data }) {
   const source = data?.analytics || data || {};
@@ -88,18 +40,68 @@ export function PortfolioRows({ data }) {
 }
 
 /**
+ * D6129 (#6129, canvas D6126): Needs you, Funds, Returns, Thesis fit on live
+ * deals and Arrivals. Each answers on its own reads: a read still out is
+ * loading, a failed one Unreadable with Try again, an answer with nothing in
+ * it the module's own empty words. The rules are `investorHomeModel.js`.
+ */
+function homeV2Tiles({ records, failures, retry, today, dashboard, dashboardUnavailable }) {
+  const { fund, deals, updates } = records;
+  const needs = needsYouRows(records, failures, today);
+  const fundUnreadable = !!failures.fund || (fund != null && !Array.isArray(fund?.lp_holdings));
+  const funds = fundUnreadable || fund === undefined ? null : fundsOf(fund, today);
+  const asAt = shortDay(today, { year: true });
+  const portfolio = records.portfolio;
+  const returns = portfolio && typeof portfolio === 'object' ? returnsOf(portfolio) : null;
+  const fit = deals && typeof deals === 'object' ? fitOf(deals) : null;
+  const dealSummary = dashboard?.proprietary_deal_flow_summary;
+  const offered = dashboardUnavailable || dashboard?.source_status?.deals === 'unreadable' ? { state: 'unreadable' }
+    : dashboard ? { state: 'ready', count: Number.isFinite(dealSummary?.total) ? dealSummary.total : null, lowerBound: dealSummary?.total_is_lower_bound === true } : null;
+  const arrivalsLoading = (updates === undefined && !failures.updates) || (fund === undefined && !failures.fund);
+  const arrivals = arrivalsLoading ? null : arrivalsOf({ updates, fund, updatesFailed: !!failures.updates, fundFailed: fundUnreadable });
+  const retryArrivals = () => { if (arrivals?.unreadable.includes('Founder updates')) retry('updates'); if (fundUnreadable || fund?.capital_statements_recorded === false) retry('fund'); };
+  const count = needs.rows.length;
+  return {
+    needs_you: !needs.incomplete && !count ? { state: TILE.EMPTY, empty: 'Nothing needs you today. Capital calls, fund notices, signatures and Trust requirements appear here when they need you.' }
+      : Object.values(needs.sources).every((s) => s.loading) ? { state: TILE.LOADING }
+        : { state: TILE.READY, note: count ? `${count} ${count === 1 ? 'item' : 'items'} · by due date, then date added` : undefined, body: <NeedsYouBody model={needs} onRetry={retry} /> },
+    fund_commitment: fundUnreadable ? { state: TILE.UNREADABLE, onRetry: () => retry('fund') }
+      : fund === undefined ? { state: TILE.LOADING }
+        : funds.unlinked && !funds.rows.length ? { state: TILE.READY, href: LP_WORKSPACE, openLabel: 'Open the LP workspace', body: <p className="ihs-sub">Open the LP workspace to link your commitment.</p> }
+          : !funds.rows.length ? { state: TILE.EMPTY, empty: 'You hold no fund commitment on Axal. Commitments you make to an Axal fund appear here with what was called, received and is due.', href: '/funds', openLabel: 'See Axal Fund I' }
+            : { state: TILE.READY, note: `${funds.rows.length} ${funds.rows.length === 1 ? 'fund' : 'funds'}`, href: COMMITMENT, openLabel: 'Open my commitments', body: <FundsBody funds={funds} asAt={asAt} onRetry={() => retry('fund')} /> },
+    returns: failures.portfolio || (portfolio !== undefined && !returns) ? { state: TILE.UNREADABLE, onRetry: () => retry('portfolio') }
+      : portfolio === undefined ? { state: TILE.LOADING }
+        : returns.empty ? { state: TILE.EMPTY, empty: 'No position is recorded in your book, so there are no returns to show.', href: '/portfolio/performance', openLabel: 'Open Portfolio' }
+          : { state: TILE.READY, href: '/portfolio/performance', openLabel: 'Open Portfolio', body: <ReturnsBody returns={returns} /> },
+    thesis_fit: failures.deals || (deals !== undefined && !fit) ? { state: TILE.UNREADABLE, onRetry: () => retry('deals') }
+      : deals === undefined ? { state: TILE.LOADING }
+        : !fit.rows.length ? { state: TILE.EMPTY, empty: 'No live deal is in your flow, so there is nothing to compare with your thesis.', href: '/deals', openLabel: 'Open Deals' }
+          : { state: TILE.READY, note: fit.notSet ? undefined : `${fit.rows.length} of ${fit.live} in your flow`, href: '/deals', openLabel: 'Open Deals', body: <FitBody fit={fit} onRetry={() => retry('deals')} /> },
+    arrivals: !arrivals ? { state: TILE.LOADING }
+      : arrivals.unreadable.length === 2 && !arrivals.items.length ? { state: TILE.UNREADABLE, onRetry: retryArrivals }
+        : { state: TILE.READY, note: arrivals.items.length ? 'Newest first' : undefined, body: <ArrivalsBody arrivals={arrivals} deals={offered} onRetry={retryArrivals} /> },
+  };
+}
+
+/** Every investor Studio key (the Worker's catalogue, `services/studioModules.ts`); an administrator's preview withholds each. */
+export const INVESTOR_KEYS = ['needs_you', 'fund_commitment', 'returns', 'thesis_fit', 'arrivals', 'upcoming_events', 'usage_quota', 'deal_lifecycle', 'quick_stats', 'portfolio_glance'];
+
+/**
  * One spec per investor Studio key. `lifecycle` and the two records are
  * undefined while loading and null (or a `failures` entry) when they failed.
  */
 export function investorTiles({
   user, previewing = false, dashboard, dashboardUnavailable = '', lifecycle, records = {}, failures = {},
-  opportunities = [], stages = [], events = [], eventsCoverage = { state: 'ready', failed: [] }, quick, refreshContext, retryLifecycle, retrySources,
+  stages = [], events = [], eventsCoverage = { state: 'ready', failed: [] }, quick, refreshContext, retryLifecycle, retrySources, retrySource = retrySources,
+  today = new Date().toISOString().slice(0, 10),
 }) {
   const withheld = { state: TILE.WITHHELD };
   if (previewing) {
-    return Object.fromEntries(['usage_quota', 'deal_lifecycle', 'scored_opportunities', 'quick_stats', 'portfolio_glance', 'upcoming_events'].map((k) => [k, withheld]));
+    return Object.fromEntries(INVESTOR_KEYS.map((k) => [k, withheld]));
   }
   return {
+    ...homeV2Tiles({ records, failures, retry: retrySource, today, dashboard, dashboardUnavailable }),
     usage_quota: { state: TILE.READY, href: '/pricing?for=investor', openLabel: 'Open account', body: <InvestorQuotaBars user={user} compact /> },
     deal_lifecycle: lifecycle === undefined ? { state: TILE.LOADING }
       : lifecycle === null ? { state: TILE.UNREADABLE, onRetry: retryLifecycle }
@@ -113,21 +115,6 @@ export function investorTiles({
                 <div className="is-funnel">{stages.slice(0, 5).map((stage) => <Link to={stage.href || '/deals'} key={stage.id || stage.label} data-testid={`link-investor-stage-${stage.id || stage.label}`}><b>{number(stage.count) ?? (lifecycle.partial ? <span className="text-red-700 dark:text-red-300" data-testid={`status-investor-stage-${stage.id || stage.label}-unreadable`}>Unreadable</span> : <Unrecorded />)}</b><span>{stage.label || readable(stage.id)}</span></Link>)}</div>
                 {lifecycle.partial && <Unreadable what="Some funnel stages" claim="This is not a claim that you have none there." onRetry={retryLifecycle} />}
                 <p className="is-card-note">Read-only here — stages move in Deals, never from this surface.</p>
-              </>
-            ),
-          },
-    scored_opportunities: dashboardUnavailable ? { state: TILE.UNREADABLE, onRetry: refreshContext }
-      : !dashboard ? { state: TILE.LOADING }
-        : !opportunities.length ? { state: TILE.EMPTY, empty: 'No historical match scores are recorded for you. The matching engine that wrote them is retired.', href: '/deals', openLabel: 'Open deal flow' }
-          : {
-            state: TILE.READY,
-            note: `${opportunities.length} historical`,
-            href: '/deals',
-            openLabel: 'Open deal flow',
-            body: (
-              <>
-                <div className="is-opportunity-list">{opportunities.map((item, index) => <Opportunity key={item.id || item.deal_id || index} item={item} index={index} />)}</div>
-                <p className="is-card-note" data-testid="text-investor-scores-historical">{HISTORICAL_NOTE}</p>
               </>
             ),
           },

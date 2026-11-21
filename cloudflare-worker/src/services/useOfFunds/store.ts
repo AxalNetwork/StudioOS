@@ -3,6 +3,7 @@ import type { Env, User } from '../../types';
 import { majorToMinor, toMajorString } from '../../../../frontend/src/lib/money.js';
 import { copyLegacyBase, SECTION_LABELS, UofStoreError } from './legacy';
 import { plan, SECTION_KEYS, type PlanInputs, type SectionKey, type Source } from './plan';
+import { capTableScenarioIn, linkView } from './capTableLink';
 
 export type Scope = { projectId: number; user: User; founderUserId: number; readOnly?: boolean };
 export class PlanError extends Error {
@@ -118,7 +119,7 @@ function claim(env:Env,s:Scope,scenarioId:number,expected:number|null):D1Prepare
 async function planBatch(env:Env,statements:D1PreparedStatement[],stale?:()=>Promise<number>) {
   try { return await env.DB.batch(statements); }
   catch(e) {
-    if(stale&&e instanceof Error&&/integer overflow/i.test(e.message)) throw staleError(await stale());
+    if(stale&&(e instanceof Error)&&/integer overflow/i.test(e.message)) throw staleError(await stale());
     // Only the fixed JSON assertion below parses JSON inside these batches.
     if(e instanceof Error && /malformed JSON/i.test(e.message)) throw legacyRepair(true);
     throw e;
@@ -157,7 +158,9 @@ export async function view(env: Env, s: Scope, r: any) {
     hires: hireRows?.map(h => ({ id: String(h.id), key: h.category_key, startMonth: h.start_month, annualCents: { value: h.annual_cents, source: 'Typed' }, currency: h.currency })) ?? null,
     milestones: milestones.map(m => ({ id: String(m.id), key: m.category_key, costCents: { value: m.cost_cents, source: sourceOf(m.source_label) }, dueMonth: m.due_on?.slice(0, 7) ?? null })),
   };
-  return { ...r, source: inputs.raiseCents.source, lines: lines.map(l => ({ ...l, source: sourceOf(l.source_label) })),
+  // D6085: the cap-table scenario this plan names, read from the same project only.
+  const cap_table_link = await linkView(env, s.projectId, r);
+  return { ...r, source: inputs.raiseCents.source, cap_table_link, lines: lines.map(l => ({ ...l, source: sourceOf(l.source_label) })),
     milestones: milestones.map(m => ({ ...m, source: sourceOf(m.source_label), cost_state: m.cost_cents === null ? 'not_costed' : 'recorded' })),
     hires: hireRows === null ? { state: 'unreadable', reason: 'Hires are Unreadable. Try again.', items: null } : { state: 'ok', items: hireRows }, model: plan(inputs) };
 }
@@ -371,6 +374,33 @@ export async function saveMilestone(env:Env,s:Scope,id:number|null,b:Record<stri
   const saved=await env.DB.prepare('SELECT * FROM uof_milestones WHERE uid=? AND scenario_id=?').bind(r.uid,sc.id).first<any>();
   return {...saved,source:'Typed',cost_state:saved.cost_cents===null?'not_costed':'recorded',scenario_revision:revision};
 }
+/**
+ * D6083 (#6083): add a planned hire from the tool (UF6). It goes through the same store, field rules
+ * and audit as an edit (D5375), not `addSectionHire`'s record-page path: role, section, start month,
+ * annual cost in whole cents and currency, each validated by the readers `saveHire` uses. A new hire
+ * starts at revision 0 and needs no `expected_revision`, because nobody can have read it yet; the
+ * hire row and its `uof_hire_created` audit row are one batch, keyed on the row's own uid.
+ */
+export async function createHire(env:Env,s:Scope,b:Record<string,unknown>) {
+  fields(b,['category_key','role','start_month','annual_cents','currency']);
+  const r={
+    category_key:key(b.category_key??null),
+    role:text(b.role),
+    start_month:has(b,'start_month')?month(b.start_month):null,
+    annual_cents:has(b,'annual_cents')?number(b.annual_cents):null,
+    currency:has(b,'currency')?currency(b.currency):'usd',
+  };
+  if (!r.category_key) throw bad();
+  const uid=crypto.randomUUID().replace(/-/g,'');
+  const written=await env.DB.batch([
+    env.DB.prepare('INSERT INTO use_of_funds_hires(uid,project_id,category_key,role,start_month,annual_cents,currency,created_by) VALUES(?,?,?,?,?,?,?,?)')
+      .bind(uid,s.projectId,r.category_key,r.role,r.start_month,r.annual_cents,r.currency,s.user.id),
+    env.DB.prepare(`INSERT INTO activity_logs(project_id,user_id,entity_type,entity_id,action,details,actor)
+      SELECT ?,?,'raise.use-of-funds',uid,'uof_hire_created',?,? FROM use_of_funds_hires WHERE uid=? AND project_id=?`)
+      .bind(s.projectId,s.user.id,`${s.user.role==='admin'?'Studio admin: ':''}uof hire added.`,`user:${s.user.id}`,uid,s.projectId),
+  ]);
+  return {id:Number(written[0]?.meta?.last_row_id),...r,revision:0,source:'Typed'};
+}
 export async function saveHire(env:Env,s:Scope,id:number,b:Record<string,unknown>,remove=false) {
   fields(b,['category_key','role','start_month','annual_cents','currency','expected_revision']);
   const old=await env.DB.prepare('SELECT * FROM use_of_funds_hires WHERE id=? AND project_id=?').bind(id,s.projectId).first<any>();
@@ -444,4 +474,37 @@ export async function saveSplit(env:Env,s:Scope,b:Record<string,unknown>,require
   const written=await planBatch(env,[...pre,...stmts],()=>currentRevision(env,s,sc.id));
   if (!written[pre.length].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   return {ok:true,revision:await currentRevision(env,s,sc.id),use_of_funds:SECTION_KEYS.map(k=>({label:SECTION_LABELS[k],pct:lines.find(l=>l.category_key===k)!.share_pct})),runway_months:r.target_runway_months};
+}
+
+/**
+ * D6085 (#6085): link, change or clear the cap-table scenario a plan scenario
+ * names. The body is `{ cap_table_scenario_uid: <uid> | null, expected_revision }`.
+ * A uid must name a cap-table scenario of this project; the check runs again
+ * inside the batch, so one deleted or moved meanwhile links nothing. Linking
+ * changes neither scenario's figures: a raise that differs stays shown.
+ */
+export async function saveCapTableLink(env:Env,s:Scope,id:number,b:Record<string,unknown>) {
+  fields(b,['cap_table_scenario_uid','expected_revision']);
+  if (!has(b,'cap_table_scenario_uid')) throw bad();
+  const v=b.cap_table_scenario_uid;
+  if (v!==null&&(typeof v!=='string'||!/^[A-Za-z0-9-]{1,64}$/.test(v))) throw bad();
+  const uid=v as string|null;
+  const expected=expectedRevision(b);
+  const r=await scenario(env,s,id); checkRevision(r,expected);
+  if (uid!==null&&!await capTableScenarioIn(env,s.projectId,uid)) throw new PlanError(404,'cap_table_scenario_not_found','That cap-table scenario is not in this venture. Nothing was linked.');
+  const action=uid===null?'uof_captable_unlinked':r.cap_table_scenario_uid?'uof_captable_changed':'uof_captable_linked';
+  const written=await planBatch(env,[...claim(env,s,id,expected),
+    env.DB.prepare(`UPDATE uof_scenarios SET cap_table_scenario_uid=?,cap_table_linked_at=datetime('now'),cap_table_linked_by=?,updated_by=?,updated_at=datetime('now')
+      WHERE id=? AND project_id=? AND (? IS NULL OR EXISTS(SELECT 1 FROM cap_table_scenarios WHERE uid=? AND project_id=?))`)
+      .bind(uid,s.user.id,s.user.id,id,s.projectId,uid,uid,s.projectId),
+    // The audit row is written only when the link above was.
+    env.DB.prepare(`INSERT INTO activity_logs(project_id,user_id,entity_type,entity_id,action,details,actor)
+      SELECT ?,?,'raise.use-of-funds',?,?,?,? FROM uof_scenarios WHERE id=? AND project_id=? AND cap_table_scenario_uid IS ?`)
+      .bind(s.projectId,s.user.id,r.uid,action,`${s.user.role==='admin'?'Studio admin: ':''}${action.replace(/_/g,' ')}.`,`user:${s.user.id}`,id,s.projectId,uid),
+  ],()=>currentRevision(env,s,id));
+  if (!written[2].meta.changes) {
+    if (uid!==null&&!await capTableScenarioIn(env,s.projectId,uid)) throw new PlanError(404,'cap_table_scenario_not_found','That cap-table scenario is not in this venture. Nothing was linked.');
+    throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
+  }
+  return view(env,s,await scenario(env,s,id));
 }

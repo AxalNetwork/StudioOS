@@ -8,9 +8,10 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { mapError } from './_t13t14t15_helpers';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
+import { railFor, refuseRun } from '../util/railContext';
 import { roundCallsEnabled, verifiedInvestor } from '../services/roundCallPolicy';
 import { RoundCallError, loadCall, projectFacts, projectRecord, roundContext, saveDraft, audience, saveAudience, notOnAxal, ventureMember, ventureReadinessRead,
-  founderPage, sendCall, investorPage, respond, recordCounsel, manageCall, answerQuestion, requestCounsel, counselQueue, audiencePreview } from '../services/roundCalls';
+  founderPage, sendCall, investorPage, investorList, respond, recordCounsel, manageCall, answerQuestion, requestCounsel, counselQueue, audiencePreview, wordRoundTerms } from '../services/roundCalls';
 
 type Ctx = Context<{ Bindings: Env }>;
 const routes = new Hono<{ Bindings: Env }>();
@@ -90,8 +91,8 @@ routes.get('/',async c=>{
     const user=await requireAuth(c);
     if(user.role==='investor') {
       if(!verifiedInvestor(user)) throw new RoundCallError('verified_investor_required',403);
-      const rows=await c.env.DB.prepare("SELECT rc.uid,rc.name,rc.instrument,rc.target_close,rc.state,rc.sent_at FROM round_calls rc JOIN round_call_recipients rr ON rr.call_id=rc.id WHERE rr.investor_user_id=? AND rc.state<>'draft' ORDER BY rc.sent_at DESC,rc.id DESC").bind(user.id).all();
-      return c.json({items:rows.results||[]});
+      // D6160 (#6160): company, terms, the state it reads as, and this investor's own response only.
+      return c.json(await investorList(c.env,user));
     }
     const {project}=await owner(c,id(c.req.query('project_id')),{members:true});
     const rows=await c.env.DB.prepare('SELECT uid,name,instrument,target_close,state,sent_at,created_at FROM round_calls WHERE project_id=? ORDER BY created_at DESC,id DESC').bind(project.id).all();
@@ -101,6 +102,24 @@ routes.get('/',async c=>{
 routes.post('/',async c=>{
   try { const body=await input(c),access=await owner(c,id(body.project_id),{members:true}); return c.json(await saveDraft(c.env,access.project,access.user,body),201); }
   catch(e){return failure(c,e);}
+});
+routes.post('/:uid/terms-draft', async c => {
+  try {
+    const body = await input(c);
+    const uid = c.req.param('uid');
+    const existing = uid === 'new' ? null : await callOwner(c, { members: true });
+    const access = existing ?? await owner(c, id(body.project_id), { members: true });
+    if (existing && existing.call.state !== 'draft') return c.json({ code: 'call_not_draft', message: 'Only a draft call can be worded.' }, 409);
+    const rail = railFor(c, { page: 'Founder · Raise', option: 'draft:raise/round-calls' },
+      uid === 'new' ? `project:${access.project.id}` : `round_call:${uid}`);
+    const { result, draft } = await wordRoundTerms(c.env, access.project, access.user, body, rail);
+    if (!result.ok) return refuseRun(c, result) || c.json({ code: 'ai_unavailable', message: 'Eadwyn could not draft these words. Try again.' }, 503);
+    if (!draft) {
+      console.warn('[round-calls:wording] model output could not be kept', { usageLogId: result.usageLogId ?? null });
+      return c.json({ code: 'nothing_kept', message: 'Eadwyn’s wording could not be kept. This draft used your AI allowance. You can use the wording from your fields.' }, 422);
+    }
+    return c.json({ draft });
+  } catch (error) { return failure(c, error); }
 });
 // Static queue path must precede /:uid, which accepts 'counsel-queue' as a UID.
 routes.get('/counsel-queue',async c=>{

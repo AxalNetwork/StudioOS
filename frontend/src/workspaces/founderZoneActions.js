@@ -140,14 +140,14 @@ export const FOUNDER_ZONE_ACTIONS = {
     // a mounted route a founder may open. The posting surface existed the whole
     // time; this desk just never pointed at it. Task #68 built it.
     { label: 'Post a role', to: '/jobs/new', linkNote: 'A posting is written in the job editor and appears here once it names this startup.' },
-    // "NO CANDIDATE RECORDS EXIST TO ACT ON" WAS FALSE AND THE REAL GAP IS
-    // NARROWER. `job_applications` exists, `jobs.applications(id)` reads it, and
-    // this page already puts those candidates in a table. What is missing is a
-    // WRITER: `routes/jobs.ts` has no endpoint that sets an application's status,
-    // so there is nothing for a reject — bulk or single — to call. A refusal that
-    // denied the records sent the next reader to build a store that is already
-    // there.
-    { label: 'Bulk reject', unbuilt: 'the candidates are stored and read, but no endpoint sets an application status, so a reject has nothing to write', hover: 'Candidates are listed here, but nothing can change an application’s status yet.' },
+    // "NO CANDIDATE RECORDS EXIST TO ACT ON" WAS FALSE, and so, since, was "no
+    // endpoint sets an application status" (#6109). `job_applications` exists,
+    // `jobs.applications(id)` reads it, and this page tabulates it. One
+    // application's stage is set by `PATCH /api/cycles/grow/applications/:id/stage`
+    // (`setApplicationStage`, whose stages include `declined`). What is still
+    // missing is the BULK form: no endpoint declines several applications at
+    // once, so a bulk reject has nothing to call.
+    { label: 'Bulk reject', unbuilt: 'one application’s stage can be set to declined, but no endpoint declines several at once, so a bulk reject has nothing to call', hover: 'Applicants are declined one at a time; nothing declines several at once yet.' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/customers': [
@@ -244,10 +244,14 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export session', kind: 'export' },
     { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer', hover: 'Nothing deletes from the history; an answer is kept or it is not.' },
   ],
+  // D7171 part 2 (#7171, canvas D7036 RMD-01/RMD-08): the Markets header is
+  // the directory canvas's. Export view is the active tab's scoped export (D7172:
+  // the label and click beside its count, `view.scoped`); New market research opens My Research's New
+  // research form with the market named. They replace New deep-dive, Export
+  // and Cite in deck.
   'research/markets': [
-    { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },
-    { label: 'Export', kind: 'export' },
-    { label: 'Cite in deck', unbuilt: 'nothing carries a sector into the deck builder' },
+    { label: 'Export view', kind: 'export' },
+    { label: 'New market research', kind: 'handler', handler: 'newMarketResearch' },
   ],
   'research/companies': [
     { label: 'Add company', unbuilt: 'the directory is a sourced baseline; nothing here adds a company' },

@@ -1,4 +1,5 @@
-import { createContext, useContext } from 'react';
+import { createContext, createElement, Fragment, useContext } from 'react';
+import InvestorPreviewRefusal from '../components/InvestorPreviewRefusal';
 
 /**
  * Provides the active view mode (role) for the current session, whether the
@@ -11,5 +12,10 @@ import { createContext, useContext } from 'react';
 const ViewModeContext = createContext(null);
 
 export const useViewMode = () => useContext(ViewModeContext);
+
+export function ViewModeProvider({ value, children }) {
+  return createElement(ViewModeContext.Provider, { value },
+    createElement(Fragment, null, children, createElement(InvestorPreviewRefusal, { mode: value })));
+}
 
 export default ViewModeContext;

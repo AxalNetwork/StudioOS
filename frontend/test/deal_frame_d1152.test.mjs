@@ -14,7 +14,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
 import {
-  STEPS, WHY, trackOf, keyStrip, termsAtGlance, whatsNewOf, readFailure, blockedRole, noteError, NO_PERMISSION, DEAL_UNREADABLE, EMPTY,
+  STEPS, WHY, trackOf, financialStrip, termsAtGlance, whatsNewOf, readFailure, blockedRole, noteError, NO_PERMISSION, DEAL_UNREADABLE, EMPTY,
 } from '../src/pages/deal/dealFrameModel.js';
 import { whatsNewOnce, forgetVisits } from '../src/pages/deal/dealVisit.js';
 
@@ -65,24 +65,19 @@ test('the track: a firm with no IC reads its IC step Not recorded once past it; 
   assert.deepEqual(trackOf({ status: 'ready', data: stageOf('IC') }).steps.map((s) => s.line), ['Done', 'Done', 'Done', 'Now', '—', '—', '—', '—']);
 });
 
-test('the key strip: a missing figure is Not recorded with its reason, never 0; your commitment, or the investors for staff', () => {
-  const bare = keyStrip({ currency: 'USD' }, { status: 'ready', items: [] }, 'investor');
-  assert.deepEqual(bare.map((t) => [t.key, t.value]), [['round', 'Not recorded'], ['committed', 'Not recorded'], ['mine', '—'], ['closes', 'Not recorded']]);
-  assert.ok(bare.every((t) => t.value !== '0' && t.value !== '$0'));
-  assert.equal(bare[1].bar, null, 'no bar when the share is not known');
-  const full = keyStrip(DEAL, { status: 'ready', items: [{ amount: 50000, status: 'pending', investor_user_id: 21 }] }, 'investor');
-  assert.deepEqual(full.map((t) => t.value), ['$1,000,000', '$250,000', '$50,000', '2026-12-01']);
-  assert.deepEqual([full[1].sub, full[1].bar, full[2].sub], ['25% of the round', 25, 'Pending']);
-  assert.equal(keyStrip(DEAL, { status: 'unreadable' }, 'investor')[2].value, 'Unreadable');
-  assert.deepEqual(keyStrip(DEAL, { status: 'ready', items: [{ amount: 9000, status: 'withdrawn' }] }, 'investor')[2].value, '—', 'a withdrawn commitment is not yours any more');
-  assert.ok(keyStrip(DEAL, { status: 'loading' }, 'investor')[2].loading);
-  const staff = keyStrip(DEAL, { status: 'ready', items: [{ investor_user_id: 1, status: 'pending' }, { investor_user_id: 1, status: 'confirmed' }, { investor_user_id: 2, status: 'withdrawn' }, { investor_user_id: 3, status: 'confirmed' }] }, 'admin');
-  assert.deepEqual([staff[2].label, staff[2].value], ['Investors', '2'], 'distinct investors with a live commitment');
-  assert.deepEqual([keyStrip(DEAL, { status: 'ready', items: null }, 'partner')[2].value], ['Not recorded'], 'a total-only read has no investor count');
+// D4815 part 4 (#5903): the four-tile key strip became DE04's five-field financial strip, and the
+// viewer's own commitment moved to Your position (deals_v2_deal_frame_4815_p4.test.mjs holds both).
+test('the financial strip: a missing figure is Not recorded with its reason, never 0', () => {
+  const bare = financialStrip({ currency: 'USD' });
+  assert.deepEqual(bare.map((t) => [t.key, t.value]), [['round', 'Not recorded'], ['instrument', 'Not recorded'], ['committed', 'Not recorded'], ['minimum', 'Not recorded'], ['closes', 'Not recorded']]);
+  assert.ok(bare.every((t) => t.value !== '0' && t.value !== '$0' && t.reason));
+  const full = financialStrip(DEAL);
+  assert.deepEqual(full.map((t) => t.value), ['$1,000,000', 'Post-money SAFE', '$250,000', '$25,000', '1 Dec 2026']);
 });
 
 test('terms at a glance, what is new, a failed deal read, and who never reads a deal', () => {
-  assert.deepEqual(termsAtGlance({ currency: 'USD', minimum_check: 25000 }).map((t) => t.value), ['Not recorded', 'Not recorded', '$25,000', 'Not recorded', 'Not recorded']);
+  // D4815 part 4: Instrument and Minimum are the strip's, so the card no longer repeats them.
+  assert.deepEqual(termsAtGlance({ currency: 'USD', minimum_check: 25000, valuation_cap: 8000000 }).map((t) => [t.label, t.value]), [['Valuation cap', '$8,000,000'], ['Carry', 'Not recorded'], ['Management fee', 'Not recorded']]);
   assert.equal(whatsNewOf({ status: 'ready', data: { first_visit: true, changes: [] } }).state, 'first');
   const w = whatsNewOf({ status: 'ready', data: { since: '2026-10-17T00:00:00Z', changes: [{ type: 'document', at: '2026-10-20T10:00:00Z' }, { type: 'investor_commitment', at: null }], unavailable: [{ type: 'deck', reason: 'Deck versions use share-token access.' }] } });
   assert.deepEqual(w.rows, [{ text: 'A document was added', at: '2026-10-20' }, { text: 'An investor committed', at: 'Date not recorded' }]);
@@ -154,34 +149,43 @@ async function mounted(url, user, handler = handlerWith()) {
     requests, text: () => text(document.body), byId,
     has: (id) => byId(id).length > 0,
     textOf: (id) => text(byId(id)[0]),
+    hrefOf: (id) => props(byId(id)[0]).href,
     tag: (t) => nodes().filter((n) => n.tagName === t),
     async click(id) { const n = byId(id)[0]; assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
+    async clickText(t) { const n = nodes().find((x) => x.tagName === 'BUTTON' && text(x).trim() === t); assert.ok(n, `no button ${t}`); await act(async () => { props(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
     async type(id, value) { const n = byId(id)[0]; await act(async () => { props(n).onChange?.({ target: { value } }); }); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); localStorage.removeItem('user'); restore(); },
   };
 }
 
-test('an investor\'s Overview: one h1, the key strip, the track at Diligence with one next action, and the Overview cards', async () => {
+test('an investor\'s Overview: one h1, the financial strip, the track at Diligence with one next action, and the Overview cards', async () => {
   const v = await mounted('/deals/4', INVESTOR);
   try {
     assert.equal(v.tag('H1').length, 1);
-    assert.match(v.textOf('deal-keys'), /Round\s*\$1,000,000[\s\S]*Committed\s*\$250,000[\s\S]*Your commitment\s*—[\s\S]*Closes\s*2026-12-01/);
+    // D4815 part 4: DE04's five fields; the viewer's commitment is Your position, below.
+    assert.match(v.textOf('deal-strip'), /Round\s*\$1,000,000[\s\S]*Instrument\s*Post-money SAFE[\s\S]*Committed\s*\$250,000[\s\S]*Minimum\s*\$25,000[\s\S]*Closes\s*1 Dec 2026/);
+    assert.match(v.textOf('deal-position'), /You have not committed to this deal/);
     assert.equal(v.byId('deal-step-now').length, 1);
     assert.equal(v.byId('deal-step-done').length, 2);
     assert.equal(v.byId('deal-next-action').length, 1, 'one next action');
     assert.equal(v.textOf('deal-next-action'), 'Open the diligence case');
-    assert.match(v.textOf('deal-track-why'), /Step 3 of 8 · Diligence/);
-    for (const id of ['deal-score-slot', 'deal-whats-new', 'deal-terms', 'deal-round', 'deal-next-step', 'deal-deck-slot']) assert.ok(v.has(id), id);
+    // D4815 part 4: the step's position is the header's own chip; the sequence carries the reason.
+    assert.equal(v.textOf('deal-progress-chip'), 'Diligence · Step 3 of 8');
+    assert.equal(v.textOf('deal-track-why'), WHY.Diligence);
+    assert.ok(!v.has('deal-next-step'), 'the one next action is not drawn a second time on Overview');
+    for (const id of ['deal-score-slot', 'deal-whats-new', 'deal-terms', 'deal-round', 'deal-deck']) assert.ok(v.has(id), id);
     // D1257: the slot is the strip, read through the batch; a deal the batch does not return is closed, never a zero.
     assert.match(v.textOf('deal-score-slot'), /opens once you are invited to this deal/);
     assert.equal(v.requests.filter((r) => /whats-new/.test(r)).length, 1);
   } finally { await v.close(); }
 });
 
-test('a founder sees the key strip with the investors and no track, and reads no stage', async () => {
+test('a founder sees the financial strip and no track, and reads no stage', async () => {
   const v = await mounted('/deals/4', { id: 30, role: 'founder', founder_id: 9, name: 'Bram', email: 'bram@example.com' });
   try {
-    assert.match(v.textOf('deal-keys'), /Investors\s*0/);
+    // D4815 part 4: the staff and founder investor count left the strip; it is the Investment tab's table.
+    assert.match(v.textOf('deal-strip'), /Round\s*\$1,000,000/);
+    assert.ok(!v.has('deal-progress-chip') && !v.has('deal-position'), 'progress and position are an investor\'s');
     assert.ok(!v.has('deal-track') && !v.has('deal-track-loading'));
     assert.ok(!v.requests.some((r) => /\/stage|whats-new|\/notes/.test(r)), 'part 2\'s reads are an investor\'s');
   } finally { await v.close(); }
@@ -194,7 +198,8 @@ test('a failed stage read leaves the page: the header, key strip, tabs and Overv
     assert.match(v.textOf('deal-track-unreadable'), /could not be read/);
     assert.equal(v.byId('deal-next-action').length, 0, 'no next action is made up');
     assert.equal(v.tag('H1').length, 1);
-    for (const id of ['deal-keys', 'deal-tabs', 'deal-overview', 'deal-score-slot']) assert.ok(v.has(id), id);
+    assert.equal(v.textOf('deal-progress-chip'), 'Your step: Unreadable');
+    for (const id of ['deal-strip', 'deal-tabs', 'deal-overview', 'deal-score-slot']) assert.ok(v.has(id), id);
   } finally { await v.close(); }
 });
 
@@ -212,6 +217,7 @@ test('an Advisor and an Explorer get DL22\'s words, and nothing is read', async 
 test('not on the deal is DL22a; a deal read that failed is DL20b, never "not found"', async () => {
   let v = await mounted('/deals/4', INVESTOR, handlerWith({ '/api/deals/4(\\?|$)': () => response({ detail: 'Forbidden' }, 403) }));
   try {
+    assert.ok(!v.has('deal-share'));
     assert.match(v.textOf('deal-no-permission-not_on_deal'), /You’re not on this deal\./);
     assert.ok(!v.requests.some((r) => /stage|notes|whats-new|commitments/.test(r)), 'nothing private is read');
   } finally { await v.close(); }
@@ -220,6 +226,55 @@ test('not on the deal is DL22a; a deal read that failed is DL20b, never "not fou
     assert.match(v.textOf('deal-unreadable'), /This deal could not be read\. That is not the same as it not existing\./);
     assert.ok(DEAL_UNREADABLE.endsWith('That is not the same as it not existing.'));
     assert.ok(!v.has('deal-not-found'));
+  } finally { await v.close(); }
+});
+
+// D6164 part 3 (DE28, the owner's answer A): a Share menu with Copy link only; the company profile is its own link.
+test('Share copies the current tab, reports failure; the company profile is a link beside it', async () => {
+  const tab = '/deals/4/terms?from=flow#valuation';
+  const url = 'https://axal.example' + tab;
+  const v = await mounted(tab, INVESTOR, handlerWith({
+    '/api/deals/4$': () => response({ ...DEAL, company_profile_url: '/startups/harbor-ledger' }),
+  }));
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  const written = [];
+  let refused = false;
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { async writeText(value) { if (refused) throw new Error('Denied'); written.push(value); } },
+  });
+  window.location.href = url;
+  try {
+    assert.equal(v.hrefOf('deal-open-company-profile'), '/startups/harbor-ledger', 'the profile is in the header, not in Share');
+    await v.click('deal-share');
+    assert.doesNotMatch(v.textOf('deal-share-menu'), /Open company profile/, 'Share holds Copy link only');
+    await v.click('deal-copy-link');
+    assert.deepEqual(written, [url]);
+    assert.match(v.text(), /Link copied\. Only people this deal admits can open it\./);
+    refused = true;
+    await v.click('deal-share');
+    await v.click('deal-copy-link');
+    assert.match(v.text(), /Could not copy the link/);
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard);
+    else delete navigator.clipboard;
+    await v.close();
+  }
+});
+
+test('Share offers only Copy link; with no public profile there is no profile link; neither on Free', async () => {
+  let v = await mounted('/deals/4', INVESTOR);
+  try {
+    assert.ok(!v.has('deal-open-company-profile'));
+    await v.click('deal-share');
+    assert.ok(v.has('deal-copy-link'));
+    assert.match(v.textOf('deal-share-menu'), /^\s*Copy link\s*$/, 'Copy link is the menu\'s one item');
+  } finally { await v.close(); }
+  v = await mounted('/deals/4', INVESTOR, handlerWith({
+    '/api/deals/4$': () => response({ ...DEAL, plan_limited: true }),
+  }));
+  try {
+    assert.ok(!v.has('deal-share'));
   } finally { await v.close(); }
 });
 
@@ -273,9 +328,30 @@ test('a new note is checked before it is sent, then saved with its tag', async (
   } finally { await v.close(); }
 });
 
+// #6193 (D6193): the Deal, Documents and Diligence chips narrow on the row's kind; an empty one says what this reader can see.
+// Mutation checked: Documents narrowing on `type` instead of `kind` (fails); the empty Diligence line claiming nothing happened (fails).
+test('#6193 the activity\'s Deal, Documents and Diligence chips narrow on each row\'s kind', async () => {
+  const rows = [
+    { type: 'document', kind: 'documents', label: 'Document added: Cap table', at: '2026-10-20', mine: false },
+    { type: 'commitment', kind: 'deal', label: 'An investor committed', at: '2026-10-18', mine: false },
+    { type: 'created', label: 'Deal created', at: '2026-09-01', mine: false },
+  ];
+  const v = await mounted('/deals/4/activity', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
+  try {
+    await v.click('deal-activity-documents');
+    assert.match(v.textOf('deal-activity'), /Document added: Cap table/);
+    assert.doesNotMatch(v.textOf('deal-activity'), /An investor committed|Deal created/);
+    await v.click('deal-activity-deal');
+    assert.match(v.textOf('deal-activity'), /An investor committed[\s\S]*Deal created/, 'a row with no kind is Deal');
+    assert.doesNotMatch(v.textOf('deal-activity'), /Cap table/);
+    await v.click('deal-activity-diligence');
+    assert.match(v.textOf('deal-activity'), /No diligence activity you can read is recorded\. A case shows to its own owner and reviewers\./);
+  } finally { await v.close(); }
+});
+
 test('the activity\'s Mine filter shows your own rows only', async () => {
   const rows = [{ type: 'commitment', label: 'An investor committed', at: '2026-10-18', mine: false }, { type: 'invitation', label: 'You were invited', at: '2026-09-22', mine: true }];
-  const v = await mounted('/deals/4/notes', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
+  const v = await mounted('/deals/4/activity', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
   try {
     assert.match(v.textOf('deal-activity'), /An investor committed[\s\S]*You were invited/);
     await v.click('deal-activity-mine');
@@ -303,4 +379,68 @@ test('no browser pop-up and no raw colour anywhere in the frame', () => {
       assert.doesNotMatch(src, /\b(bg|text|border)-\[#/, `${f} carries an arbitrary colour class`);
     }
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * #6192: every note is reachable, each names its author, tags filter
+ * ------------------------------------------------------------------ */
+
+const note = (i, over = {}) => ({ uid: `p${i}`, author_user_id: 99, author_name: 'Grace Example', tag: i % 2 ? 'Risk' : 'Thesis', body: `Note ${i}`, created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over });
+
+// Mutation checked: noteAuthor ignoring author_name (fails); noteEdited true when equal (fails); notesHaveMore ignoring total (fails).
+test('#6192 byline: the colleague\'s name or You, and edited only when it was changed', async () => {
+  const { noteAuthor, noteEdited, noteByline, notesHaveMore } = await import('../src/pages/deal/dealNotesModel.js');
+  assert.equal(noteAuthor(note(1), 21), 'Grace Example');
+  assert.equal(noteAuthor(note(1, { author_user_id: 21 }), 21), 'You');
+  assert.equal(noteAuthor(note(1, { author_name: null }), 21), 'Your firm', 'an account with no name');
+  assert.equal(noteEdited(note(1)), null);
+  assert.equal(noteEdited(note(1, { updated_at: '2026-10-03T10:00:00.000Z' })), 'edited 2026-10-03');
+  assert.equal(noteByline(note(1, { updated_at: '2026-10-03T10:00:00.000Z' }), 21), '2026-10-01 · Grace Example · Risk · edited 2026-10-03');
+  assert.equal(noteByline(note(2, { tag: '' }), 21), '2026-10-01 · Grace Example');
+  assert.deepEqual([notesHaveMore([1, 2], 3), notesHaveMore([1, 2, 3], 3), notesHaveMore([1], undefined)], [true, false, false]);
+});
+
+// Mutation checked: Show more reading offset 0 again (fails); a failed page dropping the loaded rows (fails);
+// the chip not sending ?tag= (fails); the count not following the filter (fails).
+test('#6192 Notes: Show more reaches every note; a failed page says so and keeps what was loaded; a tag chip filters with its count', async () => {
+  const all = Array.from({ length: 60 }, (_, i) => note(i + 1));
+  let failNext = false;
+  const v = await mounted('/deals/4/notes', INVESTOR, handlerWith({
+    '/api/deals/4/notes': (u, m) => {
+      if (m !== 'GET') return null;
+      const q = new URL(u, 'https://x.test').searchParams;
+      if (failNext && Number(q.get('offset')) > 0) return response({ error: 'notes_unreadable' }, 503);
+      const tag = q.get('tag');
+      const rows = tag ? all.filter((n) => n.tag === tag) : all;
+      const off = Number(q.get('offset')); const lim = Number(q.get('limit'));
+      return response({ items: rows.slice(off, off + lim), total: rows.length, tag: tag || null });
+    },
+  }));
+  try {
+    assert.equal(v.byId('deal-note-byline-p1').length, 1);
+    assert.match(v.textOf('deal-note-byline-p1'), /Grace Example · Risk/);
+    assert.ok(!v.has('deal-note-p26'), 'the first page is 25');
+    assert.match(v.textOf('deal-notes-more'), /Show more \(25 of 60\)/);
+    failNext = true;
+    await v.click('deal-notes-more');
+    assert.match(v.text(), /The older notes could not be read/);
+    assert.ok(v.has('deal-note-p25'), 'the loaded notes stay');
+    failNext = false;
+    await v.clickText('Retry');
+    assert.ok(v.has('deal-note-p50') && !v.has('deal-note-p51'));
+    assert.match(v.textOf('deal-notes-more'), /Show more \(50 of 60\)/);
+    await v.click('deal-notes-more');
+    assert.ok(v.has('deal-note-p60'), 'the last note is reached');
+    assert.ok(!v.has('deal-notes-more'), 'nothing left to show');
+    assert.ok(v.requests.some((r) => /notes\?limit=25&offset=25/.test(r)), 'the next page starts after the loaded rows');
+    await v.click('deal-notes-filter-Risk');
+    assert.ok(v.requests.some((r) => /notes\?limit=25&offset=0&tag=Risk/.test(r)), 'the filter is the Worker\'s');
+    assert.equal(v.textOf('deal-notes-count'), '30 tagged Risk', 'the count follows the filter');
+    assert.ok(v.has('deal-note-p1') && !v.has('deal-note-p2'), 'only Risk notes');
+    assert.match(v.textOf('deal-notes-more'), /Show more \(25 of 30\)/);
+    await v.click('deal-notes-filter-Decision');
+    assert.match(v.textOf('deal-notes-empty'), /No note is tagged Decision/);
+    await v.click('deal-notes-filter-all');
+    assert.equal(v.textOf('deal-notes-count'), '60');
+  } finally { await v.close(); }
 });

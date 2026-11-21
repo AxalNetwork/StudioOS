@@ -58,6 +58,8 @@ test('preview renders local raster URLs and leaves URL/HTML payloads out of imag
     const image = 'blob:https://axal.example/01234567-89ab-cdef-0123-456789abcdef';
     const local = renderToStaticMarkup(h(PostPreview, { image, text: '<script>alert(1)</script>' }));
     assert.ok(local.includes(`src="${image}"`));
+    // Asserts the markup escapes a <script>; it writes none.
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     assert.ok(local.includes('&lt;script&gt;')); assert.ok(!local.includes('<script>'));
     for (const image of ['javascript:alert(1)', '<img src=x onerror=alert(1)>', 'https://remote.example/image.png']) {
       const html = renderToStaticMarkup(h(PostPreview, { image }));

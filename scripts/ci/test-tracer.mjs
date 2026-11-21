@@ -3,6 +3,7 @@ import { isAbsolute, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { performance } from 'node:perf_hooks';
+import { MessageChannel, receiveMessageOnPort } from 'node:worker_threads';
 
 const TRACE_IMPORT = `--import=${import.meta.url}`;
 
@@ -68,6 +69,7 @@ function start() {
 
   process.once('exit', (exitCode) => {
     try {
+      drainModules();
       mkdirSync(traceDir, { recursive: true });
       const output = {
         test, isTest, wallMs: Math.round(performance.now()), exitCode, opaque,
@@ -128,27 +130,17 @@ function start() {
     });
   }
 
-  let sqliteWrapped = false;
-  modules.registerHooks?.({
-    resolve(specifier, context, next) {
-      const result = next(specifier, context);
-      if (result.url?.startsWith('file:') && !result.url.includes('/node_modules/')) collect(resolvedModules, result.url);
-      if (result.url === 'node:sqlite' && !sqliteWrapped) {
-        sqliteWrapped = true;
-        try {
-          const sqliteModule = process.getBuiltinModule('node:sqlite');
-          sqliteModule.DatabaseSync = new Proxy(sqliteModule.DatabaseSync, {
-            construct(target, args, newTarget) {
-              if (args[0] !== ':memory:') collect(sqlite, args[0]);
-              return Reflect.construct(target, args, newTarget);
-            },
-          });
-          modules.syncBuiltinESMExports();
-        } catch { opaque = true; }
-      }
-      return result;
-    },
-  });
+  // Module resolution is observed off-thread (test-tracer-hooks.mjs): a
+  // synchronous registerHooks hook here changed what frontend tests rendered.
+  const { port1, port2 } = new MessageChannel();
+  globalThis[Symbol.for('studioos.testTracer.sqlite')] = (input) => collect(sqlite, input);
+  try {
+    modules.register(new URL('./test-tracer-hooks.mjs', import.meta.url), { data: { port: port2 }, transferList: [port2] });
+  } catch { opaque = true; }
+  port1.unref?.();
+  const drainModules = () => {
+    for (let message; (message = receiveMessageOnPort(port1));) collect(resolvedModules, message.message);
+  };
 
   const childEnv = (env) => ({
     ...env,

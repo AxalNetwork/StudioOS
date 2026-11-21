@@ -15,6 +15,7 @@ These components follow `design/canvases/integrated/Cycle Overview.dc.html` belo
 | `PhoneHeader.jsx` | The founder's 52px band: logo, company pill, Studio glyph, bell and initials. The pill opens `CompanySheet`, the initials `AccountSheet`. |
 | `PhoneHeader.jsx` — `HeaderForWidth` | Mounts the band for a founder below 1024px and the shell's own header otherwise, never both. |
 | `usePhoneWidth.js` | One hook for the shared 1024px width rule. It takes an optional query; `BELOW_MD_QUERY`, `(max-width: 767px)`, is the Templates tab's `md` rule (D717, #1854). |
+| `tabletTier.js` | D4846 part 2 (#6032, BD14 B): pure. The tablet tier, 768px to 1023px (`TABLET_QUERY`, `layoutTier`, `tabletFrom`), and the overview's tablet classes. `usePhoneWidth.js`'s `useTabletWidth(enabled)` reads it; a cycle whose def names `tabletPages` (Build) draws its desktop pages there. |
 
 The band is the same in light and dark mode: white type on the Lab band
 illustration under the canvas's gradient (D699 decision 8).

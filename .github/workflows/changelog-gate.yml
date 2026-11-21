@@ -10,15 +10,15 @@ name: CHANGELOG gate
 # re-run the check when Session 1 adds or removes the `changelog` label, the
 # only way a PR may edit the file.
 #
-# WHY fetch-depth 0. The check is a diff from the merge base of the base branch
-# and HEAD, and a depth-1 clone has no merge base.
+# Full history makes the PR event commits and their common history available
+# locally, so the gate normally needs no additional network access.
 #
 # Every value reaches the script through `env:`, never `${{ }}` inside `run:`,
 # so nothing a PR controls is ever parsed as shell.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
 
 permissions:
   contents: read
@@ -30,6 +30,8 @@ concurrency:
 jobs:
   gate:
     name: CHANGELOG.md untouched
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     # Full history (fetch-depth: 0 below) so the gate can find the merge base.
     # That checkout has exceeded this job's old 5-minute limit before the gate
@@ -44,6 +46,7 @@ jobs:
           node-version: '22'
       - name: The PR leaves CHANGELOG.md alone unless it is labelled changelog
         env:
-          GITHUB_BASE_REF: ${{ github.base_ref }}
+          CHANGELOG_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CHANGELOG_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CHANGELOG_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'changelog') }}
         run: node scripts/changelog-gate.mjs

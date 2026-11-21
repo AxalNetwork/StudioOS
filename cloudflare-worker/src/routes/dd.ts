@@ -1,3 +1,4 @@
+import { liveFiles } from '../services/dataRoomTrash';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { investorHasProjectDeal } from '../services/dealAccess';
 /**
@@ -26,13 +27,14 @@ import {
   encField, decField,
   DD_DECISIONS, BLOCKING_FLAG_REFUSAL, blockingSectionsWithOpenSevereFlags, seedNewCase,
   TEMPLATE_DEPTHS, DEPTH_RANK, builtInTemplate, checkTemplateBody, latestTemplate, seedFromTemplate, CHECKLIST_CATALOG,
-  renderReportArtifact,
-  type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth, type TemplateBody,
+  renderReportArtifact, loadReportParts,
+  type DDSubjectType, type ReportCase, type ReportSection, type ReportFlag, type ReportExtras, type ChecklistDepth, type TemplateBody,
 } from '../services/dueDiligence';
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
 import { DOWNLOAD_TTL_MS, REMINDER_GAP_MS, dueDateOf, markRequestAnsweredByFile, tokenHash } from '../services/ddRequests';
 import { createIcRecordForCase, icRecordForCase, caseSentToIc } from './ic';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { putRecord } from '../services/recordStore';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -156,7 +158,7 @@ export function caseAllowed(
   };
 }
 
-async function requireDdReader(c: AppContext): Promise<AppUser> {
+export async function requireDdReader(c: AppContext): Promise<AppUser> {
   const user = await requireAuth(c);
   // D4472: founder-only accounts cannot read diligence. An independently
   // held Investor, Advisor or Operating Partner licence admits the caller;
@@ -236,6 +238,7 @@ const READY_EXPR = "(c.status IN ('open', 'in_review')"
   + ' AND EXISTS (SELECT 1 FROM dd_sections s WHERE s.case_id = c.id)'
   + ' AND NOT EXISTS (SELECT 1 FROM dd_sections s WHERE s.case_id = c.id AND s.verdict IS NULL))';
 const CASE_FILTER_SQL = ' WHERE (? IS NULL OR c.subject_type = ?)'
+  + ' AND (? IS NULL OR c.subject_id = ?)'
   + ' AND (? IS NULL OR c.status = ?)'
   + " AND (? IS NULL OR (? = 'none' AND c.risk_band IS NULL) OR c.risk_band = ?)"
   + " AND (? IS NULL OR (? = 'ready' AND " + READY_EXPR + ')'
@@ -279,10 +282,22 @@ const LIST_SORTS = new Set(['opened', 'target', 'activity', 'flags', 'name']);
 const LIST_STAGES = new Set(['not_started', 'in_review', 'ready', 'decided', 'archived']);
 const SEVERITY_WORD = ['', 'info', 'low', 'medium', 'high', 'critical'];
 
+/**
+ * D6181 (#6181): `subject_id`, an exact subject (a project's id when
+ * subject_type is `project`). Absent or empty is no filter; anything but a
+ * positive whole number is `undefined`, which the list refuses with a 400
+ * rather than widening an exact lookup to every case the caller may read.
+ */
+function subjectIdParam(v: string | undefined): number | null | undefined {
+  if (v == null || v === '') return null;
+  return /^[1-9][0-9]{0,15}$/.test(v) && Number.isSafeInteger(Number(v)) ? Number(v) : undefined;
+}
+
 /** The binds for CASE_FILTER_SQL, in its order: the query's filters, then who may see which cases. */
 function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): unknown[] {
   const opt = (v: string | undefined) => (v == null || v === '' ? null : v);
   const subjectType = opt(q('subject_type'));
+  const subjectId = subjectIdParam(q('subject_id')) ?? null;
   const status = opt(q('status'));
   const band = opt(q('risk_band'));
   const stage = LIST_STAGES.has(String(q('stage'))) ? String(q('stage')) : null;
@@ -295,6 +310,7 @@ function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): u
   const everyone = user.role === 'admin' && q('owner_only') !== '1' ? 1 : 0;
   return [
     subjectType, subjectType,
+    subjectId, subjectId,
     status, status,
     band, band, band,
     stage, stage, stage, stage, stage, stage,
@@ -313,6 +329,7 @@ dd.get('/cases', async (c) => {
   const sort = LIST_SORTS.has(String(q('sort'))) ? String(q('sort')) : 'opened';
   const pageSize = Math.min(Math.max(Number.parseInt(String(q('page_size') ?? '200'), 10) || 200, 1), 200);
   const page = Math.max(Number.parseInt(String(q('page') ?? '1'), 10) || 1, 1);
+  if (subjectIdParam(q('subject_id')) === undefined) return c.json({ error: 'subject_id must be a positive whole number.', code: 'invalid_subject_id' }, 400);
   const binds = caseFilterBinds(user, q);
   const counted = await c.env.DB.prepare(LIST_COUNT_SQL).bind(...binds).first<{ n: number }>();
   const rows = await c.env.DB.prepare(LIST_ROWS_SQL)
@@ -524,11 +541,13 @@ dd.get('/cases/:uid', async (c) => {
     // item evidence follows its item's section, as the checklist does.
     let documents: { requestFiles: any[]; reminders: any[]; evidence: any[] } | null = null;
     try {
+      // D6073 — a file in Trash answers no request until it is restored.
+      const live = await liveFiles(c.env.DB, 'f');
       const [requestFiles, reminders, evidenceAll] = await Promise.all([
         isScoped ? Promise.resolve([]) : c.env.DB.prepare(
           `SELECT f.id, f.uid, f.name, f.content_type, f.size_bytes, f.dd_request_id, f.created_at
              FROM data_room_files f JOIN dd_requests r ON r.id = f.dd_request_id
-            WHERE r.case_id = ? ORDER BY f.created_at DESC, f.id DESC`,
+            WHERE r.case_id = ?${live} ORDER BY f.created_at DESC, f.id DESC`,
         ).bind(caseId).all<any>().then((r) => r.results || []),
         isScoped ? Promise.resolve([]) : c.env.DB.prepare(
           `SELECT request_id, COUNT(*) AS count, MAX(created_at) AS last_at FROM dd_request_reminders
@@ -1174,7 +1193,7 @@ dd.get('/cases/:uid/findings/:id/history', async (c) => {
 /** The user the case is ABOUT: project → owning founder user; every
  *  other subject_type stores a users.id directly in subject_id (see
  *  partnerDeals.activatePartnerDealOnSignature + /report/share). */
-async function resolveSubjectUserId(env: Env, cs: Record<string, unknown>): Promise<number | null> {
+export async function resolveSubjectUserId(env: Env, cs: Record<string, unknown>): Promise<number | null> {
   if (cs.subject_type === 'project') {
     const sql = getSQL(env);
     try {
@@ -1358,10 +1377,10 @@ dd.post('/cases/:uid/requests/:id/withdraw', async (c) => {
 // ---------- subject-facing request surface ----------
 //
 // The ONLY DD endpoints a founder may touch. They expose a request's
-// own fields (title/details/state) plus the case's subject_label — and
-// deliberately nothing else: no case uid, no score/band, no sections,
-// no findings. Auth is subject-resolution, not role: any authenticated
-// user sees exactly the requests addressed to them.
+// own fields (title/details/state), the subject's venture identity, and
+// the requester's display name where already visible on a shared deal.
+// Case identifiers, findings and reviewer details stay on the reviewing side.
+// Any authenticated user sees exactly the requests addressed to them.
 
 dd.get('/requests/mine', async (c) => {
   const user = await requireAuth(c);
@@ -1373,10 +1392,30 @@ dd.get('/requests/mine', async (c) => {
              -- D1252 (DDL15): the subject's own venture, so "Pick a file from your data room" reads that
              -- room (the data-room routes check ownership again), and the names of the files already
              -- matched to the request. Never the case's uid, score or sections.
-             CASE WHEN c.subject_type = 'project' THEN (SELECT p.uid FROM projects p WHERE p.id = c.subject_id) END AS project_uid,
-             (SELECT json_group_array(f.name) FROM data_room_files f WHERE f.dd_request_id = r.id) AS file_names
+             p.id AS project_id, p.uid AS project_uid, p.name AS project_name,
+             (SELECT CASE WHEN COUNT(DISTINCT team_name) = 1 THEN MIN(team_name) END FROM (
+                SELECT COALESCE(NULLIF(TRIM(cp.company_name), ''), NULLIF(TRIM(requester.name), '')) AS team_name
+                  FROM deals d
+                  JOIN commitments k ON k.deal_id = d.id AND k.investor_user_id = requester.id
+                  LEFT JOIN company_profiles cp ON cp.id = k.company_id
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                UNION ALL
+                SELECT NULLIF(TRIM(requester.name), '') AS team_name
+                  FROM deals d
+                  JOIN deal_invitations i ON i.deal_id = d.id AND i.investor_user_id = requester.id
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND NOT EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = requester.id)
+                UNION ALL
+                SELECT COALESCE(NULLIF(TRIM(partner.name), ''), NULLIF(TRIM(requester.name), '')) AS team_name
+                  FROM deals d
+                  LEFT JOIN partners partner ON partner.id = d.partner_id AND LOWER(partner.email) = LOWER(requester.email)
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND (d.lead_partner_id = requester.id OR partner.id IS NOT NULL)
+             )) AS asking_team_name
         FROM dd_requests r
         JOIN dd_cases c ON c.id = r.case_id
+        LEFT JOIN projects p ON c.subject_type = 'project' AND p.id = c.subject_id
+        LEFT JOIN users requester ON requester.id = r.created_by_user_id
        WHERE r.withdrawn_at IS NULL AND ((c.subject_type != 'project' AND c.subject_id = ${user.id})
           OR (c.subject_type = 'project' AND c.subject_id IN (
                 SELECT p.id FROM projects p
@@ -1384,14 +1423,19 @@ dd.get('/requests/mine', async (c) => {
                 JOIN users u ON LOWER(u.email) = LOWER(f.email)
                WHERE u.id = ${user.id})))
        ORDER BY r.created_at DESC LIMIT 100`;
-    return c.json({ items: rows.map((r) => ({ ...r, file_names: parseNames(r.file_names) })) });
+    // D1252: the names of the files matched to each request, read apart from the tagged query above
+    // (its interpolations are binds) so D6073's clause can leave a file in the data room's Trash out.
+    const names = new Map<number, string[]>();
+    if (rows.length) {
+      const res = await c.env.DB.prepare(
+        `SELECT f.dd_request_id AS id, f.name FROM data_room_files f
+          WHERE f.dd_request_id IN (SELECT value FROM json_each(?))${await liveFiles(c.env.DB, 'f')} ORDER BY f.id`,
+      ).bind(JSON.stringify(rows.map((r) => Number(r.id)))).all<{ id: number; name: string }>();
+      for (const f of res.results || []) names.set(Number(f.id), [...(names.get(Number(f.id)) || []), String(f.name)]);
+    }
+    return c.json({ items: rows.map((r) => ({ ...r, file_names: names.get(Number(r.id)) ?? [] })) });
   } finally { await sql.end(); }
 });
-
-/** D1252: `json_group_array` answers a JSON string; a bad one is no names, never a throw. */
-function parseNames(raw: unknown): string[] {
-  try { const v = typeof raw === 'string' ? JSON.parse(raw) : raw; return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
-}
 
 dd.patch('/requests/:id/respond', async (c) => {
   const user = await requireAuth(c);
@@ -1424,7 +1468,7 @@ dd.patch('/requests/:id/respond', async (c) => {
     if (fileUid) {
       // The file must be one of the venture's own data-room files: the subject is a project.
       if (req.subject_type !== 'project') return c.json({ error: 'Only a venture answers with a data-room file', code: 'no_data_room' }, 400);
-      const file = await c.env.DB.prepare('SELECT id FROM data_room_files WHERE uid = ? AND project_id = ?')
+      const file = await c.env.DB.prepare(`SELECT id FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)}`)
         .bind(fileUid, Number(req.subject_id)).first<{ id: number }>();
       if (!file) return c.json({ error: 'File not found in your data room' }, 404);
       await c.env.DB.prepare('UPDATE data_room_files SET dd_request_id = ?, updated_at = ? WHERE id = ?')
@@ -1484,21 +1528,40 @@ dd.post('/cases/:uid/report', async (c) => {
       const u = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(sid).first<{ name: string }>().catch(() => null);
       if (u?.name) signerNames.set(sid, u.name);
     }
+    const flagOf = async (f: any): Promise<ReportFlag> => ({
+      severity: f.severity, title: f.title,
+      detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
+      evidence_url: f.evidence_url,
+      // D1247: a closed flag stays in the report, marked closed.
+      state: f.state ?? null,
+      resolution: await decField(c.env, 'dd_findings', 'resolution', f.id, f.resolution_enc ?? null),
+    });
+    // D6296 (#6296): the checklist, the decision, the memo and the requests.
+    // The deal team (an Admin, the lead or the opener — `memo_read`) gets
+    // every part. A section reviewer who may generate (a partner) gets the
+    // checklist of the sections they review and the decision without its
+    // reason; the memo, the reason, the requests and the case-wide flags
+    // read "not in this copy", as the case read withholds them from them.
+    const dealTeam = user.role === 'admin' || leadsOrOpened(user, cs);
+    const mineRows: any[] = dealTeam ? [] : await sql`SELECT DISTINCT section_id FROM dd_reviewers WHERE case_id = ${caseId} AND user_id = ${user.id}`;
+    const mySections = new Set(mineRows.map((r) => Number(r.section_id)));
+    const parts = await loadReportParts(c.env, cs, { dealTeam });
     const reportSections: ReportSection[] = await Promise.all(sections.map(async s => ({
       section_key: s.section_key, title: s.title, weight: Number(s.weight),
       status: s.status, verdict: s.verdict,
       signed_off_by_name: Number.isFinite(Number(s.signed_off_by)) ? (signerNames.get(Number(s.signed_off_by)) ?? null) : null,
       completed_at: s.completed_at ?? null,
       reviewer_notes: await decField(c.env, 'dd_sections', 'reviewer_notes', s.id, s.reviewer_notes_enc),
-      findings: await Promise.all(findings.filter(f => f.section_id === s.id).map(async f => ({
-        severity: f.severity, title: f.title,
-        detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
-        evidence_url: f.evidence_url,
-        // D1247: a closed flag stays in the report, marked closed.
-        state: f.state ?? null,
-        resolution: await decField(c.env, 'dd_findings', 'resolution', f.id, f.resolution_enc ?? null),
-      }))),
+      findings: await Promise.all(findings.filter(f => f.section_id === s.id).map(flagOf)),
+      checklist: dealTeam || mySections.has(Number(s.id)) ? (parts.checklistBySection.get(Number(s.id)) ?? []) : null,
     })));
+    const extras: ReportExtras = {
+      deal_team: dealTeam,
+      decision: parts.decision,
+      memo: parts.memo,
+      requests: parts.requests,
+      case_wide_flags: dealTeam ? await Promise.all(findings.filter(f => f.section_id == null).map(flagOf)) : [],
+    };
     const reportCase: ReportCase = {
       uid: String(cs.uid), subject_label: String(cs.subject_label),
       subject_type: String(cs.subject_type),
@@ -1508,7 +1571,7 @@ dd.post('/cases/:uid/report', async (c) => {
       notes: await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
     };
 
-    const artifact = await renderReportArtifact(c.env, reportCase, reportSections);
+    const artifact = await renderReportArtifact(c.env, reportCase, reportSections, extras);
     const ts = Date.now();
     const ext = artifact.format === 'pdf' ? 'pdf' : 'html';
     // Encryption-at-rest: DD reports may contain PII (subject email,
@@ -1770,7 +1833,8 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     const storage = c.env.FILES ? await assertStorageRoom(c.env, { userId: user.id }, size, user) : null;
     if (c.env.FILES) {
       storageKey = `dd-ndas/${caseId}/${sectionId}/${Date.now()}-${genUid().slice(0, 8)}-${filename}`;
-      try { await c.env.FILES.put(storageKey, buf, { httpMetadata: { contentType: mime } }); }
+      // D6651: a diligence NDA is a record, written once.
+      try { const stored = await putRecord(c.env.FILES, storageKey, buf, { httpMetadata: { contentType: mime } }); if (!stored.ok) throw new Error('record_exists'); }
       catch (e) {
         console.warn('[dd] NDA R2 put failed:', (e as Error).message);
         storageKey = `inline:failed:${genUid()}`;
@@ -1816,6 +1880,13 @@ dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
   if (!item) return c.json({ error: 'Checklist item not found on this case' }, 404);
   const seen = await visibleSections(c.env, cs, user);
   if (seen && !seen.has(Number(item.section_id))) return c.json({ error: 'You are not assigned to this section' }, 403);
+  // #6290: an observer reads a section and adds nothing to it, as the item PATCH refuses them.
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
+    const r = await c.env.DB.prepare('SELECT role FROM dd_reviewers WHERE case_id = ? AND section_id = ? AND user_id = ?')
+      .bind(caseId, item.section_id, user.id).all<{ role: string | null }>();
+    const roles = (r.results || []).map((x) => x.role || 'reviewer');
+    if (roles.length && roles.every((x) => x === 'observer')) return c.json({ error: 'An observer reads this section and does not work its checklist.', code: 'observer_reads_only' }, 403);
+  }
 
   const uid = genUid();
   const at = new Date().toISOString();
@@ -1832,7 +1903,9 @@ dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
     const key = `dd-evidence/${caseId}/${item.section_id}/${uid}`;
     // D1170 — a diligence upload counts to its uploader (D1169 §1).
     const storage = await assertStorageRoom(c.env, { userId: user.id }, buf.byteLength, user);
-    await c.env.FILES.put(key, buf, { httpMetadata: { contentType: mime } });
+    // D6651: diligence evidence is a record, written once.
+    const stored = await putRecord(c.env.FILES, key, buf, { httpMetadata: { contentType: mime } });
+    if (!stored.ok) return c.json({ error: 'This evidence file is already stored.', code: 'record_exists' }, 409);
     const attachment = await c.env.DB.prepare(
       `INSERT INTO dd_attachments (case_id, section_id, file_key, filename, mime_type, size_bytes, uploaded_by_user_id)
        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
@@ -1885,7 +1958,7 @@ dd.post('/cases/:uid/documents/download', async (c) => {
   } else if (body.kind === 'request_file') {
     if (seen) return c.json({ error: 'Only the case owner or an admin may open request files' }, 403);
     const f = await c.env.DB.prepare(
-      `SELECT f.id, f.name FROM data_room_files f JOIN dd_requests r ON r.id = f.dd_request_id WHERE f.id = ? AND r.case_id = ?`,
+      `SELECT f.id, f.name FROM data_room_files f JOIN dd_requests r ON r.id = f.dd_request_id WHERE f.id = ? AND r.case_id = ?${await liveFiles(c.env.DB, 'f')}`,
     ).bind(id, caseId).first<{ id: number; name: string }>();
     if (!f) return c.json({ error: 'Document not found' }, 404);
     name = f.name;
@@ -1926,7 +1999,7 @@ dd.get('/documents/dl/:token', async (c) => {
   const doc = row.kind === 'attachment'
     ? await c.env.DB.prepare('SELECT file_key AS key, filename AS name, mime_type AS type FROM dd_attachments WHERE id = ? AND case_id = ?')
       .bind(row.target_id, row.case_id).first<{ key: string; name: string; type: string | null }>()
-    : await c.env.DB.prepare('SELECT r2_key AS key, name, content_type AS type FROM data_room_files WHERE id = ?')
+    : await c.env.DB.prepare(`SELECT r2_key AS key, name, content_type AS type FROM data_room_files WHERE id = ?${await liveFiles(c.env.DB)}`)
       .bind(row.target_id).first<{ key: string; name: string; type: string | null }>();
   if (!doc || !c.env.FILES) return c.json({ error: 'Document not found' }, 404);
   const obj = await c.env.FILES.get(doc.key);
@@ -1966,7 +2039,7 @@ dd.get('/documents/dl/:token', async (c) => {
 
 const LEAD_ROLES = new Set(['admin', 'partner', 'investor']);
 const MEMO_FIELDS = ['summary', 'verified', 'on_trust', 'conditions'] as const;
-const MEMO_MAX = 8000;
+export const MEMO_MAX = 8000;
 const REASON_MAX = 2000;
 
 function isDay(v: string): boolean {

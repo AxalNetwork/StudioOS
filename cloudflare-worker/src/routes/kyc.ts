@@ -174,10 +174,10 @@ kyc.post('/submit', async (c) => {
     await sql.end();
     return c.json({ error: `Cannot resubmit while status is '${status}'` }, 409);
   }
-  const previousFileKey: string | undefined = safeParse(existing[0]?.kyc_data)?.id_document?.file_key;
 
-  // Upload to R2. On any post-upload failure below, we delete this object
-  // before bailing — see the catch around the UPDATE.
+  // Upload to R2. On any post-upload failure below, the objects this request
+  // stored and no row names are erased (D6651: through the one record-erasure
+  // path, reason `unreferenced`), so a failed submit leaves no orphaned PII.
   let documentMeta: Awaited<ReturnType<typeof putKycDocumentFromDataUri>> | null = null;
   if (body.id_document_base64 && c.env.FILES) {
     try {
@@ -194,8 +194,8 @@ kyc.post('/submit', async (c) => {
       stored.push({ kind: d.kind, meta: await putKycDocumentFromDataUri(c.env, user.id, d.data_uri) });
     } catch {
       console.error('R2 KYC upload failed: a document in the list');
-      for (const s of stored) await deleteKycDocument(c.env, s.meta.file_key).catch(() => {});
-      if (documentMeta) await deleteKycDocument(c.env, documentMeta.file_key).catch(() => {});
+      for (const s of stored) await deleteKycDocument(c.env, s.meta.file_key, 'unreferenced').catch(() => {});
+      if (documentMeta) await deleteKycDocument(c.env, documentMeta.file_key, 'unreferenced').catch(() => {});
       await sql.end();
       return c.json({ error: 'Failed to store ID document. Please try again.' }, 500);
     }
@@ -242,18 +242,22 @@ kyc.post('/submit', async (c) => {
   const newStatus = providerResult.result === 'fail' ? 'rejected' : 'pending';
   const rejectionReason = providerResult.result === 'fail' ? 'Automated checks failed — please correct your information and resubmit.' : null;
 
+  // What the writes below have made a row name: an object a row names is kept, even when a later write fails.
+  let caseWritten = false, listedWritten = 0;
   try {
     await sql`UPDATE users SET kyc_status = ${newStatus}, kyc_data = ${JSON.stringify(kycPayload)}, kyc_provider = ${providerName}, kyc_submitted_at = CURRENT_TIMESTAMP, kyc_rejection_reason = ${rejectionReason} WHERE id = ${user.id}`;
+    caseWritten = true;
     await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_submitted', ${`KYC verification submitted via ${providerName} (auto-result: ${providerResult.result})`}, ${await hashEmail(user.email)}, ${user.id})`;
     for (const d of stored) {
       await c.env.DB.prepare('INSERT INTO kyc_documents (user_id, kind, file_key, content_type, size_bytes) VALUES (?, ?, ?, ?, ?)')
         .bind(user.id, d.kind, d.meta.file_key, d.meta.content_type, d.meta.size).run();
+      listedWritten += 1;
     }
   } catch (e) {
-    // Compensating delete: roll back the R2 upload if DB write failed,
-    // otherwise we'd orphan PII.
-    if (documentMeta) await deleteKycDocument(c.env, documentMeta.file_key).catch(() => {});
-    for (const d of stored) await deleteKycDocument(c.env, d.meta.file_key).catch(() => {});
+    // Compensating delete: roll back the R2 uploads no row names, otherwise we'd
+    // orphan PII. D6651: through the one record-erasure path as `unreferenced`.
+    if (documentMeta && !caseWritten) await deleteKycDocument(c.env, documentMeta.file_key, 'unreferenced').catch(() => {});
+    for (const d of stored.slice(listedWritten)) await deleteKycDocument(c.env, d.meta.file_key, 'unreferenced').catch(() => {});
     await sql.end();
     throw e;
   }
@@ -276,12 +280,8 @@ kyc.post('/submit', async (c) => {
     }
   }
 
-  // Resubmission cleanup: delete the previously-stored document, if any.
-  // Done after the UPDATE so a failure here doesn't leave the user without
-  // a valid pointer; we just log it as a soft leak.
-  if (previousFileKey && previousFileKey !== documentMeta?.file_key) {
-    await deleteKycDocument(c.env, previousFileKey).catch(e => console.error('R2 cleanup of previous KYC doc failed:', e?.message, previousFileKey));
-  }
+  // D6651: a resubmission writes a new key and the case points at it; the previous document is a
+  // record and is kept, never deleted because a newer one replaced it.
 
   return c.json({
     kyc_status: newStatus,
@@ -683,7 +683,7 @@ async function rejectCase(c: any, adminUser: any, userId: number, reason: string
   // pointer in kyc_data stays for audit history but the bytes are gone.
   const rejectFileKey: string | undefined = safeParse(target.kyc_data)?.id_document?.file_key;
   if (rejectFileKey) {
-    await deleteKycDocument(c.env, rejectFileKey).catch(e => console.error('R2 cleanup on reject failed:', e?.message, rejectFileKey));
+    await deleteKycDocument(c.env, rejectFileKey, 'purge').catch(e => console.error('R2 cleanup on reject failed:', e?.message, rejectFileKey));
   }
 
   await sql`UPDATE users SET kyc_status = 'rejected', kyc_reviewed_at = CURRENT_TIMESTAMP, kyc_reviewed_by = ${adminUser.id}, kyc_rejection_reason = ${reason} WHERE id = ${userId}`;
@@ -694,7 +694,7 @@ async function rejectCase(c: any, adminUser: any, userId: number, reason: string
   const listed: { results?: Array<{ id: number; file_key: string }> } = await c.env.DB.prepare('SELECT id, file_key FROM kyc_documents WHERE user_id = ? AND removed_at IS NULL').bind(userId).all()
     .catch(() => { console.error('R2 cleanup on reject failed: the document list could not be read'); return { results: [] }; });
   for (const d of listed.results || []) {
-    await deleteKycDocument(c.env, d.file_key).catch(() => console.error('R2 cleanup on reject failed: a listed document'));
+    await deleteKycDocument(c.env, d.file_key, 'purge').catch(() => console.error('R2 cleanup on reject failed: a listed document'));
     await c.env.DB.prepare('UPDATE kyc_documents SET removed_at = CURRENT_TIMESTAMP WHERE id = ? AND removed_at IS NULL').bind(d.id).run();
   }
   await recordEventAfter(c.env, { userId, kind: 'rejected', actorId: Number(adminUser.id), note: String(reason), submittedAt: target.kyc_submitted_at ?? null });

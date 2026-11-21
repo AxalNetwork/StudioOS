@@ -46,11 +46,6 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
-  "POST /api/competitors/:id/refresh": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
-  },
   "POST /api/competitors/:id/rerun": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

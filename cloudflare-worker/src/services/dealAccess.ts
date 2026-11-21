@@ -140,6 +140,28 @@ export async function hasActiveVentureNda(env: Env, projectId: number, readerId:
   return !!row;
 }
 
+/**
+ * #6267: where the venture's NDA with this investor stands, not only whether one is live — the deal
+ * page's room door (`deal_workroom.ts GET /:id/room-access`, D1153) and the diligence reads
+ * (`research.ts GET /diligence` and `/diligence/:grantUid`) read it from here, so there is one status
+ * query. The venture founder's NDA (party A) with the reader (party B): an active one is on file until
+ * its date; a pending or partially signed one is out for signature. Newest first. `null` when none is.
+ * This moved from `deal_workroom.ts` unchanged; `hasActiveVentureNda` above stays the GATE (it also
+ * requires the founder's account to be active), and this is the STATUS the reader is shown.
+ */
+export type VentureNdaStatus = { status: 'on_file' | 'out_for_signature'; valid_until: string | null };
+export async function ventureNdaStatus(env: Env, projectId: number, readerId: number): Promise<VentureNdaStatus | null> {
+  const row = await env.DB.prepare(
+    `SELECT n.status, n.valid_until FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id
+       JOIN projects p ON p.founder_id = owner.founder_id
+      WHERE p.id = ? AND n.party_b_user_id = ?
+        AND n.status IN ('active', 'pending', 'partially_signed')
+        AND (n.status <> 'active' OR n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
+      ORDER BY n.id DESC LIMIT 1`,
+  ).bind(projectId, readerId).first<{ status: string; valid_until: string | null }>();
+  return row ? { status: row.status === 'active' ? 'on_file' : 'out_for_signature', valid_until: row.valid_until ?? null } : null;
+}
+
 /** The firms the caller belongs to: what an investor may see of a deal's money is their own firms' share. */
 export async function userFirmIds(env: Env, userId: number): Promise<number[]> {
   const rows = await env.DB.prepare('SELECT DISTINCT company_id FROM user_company_links WHERE user_id = ? AND company_id IS NOT NULL')

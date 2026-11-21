@@ -7,6 +7,7 @@ import { mcpOauthApi } from '../../lib/api/mcpOauth';
 import { safeWriteJSON } from '../../lib/storage';
 import { PENDING_LINKEDIN_IMPORT_KEY } from '../../lib/linkedinCsv';
 import { successBanner } from './githubSync';
+import { markSignInFrom } from './teamsConnector';
 import {
   INTEGRATION_KEYS_HREF, adminKeysHref, authKind, connectFailure, isMcpSignIn, isPersonalMercury, keepBuildProject,
 } from './connectorsModel';
@@ -33,7 +34,9 @@ export async function startFirstParty(key, returnTo = 'integrations', client = a
     const r = await client.googleCalConnect({ return_to, ...venture });
     return r?.redirect_url || r?.auth_url;
   }
-  if (key === 'microsoft') {
+  // D5810: Microsoft Teams signs in on the one Microsoft connection.
+  if (key === 'microsoft' || key === 'teams') {
+    if (key === 'teams') markSignInFrom('teams');
     const r = await client.microsoftCalConnect({ return_to, ...venture });
     return r?.redirect_url || r?.auth_url || r?.authorize_url;
   }
@@ -44,7 +47,7 @@ export async function startFirstParty(key, returnTo = 'integrations', client = a
 /** Disconnect a connector through its own route: the first-party three, or the registry's. */
 export async function disconnect(p, opts = {}) {
   if (p.key === 'google') return api.googleCalDisconnect();
-  if (p.key === 'microsoft') return api.microsoftCalDisconnect();
+  if (p.key === 'microsoft' || p.key === 'teams') return api.microsoftCalDisconnect();
   if (p.key === 'linkedin') return api.linkedinDisconnect(opts);
   return connectorsApi.disconnect(p.connection.uid);
 }

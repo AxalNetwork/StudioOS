@@ -141,8 +141,9 @@ export const STATEMENTS = Object.freeze({
     formation: `SELECT COUNT(*) AS steps, SUM(CASE WHEN state = 'done' THEN 1 ELSE 0 END) AS done,
         SUM(CASE WHEN state = 'done' AND proof_file_key IS NOT NULL THEN 1 ELSE 0 END) AS proof, MAX(updated_at) AS at
       FROM formation_steps WHERE project_id = ? AND kind = 'formation'`,
-    data_room: `SELECT COUNT(*) AS files, MAX(updated_at) AS at FROM data_room_files WHERE project_id = ?`,
-    checklist: `SELECT DISTINCT checklist_item FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL`,
+    // D6073 — a file in Trash is not counted (migration 202611152333_6073 adds removed_at).
+    data_room: `SELECT COUNT(*) AS files, MAX(updated_at) AS at FROM data_room_files WHERE project_id = ? AND removed_at IS NULL`,
+    checklist: `SELECT DISTINCT checklist_item FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL AND removed_at IS NULL`,
     rhythm: `SELECT COUNT(*) AS due, SUM(CASE WHEN state = 'done' THEN 1 ELSE 0 END) AS done, MAX(run_date) AS at
       FROM ritual_runs WHERE project_id = ? AND run_date > date(?, '-84 days') AND run_date <= ?`,
   },

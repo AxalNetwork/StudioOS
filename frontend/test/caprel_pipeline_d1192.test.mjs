@@ -164,6 +164,34 @@ test('Import: every data row is kept for the writer to judge, the columns are ma
 
 const PIPE = '/raise/capital-relationships/pipeline?project_id=3';
 
+test('Pipeline exports the loaded prospects in the browser without another read or write', async () => {
+  const v = await mounted(PIPE);
+  const create = document.createElement;
+  const createUrl = URL.createObjectURL;
+  let downloaded;
+  let csv;
+  document.createElement = (tag) => {
+    const node = create(tag);
+    if (tag === 'a') {
+      node.click = () => { downloaded = node.download; };
+      node.remove = () => node.parentNode.removeChild(node);
+    }
+    return node;
+  };
+  URL.createObjectURL = (blob) => { csv = blob; return createUrl(blob); };
+  try {
+    const requests = v.calls.length;
+    await v.click('caprel-pipeline-export');
+    assert.match(downloaded, /^capital-relationships-pipeline-7-rows-\d{4}-\d{2}-\d{2}\.csv$/);
+    assert.match(await csv.text(), /Bluefern Capital,,,Meeting,,Send the deck,2026-10-20/);
+    assert.equal(v.calls.length, requests);
+  } finally {
+    document.createElement = create;
+    URL.createObjectURL = createUrl;
+    await v.close();
+  }
+});
+
 test('the board: five columns and Passed collapsed; moving a card to Committed asks the status and writes it through the one writer', async () => {
   // Mutation checked: the status field not drawn for Committed → Signed never sent; the write sent through contacts' PUT → no PATCH.
   const v = await mounted(PIPE);
@@ -213,7 +241,8 @@ test('the list: rows with commitment and next step; three picked move together t
     assert.match(v.text('caprel-move-dialog'), /Move 3 investors/);
     await v.change('caprel-move-to', 'passed');
     await v.click('caprel-move-go');
-    assert.deepEqual(v.writes().map((c) => [c.url.match(/prospects\/(\d+)/)[1], c.body]), [['41', { stage: 'passed' }], ['42', { stage: 'passed' }], ['47', { stage: 'passed' }]]);
+    // D6077: the list is in the bar's sort (Next step due), so the writes are compared as a set.
+    assert.deepEqual(v.writes().map((c) => [c.url.match(/prospects\/(\d+)/)[1], c.body]).sort(), [['41', { stage: 'passed' }], ['42', { stage: 'passed' }], ['47', { stage: 'passed' }]]);
   } finally { await v.close(); }
 });
 
@@ -288,7 +317,8 @@ test('Overview: the round from the commitments read, Needs you and the stages fr
     assert.ok(v.text('caprel-ov-counted').includes('of $2,000,000 · 2.5%'));
     assert.ok(v.has('caprel-ov-need-overdue') && v.has('caprel-ov-need-no-status'));
     assert.ok(v.text('caprel-ov-stage-committed').endsWith('2'));
-    assert.ok(v.text('caprel-ov-stages').includes('Against 30 days ago: not recorded'));
+    // D5081 part 2 (#5081, RA-22): no shipped "not read here yet" line under the stages.
+    assert.doesNotMatch(v.text('caprel-ov-stages'), /not read here yet/i);
   } finally { await v.close(); }
   const r = await mounted('/raise/capital-relationships?project_id=3', { commitments: null });
   try {

@@ -19,8 +19,6 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -28,22 +26,19 @@ import { SignJWT } from 'jose';
 import cycleValidate from '../src/routes/cycle_validate.ts';
 import cycleBuild from '../src/routes/cycle_build.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { FORMS, EDITS, formFor, editFor, initialValues, validate } from '../../frontend/src/pages/cycles/forms.js';
+import { FORMS, EDITS, formFor, editFor, initialValues, validate, AMOUNT_KINDS } from '../../frontend/src/pages/cycles/forms.js';
 import { recordFormFor, recordEditAction } from '../../frontend/src/pages/cycles/recordModel.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
 import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 
 const FOUNDER = 10, OTHER = 20, PARTNER = 40, INVESTOR = 50;
 const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [OTHER]: 'founder', [PARTNER]: 'partner', [INVESTOR]: 'investor' };
 const P = 1, PB = 2;
 
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   loadSchema(db);
@@ -184,7 +179,8 @@ test('12: New segment, Record a signal and New hypothesis save their bodies, eve
       await sig.submit(w, P, { ...gv, kind, status, who: `${kind} ${status}`, amount: '1,200', signal_date: '2026-10-12' });
       const row = one(db, 'SELECT kind, status, amount_cents FROM demand_signals WHERE project_id = ? AND who = ?', P, `${kind} ${status}`);
       assert.deepEqual([row.kind, row.status], [kind, status]);
-      assert.equal(row.amount_cents, ['pre_sale', 'loi'].includes(kind) ? 120000 : null, `${kind}: an amount only where the route takes one`);
+      // D6013: a would-pay signal carries an amount too (AMOUNT_KINDS, the route's own list).
+      assert.equal(row.amount_cents, AMOUNT_KINDS.includes(kind) ? 120000 : null, `${kind}: an amount only where the route takes one`);
     }
   }
 

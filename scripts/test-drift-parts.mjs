@@ -6,22 +6,27 @@
  * <part> --plan-file <path> validates exact-once coverage before executing
  * the current package command with explicit files. No node count sharding.
  * --list prints names only; local npm run test:drift remains unchanged.
+ * --plan --equal-weights reads no timings file (D7108 part 2: merge_group).
+ *
+ * D6464 (#6464): under merge_group only, a node:test command also writes its
+ * failed tests (lib/failedTestsReporter.mjs). When it fails and every failed
+ * test is on scripts/flaky-tests.json, in a file the queue entry did not
+ * change, those files run once more; a pass is written to the job summary as
+ * "flaky, retried". Nothing else is ever retried, and never on PRs or pushes.
+ *
+ * D7125 (#7125): under merge_group only, a failure that stands is printed as
+ * `::error title=ci-failure-id::<file> › <test>` (at most 5 per command), or
+ * `guard › <command>` for a command that is not node:test, so the queue-stall
+ * alert can read which failure a candidate had without its 44,000-line log.
  */
-import { readFileSync, writeFileSync, globSync } from 'node:fs';
+import { readFileSync, writeFileSync, globSync, appendFileSync, existsSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { planParts, assertExactOnce, newestMainArtifact } from './lib/shardPlan.mjs';
 import { buildGenerated } from './build-generated.mjs';
-
-// D5612 (#5612): a part runs `node --test` and `tsc` directly, so no npm
-// `pretest:*` hook builds the generated modules first; this does, once.
-// `--list` and `--plan` only name parts and files, and CI reads their stdout,
-// so they skip it (the generators print to stdout).
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url) && !['--list', '--plan'].includes(process.argv[2])) {
-  const generated = buildGenerated();
-  if (generated !== 0) process.exit(generated);
-}
+import { retryDecision } from './lib/flakyTests.mjs';
 
 /** How many shards each long test script is cut into. */
 export const SHARDS = Object.freeze({
@@ -31,6 +36,12 @@ export const SHARDS = Object.freeze({
 
 /** The name of the part that runs every step of test:drift not in SHARDS. */
 export const REST = 'rest';
+
+/**
+ * D7108 part 2: `--plan --equal-weights` plans with no timings at all. The
+ * merge-queue shards use it, so their plan is a pure function of the commit.
+ */
+export const EQUAL_WEIGHTS = '--equal-weights';
 
 const SHARD_NAME = (script, i, n) => `${script.replace(/^test:/, '')}-${i}-of-${n}`;
 
@@ -57,6 +68,65 @@ export function plannedCommand(cmd, files) {
   if (!files.length) throw new Error('empty planned part');
   for (const file of files) if (!/^[\w./-]+\.test\.(?:mjs|ts)$/.test(file) || file.split('/').includes('..')) throw new Error(`unsafe test path: ${file}`);
   return testCommand(cmd).prefix + files.map(quote).join(' ');
+}
+
+/** Whether a part command is one node:test run this file can re-run by file. */
+export function isNodeTest(cmd) {
+  try { testCommand(cmd); return true; } catch { return false; }
+}
+
+/** D6464: the same command, with TAP kept on stdout and failed tests written to `out`. */
+export function withFailureReporter(cmd, out, reporter) {
+  const { prefix } = testCommand(cmd);
+  const at = prefix.length - ' --test '.length;
+  return `${cmd.slice(0, at)} --test-reporter=tap --test-reporter-destination=stdout --test-reporter=${quote(reporter)} --test-reporter-destination=${quote(out)}${cmd.slice(at)}`;
+}
+
+/** D6464: the reporter's file as [{ file, test }]; unreadable or malformed means none. */
+export function readFailures(path) {
+  try {
+    return readFileSync(path, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line))
+      .filter((f) => typeof f?.file === 'string' && typeof f?.test === 'string');
+  } catch { return []; }
+}
+
+/** D6464: the tracked list; a missing or malformed file is an empty list, so nothing retries. */
+export function readFlakyList(root) {
+  try {
+    const data = JSON.parse(readFileSync(resolve(root, 'scripts/flaky-tests.json'), 'utf8'));
+    return Array.isArray(data?.tests) ? data.tests : [];
+  } catch { return []; }
+}
+
+/** D6464: files the merge-queue entry changed against its base, or null when they cannot be read. */
+export function queueChangedFiles(root, env = process.env, run = spawnSync) {
+  let base; let head;
+  try { ({ base_sha: base, head_sha: head } = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8')).merge_group || {}); }
+  catch { return null; }
+  if (!/^[0-9a-f]{40}$/.test(base || '') || !/^[0-9a-f]{40}$/.test(head || '')) return null;
+  const diff = () => run('git', ['diff', '--name-only', base, head], { cwd: root, encoding: 'utf8' });
+  let r = diff();
+  if (r.status !== 0) {
+    run('git', ['fetch', '--no-tags', '--depth=1', 'origin', base], { cwd: root, encoding: 'utf8' });
+    r = diff();
+  }
+  return r.status === 0 ? r.stdout.split('\n').filter(Boolean) : null;
+}
+
+/**
+ * D6464: after `cmd` failed under merge_group, re-run its failed files once
+ * when retryDecision allows it. Returns { status, lines }: status 0 only when
+ * the retry ran and passed; `lines` go to the log and the job summary.
+ */
+export function retryFailed({ cmd, failures, list, changedFiles, event, exec }) {
+  const decision = retryDecision({ event, failures, list, changedFiles });
+  if (!decision.retry) return { status: 1, lines: [`No retry: ${decision.reason}.`] };
+  const again = plannedCommand(cmd, decision.files);
+  const status = exec(again);
+  const named = failures.map((f) => `- \`${f.file}\` › ${f.test}`);
+  return status === 0
+    ? { status: 0, lines: ['### Flaky, retried', `These listed flaky tests failed, and their files passed on one retry (\`scripts/flaky-tests.json\`):`, ...named] }
+    : { status: status || 1, lines: ['### Flaky retry failed', 'These listed flaky tests failed, and failed again on their one retry:', ...named] };
 }
 
 /**
@@ -120,7 +190,14 @@ function main(argv) {
   if (argv[0] === '--main-artifact') {
     const artifacts = JSON.parse(readFileSync(argv[1], 'utf8')).artifacts;
     const commits = JSON.parse(readFileSync(argv[2], 'utf8'));
-    console.log(newestMainArtifact(artifacts, commits)?.id || '');
+    if (!Array.isArray(artifacts) || !Array.isArray(commits) ||
+        !artifacts.every(row => row && typeof row.name === 'string' && typeof row.created_at === 'string' &&
+          typeof row.expired === 'boolean' && Number.isSafeInteger(row.id) && row.id > 0) ||
+        !commits.every(row => row && typeof row.sha === 'string' && row.sha.length > 0)) {
+      throw new Error('invalid timing artifact or main commit inventory');
+    }
+    const artifact = newestMainArtifact(artifacts, commits);
+    if (artifact) console.log(artifact.id);
     return 0;
   }
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -129,8 +206,10 @@ function main(argv) {
   const arg = argv[0];
   if (arg === '--plan') {
     // A missing timings artifact means equal weights; malformed data is a failed plan.
+    // D7108 part 2: --equal-weights pins the input to {} and reads no file, so
+    // every merge-queue shard computes the same plan from its checkout alone.
     let timings = {};
-    try {
+    if (argv[1] !== EQUAL_WEIGHTS) try {
       const input = JSON.parse(readFileSync(resolve(root, argv[1]), 'utf8'));
       // #5608 emits commit metadata plus per-test wallMs/exitCode.
       timings = timingsOf(input);
@@ -153,21 +232,68 @@ function main(argv) {
     console.error(`test-drift-parts: unknown part "${arg}". Parts: ${parts.map((p) => p.name).join(', ')}`);
     return 2;
   }
+  // Direct test commands have no npm pretest hook (D5612). Read-only
+  // planner modes keep stdout reserved for their machine-readable result.
+  const generated = buildGenerated();
+  if (generated !== 0) return generated;
   const env = { ...process.env };
   if (env.TEST_TRACE_DIR) {
     const tracer = pathToFileURL(resolve(root, 'scripts/ci/test-tracer.mjs')).href;
     env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${tracer}`].filter(Boolean).join(' ');
     env.TEST_TRACE_ROOT = root;
   }
-  for (const cmd of part.commands) {
-    console.log(`\n> ${cmd}\n`);
-    const r = spawnSync('sh', ['-c', cmd], { cwd: root, stdio: 'inherit', env });
-    if (r.status !== 0) {
-      console.error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
+  const sh = (command) => spawnSync('sh', ['-c', command], { cwd: root, stdio: 'inherit', env });
+  return runPart({ commands: part.commands, env, root, sh });
+}
+
+/**
+ * Run one part's commands in order; the first that fails ends the part with its exit status. Under merge_group a
+ * failed node:test command may retry its listed flaky tests once (D6464), and a failure that stands publishes its
+ * identity as `ci-failure-id` annotations (D7125) for the queue-stall alert. The exit status never changes.
+ */
+export function runPart({ commands, env = process.env, root = process.cwd(), sh, log = console.log, error = console.error,
+  flakyList = () => readFlakyList(root), changedFiles = () => queueChangedFiles(root, env) }) {
+  const event = env.GITHUB_EVENT_NAME;
+  for (const [i, cmd] of commands.entries()) {
+    const watch = event === 'merge_group' && isNodeTest(cmd);
+    const out = resolve(tmpdir(), `failed-tests-${process.pid}-${i}.jsonl`);
+    if (watch && existsSync(out)) rmSync(out);
+    const run = watch ? withFailureReporter(cmd, out, resolve(root, 'scripts/lib/failedTestsReporter.mjs')) : cmd;
+    log(`\n> ${run}\n`);
+    const r = sh(run);
+    if (r.status === 0) continue;
+    error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
+    if (!watch) {
+      if (event === 'merge_group') log(failureAnnotation(`guard › ${cmd.slice(0, 120)}`));
+      return r.status || 1;
+    }
+    const failures = readFailures(out);
+    const retried = retryFailed({ cmd, failures, list: flakyList(),
+      changedFiles: changedFiles(), event, exec: (command) => { log(`\n> ${command}\n`); return sh(command).status; } });
+    for (const line of retried.lines) log(`test-drift-parts: ${line}`);
+    if (env.GITHUB_STEP_SUMMARY && retried.lines[0].startsWith('###')) appendFileSync(env.GITHUB_STEP_SUMMARY, `${retried.lines.join('\n')}\n\n`);
+    if (retried.status !== 0) {
+      for (const f of failures.slice(0, FAILURE_ANNOTATIONS_MAX)) log(failureAnnotation(`${f.file} › ${f.test}`));
       return r.status || 1;
     }
   }
   return 0;
+}
+
+/** D7125: how many failed tests of one command are published as `ci-failure-id` annotations. */
+export const FAILURE_ANNOTATIONS_MAX = 5;
+
+/** D7125: a workflow command's data, escaped as GitHub requires (`%`, CR, LF). */
+const escapeData = (v) => String(v).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+/** D7125: a workflow command's property value: the data escapes plus `:` and `,`. */
+const escapeProperty = (v) => escapeData(v).replaceAll(':', '%3A').replaceAll(',', '%2C');
+
+/**
+ * D7125: the annotation that carries one failure's identity off the runner, read back by
+ * `scripts/github-alerts.mjs queue-stalled` through the check run's annotations.
+ */
+export function failureAnnotation(identity) {
+  return `::error title=${escapeProperty('ci-failure-id')}::${escapeData(identity)}`;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

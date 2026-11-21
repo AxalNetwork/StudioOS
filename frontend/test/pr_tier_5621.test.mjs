@@ -90,3 +90,15 @@ test('the full dispatch gate rejects stale, unbound, or missing base evidence', 
   }
   assert.equal(fullRunValid({ ...proof, base: undefined }), false);
 });
+
+
+test('#6460 draft pull requests run rest only and the draft bit does not narrow push or queue events', () => {
+  assert.deepEqual(tierFor({ ...pullRequest, draft: true }), {
+    mode: 'draft', reason: 'draft', parts: ['rest'],
+  });
+  assert.deepEqual(tierFor({ ...pullRequest, draft: false }), tierFor(pullRequest));
+  for (const event of ['push', 'merge_group']) {
+    assert.deepEqual(tierFor({ ...pullRequest, event, draft: true }),
+      { mode: 'full', reason: 'event', parts: null });
+  }
+});

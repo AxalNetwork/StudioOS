@@ -67,6 +67,8 @@ export function viewOf(pathname = '') {
   const rest = String(pathname).startsWith(BASE) ? String(pathname).slice(BASE.length) : '';
   if (/^\/review\/?$/.test(rest)) return { page: 'review', drawer: null, id: null };
   if (/^\/preview\/?$/.test(rest)) return { page: 'preview', drawer: null, id: null };
+  // D6864 (RA-29): Shared links, the record of every evidence pack that left Axal.
+  if (/^\/shared\/?$/.test(rest)) return { page: 'shared', drawer: null, id: null };
   const m = /^\/(item|claim)\/([^/]+)\/?$/.exec(rest);
   if (m && ID.test(m[2])) return { page: 'view', drawer: m[1], id: m[2] };
   return { page: 'view', drawer: null, id: null };
@@ -75,6 +77,7 @@ export const itemHref = (id, search = '') => (ID.test(String(id ?? '')) ? `${BAS
 export const claimHref = (id, search = '') => (ID.test(String(id ?? '')) ? `${BASE}/claim/${id}${search}` : `${BASE}${search}`);
 export const reviewHref = (search = '') => `${BASE}/review${search}`;
 export const previewHref = (search = '') => `${BASE}/preview${search}`;
+export const sharedHref = (search = '') => `${BASE}/shared${search}`;
 
 export const NOT_YET = 'Not read here yet';
 
@@ -168,15 +171,39 @@ export function investorView(read) {
   };
 }
 
+/** Filter choices and counts come only from evidence the viewer received. */
+export function evidenceChoices(rows) {
+  return {
+    area: [...new Set(rows.map((item) => item.area))].filter(Boolean),
+    source: [...new Set(rows.map((item) => item.source_label))].filter(Boolean),
+    claim: [...new Set(rows.flatMap((item) => item.claims.map((claim) => claim.state)))].filter(Boolean),
+  };
+}
+
+export function evidenceMatches(item, { area, source, claim }) {
+  return (!area || item.area === area) && (!source || item.source_label === source)
+    && (!claim || item.claims.some((row) => row.state === claim));
+}
+
 /** A coverage tile: area, kind, Source, count and the newest date. No value. */
 export const coverageTile = (g) => ({
   area: g.area, kind: kindWord(g.kind), source: sourceWord(g.source_label), count: Number.isSafeInteger(g.count) ? g.count : null,
   newest: recordDay(g.newest) ? `newest ${recordDay(g.newest)}` : 'date not recorded',
 });
 
-/** What the deal page says when the read is refused or fails (D1265 §4). */
-export function refusalOf(error) {
-  if (error?.status === 403 && (error?.code === 'investor_only' || error?.data?.code === 'investor_only')) return { kind: 'founder', line: 'This is the investor’s view. You read your evidence in Raise › Evidence.' };
+/** D6167: the deal staff (D4631) — the admin and an Operating Partner — as the deal page names their role. */
+const DEAL_STAFF = new Set(['admin', 'partner']);
+export const STAFF_READ_LINE = 'You are reading what an investor on this deal reads, as staff. Each open is logged.';
+
+/**
+ * What the deal page says when the read is refused or fails (D1265 §4). D6167: only the venture's own founder is
+ * pointed to Raise › Evidence; staff are never told to open a founder's page that is not theirs, even if an older
+ * Worker still answers them `investor_only`.
+ */
+export function refusalOf(error, role = null) {
+  const code = error?.code ?? error?.data?.code;
+  if (error?.status === 403 && DEAL_STAFF.has(role)) return { kind: 'closed', line: 'This deal’s evidence could not be opened for staff. Nothing was shown.' };
+  if (error?.status === 403 && code === 'investor_only') return { kind: 'founder', line: 'This is the investor’s view. You read your evidence in Raise › Evidence.' };
   if (error?.status === 403 || error?.status === 404) return { kind: 'closed', line: 'The founder’s evidence is not open to you on this deal.' };
   return { kind: 'unreadable', line: 'The evidence could not be read. That is not the same as none.' };
 }

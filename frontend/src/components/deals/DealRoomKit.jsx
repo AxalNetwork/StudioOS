@@ -1,11 +1,13 @@
 import React from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { DataState } from '../../ui';
 
 /**
  * D630 (#1388) — the four states every deal-room screen draws, as the Ops
  * canvas words them: loading; empty; "Not recorded" with its one-line reason;
- * "Unreadable" with "Try again". A failed read never renders a zero or an
- * empty list — `Unreadable` is the only thing a failed read draws.
+ * "Unavailable" with Retry (D5129's shared states; `Unreadable` keeps its code
+ * name). A failed read never renders a zero or an empty list — `Unreadable` is
+ * the only thing a failed read draws.
  */
 
 export function Loading({ what }) {
@@ -25,26 +27,20 @@ export function Empty({ children, action }) {
   );
 }
 
+/**
+ * D5129 (#5129): the shared Unavailable treatment (the screen word for a failed
+ * read since the owner's Q2 = A), keeping this kit's test id and its sentence.
+ */
 export function Unreadable({ children, onRetry }) {
-  return (
-    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300" role="alert" data-testid="dr-unreadable">
-      <span className="font-semibold">Unreadable.</span> {children}
-      {onRetry && (
-        <button type="button" onClick={onRetry} className="ml-1 inline-flex items-center gap-1 font-semibold underline">
-          <RefreshCw size={11} /> Try again
-        </button>
-      )}
-    </div>
-  );
+  return <DataState state="unavailable" size="block" reason={children} onRetry={onRetry} retryLabel="Try again" announce="always" data-testid="dr-unreadable" />;
 }
 
-/** "Not recorded", with the reason beside it rather than behind a hover. */
+/**
+ * "Not recorded", with its one-line reason as the chip's own words (each reason
+ * here starts "Not recorded: …"), so it is visible text rather than behind a hover.
+ */
 export function NotRecorded({ reason }) {
-  return (
-    <span className="inline-flex items-center rounded-full border border-dashed border-gray-300 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400" title={reason} data-testid="dr-not-recorded">
-      {reason}
-    </span>
-  );
+  return <DataState state="not_recorded" data-testid="dr-not-recorded">{reason}</DataState>;
 }
 
 const TONES = {

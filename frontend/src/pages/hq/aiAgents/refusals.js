@@ -64,7 +64,10 @@ export const SKILL_REFUSALS = {
     ? `${d.not_evaluated} of ${d.total} required golden-case runs are not evaluated. Run the evals on every required model.`
     : 'Some required golden-case runs are not evaluated. Run the evals on every required model.'),
   tool_not_read_only: (d) => (d?.tool ? `Skills may only use read tools. ${d.tool} can write.` : 'Skills may only use read tools.'),
-  version_unknown: 'Compare a published version (v1, v2, …) or the draft.',
+  version_unknown: 'Compare the library source, a published version (v1, v2, …) or the draft.',
+  source_missing: 'This skill has no matching definition in the deployed library, so the source comparison is unavailable.',
+  source_ambiguous: 'More than one deployed library definition matches this skill. Resolve the duplicate source before comparing.',
+  source_invalid: 'The deployed library definition did not pass validation. Fix the source definition before comparing.',
   action_invalid: 'Choose Publish, Retire or Re-run evals.',
   uids_invalid: 'Choose at least one skill, and no more than the list allows.',
   forbidden: 'Only a Super Admin can do this.',
@@ -103,6 +106,9 @@ export const POLICY_REFUSALS = {
   not_paused: 'AI agents are not paused.',
   policy_unreadable: 'The AI policy could not be read. Nothing was changed.',
   invalid_halt: `Say halted or cleared, with a reason of up to 64 characters.`,
+  // D7074: the capacity ceilings (aiPolicy.ts capacityCeilingsOf).
+  invalid_ceiling: 'Each ceiling is a whole number in its range, up to 500 elastic runs and 50 lanes, or blank to stop offering it.',
+  lanes_need_run_ceiling: 'Set the per-run ceiling first. Sub-agents share their agent’s monthly cap, and without a per-run ceiling one run’s cost has no bound.',
   forbidden: 'Only a Super Admin can do this.',
 };
 export const policyRefusal = (e) => wordsFor(POLICY_REFUSALS, e, 'The change could not be saved. Read the current policy before trying again.');

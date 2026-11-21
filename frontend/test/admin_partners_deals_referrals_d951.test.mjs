@@ -343,7 +343,7 @@ test('on Deals each block draws its own state: a failed list leaves C5 drawn, an
     'GET /api/admin/partners/deals': (q) => (q.get('limit') === '100' ? response({ items: [liveDeal(1, { expires_at: iso(LIVE + 10 * DAY) })], total: 1 }) : response({ error: 'down' }, 503)),
   }));
   try {
-    assert.match(listDown.textOf('partners-deals-read-unreadable').trim(), /^The deals could not be read\. A failed list is not a claim that there are none\.Try again$/);
+    assert.match(listDown.textOf('partners-deals-read-unreadable').trim(), /^UnavailableThe deals could not be read\. A failed list is not a claim that there are none\.Try again$/);
     assert.ok(!listDown.has('partners-deals-none'), 'never "No partner deals yet"');
     assert.ok(listDown.has('partners-c5-chart'), 'C5 is drawn');
     assert.equal(listDown.textOf('partners-c5-showing'), 'Showing 1 of 1 active deal');

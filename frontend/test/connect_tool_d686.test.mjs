@@ -374,6 +374,7 @@ import { EDITS, SYSTEM_KINDS, UNMAP, systemOptions } from '../src/pages/cycles/f
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
 import FormLightbox, { formErrors, formFields } from '../src/pages/cycles/FormLightbox.jsx';
 import ToolsHistory from '../src/pages/cycles/ToolsHistory.jsx';
+import { partElement } from './_buildParts.mjs'; // #5507: this provider's line only; the full list is build_parts_contract_5507's
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const CHOICES = { kinds: [
@@ -462,8 +463,10 @@ test('the Tools history on Operating systems: one row per connection with its Op
   assert.doesNotMatch(none, /tools<\/span>/, 'no count without a company');
   assert.equal(renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: null }))), '', 'no part, nothing drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  // D1311: Build's parts live in buildParts.jsx, one line per connector.
-  assert.match(readFileSync('frontend/src/pages/cycles/buildParts.jsx', 'utf8'), /\['tools', \(data\) => <ToolsHistory tools=\{data\?\.parts\?\.tools\} \/>\]/);
+  // D1311: Build's parts live in buildParts.jsx, one line per connector; read through its export (#5507).
+  const toolsPart = partElement('operating-systems', 'tools', { parts: { tools } });
+  assert.equal(toolsPart.type, ToolsHistory);
+  assert.deepEqual(toolsPart.props, { tools });
   assert.match(route, /loadOptions=\{edit\.loadOptions \? \(\) => edit\.loadOptions\(cyclesWrite, projectId, edit\.idOf\(editing\)\) : null\}/);
 });
 

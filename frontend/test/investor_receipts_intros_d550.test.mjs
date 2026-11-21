@@ -9,7 +9,8 @@ import { capitalMetric } from '../src/lib/fundAnalytics.js';
 const founder = { other: { id: 42, name: 'Fixture founder', role: 'founder' } };
 const target = introTarget(founder);
 const render = (props = {}) => renderToStaticMarkup(createElement(InvestorIntroRequest, {
-  targets: [target], states: {}, ready: true, asked: new Set(), request: () => {}, ...props,
+  targets: [target], states: {}, ready: true, asked: new Set(), request: () => {},
+  quota: { status: 'ready', value: { tier: 'free', quarter: '2026Q4', used: 1, cap: 3, remaining: 2 } }, ...props,
 }));
 
 test('only recorded founder or project targets reach the existing request route', () => {

@@ -95,6 +95,8 @@ export function aboutHistory(notes) {
  */
 export function decidedItemPath(row) {
   if (row?.laneKey === 'product_testers' && Number.isInteger(row.itemId)) return `/admin/approvals/product-testers/${row.itemId}`;
+  // D5885: a Best-Fit consultation opens on its board by its numeric id.
+  if (row?.laneKey === 'best_fit' && Number.isInteger(row.itemId)) return `/admin/approvals/best-fit/${row.itemId}`;
   if (row?.laneKey === 'comarketing' && row.itemUid) return `/admin/approvals/co-marketing/${encodeURIComponent(row.itemUid)}`;
   return null;
 }

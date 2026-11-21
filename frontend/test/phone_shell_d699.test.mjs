@@ -250,7 +250,7 @@ test('D699 the recorder sends a founder\'s visit, and never an operator\'s (test
   assert.deepEqual(await visitsSent({ role: 'founder', record: true }, { support: true }), [], 'an HQ support session');
   assert.deepEqual(await visitsSent({ role: 'investor', record: true }), [], 'not a founder');
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<MobileTabBar role=\{shellRole\} held=\{isLicence\(shellRole\) \? heldLicences : null\} groups=\{isLicence\(shellRole\) \? sidebarGroups : null\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
+  assert.match(app, /\{!pitchFocused && <MobileTabBar role=\{shellRole\} held=\{isLicence\(shellRole\) \? heldLicences : null\} groups=\{isLicence\(shellRole\) \? sidebarGroups : null\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>\}\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
 });
 
 const ada = { id: 7, name: 'Ada Quill', email: 'ada@example.test' };

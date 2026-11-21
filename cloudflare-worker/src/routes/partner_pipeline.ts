@@ -71,6 +71,56 @@ import {
 
 const partnerPipeline = new Hono<{ Bindings: Env }>();
 
+partnerPipeline.get('/activity', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const raw = c.req.query('need_id');
+    const needId = raw == null ? null : Number(raw);
+    if (raw != null && (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(needId))) {
+      return c.json({ detail: 'Name an opportunity by its need ID.' }, 400);
+    }
+    const { results } = await c.env.DB.prepare(
+      `WITH scoped_quotes AS (
+         SELECT id, need_id, status, decided_at FROM quotes
+         WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
+           AND (? IS NULL OR need_id = ?)
+       ), scoped_engagements AS (
+         SELECT id, need_id FROM engagements
+         WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
+           AND (? IS NULL OR need_id = ?)
+       ), events AS (
+         SELECT need_id, 'passed' AS kind, passed_at AS occurred_at, id AS source_id
+           FROM partner_lead_passes WHERE partner_id = ? AND (? IS NULL OR need_id = ?)
+         UNION ALL
+         SELECT q.need_id, 'proposal_version', v.created_at, v.id
+           FROM quote_versions v JOIN scoped_quotes q ON q.id = v.quote_id
+         UNION ALL
+         SELECT need_id, CASE status WHEN 'accepted' THEN 'proposal_won' ELSE 'proposal_lost' END, decided_at, id
+           FROM scoped_quotes WHERE status IN ('accepted', 'rejected') AND decided_at IS NOT NULL
+         UNION ALL
+         SELECT q.need_id, 'negotiation_moved', g.last_moved_at, g.id
+           FROM quote_negotiations g JOIN scoped_quotes q ON q.id = g.quote_id
+         UNION ALL
+         SELECT e.need_id, 'retainer_created', r.created_at, r.id
+           FROM partner_retainers r JOIN scoped_engagements e ON e.id = r.engagement_id
+         UNION ALL
+         SELECT e.need_id, 'retainer_ended', r.ended_at, r.id
+           FROM partner_retainers r JOIN scoped_engagements e ON e.id = r.engagement_id WHERE r.ended_at IS NOT NULL
+       )
+       SELECT e.kind, e.occurred_at, e.source_id, n.id AS need_id, n.uid AS need_uid, n.title
+       FROM events e JOIN founder_needs n ON n.id = e.need_id
+       WHERE julianday(e.occurred_at) IS NOT NULL
+       ORDER BY julianday(e.occurred_at) DESC, e.kind, e.source_id DESC LIMIT ?`,
+    ).bind(partnerId, ...companyBinds(companyId), needId, needId,
+      partnerId, ...companyBinds(companyId), needId, needId,
+      partnerId, needId, needId, listLimit(c.req.query('limit')))
+      .all<{ kind: string; occurred_at: string; source_id: number; need_id: number; need_uid: string; title: string }>();
+    return c.json({ items: results.map(({ kind, occurred_at, source_id, need_id, need_uid, title }) => ({
+      key: `${kind}:${source_id}`, kind, occurred_at, opportunity: { need_id, uid: need_uid, title },
+    })) });
+  } catch (e) { return mapError(c, e); }
+});
+
 /** The partner row for the caller, or a throw `mapError` will shape. */
 async function actingPartner(c: any): Promise<{ user: User; partnerId: number; companyId: number | null }> {
   const user = (await requireAuth(c)) as User;
@@ -544,6 +594,114 @@ partnerPipeline.delete('/leads/:needId/pass', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// D4838 part 10 (#5936, PP03c): a lead's proposal draft — kept, never sent
+// ---------------------------------------------------------------------------
+
+/** The shapes a lead's draft can name; `null` is "not chosen yet", never a default. */
+export const LEAD_DRAFT_SHAPES = ['fixed_project', 'retainer', 'time_and_materials'] as const;
+const LEAD_DRAFT_ORIGINS = ['manual', 'eadwyn'] as const;
+
+/**
+ * Is this need still a LEAD for this firm, and if not, why not.
+ *
+ * A draft belongs to a lead and to nothing else: a need the firm bid on is a proposal (its draft is
+ * the quote itself), a need it passed on is a pass, and a need no longer open has nothing to draft
+ * for. The same three-set rule the leads read and the pass write keep (migration 233).
+ */
+async function leadForDraft(env: Env, partnerId: number, needId: number): Promise<{ ok: true } | { status: 404 | 409; detail: string }> {
+  if (!Number.isInteger(needId) || needId <= 0) return { status: 404, detail: 'Need not found' };
+  const need = await env.DB.prepare('SELECT status FROM founder_needs WHERE id = ?').bind(needId).first<{ status: string | null }>();
+  if (!need) return { status: 404, detail: 'Need not found' };
+  const bid = await env.DB.prepare('SELECT 1 AS ok FROM quotes WHERE need_id = ? AND partner_id = ?').bind(needId, partnerId).first();
+  if (bid) return { status: 409, detail: 'You have already bid on this need, so it is a proposal rather than a lead. Its draft is the proposal itself, on Proposals.' };
+  const passed = await env.DB.prepare('SELECT 1 AS ok FROM partner_lead_passes WHERE need_id = ? AND partner_id = ?').bind(needId, partnerId).first();
+  if (passed) return { status: 409, detail: 'You passed on this lead. Un-pass it first to draft a proposal for it.' };
+  if (need.status !== 'open') return { status: 409, detail: 'This need is no longer open, so there is no lead to draft a proposal for.' };
+  return { ok: true };
+}
+
+/** A draft as the page reads it. `sent` is not a field: nothing about a draft has been sent. */
+function leadDraftDto(r: any) {
+  return {
+    uid: r.uid, need_id: Number(r.need_id), shape: r.shape ?? null,
+    price_cents: r.price_cents == null ? null : Number(r.price_cents), currency: r.currency || 'USD',
+    scope: r.scope ?? null, origin: r.origin, created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+/** `GET /leads/:needId/draft` — this firm's saved draft for one of its leads, or `draft: null`. */
+partnerPipeline.get('/leads/:needId/draft', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const needId = Number(c.req.param('needId'));
+    const lead = await leadForDraft(c.env, partnerId, needId);
+    if (!('ok' in lead)) return c.json({ detail: lead.detail }, lead.status);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM partner_lead_proposal_drafts WHERE partner_id = ? AND need_id = ?',
+    ).bind(partnerId, needId).first<any>();
+    return c.json({ need_id: needId, draft: row ? leadDraftDto(row) : null });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * `PUT /leads/:needId/draft` — Save draft (and Edit, which is the same write). One draft per lead:
+ * a second save replaces the first. `origin` is written only when the body names one: `manual` for
+ * a draft typed from nothing, `eadwyn` when the partner accepts an Eadwyn draft into it. An edit
+ * sends none and keeps the origin it had, so an Eadwyn draft a person reworded is still marked as one.
+ */
+partnerPipeline.put('/leads/:needId/draft', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const needId = Number(c.req.param('needId'));
+    const lead = await leadForDraft(c.env, partnerId, needId);
+    if (!('ok' in lead)) return c.json({ detail: lead.detail }, lead.status);
+    const b = await body<any>(c);
+    const shape = b.shape == null || b.shape === '' ? null : String(b.shape);
+    if (shape !== null && !(LEAD_DRAFT_SHAPES as readonly string[]).includes(shape)) {
+      return c.json({ detail: `A draft's shape is one of: ${LEAD_DRAFT_SHAPES.join(', ')}` }, 400);
+    }
+    const price = parseCents(b.price_cents, 'price_cents');
+    if ('error' in price) return c.json({ detail: price.error }, 400);
+    const currency = b.currency == null || b.currency === '' ? 'USD' : String(b.currency).toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) return c.json({ detail: 'currency must be a three-letter code' }, 400);
+    const scope = trimOrNull(b.scope, 4000);
+    const origin = b.origin == null ? 'manual' : String(b.origin);
+    if (!(LEAD_DRAFT_ORIGINS as readonly string[]).includes(origin)) {
+      return c.json({ detail: `origin is one of: ${LEAD_DRAFT_ORIGINS.join(', ')}` }, 400);
+    }
+    if (shape === null && price.cents === null && scope === null) {
+      return c.json({ detail: 'A draft needs a shape, a price or a scope. Discard it instead to clear it.' }, 400);
+    }
+    const now = nowIso();
+    await c.env.DB.prepare(
+      `INSERT INTO partner_lead_proposal_drafts
+         (uid, partner_id, need_id, shape, price_cents, currency, scope, origin, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (partner_id, need_id) DO UPDATE SET
+         shape = excluded.shape, price_cents = excluded.price_cents, currency = excluded.currency,
+         scope = excluded.scope, updated_at = excluded.updated_at,
+         origin = CASE WHEN ? = 1 THEN excluded.origin ELSE partner_lead_proposal_drafts.origin END`,
+    ).bind(newUid(), partnerId, needId, shape, price.cents, currency, scope, origin, Number(user.id), now, now, b.origin == null ? 0 : 1).run();
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM partner_lead_proposal_drafts WHERE partner_id = ? AND need_id = ?',
+    ).bind(partnerId, needId).first<any>();
+    return c.json({ ok: true, draft: leadDraftDto(row) });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** `DELETE /leads/:needId/draft` — Discard. The lead stays a lead; only the draft goes. */
+partnerPipeline.delete('/leads/:needId/draft', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const needId = Number(c.req.param('needId'));
+    await c.env.DB.prepare(
+      'DELETE FROM partner_lead_proposal_drafts WHERE partner_id = ? AND need_id = ?',
+    ).bind(partnerId, needId).run();
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
 // Proposals — the lifecycle, the versions, and the one thing it cannot see
 // ---------------------------------------------------------------------------
 
@@ -853,7 +1011,16 @@ function termDto(r: any) {
   };
 }
 
-const STAGES = ['scoping', 'terms', 'legal', 'ready_to_sign', 'closed'];
+const WIP_STAGES = ['scoping', 'terms', 'legal', 'ready_to_sign'];
+const STAGES = [...WIP_STAGES, 'closed'];
+
+async function readNegotiationWipLimits(env: Env, partnerId: number) {
+  const { results } = await env.DB.prepare(
+    'SELECT stage, wip_limit FROM partner_negotiation_wip_limits WHERE partner_id = ?',
+  ).bind(partnerId).all<{ stage: string; wip_limit: number }>();
+  const stored = new Map(results.map(({ stage, wip_limit }) => [stage, wip_limit]));
+  return Object.fromEntries(WIP_STAGES.map(stage => [stage, stored.get(stage) ?? null]));
+}
 const BALLS = ['us', 'them'];
 const TERM_STATES = ['open', 'agreed', 'conceded', 'refused'];
 
@@ -953,6 +1120,7 @@ partnerPipeline.get('/negotiations', async (c) => {
       },
     );
     return c.json({
+      wip_limits: await readNegotiationWipLimits(c.env, partnerId),
       items,
       next_cursor: pageRead.next,
       has_more: pageRead.next !== null,
@@ -974,6 +1142,30 @@ partnerPipeline.get('/negotiations', async (c) => {
       close_probability: null,
       close_probability_note: 'Nothing here forecasts a close. Migration 234 records why a proposal was LOST, which is a taxonomy rather than a rate, and a handful of decided deals cannot support a probability conditioned on stage. A number drawn from stage alone would be the stage relabelled as a forecast.',
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerPipeline.put('/negotiations/wip-limits/:stage', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const stage = c.req.param('stage');
+    if (!WIP_STAGES.includes(stage)) return c.json({ detail: 'Unknown negotiation lane' }, 400);
+    const limit: unknown = (await body<{ limit?: unknown } | null>(c))?.limit;
+    if (limit !== null && (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 0)) {
+      return c.json({ detail: 'Limit must be a non-negative whole number or null' }, 400);
+    }
+    if (limit === null) {
+      await c.env.DB.prepare(
+        'DELETE FROM partner_negotiation_wip_limits WHERE partner_id = ? AND stage = ?',
+      ).bind(partnerId, stage).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO partner_negotiation_wip_limits (partner_id, stage, wip_limit)
+         VALUES (?, ?, ?)
+         ON CONFLICT (partner_id, stage) DO UPDATE SET wip_limit = excluded.wip_limit`,
+      ).bind(partnerId, stage, limit).run();
+    }
+    return c.json({ stage, limit });
   } catch (e) { return mapError(c, e); }
 });
 

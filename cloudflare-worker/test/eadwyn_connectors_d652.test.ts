@@ -131,6 +131,10 @@ function world(opts: { reply?: string; verdict?: string } = {}) {
   return { env, db, modelCalls, guardCalls };
 }
 
+/** Everything one model call was sent, and its last message: D6420 moved the connector lines out of the system message into it. */
+const sent = (call: any): string => call.messages.map((m: any) => m.content).join('\n');
+const lastMessage = (call: any): string => call.messages[call.messages.length - 1].content;
+
 async function auth(env: any, id = ME, role = 'founder') {
   const token = await createJWT(env, id, `u${id}@example.test`, role, undefined, `jti-${id}`);
   return { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-company-id': String(COMPANY) };
@@ -424,14 +428,15 @@ test('through the route: a switched-on connector is read, named under the answer
     const off = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'What is MRR?' });
     assert.deepEqual(reads, [], 'Stripe was read with its switch off');
     assert.deepEqual(off.json.usage.connectors_read, []);
-    assert.doesNotMatch(modelCalls[0].messages[0].content, /MRR 38400/, 'Stripe data reached the model with its switch off');
+    assert.doesNotMatch(sent(modelCalls[0]), /MRR 38400/, 'Stripe data reached the model with its switch off');
 
     await call(env, 'PUT', `/conversations/${conv}/connectors`, { keys: ['stripe'] });
     const on = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'And now?' });
     assert.deepEqual(reads, ['stripe']);
     assert.deepEqual(on.json.sources, [{ key: 'stripe', name: 'Stripe', as_of: '2026-10-09T11:48:00Z' }]);
     assert.deepEqual(on.json.usage.connectors_read, ['stripe'], 'the receipt does not record the connector read');
-    assert.match(modelCalls[1].messages[0].content, /\[Stripe\]\n- MRR 38400 USD/);
+    assert.match(lastMessage(modelCalls[1]), /\[Stripe\]\nBEGIN_CONNECTOR_ROW_UNTRUSTED_[0-9a-f]{32}\n- MRR 38400 USD\nEND_CONNECTOR_ROW_UNTRUSTED_/);
+    assert.doesNotMatch(modelCalls[1].messages[0].content, /MRR 38400/, 'connector text sat in the system message');
     const kept = (await call(env, 'GET', `/conversations/${conv}`)).json.messages;
     assert.deepEqual(kept[3].sources, on.json.sources, 'the stored answer lost its source line');
   } finally {
@@ -717,10 +722,10 @@ test('through the route: the real Stripe reader feeds the run only with its swit
   seedSynced(db);
   const conv = await startConversation(env);
   await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'MRR?' });
-  assert.doesNotMatch(modelCalls[0].messages[0].content, /38,400/, 'Stripe was read with its switch off');
+  assert.doesNotMatch(sent(modelCalls[0]), /38,400|3,200/, 'Stripe was read with its switch off');
   await call(env, 'PUT', `/conversations/${conv}/connectors`, { keys: ['stripe'] });
   const on = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'MRR?' });
-  assert.match(modelCalls[1].messages[0].content, /\[Stripe\]\n- Stripe for Mine on 2026-10-08: MRR 3,200/);
+  assert.match(lastMessage(modelCalls[1]), /\[Stripe\]\nBEGIN_CONNECTOR_ROW_UNTRUSTED_[0-9a-f]{32}\n- Stripe for Mine on 2026-10-08: MRR 3,200/);
   assert.deepEqual(on.json.sources, [{ key: 'stripe', name: 'Stripe', as_of: '2026-10-08' }]);
 });
 

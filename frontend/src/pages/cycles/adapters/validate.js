@@ -72,6 +72,11 @@ export function usdShort(v) {
 
 const SEVERITY_TONE = { severe: 'v1', real: 'v2', mild: 'v3' };
 const SEVERITY_WORD = { severe: 'Severe', real: 'Real', mild: 'Mild' };
+// #6006 (V17): a severity carries a word and a glyph, three dots to one; an unjudged theme says so.
+const SEVERITY_GLYPH = { severe: '●●●', real: '●●○', mild: '●○○' };
+export const severityPill = (v) => (SEVERITY_WORD[v]
+  ? { text: `${SEVERITY_GLYPH[v]} ${SEVERITY_WORD[v]}`, tone: SEVERITY_TONE[v] }
+  : { text: '○ Not judged', tone: 'grey' });
 
 // ---------- Cards ------------------------------------------------------------
 
@@ -133,6 +138,17 @@ function idealCustomerProfile(s) {
   return out;
 }
 
+/**
+ * D6011 (#6011): a figure's source and the date it was set, from its
+ * `market_figures` row. Saved before that store, it has neither and says so;
+ * saved with none named, it says that and keeps its date.
+ */
+export function marketBandSource(f) {
+  const day = typeof f?.as_of === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.as_of) ? f.as_of : null;
+  if (!day) return nonEmpty(f?.source) || 'source not recorded';
+  return `${nonEmpty(f?.source) || 'no source named'} · as of ${day}`;
+}
+
 function marketIntelligence(s) {
   if (!s || typeof s !== 'object') return [];
   // A figure the founder typed carries no source yet (D659 says so rather
@@ -140,7 +156,7 @@ function marketIntelligence(s) {
   const band = (label, f) => ({
     label,
     value: usdShort(f?.value),
-    source: num(f?.value) ? (nonEmpty(f?.source) || 'source not recorded') : undefined,
+    source: num(f?.value) ? marketBandSource(f) : undefined,
   });
   const out = [{ kind: 'bands', items: [band('Total addressable', s.tam), band('Serviceable', s.sam), band('Obtainable', s.som)] }];
   if (num(s.competitors_tracked)) {
@@ -153,13 +169,26 @@ function demandSignals(s) {
   if (!s || typeof s !== 'object') return [];
   const out = [];
   const signups = list(s.signups);
-  if (signups.length) {
+  if (s.chart_ready !== false && signups.length) {
     out.push({
       kind: 'line',
       values: signups.map((w) => (num(w?.total) ? w.total : null)),
       ...(num(s.bar) ? { target: s.bar, target_label: `bar · ${s.bar.toLocaleString('en-US')}` } : {}),
       labels: weekTicks(signups.map((w) => w?.week_start)),
     });
+  }
+  if (s.signals && typeof s.signals === 'object' && !Array.isArray(s.signals)) {
+    out.push({ kind: 'rows', showWhenSparse: true, items: Object.entries(SIGNAL).map(([key, label]) => ({
+      label, value: num(s.signals[key]) ? s.signals[key].toLocaleString('en-US') : '0',
+    })) });
+  }
+  const committed = list(s.committed).filter(row => typeof row?.currency === 'string' && num(row.amount_cents));
+  if (committed.length) {
+    out.push({ kind: 'rows', showWhenSparse: true, items: committed.map(row => ({
+      label: `Committed · ${row.currency}`,
+      value: money(row.amount_cents, row.currency, row.period)
+        + (row.period === 'not_recorded' ? ' · period not recorded' : row.period === 'once' ? ' · once' : ''),
+    })) });
   }
   const n = s.need_to_have;
   if (n && num(n.interviews) && num(n.of) && n.of > 0) {
@@ -171,8 +200,9 @@ function demandSignals(s) {
 }
 
 const STATUS_PARTS = [
-  ['untested', 'Untested', 'grey'], ['testing', 'Testing', 'v2'], ['supported', 'Supported', 'ok'],
-  ['contested', 'Contested', 'warn'], ['refuted', 'Refuted', 'bad'], ['inconclusive', 'Inconclusive', 'muted'], ['not_recorded', 'Fit not recorded', 'warn'],
+  // D6016: the methodology's words (METHOD_WORD below), as the Hypotheses list draws them.
+  ['untested', 'Not started', 'grey'], ['testing', 'Testing', 'v2'], ['supported', 'Supported', 'ok'],
+  ['contested', 'Mixed', 'warn'], ['refuted', 'Contradicted', 'bad'], ['inconclusive', 'Inconclusive', 'muted'], ['not_recorded', 'Fit not recorded', 'warn'],
 ];
 
 function experiments(s) {
@@ -282,6 +312,15 @@ export function figure(f) {
 // D4586 (#4586): Contested is methodology v2's, for a claim past the bar with material contradiction.
 const CLAIM_TONE = { supported: 'ok', contested: 'warn', refuted: 'bad', testing: 'v2', untested: 'grey', inconclusive: 'muted', not_recorded: 'warn' };
 const CLAIM_WORD = { supported: 'Supported', contested: 'Contested', refuted: 'Refuted', testing: 'Testing', untested: 'Untested', inconclusive: 'Inconclusive', not_recorded: 'Fit not recorded' };
+/**
+ * D6016 (#6016): the methodology's words for a computed evidence state (V7, V8). S1 (2026-11-14): they win over
+ * CLAIM_WORD. Contested is Mixed (past the bar with material contradiction), Refuted is Contradicted and Untested is
+ * Not started; Testing and Supported keep their words. Inconclusive is the founder's own mark and Fit not recorded the
+ * D4586 lane, so both keep theirs. A state is computed from linked evidence, never proof and never a decision.
+ */
+export const METHOD_WORD = { supported: 'Supported', contested: 'Mixed', refuted: 'Contradicted', testing: 'Testing', untested: 'Not started', inconclusive: 'Inconclusive', not_recorded: 'Fit not recorded' };
+/** The same words by the record's pill text (the record read sends CLAIM's words, `services/records/validate.ts`). */
+export const METHOD_BY_CLAIM_WORD = Object.fromEntries(Object.entries(CLAIM_WORD).map(([k, w]) => [w, METHOD_WORD[k]]));
 /** D4586 § 6: a lane move inside 14 days, and one made only by the methodology changing on unchanged evidence. */
 const MOVED_WORD = { recent: ' · Moved', method: ' · Method changed' };
 const FIT = { strong: ['Strong', 'ok'], partial: ['Partial', 'v2'], none: ['None', 'grey'] };
@@ -361,16 +400,41 @@ const seg = (id) => (id == null ? null : String(id));
  */
 const workerId = (v) => (v == null || v === '' ? null : String(v));
 
+/** #6006: "7 people · 7 organisations", each "not recorded" when no interview behind the theme names one. */
+export function sourcesLine(sources) {
+  if (!sources || typeof sources !== 'object') return null;
+  const part = (n, one, many) => (num(n) ? `${n} ${n === 1 ? one : many}` : `${many} not recorded`);
+  return `${part(sources.people, 'person', 'people')} · ${part(sources.organisations, 'organisation', 'organisations')}`;
+}
+/** #6006: the theme cell's notes. A grouped theme says why it ranks there; a phrase in no theme says it opens nothing. */
+export function themeNotes(r) {
+  const rank = num(r?.rank) ? r.rank : null;
+  if (r?.grouped === false) return [`${rank != null ? `#${rank} · ` : ''}Not grouped · no record to open`];
+  if (typeof r?.rank_reason === 'string' && r.rank_reason) return [`${rank != null ? `Why rank ${rank}: ` : ''}${r.rank_reason}`];
+  return rank != null ? [`Rank ${rank}`] : null;
+}
+/** #6006: "+ H1 · − H2", with the counts in each direction under it; no link reads so in words. */
+export function hypothesesCell(r) {
+  const plus = Array.isArray(r?.supports) ? r.supports : [];
+  const minus = Array.isArray(r?.contradicts) ? r.contradicts : [];
+  if (!plus.length && !minus.length) return { text: 'No hypothesis linked' };
+  const text = [...plus.map((c) => `+ ${c}`), ...minus.map((c) => `− ${c}`)].join(' · ');
+  const counted = num(r?.supporting) && num(r?.contradicting);
+  return { text, note: counted ? `${r.supporting} supporting · ${r.contradicting} contradicting` : null };
+}
+
 /** Column keys in the order the read lists its labels; each row builder fills them. */
 export const RECORDS = {
   'problem-discovery': {
     keys: ['theme', 'mentions', 'severity', 'trend', 'supports'],
+    // #6006 (V17): the ranked list. The theme says why it ranks there; a phrase in no theme ranks
+    // as its own row, says Not grouped and opens no record (the Worker sends its `id` as null).
     row: (r, i) => ({ id: `theme-${i}-${r.theme}`, recordId: workerId(r.id), cells: {
-      theme: r.theme ?? null,
-      mentions: num(r.mentions) ? `${r.mentions} ${r.mentions === 1 ? 'interview' : 'interviews'}` : null,
-      severity: SEVERITY_WORD[r.severity] ? { text: SEVERITY_WORD[r.severity], tone: SEVERITY_TONE[r.severity] } : null,
+      theme: r.theme == null ? null : { text: String(r.theme), note: themeNotes(r) },
+      mentions: num(r.mentions) ? { text: `${r.mentions} ${r.mentions === 1 ? 'interview' : 'interviews'}`, note: r.grouped === false ? null : sourcesLine(r.sources) } : null,
+      severity: r.grouped === false && !SEVERITY_WORD[r.severity] ? null : severityPill(r.severity),
       trend: trend(r.trend),
-      supports: Array.isArray(r.supports) && r.supports.length ? r.supports.join(', ') : null,
+      supports: hypothesesCell(r),
     } }),
     filters: [
       { key: 'severity', label: 'Severity', options: [{ value: 'severe', label: 'Severe' }, { value: 'real', label: 'Real' }, { value: 'mild', label: 'Mild' }, { value: 'not_recorded', label: 'Not judged' }] },
@@ -385,7 +449,8 @@ export const RECORDS = {
     // #4411 splits recording and quote permissions. Channel stays a
     // filter and a cell (its words are pinned), but no column names it.
     keys: ['interviewee', 'company', 'date', 'icp_fit', 'recording_consent', 'consent', 'state'],
-    row: (r) => ({ id: r.id, recordId: workerId(r.id), cells: {
+    // D6001 (#6001): `stage` and `name` are what Move stage reads; neither is a column.
+    row: (r) => ({ id: r.id, recordId: workerId(r.id), stage: typeof r.stage === 'string' ? r.stage : null, name: r.interviewee ?? null, cells: {
       // D685 §5.11: the interviewee opens the interview's review, Customer
       // research's record (D696 decision 6). A linked row draws it as text.
       // The scoped read carries the project, so no ?project_id= is threaded.
@@ -401,11 +466,14 @@ export const RECORDS = {
     } }),
     filters: [
       { key: 'icp', label: 'ICP fit', options: [{ value: 'strong', label: 'Strong' }, { value: 'partial', label: 'Partial' }, { value: 'none', label: 'None' }, { value: 'not_recorded', label: 'Not recorded' }] },
-      // D697 decision 4: FVW's Deck-eligible view is the Agreed rows, and Stage
-      // gave way to State (the Worker keeps `stage:pipeline` for the recruiting picker).
+      // D697 decision 4: FVW's Deck-eligible view is the Agreed rows. Stage gave
+      // way to State there; D6001 lists it again, last, for the recruiting pipeline.
       { key: 'recording_consent', label: 'Recording consent', options: [{ value: 'given', label: 'Given' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'consent', label: 'Quotes OK', options: [{ value: 'agreed', label: 'Agreed · deck-eligible' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'channel', label: 'Channel', options: ['in_person', 'call', 'text'].map((value) => ({ value, label: CHANNEL[value] })) },
+      // D6001 (#6001): Stage is listed again, beside State, as the Worker lists it.
+      { key: 'stage', label: 'Stage', options: [{ value: 'lead', label: 'Lead' }, { value: 'invited', label: 'Invited' },
+        { value: 'invited_no_slot', label: 'Invited · no slot yet' }, { value: 'booked', label: 'Booked' }, { value: 'done', label: 'Done · or no stage recorded' }] },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },
@@ -419,7 +487,7 @@ export const RECORDS = {
       updated: typeof r.updated === 'string' ? r.updated.slice(0, 10) : null,
     } }),
     filters: [{ key: 'evidence', label: 'Evidence', options: [{ value: 'anecdote', label: 'Anecdote' }, { value: 'pattern', label: 'Pattern' }, { value: 'not_recorded', label: 'Not recorded' }] }],
-    sorts: [{ key: 'interviews', label: 'Interviews' }, { key: 'strong', label: 'Strong fit' }, { key: 'name', label: 'Name' }],
+    sorts: [{ key: 'evidence', label: 'Evidence' }, { key: 'interviews', label: 'Interviews' }, { key: 'strong', label: 'Strong fit' }, { key: 'name', label: 'Name' }],
   },
   'market-intelligence': {
     keys: ['company', 'kind', 'latest_signal', 'date', 'source'],
@@ -453,30 +521,39 @@ export const RECORDS = {
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
   },
+  // D6016 (#6016, V7): the Hypotheses list in the canvas's columns, labelled by the read (D661); each cell is drawn from
+  // what the read already sends.
   experiments: {
-    keys: ['hypothesis', 'status', 'evidence', 'sprint', 'owner', 'source'],
-    row: (r) => ({ id: r.id, recordId: workerId(r.id), cells: {
-      hypothesis: r.hypothesis ?? null,
-      // D697: a retired claim reads Retired; one whose lane moved in the last 14 days says so beside its status.
-      status: r.retired === true ? { text: 'Retired', tone: 'grey' }
-        : CLAIM_WORD[r.status] ? { text: `${CLAIM_WORD[r.status]}${MOVED_WORD[r.moved] ?? ''}`, tone: CLAIM_TONE[r.status] } : null,
-      // D4585: the interviews the status counts, labelled as interviews, and the claim's other linked evidence apart.
-      evidence: supportCell(r),
-      sprint: r.sprint ?? null,
-      owner: r.owner ?? null,
-      source: fillCell(r.provenance),
-    } }),
+    keys: ['code', 'claim', 'status', 'relationships', 'sources', 'sprint', 'owner', 'source'],
+    row: (r) => {
+      const [code, claim] = splitClaim(r.hypothesis);
+      return { id: r.id, recordId: workerId(r.id), cells: {
+        code, claim,
+        // D697: a retired claim reads Retired; one whose lane moved in the last 14 days says so beside its state.
+        status: r.retired === true ? { text: 'Retired', tone: 'grey' }
+          : METHOD_WORD[r.status] ? { text: `${METHOD_WORD[r.status]}${MOVED_WORD[r.moved] ?? ''}`, tone: CLAIM_TONE[r.status] } : null,
+        relationships: relationshipsCell(r),
+        sources: sourcesCell(r),
+        sprint: r.sprint ?? null,
+        owner: r.owner ?? null,
+        source: fillCell(r.provenance),
+      } };
+    },
+    // The Status filter's words follow the methodology too; its values are the Worker's.
+    mapFilters: (filters) => (Array.isArray(filters) ? filters.map((f) => (f?.key === 'status' && Array.isArray(f.options)
+      ? { ...f, label: 'Evidence state', options: f.options.map((o) => (METHOD_WORD[o?.value] ? { ...o, label: METHOD_WORD[o.value] } : o)) }
+      : f)) : filters),
     filters: [
       // D697: the Worker's options, in its order. Sprint's are the venture's own, so only the read can list them.
-      { key: 'status', label: 'Status', options: ['untested', 'testing', 'supported', 'contested', 'refuted', 'inconclusive', 'not_recorded']
-        .map((value) => ({ value, label: CLAIM_WORD[value] })).concat([{ value: 'retired', label: 'Retired' }]) },
+      { key: 'status', label: 'Evidence state', options: ['untested', 'testing', 'supported', 'contested', 'refuted', 'inconclusive', 'not_recorded']
+        .map((value) => ({ value, label: METHOD_WORD[value] })).concat([{ value: 'retired', label: 'Retired' }]) },
       { key: 'sprint', label: 'Sprint', options: [] },
       { key: 'strength', label: 'Strength', options: [{ value: 'anecdote', label: 'Anecdote' }, { value: 'pattern', label: 'Pattern' }, { value: 'measured', label: 'Measured' }, { value: 'not_recorded', label: 'Not recorded' }] },
       // FVW's Recently moved, and the verdict zone's two history views (decision 19).
       { key: 'moved', label: 'Recently moved', options: [{ value: 'recent', label: 'Recently moved' }] },
       { key: 'history', label: 'History', options: [{ value: 'last_week', label: 'As of last week' }, { value: 'this_month', label: 'Changed this month' }] },
     ],
-    sorts: [{ key: 'updated', label: 'Updated' }, { key: 'status', label: 'Status' }, { key: 'code', label: 'Code' }],
+    sorts: [{ key: 'updated', label: 'Updated' }, { key: 'status', label: 'Evidence state' }, { key: 'code', label: 'Code' }],
   },
   // D693 (#1704): the Decisions table (CO:610). A Withheld row's Decision is
   // "Withheld" and its Reasoning the Worker's "<n> of 5 pieces of evidence";
@@ -499,6 +576,47 @@ export const RECORDS = {
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
   },
 };
+
+/** D6016: the read's `hypothesis` is "<code> · <claim>"; split once, on the first separator. */
+export function splitClaim(text) {
+  if (typeof text !== 'string' || !text.trim()) return [null, null];
+  const at = text.indexOf(' · ');
+  return at > 0 ? [text.slice(0, at), text.slice(at + 3)] : [null, text];
+}
+
+/**
+ * D6016 (V7 Relationships): supporting, contradicting and unknown fit together, each a word with a glyph, never
+ * colour alone. These count relationships (interview links), not sources. Before the v2 counts, the D4585 interview
+ * figure stands alone. Nothing at all is null ("Not recorded"), never "0".
+ */
+export function relationshipsCell(r) {
+  const v2 = num(r?.supporting) && num(r?.contradicting);
+  if (v2) {
+    const parts = [`↑ ${r.supporting} supports`, `↓ ${r.contradicting} contradicts`];
+    if (num(r.fit_unrecorded) && r.fit_unrecorded > 0) parts.push(`? ${r.fit_unrecorded} fit unknown`);
+    if (!r.supporting && !r.contradicting && !(r.fit_unrecorded > 0)) return null;
+    return parts.join(' · ');
+  }
+  return num(r?.evidence) && r.evidence > 0 ? `${r.evidence} interview ${r.evidence === 1 ? 'link' : 'links'}` : null;
+}
+
+/**
+ * D6016 (V7 Distinct sources): how many separate things the relationships come from: distinct interviews (with the
+ * organizations behind them when recorded) and the claim's other linked evidence by kind. Breadth, not studies.
+ */
+export function sourcesCell(r) {
+  const parts = [];
+  if (num(r?.interviews) && r.interviews > 0) {
+    parts.push(`${r.interviews} interview${r.interviews === 1 ? '' : 's'}`);
+    if (num(r.organizations)) parts.push(`${r.organizations} organization${r.organizations === 1 ? '' : 's'}`);
+  }
+  const l = r?.linked_evidence || {};
+  for (const [k, one, many] of [['signal', 'signal', 'signals'], ['metric', 'metric', 'metrics'], ['experiment', 'experiment', 'experiments']]) {
+    if (num(l[k]) && l[k] > 0) parts.push(`${l[k]} ${l[k] === 1 ? one : many}`);
+  }
+  if (num(l.interview) && l.interview > 0) parts.push(`${l.interview} direct interview${l.interview === 1 ? '' : 's'}`);
+  return parts.length ? parts.join(' · ') : null;
+}
 
 /**
  * D4585 (#4585): a claim's Interview support cell. The status counts interviews through pain links only, so the cell

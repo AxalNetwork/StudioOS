@@ -49,11 +49,11 @@ test('quickStats: a failed lifecycle read is unreadable; a preview is withheld',
   assert.equal(p.lifecycle.state, 'withheld');
 });
 
-test('quickStats: a null count or average stays absent; it is not 0', () => {
-  const q = quickStats({ dashboard: { quick_stats: { ai_score_avg: null } }, lifecycle: { counts: { watching: null } }, dealCount: 3 });
-  const [, avg] = q.dealFlow.rows.find(([label]) => label === 'Avg AI match');
+test('quickStats: a null count stays absent; it is not 0', () => {
+  const q = quickStats({ dashboard: {}, lifecycle: { counts: { watching: null } }, dealCount: null });
+  const [, deals] = q.dealFlow.rows.find(([label]) => label === 'Deals in flow');
   const [, watching] = q.lifecycle.rows.find(([label]) => label === 'Watching');
-  assert.equal(avg, null);
+  assert.equal(deals, null);
   assert.equal(watching, null);
 });
 
@@ -87,7 +87,6 @@ test('a readable stat group draws its figures, and an absent one as not recorded
   const group = quickStats({ dashboard: { quick_stats: {} }, lifecycle, dealCount: 3 }).dealFlow;
   const text = draw(createElement(StatGroup, { group, what: 'x', claim: 'y' }));
   assert.match(text, /Deals in flow\s*3/);
-  assert.match(text, /Avg AI match\s*Not recorded/);
   assert.match(draw(createElement(Row, { label: 'IRR', value: null })), /IRR\s*Not recorded/);
 });
 
@@ -119,12 +118,11 @@ test('the investor home routes every failed read to its module\'s could-not-be-r
     quick, refreshContext, retryLifecycle, retrySources,
   });
   assert.deepEqual([t.deal_lifecycle.state, t.deal_lifecycle.onRetry], ['unreadable', retryLifecycle]);
-  assert.deepEqual([t.scored_opportunities.state, t.scored_opportunities.onRetry], ['unreadable', refreshContext]);
   assert.deepEqual([t.portfolio_glance.state, t.portfolio_glance.onRetry], ['unreadable', retrySources]);
   assert.deepEqual([t.upcoming_events.state, t.upcoming_events.onRetry], ['unreadable', retrySources]);
   // Loading is loading, never empty and never a zero.
   const loading = investorTiles({ user: {}, dashboard: null, lifecycle: undefined, records: {}, failures: {}, quick: quickStats({ lifecycle: undefined, dealCount: 0 }) });
-  for (const k of ['deal_lifecycle', 'scored_opportunities', 'portfolio_glance', 'upcoming_events']) assert.equal(loading[k].state, 'loading', k);
+  for (const k of ['deal_lifecycle', 'portfolio_glance', 'upcoming_events']) assert.equal(loading[k].state, 'loading', k);
   // An administrator's preview withholds all six (SM11).
   const preview = investorTiles({ previewing: true });
   assert.ok(Object.values(preview).every((x) => x.state === 'withheld'));
@@ -150,4 +148,41 @@ test('both homes draw the canvas context line: Studio, and the investor\'s role 
   assert.match(investor, /data-testid="text-investor-studio-title">Studio</);
   assert.match(investor, /data-testid="badge-investor-studio-role">Investor</);
   assert.match(investor, /data-testid="text-investor-studio-date">\{new Intl\.DateTimeFormat/);
+});
+
+test('Fund and Needs you use recorded LP, booklet and Trust data and retry failures independently', () => {
+  const retryKeys = [];
+  const quick = quickStats({ dashboard, lifecycle, dealCount: 0 });
+  const fund = { lp_holdings: [{ id: 2, fund_id: 9, fund_name: 'Seed Fund', commitment_amount: 1000, lpa_signed: false }],
+    capital_calls: [{ id: 1, fund_id: 9, limited_partner_id: 2, owed_cents: 10000, received_cents: 2500, due_date: '2000-01-02' },
+      { id: 2, fund_id: 9, limited_partner_id: 2, owed_cents: 1000, received_cents: 0, due_date: null }] };
+  // D6129 (#6129): the inbox count is Needs you's sixth source; `today` is handed in, never read from the clock.
+  const records = { fund, notices: { notices: [] }, booklet: { status: 'open' }, inbox: { count: 0 },
+    trust: { obligations: [
+      { required: 1, status: 'pending', obligation_key: 'kyc_v1' },
+      { required: 1, status: 'in_review', obligation_key: 'accreditation_v1' },
+      { required: 1, status: 'verified', obligation_key: 'investor_nda_v1' },
+    ] } };
+  const opts = { quick, retrySource: key => retryKeys.push(key), today: '2000-01-05' };
+  const tiles = investorTiles({ ...opts, records });
+  // D6129: the Funds table, in whole dollars: committed $1,000, called $110, received $25, due $85, uncalled $890.
+  assert.match(draw(tiles.fund_commitment.body), /Seed Fund\$1,000\$110\$25\$85\$890/);
+  // D6129: by due date, then date added; the overdue call first, in words.
+  assert.match(draw(tiles.needs_you.body), /Seed Fund: \$75 due.*Overdue by 3 days.*Seed Fund: \$10 due.*Due date not recorded.*LPA to sign · Seed Fund.*Subscription booklet to finish.*Identity check/s);
+  const actions = draw(tiles.needs_you.body);
+  assert.doesNotMatch(actions, /Accreditation|Investor NDA|Review a required Trust item/);
+  const partial = investorTiles({ ...opts, records: { ...records, fund: undefined }, failures: { fund: 'failed' } });
+  assert.equal(partial.fund_commitment.state, 'unreadable');
+  partial.fund_commitment.onRetry();
+  assert.deepEqual(retryKeys, ['fund']);
+  assert.match(draw(partial.needs_you.body), /Identity check/);
+  const empty = investorTiles({ ...opts, records: { fund: { lp_holdings: [] }, notices: { notices: [] }, booklet: null, trust: { obligations: [] }, inbox: { count: 0 } } });
+  assert.equal(empty.fund_commitment.state, 'empty');
+  assert.equal(empty.needs_you.state, 'empty');
+  const legacy = investorTiles({ ...opts, records: { ...records, fund: { lp_holdings: [], unlinked_commitment: true } } });
+  assert.match(draw(legacy.fund_commitment.body), /Open the LP workspace to link your commitment/);
+  assert.match(draw(legacy.needs_you.body), /Open the LP workspace to link your commitment/);
+  const preview = investorTiles({ ...opts, records, previewing: true });
+  assert.equal(preview.fund_commitment.state, 'withheld');
+  assert.equal(preview.needs_you.state, 'withheld');
 });

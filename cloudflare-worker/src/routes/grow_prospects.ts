@@ -26,11 +26,11 @@ const handle=(write:boolean,fn:Handler,created=false)=>async(c:C)=>{
   }catch(error){
     if(error instanceof Response)return error;
     if(error instanceof ProspectsRefused)return c.json({detail:error.sentence,...(error.field?{field:error.field}:{})},error.status as any);
-    if(error instanceof Error&&error.message==='Unauthorized')return c.json({detail:'Sign in to continue.'},401);
+    if((error instanceof Error)&&error.message==='Unauthorized')return c.json({detail:'Sign in to continue.'},401);
     return c.json({detail:write?'Prospects could not be saved. Reload before trying again.':'Prospects could not be read. Try again.'},503);
   }
 };
-router.get('/',handle(false,(c,_u,p)=>prospectPipeline(c.env,p,{source:c.req.query('source'),campaign:c.req.query('campaign'),per_status:c.req.query('per_status')})));
+router.get('/',handle(false,(c,_u,p)=>prospectPipeline(c.env,p,{source:c.req.query('source'),campaign:c.req.query('campaign'),per_status:c.req.query('per_status'),cursor:c.req.query('cursor')})));
 router.get('/settings',handle(false,(c,_u,p)=>outreachSettings(c.env,p)));
 router.put('/settings',handle(true,(c,u,p,b)=>saveOutreachSettings(c.env,p,u,b)));
 router.get('/suppressions/count',handle(false,(c,_u,p)=>suppressionList(c.env,p)));

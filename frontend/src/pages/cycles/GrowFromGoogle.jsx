@@ -1,3 +1,4 @@
+import GrowProposalDestinations from './GrowProposalDestinations';
 import { useCallback, useEffect, useState } from 'react';
 import Lightbox from '../../ui/Lightbox';
 import { actionGhost, actionPrimary } from '../../ui';
@@ -176,8 +177,12 @@ export function RevenueFromGoogleView({ projectId, state, reload, api = googleWo
   );
 }
 export function RevenueFromGoogle({ projectId, api = googleWorkspace }) {
-  const { state, reload } = useGrowGoogle(projectId, SLUG.revenue, api);
-  return <RevenueFromGoogleView projectId={projectId} state={state} reload={reload} api={api} />;
+  return <GrowGooglePart key={projectId} View={RevenueFromGoogleView} projectId={projectId} slug={SLUG.revenue} api={api} />;
+}
+
+function GrowGooglePart({ View, projectId, slug, api, canDecide }) {
+  const { state, reload } = useGrowGoogle(projectId, slug, api);
+  return <View projectId={projectId} state={state} reload={reload} api={api} canDecide={canDecide} />;
 }
 
 function DecideDialog({ projectId, proposal, verb, api, onClose, onDone }) {
@@ -212,6 +217,7 @@ function DecideDialog({ projectId, proposal, verb, api, onClose, onDone }) {
 /** Durable company-building: the tagged Calendar events, each Accept or Dismiss, and Sync. */
 export function DurableFromGoogleView({ projectId, state, reload, canDecide = true, api = googleWorkspace }) {
   const [dialog, setDialog] = useState(null);
+  const [revision,setRevision]=useState(0);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   if (!state || state.status === 'none' || state.status === 'refused') return null;
@@ -269,13 +275,13 @@ export function DurableFromGoogleView({ projectId, state, reload, canDecide = tr
           ))}
         </ul>
       ) : null}
+      <GrowProposalDestinations projectId={projectId} source="google" revision={revision} onChanged={reload} canUndo={canDecide}/>
       {decided.accepted || decided.dismissed ? <p className={MUTED} data-testid="grow-calendar-decided">{decided.accepted} accepted and {decided.dismissed} dismissed before.</p> : null}
       {note ? <p role="status" className={MUTED} data-testid="grow-calendar-note">{note}</p> : null}
-      {dialog ? <DecideDialog projectId={projectId} proposal={dialog.p} verb={dialog.verb} api={api} onClose={() => setDialog(null)} onDone={() => { setDialog(null); reload(); }} /> : null}
+      {dialog ? <DecideDialog projectId={projectId} proposal={dialog.p} verb={dialog.verb} api={api} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setRevision(n=>n+1); reload(); }} /> : null}
     </section>
   );
 }
 export function DurableFromGoogle({ projectId, canDecide = true, api = googleWorkspace }) {
-  const { state, reload } = useGrowGoogle(projectId, SLUG.durable, api);
-  return <DurableFromGoogleView projectId={projectId} state={state} reload={reload} canDecide={canDecide} api={api} />;
+  return <GrowGooglePart key={projectId} View={DurableFromGoogleView} projectId={projectId} slug={SLUG.durable} api={api} canDecide={canDecide} />;
 }

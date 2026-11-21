@@ -6,6 +6,13 @@
  * see, and Investor opens. Its states: empty (VR13), loading (VR14), error and
  * partial (VR15), and a studio admin's read-only view (VR12).
  *
+ * D6048 (#6048), Raise v2 RA-15 and RA-26: with no claim, nothing pinned and
+ * nothing waiting, the page draws first use instead of a zero-filled dashboard
+ * (RA-15b for a founder, RA-15c for an admin viewer); otherwise the Home in
+ * RA-15's order (figures, Needs you, then the library beside what investors
+ * see), each claim a card with one action at phone width (RA-26a), and a
+ * page-level hand-off to Fundraising readiness.
+ *
  * ONE FAILED BLOCK NEVER BLANKS THE PAGE. Each block says Unreadable with its
  * own Try again; the whole read failing says so, and that it is not the same as
  * having none.
@@ -14,10 +21,10 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CLAIM_STATE, SHARING, SOURCES, claimHref, itemHref, previewHref, reviewHref } from './evidenceModel';
 import {
-  claimTitle, claimWhere, claimsByArea, countOf, coverageByArea, day, filterClaims, investorsSee, itemFigure, itemTitle, itemsByArea, statedFigure,
+  claimAction, claimTitle, claimWhere, claimsByArea, countOf, coverageByArea, day, filterClaims, investorsSee, itemFigure, itemTitle, itemsByArea, statedFigure,
 } from './evidenceView';
 import {
-  BTN_L, BTN_P, BTN_S, BlockUnreadable, CARD, ChangedPill, H2, LINK, MUTED, SharingPill, SourcePill, StalePill, StatePill, StrengthMark,
+  BTN_L, BTN_P, BTN_S, BlockUnreadable, CARD, ChangedPill, H2, LINK, MUTED, SharingPill, SourcePill, StalePill, StatePill, StrengthMark, TAP_L, TAP_P, TAP_S,
 } from './EvidenceParts';
 import { DecisionDialog, ProposalRow, ShareDialog } from './EvidenceReview';
 
@@ -49,8 +56,10 @@ export function Tiles({ model, admin = false }) {
 
 function ClaimRow({ c, model, search }) {
   const best = model.byUid.get(c?.record?.items?.[0]);
+  const action = model.canDecide ? claimAction(c, model.byUid) : null;
+  // RA-26a: at phone width each claim is its own card; from `sm` up, a row of the list.
   return (
-    <li className="flex flex-col gap-1.5 py-2.5" data-testid="evidence-claim" data-state={c.state}>
+    <li className="flex flex-col gap-1.5 rounded-lg border border-axal-hairline p-3 sm:rounded-none sm:border-0 sm:px-0 sm:py-2.5 dark:border-gray-800" data-testid="evidence-claim" data-state={c.state}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link to={claimHref(c.uid, search)} className="text-[13.5px] font-semibold text-axal-ink hover:text-axal-violet dark:text-gray-100 dark:hover:text-violet-300">{claimTitle(c)}</Link>
         <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{statedFigure(c) ?? ''}</span>
@@ -65,6 +74,7 @@ function ClaimRow({ c, model, search }) {
         {best?.stale ? <StalePill /> : null}
       </div>
       {c.state === 'mismatch' && c.record?.shown ? <span className="text-[12px] text-red-700 dark:text-red-300">{statedFigure(c)} stated · {c.record.shown} in the record</span> : null}
+      {action ? <Link to={claimHref(c.uid, search)} className={`${TAP_L} w-full sm:w-fit`} data-testid="claim-action">{action}</Link> : null}
     </li>
   );
 }
@@ -108,7 +118,7 @@ export function ClaimsCard({ model, read, search, onRetry }) {
             <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">{area}</h3>
             <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{claims.length} {claims.length === 1 ? 'claim' : 'claims'} · {claims.filter((c) => c.state === 'backed').length} backed</span>
           </div>
-          <ul className="m-0 flex list-none flex-col divide-y divide-axal-hairline p-0 dark:divide-gray-800">{claims.map((c) => <ClaimRow key={c.uid} c={c} model={model} search={search} />)}</ul>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0 sm:gap-0 sm:divide-y sm:divide-axal-hairline sm:dark:divide-gray-800">{claims.map((c) => <ClaimRow key={c.uid} c={c} model={model} search={search} />)}</ul>
         </div>
       ))}
     </section>
@@ -252,17 +262,43 @@ export function SourcesNote({ names, onRetry }) {
   );
 }
 
-/** VR13 Crop A. */
+const EYEBROW = 'text-[11px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400';
+
+/** RA-15b (was VR13 Crop A): a founder's first use, three ways to start and no zero-filled dashboard. */
 export function EvidenceEmpty({ search = '' }) {
   return (
-    <section className={`${CARD} items-start`} data-testid="evidence-empty">
-      <h2 className={H2}>Nothing backs your Raise yet.</h2>
-      <p className={MUTED}>Record a customer session, or connect Stripe, Mercury or GitHub, and evidence appears here for you to review.</p>
-      <div className="flex flex-wrap gap-2">
-        <Link to={`/validate/record${search}`} className={BTN_L}>Record a session</Link>
-        <Link to={`/build/connect${search}`} className={BTN_S}>Connectors</Link>
+    <section className={`${CARD} items-start sm:px-7 sm:py-6`} data-testid="evidence-empty">
+      <span className={EYEBROW}>Evidence · first use</span>
+      <h2 className="m-0 text-[20px] font-extrabold text-axal-ink dark:text-gray-100">Build your evidence base</h2>
+      <p className="m-0 max-w-[560px] text-[13.5px] text-axal-muted dark:text-gray-400">Nothing backs your Raise yet. Evidence appears as claims are stated across Narrative, Pitch, Use of funds and Cap table, and as you record sessions and connect sources.</p>
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap" data-testid="evidence-setup">
+        <Link to={`/build/connect${search}`} className={TAP_P} data-testid="setup-connect">Connect a source</Link>
+        <Link to={`/validate/record${search}`} className={TAP_S} data-testid="setup-record">Record a session</Link>
+        <Link to={`/validate${search}`} className={TAP_S} data-testid="setup-validate">Open Validate records</Link>
       </div>
+      <p className={MUTED}>The checks, the library and coverage appear here once there is evidence.</p>
     </section>
+  );
+}
+
+/** RA-15c: an admin viewer of a venture with no evidence it can see; only the founders add evidence. */
+export function EvidenceAdminEmpty() {
+  return (
+    <section className={`${CARD} items-start sm:px-7 sm:py-6`} data-testid="evidence-admin-empty">
+      <span className={EYEBROW}>Evidence · support view</span>
+      <h2 className="m-0 text-[20px] font-extrabold text-axal-ink dark:text-gray-100">This venture has no visible evidence yet.</h2>
+      <p className="m-0 max-w-[560px] text-[13.5px] text-axal-muted dark:text-gray-400">Nothing is recorded that you can see. Founders add evidence from their own workspace.</p>
+    </section>
+  );
+}
+
+/** D6048: the page's own way on, after Evidence in Raise's Prepare stage (D4863). */
+export function ReadinessHandoff({ search = '' }) {
+  return (
+    <nav aria-label="Next in Raise" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900" data-testid="evidence-handoff">
+      <span className={MUTED}>Next in Prepare: check how ready the raise is, area by area.</span>
+      <Link to={`/raise/fundraising-readiness${search}`} className={TAP_S}>Fundraising readiness ›</Link>
+    </nav>
   );
 }
 
@@ -309,26 +345,40 @@ export function AdminBanner() {
   );
 }
 
-/** VR1 itself: the tiles, the claims and the right-hand column. */
+/**
+ * VR1 as RA-15 orders it: the figures, Needs you (the claims, Needs you first), then the evidence library beside
+ * Waiting for review, what investors see, coverage and opens; and the hand-off to Fundraising readiness. With no
+ * evidence at all (D6048), first use instead: no tiles, no filters, no coverage.
+ */
 export function EvidenceMain({ model, read, search, projectId, onChanged, onRetry }) {
+  if (model.empty) {
+    return (
+      <div className="flex flex-col gap-4" data-testid="raise-evidence" data-mode="first-use">
+        {!model.canDecide ? <AdminBanner /> : null}
+        <SourcesNote names={model.unreadableSources} onRetry={onRetry} />
+        {model.canDecide ? <EvidenceEmpty search={search} /> : <EvidenceAdminEmpty />}
+        {model.canDecide ? <ReadinessHandoff search={search} /> : null}
+      </div>
+    );
+  }
   return (
-    <div className="flex flex-col gap-4" data-testid="raise-evidence">
+    <div className="flex flex-col gap-4" data-testid="raise-evidence" data-mode="home">
       {!model.canDecide ? <AdminBanner /> : null}
       <SourcesNote names={model.unreadableSources} onRetry={onRetry} />
       <Tiles model={model} admin={!model.canDecide} />
-      {model.empty ? <EvidenceEmpty search={search} /> : null}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <ClaimsCard model={model} read={read} search={search} onRetry={onRetry} />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         <div className="flex min-w-0 flex-col gap-4">
-          <ClaimsCard model={model} read={read} search={search} onRetry={onRetry} />
           <ItemsCard model={model} read={read} search={search} projectId={projectId} onChanged={onChanged} onRetry={onRetry} />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           {model.canDecide ? <ReviewCard model={model} read={read} search={search} projectId={projectId} onChanged={onChanged} onRetry={onRetry} /> : null}
-          <CoverageCard model={model} read={read} onRetry={onRetry} />
           <InvestorsSeeCard model={model} search={search} />
+          <CoverageCard model={model} read={read} onRetry={onRetry} />
           <OpensCard read={read} onRetry={onRetry} />
         </div>
       </div>
+      <ReadinessHandoff search={search} />
     </div>
   );
 }

@@ -37,8 +37,21 @@
  *                   (what a commit holds) carries filled fails, so adding a file
  *                   never edits a README.
  *
+ *   6. NO HAND-WRITTEN ROWS (#6465) — a README may declare, in its own text,
+ *                   `<!-- index: generated -->` (its list is generated as in
+ *                   rule 5, and a Markdown file there is described by its first
+ *                   heading: `decisions/README.md`) or `<!-- index: none -->`
+ *                   (it describes the folder and its rule, with no per-file
+ *                   rows). Either way a table row naming one of the folder's
+ *                   files fails here, so adding a file never edits that README.
+ *                   The marker lives in the README, not in a list here, so
+ *                   marking another README edits only that README. An unmarked
+ *                   README is checked as before.
+ *
  *   4. ONE VERSION — every README.md merges with `union` (`.gitattributes`), so
- *                   two branches appending at the same spot never conflict.
+ *                   two branches appending at the same spot do not conflict in
+ *                   a local merge (GitHub's merge ignores union; rule 6 is the
+ *                   cure there).
  *                   When two branches rewrote the same line, union keeps both
  *                   versions; a README with a conflict marker, two rows for one
  *                   name in one table, or the same substantial line twice within
@@ -48,8 +61,8 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { unionArtifacts } from './lib/readmeUnion.mjs';
-import { blockHoldsList, findBlock, listedFile, renderList, withBlock } from './lib/folderFiles.mjs';
-import { writeFileSync } from 'node:fs';
+import { blockHoldsList, findBlock, folderListing, indexMode, perFileRows, renderList, withBlock } from './lib/folderFiles.mjs';
+import { regularTextFile } from './local-files.mjs';
 
 const ROOT = resolve(process.cwd());
 // #4104: `--write` fills the generated file lists in the working tree; `--clean` empties them.
@@ -59,6 +72,8 @@ const MODE = process.argv.includes('--write') ? 'write' : process.argv.includes(
 // a newcomer's attention. Adding a folder here is the cheap part; the README
 // it then demands is the point.
 const DOCUMENTED = new Map([
+  ['frontend/src/pages/relationships', 'relationship intelligence, consent pickers and introduction records'],
+  ['cloudflare-worker/src/services/eventSyndication', 'event syndication (D1490): the channel registry, eligibility, triggers, the job and the adapters'],
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
   ['cloudflare-worker/src/agents', 'the agent engine runtime (D1528): the seam, the AgentScope object, the task Workflow, the agent queue and the sweep'],
   ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],
@@ -71,7 +86,9 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages',              'one file per route; the biggest folder in the repo'],
   ['frontend/src/components',         'shared presentational pieces'],
   ['frontend/src/ui',                 'the design-system primitives everything else composes'],
+  ['frontend/src/ui/phone',           'the founder phone primitives (D699) and the width tiers: phone, tablet (D4846 part 2) and desktop'],
   ['frontend/src/pages/work',         'Work and company compliance (D1614): the board, backlog, burn-up, run sheet, activity feed and Workload, and the one adapter seam'],
+  ['frontend/src/pages/wellbeing',    'the Wellbeing screens (D570) and the public Wellness presentation (D7121)'],
   ['frontend/src/pages/hq',           'the Super Admin tier — one page per HQ sidebar row, and which canvas each draws'],
   ['frontend/src/pages/hq/security', 'HQ › Security v2 (D4800, D4801): the workspace registry, the shared state vocabulary, the Overview, and the Access workspace with its Scope → Review → Result dialogs'],
   ['frontend/src/pages/hq/team', 'HQ › Team (D5044): the one supervision read, the roster, the branch search, each action on its shared state model, and what each act invalidates'],
@@ -87,10 +104,14 @@ const DOCUMENTED = new Map([
   ['frontend/test',                   'what the frontend guarantees'],
   ['cloudflare-worker/src',           'the production worker'],
   ['cloudflare-worker/src/routes',    'the production API surface'],
+  ['cloudflare-worker/src/durable-objects', 'the Durable Object classes index.ts re-exports, one per binding in wrangler.toml (D5581 part 2 made it eight)'],
   ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
+  ['cloudflare-worker/src/services/useOfFunds', 'Use of funds scenarios, projections and cap-table links'],
   ['cloudflare-worker/src/services/fills', 'Fill with Eadwyn: the fill classes, FILL_FIELDS, the sources, provenance, the form run and what is kept'],
   ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
+  ['cloudflare-worker/src/services/posthog', 'PostHog, read-only (D1385): the MCP reads, the tracked metrics and each section\'s sync (D1605–D1609), and Distribution\'s visits (D6107)'],
   ['cloudflare-worker/src/services/calendar', 'personal sources, external copies and calendar sync state'],
+  ['cloudflare-worker/src/services/wellbeing', 'Wellbeing: expert matching, slots, bookings, reflection periods (D7118) and recommendations (D7119)'],
   ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
   ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
@@ -98,6 +119,9 @@ const DOCUMENTED = new Map([
   ['scripts',                         'build, deploy and the CI guards'],
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
+  ['scripts/ci',                      'CI evidence, provider boundaries and verified tool acquisition'],
+  ['scripts/landing-bot',             'pull request admission, queue requests and bot safeguards'],
+  ['scripts/landing-bot/model',       'the landing bot\'s model runner: task caps, edit tools, provider order, patch checks'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
   ['scripts/lib/fixtures',            'evidence-backed offline replay fixtures'],
   ['documentation',                   'every hand-written document'],
@@ -157,6 +181,9 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/investor/dealflow',     'Deal flow for an Investor and the Studio lens: the board, the table, their rules and controls (D1236, D1240, D1242)'],
   ['frontend/src/pages/duediligence',         'Due diligence (D1244): the list and case tabs as addresses, and the list tabs D1250 draws — Cases, Templates and their dialogs'],
   ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
+  ['frontend/src/pages/programs',             'program presentations (D6966): the kit, the key → page → PDF map with one file per program, /programs and /programs/:key'],
+  ['frontend/src/pages/programs/catalog',     'the program map (D6966): one entry per program, registry key → canonical page → committed PDF'],
+  ['frontend/src/pages/programs/content',     'each program\'s page sections, panel and slides (D6966), one file per program'],
   ['frontend/src/pages/admin/contentQueue',   'Content queue (D1290): Pipeline (D1295), Calendar (D1296), Authors and Performance (D1297)'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
   ['frontend/src/pages/admin/accounts',       'Admin › Accounts: the Overview (D1304), All accounts (D1305), the account drawer (D1306) and its Licences block (D4473)'],
@@ -172,16 +199,22 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
+  ['frontend/src/pages/relationships',         'relationship intelligence, introduction records and consent-based offers'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
   ['frontend/src/pages/raise/pitch',          'the Pitch deck studio (D894): its shell, its tabs and the model they read'],
   ['frontend/src/pages/raise/narrative',      'the Investor narrative tool (D906): its tabs inside the module page, and the model they read'],
   ['frontend/src/pages/raise/captable',       'the Cap table tool (D1015): its tabs inside the module page, and the model they read'],
+  ['frontend/src/pages/raise/useoffunds',     'the Use of funds tool (D1173): its tabs inside the module page, the dialogs, and the models they read'],
   ['frontend/src/pages/raise/caprel',         'the Capital relationships tool (D1188, D1192, D1193): its tabs inside the module page, the dialogs, and the models they read'],
   ['frontend/src/pages/raise/dataroom',       'the Data room tool (D1101, D1106): its tabs, Files with its lightboxes, Upload and the dialogs, and the models they read'],
+  ['frontend/src/pages/raise/useoffunds',     'the Use of funds tool (D1173, D1177, D1178, D5081): Home and its tabs inside the module page, the dialogs, the shared plan read and the models they read'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
+  ['frontend/src/pages/partner/offers',       'the partner Offers bucket’s zones and the pure rules they read (#4688, D4842, D4843)'],
   ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],
+  ['frontend/src/pages/investor/fund',         'Axal VC Fund workspace sections and navigation (D6130)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
+  ['frontend/src/pages/portfolio',            'the Portfolio v2 frame, its shared parts and models, the company workspace and the Admin Investor preview (D4817)'],
   ['frontend/src/pages/incorporate',          'Incorporate: the formation flow, its review quote, the bank step, Done and HQ\'s read-only frame'],
   ['frontend/src/pages/learning',             'the Learning center: one routed page, its components, and the coming-soon gate'],
   ['frontend/src/pages/advisor',               'advisor workspace framing, public profiles and booking links'],
@@ -369,36 +402,57 @@ function indexed(file) {
   try { return execFileSync('git', ['show', `:${file}`], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
   catch { return null; }
 }
+// Every tracked README.md, for rule 4 below and for the #6465 markers.
+let readmes = [];
+try { readmes = execFileSync('git', ['ls-files', '-z', '*README.md'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean); } catch { readmes = []; }
+
+// ── 6. NO HAND-WRITTEN ROWS (#6465) ────────────────────────────────────────
+// The marker is read from each README itself; `MARKED` maps its folder to it.
+const MARKED = new Map();
+for (const file of readmes) {
+  if (!existsSync(join(ROOT, file))) continue;
+  const dir = file === 'README.md' ? '.' : file.slice(0, -'/README.md'.length);
+  const text = readFileSync(join(ROOT, file), 'utf8');
+  const gen = findBlock(text);
+  const mode = indexMode(gen && !gen.broken ? withBlock(text, '') : text);
+  if (!mode) continue;
+  if (mode === 'both') { errors.push(`${file} carries both \`<!-- index: generated -->\` and \`<!-- index: none -->\` — keep one (#6465)`); continue; }
+  MARKED.set(dir, mode);
+  if (mode === 'generated' && !gen) errors.push(`${file} says \`<!-- index: generated -->\` but holds no \`<!-- files:begin -->\` … \`<!-- files:end -->\` block to generate into (#6465)`);
+  const names = readdirSync(join(ROOT, dir), { withFileTypes: true }).filter((e) => e.isFile() && e.name !== 'README.md').map((e) => e.name);
+  for (const r of perFileRows(text, names)) {
+    errors.push(`${file}:${r.line} has a hand-written row for \`${r.name}\`, but the README says \`<!-- index: ${mode} -->\`: ${mode === 'generated' ? 'the list is generated from each file\'s header' : 'it takes no per-file rows'} — delete the row (#6465)`);
+  }
+}
+
 let listed = 0;
-for (const [dir] of DOCUMENTED) {
+for (const dir of new Set([...DOCUMENTED.keys(), ...[...MARKED].filter(([, m]) => m === 'generated').map(([d]) => d)])) {
   const abs = join(ROOT, dir);
   const readmePath = join(abs, 'README.md');
-  if (!existsSync(readmePath)) continue;
-  const src = readFileSync(readmePath, 'utf8');
-  const block = findBlock(src);
-  if (!block) continue;
-  if (block.broken) { errors.push(`${dir}/README.md has a broken file list: one \`<!-- files:begin -->\`, then one \`<!-- files:end -->\``); continue; }
-  listed += 1;
-  const files = readdirSync(abs, { withFileTypes: true }).filter((e) => e.isFile() && listedFile(e.name))
-    .map((e) => ({ name: e.name, text: readFileSync(join(abs, e.name), 'utf8') }));
-  const list = renderList(files);
-  for (const row of list.split('\n').filter((l) => /\|\s*\|$/.test(l) && l.startsWith('| `'))) {
-    const name = /^\| `([^`]+)`/.exec(row)[1];
-    errors.push(`${dir}/${name} has no header comment — its first line describes it in ${dir}/README.md's generated file list (#4104)`);
-  }
-  if (MODE === 'write') writeFileSync(readmePath, withBlock(src, list));
-  else if (MODE === 'clean') writeFileSync(readmePath, withBlock(src, ''));
-  // What a commit carries must hold no list: a committed list would make every new file a README edit.
-  const committed = findBlock(indexed(relative(ROOT, readmePath)) ?? (MODE === 'check' ? src : ''));
-  if (committed && !committed.broken && blockHoldsList(committed.content)) {
-    errors.push(`${dir}/README.md carries its generated file list in the index; it is generated, never committed — run \`node scripts/check-folder-docs.mjs --clean\` and stage the README again (#4104)`);
-  }
+  regularTextFile(readmePath, (src) => {
+    const block = findBlock(src);
+    if (!block) return;
+    if (block.broken) { errors.push(`${dir}/README.md has a broken file list: one \`<!-- files:begin -->\`, then one \`<!-- files:end -->\``); return; }
+    listed += 1;
+    const list = renderList(folderListing(abs, MARKED.get(dir) ?? null));
+    for (const row of list.split('\n').filter((l) => /\|\s*\|$/.test(l) && l.startsWith('| `'))) {
+      const name = /^\| `([^`]+)`/.exec(row)[1];
+      errors.push(/\.md$/.test(name)
+        ? `${dir}/${name} does not open with a heading — its first line describes it in ${dir}/README.md's generated list (#6465)`
+        : `${dir}/${name} has no header comment — its first line describes it in ${dir}/README.md's generated file list (#4104)`);
+    }
+
+    // What a commit carries must hold no list: a committed list would make every new file a README edit.
+    const committed = findBlock(indexed(relative(ROOT, readmePath)) ?? (MODE === 'check' ? src : ''));
+    if (committed && !committed.broken && blockHoldsList(committed.content)) {
+      errors.push(`${dir}/README.md carries its generated file list in the index; it is generated, never committed — run \`node scripts/check-folder-docs.mjs --clean\` and stage the README again (#4104)`);
+    }
+    return MODE === 'write' ? withBlock(src, list) : MODE === 'clean' ? withBlock(src, '') : null;
+  }, MODE !== 'check');
 }
 
 // Rule 4: every tracked README.md, not only the documented folders' — union
 // merges them all. Outside a git checkout there is nothing union could have done.
-let readmes = [];
-try { readmes = execFileSync('git', ['ls-files', '-z', '*README.md'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean); } catch { readmes = []; }
 for (const file of readmes) {
   if (!existsSync(join(ROOT, file))) continue;
   const text = readFileSync(join(ROOT, file), 'utf8');

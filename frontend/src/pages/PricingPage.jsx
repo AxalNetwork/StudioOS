@@ -39,6 +39,7 @@ import {
   AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, STORAGE_COMPARE, TOKENS_BAND,
 } from '../lib/sitePricing';
 import './pricing.css';
+import { entitlementQuestions, investorCapacityGroup } from '../lib/pricingEntitlements';
 
 /**
  * The display face for lines that are not headings (a card's name, a price):
@@ -69,6 +70,19 @@ function useRead(fetcher) {
   return [state, useCallback(() => setRound((n) => n + 1), [])];
 }
 
+/** D4655: arrow keys move and select a tab; Tab leaves the group. */
+function moveTab(event, keys, active, onPick) {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  const at = keys.indexOf(active);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? keys.length - 1
+    : event.key === 'ArrowRight' ? (at + 1) % keys.length
+      : event.key === 'ArrowLeft' ? (at + keys.length - 1) % keys.length : null;
+  if (next === null) return;
+  event.preventDefault();
+  onPick(keys[next]);
+  event.currentTarget.closest('[role="tablist"]')?.querySelectorAll('[role="tab"]')[next]?.focus();
+}
+
 function Tabs({ tab, onPick }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -80,7 +94,9 @@ function Tabs({ tab, onPick }) {
     <div className="axp-tabwrap">
       <div className="axp-tabs" role="tablist" aria-label="Pricing for" ref={ref}>
         {PRICING_TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={t.key === tab} data-testid={`pricing-tab-${t.key}`}
+          <button key={t.key} type="button" role="tab" id={`pricing-audience-${t.key}`} aria-controls="pricing-audience-panel"
+            aria-selected={t.key === tab} tabIndex={t.key === tab ? 0 : -1} data-testid={`pricing-tab-${t.key}`}
+            onKeyDown={(event) => moveTab(event, PRICING_TABS.map(item => item.key), tab, onPick)}
             className={`axp-tab${t.key === tab ? ' is-on' : ''}`} onClick={() => onPick(t.key)}>
             {t.label}
           </button>
@@ -119,6 +135,11 @@ function PlanCard({ card, onCheckout, onSelect }) {
       ) : (
         <div className="axp-notoffered"><span className="axp-pill axp-pill-dash">Not offered yet</span></div>
       )}
+      {card.limits.length > 0 && (
+        <ul className="axp-limits" aria-label={`${card.name} limits`} data-testid={`pricing-limits-${card.id}`}>
+          {card.limits.map((f) => <li key={f}><span className="axp-tick">{TICK}</span><span>{f}</span></li>)}
+        </ul>
+      )}
       {card.button.checkout && !card.button.disabled ? (
         <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => { onSelect(card); onCheckout(card); }} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
       ) : card.button.to && !card.button.disabled ? (
@@ -143,10 +164,10 @@ function GroupHead({ t, meta }) {
 /** D1172: "Best suited for" is a sentence, set in words rather than figures. */
 const cellClass = (meta, label) => (meta?.fresh && label === STORAGE_COMPARE.best ? 'axp-cell axp-cell-words' : 'axp-cell');
 
-function Compare({ tab, cards, storage = null }) {
+function Compare({ tab, cards, storage = null, capacity = null }) {
   const D = useContext(Face);
   // D1172 (#3085, STG18–STG19): the Storage group comes last, from the public read.
-  const groups = [...(COMPARE[tab] || []), ...(storage ? [storage] : [])];
+  const groups = [...(COMPARE[tab] || []), ...(capacity ? [capacity] : []), ...(storage ? [storage] : [])];
   // The phone shows one plan: the member's own, else the second (the canvas's default).
   const [pick, setPick] = useState(() => {
     const own = cards.findIndex((c) => c.current);
@@ -157,8 +178,8 @@ function Compare({ tab, cards, storage = null }) {
     const c = compareCell(v);
     return (
       <span key={key} role="cell" className={cn}>
-        {c.tick && <span className="axp-tick" aria-label="Included">{TICK}</span>}
-        {c.dash && <span className="axp-dash" aria-label="Not included">—</span>}
+        {c.tick && <span className="axp-tick" role="img" aria-label="Included">{TICK}</span>}
+        {c.dash && <span className="axp-dash" role="img" aria-label="Not included">—</span>}
         {c.text}
       </span>
     );
@@ -184,10 +205,15 @@ function Compare({ tab, cards, storage = null }) {
       <div className="axp-phone">
         <div className="axp-chips" role="tablist" aria-label="Plan">
           {cards.map((c, i) => (
-            <button key={c.id} type="button" role="tab" aria-selected={i === at} className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{c.name}</button>
+            <button key={c.id} type="button" role="tab" id={`pricing-plan-${c.id}`} aria-controls="pricing-plan-panel"
+              aria-selected={i === at} tabIndex={i === at ? 0 : -1}
+              onKeyDown={(event) => moveTab(event, cards.map((_, index) => index), at, setPick)}
+              className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{c.name}</button>
           ))}
         </div>
+        <div role="tabpanel" id="pricing-plan-panel" aria-labelledby={`pricing-plan-${cards[at]?.id}`} tabIndex={0}>
         <div className="axp-table" role="table" aria-label={`${cards[at]?.name ?? ''} plan features`}>
+          <div className="axp-thead axp-row-phone" role="row"><span role="columnheader">Feature</span><span role="columnheader">{cards[at]?.name}</span></div>
           {groups.map(([t, rows, meta]) => (
             <React.Fragment key={t}>
               <div role="row"><div role="cell" aria-colspan={2}><GroupHead t={t} meta={meta} /></div></div>
@@ -196,6 +222,7 @@ function Compare({ tab, cards, storage = null }) {
               ))}
             </React.Fragment>
           ))}
+        </div>
         </div>
       </div>
     </section>
@@ -438,8 +465,8 @@ function Packs({ read, onRetry, signedIn, onBuy }) {
   );
 }
 
-function Faq({ tab }) {
-  const items = tab === 'investor' ? [...FAQ_INVESTOR, ...FAQ] : FAQ;
+function Faq({ tab, catalogue }) {
+  const items = [...(tab === 'investor' ? [...FAQ_INVESTOR, ...FAQ] : FAQ), ...entitlementQuestions(tab, catalogue)];
   const [open, setOpen] = useState(0);
   return (
     <section className="axp-sec axp-faq" aria-labelledby="axp-faq-h">
@@ -447,10 +474,11 @@ function Faq({ tab }) {
       <div className="axp-faq-list">
         {items.map(([q, a], i) => (
           <div key={q} className="axp-faq-item">
-            <button type="button" aria-expanded={i === open} onClick={() => setOpen(i === open ? -1 : i)}>
+            <button type="button" aria-expanded={i === open} aria-controls={`pricing-faq-${tab}-${i}`}
+              onClick={() => setOpen(i === open ? -1 : i)}>
               <span>{q}</span><span className="axp-faq-chev" aria-hidden="true">{i === open ? '−' : '+'}</span>
             </button>
-            {i === open && <p>{a}</p>}
+            <p id={`pricing-faq-${tab}-${i}`} hidden={i !== open}>{a}</p>
           </div>
         ))}
       </div>
@@ -571,6 +599,7 @@ export function PricingBody({ user = null }) {
         )}
       </section>
 
+      <div id="pricing-audience-panel" role="tabpanel" aria-labelledby={`pricing-audience-${tab}`} tabIndex={0}>
       {roleTab && returned && <ReturnedNotice notice={returned} onClose={() => setReturned(null)} />}
 
       {roleTab && (
@@ -623,7 +652,7 @@ export function PricingBody({ user = null }) {
         </section>
       )}
 
-      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} storage={storageGroup(plans.body, specs, tab, STORAGE_COMPARE)} />}
+      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} storage={storageGroup(plans.body, specs, tab, STORAGE_COMPARE)} capacity={investorCapacityGroup(tab, plans.body?.catalogue)} />}
 
       {!roleTab && user && <TokensBand read={me} onRetry={retryMe} storage={storage} autoReload={autoReload} packs={plans} user={user} onAdd={(uid) => setPackSheet({ pack: uid })} />}
       {!roleTab && <Packs read={plans} onRetry={retryPlans} signedIn={!!user} onBuy={(uid) => setPackSheet({ pack: uid })} />}
@@ -634,7 +663,8 @@ export function PricingBody({ user = null }) {
         </section>
       )}
 
-      <Faq key={`faq-${tab}`} tab={tab} />
+      <Faq key={`faq-${tab}`} tab={tab} catalogue={plans.status === 'ready' ? plans.body?.catalogue : null} />
+      </div>
 
       {!user && (
         <section className="axp-sec">

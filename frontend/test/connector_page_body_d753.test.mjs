@@ -597,7 +597,8 @@ test('Details: a missing value reads "Not recorded" with DETAIL_MISSING; an http
 
   const html = body(c);
   assert.ok(!/javascript:|http:\/\/example|data:text/.test(html), 'no unsafe link reaches the page');
-  assert.ok(section(html, 'connector-page-details').includes(`title="${DETAIL_MISSING}">Not recorded`));
+  // D5129: the shared Not recorded chip draws an aria-hidden dash glyph before its word; the reason stays on its title.
+  assert.ok(section(html, 'connector-page-details').replace(/<svg[\s\S]*?<\/svg>/g, '').includes(`title="${DETAIL_MISSING}">Not recorded`));
   assert.ok(html.includes('>Support ↗'));
 
   assert.equal(safeHref('https://example.test/x'), 'https://example.test/x');

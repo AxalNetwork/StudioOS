@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { RESEARCH_ACCESS, canOpenResearch } from '../src/lib/researchAccess.js';
+import { PLAIN_GUARD_AREAS, RESEARCH_ACCESS, canOpenResearch } from '../src/lib/researchAccess.js';
 import { researchLinks } from '../src/pages/research/researchLinks.js';
 import { SectorProfileView } from '../src/pages/research/SectorProfile.jsx';
 import { Funds } from '../src/pages/research/CompanyProfile.jsx';
@@ -23,9 +23,10 @@ const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 
 /** The roles App.jsx admits to one Research path, read off its own guard. */
-function admitted(path) {
-  // A plain string search, not a RegExp built from the path.
-  const head = `path="${path}" element={guard(labRoles([`;
+function admitted(path, plain = false) {
+  // A plain string search, not a RegExp built from the path. #6265: the
+  // plain-guard areas are `adminToResearch(guard([...]))`, with no labRoles.
+  const head = plain ? `path="${path}" element={adminToResearch(guard([` : `path="${path}" element={guard(labRoles([`;
   const at = APP.indexOf(head);
   assert.ok(at >= 0, `no guarded route for ${path}`);
   const list = APP.slice(at + head.length, APP.indexOf(']', at + head.length));
@@ -39,7 +40,17 @@ test('the access table is App.jsx\'s own admissions, area by area', () => {
     ['companies', '/research/companies/company/:uid'], ['funds', '/research/funds/catalog/:id'],
     ['library', '/research/library'], ['diligence', '/research/diligence/:grantUid'],
     ['benchmarking', '/research/benchmarking/:uid'], ['clientPrep', '/research/client-prep'],
-  ]) assert.deepEqual([...RESEARCH_ACCESS[area]].sort(), admitted(path), area);
+  ]) assert.deepEqual([...RESEARCH_ACCESS[area]].sort(), admitted(path, PLAIN_GUARD_AREAS.includes(area)), area);
+});
+
+test('the plain-guard areas take no admin or Lab shortcut, and follow a previewed role (#6265)', () => {
+  for (const area of PLAIN_GUARD_AREAS) {
+    const [own] = RESEARCH_ACCESS[area];
+    assert.equal(canOpenResearch(area, { role: 'admin' }, 'founder'), false, `${area}: an admin browsing as the founder`);
+    assert.equal(canOpenResearch(area, { role: 'admin' }, own), true, `${area}: an admin previewing ${own}`);
+    assert.equal(canOpenResearch(area, { role: 'founder', spinout_lab_active: 1 }), false, `${area}: a Lab founder`);
+    assert.equal(canOpenResearch(area, { role: own }), true, `${area}: ${own}`);
+  }
 });
 
 test('each ordinary role is offered exactly the profiles it is admitted to; Lab and admin are their own case', () => {

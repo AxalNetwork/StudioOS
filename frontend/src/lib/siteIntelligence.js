@@ -15,10 +15,14 @@
  * the router's own table, and this file names no model.
  */
 
-/** The three research cards, with only the sentences that are true. */
+/**
+ * The three research cards, with only the sentences that are true. D7178 (#7044, RCL01): the Companies card opens
+ * `/research/companies`; a signed-out visitor goes through sign-in and comes back to it (`lib/pendingNext.js`).
+ */
 export const RESEARCH_CARDS = [
   { t: 'Markets', q: 'How big is it, and is it moving?', d: 'A stale figure shows its age instead of passing as current.' },
-  { t: 'Companies', q: 'Who else is building this?', d: 'Competitor profiles, direct or adjacent, with the public sources behind them.' },
+  { t: 'Companies', q: 'Who else is building this?', d: 'Competitor profiles, direct or adjacent, with the public sources behind them.',
+    to: '/research/companies', go: 'Open Companies' },
   { t: 'Funds', q: 'Who writes this cheque?', d: 'Funds by thesis, stage, and cheque range, with the path in: warm, cold, or not yet assessed.' },
 ];
 
@@ -78,7 +82,7 @@ export const INTEL_CLAIMS = [
   { id: 'research-markets-data', kept: false, text: 'Sector and stage data with sources and run dates.',
     instead: 'Markets carry sources and run dates, but no stage dimension was found in them.' },
   { id: 'research-stale', kept: true, text: 'A stale figure shows its age instead of passing as current.',
-    evidence: ['frontend/src/pages/research/MarketZone.jsx', 'AGE IS A GATE, NOT A LABEL'] },
+    evidence: ['frontend/src/pages/research/MarketReading.jsx', 'stale at ${STALE_AT} days'] },
   { id: 'research-companies', kept: true, text: 'Competitor profiles, direct or adjacent, with the public sources behind them.',
     evidence: ['frontend/src/pages/research/CompanyAnalysis.jsx', '<option value="adjacent">Adjacent</option>'] },
   { id: 'research-pricing', kept: false, text: 'Compare positioning and pricing side by side.',

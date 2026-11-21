@@ -1,0 +1,4 @@
+{
+  "note": "D6651: R2 sites allowed to write or delete a record prefix outside recordStore.ts / recordErasure.ts while they move. Started empty and only shrinks.",
+  "sites": []
+}

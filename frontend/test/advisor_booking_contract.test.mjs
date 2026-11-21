@@ -235,7 +235,8 @@ test('Sessions does not tell an advisor about a BOOKING STATUS called "held"', (
   }
 
   // 2. The sentence that replaced it still says the true thing.
-  assert.match(src, /Only confirmed and completed sessions are listed/);
+  // #4832 (D4832): the price record moved into each card's Open, and says which sessions it prices.
+  assert.match(src, /Only confirmed and completed sessions are priced/);
 
   // 3. The word that survives is the schema's, not prose. Asserted against the
   //    migration rather than against a copy of the value kept here, so the two

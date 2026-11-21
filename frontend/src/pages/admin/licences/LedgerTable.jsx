@@ -5,10 +5,14 @@
  * cell is one primary state; a value the reads do not give is said as None,
  * Not recorded, Unavailable or Not instrumented (`../licenceLedgerModel.js`),
  * never as 0.
+ *
+ * D4819 part 20 (#5932), board L20 — on a phone each list row is one touch
+ * target of at least 56px: the licence's link covers the whole row.
  */
 import React from 'react';
 import {
-  NOT_INSTRUMENTED, NOT_ON_LEDGER, attentionCell, notInstrumentedCell, renewalCell, requestsCell, territoryCell,
+  ATTENTION_FILTERS, NEEDS, NEED_GROUPS, NOT_INSTRUMENTED, NOT_ON_LEDGER, RENEWAL_WINDOWS, TERRITORY_NONE, attentionCell,
+  notInstrumentedCell, renewalCell, requestsCell, territoryCell,
 } from '../licenceLedgerModel';
 import { STATUS_TONE, Chip } from './licenceShared';
 
@@ -72,27 +76,39 @@ export function CountsAndNeeds({ counts, countsUnavailable, onRetry, needs, chos
         <h2 className="text-[10px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">
           Needs HQ{scope ? ` · ${scope}` : ''}
         </h2>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {needs.map((n) => (n.state === 'value' ? (
-            <button
-              key={n.key} type="button" role="checkbox" aria-checked={chosen.includes(n.key)}
-              onClick={() => onToggle(n.key)} data-testid={`licence-need-${n.key}`}
-              className={`min-h-[28px] rounded-full border px-3 text-xs font-semibold ${
-                chosen.includes(n.key)
-                  ? 'border-indigo-300 bg-indigo-50 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
-                  : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
-              }`}
-            >
-              {n.label}
-            </button>
-          ) : (
-            <span
-              key={n.key} data-testid={`licence-need-${n.key}`} data-state={n.state}
-              className="inline-flex min-h-[28px] items-center rounded-full border border-dashed border-gray-300 px-3 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400"
-            >
-              {n.label}
-            </span>
-          )))}
+        {/* D5020 (L28): the items in three rows, Pricing, Legal and Operations; each chip is still a filter of the table. */}
+        <div className="mt-2 space-y-1.5">
+          {NEED_GROUPS.map(([group, word]) => {
+            const items = needs.filter((n) => (NEEDS.find((x) => x.key === n.key)?.group || 'operations') === group);
+            if (!items.length) return null;
+            return (
+              <div key={group} className="grid items-center gap-2 sm:grid-cols-[96px_minmax(0,1fr)]" data-testid={`licence-needs-group-${group}`}>
+                <span className="text-[10px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">{word}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {items.map((n) => (n.state === 'value' ? (
+                    <button
+                      key={n.key} type="button" role="checkbox" aria-checked={chosen.includes(n.key)}
+                      onClick={() => onToggle(n.key)} data-testid={`licence-need-${n.key}`}
+                      className={`min-h-[28px] rounded-full border px-3 text-xs font-semibold ${
+                        chosen.includes(n.key)
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
+                          : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      {n.label}
+                    </button>
+                  ) : (
+                    <span
+                      key={n.key} data-testid={`licence-need-${n.key}`} data-state={n.state}
+                      className="inline-flex min-h-[28px] items-center rounded-full border border-dashed border-gray-300 px-3 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400"
+                    >
+                      {n.label}
+                    </span>
+                  )))}
+                </div>
+              </div>
+            );
+          })}
         </div>
         <p className="mt-2 text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="licence-needs-not-instrumented">
           Not instrumented on the ledger yet: {NOT_INSTRUMENTED.join(' · ')}. Open a licence to see them.
@@ -104,12 +120,41 @@ export function CountsAndNeeds({ counts, countsUnavailable, onRetry, needs, chos
 
 const COLUMNS = ['Licence / studio', 'Territory', 'Status', 'Renewal', 'Agreement', 'Branch', 'Requests', 'Billing', 'Attention'];
 
-function Identity({ l, onOpen }) {
+const MENU = 'min-h-[32px] rounded-md border border-gray-300 bg-white px-2 text-xs font-semibold text-gray-800 '
+  + 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 '
+  + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus-visible:outline-indigo-400';
+
+/**
+ * D5919 (#5919): the canvas's Territory, Renewal window and Attention menus (L01, L02), native selects so the
+ * keyboard and screen readers work as they do everywhere, each with a visible focus ring. They filter the loaded
+ * rows from the reads the ledger already makes; the page keeps the choice in the address.
+ */
+export function LedgerMenus({ menus, territories, onChange }) {
+  return (
+    <>
+      <select value={menus.territory} onChange={(e) => onChange({ territory: e.target.value })} aria-label="Territory" className={MENU} data-testid="licence-territory-filter">
+        <option value="">Every territory</option>
+        {territories.map((t) => <option key={t} value={t}>{t}</option>)}
+        <option value={TERRITORY_NONE}>No territory</option>
+      </select>
+      <select value={menus.renewal} onChange={(e) => onChange({ renewal: e.target.value })} aria-label="Renewal window" className={MENU} data-testid="licence-renewal-filter">
+        <option value="">Any renewal</option>
+        {RENEWAL_WINDOWS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+      </select>
+      <select value={menus.attention} onChange={(e) => onChange({ attention: e.target.value })} aria-label="Attention" className={MENU} data-testid="licence-attention-filter">
+        <option value="">Any attention</option>
+        {ATTENTION_FILTERS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+      </select>
+    </>
+  );
+}
+
+function Identity({ l, onOpen, stretch = false }) {
   return (
     <>
       <a
         href={`/admin/licences/${encodeURIComponent(l.uid)}`} onClick={(e) => onOpen(e, l.uid)}
-        className="inline-flex items-center gap-1.5 font-semibold text-gray-900 hover:underline dark:text-gray-100"
+        className={`inline-flex items-center gap-1.5 font-semibold text-gray-900 hover:underline dark:text-gray-100 ${stretch ? "after:absolute after:inset-0 after:content-['']" : ''}`}
         data-testid="licence-row-link"
       >
         {/* D198 / H28 — a white-label row shows the operator's own colour; a subsidiary none. */}
@@ -136,7 +181,7 @@ const statusWord = (s) => String(s).replace('_', ' ');
  * (a plain click) and leaves a modified click to the browser, so every row's
  * link is a real deep link that opens in a new tab or is copied whole.
  */
-export function LedgerTable({ rows, reads, onOpen, onRetryRequests, footer }) {
+export function LedgerTable({ rows, reads, pricing, onOpen, onRetryRequests, footer }) {
   return (
     <section className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="licence-ledger">
       <div className="hidden md:block">
@@ -169,7 +214,7 @@ export function LedgerTable({ rows, reads, onOpen, onRetryRequests, footer }) {
                     )}
                   </td>
                   <td className="px-3 py-2.5"><NotOnLedger uid={l.uid} col="billing" href={`/admin/licences/${encodeURIComponent(l.uid)}/fee-invoices`} onOpen={onOpen} /></td>
-                  <td className="px-3 py-2.5"><StateTag c={attentionCell(l, read)} testId="licence-cell-attention" /></td>
+                  <td className="px-3 py-2.5"><StateTag c={attentionCell(l, read, pricing)} testId="licence-cell-attention" /></td>
                 </tr>
               );
             })}
@@ -183,11 +228,11 @@ export function LedgerTable({ rows, reads, onOpen, onRetryRequests, footer }) {
         {rows.map((l) => {
           const read = reads[l.uid];
           return (
-            <li key={l.uid} className="flex items-start justify-between gap-3 px-4 py-3">
-              <div className="min-w-0"><Identity l={l} onOpen={onOpen} /></div>
+            <li key={l.uid} className="relative flex min-h-[56px] items-start justify-between gap-3 px-4 py-3 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600" data-testid="licence-list-row">
+              <div className="min-w-0"><Identity l={l} onOpen={onOpen} stretch /></div>
               <div className="flex shrink-0 flex-col items-end gap-1 text-[12px]">
                 <Chip tone={STATUS_TONE[l.status]}>{statusWord(l.status)}</Chip>
-                <StateTag c={attentionCell(l, read)} />
+                <StateTag c={attentionCell(l, read, pricing)} />
               </div>
             </li>
           );

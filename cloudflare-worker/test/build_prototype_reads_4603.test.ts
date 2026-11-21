@@ -53,6 +53,8 @@ after(() => { varied?.close(); large?.close(); });
 const page = (h: typeof varied, query = '', user = 1) => h.get(`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}${query}`, user);
 const ORDERS = { state: ['blocked', 'in_progress', 'not_started', 'done'] };
 const hypothesisOptions = (body: any) => body.records.filters.find((f: any) => f.key === 'hypothesis').options;
+/** D6031: the Test, Built and Tested cells come from their own reads (`build_mvp_marks_6031`); the paging is compared without them. */
+const unmarked = (rows: any[]) => rows.map(({ cells: { test, built, tested, ...cells }, ...row }) => ({ ...row, cells }));
 
 test('1. the SQL page answers exactly what the in-memory path answers, and offers the same filters', async () => {
   // Mutation checked: ties broken by id alone (not sort_order, id) → the read-order ties differ;
@@ -75,7 +77,7 @@ test('1. the SQL page answers exactly what the in-memory path answers, and offer
     assert.equal(r.status, 200, params);
     const expected = pageBuildRows(all, query, 25, { orders: ORDERS, defaultSort: 'state' });
     const { rows, total, page: at, page_size } = r.body.records;
-    assert.deepEqual({ rows, total, page: at, page_size }, expected, params);
+    assert.deepEqual({ rows: unmarked(rows), total, page: at, page_size }, expected, params);
     checked += 1;
   }
   assert.ok(checked > 300, `${checked} queries compared`);
@@ -90,7 +92,7 @@ test('1. the SQL page answers exactly what the in-memory path answers, and offer
 });
 
 /** The card and facts as the reader computed them before #4603 part 2b, from every feature row. */
-function referenceCard(features: any[], target: string | null) {
+function referenceCard(features: any[], target: string | null, today: string) {
   const must = features.filter(f => Number(f.is_must_have ?? 0) === 1);
   const done = must.filter(f => f.delivery_status === 'Done');
   const history = new Map<string, number>();
@@ -103,23 +105,32 @@ function referenceCard(features: any[], target: string | null) {
   const mark = target ? dated.findIndex(point => point.label === 'Ship') : -1;
   const series = points.length >= 3 ? [{ kind: 'line', values: dated.map(point => point.value), target: must.length,
     labels: dated.map((point, at) => ({ at, label: point.label })), ...(mark >= 0 ? { mark, mark_label: `Ship ${target}` } : {}) }] : [];
-  const missing = must.find(f => f.delivery_status !== 'Done');
-  return { series, state: must.length === 0 ? 'empty' : points.length < 3 ? 'too_little' : 'ok', next: missing ? `Complete ${missing.title}` : null,
-    facts: { done: done.length, total: must.length, target_date: target } };
+  // D6031 (BD8): the next blocked must-have, else the earliest due one not done, else the first not done (read order on a tie).
+  const open = must.filter(f => f.delivery_status !== 'Done');
+  const blocked = open.find(f => f.delivery_status === 'Blocked');
+  const due = open.filter(f => typeof f.due_date === 'string' && f.due_date > '').sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
+  const missing = blocked ?? due ?? open[0];
+  return { series, state: must.length === 0 ? 'empty' : points.length < 3 ? 'too_little' : 'ok', next: missing ? `${blocked ? 'Unblock' : 'Complete'} ${missing.title}` : null,
+    facts: { done: done.length, total: must.length, blocked: must.filter(f => f.delivery_status === 'Blocked').length,
+      // #6027 (D6027): must-haves not Done whose due date is before today (UTC).
+      overdue: open.filter(f => typeof f.due_date === 'string' && f.due_date !== '' && f.due_date.slice(0, 10) < today).length, target_date: target } };
 }
 
-test('2. the card and facts are what the old full read computed', async () => {
+test('2. the card and facts are what the old full read computed', async (t) => {
   // Mutation checked: the history without `delivery_status = 'Done'` → the stale done_at adds a month;
   // `missing` ordered by id alone → the card's next names another must-have.
+  // #6027: a fixed today inside the seeded 2027 due dates, so some open must-haves are overdue and some are not.
+  // Mutation checked: overdue counting Done must-haves, or `<=` today → the facts differ.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2027, 4, 4, 12) });
   for (const h of [varied, large]) {
     const features = h.db.prepare(`SELECT * FROM mvp_features WHERE project_id = ? ORDER BY sort_order, id`).all(PROJECT) as any[];
     const target = (h.db.prepare('SELECT mvp_target_date AS t FROM projects WHERE id = ?').get(PROJECT) as any).t;
-    const want = referenceCard(features, target);
+    const want = referenceCard(features, target, '2027-05-04');
     const r = await page(h);
     assert.deepEqual(r.body.card.series, want.series);
     assert.equal(r.body.card.state, want.state);
     assert.equal(r.body.card.next?.text ?? null, want.next);
-    assert.deepEqual(r.body.facts, want.facts);
+    assert.deepEqual(r.body.facts, { ...want.facts, can_set_target: true }, 'D6031: the module page also says the founder may set the date');
   }
 });
 
@@ -135,7 +146,7 @@ test('3. at 1,000 records the page reads 25 must-have rows and the overview none
   assert.equal(o.status, 200);
   assert.equal(listed(o.log), 0, 'the overview lists no must-have');
   const prototypeRows = o.log.filter((s) => /FROM mvp_features WHERE project_id = \? AND is_must_have = 1/.test(s.sql)).reduce((t, s) => t + s.rows, 0);
-  assert.ok(prototypeRows <= 13, `${prototypeRows} rows for the card: one count row and one per month`);
+  assert.ok(prototypeRows <= 13, `${prototypeRows} rows for the card: one per state, hypothesis and day of completion (D6025)`);
   assert.deepEqual(o.body.figures[0].value, [r.body.facts.done, r.body.facts.total]);
   const searched = await page(large, '&q=feature%20999');
   assert.deepEqual(searched.body.records.rows.map((x: any) => x.cells.must_have), ['Synthetic feature 999']);

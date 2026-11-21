@@ -490,7 +490,7 @@ test('14 · "On this page" lists the page\'s options; an open option moves the r
   const m = await mount(onPage(path, h(WorkerRail, { workspace: 'Validate' })));
   try {
     const rows = m.nodes().map((n) => String(m.pr(n)['data-testid'] || '')).filter((id) => id.startsWith('row-worker-rail-option-'));
-    assert.deepEqual(rows, ['transcribe:interview', 'transcribe:session', 'transcribe:recording', 'summarise:session', 'structure:transcript', 'ask:transcript']
+    assert.deepEqual(rows, ['transcribe:interview', 'transcribe:session', 'transcribe:recording', 'summarise:session', 'structure:transcript', 'ask:transcript', 'draft:validate/interview-guide']
       .map((k) => `row-worker-rail-option-${k}`));
     assert.equal(m.text(m.by('row-worker-rail-option-ask:transcript')), 'Ask Kimi K2.6');
     assert.equal(m.pr(m.by('row-worker-rail-option-ask:transcript'))['data-open'], 'false');

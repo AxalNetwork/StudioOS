@@ -4,6 +4,14 @@
  * D1238), newest first. Nothing is added until Add to my deal flow; Pass asks
  * for its reason; Not for me hides the row for the firm, with an optional
  * reason. A way in that could not be read says so; the others still list.
+ *
+ * D6148 (#6148): a pass the firm gave a date comes back here on that date,
+ * as "Back from your pass". It is already in the flow, so it offers Back to
+ * Screening (a move off Passed) instead of Add and Pass. Next round is not
+ * detected, and the section says so.
+ *
+ * D6147: a round that is a High fit to the investor's thesis arrives too, its
+ * chip "Matches your thesis" and its line the matching criteria.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -12,9 +20,9 @@ import { reportError } from '../../../lib/log';
 import { dealFlowApi } from '../../../lib/api/dealFlow.js';
 import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
 import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
-import { STAGE_WORD, scoresOf, shortDayOf, stripScopes } from './flowModel';
+import { STAGE_WORD, THESIS_PATH, scoresOf, shortDayOf, stripScopes } from './flowModel';
 import { roundWord } from './dealFlowModel';
-import { inboxActions, inboxChip, inboxIntro, inboxLine, thesisLine, unreadSources } from './movesModel';
+import { inboxActions, inboxChip, inboxIntro, inboxLine, nextRoundLine, thesisLine, thesisNeedsSetting, unreadSources } from './movesModel';
 import { AddToFlowDialog } from './FlowControls';
 import { NotForMeDialog, PassDialog } from './StageDialogs';
 
@@ -30,6 +38,8 @@ export default function NewForYou({ onToast }) {
   const [scores, setScores] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [again, setAgain] = useState(0);
+  const [reopening, setReopening] = useState(null);
+  const [reopenError, setReopenError] = useState('');
   useEffect(() => {
     let alive = true;
     setRead({ kind: 'loading' });
@@ -55,16 +65,31 @@ export default function NewForYou({ onToast }) {
   const drop = (k) => setRead((r) => ({ ...r, items: r.items.filter((i) => i.key !== k) }));
   const unread = unreadSources(read.sources);
   const thesis = thesisLine(read.sources);
+  const nextRound = nextRoundLine(read.sources);
+  const setThesis = thesisNeedsSetting(read.sources);
   const asRow = (i) => ({ id: String(i.deal_id), name: i.venture || 'Name not recorded' });
+  const reopen = async (i) => {
+    setReopening(i.key); setReopenError('');
+    try {
+      await dealFlowApi.update(i.deal_id, { stage: 'screening' });
+      drop(i.key);
+      onToast?.(`${asRow(i).name} is back in Screening.`);
+    } catch (e) {
+      reportError('DealFlow:reopen', e);
+      setReopenError(e?.message || 'It could not be moved back. Nothing changed.');
+    } finally { setReopening(null); }
+  };
 
   return (
     <section className={BOX} data-testid="dealflow-new">
       <h2 className="m-0 text-[15px] font-bold text-axal-ink dark:text-gray-100">New for you</h2>
       {read.items.length
         ? <p className={MUTED} data-testid="dealflow-new-intro">{inboxIntro(read.items.length)}</p>
-        : <p className="m-0 text-[13px]" data-testid="dealflow-new-empty">Nothing new for you. Invitations, introductions, open syndicates and your watchlist bring ventures here.</p>}
+        : <p className="m-0 text-[13px]" data-testid="dealflow-new-empty">Nothing new for you. Invitations, introductions, open syndicates, your watchlist and rounds that match your thesis bring ventures here.</p>}
       {unread.length > 0 && <p className="m-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200" role="status" data-testid="dealflow-new-unread">Unreadable: {unread.join(', ')} could not be read. The rest are listed. <button type="button" className="font-semibold underline" onClick={() => setAgain((n) => n + 1)}>Try again</button></p>}
-      {thesis && <p className={MUTED} data-testid="dealflow-new-thesis">{thesis}</p>}
+      {thesis && <p className={MUTED} data-testid="dealflow-new-thesis">{thesis}{setThesis && <> <Link to={THESIS_PATH} className={LINK} data-testid="dealflow-new-set-thesis">Set your thesis</Link></>}</p>}
+      {nextRound && <p className={MUTED} data-testid="dealflow-new-next-round">{nextRound}</p>}
+      {reopenError && <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert">{reopenError}</p>}
       <ul className="m-0 flex list-none flex-col divide-y divide-gray-100 p-0 dark:divide-gray-800">
         {read.items.map((i) => {
           const a = inboxActions(i);
@@ -83,6 +108,7 @@ export default function NewForYou({ onToast }) {
               {s !== 'failed' && (s.state === 'locked' ? <ScopeStrip locked /> : s.state === 'ok' ? <ScopeStrip scopes={stripScopes(s)} /> : null)}
               <div className="flex flex-wrap items-center gap-2">
                 {a.add && <button type="button" className={PRIMARY} onClick={() => setDialog({ kind: 'add', item: i })} data-testid={`dealflow-new-add-${i.key}`}>Add to my deal flow</button>}
+                {a.reopen && <button type="button" className={PRIMARY} onClick={() => reopen(i)} disabled={reopening === i.key} data-testid={`dealflow-new-reopen-${i.key}`}>{reopening === i.key ? 'Moving…' : 'Back to Screening'}</button>}
                 {a.pass && <button type="button" className={BTN} onClick={() => setDialog({ kind: 'pass', item: i })} data-testid={`dealflow-new-pass-${i.key}`}>Pass</button>}
                 {a.open && <Link to={`/deals/${i.deal_id}`} className={BTN} data-testid={`dealflow-new-open-${i.key}`}>Open</Link>}
                 {a.dismiss && <button type="button" className={LINK} onClick={() => setDialog({ kind: 'dismiss', item: i })} data-testid={`dealflow-new-dismiss-${i.key}`}>Not for me</button>}

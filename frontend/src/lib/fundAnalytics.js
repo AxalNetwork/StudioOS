@@ -14,7 +14,6 @@
  * result, and "0.00x DPI" is a claim about a fund, not an absence of one.
  */
 import { useCallback, useEffect, useState } from 'react';
-import React from 'react';
 import { api } from './api';
 import { NOT_RECORDED } from './absence';
 
@@ -57,20 +56,13 @@ export function fmtRate(v) {
 }
 
 /**
- * The absence of a number, said out loud. `reason` is the server's own
- * explanation from the `unavailable` map, surfaced on hover so a GP asking
- * "why is TVPI blank" gets the answer from the page rather than from support.
+ * The absence of a number, said out loud. D5129 (#5129) folded this local copy
+ * into the shared one: `reason` is the server's own explanation from the
+ * `unavailable` map, now drawn as visible text beside the Not recorded chip
+ * rather than a hover title, so a GP asking "why is TVPI blank" gets the
+ * answer on a phone too. Re-exported so `FundPerformancePage` is unchanged.
  */
-export function Unrecorded({ reason }) {
-  return React.createElement(
-    'span',
-    {
-      className: 'text-gray-400 dark:text-gray-500 italic text-xs',
-      title: reason || undefined,
-    },
-    NOT_RECORDED,
-  );
-}
+export { Unrecorded } from '../ui/Honesty.jsx';
 
 /**
  * Family-wide fund analytics. One request; the caller renders loading, error

@@ -7,10 +7,10 @@ import {
 } from '../src/pages/raise/pitch/pitchOverviewModel.js';
 import { TABS, TITLE, LINE, STUDIO_PATH } from '../src/pages/raise/pitch/pitchStudioModel.js';
 
-test('the tile row: five tiles in the canvas order; the Overview is not a tile', () => {
-  assert.deepEqual(TABS.map((t) => t.label), ['Decks', 'Script & rehearsal', 'Review', 'Share & analytics', 'Notes']);
-  assert.deepEqual(TABS.map((t) => t.path), ['/raise/pitch/decks', '/raise/pitch/script', '/raise/pitch/review', '/raise/pitch/share', '/raise/pitch/notes']);
-  assert.ok(!TABS.some((t) => t.path === STUDIO_PATH), 'the Overview lights no tile');
+test('the six tabs follow PS-01 in order', () => {
+  assert.deepEqual(TABS.map((t) => t.label), ['Overview', 'Decks', 'Script & rehearsal', 'Review', 'Share & analytics', 'Notes']);
+  assert.deepEqual(TABS.map((t) => t.path), ['/raise/pitch', '/raise/pitch/decks', '/raise/pitch/script', '/raise/pitch/review', '/raise/pitch/share', '/raise/pitch/notes']);
+  assert.deepEqual(TABS[0], { id: 'overview', path: STUDIO_PATH, label: 'Overview' });
   assert.equal(TITLE, 'Pitch');
   assert.equal(LINE, 'Your deck, what to say, and who has seen it, in one place.');
 });
@@ -72,7 +72,7 @@ test('the latest HQ note is an admin’s or the Super Admin’s, never a founder
 
 test('no deck: only the ways in that exist on main are drawn', () => {
   // D4599 (#4599): the import is the third, gated on importDocument (pitch_overview_reads_4599).
-  assert.deepEqual(NO_DECK_ITEMS.map((i) => i.id), ['records', 'template', 'import']);
+  assert.deepEqual(NO_DECK_ITEMS.map((i) => i.id), ['records', 'manual', 'import']);
 });
 
 test('the routes: Overview at /raise/pitch, the new tiles, and the old addresses redirect with the query', () => {

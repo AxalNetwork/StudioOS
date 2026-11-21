@@ -62,6 +62,7 @@ export type FundActTier = 'admin' | 'super_admin';
 
 export type FundActKey =
   | 'capital_call.preview' | 'capital_call.issue' | 'capital_call.receipt'
+  | 'capital_call.correct' | 'capital_call.withdraw'
   | 'distribution.preview' | 'distribution.execute' | 'distribution.mark_paid'
   | 'fund_report.draft' | 'fund_report.issue'
   | 'fund_booklet.read' | 'fund_booklet.withdraw' | 'fund_booklet.accept'
@@ -102,6 +103,16 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
       'POST /api/capital/calls'] }),
   act({ act: 'capital_call.receipt', label: 'Record a receipt', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/capital-calls/lines/:lineId/receipts'] }),
+  // D6238 (#6238): correcting an issued call's due date or purpose, and
+  // withdrawing one nothing was paid against, change what its LPs were told,
+  // so they sit with issuing: the Super Admin's, and the GP of record's for
+  // their own fund (rule 6).
+  act({ act: 'capital_call.correct', label: "Correct a capital call's due date or purpose", tier: 'super_admin', owner: '#6238',
+    sentence: "A Super Admin corrects an issued capital call.",
+    routes: ['POST /api/funds/:id/capital-calls/:callId/correct'] }),
+  act({ act: 'capital_call.withdraw', label: 'Withdraw a capital call with no receipts', tier: 'super_admin', owner: '#6238',
+    sentence: 'A Super Admin withdraws a capital call.',
+    routes: ['POST /api/funds/:id/capital-calls/:callId/withdraw'] }),
   act({ act: 'distribution.preview', label: 'Preview a distribution', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/distributions/preview'] }),
   act({ act: 'distribution.execute', label: 'Execute a distribution', tier: 'super_admin', owner: '#1779',

@@ -138,8 +138,8 @@ const column = (body: any, key: string) => body.records.rows.map((r: any) => tex
 const SLUGS = ['solution-design', 'prototype-mvp', 'product-roadmap', 'founding-team', 'company-creation', 'operating-systems'];
 /** CO:617-622: each list's title, columns, filters and default sort. */
 const CANVAS: Record<string, { title: string; name: string; cols: string[]; filters: string[]; sort: string }> = {
-  'solution-design': { title: 'Features', name: 'Solution design', cols: ['Feature', 'Pain theme', 'Hypothesis', 'Impact', 'Effort'], filters: ['Linked', 'Impact', 'Effort'], sort: 'Impact' },
-  'prototype-mvp': { title: 'Must-haves', name: 'Prototype / MVP', cols: ['Must-have', 'Tests', 'State', 'Owner', 'Due'], filters: ['State', 'Hypothesis'], sort: 'State' },
+  'solution-design': { title: 'Features', name: 'Solution design', cols: ['Feature', 'Evidence link', 'Impact', 'Effort'], filters: ['Evidence link', 'Impact', 'Effort'], sort: 'Impact' },
+  'prototype-mvp': { title: 'Must-haves', name: 'Prototype / MVP', cols: ['Must-have', 'Test', 'State', 'Owner', 'Due', 'Built', 'Tested'], filters: ['State', 'Hypothesis'], sort: 'State' },
   'product-roadmap': { title: 'Roadmap items', name: 'Product roadmap', cols: ['Item', 'Column', 'Moves', 'Owner', 'Date'], filters: ['Column', 'Theme', 'KPI'], sort: 'Column' },
   'founding-team': { title: 'Founders', name: 'Founding team', cols: ['Founder', 'Role', 'Equity', 'Vesting', 'Agreement'], filters: ['Role'], sort: 'Equity' },
   'company-creation': { title: 'Filings', name: 'Company creation', cols: ['Filing', 'Jurisdiction', 'Due', 'State', 'Proof'], filters: ['State', 'Due'], sort: 'Due' },
@@ -191,6 +191,9 @@ test('test 11: filters read each row\'s keys, never a hidden cell', async () => 
   // #5067: feature 2 has a hypothesis (no pain theme) and now counts as linked.
   assert.deepEqual(await ids('solution-design', 'linked:no'), [3]);
   assert.deepEqual(await ids('solution-design', 'linked:yes'), [1, 4, 2]);
+  // #6030 (BD7): the evidence filter names its link kind.
+  assert.deepEqual(await ids('solution-design', 'evidence:none'), [3]);
+  assert.deepEqual(await ids('solution-design', 'evidence:hypothesis'), [2], 'a hypothesis-only feature is Hypothesis linked, never unlinked');
   assert.deepEqual(await ids('solution-design', 'impact:high'), [1, 4]);
   assert.deepEqual(await ids('solution-design', 'effort:high'), [4, 2], 'an old XL is High');
   assert.deepEqual(await ids('prototype-mvp', 'state:in_progress'), [2], 'an old Review is In progress');
@@ -206,13 +209,36 @@ test('test 11: filters read each row\'s keys, never a hidden cell', async () => 
   db.close();
 });
 
+// #6030 (BD7). Mutation checked: a both-linked feature counted as hypothesis (fails); the none count dropped (fails);
+// must_have from `is_must_have` instead of scope (fails); on_roadmap read without the OKR link (fails).
+test('#6030: each evidence option carries its count, and each row its scope, must-have and roadmap marks', async () => {
+  const db = seeded();
+  db.exec(`UPDATE roadmap_okrs SET feature_id = 4 WHERE id = 2`);
+  const body = (await read(db, 'solution-design')).body;
+  const evidence = body.records.filters.find((f: any) => f.key === 'evidence');
+  assert.deepEqual(evidence.options, [
+    { value: 'pain', label: 'Pain linked', count: 2 },
+    { value: 'hypothesis', label: 'Hypothesis linked', count: 1 },
+    { value: 'none', label: 'No evidence link', count: 1 },
+  ]);
+  assert.ok(!body.records.filters.some((f: any) => f.label === 'Linked'), 'the word Linked is not a filter');
+  const keys = Object.fromEntries(body.records.rows.map((r: any) => [r.id, [r.keys.evidence, r.keys.scope, r.keys.must_have, r.keys.on_roadmap]]));
+  assert.deepEqual(keys, {
+    1: ['pain', 'core', 'yes', 'no'], 2: ['hypothesis', null, 'no', 'no'],
+    3: ['none', null, 'no', 'no'], 4: ['pain', 'out', 'no', 'yes'],
+  });
+  db.close();
+});
+
 test('test 11: cells read the canvas\'s words', async () => {
   const db = seeded();
   const solution = (await read(db, 'solution-design')).body.records.rows;
   const byId = (rows: any[], id: unknown) => rows.find((r: any) => r.id === id);
-  assert.deepEqual(byId(solution, 3).cells.pain_theme, { text: 'Links to nothing', tone: 'bad' });
-  assert.equal(byId(solution, 2).cells.pain_theme, null, 'a hypothesis is a link: not "Links to nothing"');
-  assert.equal(byId(solution, 1).cells.pain_theme, 'Manual reconciliation');
+  // #6030 (BD7): one evidence cell, linking the records it cites.
+  assert.deepEqual(byId(solution, 3).cells.evidence, { text: 'No evidence link', tone: 'warn' });
+  assert.ok(byId(solution, 2).cells.evidence.links?.every((l: any) => l.text.startsWith('Hypothesis · ')), 'a hypothesis is a link: not "No evidence link"');
+  assert.equal(byId(solution, 1).cells.evidence.links[0].text, 'Pain · Manual reconciliation');
+  assert.match(byId(solution, 1).cells.evidence.links[0].href, /^\/validate\/problem-discovery\/\d+\?project=\d+$/);
   const roadmap = (await read(db, 'product-roadmap')).body.records.rows;
   assert.deepEqual(roadmap.map((r: any) => [r.id, r.cells.moves]), [[3, 'activation'], [4, null], [2, 'Control'], [1, 'Speed · mrr']]);
   const founders = (await read(db, 'founding-team')).body.records.rows;
@@ -446,7 +472,7 @@ const pillText = (body: any) => body.pills.map((p: any) => (typeof p === 'string
 const RECORD_CANVAS: Record<string, { id: string | number; facts: string[]; main: string[]; side: string[] }> = {
   'solution-design': { id: 1, facts: ['Pain theme', 'Hypothesis', 'Impact', 'Effort'], main: ['Description', 'Risks'], side: ['Appears in', 'Brief'] },
   'prototype-mvp': { id: 1, facts: ['Owner', 'Due', 'Hypothesis', 'Tests run'], main: ['Test sessions', 'Findings'], side: ['Linked', 'Release checklist'] },
-  'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date'], main: ['Dependencies', 'Feedback it answers'], side: ['GitHub', 'Public roadmap'] },
+  'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date'], main: ['Dependencies', 'Feedback it answers'], side: ['GitHub'] },
   'founding-team': { id: 'h-1', facts: ['Role', 'Equity', 'Vesting', 'Vested today'], main: ['Vesting timeline', 'Contributions'], side: ['Documents', 'Cap table'] },
   'company-creation': { id: 'step-2', facts: ['Filing', 'Jurisdiction', 'Due', 'Proof'], main: ['Steps', 'Reminders'], side: ['Linked'] },
   'operating-systems': { id: 'crm', facts: ['State', 'Last sync', 'Sync', 'Feeds'], main: ['Sync log', 'Permissions'], side: ['Companies'] },
@@ -475,7 +501,9 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
   const solution = (await one(db, 'solution-design', 1)).body;
   assert.deepEqual(pillText(solution), ['High impact', 'Low effort']);
   assert.deepEqual(pillText((await one(db, 'solution-design', 2)).body), ['Low impact', 'High effort', 'Out of scope'], 'a NULL scope with Low impact reads Out of scope');
-  assert.deepEqual(section(solution, 'risks').rows, [{ a: 'Bank API rate limits', b: 'Tomas Reyes', c: 'High', tone: 'bad' }]);
+  // D6023 (#6023): owner, state and mitigation beside the severity; a writer's row opens Edit a risk.
+  assert.deepEqual(section(solution, 'risks').rows, [{ a: 'Bank API rate limits', b: 'Owner: Tomas Reyes · State: Open · Mitigation: Not recorded',
+    c: 'High', tone: 'bad', action: { key: 'edit-risk', body: { risk_id: 1 } } }]);
   assert.deepEqual(section(solution, 'appears_in').rows.map((r: any) => [r.a, r.b, r.href]), [
     ['Prototype / MVP', 'Must-have', `/build/prototype-mvp/1?project=${P}`], ['Roadmap', 'Bank coverage · Now', `/build/product-roadmap/3?project=${P}`]]);
   assert.equal(section(solution, 'brief').rows[0].a, 'Not recorded');
@@ -498,7 +526,9 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
   // D782 (#2111): the panel also names the issue's milestone and the release that shipped the item.
   assert.deepEqual(section(item, 'github').rows.map((r: any) => [r.a, r.b]), [['Issue #7', 'synced 12 Oct 2026'], ['State', 'Not recorded: the sync stores no issue state.'],
     ['Milestone', 'In no milestone'], ['Shipped', 'Not shipped: no release names it or closes it.']]);
-  assert.equal(section(item, 'public').rows[0].a, 'Not recorded');
+  // D6044 (#6044): the owner removed the Public roadmap section; no section claims a page that does not exist.
+  assert.equal(section(item, 'public'), undefined);
+  assert.doesNotMatch(JSON.stringify(item), /public roadmap/i);
   db.close();
 });
 

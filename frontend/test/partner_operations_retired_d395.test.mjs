@@ -53,7 +53,7 @@ const SUCCESSOR = {
 // ── The redirects ───────────────────────────────────────────────────────────
 
 test('D2319 retires the unused Partner operations aliases', () => {
-  for (const [from, to] of Object.entries(SUCCESSOR)) {
+  for (const from of Object.keys(SUCCESSOR)) {
     const line = routeLine(from);
     assert.equal(line, null, `${from} retired by D2319`);
   }
@@ -209,8 +209,9 @@ test('D395: a proposal can be withdrawn while it is submitted, and only then', (
     assert.equal(canWithdraw({ status }), false, `${status} offers Withdraw`);
   }
   const zone = codeOnly(raw('frontend/src/pages/partner/pipeline/ProposalsZone.jsx'));
-  assert.match(zone, /node: canWithdraw\(r\) \? \(/, 'the Withdraw control is not gated on canWithdraw');
-  assert.match(zone, /api\.withdrawQuote\(r\.quote_id\)/, 'Withdraw does not reach the quote route');
+  // D4838 PP04 (#5937): Withdraw moved from the row's Signal cell into the sheet's Outcome tab.
+  assert.match(zone, /\{canWithdraw\(row\) && \(/, 'the Withdraw control is not gated on canWithdraw');
+  assert.match(zone, /api\.withdrawQuote\(row\.quote_id\)/, 'Withdraw does not reach the quote route');
   const worker = raw('cloudflare-worker/src/routes/needs.ts');
   assert.match(worker, /if \(q\.status !== 'submitted'\) return c\.json\(\{ detail: 'Only submitted quotes may be withdrawn' \}, 409\);/,
     'the Worker rule this mirrors moved');

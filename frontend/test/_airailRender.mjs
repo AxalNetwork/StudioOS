@@ -166,18 +166,15 @@ export const RENDER_NOT_YET = {
     'Founder /raise/legal-engine',
   ],
   2098: [
-    'Investor /funds/performance',
   ],
   2099: [
   ],
   2100: [
-    'Admin /admin/fund-admin',
     'Admin /admin/programs/spinout-lab/applications',
     'Admin /admin/spinout-moderation',
     'Admin /admin/programs/spinout-lab',
   ],
   2101: [
-    'Super Admin /admin/fund-admin',
     'Super Admin /admin/revenue/disputes',
   ],
   offCanvas: [
@@ -313,10 +310,13 @@ export async function railRenderer() {
     try { await import(pathToFileURL(file).href); } catch { /* a module that cannot load under node stays lazy */ }
   }
 
+  const { useAskPanel } = await import('../src/ui/eadwynPanel.js');
+  let ask = null;
   let at = null;
   function Landed() {
     const l = useLocation();
     at = l;
+    ask = useAskPanel();
     return null;
   }
   // React reports what a page does with a stub's answer (a refusal, a missing
@@ -376,6 +376,8 @@ export async function railRenderer() {
         state: nextState,
         escaped,
         rails: rails.length,
+        askAvailable: ask?.available ?? false,
+        askPage: ask?.page ?? null,
         keys: rails.map((a) => a.getAttribute('data-page-key')),
         landed,
         expected: pageKeyFor(at?.pathname ?? '', profile, { search: at?.search ?? '', hash: at?.hash ?? '' }),

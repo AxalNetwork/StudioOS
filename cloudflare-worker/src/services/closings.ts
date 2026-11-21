@@ -134,13 +134,18 @@ function event(env: Env, closingId: number, lineId: number | null, actor: number
   ).bind(closingId, lineId, actor, name, sourceRef, now());
 }
 
-/** The line's status from its evidence: withdrawn stays; receiving evidence is received; sending alone is sent. */
+/**
+ * The line's status from its evidence: withdrawn stays; receiving evidence is
+ * received; sending evidence, or the investor's own declaration (D6198), alone
+ * is sent. A declaration never makes a line received.
+ */
 export function recompute(env: Env, lineId: number) {
   return env.DB.prepare(
     `UPDATE closing_lines SET status = CASE
         WHEN status = 'withdrawn' THEN 'withdrawn'
         WHEN EXISTS (SELECT 1 FROM closing_evidence e WHERE e.line_id = closing_lines.id AND e.side = 'receiving' AND e.withdrawn_at IS NULL) THEN 'received'
         WHEN EXISTS (SELECT 1 FROM closing_evidence e WHERE e.line_id = closing_lines.id AND e.side = 'sending' AND e.withdrawn_at IS NULL) THEN 'sent'
+        WHEN EXISTS (SELECT 1 FROM closing_sender_declarations d WHERE d.line_id = closing_lines.id AND d.withdrawn_at IS NULL) THEN 'sent'
         ELSE 'open' END,
       updated_at = ?
       WHERE id = ?`,
@@ -181,17 +186,24 @@ export async function listClosings(env: Env, user: User) {
  * One closing as the caller may read it. `total_cents` is the round's total
  * (every line not withdrawn), which every reader sees; `lines` are every line
  * for an admin or the founder, and only the caller's own for anyone else.
+ * `for_investor` (D6199) is the caller's own part when they read through a
+ * line of their own, and null for an admin or the founder.
+ * D6889: each event carries `actor_name`; for an admin or the founder each
+ * line carries `in_portfolio`, and for an admin `portfolio_position_uid`.
  */
 export async function readClosing(env: Env, user: User, closingUid: string) {
   const { closing, reach } = await readable(env, user, closingUid);
   // An investor's own lines only: `investor_user_id` matched to the caller, or every line (-1 matches none).
+  // D6195: each line carries its commitment's route preference (null for a prospect line or none
+  // recorded), beside the route the studio sets; the preference never sets `route`.
   const lines = await env.DB.prepare(
     `SELECT l.id, l.uid, l.commitment_id, l.prospect_id, l.investor_user_id, l.route, l.amount_cents, l.currency, l.envelope_id,
             l.safe_issuance_uid, l.vehicle_ref, l.status, l.created_at, l.updated_at,
-            COALESCE(u.name, rp.name) AS investor_name
+            COALESCE(u.name, rp.name) AS investor_name, cm.route_preference AS route_preference
        FROM closing_lines l
        LEFT JOIN users u ON u.id = l.investor_user_id
        LEFT JOIN raise_prospects rp ON rp.id = l.prospect_id
+       LEFT JOIN commitments cm ON cm.id = l.commitment_id
       WHERE l.closing_id = ? AND (? = 0 OR l.investor_user_id = ?)
       ORDER BY l.id`,
   ).bind(closing.id, reach === 'own' ? 1 : 0, reach === 'own' ? Number(user.id) : -1).all<any>();
@@ -204,6 +216,16 @@ export async function readClosing(env: Env, user: User, closingUid: string) {
             e.withdrawn_at, e.withdrawn_reason, e.created_at
        FROM closing_evidence e WHERE e.line_id IN (SELECT value FROM json_each(?)) ORDER BY e.id`,
   ).bind(JSON.stringify(ids)).all<any>() : { results: [] };
+  // D6198: the investor's own declarations, beside the evidence. Never a bank memo or account number.
+  const declared = ids.length ? await env.DB.prepare(
+    `SELECT d.uid, d.line_id, d.declared_by, d.sent_on, d.amount_cents, d.reference, d.withdrawn_at, d.created_at
+       FROM closing_sender_declarations d WHERE d.line_id IN (SELECT value FROM json_each(?)) ORDER BY d.id`,
+  ).bind(JSON.stringify(ids)).all<any>() : { results: [] };
+  const declByLine = new Map<number, any[]>();
+  for (const d of declared.results || []) {
+    const { line_id: _line, ...rest } = d;
+    declByLine.set(Number(d.line_id), [...(declByLine.get(Number(d.line_id)) || []), rest]);
+  }
   const byLine = new Map<number, any[]>();
   for (const e of evidence.results || []) {
     const list = byLine.get(Number(e.line_id)) || [];
@@ -211,10 +233,42 @@ export async function readClosing(env: Env, user: User, closingUid: string) {
     list.push(rest);
     byLine.set(Number(e.line_id), list);
   }
+  // D6889: the actor's name beside the id, under the events' own rule (reach 'all' only). An
+  // account that no longer exists, or has no name, reads null: "Not recorded", never a guess.
   const events = reach === 'all' ? ((await env.DB.prepare(
-    `SELECT ev.event, ev.line_id, ev.actor_user_id, ev.source_ref, ev.created_at FROM closing_events ev WHERE ev.closing_id = ? ORDER BY ev.id`,
+    `SELECT ev.event, ev.line_id, ev.actor_user_id, au.name AS actor_name, ev.source_ref, ev.created_at
+       FROM closing_events ev LEFT JOIN users au ON au.id = ev.actor_user_id WHERE ev.closing_id = ? ORDER BY ev.id`,
   ).bind(closing.id).all<any>()).results || []) : null;
+  // D6889: the Portfolio position recorded for each line (`portfolio_positions.closing_line_uid`, 612,
+  // written by POST /api/positions). Only the record's link counts: a position recorded without naming
+  // the line is not matched by venture or round. An admin reads the position's uid; the founder reads
+  // whether one exists; an investor reads neither (positions are a fund's record, D1057).
+  const positionByLine = new Map<string, string>();
+  if (reach === 'all' && ids.length) {
+    const linked = await env.DB.prepare(
+      `SELECT l.uid AS line_uid, (SELECT pp.uid FROM portfolio_positions pp WHERE pp.closing_line_uid = l.uid ORDER BY pp.id LIMIT 1) AS position_uid
+         FROM closing_lines l WHERE l.id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(ids)).all<any>();
+    for (const r of linked.results || []) if (r.position_uid) positionByLine.set(String(r.line_uid), String(r.position_uid));
+  }
+  const portfolioOf = (lineUid: string) => {
+    if (reach !== 'all') return {};
+    const position = positionByLine.get(lineUid) ?? null;
+    return isAdmin(user) ? { in_portfolio: position !== null, portfolio_position_uid: position } : { in_portfolio: position !== null };
+  };
   const all = await env.DB.prepare('SELECT status FROM closing_lines WHERE closing_id = ?').bind(closing.id).all<{ status: string }>();
+  const captable = captableState(closing, (all.results || []).map((r) => r.status));
+  // D6199: the investor's own part (what waits on them, a count of the rest, their summary and duties). Never for reach 'all'.
+  // A failure here costs only this part, which then says Unreadable; the line and the total still answer.
+  let forInvestor: Record<string, unknown> | null = null;
+  if (reach === 'own') {
+    try {
+      forInvestor = await (await import('./closingInvestorRoom')).investorRoom(env, user, closing, lines.results || [], byLine, captable);
+    } catch {
+      console.warn('[closings] the investor’s part of a closing could not be read');
+      forInvestor = { unreadable: true };
+    }
+  }
   return {
     uid: closing.uid,
     deal_id: closing.deal_id,
@@ -231,12 +285,13 @@ export async function readClosing(env: Env, user: User, closingUid: string) {
     reach,
     total_cents: Number(total?.cents ?? 0),
     line_count: Number(total?.n ?? 0),
-    captable: { state: captableState(closing, (all.results || []).map((r) => r.status)), decided_at: closing.captable_decided_at },
+    captable: { state: captable, decided_at: closing.captable_decided_at },
     lines: (lines.results || []).map((l: any) => {
       const { id: _id, ...rest } = l;
-      return { ...rest, evidence: byLine.get(Number(l.id)) || [] };
+      return { ...rest, evidence: byLine.get(Number(l.id)) || [], sender_declarations: declByLine.get(Number(l.id)) || [], ...portfolioOf(String(l.uid)) };
     }),
     events,
+    for_investor: forInvestor,
   };
 }
 
@@ -439,6 +494,89 @@ export async function addEvidence(env: Env, user: User, closingUid: string, line
     event(env, closing.id, line.id, Number(user.id), 'evidence_added', `closing_evidence:${evidenceUid}`),
   ]);
   return evidenceUid;
+}
+
+/** D6198: a reference that looks like an account or card number is refused: no bank details are kept. */
+const ACCOUNT_LIKE = /\d[\d\s-]{6,}\d|\b[A-Z]{2}\d{2}[A-Z0-9]{8,}\b/i;
+
+/**
+ * D6198 (#6198): the investor records on their own line that they sent the
+ * money (date, amount, an optional short reference). The line reads Sent, not
+ * yet confirmed; it is never Received from this. Only the line's own investor
+ * may declare, on an open closing and a line not withdrawn or received; anyone
+ * else reads the line as missing. The closing's owner (else its opener) is
+ * told in the app.
+ */
+export async function declareSent(env: Env, user: User, closingUid: string, lineUid: string, body: any) {
+  const closing = await env.DB.prepare('SELECT id, uid, deal_id, status, owner_user_id, created_by, round_label FROM closings WHERE uid = ?')
+    .bind(String(closingUid)).first<any>();
+  const line = closing ? await env.DB.prepare('SELECT id, uid, investor_user_id, status, amount_cents, currency FROM closing_lines WHERE uid = ? AND closing_id = ?')
+    .bind(String(lineUid), closing.id).first<any>() : null;
+  // Another investor's line, a missing one and a missing closing read alike.
+  if (!closing || !line || line.investor_user_id == null || Number(line.investor_user_id) !== Number(user.id)) {
+    throw new ClosingRefusal(404, 'line_not_found', 'No line of yours on this closing has that id.');
+  }
+  if (closing.status !== 'open') throw new ClosingRefusal(409, 'closing_not_open', 'This closing is no longer open.');
+  if (line.status === 'withdrawn') throw new ClosingRefusal(409, 'line_withdrawn', 'This line is withdrawn.');
+  if (line.status === 'received') throw new ClosingRefusal(409, 'line_received', 'This line is already received.');
+  const sentOn = String(body?.sent_on ?? '');
+  const today = now().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sentOn) || Number.isNaN(Date.parse(`${sentOn}T00:00:00Z`)) || new Date(`${sentOn}T00:00:00Z`).toISOString().slice(0, 10) !== sentOn) {
+    throw new ClosingRefusal(400, 'sent_on_invalid', 'Give the day you sent it, as YYYY-MM-DD.');
+  }
+  if (sentOn > today) throw new ClosingRefusal(400, 'sent_on_future', 'The day you sent it cannot be in the future.');
+  const amount = body?.amount_cents;
+  if (!(typeof amount === 'number' && Number.isSafeInteger(amount) && amount > 0)) {
+    throw new ClosingRefusal(400, 'amount_invalid', 'Give the amount you sent, in cents, as a whole number above zero.');
+  }
+  const reference = body?.reference == null || body.reference === '' ? null : String(body.reference).trim();
+  if (reference !== null && (reference.length < 1 || reference.length > 40)) throw new ClosingRefusal(400, 'reference_invalid', 'A reference is up to 40 characters.');
+  if (reference !== null && ACCOUNT_LIKE.test(reference)) {
+    throw new ClosingRefusal(400, 'reference_account_like', 'Leave out account and card numbers. A short label of your own is enough.');
+  }
+  const active = await env.DB.prepare('SELECT 1 AS yes FROM closing_sender_declarations WHERE line_id = ? AND withdrawn_at IS NULL').bind(line.id).first();
+  if (active) throw new ClosingRefusal(409, 'already_declared', 'You already recorded that you sent it. Withdraw that first to change it.');
+  const declUid = uid();
+  await env.DB.batch([
+    env.DB.prepare(
+      'INSERT INTO closing_sender_declarations (uid, line_id, declared_by, sent_on, amount_cents, reference, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).bind(declUid, line.id, Number(user.id), sentOn, amount, reference, now()),
+    recompute(env, line.id),
+    // closing_events.event is a CHECK list (612): a declaration is logged as evidence, its source_ref naming the declaration.
+    event(env, closing.id, line.id, Number(user.id), 'evidence_added', `closing_sender_declaration:${declUid}`),
+  ]);
+  // After commit: a failed notice never undoes the declaration.
+  const studio = Number(closing.owner_user_id ?? closing.created_by);
+  let notified = false;
+  if (Number.isInteger(studio) && studio > 0) {
+    try {
+      const { notify } = await import('./notify');
+      notified = (await notify(env, {
+        userId: studio, type: 'closing_sender_declared', channels: ['in_app'], category: 'deals',
+        title: 'An investor says they sent their money',
+        body: `On ${closing.round_label || 'a closing'}: sent on ${sentOn}, not yet confirmed. Check the receiving account and record the evidence.`,
+        link: `/admin/contracts/closings/${Number(closing.deal_id)}`,
+        payload: { closing_uid: closing.uid, line_uid: line.uid },
+      })) !== null;
+    } catch { console.warn('[closings] the sender declaration notice failed'); }
+  }
+  return { uid: declUid, notified };
+}
+
+/** D6198: the investor withdraws their own active declaration; the line's status is recomputed. */
+export async function withdrawDeclaration(env: Env, user: User, closingUid: string, lineUid: string) {
+  const row = await env.DB.prepare(
+    `SELECT d.id, d.uid, d.line_id, c.id AS closing_id, c.status AS closing_status FROM closing_sender_declarations d
+       JOIN closing_lines l ON l.id = d.line_id JOIN closings c ON c.id = l.closing_id
+      WHERE c.uid = ? AND l.uid = ? AND d.declared_by = ? AND l.investor_user_id = ? AND d.withdrawn_at IS NULL`,
+  ).bind(String(closingUid), String(lineUid), Number(user.id), Number(user.id)).first<any>();
+  if (!row) throw new ClosingRefusal(404, 'declaration_not_found', 'You have no active declaration on this line.');
+  if (row.closing_status !== 'open') throw new ClosingRefusal(409, 'closing_not_open', 'This closing is no longer open.');
+  await env.DB.batch([
+    env.DB.prepare('UPDATE closing_sender_declarations SET withdrawn_at = ? WHERE id = ? AND withdrawn_at IS NULL').bind(now(), row.id),
+    recompute(env, Number(row.line_id)),
+    event(env, Number(row.closing_id), Number(row.line_id), Number(user.id), 'evidence_withdrawn', `closing_sender_declaration:${row.uid}`),
+  ]);
 }
 
 /** Withdraw a piece of evidence with a reason; the line's status is recomputed. */

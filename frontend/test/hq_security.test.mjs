@@ -14,6 +14,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { securityRaw } from './_securitySource.mjs';
+import { readAdminSecurity } from '../../cloudflare-worker/test/_admin_security_source.mjs';
 import { teamRaw, teamFile } from './_hqTeamSource.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -24,8 +26,8 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
-const PAGE = codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx'));
-const ROUTE = codeOnly(read('cloudflare-worker/src/routes/admin_security.ts'));
+const PAGE = codeOnly(securityRaw());
+const ROUTE = codeOnly(readAdminSecurity());
 const APP = read('frontend/src/App.jsx');
 
 test('the Security row sits between Support and Settings, and /admin/security is HQ-only', () => {
@@ -274,7 +276,7 @@ test('no note asserts a security fact while the overview is unreadable', () => {
   // An apex audit on 2026-09-03 found two notes that read as facts under a
   // failed read: 'every admin enrolled' with no MFA figures, and a hardcoded
   // 'not run' for sanctions. An unreadable overview says so, in every zone.
-  const src = codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx'));
+  const src = codeOnly(securityRaw());
   assert.match(src, /note=\{withoutMfa === null \? 'unreadable' :/, 'MFA: unreadable before enrolled');
   // D200 — the sanctions note became a card of the store's own figures. The
   // property this assertion carried is unchanged: under a FAILED overview

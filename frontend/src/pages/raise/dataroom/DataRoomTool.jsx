@@ -12,7 +12,7 @@ import DataRoomFiles from './DataRoomFiles.jsx';
 import DataRoomFile from './DataRoomFile.jsx';
 import DataRoomHome from './DataRoomHome.jsx';
 import DataRoomAccess from './DataRoomAccess.jsx';
-import DataRoomRequests from './DataRoomRequests.jsx';
+import DataRoomRequests, { DiligenceRequestsLink } from './DataRoomRequests.jsx';
 import DataRoomActivity from './DataRoomActivity.jsx';
 import DataRoomChecklist from './DataRoomChecklist.jsx';
 import DataRoomPreview from './DataRoomPreview.jsx';
@@ -20,8 +20,9 @@ import { noPermission } from './accessModel';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { useVenture } from '../../cycles/VentureContext.jsx';
 import {
-  HOME_PATH, LINE, TABS, TITLE, roomCan, tabHref, tabSearch,
+  HOME_PATH, LINE, TABS, TITLE, homeAction, roomCan, tabHref, tabSearch,
 } from './dataRoomModel';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { raiseReadState, raiseToolRefusal, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
@@ -58,14 +59,27 @@ export function DataRoomTabBar({ active, search = '' }) {
   );
 }
 
+const PHONE_ACTION = 'inline-flex min-h-[48px] w-full items-center justify-center rounded-[10px] bg-axal-violet px-4 text-[14px] font-bold text-white hover:bg-axal-violet-deep dark:bg-violet-600 dark:hover:bg-violet-500';
+
 /**
  * Home's tab bar and its own blocks (D1106, DR1). D1109: the old files tool is retired, so Home links to no other page.
  * D5074: the venture is the page's context (`useVenture`), never parsed from `search`, which only builds links.
+ *
+ * D5081 part 4 (#5081, RA-19): Home owns its page (CycleRoute passes `owned`). The room read needs the
+ * venture's uid from the page's venture context, which CycleRoute provides around the page rather than
+ * holds, so Home keeps the one read and reports the header's primary (`homeAction`) up through `onAction`,
+ * as it reports a refusal through `onRefused`. A phone's bar carries no action, so Home draws it full width.
  */
-export function DataRoomHomeNav({ search = '', onRefused = null }) {
+export function DataRoomHomeNav({ search = '', onRefused = null, onAction = null }) {
   const [reload, setReload] = useState(0);
   const venture = useVenture();
   const read = useRoom(venture, reload);
+  const phone = usePhoneWidth();
+  const action = homeAction(read, { search });
+  const label = action?.label || null;
+  const href = action?.href || null;
+  useEffect(() => { onAction?.(label && href ? { label, href } : null); }, [onAction, label, href]);
+  useEffect(() => () => onAction?.(null), [onAction]);
   /**
    * D5079 (#5079): the room read is this tool's authoritative read. A refusal,
    * and an admin's `summary` answer (which is not the room), both mean the
@@ -78,7 +92,9 @@ export function DataRoomHomeNav({ search = '', onRefused = null }) {
   useEffect(() => () => onRefused?.(null), [onRefused]);
   return (
     <div className="flex flex-col gap-3">
+      {phone && action ? <Link to={action.href} className={PHONE_ACTION} data-testid="dataroom-home-action">{action.label}</Link> : null}
       <DataRoomTabBar active="home" search={search} />
+      {read.status === 'ready' && !withheld && <DiligenceRequestsLink reload={reload} />}
       {venture.projectId ? <DataRoomHome read={read} retry={() => setReload((n) => n + 1)} search={search} /> : null}
     </div>
   );
@@ -199,12 +215,15 @@ function PreviewTab({ read, retry }) {
   );
 }
 
-export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, fileId = null, venture = null, viewer = 'admin', onSupportRead }) {
+export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, phone = false, fileId = null, venture = null, viewer = 'admin', onSupportRead }) {
   const navigate = useNavigate();
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const read = useRoom(useVenture(projectId), reload);
   const here = TABS.find((t) => t.id === tab) || TABS[0];
+  // D5081 part 4 (#5081, RA-19): the header's primary is the tool's own (Complete data room), from this tab's
+  // room read; none on Checklist, where it leads. Raise's Build your deck is never the action here.
+  const action = homeAction(read, { search, tab });
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;

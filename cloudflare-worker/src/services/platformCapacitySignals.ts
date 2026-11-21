@@ -9,6 +9,9 @@
  *   #4593  lifecycle repairs still owed: the sweep's `agent_repair_*` rows.
  *   #4558  the last verified restore: `drill-d1.json` in the backups bucket,
  *          read and validated by `services/backup.ts` (`readRestoreDrill`).
+ *   D4569  settled AI charges with no usage row (D4569 §1 fact 2): one
+ *          indexed count over `ai_budget_reservations` against
+ *          `ai_usage_logs.reservation_uid` (`readSettlementSignal`).
  *
  * Not read, with why (`SIGNALS_NOT_READ_HERE`): #4572, #4568, #4571 and #4556
  * shipped no record the Worker can read. They are listed, not invented.
@@ -28,7 +31,8 @@
  *
  * NO TENANT DATA. The sweep's rows are counts and ages with low-cardinality
  * labels (cadence, cursor reset, scanned); the drill marker is names, counts and
- * times. Nothing here names a member, company, agent, task, file or table.
+ * times; the settlement read returns one COUNT and never a hold. Nothing here
+ * names a member, company, agent, task or file.
  */
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
@@ -60,6 +64,69 @@ export const RESTORE_AGE_THRESHOLDS: Thresholds = {
   warning: DRILL_STALE_AFTER_DAYS * DAY_S, critical: 64 * DAY_S, hysteresis: DAY_S,
   basis: `Warning when the last passing drill is older than ${DRILL_STALE_AFTER_DAYS} days (the Security page's rule, D263); critical at 64 days is proposed. A failed or absent drill is critical.`,
 };
+
+/**
+ * Settled AI charges with no usage row (D4569 §1 fact 2). A run settles its
+ * hold, then `recordUsage` writes the `ai_usage_logs` row as a separate write
+ * and returns null when it cannot; the money is right (the hold and the ledger
+ * carry it) but the attribution is missing. The window is the hold's
+ * `created_at` (indexed with `status`), the settlement grace keeps a run between
+ * its settle and its row's insert from counting.
+ */
+export const SETTLEMENT_WINDOW_S = 24 * HOUR_S;
+export const SETTLEMENT_GRACE_S = 5 * 60;
+/** Proposed, not approved: any settled charge without its usage row is a warning; no critical level is proposed. */
+export const SETTLEMENT_WITHOUT_USAGE_THRESHOLDS: Thresholds = {
+  warning: 1, critical: Number.MAX_SAFE_INTEGER, hysteresis: 0,
+  basis: 'Proposed (#4559, D4569): any settled charge in the window without its usage row is a warning. No critical level is proposed. Not yet approved by the owner.',
+};
+/**
+ * The count, bound as (window start, window end, settled at or before), each a
+ * UTC `YYYY-MM-DD HH:MM:SS`. `idx_ai_reservations_review_created (status,
+ * created_at)` bounds the outer rows and `idx_ai_usage_logs_reservation_ref
+ * (reservation_uid, ...)` answers each NOT EXISTS: no full-table scan. Only
+ * holds an AI run took (`surface = 'ai'`: `aiRouter.run` and deck batches) are
+ * counted, because those are the paths that write a usage row under the hold;
+ * MCP and flow holds record their use in `api_usage_events`, and holds that
+ * name no surface (meeting bots, image draws, live transcription, every hold
+ * from before migration 632) are not covered. `_d1_bench.ts` counts the same
+ * statement as its `settled_without_usage` invariant.
+ */
+export const SETTLED_WITHOUT_USAGE_SQL = `SELECT COUNT(*) AS n FROM ai_budget_reservations r
+  WHERE r.status = 'settled' AND r.created_at >= ? AND r.created_at < ?
+    AND r.surface = 'ai'
+    AND r.actual_included_microusd + r.actual_topup_microusd > 0
+    AND r.updated_at <= ?
+    AND NOT EXISTS (SELECT 1 FROM ai_usage_logs u WHERE u.reservation_uid = r.uid)`;
+
+/** A Date as D1's own `datetime('now')` text: UTC `YYYY-MM-DD HH:MM:SS`. */
+export function sqlStamp(d: Date): string {
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+/** D4569: settled AI charges in the last 24 hours with no usage row naming their hold. */
+export async function readSettlementSignal(env: Partial<Env>, now: Date, timeoutMs = READ_TIMEOUT_MS): Promise<Metric> {
+  const b: Base = {
+    key: 'ai.settlement.without_usage_row', label: 'Settled AI charges without a usage row',
+    source: "ai_budget_reservations (status 'settled', surface 'ai', a non-zero charge) against ai_usage_logs.reservation_uid (D4569)",
+    unit: 'count', scope: 'deployment', thresholds: SETTLEMENT_WITHOUT_USAGE_THRESHOLDS,
+    window: `AI holds taken in the last ${SETTLEMENT_WINDOW_S / HOUR_S} hours (by when the hold was taken) and settled at least ${SETTLEMENT_GRACE_S / 60} minutes before the read.`,
+    sampling: 'One indexed count on each capacity read; not sampled. Holds from MCP tools, flows and surfaces that name none are not counted.',
+  };
+  const db = env.DB as any;
+  if (!db || typeof db.prepare !== 'function') return unavailable(b, 'The DB binding is not present on this Worker.');
+  const t = now.getTime();
+  try {
+    const row: any = await withTimeout(db.prepare(SETTLED_WITHOUT_USAGE_SQL).bind(
+      sqlStamp(new Date(t - SETTLEMENT_WINDOW_S * 1000)), sqlStamp(now), sqlStamp(new Date(t - SETTLEMENT_GRACE_S * 1000)),
+    ).first(), timeoutMs);
+    const n = row == null || row.n === null || row.n === undefined ? NaN : Number(row.n);
+    if (!Number.isSafeInteger(n) || n < 0) return unavailable(b, 'The reservations read answered without a count.');
+    return measured(b, n, now.toISOString(), levelFor(n, SETTLEMENT_WITHOUT_USAGE_THRESHOLDS));
+  } catch (e) {
+    return unavailable(b, (e as Error)?.message === 'timeout' ? 'The reservations read did not answer in time.' : 'The reservations and usage rows could not be read.');
+  }
+}
 
 /** The issues whose signals this read does not make, and why. */
 export const SIGNALS_NOT_READ_HERE = [
@@ -279,6 +346,8 @@ export async function readRestoreSignal(env: Partial<Env>, now: Date, timeoutMs 
 
 /** Every part 3 signal. Each fails into its own state; none fails the read. */
 export async function readOperationalSignals(env: Partial<Env>, now: Date, timeoutMs = READ_TIMEOUT_MS): Promise<Metric[]> {
-  const [agents, restore] = await Promise.all([readAgentSweepSignals(env, now, timeoutMs), readRestoreSignal(env, now, timeoutMs)]);
-  return [...agents, restore];
+  const [agents, restore, settlement] = await Promise.all([
+    readAgentSweepSignals(env, now, timeoutMs), readRestoreSignal(env, now, timeoutMs), readSettlementSignal(env, now, timeoutMs),
+  ]);
+  return [...agents, restore, settlement];
 }

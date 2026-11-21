@@ -6,10 +6,13 @@
  * `ddCaseModel.js`; the dialogs are `DdCaseDialogs.jsx`.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Lightbox, usePhoneWidth } from '../../ui';
 import { dd } from '../../lib/api';
 import {
-  ACTIVITY_CAP, FLAG_STATES, FLAG_STATE_WORD, ITEM_FILTERS, ITEM_STATUS_WORD, NOT_RECORDED, SOURCE_WORD, WHO, activityFilters,
-  activityRows, bandWord, caseTiles, decisionStrip, evidenceByItem, filterItems, flagRows, flagSourceWord, flagsHeadline,
+  ACTIVITY_CAP, FLAG_STATES, FLAG_STATE_WORD, ITEM_FILTERS, ITEM_STATUS_WORD, LINK_LINE, NOT_RECORDED, NO_REMOVE_LINE, SEVERITY_STATUSES,
+  SOURCE_WORD, WHO, activityFilters, activityRows, bandWord, caseContextLinks, caseRefusal, caseTiles, decisionStrip, evidenceByItem, evidenceRows,
+  filterItems, flagRows, flagSourceWord, flagsHeadline,
   fmtDay, itemCounts, may, maySection, peopleOf, personName, sectionRow,
 } from './ddCaseModel.js';
 import { SEVERITY_WORD } from './ddListModel.js';
@@ -53,15 +56,53 @@ export function Block({ title, testId, action, children }) {
 
 const thCls = 'px-3 py-2 text-left font-mono text-[10.5px] font-semibold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400';
 const tdCls = 'px-3 py-2 align-top text-[13px] text-gray-800 dark:text-gray-200';
-export const Table = ({ head, children, testId }) => (
-  <div className="overflow-x-auto">
-    <table className="w-full min-w-[560px] border-collapse" data-testid={testId}>
+export function Table({ head, children, testId }) {
+  const phone = usePhoneWidth('(max-width: 767px)');
+  if (phone) {
+    return (
+      <div className="min-w-0 divide-y divide-axal-hairline dark:divide-gray-800" data-testid={testId}>
+        {React.Children.map(children, (row) => (
+          <div className="grid min-w-0 gap-2 py-3" data-testid={row.props['data-testid']}>
+            {React.Children.map(row.props.children, (cell, index) => cell && (
+              <div className={`min-w-0 break-words text-[13px] ${cell.props.className || ''}`}>
+                {head[index] ? <div className={eyebrowCls}>{head[index]}</div> : null}
+                {cell.props.children}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] border-collapse" data-testid={testId}>
       <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{head.map((h) => <th key={h} className={thCls}>{h}</th>)}</tr></thead>
       <tbody>{children}</tbody>
-    </table>
-  </div>
-);
+      </table>
+    </div>
+  );
+}
 export const Td = ({ children, className = '' }) => <td className={`${tdCls} ${className}`}>{children}</td>;
+
+/** A file's two-minute link, issued to the caller alone (D1248); a refusal is said beside it. */
+export function OpenLink({ uid, kind, id, name }) {
+  const [refused, setRefused] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setRefused(null);
+    try { const r = await dd.documentLink(uid, kind, id); if (r?.url) window.open(r.url, '_blank', 'noopener,noreferrer'); }
+    catch (e) { setRefused(caseRefusal(e, 'The file could not be opened.')); }
+    finally { setBusy(false); }
+  };
+  return (
+    <span className="flex flex-col">
+      <button type="button" className="w-fit text-left font-semibold text-violet-700 underline dark:text-violet-300" onClick={go} aria-label={`Open ${name}`}>{busy ? 'Opening…' : 'Open'}</button>
+      {refused ? <span role="alert" className="text-[12px] text-red-700 dark:text-red-300">{refused}</span> : null}
+    </span>
+  );
+}
 
 const SEV_CLS = {
   critical: 'bg-red-600 text-white', high: 'bg-orange-500 text-white', medium: 'bg-amber-300 text-amber-950',
@@ -99,6 +140,7 @@ export function DecisionStrip({ data, onDecide }) {
 
 export function OverviewTab({ data, focusSection, open, sectionRefs }) {
   const cs = data.case;
+  const links = caseContextLinks(cs);
   const score = cs.risk_score != null ? Math.round(Number(cs.risk_score) * 100) : null;
   const assign = may(data, 'assign') && !cs.scoped;
   return (
@@ -146,11 +188,13 @@ export function OverviewTab({ data, focusSection, open, sectionRefs }) {
             <div className={`text-[12.5px] ${muted}`}>{score == null ? 'No score yet' : `Score ${score} of 100`}</div>
           </Block>
           {!cs.scoped && (
-            <Block title="Deal context" testId="dd-deal">
+            <Block title="Deal context" testId="dd-deal" action={may(data, 'update') ? <button type="button" className={`${btnCls} max-sm:min-h-11`} onClick={() => open('deal-context')} data-testid="dd-deal-context-open">Edit deal context</button> : <Who text="The case lead or an Admin edits deal context." testId="dd-who-context" />}>
               <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
                 <dt className={muted}>Round</dt><dd className="m-0">{cs.round_label || NOT_RECORDED}</dd>
                 <dt className={muted}>Cheque</dt><dd className="m-0">{cs.cheque_cents != null ? codeAmount(Number(cs.cheque_cents), cs.cheque_currency, { trimWhole: true }) : NOT_RECORDED}</dd>
-                <dt className={muted}>Deal</dt><dd className="m-0">{cs.deal_id != null ? `Deal #${cs.deal_id}` : NOT_RECORDED}</dd>
+                <dt className={muted}>Deal</dt><dd className="m-0">{links.deal ? <Link className="text-violet-700 underline dark:text-violet-300" to={links.deal} data-testid="dd-context-deal">Deal #{cs.deal_id}</Link> : NOT_RECORDED}</dd>
+                {cs.subject_type === 'project' && <><dt className={muted}>Company</dt><dd className="m-0">{links.company ? <Link className="text-violet-700 underline dark:text-violet-300" to={links.company} data-testid="dd-context-company">{cs.subject_label || 'Open company'}</Link> : NOT_RECORDED}</dd></>}
+                {links.dataRoom && <><dt className={muted}>Data room</dt><dd className="m-0"><Link className="text-violet-700 underline dark:text-violet-300" to={links.dataRoom} data-testid="dd-context-data-room">Open data room</Link></dd></>}
               </dl>
             </Block>
           )}
@@ -173,15 +217,24 @@ export function OverviewTab({ data, focusSection, open, sectionRefs }) {
 
 const SEGMENTS = ['pending', 'pass', 'flag', 'fail', 'n_a'];
 
-function ItemRow({ item, people, evidence, works, picked, onPick, open }) {
-  const set = (status) => { if (status !== item.status) open('item', { item, status }); };
+function ItemRow({ uid, item, people, evidence, works, picked, onPick, open }) {
+  const [actions, setActions] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const set = (status) => {
+    setActions(false);
+    if (status !== item.status) open('item', { item, status });
+  };
   return (
     <li className="flex flex-col gap-1 border-t border-axal-hairline py-2 first:border-t-0 dark:border-gray-800" data-testid={`dd-item-${item.id}`}>
       <div className="flex flex-wrap items-center gap-2">
         {works ? <input type="checkbox" checked={picked} onChange={() => onPick(item.id)} aria-label={`Choose ${item.title}`} data-testid={`dd-item-pick-${item.id}`} /> : null}
         <span className="min-w-0 flex-1 text-[13px]">{item.title}</span>
         {works ? (
-          <div className="flex overflow-hidden rounded-lg border border-axal-hairline dark:border-gray-700" role="group" aria-label={`Status of ${item.title}`}>
+          <>
+          <button type="button" className={`${btnCls} md:hidden`} onClick={() => setActions(true)} data-testid={`dd-item-actions-${item.id}`}>
+            {ITEM_STATUS_WORD[item.status] || NOT_RECORDED} · Actions
+          </button>
+          <div className="hidden overflow-hidden rounded-lg md:flex border border-axal-hairline dark:border-gray-700" role="group" aria-label={`Status of ${item.title}`}>
             {SEGMENTS.map((s) => (
               <button key={s} type="button" aria-pressed={item.status === s} onClick={() => set(s)} data-testid={`dd-item-${item.id}-${s}`}
                 className={`px-2 py-1 text-[11.5px] font-semibold ${item.status === s ? 'bg-violet-600 text-white dark:bg-violet-500' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'}`}>
@@ -189,19 +242,77 @@ function ItemRow({ item, people, evidence, works, picked, onPick, open }) {
               </button>
             ))}
           </div>
+          {actions ? (
+            <Lightbox label={item.title} title={item.title} phone="sheet" onClose={() => setActions(false)} testId={`dd-item-sheet-${item.id}`}>
+              <div className="grid gap-2 p-4">
+                {SEGMENTS.map((status) => (
+                  <button key={status} type="button" className={btnCls} aria-pressed={item.status === status} onClick={() => set(status)}>
+                    {ITEM_STATUS_WORD[status]}
+                  </button>
+                ))}
+              </div>
+            </Lightbox>
+          ) : null}
+          </>
         ) : <span className="text-[12px] font-semibold" data-testid={`dd-item-status-${item.id}`}>{ITEM_STATUS_WORD[item.status] || NOT_RECORDED}</span>}
       </div>
-      <div className={`flex flex-wrap gap-3 text-[12px] ${muted}`}>
+      <div className={`flex flex-wrap items-center gap-3 text-[12px] ${muted}`}>
         <span>Owner: {personName(people, item.owner_user_id) || 'No owner'}</span>
         <span>{item.due_date ? `Due ${fmtDay(item.due_date)}` : 'No due date'}</span>
         <span>{evidence == null ? 'Evidence: Not recorded' : `Evidence: ${evidence.length || 'none'}`}</span>
-        {item.note ? <span>Note: {item.note}</span> : null}
+        {item.note && !expanded ? <span>Note: {item.note}</span> : null}
+        <button type="button" className="min-h-11 font-semibold text-violet-700 underline md:min-h-0 dark:text-violet-300" aria-expanded={expanded}
+          aria-controls={`dd-item-detail-${item.id}`} onClick={() => setExpanded((x) => !x)} data-testid={`dd-item-expand-${item.id}`}>
+          {expanded ? 'Hide details' : 'Details'}
+        </button>
       </div>
+      {expanded ? <ItemDetail uid={uid} item={item} people={people} evidence={evidence} works={works} open={open} /> : null}
     </li>
   );
 }
 
-export function ChecklistTab({ data, open }) {
+/** DDL4, one row expanded (#6290): the item's note, severity, owner, due date and evidence. */
+function ItemDetail({ uid, item, people, evidence, works, open }) {
+  const rows = evidenceRows(evidence);
+  const severe = SEVERITY_STATUSES.includes(item.status);
+  return (
+    <div id={`dd-item-detail-${item.id}`} className="mt-1 flex flex-col gap-2 rounded-lg border border-axal-hairline bg-gray-50 p-3 text-[12.5px] dark:border-gray-800 dark:bg-gray-800/40" data-testid={`dd-item-detail-${item.id}`}>
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dt className={muted}>Note</dt><dd className="m-0 whitespace-pre-wrap" data-testid={`dd-item-note-${item.id}`}>{item.note || 'No note'}</dd>
+        <dt className={muted}>Severity</dt>
+        <dd className="m-0" data-testid={`dd-item-severity-${item.id}`}>{severe ? (item.severity ? <Severity s={item.severity} /> : NOT_RECORDED) : 'Set on an item marked Flag or Fail'}</dd>
+        <dt className={muted}>Owner</dt><dd className="m-0">{personName(people, item.owner_user_id) || 'No owner'}</dd>
+        <dt className={muted}>Due</dt><dd className="m-0">{item.due_date ? fmtDay(item.due_date) : 'No due date'}</dd>
+      </dl>
+      <div data-testid={`dd-item-evidence-${item.id}`}>
+        <div className={eyebrowCls}>Evidence</div>
+        {rows == null ? <p className="m-0">Not recorded: the case read could not carry this item’s evidence.</p>
+          : !rows.length ? <p className={`m-0 ${muted}`}>No evidence on this item yet.</p> : (
+            <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
+              {rows.map((e) => (
+                <li key={e.key} className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid={`dd-item-evidence-row-${e.key}`}>
+                  <span className="font-semibold">{e.name}</span>
+                  <span className={muted}>{e.kind === 'file' ? 'File' : 'Link'} · {e.by} · {e.at}</span>
+                  {e.kind === 'file' && e.attachmentId ? <OpenLink uid={uid} kind="attachment" id={e.attachmentId} name={e.name} />
+                    : e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-violet-700 underline dark:text-violet-300">Visit link</a> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        {rows?.some((e) => e.kind === 'file') ? <p className={`m-0 mt-1 text-[12px] ${muted}`}>{LINK_LINE}</p> : null}
+      </div>
+      {works ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={btnCls} onClick={() => open('evidence', { item })} data-testid={`dd-evidence-open-${item.id}`}>Add evidence</button>
+          <button type="button" className={btnCls} onClick={() => open('item-edit', { item })} data-testid={`dd-item-edit-open-${item.id}`}>Edit item</button>
+          <span className={`text-[12px] ${muted}`} data-testid={`dd-item-no-remove-${item.id}`}>{NO_REMOVE_LINE}</span>
+        </div>
+      ) : <Who text={WHO.work} testId={`dd-who-item-${item.id}`} />}
+    </div>
+  );
+}
+
+export function ChecklistTab({ uid, data, open }) {
   const [chip, setChip] = useState('all');
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState([]);
@@ -243,7 +354,7 @@ export function ChecklistTab({ data, open }) {
             {!all.length ? <p className={`m-0 text-[12.5px] ${muted}`}>This section has no checklist items.</p> : (
               <ul className="m-0 list-none p-0">
                 {items.map((i) => (
-                  <ItemRow key={i.id} item={i} people={people} evidence={evidence ? evidence.get(Number(i.id)) || [] : null}
+                  <ItemRow key={i.id} uid={uid} item={i} people={people} evidence={evidence ? evidence.get(Number(i.id)) || [] : null}
                     works={works} picked={picked.includes(i.id)} onPick={pick} open={open} />
                 ))}
               </ul>
@@ -267,10 +378,10 @@ export function FlagsTab({ data, open }) {
   const people = peopleOf(data);
   const raise = (data.sections || []).some((s) => maySection(data, 'work', s.id));
   const sectionTitle = (id) => (data.sections || []).find((s) => Number(s.id) === Number(id))?.title || 'Case-wide';
-  const Row = ({ flag }) => (
-    <tr className="cursor-pointer border-t border-axal-hairline hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50" onClick={() => open('flag', { flag })} data-testid={`dd-flag-row-${flag.kind}-${flag.id ?? flag.checklist_item_id}`}>
+  const renderRow = (flag) => (
+    <tr key={`${flag.kind}-${flag.id ?? flag.checklist_item_id}`} className="cursor-pointer border-t border-axal-hairline hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50" onClick={() => open('flag', { flag })} data-testid={`dd-flag-row-${flag.kind}-${flag.id ?? flag.checklist_item_id}`}>
       <Td><Severity s={flag.severity} /></Td>
-      <Td><button type="button" className="text-left font-semibold hover:underline" onClick={(e) => { e.stopPropagation(); open('flag', { flag }); }}>{flag.title}</button></Td>
+      <Td><button type="button" className="min-h-11 text-left font-semibold hover:underline md:min-h-0" onClick={(e) => { e.stopPropagation(); open('flag', { flag }); }}>{flag.title}</button></Td>
       <Td>{sectionTitle(flag.section_id)}</Td>
       <Td>{flagSourceWord(flag)}</Td>
       <Td>{personName(people, flag.owner_user_id) || 'No owner'}</Td>
@@ -305,12 +416,12 @@ export function FlagsTab({ data, open }) {
         </select>
       </div>
       <Block title="Open" testId="dd-flags-open">
-        {rows.open.length ? <Table head={head}>{rows.open.map((fl) => <Row key={`${fl.kind}-${fl.id ?? fl.checklist_item_id}`} flag={fl} />)}</Table>
+        {rows.open.length ? <Table head={head}>{rows.open.map(renderRow)}</Table>
           : <p className={`m-0 text-[13px] ${muted}`}>No flag matches.</p>}
       </Block>
       {rows.closed.length ? (
         <Block title="Closed" testId="dd-flags-closed">
-          <Table head={head}>{rows.closed.map((fl) => <Row key={`${fl.kind}-${fl.id}`} flag={fl} />)}</Table>
+          <Table head={head}>{rows.closed.map(renderRow)}</Table>
         </Block>
       ) : null}
     </div>

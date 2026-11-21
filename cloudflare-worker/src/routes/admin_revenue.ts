@@ -13,7 +13,7 @@
  * other spelling is refused with 400 rather than read as "this quarter", which
  * would put this quarter's figures under another quarter's label. Only the
  * figures read over a date window follow it: the token cost and margin, and
- * the branch usage-report coverage. The licence run-rate is computed from the
+ * the branch usage-report coverage and subscription revenue. The licence run-rate is computed from the
  * licences active NOW and the promotion counts are what checkout would honour
  * NOW, so they are point-in-time whatever period is asked for, and `temporal`
  * says so per block so the page labels each one and never implies otherwise.
@@ -33,10 +33,8 @@
  *                    invoiced, collected, outstanding, overdue and void per
  *                    currency, and the billable licences not yet invoiced
  *                    (`services/licenceFeeReceivables.ts`).
- *     Subscriptions  NOT RECORDED. `account_subscriptions` has a plan and a
- *                    status and NO amount, and `/api/admin/billing/ltv` reads
- *                    charges from the Stripe API per customer — there is no
- *                    local charge ledger to total a quarter from.
+ *     Subscriptions  Quarterly subscription receipts and refunds per currency,
+ *                    from the local financial ledger (D5946).
  *     Token margin   HALF. The COST is real (`ai_usage_logs.est_cost_usd`).
  *                    What was billed for tokens is stored nowhere, so the
  *                    margin cannot be derived, only the cost reported.
@@ -64,6 +62,14 @@
  * slowest external call; the page reads that endpoint separately so one
  * unreadable zone does not take the other four down with it.
  *
+ * D5950 — THE READ MODEL. `metrics` answers every Revenue metric in one envelope
+ * (services/revenueReadModel.ts): its source, period, currencies, last
+ * reconciliation, incomplete rows and coverage gap. Revenue per subsidiary
+ * reads the branches' measured gross (#5947) and AI margin per licence the
+ * licence stamped on AI runs (#5948), D5950 part 2. The blocks above, and the
+ * top-level `revenue_per_subsidiary_*` and `token_pl_per_subsidiary_*`
+ * sentences the built page reads, stay as they were.
+ *
  * Mounted at /api/admin/revenue BEFORE the catch-all /api/admin in index.ts.
  */
 import { Hono } from 'hono';
@@ -76,6 +82,8 @@ import {
 import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
 import { promoState } from '../services/promos';
 import { licenceFeeReceivables } from '../services/licenceFeeReceivables';
+import { subscriptionRevenue } from '../services/subscriptionRevenue';
+import { revenueReadModel } from '../services/revenueReadModel';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -160,10 +168,12 @@ export const SUMMARY_TEMPORAL = Object.freeze({
   token_cost: 'period',
   usage_coverage: 'period',
   promos: 'as_of_now',
-  subscriptions: 'not_recorded',
+  subscriptions: 'period',
   // D5036: invoiced, collected, outstanding and void follow the quarter (by issue date); its receivable and overdue
   // list are as at today, and say so in their own `basis`.
   licence_invoices: 'period',
+  // D5950: every metric in the read model follows the quarter and carries its own `period`.
+  metrics: 'period',
 });
 
 r.get('/summary', async (c) => {
@@ -310,6 +320,12 @@ r.get('/summary', async (c) => {
   // leaves the run-rate on screen and says so, never a zero.
   const licenceInvoices = await licenceFeeReceivables(env, quarter, today);
 
+  const subscriptions = await subscriptionRevenue(env, quarter);
+
+  // D5950 — the read model: one envelope per metric (source, period, currencies, last reconciled, incomplete rows,
+  // coverage gap). It reuses the two readers' results above, and each metric fails alone.
+  const model = await revenueReadModel(env, quarter, readAt, { subscriptions, licenceInvoices });
+
   return c.json({
     quarter,
     // D5039: the quarter today falls in, whether or not it was the one asked for, and when this was read.
@@ -322,15 +338,11 @@ r.get('/summary', async (c) => {
     token_cost: tokenCost,
     promos,
     usage_coverage: usageCoverage,
+    metrics: model.metrics,
 
-    // Subscriptions. Not a read that failed — a figure the platform cannot
-    // produce, which is a different thing and says so.
-    subscriptions_available: false,
-    subscriptions_reason:
-      'Subscription revenue is not totalled anywhere in the database. `account_subscriptions` '
-      + 'records a plan and a status but no amount, and the lifetime-value endpoint reads charges '
-      + 'from the Stripe API one customer at a time. A quarter figure would mean walking every '
-      + 'customer in Stripe on page load.',
+    subscriptions,
+    subscriptions_available: subscriptions.state === 'complete' || subscriptions.state === 'incomplete',
+    subscriptions_reason: subscriptions.reason ?? 'Quarterly subscription totals are recorded and will appear here when the revenue view supports them.',
 
     // Statements between HQ and each subsidiary. THE STORE EXISTS NOW
     // (migration 260, D111) and is deliberately NOT fetched here, for the

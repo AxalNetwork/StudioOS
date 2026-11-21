@@ -122,6 +122,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Validate · Customer research', key: 'ask:transcript', route: '/validate/session/1', label: 'Ask', kind: 'research', handler: 'draft',
     at: [[SESSION, 'api.ask(']],
   },
+  // D6008 (#6008): Eadwyn's interview questions, quoted before the press, saved only on Accept.
+  {
+    page: 'Founder · Validate · Customer research', key: 'draft:validate/interview-guide', route: '/validate/customer-research', label: 'Draft questions', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/InterviewGuide.jsx', 'api.draft(']],
+  },
   {
     page: 'Founder · Validate · Experiments and evidence', key: 'fill:hypothesis', route: '/validate/experiments', label: 'Draft a hypothesis', kind: 'reason', handler: 'form',
     at: [[VALIDATE, "experiments: 'hypothesis'"]],
@@ -152,6 +157,15 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Build · Operating systems', key: 'draft:build/kpi', route: '/build/operating-systems', label: 'Draft an annotation', kind: 'numbers', handler: 'draft',
     at: [[BUILD, "surface: 'build/kpi'"]],
+  },
+  // D6042 (#6042): the two Build modules that had no Eadwyn draft, each on its page's kind.
+  {
+    page: 'Founder · Build · Founding team', key: 'draft:build/founding', route: '/build/founding-team', label: 'Check the split and vesting', kind: 'plan', handler: 'draft',
+    at: [[BUILD, "surface: 'build/founding'"]],
+  },
+  {
+    page: 'Founder · Build · Company creation', key: 'draft:build/company', route: '/build/company-creation', label: 'Summarise the filings', kind: 'legal', handler: 'draft',
+    at: [[BUILD, "surface: 'build/company'"]],
   },
 
   // ── Raise.
@@ -429,10 +443,7 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Research · Companies', key: 'analyse:again', route: '/research/companies/1', label: 'Re-run', kind: 'research', handler: 'draft',
     at: [[COMPETITORS, 'api.competitors.rerun('], [ANALYSIS, 'api.competitors.rerun(']],
   },
-  {
-    page: 'Founder · Research · Companies', key: 'analyse:sources', route: '/research/companies/1', label: 'Refresh sources', kind: 'research', handler: 'draft',
-    at: [[COMPETITORS, 'api.competitors.refresh('], [ANALYSIS, 'api.competitors.refresh(']],
-  },
+  // D7652: Refresh sources re-fetches the stored pages and runs no model (D7176), so it is not a row.
   // Runs a model only with "Crawl site" ticked and a URL given.
   {
     page: 'Founder · Research · Companies', key: 'extract:candidate', route: '/research/companies/1', label: 'Add', kind: 'research', handler: 'draft',
@@ -466,8 +477,6 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Validate · Verdict': 'Export summary is a CSV the Worker builds; no model.',
   'Founder · Build · Solution design': 'Its records and forms only.',
   'Founder · Build · Prototype / MVP': 'Its records and forms only.',
-  'Founder · Build · Founding team': 'Its tool is the cap table, which runs no model.',
-  'Founder · Build · Company creation': 'Its legal and e-signature doors run no model; the legal generator refuses founders.',
   'Founder · Raise': 'Call for Capital matches by rule.',
   // #3938 part 2: search runs on the room's own index, whose embedder is fixed (D1478 retrieve_index), so nothing is offered to pick.
   'Founder · Raise · Data room': 'Search runs on the room’s own index with fixed models, so there is nothing to pick; the room is read on Fundraising readiness.',

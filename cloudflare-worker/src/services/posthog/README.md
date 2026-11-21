@@ -68,3 +68,7 @@ PostHog parts 4–6 (#3731) add their syncs and acceptors beside these files
 Every section's sync and acceptor now lives beside these files
 PostHog part 6 (#3731) adds its sync and acceptor beside these files
 and read PostHog through `reads.ts` alone.
+
+- `visits.ts` — D6107 (#6107): Grow › Distribution's Visit stage from a
+  tracked metric whose role is `visits`, for the venture's team only. It
+  reads landed facts, never PostHog, and a failed read is Unreadable.

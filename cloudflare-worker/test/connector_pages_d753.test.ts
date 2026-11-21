@@ -82,14 +82,18 @@ for (const [key, entry] of Object.entries(CONNECTOR_PAGES)) {
   }
 }
 ENTRIES.push({ id: 'linkedin', key: 'linkedin', page: FIRST_PARTY_PAGES.linkedin });
+// D5810 (#5810): Microsoft Teams, on Microsoft 365's connection.
+ENTRIES.push({ id: 'teams', key: 'teams', page: FIRST_PARTY_PAGES.teams });
 for (const [key, page] of Object.entries(CHANNEL_PAGES)) ENTRIES.push({ id: key, key, page });
 
 /** Pages with no registry row: LinkedIn and the channels. */
 const CHANNELS = new Set(Object.keys(CHANNEL_PAGES));
-const NOT_ROWS = new Set(['linkedin', ...CHANNELS]);
+const NOT_ROWS = new Set(['linkedin', 'teams', ...CHANNELS]);
 
 /** Each connector's own files. `services/notify.ts` holds Slack's one write but also sends mail, so it is not scanned for coverage. */
 const SOURCES: Record<string, string[]> = {
+  // D5859: a Page's Grow figures are read in `services/facebook/insights.ts`, through the provider's Graph call.
+  facebook: ['services/facebook/insights.ts'],
   github: ['integrations/providers/github.ts', 'integrations/providers/github/roadmap.ts', 'integrations/providers/github/solutionDesign.ts', 'integrations/providers/github/team.ts', 'integrations/providers/github/company.ts', 'integrations/providers/github/mvp.ts'],
   // D840: a member's sign-in reads through the MCP client and its typed reads, and signs in through `oauth.ts`.
   // D847: the transport is the shared client, which `mcp.ts` calls.
@@ -101,6 +105,8 @@ const SOURCES: Record<string, string[]> = {
   microsoft_365: ['services/calendar.ts'],
   // D1352 (#3567): the connections import is the member's file, parsed in contact_imports.ts.
   linkedin: ['routes/linkedin.ts', 'routes/contact_imports.ts'],
+  // D5810: the profile read is the calendar sign-in's; the meeting is `teamsMeet.ts`'s one write.
+  teams: ['services/calendar.ts', 'services/channels/teamsMeet.ts'],
   hubspot: ['integrations/providers/hubspot.ts'],
   calendly: ['integrations/providers/calendly.ts'],
   salesforce: ['integrations/providers/salesforce.ts'],
@@ -117,6 +123,8 @@ const SOURCES: Record<string, string[]> = {
   // D2407 (#2407): Beehiiv's typed reads and provider.
   // D2407 part 3: the draft tool's one call site is drafts.ts.
   beehiiv: ['services/beehiiv/reads.ts', 'services/beehiiv/drafts.ts', 'integrations/providers/beehiiv.ts'],
+  // D5863: the Display API reads are the client's; the sign-in, refresh and revoke stay in tiktokOAuth.ts (the TOKEN_EXCHANGE side).
+  tiktok: ['services/tiktok/client.ts'],
   // D1096: Vercel's only transport is its typed client; the provider calls it.
   vercel: ['services/vercel/api.ts', 'integrations/providers/vercel.ts'],
 };
@@ -130,7 +138,9 @@ const linesOf = (file: string) => {
 /** The sign-in's own token exchange and refresh: not tools (D753 decision 3). */
 const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint', '/v2/oauth/access_token'];
 /** A read that is a POST. */
-const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
+const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"],
+  // D5863: TikTok's video list is a POST that reads (UNVERIFIED method, #2401).
+  tiktok: ['/v2/video/list/'] };
 /**
  * D2407 part 3: a write made through an MCP tool, not an HTTP method in the
  * connector's source (the shared client sends it). It counts as a write only
@@ -308,6 +318,10 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   facebook: '2026-11',
   tiktok: '2026-11',
+  x: '2026-11', // D2403
+  google_search_console: '2026-11', // D5839
+  typeform: '2026-11', // D5827
+  teams: '2026-11', // D5810
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
   github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10', vercel: '2026-10', posthog: '2026-10', beehiiv: '2026-11',
@@ -350,6 +364,12 @@ const constant = (src: string, name: string) => {
 const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null; api: string | null }> = {
   facebook: { file: 'integrations/providers/facebook.ts', sign_in: ['AUTHORIZE', ''], api: 'GRAPH' },
   tiktok: { file: 'integrations/tiktokOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'API' },
+  // D2403: the founders app signs in and reads through the shared X client.
+  x: { file: 'services/xClient.ts', sign_in: ['AUTH_BASE', ''], api: 'API_BASE' },
+  // D5839: Search Console's own client; the page names the property list it reads.
+  google_search_console: { file: 'integrations/searchConsoleOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'SITES' },
+  // D5827: the page names the US origin; an EU member's requests go to EU_API.
+  typeform: { file: 'integrations/typeformOAuth.ts', sign_in: ['US_API', '/oauth/authorize'], api: 'US_API' },
   hubspot: { file: 'integrations/providers/hubspot.ts', sign_in: ['HS_AUTH', '/oauth/authorize'], api: 'HS_API' },
   calendly: { file: 'integrations/providers/calendly.ts', sign_in: ['CL_AUTH', '/oauth/authorize'], api: 'CL_API' },
   salesforce: { file: 'integrations/providers/salesforce.ts', sign_in: ['PROD_HOST', '/services/oauth2/authorize'], api: null },
@@ -363,6 +383,8 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
   google_workspace: { file: 'services/calendar.ts', sign_in: ['GOOGLE_AUTH_URL', ''], api: null },
   google_calendar: { file: 'services/calendar.ts', sign_in: ['GOOGLE_AUTH_URL', ''], api: 'GOOGLE_CALENDAR_API' },
   microsoft_365: { file: 'services/calendar.ts', sign_in: ['MICROSOFT_AUTHORITY', '/common/oauth2/v2.0/authorize'], api: 'MICROSOFT_GRAPH' },
+  // D5810: Microsoft Teams signs in and calls Graph exactly as Microsoft 365 does.
+  teams: { file: 'services/calendar.ts', sign_in: ['MICROSOFT_AUTHORITY', '/common/oauth2/v2.0/authorize'], api: 'MICROSOFT_GRAPH' },
   mercury: { file: 'services/mercury/client.ts', sign_in: null, api: 'MERCURY_API_BASE' },
   // D840: a member's page names the MCP server their sign-in reads through.
   mercury_personal: { file: 'services/mercury/mcp.ts', sign_in: ['MERCURY_MCP_URL', ''], api: null },
@@ -419,7 +441,7 @@ test('10. sign-in kinds', () => {
     const kind = e.page.sign_in.kind;
     if (row?.auth_type === 'none') assert.equal(kind, 'none', e.id);
     else if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
-    else if (['google_workspace', 'google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
+    else if (['google_workspace', 'google_calendar', 'microsoft_365', 'linkedin', 'teams'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
     // D881 (#2554): a member connects Mercury only by signing in through its MCP server.
     else if (e.key === 'mercury') assert.equal(kind, 'mcp', e.id);
     // D1085: a record the generic MCP sign-in serves (D1080).
@@ -497,9 +519,11 @@ test('13. connectorPagePath', () => {
   assert.equal(connectorPagePath('google_calendar'), '/account/connectors/google');
   assert.equal(connectorPagePath('google'), '/account/connectors/google');
   assert.equal(connectorPagePath('microsoft_365'), '/account/connectors/microsoft');
+  assert.equal(connectorPagePath('teams'), '/account/connectors/teams', 'D5810: Teams has its own page');
   assert.equal(connectorPagePath('linkedin'), '/account/connectors/linkedin');
   assert.equal(connectorPagePath('whatsapp'), '/account/connectors/whatsapp');
   assert.equal(connectorPagePath('telegram'), '/account/connectors/telegram');
+  assert.equal(connectorPagePath('x'), '/account/connectors/x', 'D2403: a one-letter key is a page');
   for (const bad of ['', '../x', 'Github', 'a/b', 'no_such_connector']) assert.equal(connectorPagePath(bad), '/account/connectors', bad);
   const re = /const PAGE_KEY_RE = \/(.+)\/;/.exec(SRC('integrations/connectorPages.ts'))![1];
   assert.equal(re, CONNECTOR_KEY_RE.source);

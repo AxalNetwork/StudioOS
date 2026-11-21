@@ -150,7 +150,7 @@ export function useMentorReads(tab) {
   const hosts = useRead('hosts', 'hosts', tick, overview, readHosts);
   const history = useRead('history', 'history', tick, overview, readHistory);
   const recent = useRead('recent', 'recent', tick, overview, readRecent);
-  const sessions = useRead('sessions', 'sessions', tick, tab === 'how', readSessions);
+  const sessions = useRead('sessions', 'sessions', tick, tab === 'how' || tab === 'participation', readSessions);
   return { assignments, timeline, hosts, history, recent, sessions, reload };
 }
 
@@ -219,8 +219,9 @@ export const LEARNERS_PAGE = 50;
  */
 export function useLearningReads(tab, programUid, learnerOffset = 0) {
   const [tick, reload] = useTick();
-  const learning = useRead('learning', 'learning', tick, tab === 'overview' || tab === 'people', readLearning);
-  const weekly = useRead('learning:weekly', 'weekly', tick, tab === 'overview', () => programsApi.learningWeekly(12));
+  // D5887: Participation reads the same programs (R9) and enrolments per week (P4) as Overview.
+  const learning = useRead('learning', 'learning', tick, tab === 'overview' || tab === 'people' || tab === 'participation', readLearning);
+  const weekly = useRead('learning:weekly', 'weekly', tick, tab === 'overview' || tab === 'participation', () => programsApi.learningWeekly(12));
   const completion = useRead('learning:completion', 'completion', tick, tab === 'overview',
     () => learningApi.programsCompletion().then(listed('programs', 'Completion by program')));
   const learners = useRead('learners', `learners:${programUid || ''}:${learnerOffset}`, tick, tab === 'people' && Boolean(programUid),

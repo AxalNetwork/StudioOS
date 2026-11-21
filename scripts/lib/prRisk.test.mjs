@@ -206,7 +206,10 @@ test('the scan drops vanished and closed PRs, dedupes, marks a moved head stale 
   assert.equal(written.length, 1);
   const snap = JSON.parse(written[0][1]);
   assert.equal(snap.generatedAt, '2026-11-13T12:00:00.000Z');
-  assert.equal(snap.schema, 'studioos-pr-overlap-snapshot/v1');
+  // Part 2 (D5580): v2 is v1 plus workInFlight. This fixture serves no claim refs, so the section is Unreadable, not empty.
+  assert.equal(snap.schema, 'studioos-pr-overlap-snapshot/v2');
+  assert.deepEqual([snap.workInFlight.status, snap.workInFlight.intents], ['unreadable', []]);
+  assert.match(logs.join('\n'), /### Work in flight \(partial\)\n\nUnreadable: claim refs unreadable\./);
   assert.deepEqual(snap.prs.map(p => [p.number, p.stale]), [[5523, false], [5553, false], [5562, false], [5563, false], [9003, true]]);
   assert.deepEqual(snap.prs.find(p => p.number === 9003).evidence.queue, { status: 'not measured', reason: 'not read', maxMinutes: null });
   assert.deepEqual(snap.prs[0].paths, [DELIVERY]);

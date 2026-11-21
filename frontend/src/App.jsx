@@ -6,22 +6,23 @@ import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import {
-  clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationNeedsSetup, keepThroughSetup,
-  loginRedirectFor, markPendingNextRedirected, pendingNextRedirected,
+  clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationArea, destinationNeedsSetup,
+  keepThroughSetup, loginRedirectFor, markPendingNextRedirected, markRestoredArrival, pendingNextRedirected,
 } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
+import { SidebarSubpagesProvider } from './ui/SidebarNav'; // D6029: from the sidebar's own module (App.jsx imports are frozen, D5615)
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
-import ViewModeContext from './contexts/ViewModeContext';
+import { ViewModeProvider } from './contexts/ViewModeContext';
 import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // Single source of truth for "which role is this session browsing as". The
 // shell picks the sidebar from it and the router picks route elements from it;
 // when those two disagree the nav offers one thing and the route serves another.
-import { resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
+import { researchRoleFor, resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
 import { multiLicenceSet } from './lib/multiLicencePages.js';
 import { buildLicenceSidebar, isLicence } from './lib/licenceSidebar';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
@@ -43,7 +44,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { collectRouteModules } from './lib/routeModules';
 const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 import { useRedirectBeacon } from './lib/redirectBeacon';
-import { ventureSearch } from './pages/raise/pitch/pitchRoutes';
+import { pitchFocusMode, ventureSearch } from './pages/raise/pitch/pitchRoutes';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -494,6 +495,13 @@ const ContentQueueBoundary = lazy(() => import('./pages/admin/contentQueue/NoPer
 // GROW_BOUNDARY_ROLES in pages/founder/GrowBoundary.jsx (a test compares them).
 const GrowBoundary = lazy(() => import('./pages/founder/GrowBoundary'));
 const GROW_BOUNDARY_ROLES = new Set(['investor', 'advisor', 'partner', 'exploring']);
+// D7178 (#7044, RCL09): an account with no held Founder or Advisor licence reads why Companies is closed to it, where
+// it was sent to /studio in silence. Kept in step with COMPANIES_BOUNDARY_ROLES in pages/research/CompaniesAccess.jsx
+// (a test compares them); loaded through GrowBoundary's module, which re-exports it.
+const CompaniesBoundary = lazy(() => import('./pages/founder/GrowBoundary').then((m) => ({ default: m.CompaniesBoundary })));
+const COMPANIES_BOUNDARY_ROLES = new Set(['investor', 'partner', 'exploring']);
+// D7178 (RCL04B): "Your account is ready · Continue to Companies", between required setup and the kept destination.
+const DestinationReady = lazy(() => import('./pages/founder/GrowBoundary').then((m) => ({ default: m.DestinationReady })));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -506,7 +514,6 @@ const RoundCallIndex = lazy(() => import('./pages/founder/RoundCallPage').then(m
 const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
 const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent'));
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
-const FounderGrowPartnerships = lazy(() => import('./pages/founder/FounderGrowPartnerships'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
@@ -551,7 +558,7 @@ import RecordingPill from './pages/founder/RecordingPill';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
-import { connectorsRedirect } from './pages/account/connectorsModel';
+import { connectorsRedirect, takeSignInFrom } from './pages/account/connectorsModel';
 import { signInPath as assistantSignInPath } from './pages/connect/assistantConsentModel';
 import { PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
@@ -789,7 +796,9 @@ function SupportRedirect() {
 // Connectors" notice.
 function IntegrationsRedirect() {
   const loc = useLocation();
-  return <Navigate to={connectorsRedirect(loc)} state={{ connectorsMoved: true }} replace />;
+  // D5810: a Microsoft sign-in begun on the Teams page returns there; the marker is read once.
+  const [from] = useState(() => takeSignInFrom());
+  return <Navigate to={connectorsRedirect(loc, { from })} state={{ connectorsMoved: true }} replace />;
 }
 
 
@@ -988,6 +997,18 @@ function UserDropdown({ user, onLogout }) {
 }
 
 
+// D4817 part 8 (#5311, PF-08): the Portfolio boards that draw their own Investor
+// preview banner. App.jsx's imports are frozen (D5615), so this mirrors
+// `pages/portfolio/previewModel.js`'s `pageOwnsPreviewBanner`; the PF-08 test
+// holds the two to the same addresses.
+const PREVIEW_BANNER_BOARDS = /^\/portfolio(?:\/(?:health|positions|updates|performance|value-add))?\/?$/;
+// D4817 part 10 (#5311): the company workspace and its tabs draw the same one
+// banner (`previewModel.js`' `previewCompanyTabOf`; the part 10 test holds the two together).
+const PREVIEW_BANNER_COMPANY = /^\/portfolio\/companies\/[^/]+(?:\/(?:reports|terms|financials|support|activity))?\/?$/;
+function pageOwnsPreviewBanner(pathname, selectedKey) {
+  return selectedKey === 'investor' && (PREVIEW_BANNER_BOARDS.test(String(pathname || '')) || PREVIEW_BANNER_COMPANY.test(String(pathname || '')));
+}
+
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
   const [open, setOpen] = useState(false);
   // D288 / H38 — "View as" is Preview shell. "HQ" is a VIEW of the admin
@@ -1001,6 +1022,11 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
   const selected = PREVIEW_SHELLS.find((o) => o.key === selectedKey) || null;
   const home = PREVIEW_SHELLS.find((o) => o.key === homePreviewKey(superAdmin));
   const previewing = selected && home && selected.key !== home.key;
+  // D4817 part 8 (#5311, PF-08): a Portfolio board previewed as Investor draws
+  // the one preview banner itself (read-only, with this same way back), so the
+  // shell-level strip stands down there.
+  const { pathname } = useLocation();
+  const pageBanner = pageOwnsPreviewBanner(pathname, selectedKey);
   const choose = (key) => {
     if (key === 'hq') onViewModeChange('admin', { hq: true });
     else if (key === 'admin') onViewModeChange('admin', { hq: false });
@@ -1074,10 +1100,10 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
       {/* H38's strip: while a shell other than the viewer's own is previewed,
           the chip, the sentence about whose name the writes carry — "the
           Super Admin" to the holder, "you" to anyone else — and the way back. */}
-      {!isImpersonating && previewing && (
+      {!isImpersonating && previewing && !pageBanner && (
         <div className="ml-2 flex flex-wrap items-center gap-2 text-xs" data-testid="preview-shell-strip">
           <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold">{previewChip(selected.label)}</span>
-          <span className="opacity-90">{previewNote(superAdmin)}</span>
+          <span className="opacity-90">{previewNote(superAdmin, selectedKey)}</span>
           <button
             type="button"
             onClick={() => choose(home.key)}
@@ -1199,7 +1225,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // `.main { padding }`, so a workspace route wants `p-0` here on every
   // licence — including `/research/*`, which was carved out of both lists
   // precisely because the shell had no padding of its own.
+  const pitchFocused = pitchFocusMode(location.pathname);
+  const appScroll = useRef(null);
+  useLayoutEffect(() => {
+    if (pitchFocused && appScroll.current) appScroll.current.scrollTop = 0;
+  }, [pitchFocused, location.pathname]);
   const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
+    || pitchFocused
     || SHARED_FULL_BLEED.includes(location.pathname)
     // D631's two fund child pages carry WorkspaceShell's own inset and rail.
     || /^\/funds\/[1-9][0-9]*(?:\/reporting\/(?:new|[1-9][0-9]*))?$/.test(location.pathname)
@@ -1270,6 +1302,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <HqSubNavStrip label="Licences">
           <StripLink to="/admin/licences">Ledger</StripLink>
           <StripLink to="/admin/licences/programs">Program access by licence</StripLink>
+          <StripLink to="/admin/licences/packages">Axal VC packages</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Content' && (
@@ -1310,9 +1343,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
   // Memoize the context value so consumers of `useViewMode()` don't re-render
   // on every App render. Stable identity unless one of the three inputs changes.
+  // D4817 part 8 (#5311, PF-08): a page that draws its own preview banner
+  // offers the strip's way back, so the context carries it and the elevation.
+  const viewModeChangeRef = useRef(onViewModeChange);
+  viewModeChangeRef.current = onViewModeChange;
+  const exitPreview = useCallback(() => viewModeChangeRef.current?.('admin', { hq: superAdmin === true }), [superAdmin]);
   const viewModeContextValue = useMemo(
-    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole }),
-    [activeRole, isAdmin, isImpersonating, shellRole],
+    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole, superAdmin: superAdmin === true, exitPreview }),
+    [activeRole, isAdmin, isImpersonating, shellRole, superAdmin, exitPreview],
   );
 
   // D153 / H12 — the view-as scope, held in the SHELL rather than on a page,
@@ -1339,7 +1377,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
   return (
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
-    <ViewModeContext.Provider value={viewModeContextValue}>
+    <ViewModeProvider value={viewModeContextValue}>
     <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
       {/* D504 — `viewport-fit=cover` is live (D425), so the installed app draws
           under a phone's status bar. The shell's root reserves the top inset,
@@ -1415,7 +1453,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
             and up, gets the header below unchanged. One is mounted, never both. */}
         {/* ── Carta-style global top header ─────────────────────────────── */}
-        <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
+        {!pitchFocused && <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <button
@@ -1525,10 +1563,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <Link
                 to="/email"
                 data-testid="email-door"
-                className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+                aria-label="Email"
+                title="Email"
+                className="hidden sm:inline-flex items-center justify-center rounded-lg p-2 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
               >
-                <Mail size={14} />
-                Email
+                <Mail size={18} aria-hidden="true" />
               </Link>
             )}
             {/* D563 — no Workspaces launcher. Its 28 pages each light the
@@ -1548,10 +1587,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <UserDropdown user={user} onLogout={onLogout} />
           </div>
         </header>
-        </HeaderForWidth>
+        </HeaderForWidth>}
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className={`
+          {!pitchFocused && <aside className={`
             fixed ${sidebarOpen ? 'lg:relative' : ''}
             inset-y-0 left-0 z-50 ${effectiveCollapsed ? 'w-20' : 'w-64'} bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
             flex flex-col
@@ -1559,9 +1598,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
             <SidebarNav groups={sidebarGroups} role={shellRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
-          </aside>
+          </aside>}
 
-          {sidebarOpen && (
+          {!pitchFocused && sidebarOpen && (
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
           {/* D504 — the phone's tab bar (D425): four tabs and More below 1024px,
@@ -1569,7 +1608,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               resolved, without the sidebar's `|| 'founder'` fallback, so a
               viewer with no role gets no bar. The bar renders nothing for a
               licence whose plan is not built yet (`mobilePlan` returns null). */}
-          <MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />
+          {!pitchFocused && <MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />}
           {/* D699 — the founder's last opened cycle per company, for the
               company sheet. Never while an operator acts as someone else. */}
           <CompanyVisits role={shellRole} record={!isImpersonating && !(isAdmin && activeRole !== 'admin')} />
@@ -1586,6 +1625,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               at the end of the scroll. */}
           <main
             data-app-scroll
+            ref={appScroll}
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
@@ -1599,6 +1639,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
             {/* D768 (#2092): every rail below reads its page key from the route (lib/railPages.js). */}
+            {/* D6029 (#6029): which sidebar rows list their own pages now, so Build's header drops its desktop module tabs only then. */}
+            <SidebarSubpagesProvider groups={sidebarGroups} open={sidebarOpen && isDesktop} collapsed={effectiveCollapsed}>
             <RailPageProvider role={shellRole}>
             <RailStripSlot.Provider value={railStrip}>
               <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
@@ -1606,7 +1648,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </div>
             </RailStripSlot.Provider>
             </RailPageProvider>
-            {!onboardingCanvas && (
+            </SidebarSubpagesProvider>
+            {!onboardingCanvas && !pitchFocused && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 <span>
@@ -1635,7 +1678,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <StepUpModal phoneSheet={location.pathname.startsWith('/admin/fund-admin')} />
       </Suspense>
     </ViewAsBranchContext.Provider>
-    </ViewModeContext.Provider>
+    </ViewModeProvider>
     </ActiveCompanyContext.Provider>
   );
 }
@@ -1697,9 +1740,15 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const exemptFromSetup = atPendingNext && !deferPendingToSetup;
   const afterSetup = user && onboardingLoaded && onboardingComplete ? destinationAfterSetup() : null;
   const afterSetupDue = !!(afterSetup && location.pathname !== afterSetup.split(/[?#]/)[0]);
+  // D7178 (#7044, RCL04B): an area with a ready screen (Companies) waits on "Continue to …" instead of opening at
+  // once. The kept path is cleared from storage after commit, so the screen holds it in state until it is used.
+  const [readyFor, setReadyFor] = useState(null);
+  const navigate = useNavigate();
+  const readyArea = afterSetupDue ? destinationArea(afterSetup) : null;
   useEffect(() => {
     if (afterSetup) clearDestinationAfterSetup();
-  }, [afterSetup]);
+    if (afterSetupDue && readyArea?.ready) setReadyFor(afterSetup);
+  }, [afterSetup, afterSetupDue, readyArea?.ready]);
   // Called by each setup gate just before it redirects. Idempotent: the same
   // safe path written twice by StrictMode's two renders.
   const keepForAfterSetup = () => keepThroughSetup(`${location.pathname}${location.search}${location.hash}`);
@@ -1964,6 +2013,19 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to={myWizard} replace />;
   }
 
+  // D7178: the ready screen, until "Continue to Companies" (or home) is chosen.
+  const readyPath = readyFor || (afterSetupDue && readyArea?.ready ? afterSetup : null);
+  if (readyPath) {
+    return (
+      <DestinationReady
+        area={destinationArea(readyPath)}
+        home={ROLE_DEFAULT_PATH[(realUser || user)?.role] || '/studio'}
+        onContinue={() => { markRestoredArrival(readyPath); setReadyFor(null); navigate(readyPath, { replace: true }); }}
+        onHome={() => setReadyFor(null)}
+      />
+    );
+  }
+
   // #4579: setup is done; return to the destination it was started for, once.
   if (afterSetupDue) {
     return <Navigate to={afterSetup} replace />;
@@ -2042,6 +2104,8 @@ const ROUTE_BOUNDARIES = [
   { under: /^\/admin\/articles(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: ContentQueueBoundary, notPreview: true },
   // #4579: an account without the Founder licence reads why Grow is closed to it, and how to open it.
   { under: /^\/grow(\/|$)/, roles: GROW_BOUNDARY_ROLES, Panel: GrowBoundary },
+  // D7178 (#7044): the held licences decide (D4473); an admin's "View as Investor" sees this too (the owner's answer A).
+  { under: /^\/research\/companies(\/|$)/, roles: COMPANIES_BOUNDARY_ROLES, Panel: CompaniesBoundary },
 ];
 
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
@@ -2063,7 +2127,7 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
     // A pending handoff still wins: the boundary is drawn only when nothing is on its way.
     const previewing = !isImpersonating && (realUser || user)?.role === 'admin';
     const boundary = !pendingTarget && ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole) && !(b.notPreview && previewing));
-    if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} />;
+    if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} held={held} />;
     // D940: retain the canonical policy, including preview and impersonation exceptions.
     if (adminRefusal({ pathname, realRole: (realUser || user)?.role, isImpersonating })) {
       if (/^\/admin\/programs\/spinout-lab(\/|$)/.test(pathname)) return <LabOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
@@ -2483,12 +2547,14 @@ function AppInner() {
   // RoleGuard doesn't redirect them while they're previewing another role.
   // D1070: who meets VB20a's card on the plan's two addresses.
   const planNotFounder = ['investor', 'advisor', 'exploring'].includes(user?.role) && user?.spinout_lab_active !== 1;
-  const labRoles = (roles) => {
+  // D7178 (#7044, the owner's answer A): `{ preview: false }` leaves the previewed role out, so an admin using
+  // "View as Investor" on Companies sees the boundary that member would see instead of being admitted by viewMode.
+  const labRoles = (roles, { preview = true } = {}) => {
     const result = [...roles];
     if (user && user.spinout_lab_active === 1 && !result.includes(user.role)) {
       result.push(user.role);
     }
-    if (user?.role === 'admin' && !isImpersonating && viewMode && !result.includes(viewMode)) {
+    if (preview && user?.role === 'admin' && !isImpersonating && viewMode && !result.includes(viewMode)) {
       result.push(viewMode);
     }
     return result;
@@ -2520,14 +2586,37 @@ function AppInner() {
   // the read inside the temporal dead zone of a `const` in the same function
   // body — a ReferenceError on every render of AppInner, so a blank app. The
   // build does not catch it because it is a runtime error, not a compile one.
-  const researchRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
-  // Same rule as researchRole, and the same reason it lives below
+  //
+  // D7178 (#7044): one held-licence rule (`researchRoleFor`, lib/researchAccess.js). Admin and no role still read
+  // as the founder; a page the role browsed as is not admitted to reads in the first held licence's shell that is,
+  // so an Investor who also holds Founder gets the Companies zone, its page and its actions, not "Nothing serves
+  // this zone yet". The zone list, `canOpenResearch` and `canAddToResearch` all read this role.
+  const researchRole = researchRoleFor({ effectiveRole, heldLicences, pathname: location.pathname, labActive: user?.spinout_lab_active === 1 });
+  // The rule researchRole had before D7178, and the same reason it lives below
   // effectiveRole rather than above it.
-  const networkRole = researchRole;
+  const networkRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
+  // #6265: a Research zone the founder shell does not list (diligence, benchmarking, client prep)
+  // sends an admin who is not previewing back to `/research`. It cannot be done by leaving `admin`
+  // out of `labRoles([...])`, because labRoles adds `viewMode`, which is 'admin' for that admin.
+  // These routes use a plain `guard([...])` inside this, so View as Investor / Advisor / Partner
+  // (effectiveRole = the previewed role) still passes RoleGuard.
+  const adminToResearch = (element) => (effectiveRole === 'admin' ? <Navigate to="/research" replace /> : element);
   const investorWorkspace = (page, component, options = {}) => (
     effectiveRole === 'investor'
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
       : component
+  );
+  const investorRoundCall = (Component) => (
+    user?.role === 'investor' && effectiveRole === 'investor'
+      ? investorWorkspace('deals', <Component embedded />)
+      : <Component />
+  );
+  // D6160 (#6160): an investor's round calls list is a page of Deals, drawn in
+  // InvestorDealsRoutes' shell; a founder's `?project_id` list keeps RoundCallIndex.
+  const investorRoundCallList = () => (
+    user?.role === 'investor' && effectiveRole === 'investor'
+      ? <InvestorDealsRoutes />
+      : <RoundCallIndex />
   );
   const trustCenter = user
     ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
@@ -2914,20 +3003,25 @@ function AppInner() {
       {/* D533/D546 (#1080) — Geographies, guarded like /research/markets. */}
       <Route path="/research/geographies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/geographies/:code" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <GeographyProfile role={researchRole} />)} />
-      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyProfile role={researchRole} />)} />
-      <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyAnalysis role={researchRole} />)} />
-      <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />
+      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor'], { preview: false }), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor'], { preview: false }), <CompanyProfile role={researchRole} />)} />
+      <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor'], { preview: false }), <CompanyAnalysis role={researchRole} />)} />
+      <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor'], { preview: false }), <CompanyCandidate role={researchRole} />)} />
       <Route path="/research/funds" element={guard(labRoles(['admin', 'founder']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/funds/catalog/:id" element={guard(labRoles(['admin', 'founder']), <FundCatalogProfile role={researchRole} />)} />
       <Route path="/research/funds/:uid" element={guard(labRoles(['admin', 'founder']), <FundDossier role={researchRole} />)} />
       <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence/:grantUid" element={guard(labRoles(['admin', 'investor']), <DiligenceRoom role={researchRole} />)} />
-      <Route path="/research/diligence/:grantUid/files/:fileUid" element={guard(labRoles(['admin', 'investor']), <DiligenceFile role={researchRole} />)} />
-      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/benchmarking/:uid" element={guard(labRoles(['admin', 'investor']), <BenchmarkDetail role={researchRole} />)} />
-      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      {/* #6265: no `admin` on diligence, benchmarking or client prep. An admin browses Research as
+          the founder shell (`researchRole`), which lists none of the three, so the zone resolved to
+          null and drew "Nothing serves this zone yet"; the diligence reads are keyed to the caller
+          as the investor, so an admin holds no rooms either. `adminToResearch` sends that admin to
+          /research; View as Investor / Advisor / Partner still opens them through RoleGuard. */}
+      <Route path="/research/diligence" element={adminToResearch(guard(['investor'], <ResearchWorkspace role={researchRole} user={user} />))} />
+      <Route path="/research/diligence/:grantUid" element={adminToResearch(guard(['investor'], <DiligenceRoom role={researchRole} />))} />
+      <Route path="/research/diligence/:grantUid/files/:fileUid" element={adminToResearch(guard(['investor'], <DiligenceFile role={researchRole} />))} />
+      <Route path="/research/benchmarking" element={adminToResearch(guard(['investor'], <ResearchWorkspace role={researchRole} user={user} />))} />
+      <Route path="/research/benchmarking/:uid" element={adminToResearch(guard(['investor'], <BenchmarkDetail role={researchRole} />))} />
+      <Route path="/research/client-prep" element={adminToResearch(guard(['advisor', 'partner'], <ResearchWorkspace role={researchRole} user={user} />))} />
       {/* Legacy Customer Discovery lands on Validate · Customer research (#2335). */}
       <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder']), <FounderBuildRoadmap />)} />
       <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
@@ -3320,8 +3414,9 @@ function AppInner() {
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
       {/* #2333 — one publications list: /articles carries the briefs the
-          /insights index listed; each brief keeps its share link below. */}
-      <Route path="/insights" element={<Navigate to="/articles#briefs" replace />} />
+          /insights index listed; each brief keeps its share link below.
+          #6999: /insights lands on the list itself, not on a Briefs shelf that may be hidden. */}
+      <Route path="/insights" element={<Navigate to="/articles" replace />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       {/* D1244 (#2385) — the list's tabs and the case's tabs are addresses; the
@@ -3603,12 +3698,11 @@ function AppInner() {
         holds('investor') ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />)} />
 
       {/* ── Deals · the four stages, as four routes ──────────────────────────
-          The zone slugs are InvestorDealsWorkspace's own anchor ids with the
-          prefix stripped — the canvas took them from there. Four deep-linkable
-          URLs replacing five that never said which stage you were on; the
-          workspace still renders all four sections and the route scrolls to
-          one. Splitting it into four pages is a content decision, not a
-          routing one. */}
+          The zone slugs are InvestorDealsWorkspace's old anchor ids with the
+          prefix stripped — the canvas took them from there. Each zone route
+          renders its own page (`ZONES` in InvestorDealsRoutes); nothing
+          scrolls to a section, and the old workspace is not on these routes
+          (#6152). */}
       {/* D1236 (#2423): compare up to four ventures from Deal flow. */}
       <Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       {/* D1243 (#3256): the Pipeline zone is retired; its job is Deal flow's table. The query and hash travel. */}
@@ -3634,8 +3728,8 @@ function AppInner() {
           redirects' `mode=workspace` is kept only so old links stay stable. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderWorkspace('grow', founderEditor(<FounderTeamPage />)))} />
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
-      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], <RoundCallIndex />)} />
-      <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], <RoundCallPage />)} />
+      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCallList())} />
+      <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], investorRoundCall(RoundCallPage))} />
       {/* D668 (#1498): approve an AI assistant for the companies ticked. Outside
           the shell's guard on purpose: the assistant's OAuth flow lands here,
           and a signed-out visitor goes to sign-in and back to this request. */}
@@ -3663,9 +3757,14 @@ function AppInner() {
       <Route path="/grow/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" record />)} />
       <Route path="/grow/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" adding />)} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
+      <Route path="/grow/team-expansion" element={guard(['admin', 'founder'], <ParamRedirect to="/grow/talent" />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
-      <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <FounderGrowPartnerships />)} />
+      {/* D6118 (#6118, GR-09): one Partnerships page. It is the partner-network module (partners by stage,
+          revenue and terms, Rank by fit, the Mercury proposal) with co-marketing as one of its parts. The
+          module's own address forwards here; its records, /new and /co-marketing keep their addresses. */}
+      <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="partner-network" />)} />
+      <Route path="/grow/partner-network" element={guard(['admin', 'founder'], <ParamRedirect to="/grow/partnerships" />)} />
       {/* D1194 (#3128): Investor match is Capital relationships › Match; /grow/capital-match goes straight there too. */}
       {/* #2343: one brand page. Grow's read of pages and leads moved into the
           builder (`BrandPagesSection`); the old address forwards there. */}
@@ -3775,6 +3874,9 @@ function AppInner() {
       <Route path="/portfolio/companies/:uid" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/companies/:uid/reports" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/companies/:uid/terms" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/financials" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/support" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/activity" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
           Research) scoped to the advisor (and admin) roles. Each tab deep-links
@@ -3953,7 +4055,8 @@ function AppInner() {
           founder's board and the partner's bucket root with it. */}
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
-      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? investorFundWorkspace(<FundPerformancePage embedded />) : <FundOpsRedirect />)} />
+      {/* #6245 (owner: C): the Worker's gate, so no tier here. An LP reads their funds and a GP of record theirs (#6246). */}
+      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? <FundPerformancePage fundUnlocked={hasInvestorTier(user, 'institutional')} /> : effectiveRole !== 'admin' ? <FundPerformancePage locked /> : <FundOpsRedirect />)} />
       <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
       <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
       <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />

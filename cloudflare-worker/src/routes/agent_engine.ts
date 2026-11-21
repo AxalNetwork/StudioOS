@@ -35,13 +35,19 @@
  * D1528 (#3847, E3 of #3742) — the runtime's routes, behind the same flag and gates:
  *
  *   GET    /tasks/:uid/quote          manage or sponsor  { quote: { available, value_microusd } }
- *   POST   /tasks/:uid/start          manage or sponsor  202 { run }; 409 agent_busy | scope_busy | queue_full | not_ready;
+ *   POST   /tasks/:uid/start          manage or sponsor  202 { run }; 409 agent_busy | scope_busy | queue_full | not_ready | lane_budget;
  *                                                        403 engine_paused | scope_paused
  *   GET    /agents/:uid/runs          read               { runs: [Run] }
  *   GET    /runs/:uid                 read               { run, steps: [{ name, status, at, summary }], cost, detail } (detail: W3 below)
  *   POST   /runs/:uid/cancel          manage             { run }; 409 not_running
- *   GET    /:scope/:id/engine         read               { engine, halted, scope_paused, max_parallel_runs, autonomy }
+ *   GET    /:scope/:id/engine         read               { engine, halted, scope_paused, max_parallel_runs, autonomy, capacity }
  *   PUT    /:scope/:id/engine         manage             body { paused?, max_parallel_runs? }; 400 invalid_engine
+ *                                                        D7074 (#7074): capacity is { mode, elastic_max_runs, lanes_per_agent, review_backlog_max,
+ *                                                        daily_runs_per_agent, offered: { elastic_max_runs, lanes_per_agent } (HQ's ceilings, null = not
+ *                                                        offered), in_force: { parallel_runs, lanes_per_agent, review_backlog, daily_runs_per_agent } }.
+ *                                                        PUT also takes capacity_mode ('fixed' | 'elastic'), elastic_max_runs, lanes_per_agent,
+ *                                                        review_backlog_max and daily_runs_per_agent; 403 elastic_not_offered | lanes_not_offered
+ *                                                        while HQ offers none, 400 invalid_engine above HQ's ceiling.
  *
  * D1614 W3 (#3971) — a run in full, its retry, and a project's activity feed (`services/agents/runActivity.ts`):
  *
@@ -109,8 +115,13 @@ import { workBoardRoutes } from './work_board';
 import { assignable, myTasks } from '../services/agents/teamRoster';
 import { agentQuote } from '../services/agents/agentRun';
 import { agentByUid, type AgentRow } from '../services/agents/teams';
-import { agentRuntime, autonomy, engineMode, haltedAll, type AgentRuntime, type ScopeRef } from '../agents/runtime';
-import { moveTask, putScopeSettings, runByUid, runDto, scopeOfRow as runScopeOf, scopeSettings, stepsOf, type RunRow } from '../agents/engine';
+import { DAILY_LIMIT, OPEN_PROPOSALS_MAX, agentRuntime, autonomy, engineMode, haltedAll, type AgentRuntime, type ScopeRef } from '../agents/runtime';
+import {
+  moveTask, putScopeSettings, runByUid, runDto, scopeOfRow as runScopeOf, scopeSettings, stepsOf, type RunRow, type ScopeSettings, type ScopeSettingsWrite,
+} from '../agents/engine';
+import {
+  DAILY_RUNS_MAX, LANES_MAX, REVIEW_BACKLOG_MAX, backlogLimit, capacityCeilings, dailyLimit, laneLimit, lanesOffered, parallelLimit, type Ceilings,
+} from '../agents/capacity';
 import { terminateRun, trackRun } from '../agents/doRuntime';
 import { workItemRoutes } from './work_items';
 import { memberTimeZone, projectBurnup } from '../services/agents/workBurnup';
@@ -599,14 +610,89 @@ router.post('/runs/:uid/cancel', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+const CAPACITY_KEYS = ['capacity_mode', 'elastic_max_runs', 'lanes_per_agent', 'review_backlog_max', 'daily_runs_per_agent'] as const;
+const ENGINE_KEYS: readonly string[] = ['paused', 'max_parallel_runs', ...CAPACITY_KEYS];
+const wholeIn = (v: unknown, min: number, max: number) => Number.isSafeInteger(v) && (v as number) >= min && (v as number) <= max;
+
+/**
+ * D7074: a body's capacity fields, checked against what HQ offers. Elastic mode and sub-agents are refused 403 while HQ
+ * offers none (`elastic_not_offered`, `lanes_not_offered`); a number above HQ's ceiling is 400 `invalid_engine`.
+ * Going back to the defaults (`fixed`, one lane, null) is always allowed.
+ */
+export function capacityWrite(b: Record<string, unknown>, current: ScopeSettings, ceilings: Ceilings):
+  { ok: true; value: ScopeSettingsWrite } | { ok: false; problem: { status: number; code: string; message: string } } {
+  const invalid = (message: string) => ({ ok: false as const, problem: { status: 400, code: 'invalid_engine', message } });
+  const value: ScopeSettingsWrite = {};
+  if ('capacity_mode' in b) {
+    if (b.capacity_mode !== 'fixed' && b.capacity_mode !== 'elastic') return invalid('capacity_mode is fixed or elastic.');
+    value.capacity_mode = b.capacity_mode;
+  }
+  const mode = value.capacity_mode ?? current.capacity_mode;
+  const elasticAsked = value.capacity_mode === 'elastic' || ('elastic_max_runs' in b && b.elastic_max_runs !== null);
+  if (elasticAsked && ceilings.elastic_runs == null) {
+    return { ok: false, problem: { status: 403, code: 'elastic_not_offered', message: 'Elastic capacity is not offered on the platform yet. This team keeps its fixed number of agents at once.' } };
+  }
+  if ('elastic_max_runs' in b) {
+    if (b.elastic_max_runs !== null && !wholeIn(b.elastic_max_runs, 1, ceilings.elastic_runs as number)) {
+      return invalid(`elastic_max_runs is a whole number from 1 to ${ceilings.elastic_runs}, or null for the platform's ceiling.`);
+    }
+    value.elastic_max_runs = b.elastic_max_runs as number | null;
+  } else if (mode === 'elastic' && current.elastic_max_runs != null && ceilings.elastic_runs != null && current.elastic_max_runs > ceilings.elastic_runs) {
+    // HQ lowered its ceiling under the team's saved number: the save brings the row back under it.
+    value.elastic_max_runs = ceilings.elastic_runs;
+  }
+  if ('lanes_per_agent' in b) {
+    if (!wholeIn(b.lanes_per_agent, 1, LANES_MAX)) return invalid(`lanes_per_agent is a whole number from 1 to ${LANES_MAX}.`);
+    if ((b.lanes_per_agent as number) > 1) {
+      if (!lanesOffered(ceilings)) {
+        return { ok: false, problem: { status: 403, code: 'lanes_not_offered', message: 'Sub-agents are not offered on the platform yet. Each agent works on one task at a time.' } };
+      }
+      if ((b.lanes_per_agent as number) > (ceilings.lanes as number)) return invalid(`lanes_per_agent is a whole number from 1 to ${ceilings.lanes}.`);
+    }
+    value.lanes_per_agent = b.lanes_per_agent as number;
+  }
+  if ('review_backlog_max' in b) {
+    if (b.review_backlog_max !== null && !wholeIn(b.review_backlog_max, 1, REVIEW_BACKLOG_MAX)) {
+      return invalid(`review_backlog_max is a whole number from 1 to ${REVIEW_BACKLOG_MAX}, or null for the platform's ${OPEN_PROPOSALS_MAX}.`);
+    }
+    value.review_backlog_max = b.review_backlog_max as number | null;
+  }
+  if ('daily_runs_per_agent' in b) {
+    if (b.daily_runs_per_agent !== null && !wholeIn(b.daily_runs_per_agent, 1, DAILY_RUNS_MAX)) {
+      return invalid(`daily_runs_per_agent is a whole number from 1 to ${DAILY_RUNS_MAX}, or null for the platform's ${DAILY_LIMIT}.`);
+    }
+    value.daily_runs_per_agent = b.daily_runs_per_agent as number | null;
+  }
+  return { ok: true, value };
+}
+
 async function engineDto(env: Env, s: Scope) {
   const settings = await scopeSettings(env, refRef(s));
+  // D7074: always HQ's ceilings here (not only when the scope uses them), so the page can say what is offered.
+  const ceilings = await capacityCeilings(env);
   return {
     engine: await engineMode(env),
     halted: await haltedAll(env),
     scope_paused: settings.engine_paused,
     max_parallel_runs: settings.max_parallel_runs,
     autonomy: autonomy(env),
+    capacity: {
+      // What the team set.
+      mode: settings.capacity_mode,
+      elastic_max_runs: settings.elastic_max_runs,
+      lanes_per_agent: settings.lanes_per_agent,
+      review_backlog_max: settings.review_backlog_max,
+      daily_runs_per_agent: settings.daily_runs_per_agent,
+      // What HQ offers: null means not offered.
+      offered: { elastic_max_runs: ceilings.elastic_runs, lanes_per_agent: lanesOffered(ceilings) ? ceilings.lanes : null },
+      // What admission enforces now, after HQ's ceilings.
+      in_force: {
+        parallel_runs: parallelLimit(settings, ceilings),
+        lanes_per_agent: laneLimit(settings, ceilings),
+        review_backlog: backlogLimit(settings),
+        daily_runs_per_agent: dailyLimit(settings),
+      },
+    },
   };
 }
 
@@ -647,7 +733,7 @@ router.put('/:scope/:id/engine', async (c) => {
     if (!(await canManage(c.env, s, user))) return notManager(c);
     const b = await readBody(c);
     const bad = (message: string) => say(c, { status: 400, code: 'invalid_engine', message });
-    if (!b || Object.keys(b).some((k) => k !== 'paused' && k !== 'max_parallel_runs') || !Object.keys(b).length) {
+    if (!b || Object.keys(b).some((k) => !ENGINE_KEYS.includes(k)) || !Object.keys(b).length) {
       return bad('Send paused (true or false) and/or max_parallel_runs (1 to 5).');
     }
     if ('paused' in b && typeof b.paused !== 'boolean') return bad('paused is true or false.');
@@ -655,7 +741,14 @@ router.put('/:scope/:id/engine', async (c) => {
       return bad('max_parallel_runs is a whole number from 1 to 5.');
     }
     const ref = refRef(s);
-    await putScopeSettings(c.env, ref, { paused: b.paused, max_parallel_runs: b.max_parallel_runs }, user.id);
+    // D7074: the capacity fields, each held under what HQ offers. A body that names none reads no ceiling.
+    const write: ScopeSettingsWrite = { paused: b.paused, max_parallel_runs: b.max_parallel_runs };
+    if (CAPACITY_KEYS.some((k) => k in b)) {
+      const checked = capacityWrite(b, await scopeSettings(c.env, ref), await capacityCeilings(c.env));
+      if (!checked.ok) return say(c, checked.problem);
+      Object.assign(write, checked.value);
+    }
+    await putScopeSettings(c.env, ref, write, user.id);
     const rt = await deps.runtime(c.env);
     // A pause stops admissions in the scope's object from the next request on; a resume rebuilds it from D1.
     if (b.paused === true) await rt.halt(ref, 'scope_paused');

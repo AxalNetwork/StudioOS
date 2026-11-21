@@ -11,19 +11,19 @@
 // browser pop-up.
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin } from 'lucide-react';
 import { Lightbox, Unreadable, actionGhost, actionPrimary } from '../../ui';
 import { ChartTable, GroupedColumns, Legend } from '../../ui/Charts';
 import { ChangeDialog } from './MyEventsDrawers';
-import { dateBlock, statusOf, timeLine, visibilityWord, whereOf, hostAction } from './myEventsModel';
+import { statusOf, timeLine, visibilityWord, hostAction } from './myEventsModel';
+import { CARD, EventLine, viewerZone } from './MyEventsCard';
 import { hostedPath, ticketPath } from './eventDrawersModel';
 import {
-  CALENDAR_KINDS, EMPTY, FORMATS, HOST_DEFAULTS, HOST_SORT, HOST_STATUS, HOST_VISIBILITY, HOST_WHEN, PAST_FILTERS, PRICES, SUBSCRIBE,
-  dayChips, dayLabel, discoverMonths, discoverRow, freeForMe, hostCounts, hostMenu, hostingView, invitationDialog, monthCells, monthTitle,
-  pageOf, pastAll, pastChart, pastView, pastYears, placeMenu, registerDialog, shiftMonth, subscribeLine, typeChips, typeLabel,
+  CALENDAR_KINDS, EMPTY, EXTERNAL_EVENTS, FORMATS, TOPICS, HOST_DEFAULTS, HOST_SORT, HOST_STATUS, HOST_VISIBILITY, HOST_WHEN, PAST_FILTERS, PRICES, SUBSCRIBE,
+  dayChips, dayLabel, discoverMonths, discoverParams, discoverRow, freeForMe, hostCounts, hostMenu, hostingView, invitationDialog, monthCells, monthTitle,
+  pageOf, pastAll, pastChart, pastView, pastYears, placeMenu, registerDialog, shiftMonth, sourceLabel, subscribeLine, topicLabel, typeChips, typeLabel,
 } from './myEventsTabsModel';
 
-export const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
+export { CARD, EventLine } from './MyEventsCard';
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
@@ -44,10 +44,22 @@ const KIND_CHIP = {
   invitation: 'border-dashed border-sky-300 bg-white text-axal-ink dark:border-sky-800 dark:bg-gray-900 dark:text-gray-100',
 };
 const KIND_DOT = { going: 'bg-axal-violet dark:bg-[#a78bfa]', hosting: 'bg-[#0ea5e9]' };
-const viewerZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } };
 
 export function Pill({ tone = 'muted', children, testId }) {
   return <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${TONES[tone] || TONES.muted}`} data-testid={testId}>{children}</span>;
+}
+
+/**
+ * ME5 (#5869): the event's source as a small badge, drawn from its `source`
+ * field. An event with no `source` draws nothing: no badge is guessed.
+ */
+export function SourceBadge({ event }) {
+  const label = sourceLabel(event);
+  if (!label) return null;
+  return (
+    <span className="inline-flex min-h-[18px] w-fit items-center rounded-[5px] border border-axal-hairline bg-white px-[7px] text-[10.5px] font-extrabold tracking-[.04em] text-axal-muted dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+      data-testid="my-events-source-badge" data-source={event.source}>{label}</span>
+  );
 }
 
 /** MEV15: a card that is reading, its lines as grey bars. */
@@ -68,36 +80,6 @@ export function EmptyCard({ copy, to, testId, glyph = '○' }) {
       <h2 className={`m-0 text-[16px] font-extrabold ${INK}`}>{copy.title}</h2>
       {copy.note ? <p className={`m-0 text-[13px] ${MUTED}`}>{copy.note}</p> : null}
       {copy.action && to ? <Link to={to} className={`${actionPrimary} mt-1`}>{copy.action}</Link> : null}
-    </div>
-  );
-}
-
-function DateTile({ event }) {
-  const d = dateBlock(event);
-  return (
-    <div className="flex w-[58px] shrink-0 flex-col items-center rounded-[10px] border border-axal-hairline py-1.5 font-mono dark:border-gray-700">
-      {d ? (<>
-        <span className={`text-[10px] font-bold ${MUTED}`}>{d.month}</span>
-        <span className={`text-[20px] font-extrabold leading-none ${INK}`}>{d.day}</span>
-        <span className={`text-[10px] ${MUTED}`}>{d.weekday}</span>
-      </>) : <span className={`px-1 text-center text-[10px] ${MUTED}`}>No date</span>}
-    </div>
-  );
-}
-
-export function EventLine({ event, to, sub = null, children }) {
-  return (
-    <div className="flex min-w-0 items-start gap-3">
-      <DateTile event={event} />
-      <div className="flex min-w-0 flex-col gap-0.5">
-        {to
-          ? <Link to={to} className={`truncate text-[14px] font-extrabold hover:text-axal-violet ${INK}`} data-testid="my-events-open-drawer">{event.title || 'Not recorded'}</Link>
-          : <span className={`truncate text-[14px] font-extrabold ${INK}`}>{event.title || 'Not recorded'}</span>}
-        {sub ? <span className={`text-[12px] ${MUTED}`}>{sub}</span> : null}
-        <span className={`text-[12px] ${MUTED}`}>{timeLine(event, viewerZone())}</span>
-        <span className={`inline-flex items-center gap-1 text-[12px] ${MUTED}`}><MapPin size={12} /> {whereOf(event)}</span>
-        {children}
-      </div>
     </div>
   );
 }
@@ -506,7 +488,8 @@ export function HostingList({ hosting, now, f, setF, onPublish, onCopy, onCancel
 
 /**
  * Discover: the next three months as chips, each with its count; the type
- * chips with counts for the chosen month; Format, Price and "Free for me";
+ * chips with counts for the chosen month; the topic chips (ME5, #5868), one
+ * at a time, sent as `topic=` with the other filters; Format, Price and "Free for me";
  * each row's price line and action from eligibility; "1–25 of [N]". One
  * failed read is said where it is, and never blanks the tab.
  */
@@ -517,6 +500,7 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
   const [type, setType] = useState('');
   const [format, setFormat] = useState('');
   const [price, setPrice] = useState('');
+  const [topic, setTopic] = useState('');
   const [mine, setMine] = useState(false);
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
@@ -532,22 +516,22 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
   useEffect(() => {
     let live = true;
     for (const m of months) {
-      Promise.resolve().then(() => api.publicList({ limit: 1, offset: 0, from: m.from, to: m.to, format: format || undefined, price: price || undefined }))
+      Promise.resolve().then(() => api.publicList(discoverParams({ limit: 1, from: m.from, to: m.to, format, price, topic })))
         .then((r) => { if (live) setMonthCounts((c) => ({ ...c, [m.key]: Number.isFinite(Number(r?.total)) ? Number(r.total) : null })); })
         .catch(() => { if (live) setMonthCounts((c) => ({ ...c, [m.key]: null })); });
     }
     return () => { live = false; };
-  }, [format, price, again]);
+  }, [format, price, topic, again]);
 
   // The chosen month, every event the filters match up to 100, so the type chips and pages count what is there.
   useEffect(() => {
     let live = true;
     setRead({ status: 'loading', events: [], total: null });
-    Promise.resolve().then(() => api.publicList({ limit: 100, offset: 0, from: win.from, to: win.to, q: term || undefined, format: format || undefined, price: price || undefined }))
+    Promise.resolve().then(() => api.publicList(discoverParams({ limit: 100, from: win.from, to: win.to, q: term, format, price, topic })))
       .then((r) => { if (live) setRead({ status: 'ready', events: Array.isArray(r?.events) ? r.events : [], total: Number.isFinite(Number(r?.total)) ? Number(r.total) : null }); })
       .catch(() => { if (live) setRead({ status: 'error', events: [], total: null }); });
     return () => { live = false; };
-  }, [monthKey, term, format, price, again]);
+  }, [monthKey, term, format, price, topic, again]);
 
   const chips = typeChips(read.events);
   const byType = read.events.filter((ev) => !type || (ev.type || 'other') === type);
@@ -584,7 +568,7 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
             <div className="grid gap-2.5 md:grid-cols-2 lg:grid-cols-4">
               {suggested.slice(0, 4).map((ev) => (
                 <Link key={ev.id} to={`/events/${ev.slug || ev.id}`} className={`${CARD} flex flex-col gap-1 p-3 hover:border-axal-violet`} data-testid="my-events-discover-suggested">
-                  <span className={`text-[13px] font-bold ${INK}`}>{ev.title}</span>
+                  <span className="flex flex-wrap items-center gap-1.5"><span className={`text-[13px] font-bold ${INK}`}>{ev.title}</span><SourceBadge event={ev} /></span>
                   <span className={`text-[11.5px] ${MUTED}`}>{timeLine(ev, zone)}</span>
                   {ev.suggestion_reason ? <Pill tone="info">{ev.suggestion_reason}</Pill> : null}
                 </Link>
@@ -601,6 +585,12 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
           </Chip>
         ))}
       </div>
+      <div role="group" aria-label="Topic" className="flex flex-wrap items-center gap-1.5" data-testid="my-events-discover-topics">
+        <span className={EYEBROW}>Topic</span>
+        {TOPICS.map((t) => (
+          <Chip key={t.key} on={topic === t.key} onClick={() => { setTopic(topic === t.key ? '' : t.key); reset(); }} testId={`my-events-discover-topic-${t.key}`}>{t.label}</Chip>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-2" data-testid="my-events-discover-types">
         {chips.map((t) => (
           <Chip key={t.key} on={type === t.key} onClick={() => { setType(type === t.key ? '' : t.key); reset(); }} testId={`my-events-discover-type-${t.key}`}>
@@ -610,7 +600,12 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
         <Select label="Format" value={format} onChange={(v) => { setFormat(v); reset(); }} options={FORMATS} testId="my-events-discover-format" />
         <Select label="Price" value={price} onChange={(v) => { setPrice(v); reset(); }} options={PRICES} testId="my-events-discover-price" />
         <Chip on={mine} onClick={() => { setMine(!mine); reset(); }} testId="my-events-discover-free">Free for me</Chip>
+        {/* ME5: events from outside Axal are not offered (D1487, question 1); the chip says so and does nothing. */}
+        <span role="note" title={EXTERNAL_EVENTS.state} aria-label={`${EXTERNAL_EVENTS.label}: ${EXTERNAL_EVENTS.state}. ${EXTERNAL_EVENTS.note}`}
+          className="inline-flex min-h-[28px] items-center whitespace-nowrap rounded-full border border-dashed border-axal-hairline px-3 text-[12px] font-semibold text-axal-muted opacity-75 dark:border-gray-700 dark:text-gray-400"
+          data-testid="my-events-discover-external">{EXTERNAL_EVENTS.label} · {EXTERNAL_EVENTS.state}</span>
       </div>
+      <p className={`m-0 text-[11.5px] ${MUTED}`} data-testid="my-events-discover-axal-only">{EXTERNAL_EVENTS.note}</p>
       {read.status === 'ready' && read.total != null && read.total > read.events.length ? (
         <p className={`m-0 text-[12px] ${MUTED}`} data-testid="my-events-discover-capped">{win.title} has {read.total} events; the first {read.events.length} are listed and counted here. Search to narrow them.</p>
       ) : null}
@@ -618,13 +613,13 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
         <h2 className={`m-0 flex items-center justify-between border-b border-axal-hairline px-4 py-3 text-[14px] font-extrabold dark:border-gray-800 ${INK}`}>{win.title} <span className={`text-[12px] font-semibold ${MUTED}`}>By date</span></h2>
         {read.status === 'loading' ? <div className="p-4"><Skeleton lines={4} testId="my-events-discover-loading" /></div>
           : read.status === 'error' ? <div className="p-4" data-testid="my-events-discover-unreadable"><Unreadable what="The public calendar" claim="This is not a claim that nothing is on." onRetry={() => setAgain((x) => x + 1)} /></div>
-            : pg.rows.length === 0 ? <p className={`m-0 p-4 text-[12.5px] ${MUTED}`} data-testid="my-events-discover-none">{mine ? 'No event on this page’s list is free for you.' : term ? `No event in ${win.title} matches “${term}”.` : `No upcoming events on the public calendar in ${win.title}.`}</p>
+            : pg.rows.length === 0 ? <p className={`m-0 p-4 text-[12.5px] ${MUTED}`} data-testid="my-events-discover-none">{mine ? 'No event on this page’s list is free for you.' : term ? `No event in ${win.title} matches “${term}”.` : topic ? `No upcoming events on the public calendar in ${win.title} are about ${topicLabel(topic)}.` : `No upcoming events on the public calendar in ${win.title}.`}</p>
               : pg.rows.map((ev) => {
                 const row = discoverRow(ev, { held, invitation: invitationFor(ev.id), elig: elig[ev.id] });
                 return (
                   <div key={ev.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="my-events-discover-row">
                     <EventLine event={ev} sub={ev.summary || null}>
-                      <span className="mt-1 flex flex-wrap items-center gap-2"><Pill>{typeLabel(ev.type)}</Pill>{row.pill ? <Pill tone="info">{row.pill}</Pill> : null}</span>
+                      <span className="mt-1 flex flex-wrap items-center gap-2"><Pill>{typeLabel(ev.type)}</Pill><SourceBadge event={ev} />{row.pill ? <Pill tone="info">{row.pill}</Pill> : null}</span>
                     </EventLine>
                     <span className="flex flex-col items-end gap-1">
                       <span className={`font-mono text-[12.5px] font-bold ${row.muted ? MUTED : INK}`} data-testid="my-events-discover-price-line">{row.price}</span>

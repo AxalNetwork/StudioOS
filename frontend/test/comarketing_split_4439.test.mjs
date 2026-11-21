@@ -62,12 +62,14 @@ test('the old route sends only a founder to the counted forward; the partner Off
   assert.match(read('../src/App.jsx'), /const CoMarketingFounderRedirect = lazy\(\(\) => import\('\.\/pages\/founder\/CoMarketingFounderRedirect'\)\)/);
 });
 
-test('founder opens co-marketing from Partner network and returns with the venture; investor has no navigation link', () => {
+test('founder opens co-marketing from Partnerships and returns with the venture; investor has no navigation link', () => {
   assert.deepEqual(moduleToolLinks('grow', 'partner-network', founder, '?project_id=41&tab=old'), [{ label: 'Open co-marketing', href: target + '?project_id=41' }]);
   assert.ok(!moduleToolLinks('grow', 'distribution', founder).some((link) => link.href.includes('co-marketing')));
-  assert.deepEqual(editorModuleLink(target, '?project_id=41&tab=old', founder), { href: '/grow/partner-network?project_id=41', label: '← Grow › Partner network' });
+  // D6118: Partner network's page is Partnerships, so the return names it, never the forward.
+  assert.deepEqual(editorModuleLink(target, '?project_id=41&tab=old', founder), { href: '/grow/partnerships?project_id=41', label: '← Grow › Partnerships' });
   assert.deepEqual(FOUNDER_ZONE_ACTIONS['grow/partnerships'][0], { canvas: 'New proposal', label: 'Open co-marketing', to: target });
-  assert.equal((read('../src/pages/founder/FounderGrowPartnerships.jsx').match(/\/grow\/partner-network\/co-marketing\?project_id=/g) || []).length, 2);
+  // D6118: the Partnerships page's co-marketing part links the workspace with the venture.
+  assert.match(read('../src/pages/cycles/PartnershipsCoMarketing.jsx'), /CO_MARKETING_WORKSPACE = '\/grow\/partner-network\/co-marketing'/);
   const visibility = PARTNER_TAB_SETS.offers.find((tab) => tab.to === '/comarketing');
   assert.deepEqual(visibility.roles, ['admin', 'partner']);
   assert.deepEqual(PAGE_HOMES['/comarketing'], [['partner', 'Offers', 'also']]);
@@ -81,9 +83,9 @@ test('founder opens co-marketing from Partner network and returns with the ventu
   assert.deepEqual(moduleToolLinks('grow', 'partner-network', { role: 'investor' }), []);
 });
 
-test('the reused founder page shows the published feed with a Partner network return, not a partner pitch form', () => {
+test('the reused founder page shows the published feed with a Partnerships return, not a partner pitch form', () => {
   const html = renderToStaticMarkup(h(MemoryRouter, { initialEntries: [target + '?project_id=41'] }, h(FounderCoMarketingPage, { user: founder })));
-  assert.match(html, /href="\/grow\/partner-network\?project_id=41"/);
+  assert.match(html, /href="\/grow\/partnerships\?project_id=41"/);
   assert.match(html, /Explore published webinars, blog posts and podcasts from the partner network/);
   assert.doesNotMatch(html, /My pitches|partner profile|Propose a pitch/);
   assert.equal((html.match(/<h1\b/g) || []).length, 1);

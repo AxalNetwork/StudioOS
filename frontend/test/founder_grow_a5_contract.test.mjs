@@ -13,8 +13,9 @@ const grow = cycleDef(cycleRouteSource(), 'grow');
 test('the Grow pages read the founder-side co-marketing route, never a partner-only one', () => {
   // The partner-side co-marketing reads refuse every founder (requirePartnerProfile),
   // so a founder page that calls them shows "sources unavailable" on every load.
-  for (const page of ['FounderGrowLaunch', 'FounderGrowPartnerships']) {
-    const src = read(`frontend/src/pages/founder/${page}.jsx`);
+  // D6118: Partnerships' co-marketing is a part of the partner-network page now.
+  for (const page of ['founder/FounderGrowLaunch', 'cycles/PartnershipsCoMarketing']) {
+    const src = read(`frontend/src/pages/${page}.jsx`);
     assert.doesNotMatch(src, /api\.listMyCoMarketing(Pitches|Attributions)\(/, `${page} calls a partner-only co-marketing read`);
     assert.match(src, /api\.founderCoMarketing\(/, `${page} does not read the founder-side co-marketing route`);
   }

@@ -17,7 +17,7 @@ const LEDGER_SENTENCES = [
   "Not recorded: management fee terms are missing. No fee was posted.",
   "Only an admin can assign the fund administrator.",
   "Only an admin or the assigned fund administrator can write this ledger.",
-  "Only the fund administrator or an admin can read the chart of accounts.",
+  "Only the fund administrator, the GP of record or an admin can read the chart of accounts.",
   "Record a date within this period and a description of up to 500 characters.",
   "Record a period label and valid start and end dates in order.",
   "Record a statement reference, line reference, date and signed amount in cents.",
@@ -135,11 +135,15 @@ export async function accrueFundFee(env: Env, actor: any, fundId: number, period
     lines:[{account_id:expenseAccount,debit_cents:fee,credit_cents:0},{account_id:payableAccount,debit_cents:0,credit_cents:fee}]},'fee_accrual',terms.id);
   return {...result,fee_cents:fee,fee_terms_id:terms.id};
 }
-export async function readFundLedger(env: Env, fund: any, full: boolean, selectedPeriod?: number) {
+/**
+ * `full` reads the journal, fees and trial balance; `canManage` is the write
+ * gate the page draws (D6241: the GP of record reads in full but writes nothing).
+ */
+export async function readFundLedger(env: Env, fund: any, full: boolean, selectedPeriod?: number, canManage: boolean = full) {
   const periods = await rows(env,`SELECT id,label,start_date,end_date,closed,version FROM fund_accounting_periods WHERE fund_id=? ORDER BY start_date DESC,id DESC`,[fund.id]);
   const period = selectedPeriod ? periods.find(p=>p.id===selectedPeriod) : periods[0];
   if (selectedPeriod && !period) throw new LedgerRefusal('Accounting period not found.',404);
-  const base = {id:fund.id,name:fund.name,can_manage:full,periods,period:period || null};
+  const base = {id:fund.id,name:fund.name,can_manage:canManage,full_read:full,periods,period:period || null};
   if (!period) return {...base,summary:{entry_count:0,fee_cents:null,expense_cents:null,reconciled_lines:0},journal:[],trial_balance:[],reason:'Not recorded: no accounting period is recorded.'};
   const entries = await rows(env,`SELECT id,uid,entry_date,description,kind,recorded_by,debit_cents,credit_cents,fee_terms_id
     FROM fund_ledger_entries WHERE fund_id=? AND period_id=? AND posted=1 ORDER BY entry_date,id`,[fund.id,period.id]);

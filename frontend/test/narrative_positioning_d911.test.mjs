@@ -19,6 +19,7 @@ import PitchPositioningRedirect from '../src/pages/raise/narrative/PitchPosition
 import {
   MOVED_NOTICE, POSITIONING_PATH, REMOVED_LINE, coreRows, movedHref, proposalRows, provenance, saveLine, versionRows,
 } from '../src/pages/raise/narrative/narrativeModel.js';
+import { withNarrativeCapabilities } from './_narrative_capabilities.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -38,7 +39,8 @@ const RUN = {
   ],
   removed: 1, withheld: 1, read_from: ['Validate › Segments', 'Validate › Competitors'],
 };
-const OPTIONS = { versions: [{ value: '4', label: 'v4 · seed fund' }] };
+// D5074: the versions read carries the founder's capability map, as the Worker sends it.
+const OPTIONS = withNarrativeCapabilities({ versions: [{ value: '4', label: 'v4 · seed fund' }] });
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: '' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
 
 function worker({ failPositioning = false, failRun = null } = {}) {

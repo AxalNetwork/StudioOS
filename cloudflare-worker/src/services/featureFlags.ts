@@ -65,7 +65,8 @@ export const DECK_FEATURES = Object.freeze([
   { key: 'deck:rehearsal', label: 'Rehearsal', description: 'Founders record a run-through of their deck and get timing and delivery notes.' },
   { key: 'deck:pptx_import', label: 'PowerPoint import', description: 'Founders start a deck from a .pptx file they upload.' },
   { key: 'deck:logo_wall', label: 'Logo wall', description: 'Founders add customer logos, each with its permission recorded, to a logo wall card.' },
-  // D1590 (#3837): read by every route of `routes/deck_recordings.ts`.
+  // D1590 (#3837): read by every route of `routes/deck_recordings.ts`; D5791 (#5791): and by the share link's
+  // walkthrough read (`routes/deck_share_walkthrough.ts`), for the walkthrough's maker.
   { key: 'deck:walkthrough', label: 'Recorded walkthrough', description: 'Founders record a take per card, captioned, and attach the walkthrough to an investor link.' },
 ] as const);
 export type DeckFeatureKey = (typeof DECK_FEATURES)[number]['key'];

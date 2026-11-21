@@ -1,7 +1,7 @@
 // #4274 (D4254 P1 slice 2): the deck bar in the editor (psE, psES, psEA) and the
 // Overview's Recent investor activity (ps1, D1568).
 //   * the bar replaces the crumb: ‹ Pitch to the Overview, the deck's h1, the
-//     section menu of the five tiles, Edit / Comment, then the D1604 tools and Ask;
+//     section menu of the six tabs, Edit / Comment, then the D1604 tools and Ask;
 //   * Comment opens the selected card's comments and Edit closes them;
 //   * `investorActivity` keeps only links someone opened, newest first, with
 //     D1568's words, and says `null` when the read gave no list.
@@ -46,11 +46,11 @@ test('investorActivity: opened links only, newest event first, D1568 words, capp
 
 test('the Overview draws Recent investor activity from the investor-links read, with a draft only for a prospect', () => {
   const s = src('pages/raise/pitch/PitchOverview.jsx');
-  assert.match(s, /const listLinks = \(id\) => deckInvestorLinksApi\.investorLinks\(id\);/);
-  assert.match(s, /<InvestorActivity read=\{links\} q=\{q\} projectId=\{projectId\} readOnly=\{readOnly\} \/>/);
+  assert.match(s, /const listLinks = \(id\) => investorLinks\(id\).then\(adapterRead\);/);
+  assert.match(s, /<InvestorActivity read=\{links\} previousRead=\{previous \? previousLinks : null\}/);
   assert.match(s, /!readOnly && r\.prospectId != null && projectId != null \?/, 'a reader, or a link with no prospect, gets no draft');
   assert.match(s, /<DraftDialog projectId=\{projectId\} prospect=\{\{ id: drafting\.prospectId/);
-  assert.match(s, /Investor activity could not be read\./);
+  assert.match(s, /<ReadState kind=\{status\} retry=\{missing.retry\}/);
   assert.doesNotMatch(s, /Recent\s+investor activity and Upcoming pitch meetings wait/, 'the "not drawn yet" note no longer lists it');
 });
 
@@ -70,11 +70,11 @@ test('the editor draws the deck bar in place of the crumb', async () => {
     assert.equal(m.pr(m.by('pitch-back')).href, '/raise/pitch?project_id=7');
     assert.ok(m.walk(bar).includes(m.by('pitch-heading')), 'the deck\'s h1 is in the bar');
     assert.ok(m.walk(bar).includes(m.by('deck-toolbar')) && m.walk(bar).includes(m.by('pitch-header-ask')));
-    // The section menu lists the five tiles, Decks current.
+    // The section menu lists the six tabs, Decks current.
     assert.equal(m.pr(m.by('pitch-deck-bar-section'))['aria-expanded'], false);
     await m.press(m.by('pitch-deck-bar-section'));
     assert.deepEqual(TABS.map((t) => m.pr(m.by(`pitch-deck-bar-section-${t.id}`)).href),
-      ['/raise/pitch/decks', '/raise/pitch/script', '/raise/pitch/review', '/raise/pitch/share', '/raise/pitch/notes'].map((p) => `${p}?project_id=7`));
+      ['/raise/pitch', '/raise/pitch/decks', '/raise/pitch/script', '/raise/pitch/review', '/raise/pitch/share', '/raise/pitch/notes'].map((p) => `${p}?project_id=7`));
     assert.equal(m.pr(m.by('pitch-deck-bar-section-decks'))['aria-current'], 'page');
     // Comment opens the selected card's comments; Edit closes them.
     assert.equal(m.pr(m.by('pitch-deck-bar-edit'))['aria-pressed'], true);

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
 import { bucketForPath, zoneForPath } from '../shellConfig';
-import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, ROOMS, TITLE as DEAL_FLOW_TITLE, compareIds, dealsPageTitle, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
+import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, ROOMS, ROUND_CALLS, TITLE as DEAL_FLOW_TITLE, compareIds, dealsPageTitle, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
 import { STATES as ROOM_STATES } from '../../components/deals/dealRoomCopy';
 
 const COMPARE_TITLE = 'Compare';
@@ -13,18 +13,20 @@ const DealRoomsPanel = lazy(() => import('../../components/deals/DealRoomsPanel'
 // D1236 (#2423): Deal flow at the root and Compare at /deals/compare.
 const DealFlow = lazy(() => import('../../pages/investor/dealflow/DealFlow'));
 const DealCompare = lazy(() => import('../../pages/investor/dealflow/DealFlow').then((m) => ({ default: m.DealCompare })));
-const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorDealsWorkspace'));
+// D6160 (#6160): the investor's round calls at `/round-calls`, a page of Deals with no pill of its own (D6159 Q1).
+const RoundCallIndex = lazy(() => import('../../pages/investor/RoundCallIndex'));
+const ROUND_CALLS_TITLE = 'Round calls';
+const ROUND_CALLS_LINE = 'Private calls founders sent you. An amount you indicate is Indicated, never committed.';
 /**
- * ONE ZONE AT A TIME, AS EACH ARTBOARD LANDS.
+ * ONE FILE PER ZONE.
  *
  * `Pages · Investor Deals.dc.html` draws four artboards, ID1–ID4, and each is
  * a full composition: a four-up strip, an instrument with its own columns, the
- * note that carries the finding, and the AI band. The workspace below renders
- * all four zones as one card each, which is what shipped and what the artboards
- * are not. They are replaced one at a time rather than in one commit, so a zone
- * is either its artboard or the card that preceded it — never a half-built
- * page. `ZONES` is the registry; a slug that is not in it falls through to the
- * workspace.
+ * note that carries the finding, and the AI band. They replaced the old
+ * workspace's cards one at a time. ID1 is retired (D1243), and the other three
+ * are built, so every zone slug in the shell config is in `ZONES`. The
+ * fall-through to `InvestorDealsWorkspace` for a slug missing from it could no
+ * longer render, and is gone (#6152).
  */
 // D1243 (#3256): Pipeline (ID1) is retired; `/deals/pipeline` forwards to Deal flow's table.
 const ZONES = {
@@ -96,10 +98,11 @@ export default function InvestorDealsRoutes() {
   // D4815: the deal rooms are a page of the bucket with no pill of their own,
   // as Compare is; the canvas's zone row is Deal flow, Screening, Commit, Closing.
   const isRooms = location.pathname === ROOMS;
+  const isRoundCalls = location.pathname === ROUND_CALLS;
   const zone = zoneForPath(bucket, location.pathname);
 
   const Zone = ZONES[zone?.slug];
-  const pageTitle = dealsPageTitle({ isRoot, isCompare, isRooms, slug: zone?.slug });
+  const pageTitle = dealsPageTitle({ isRoot, isCompare, isRooms, isRoundCalls, slug: zone?.slug });
   useEffect(() => { document.title = pageTitle; }, [pageTitle]);
 
   // NO `scope` PROP. It read `scope="One fund"` — a literal, on one of only
@@ -110,16 +113,17 @@ export default function InvestorDealsRoutes() {
   return (
     <WorkspaceShell
       role="investor"
-      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : isRooms ? ROOMS_TITLE : undefined}
-      activeSlug={isRoot || isCompare || isRooms ? null : undefined}
-      intro={isRooms ? ROOM_STATES.pipeline.intro : isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
+      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : isRooms ? ROOMS_TITLE : isRoundCalls ? ROUND_CALLS_TITLE : undefined}
+      activeSlug={isRoot || isCompare || isRooms || isRoundCalls ? null : undefined}
+      bucketPath={isRoundCalls ? '/deals' : undefined}
+      intro={isRoundCalls ? ROUND_CALLS_LINE : isRooms ? ROOM_STATES.pipeline.intro : isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
       rail={(
         <WorkerRail
           workspace="Deals"
           role="investor"
           stance="Manual workspace"
           note="Your pipeline, deal rooms, votes and invitations work without AI. Scores appear only when they exist in the live deal record. Eadwyn drafts only when you ask. This view never invents a memo, cost, model, or result."
-          coverage={[`${isRooms ? ROOMS_TITLE : isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
+          coverage={[`${isRoundCalls ? ROUND_CALLS_TITLE : isRooms ? ROOMS_TITLE : isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
           coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
           unavailable={[
             // WAS "Nothing on this page drafts a memo or produces a score" —
@@ -137,17 +141,18 @@ export default function InvestorDealsRoutes() {
           stacked on one page; the zones are now one line inside `DealFlow`,
           each linking to its route, and `DealsRoot` below says what else stays.
 
-          `embedded`: the shell above already draws the heading, the zone row and
-          the rail. Without it the workspace drew all three again inside them —
-          two h1s, two pill rows and two Worker AI rails on one page. */}
+          A zone route draws its own file; the root (and any path the shell
+          config does not give a zone) is Deal flow. */}
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
         {isCompare
           ? <DealCompare ids={compareIds(location.search)} />
           : isRooms
           ? <DealRoomsPanel />
-          : isRoot
-          ? <DealsRoot search={location.search} />
-          : (Zone ? <Zone /> : <InvestorDealsWorkspace embedded zone={zone?.slug} />)}
+          : isRoundCalls
+          ? <RoundCallIndex />
+          : Zone && !isRoot
+          ? <Zone />
+          : <DealsRoot search={location.search} />}
       </Suspense>
     </WorkspaceShell>
   );

@@ -134,7 +134,9 @@ test('mounted company page: the header from the position, Reports from the compa
       h(Routes, null,
         h(Route, { path: '/portfolio/companies/:uid', element: h(PortfolioCompanyPage) }),
         h(Route, { path: '/portfolio/companies/:uid/reports', element: h(PortfolioCompanyPage) }),
-        h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) })))));
+        h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) }),
+        // D4817 part 6: the old Terms address is replaced by Financials, at Ownership & rights.
+        h(Route, { path: '/portfolio/companies/:uid/financials', element: h(PortfolioCompanyPage) })))));
     await t.settle();
   };
   try {

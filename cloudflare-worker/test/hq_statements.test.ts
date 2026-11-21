@@ -114,6 +114,8 @@ function seededDb() {
   db.exec(MIGRATION_260);
   db.exec(MIGRATION_ACTIONS);
   db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611132151_5039_statement_adjustments.sql'), 'utf8'));
+  // D5949: the branch-reported issued and spent figures.
+  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611150136_5949_promo_issued_reports.sql'), 'utf8'));
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(HOLDER, 'admin', 'Sue', 'sue@axal.example');

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Network overview data states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.hdr{display:flex;flex-direction:column;gap:6px}
+.hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.k.bad{border-color:var(--negE)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c6{grid-column:span 6}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.ask .em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+</style>
+</helmet>
+<div class="cv" style="width:1440px;min-height:1240px">
+<div class="sh" style="min-height:1240px">
+<aside class="sd">
+<div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div>
+<button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company: Northwind Labs">Northwind Labs <span aria-hidden="true">▾</span></button>
+<span class="eye grp">Founder</span>
+<nav aria-label="Founder">
+<a href="#">Home</a><a href="#">Validate</a><a href="#">Build</a><a href="#">Raise</a><a href="#">Grow</a><a href="#" aria-current="page">Network</a><a href="#">Research</a><a href="#">Trust</a><a href="#">Company Settings</a>
+</nav>
+</aside>
+<div class="mn">
+<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></button><span class="av" role="img" aria-label="Account">MR</span></div></div>
+<main class="bd">
+<header class="hdr">
+<span class="eye">Network · Relationship intelligence</span>
+<div class="hrow">
+<div><h1>Your network</h1><p>Know who you can reach, which relationships need attention, and which introductions are moving.</p></div>
+<div class="acts"><button type="button" class="btn ask"><span class="em" aria-hidden="true">E</span>Ask</button><button type="button" class="btn p">Request introduction</button></div>
+</div>
+</header>
+<nav class="ptabs" aria-label="Network">
+<a href="#" aria-current="page">Overview</a><a href="#">Relationships</a><a href="#">Introductions</a><a href="#">Organizations</a>
+</nav>
+
+<div class="nt a"><span class="ic" aria-hidden="true">◷</span><div><b>Partly out of date.</b> Introductions could not be refreshed. What you see below was read at <span class="mo">14:02</span>, 47 minutes ago.</div><span class="bt"><button type="button" class="btn">Refresh introductions</button></span></div>
+
+<section class="kp" aria-label="Network summary, mixed states">
+<a class="k" href="#"><span class="tag">Read</span><span class="eye">Connections</span><span class="kv">142</span><span class="ks">people in your relationship book</span></a>
+<div class="k"><span class="tag">Loading</span><span class="eye">Needs attention</span><span class="sk" style="width:60px;height:30px" aria-hidden="true"></span><span class="ks" role="status">Loading follow-ups…</span></div>
+<div class="k bad"><span class="tag">Could not be read</span><span class="eye">Awaiting my action</span><span class="kv un">? Could not be read</span><span class="ks">Introduction requests did not load. This is not zero.</span><button type="button" class="btn" style="min-height:28px">Retry</button></div>
+<div class="k"><span class="tag">Stale</span><span class="eye">Active introductions</span><span class="kv">5</span><span class="ks"><span class="pl a">◷ as of 14:02</span></span></div>
+</section>
+
+<div class="g">
+<section class="c6 cd" aria-labelledby="s1">
+<span class="tag">Not recorded</span>
+<div class="ch"><h2 id="s1">Relationship strength</h2></div>
+<p class="kv un" style="line-height:1.4">— Not recorded</p>
+<p class="sub">The platform records follow-ups, notes, imports and introductions. It does not record a strength score, so none is shown and none is estimated.</p>
+</section>
+
+<section class="c6 cd" aria-labelledby="s2">
+<span class="tag">Could not be read</span>
+<div class="ch"><h2 id="s2">Introductions in progress</h2><span class="pl r">? Could not be read</span></div>
+<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>Introductions could not be read.</b> Your requests are safe; this view failed to load them. Nothing is shown as zero.</div><span class="bt"><button type="button" class="btn">Retry</button></span></div>
+</section>
+
+<section class="c4 cd" aria-labelledby="s3">
+<span class="tag">Empty, read</span>
+<div class="ch"><h2 id="s3">Introductions in progress</h2></div>
+<p class="sub">No introductions in progress. When you ask a teammate for an introduction, it appears here.</p>
+<button type="button" class="btn" style="align-self:flex-start">Request introduction</button>
+</section>
+
+<section class="c4 cd" aria-labelledby="s4">
+<span class="tag">No result</span>
+<div class="ch"><h2 id="s4">Find a warm path</h2></div>
+<p class="sub">Nobody on your teams who shares their book has this relationship recorded.</p>
+<p class="foot">Teammates who don’t share their book are not searched.</p>
+</section>
+
+<section class="c4 cd" aria-labelledby="s5">
+<span class="tag">Organization not recorded</span>
+<div class="ch"><h2 id="s5">Organizations</h2></div>
+<p class="sub">No organization is recorded on your relationships yet. Organizations are not guessed from email domains.</p>
+</section>
+
+<section class="c6 cd" aria-labelledby="s6">
+<span class="tag">Credits could not be read</span>
+<div class="ch"><h2 id="s6">People you may know</h2></div>
+<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border:1px solid var(--negE);border-radius:10px;background:var(--negBg)"><span class="sub">Spendable intro credits</span><b style="color:var(--neg)">? Could not be read</b></div>
+<p class="sub">Accept is turned off until the balance loads, so a match is never accepted against an unknown balance.</p>
+<div class="acts"><button type="button" class="btn">Decline</button><button type="button" class="btn p" aria-disabled="true" style="opacity:.6">Accept</button><button type="button" class="btn">Retry</button></div>
+</section>
+
+<section class="c6 cd" aria-labelledby="s7">
+<span class="tag">Insufficient credits</span>
+<div class="ch"><h2 id="s7">People you may know</h2></div>
+<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)"><span class="sub">Spendable intro credits</span><b class="mo" style="font-size:15px">0</b></div>
+<p class="sub">Accepting needs 1 credit. You have 0 spendable credits (read just now).</p>
+<div class="acts"><button type="button" class="btn">Decline</button><a class="btn p" href="#">Get credits</a></div>
+</section>
+</div>
+</main>
+</div>
+<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask about your network</span></aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

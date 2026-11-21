@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise v2 Calls Follow-through · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.pgh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pgh h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.pgh p{font-size:13px;color:var(--mu);margin-top:3px}
+.pgh .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.strip4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kc{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.kc .t{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kc .v{font:700 22px var(--mo);letter-spacing:-.02em;line-height:1.1}
+.kc .s{font-size:12.5px;color:var(--ink);line-height:1.45}
+.kc .s span{color:var(--mu)}
+.kc.inc{border-style:dashed;border-color:var(--amE)}
+.cat{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cat .hrow,.cat .row{display:grid;grid-template-columns:minmax(0,2.1fr) 1fr 1fr 1fr 1.1fr 1.1fr 74px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair)}
+.cat .hrow{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);padding-top:8px;padding-bottom:8px}
+.cat .row:last-child{border-bottom:0}
+.cat .row b{font-size:13.5px;display:block}
+.cat .row small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.cat .grp td{}
+.cat .gh{padding:7px 16px;font:700 11px var(--mo);color:var(--ink);background:var(--card);border-bottom:1px solid var(--hair)}
+.dim5{font-size:12px;line-height:1.35;display:flex;flex-direction:column;gap:1px}
+.dim5 b{font-size:12.5px!important;font-weight:700;display:flex!important;align-items:center;gap:5px}
+.dim5 b i{width:8px;height:8px;border-radius:2px;display:inline-block;flex:none}
+.dot-ok{background:var(--pos)}.dot-pt{background:transparent;border:1.5px solid var(--amD)}.dot-no{background:transparent;border:1.5px dashed var(--hair2)}.dot-pr{background:transparent;border:1.5px dashed #a78bfa}.dot-pa{background:var(--mu)}
+.pcard2{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.pcard2 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pcard2 h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.pcard2 .cat2{font:600 11px var(--mo);color:var(--mu)}
+.pcard2 .lead{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.pcard2 dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;font-size:12px;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2 dt{color:var(--mu)}
+.pcard2 dd{font-weight:600}
+.pcard2 .f{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2.custom{border-style:dashed}
+.att li{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.att li:first-child{border-top:0}
+.att li .w{font:500 11.5px var(--mo);color:var(--mu)}
+.att .ic2{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font:800 11px var(--sg)}
+.ic2.r{background:var(--negBg);color:var(--neg)}.ic2.a{background:var(--amBg);color:var(--amT)}.ic2.n{background:var(--raised);color:var(--mu)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:110px;padding-top:6px}
+.bars>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;background:#7c3aed;border-radius:3px 3px 0 0;min-height:2px}
+.bars i.z{background:var(--hair2)}
+.bars span{font:500 9.5px var(--mo);color:var(--mu)}
+.hbar{display:grid;grid-template-columns:140px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px;padding:4px 0}
+.hbar .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--amD)}
+.hbar b{font:700 12px var(--mo);text-align:right}
+.mods{display:flex;gap:8px;flex-wrap:wrap}
+.mods span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font-size:12px;font-weight:600}
+.mods span.off{border-style:dashed;color:var(--mu);background:transparent}
+.spec{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.spec dt,.spec dd{padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.spec dt{color:var(--mu);font-weight:600}
+.lock{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--mo);color:var(--mu);padding:3px 8px;border:1px solid var(--hair);border-radius:6px;background:var(--raised)}
+
+.fah{display:flex;flex-direction:column;gap:10px}
+.fah .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.fah h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.fah p{font-size:13.5px;color:var(--mu);margin-top:3px}
+.fah .r2{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.scopec{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1.5px solid var(--ink);border-radius:9px;background:var(--card);font:700 13px var(--sg)}
+.scopec span{font-weight:500;color:var(--mu)}
+.role{font:600 11px var(--mo);color:var(--mu);padding:2px 8px;border:1px solid var(--hair);border-radius:999px}
+.ws6{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ws6 a{padding:10px 14px 11px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ws6 a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ws6 a .n{font:700 10.5px var(--mo);margin-left:5px;padding:0 6px;border-radius:999px;background:var(--amBg);color:var(--amT);border:1px solid var(--amE)}
+.pos6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.pos6>div{padding:13px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.pos6>div:last-child{border-right:0}
+.pos6 small{font-size:12px;color:var(--mu)}
+.pos6 b{font:700 22px var(--mo);letter-spacing:-.02em}
+.pos6 em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.fhr{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,2fr) auto;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.fhr:first-child{border-top:0}
+.fhr b{font-size:14px}
+.fhr small{display:block;font-size:12px;color:var(--mu)}
+.fhr .m{font:600 13px var(--mo)}
+.fhr .q{font-size:12.5px;display:flex;gap:6px;flex-wrap:wrap}
+.att2 li{display:grid;grid-template-columns:110px minmax(0,1.6fr) minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.att2 li:first-child{border-top:0}
+.att2 .f{font:600 11.5px var(--mo);color:var(--mu)}
+.att2 .amt{font:700 13px var(--mo);text-align:right}
+.tl li{display:grid;grid-template-columns:86px 120px minmax(0,1fr) 110px 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tl li:first-child{border-top:0}
+.tl .w{font:500 11.5px var(--mo);color:var(--mu)}
+.tl .amt{font:700 12.5px var(--mo);text-align:right}
+.money td.n,.money th.n{text-align:right;font-family:var(--mo)}
+.nrec{color:var(--mu);font-family:var(--sg)!important;font-style:italic;font-weight:500!important}
+.unr{color:var(--neg);font-weight:700!important;font-family:var(--sg)!important}
+.fx2{display:grid;grid-template-columns:200px minmax(0,1fr) 200px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx2 dt,.fx2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.fx2 dt{color:var(--mu)}
+.fx2 dd{font-weight:600}
+.effect{display:grid;grid-template-columns:200px minmax(0,1fr);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+.effect dt,.effect dd{padding:9px 14px;border-bottom:1px solid var(--hair);font-size:13px}
+.effect dt{color:var(--mu);background:var(--raised)}
+.effect dd{font-weight:700;font-family:var(--mo)}
+.effect .hl{background:var(--amBg)}
+.flow5{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.flow5 span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.flow5 span+span{border-left:0}
+.flow5 span:first-child{border-radius:8px 0 0 8px}.flow5 span:last-child{border-radius:0 8px 8px 0}
+.flow5 span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.flow5 span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.rec2{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:10px;align-items:stretch}
+.rec2 .side{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.rec2 .side b.mo{font-size:15px}
+.rec2 .lnk{display:grid;place-items:center;font-size:18px;color:var(--mu)}
+.picker li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.picker li.dis{opacity:.75}
+.picker li.on{background:var(--lav)}
+.att2 .stt,.fhr .stt{justify-self:start}
+.mc>.stt{align-self:flex-start}
+
+.rgp{padding:8px 18px 2px;font:700 9.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.jr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:14px;background:var(--card);overflow:hidden}
+.jr>div{padding:14px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;min-width:0}
+.jr>div:last-child{border-right:0}
+.jr>div.cur{background:var(--lav)}
+.jr .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.jr .h b{font-size:13.5px;font-weight:800}
+.jr .h span{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.jr ol{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px}
+.jr ol li{display:inline-flex;align-items:center;gap:5px}
+.jr ol li+li:before{content:"→";color:var(--mu);margin-right:2px}
+.jst{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:999px;font:800 9px var(--sg);border:1.5px solid var(--hair2);color:var(--mu)}
+.jst.d{background:var(--pos);border-color:var(--pos);color:#fff}
+.jst.p{border-color:#7c3aed;color:#7c3aed}
+.jst.m{border-style:dashed}
+.rdy{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.rdy h2{font-size:15px;font-weight:800}
+.rdy .big{font:700 20px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.rdy .big span{font:500 13px var(--sg);color:var(--mu);letter-spacing:0}
+.nxt{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.nxt article{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:7px}
+.nxt article.first{border:2px solid #7c3aed}
+.nxt .n{font:700 10px var(--mo);color:var(--mu);letter-spacing:.06em;text-transform:uppercase}
+.nxt h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em}
+.nxt p{font-size:12.5px;color:var(--mu);line-height:1.5}
+.nxt .out{font-size:12px;line-height:1.45}
+.nxt .out b{font-weight:700}
+.imp{display:inline-flex;align-items:center;gap:5px;font:600 11px var(--mo);color:var(--mu);border:1px solid var(--hair);border-radius:6px;padding:1px 7px;background:var(--raised)}
+.srow{display:grid;grid-template-columns:150px 150px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.srow:first-child{border-top:0}
+.srow.h{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:0 0 6px}
+.mat{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.mat article{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:13px 14px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.mat h3{font-size:13.5px;font-weight:800}
+.mat dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 8px;font-size:12px}
+.mat dt{color:var(--mu)}
+.mat dd{font-weight:600;text-align:right}
+.mat .f{margin-top:auto;display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--hair)}
+.inv{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.inv>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.inv>div:last-child{border-right:0}
+.inv small{font-size:11.5px;color:var(--mu)}
+.inv b{font:700 19px var(--mo)}
+.src2 li{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.src2 li:first-child{border-top:0}
+.ch2{display:grid;grid-template-columns:150px minmax(0,1fr) 46px 120px;gap:10px;align-items:center;font-size:12.5px;padding:5px 0}
+.ch2 .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.ch2 .tr i{display:block;height:100%;background:#7c3aed}
+.ch2 .tr.nr{background:repeating-linear-gradient(45deg,transparent 0 4px,var(--hair) 4px 5px)}
+.ch2 b{font:700 12px var(--mo);text-align:right}
+.ra-mut{color:var(--mu)}
+.imp{align-self:flex-start}
+/* v2 revision · 9 Nov */
+.sp.eadx{align-items:stretch;padding:0;gap:0;display:flex;flex-direction:column;border-left:1px solid var(--hair);background:var(--card)}
+.rax-rel{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.rax-rel li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;font-size:12.5px;padding:6px 0;border-top:1px solid var(--hair)}
+.rax-rel li:first-child{border-top:0}
+.rax-rel li>.raw{grid-column:1;font-size:11.5px}
+.rax-rel li>.stt{grid-column:2;grid-row:1/span 2;justify-self:end}
+.rax-sl{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.rax-kf{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.rax-kf>div{padding:12px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.rax-kf>div:last-child{border-right:0}
+.rax-kf small{font-size:12px;color:var(--mu)}
+.rax-kf b{font:700 20px var(--mo);letter-spacing:-.02em}
+.rax-kf em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.rax-tag{display:inline-flex;align-items:center;gap:4px;font:700 10.5px var(--mo);letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:5px;border:1px solid var(--hair);white-space:nowrap;vertical-align:middle;align-self:flex-start}
+.rax-tag.rec{background:var(--ink);color:#fff;border-color:var(--ink)}
+.rax-tag.mod{background:repeating-linear-gradient(135deg,var(--card) 0 4px,var(--lav) 4px 8px);color:#5b21b6;border:1.5px dashed #7c3aed}
+.rax-tag.ff{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.rax-tag.bk{background:var(--posBg);color:var(--pos);border-color:var(--posE)}
+.rax-tag.mm,.rax-tag.nb{background:#fdecec;color:var(--neg);border-color:#f3b4b4}
+.rax-tag.ch{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+.rax-tag.rec::before{content:"●"}.rax-tag.mod::before{content:"◌"}.rax-tag.mm::before,.rax-tag.nb::before{content:"✕"}.rax-tag.bk::before{content:"✓"}.rax-tag.ff::before{content:"✎"}.rax-tag.ch::before{content:"↻"}
+.rax-stack{display:flex;flex-direction:column;gap:6px}
+.rax-stack>div{padding:9px 12px;border-radius:8px;font-size:12.5px;border:1px solid var(--hair)}
+.rax-stack .ok{background:var(--posBg);border-color:var(--posE)}
+.rax-stack .dup{background:#fdecec;border-color:#f3b4b4;text-decoration:line-through;color:var(--neg)}
+.rax-stack .kept{border-style:dashed;color:var(--mu)}
+.rax-3{display:grid;grid-template-columns:220px minmax(0,1fr) 260px;gap:14px;align-items:start}
+.rax-sec{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:8px 14px;font-size:13px;color:var(--ink)!important;border-left:3px solid transparent}
+.rax-sec.on{background:var(--lav);border-left-color:#7c3aed;font-weight:700}
+.rax-write{font:400 15px/1.7 var(--sg);padding:4px 0}
+.rax-write mark{background:none;padding:0 2px;border-bottom:2px solid var(--neg)}
+.rax-write mark.ch{border-bottom:2px dashed #3730a3}
+.rax-write span{border-bottom:2px dotted var(--amT)}
+.rax-jn{display:flex}
+.rax-jn>div{flex:1;padding:10px 12px;border:1px solid var(--hair);background:var(--card);font-size:13px;text-align:center}
+.rax-jn>div+div{border-left:0}
+.rax-jn>div:first-child{border-radius:9px 0 0 9px}.rax-jn>div:last-child{border-radius:0 9px 9px 0}
+.rax-jn>div.d{background:var(--posBg);color:var(--pos)}
+.rax-jn>div.on{background:var(--ink);color:#fff}
+.rax-recb{border:1.5px solid var(--ink)}
+.rax-modb{border:1.5px dashed #7c3aed;background:repeating-linear-gradient(135deg,var(--card) 0 10px,#faf7ff 10px 20px)}
+.rax-sc{border:1px dashed #7c3aed;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.rax-stop{border:1.5px dashed var(--hair);border-radius:12px;padding:14px 16px;color:var(--mu);font-size:12.5px;display:flex;flex-direction:column;gap:4px}
+.rax-al{display:grid;grid-template-columns:180px minmax(0,1fr) 48px 64px;gap:10px;align-items:center;font-size:13px;padding:5px 0}
+.rax-al .bar{height:10px;border-radius:5px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.rax-al .bar i{display:block;height:100%;background:var(--ink)}
+.rax-al b{font:700 12.5px var(--mo);text-align:right}
+.rax-al .mo{font-size:12px;color:var(--mu);text-align:right}
+.rax-pipe{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.rax-pipe>div{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;background:var(--card)}
+.rax-pipe small{font-size:12px;color:var(--mu)}
+.rax-pipe b{font:700 20px var(--mo)}
+/* RAC · Raise v2 addendum · Calls follow-through (#6053) */
+.rac-flag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;vertical-align:middle}
+.rac-note{border:1.5px dashed #a78bfa;border-radius:12px;padding:10px 14px;font-size:12.5px;line-height:1.7;color:var(--ink);background:var(--card)}
+.rac-note code{font:500 11.5px var(--mo)}
+.rac-nl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);margin-right:8px}
+.rac-fil{display:flex;flex-direction:column;gap:8px}
+.rac-rt td small{display:block;color:var(--mu);font-size:11.5px}
+.rac-rt input,.tbl input[type=checkbox]{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.tbl tr.rac-sel td{background:var(--lav)}
+.tbl tr.rac-dis td{color:var(--mu);background:repeating-linear-gradient(135deg,transparent 0 6px,var(--raised) 6px 12px)}
+.tbl tr.rac-dis td b{color:var(--mu);font-weight:600}
+.tbl tr.rac-hl td{background:var(--lav);border-bottom-color:var(--lavE)}
+.tbl tr.rac-hl td:first-child{box-shadow:inset 3px 0 0 #7c3aed}
+.rac-prop{border:1px dashed #7c3aed;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:7px;background:var(--card)}
+.rac-prop b{font-size:13.5px;line-height:1.35}
+.rac-prop p{font-size:12.5px;line-height:1.5;color:var(--mu)}
+.rac-pv{border:1px solid var(--hair);border-radius:10px;padding:12px 14px;background:var(--raised);display:flex;flex-direction:column;gap:4px}
+.rac-pv b{font-size:14px}
+.rac-pv p{font-size:12.5px;line-height:1.5}
+.rac-off{display:flex;flex-direction:column;gap:8px}
+.rac-off li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;font-size:12.5px;padding:6px 0;border-top:1px solid var(--hair)}
+.rac-off li:first-child{border-top:0}
+.rac-off li div{display:flex;flex-direction:column;gap:1px}
+.rac-off li span{color:var(--mu)}
+.rac-fmt{display:grid;grid-template-columns:1fr 1fr;gap:10px;border:0;padding:0;margin:0}
+.rac-fmt legend{margin-bottom:6px}
+.rac-fmt label{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;font-size:13px;background:var(--card)}
+.rac-fmt label.on{border:2px solid #7c3aed;background:var(--lav)}
+.rac-fmt label span{flex-basis:100%;font-size:12px;color:var(--mu);padding-left:22px}
+.rac-fmt input{accent-color:#7c3aed}
+.rac-fmtl{display:flex;gap:8px;align-items:center;font-size:12.5px}
+.rac-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rac-two section{border:1px solid var(--hair);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.rac-two section.w{border-style:dashed;background:var(--raised)}
+.rac-two ul{display:flex;flex-direction:column;gap:5px}
+.rac-two li{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;line-height:1.45}
+.rac-two li svg{margin-top:3px;flex:none}
+.rac-steps{display:flex;gap:6px;flex-wrap:wrap}
+.rac-steps li{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mu);padding:3px 10px 3px 4px;border-radius:999px;border:1px solid var(--hair)}
+.rac-steps li span{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1.5px solid var(--hair2);font:700 10px var(--mo)}
+.rac-steps li.on{color:var(--vt);border-color:var(--lavE);background:var(--lav);font-weight:700}
+.rac-steps li.on span{border-color:#7c3aed}
+.rac-steps li.d span{background:var(--pos);border-color:var(--pos);color:#fff}
+.rac-ban{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--lavE);background:var(--lav);font-size:12.5px}
+.rac-ban b{font-weight:800}
+.rac-ban span{color:var(--mu)}
+.rac-car{display:inline-flex;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--pos)!important}
+.rac-nw{display:inline-flex;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT)!important}
+.rac-ind{border:1.5px dashed var(--hair2);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:5px;background:var(--raised)}
+.rac-ind b{font-size:13.5px}
+.rac-ind p{font-size:12.5px;line-height:1.5;color:var(--mu)}
+.rac-rec{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border:1.5px solid var(--ink);border-radius:10px;padding:10px 14px;font-size:13px}
+.rac-rec>span{display:inline-flex;align-items:center;gap:6px;color:var(--pos)}
+.rac-rec>span b{color:var(--ink)}
+.rac-diff{font:600 12px var(--sg);color:var(--amT)}
+.rac-full{position:absolute;inset:0;z-index:8;background:var(--card);display:flex;flex-direction:column}
+.rac-sticky{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 16px 20px;border-top:1px solid var(--hair);background:var(--card);z-index:6}
+.rac-sticky .btn{flex:1}
+.rac-sticky>span{font-size:13px;font-weight:700;flex:none}
+.rac-mc{cursor:pointer}
+.rac-mc input{accent-color:#7c3aed;width:20px;height:20px;margin:0}
+.rac-mc.rac-dis{background:repeating-linear-gradient(135deg,var(--card) 0 6px,var(--raised) 6px 12px);color:var(--mu)}
+.rac-rt td:nth-child(2){min-width:240px}
+.rac-rt td,.rac-rt th{white-space:nowrap}
+.rac-rt td small.rac-why{color:var(--ink);font-weight:600}
+.rac-q li{display:grid;grid-template-columns:56px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.rac-q li:first-child{border-top:0}
+.rac-q li>span{color:var(--mu);font-size:12px}
+.rac-q b{font-weight:600}
+.rac-q small{display:block;color:var(--mu);font-size:11.5px;margin-top:2px}
+.rac-cm{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px;align-items:stretch}
+.rac-cm dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 14px;align-content:center;border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 16px;font-size:13px}
+.rac-cm dt{display:flex;gap:6px;align-items:center;font-weight:700}
+.rac-cm dd{color:var(--mu)}
+.pbd>.rac-flag{align-self:flex-start}
+.cv .tbl,.cv .dt{color:inherit;font-size:12.5px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "RAC16", "options": ["RAC16", "RAC16B", "RAC17", "RAC18", "RAC18B", "RAC19", "RAC20", "RAC20B", "RAC20C", "RAC20D", "RAC21", "RAC22", "RAC22B", "RAC22C", "RAC22D", "RAC23", "RAC24", "RAC27", "RAC28", "RAC28B", "RAC25a", "RAC25b", "RAC25c", "RAC26a", "RAC26b", "RAC26c", "RAC27P", "RAC27R", "RACH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'RAC16';
+    const dark = ['RAC28', 'RAC28B'].includes(B);
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      st: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 1.6"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      lk: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      na: SV('<path d="M2.5 6h7" stroke="currentColor" stroke-width="2"/>'),
+      mz: SV('<text x="6" y="9.5" text-anchor="middle" font-size="9.5" font-weight="700" font-family="monospace" fill="currentColor">0</text>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="1 1.8"/>')
+    };
+    const S = { Ready: ['ok', 'ok'], Saved: ['ok', 'ok'], Reviewed: ['ok', 'ok'], Connected: ['ok', 'ok'], Fresh: ['ok', 'ok'], Assessed: ['ok', 'ok'], Shared: ['pd', 'pd'], Draft: ['pd', 'pd'], 'In progress': ['pd', 'pd'], Missing: ['xar', 'ar'], 'Needs attention': ['xar', 'ar'], Partial: ['xar', 'half'], Stale: ['xst', 'st'], Unavailable: ['un', 'ua'], Failed: ['fl', 'fl'], Restricted: ['ni', 'lk'], 'Not applicable': ['na', 'na'], 'Measured zero': ['mz', 'mz'], 'Not recorded': ['ni', 'nd'], Empty: ['ni', 'nd'], 'Not connected': ['ni', 'nd'] };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+    const NREC = '<span class="nrec">— Not recorded</span>';
+    const UNAV = '<span class="unr">! Unavailable · <a href="#">Retry</a></span>';
+    const BE = (t) => '<span class="ptag" title="Needs backend work">◇ ' + (t || 'Backend required') + '</span>';
+
+    /* ---------- founder shell, Raise grouped ---------- */
+    const GROUPS = [['', ['Overview']], ['Prepare', ['Evidence', 'Fundraising readiness']], ['Build the story', ['Investor narrative', 'Pitch']], ['Prepare diligence', ['Data room', 'Cap table', 'Use of funds']], ['Run the raise', ['Capital relationships']]];
+    const raiseNav = (cur) => '<nav aria-label="Raise" style="display:flex;flex-direction:column;gap:1px;margin:2px 0 4px 18px;border-left:1px solid var(--hair);padding-left:6px">' + J(GROUPS.map(g => (g[0] ? '<span class="rgp">' + g[0] + '</span>' : '') + J(g[1].map(t => '<a href="#" style="min-height:28px;font-size:12.5px;font-weight:' + (t === cur ? '800' : '600') + ';color:' + (t === cur ? 'var(--vt)' : 'var(--mu)') + ';display:flex;align-items:center;padding:0 10px;border-radius:8px' + (t === cur ? ';background:var(--lav)' : '') + '"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')))) + '</nav>';
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><div class="selb" style="font-size:12px"><span>[Northwind Labs]</span><span aria-hidden="true">▾</span></div></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Raise' ? ' style="color:var(--ink);font-weight:800"' : '') + '>' + t + '</a>' + (t === 'Raise' ? raiseNav(cur) : ''))) + '</nav></aside>';
+    const top = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">GL</span></div></div>';
+
+    /* ================= RAC · Raise v2 addendum · Calls follow-through (#6053, brief CLS16 to CLS28) ================= */
+    const FLAG = (t) => '<span class="rac-flag" title="Owner policy decision">⚑ ' + t + '</span>';
+    const NOTE = (t) => '<div class="rac-note"><span class="rac-nl">Design note</span>' + t + '</div>';
+    const OWN = '[Maya Chen]', COF = '[Sam Patel]';
+    const TABS = ['Pipeline', 'Match', 'Outreach', 'Commitments', 'Calls', 'Activity', 'Closing'];
+    const mhead = (crumb, title, purpose, primary, sec, tabs, curTab, stateLine, primaryOff) => '<div class="crumb" style="font:600 12px var(--sg);color:var(--mu)">Raise / ' + crumb + '</div><header class="pgh"><div><h1>' + title + '</h1><p>' + purpose + '</p>' + (stateLine ? '<div class="rax-sl">' + stateLine + '</div>' : '') + '</div><div class="ctl">' + (sec || '') + (primary ? '<button type="button" class="btn p"' + (primaryOff ? ' aria-disabled="true"' : '') + '>' + primary + '</button>' : '') + '</div></header>'
+      + (tabs ? '<nav class="ptabs" aria-label="Capital relationships">' + J(tabs.map(t => '<a href="#"' + (t === curTab ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>' : '');
+    const kfig = (rows) => '<div class="rax-kf">' + J(rows.map(r => '<div><small>' + r[0] + '</small><b>' + r[1] + '</b>' + (r[2] ? '<em>' + r[2] + '</em>' : '') + '</div>')) + '</div>';
+    const box = (t, inner, extra) => '<section class="cd" style="gap:8px' + (extra || '') + '"><div class="ch"><h2 style="font-size:13.5px">' + t + '</h2></div>' + inner + '</section>';
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const eRail = (inner) => '<aside class="sp eadx" aria-label="Ask Eadwyn" style="width:330px"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Ask Eadwyn</b></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1">' + inner + '<p class="foot">Proposals never change a record until you accept them. Eadwyn never sends, records or sets an audience.</p></div><div style="padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px"><div class="inp" style="min-width:0;min-height:38px">Ask about this call…</div><button type="button" class="dd" style="justify-content:space-between" aria-haspopup="listbox">Model: Recommended ▾</button><button type="button" class="disc2" aria-expanded="false">Usage &amp; pricing ▾</button></div></aside>';
+    const railMini = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Ask Eadwyn" aria-expanded="false" style="background:#7c3aed;color:#fff">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const prop = (eye, title, body, acts) => '<div class="rac-prop"><span class="eye">' + eye + '</span><b>' + title + '</b><p>' + body + '</p><div style="display:flex;gap:6px;flex-wrap:wrap">' + J((acts || ['Accept', 'Edit', 'Discard']).map(a => '<button type="button" class="btn bsm">' + a + '</button>')) + '</div></div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="sh" style="min-height:' + (o.h || 900) + 'px;grid-template-columns:200px minmax(0,1fr) ' + (o.rail ? '330px' : '44px') + '">' + side('Capital relationships') + '<div class="mn">' + top + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail ? eRail(o.rail) : railMini) + (o.overlay || '') + '</div></div>'; };
+    const cb = (on, dis, lab) => '<input type="checkbox"' + (on ? ' checked' : '') + (dis ? ' disabled' : '') + ' aria-label="' + lab + '">';
+    const dt = (d) => d ? '<span class="mo">' + d + '</span>' : '<span class="ra-mut">—</span>';
+    const NO = '<span class="stt ni">' + SH.nd + 'Not opened</span>';
+
+    /* ---------- the open call: [Bridge call] ---------- */
+    const BRIDGE_STATE = st('In progress', 'Open') + '<span class="stt">Sent <span class="mo">&nbsp;6 Nov</span></span><span class="stt">Closes <span class="mo">&nbsp;27 Nov</span></span><span class="stt ok">' + SH.ok + 'Counsel approved 5 Nov</span>' + BE('Started from [Seed extension] · #6053');
+    const bridgeHead = (primary, off, secOff) => mhead('Capital relationships / Calls / [Bridge call]', '[Bridge call]', 'A private round call to 30 investors · SAFE · [$400,000] target · USD', primary, '<button type="button" class="btn"' + (secOff ? ' aria-disabled="true"' : '') + '>Export responses</button><button type="button" class="btn">Extend</button><button type="button" class="btn">Close call</button>', TABS, 'Calls', BRIDGE_STATE, off);
+    const bridgeFig = () => kfig([['Recipients', '30', '24 chosen · 6 matching'], ['Opened', '20 <span style="font:500 13px var(--sg);color:var(--mu)">of 30</span>', 'since 6 Nov'], ['Data-room requests', '8', 'since 6 Nov'], ['Responded', '13 <span style="font:500 13px var(--sg);color:var(--mu)">of 30</span>', 'since 6 Nov'], ['Indicated, not committed', '[$310,000]', 'of [$400,000] target · never counted']]);
+    // rows: name, origin, delivery, opened, dataroom, responded, last reminded, count, ticked, disabled reason, group
+    const RROWS = [
+      ['[Investor K]', 'Chosen', 'Told on Axal', '6 Nov', '', '', 'Never', 0, 1, '', 'oa'],
+      ['[Investor L]', 'Chosen', 'Told on Axal', '7 Nov', '7 Nov', '', 'Never', 0, 1, '', 'oa'],
+      ['Matching investor · [Fintech]', 'Matching', 'Told on Axal', '6 Nov', '', '', 'Never', 0, 1, '', 'oa'],
+      ['[Investor M]', 'Chosen', 'Told on Axal', '7 Nov', '', '', '9 Nov', 1, 1, '', 'oa'],
+      ['[Investor N]', 'Chosen', 'Told on Axal', '13 Nov', '', '', 'Never', 0, 0, '', 'oa'],
+      ['[Investor P]', 'Chosen', 'Told on Axal', '', '', '', '12 Nov', 2, 0, 'Reminded twice · limit reached', 'no'],
+      ['[Investor Q]', 'Chosen', 'Told on Axal', '', '', '', '12 Nov', 1, 0, 'Next reminder from 15 Nov', 'no'],
+      ['Matching investor · [Climate]', 'Matching', 'Told on Axal', '', '', '', 'Never', 0, 1, '', 'no'],
+      ['[Investor R]', 'Chosen', 'Told on Axal', '', '', '', 'Never', 0, 1, '', 'no']];
+    const filterRow = (z) => '<div class="rac-fil"><span class="eye">Who has not acted · since 6 Nov · out of 30 recipients</span><div class="chips" role="group" aria-label="Filter recipients">' + J([['Not opened', z ? '0' : '9', !z], ['Opened, not answered', z ? '0' : '7', !z], ['Not delivered', z ? '0' : '1', false], ['All recipients', '30', false]].map(c => '<button type="button" aria-pressed="' + c[2] + '" aria-checked="' + c[2] + '">' + c[0] + ' <span>' + c[1] + '</span></button>')) + '</div></div>';
+    const rtable = (rows) => '<table class="tbl rac-rt"><caption class="sr">Recipients who have not opened or not answered</caption><thead><tr><th style="width:28px"><span class="sr">Select</span></th><th>Recipient</th><th>Delivery</th><th>Opened</th><th>Data room</th><th>Last reminded ' + BE('#6053') + '</th></tr></thead><tbody>'
+      + J(rows.map(r => '<tr class="' + (r[9] ? 'rac-dis' : '') + (r[8] ? ' rac-sel' : '') + '"><td>' + cb(r[8], !!r[9], 'Select ' + r[0]) + '</td><td><b>' + r[0] + '</b><small>' + (r[1] === 'Matching' ? 'Matching · not named until they respond' : 'Chosen') + '</small>' + (r[9] ? '<small class="rac-why">' + (r[7] === 2 ? '⦸ ' : '◷ ') + r[9] + '</small>' : '') + '</td><td>' + st('Ready', r[2]) + '</td><td>' + (r[3] ? dt(r[3]) : NO) + '</td><td>' + dt(r[4]) + '</td><td>' + (r[6] === 'Never' ? '<span class="ra-mut">Never</span>' : dt(r[6]) + ' <small class="ra-mut" style="display:inline">· ' + r[7] + ' of 2</small>') + '</td></tr>')) + '</tbody></table>';
+    const remindPage = () => bridgeHead('Remind (12)') + bridgeFig()
+      + '<section class="cd"><div class="ch"><h2>Recipients</h2><span class="sm">12 selected · 6 opened, not answered · 6 not opened</span></div>' + filterRow(false) + rtable(RROWS)
+      + '<div style="display:flex;justify-content:space-between;align-items:center"><button type="button" class="btn t bsm">Show 7 more of 16</button><span class="raw">Matching investors stay “Matching investor · [sector]” until they respond, here and in the reminder.</span></div></section>'
+      + NOTE('Remind, the Last reminded column and the limit need backend work ' + BE('#6053 remind action') + ' The limit is drawn as option A ' + FLAG('Q2 · 2 per recipient, 3 days apart') + ' Owner only ' + FLAG('Q1 · A') + '. The whole area is behind <code>ROUND_CALLS_ENABLED="false"</code> (#1008 item 19): the build cannot be checked live until counsel answers.');
+    const remindRail = prop('Proposal · who to remind', '[6] opened in the first two days and have not answered', 'Ticked for you: [Investor K], [Investor L], [Investor M], two more chosen investors and one matching investor (not named). [Investor N] opened yesterday, so it is left out.', ['Accept selection', 'Edit', 'Discard']) + '<p class="raw">Read from opened_at and responded_at on this call. You still press Remind.</p>';
+
+    const remindSheet = () => '<div class="dim1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="rmh" style="width:560px"><div class="drh"><div class="tr"><span class="eye">[Bridge call] · Remind</span><button type="button" class="ib" aria-label="Close">✕</button></div><h2 id="rmh">Remind 12 recipients</h2><div class="mt"><span>6 opened, not answered · 6 not opened</span></div></div>'
+      + '<div class="drb"><div><h3>What they receive</h3><div class="rac-pv"><span class="eye">Axal VC · notification</span><b>A private round call</b><p>[Northwind Labs] invited you to a private round call. It closes on 27 Nov.</p><a href="#" class="mo" style="font-size:12px">/round-calls/[uid]</a></div><p class="raw" style="margin-top:6px">The same in-app notice as the send. Nothing about who else was asked, amounts or other responses. No email is sent.</p></div>'
+      + '<div><h3>Who</h3><dl class="kv2" style="grid-template-columns:170px minmax(0,1fr)"><dt>Opened, not answered</dt><dd>6 · 5 named, 1 matching investor (not named)</dd><dt>Not opened</dt><dd>6 · 5 named, 1 matching investor (not named)</dd><dt>Left out</dt><dd>3 at the limit or too soon · 1 opened yesterday</dd></dl></div>'
+      + '<div><h3>Limit ' + FLAG('Q2 · option A') + ' ' + BE('#6053') + '</h3><p style="font-size:12.5px">At most 2 reminders per recipient per call, at least 3 days apart. After this one, [Investor M] reaches the limit.</p></div></div>'
+      + '<div class="drf"><p class="ln">Nothing is sent until you press Remind 12. Reminders are logged on the call.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Remind 12</button></div></div></aside>';
+
+    /* ---------- the closed call: [Seed extension] ---------- */
+    const SEED_STATE = st('Shared', 'Closed 12 Oct') + '<span class="stt">Sent <span class="mo">&nbsp;1 Oct</span></span><span class="stt ok">' + SH.ok + 'Counsel approved 29 Sep</span>';
+    const seedHead = (primary, sec, off) => mhead('Capital relationships / Calls / [Seed extension]', '[Seed extension]', 'A private round call to 24 investors · SAFE · [$500,000] target · USD', primary, sec, TABS, 'Calls', SEED_STATE, off);
+    const seedNow = () => mhead('Capital relationships / Calls / [Seed extension]', '[Seed extension]', 'A private round call to 24 investors · SAFE · [$500,000] target · USD', 'Start a new call from this', '<button type="button" class="btn">Export responses</button>', TABS, 'Calls', SEED_STATE + '<span class="raw" id="snr">Start a new call is off: one call at a time. [Bridge call] is open.</span>', true);
+    const seedFig = () => kfig([['Recipients', '24', '18 chosen · 6 matching'], ['Opened', '19 <span style="font:500 13px var(--sg);color:var(--mu)">of 24</span>', '1 Oct to 12 Oct'], ['Responded', '11 <span style="font:500 13px var(--sg);color:var(--mu)">of 24</span>', '1 Oct to 12 Oct'], ['Questions', '7', '5 answered'], ['Indicated, not committed', '[$410,000]', 'of [$500,000] target · never counted']]);
+    const SEED = [['[Investor A]', '1 Oct', '2 Oct', '3 Oct', '[$50,000]'], ['[Investor B]', '1 Oct', '1 Oct', '2 Oct', '[$100,000]'], ['[Investor C]', '2 Oct', '', '4 Oct', '[$25,000]'], ['[Investor D]', '1 Oct', '3 Oct', '5 Oct', '[$75,000]'], ['[Investor E]', '3 Oct', '', '6 Oct', '[$50,000]'], ['[Investor F]', '2 Oct', '', '8 Oct', '']];
+    const seedTable = (sel) => '<table class="tbl"><thead><tr><th>Responder</th><th>Opened</th><th>Data room</th><th>Responded</th><th class="n">Indicated (USD), not committed</th><th>In Capital relationships</th></tr></thead><tbody>' + J(SEED.map(r => '<tr' + (r[0] === sel ? ' class="cur"' : '') + '><td><b>' + r[0] + '</b></td><td>' + dt(r[1]) + '</td><td>' + dt(r[2]) + '</td><td>' + dt(r[3]) + '</td><td class="n">' + (r[4] || NREC) + '</td><td>' + (r[0] === '[Investor D]' ? st('Ready', 'Wired · counted') : r[0] === '[Investor E]' ? st('Not applicable', 'Other currency') : st('Draft', 'Indicated · Soft · not counted')) + '</td></tr>')) + '</tbody></table><p class="raw">Showing 6 of 11 responders. [4] matching investors never responded and are not named.</p>';
+    const seedTerms = () => '<section class="cd"><div class="ch"><h2>Terms this call carried</h2><span class="sm">Counsel approved 29 Sep</span></div><dl class="kv2" style="grid-template-columns:repeat(4,max-content minmax(0,1fr));column-gap:14px"><dt>Amount</dt><dd class="mo">[$500,000]</dd><dt>Instrument</dt><dd>SAFE</dd><dt>Minimum cheque</dt><dd class="mo">[$25,000]</dd><dt>Valuation cap</dt><dd class="mo">[$8,000,000]</dd><dt>Discount</dt><dd>' + NREC + '</dd><dt>Pre-money</dt><dd>' + NREC + '</dd><dt>Deck</dt><dd>[Northwind seed deck] v5</dd><dt>Data room</dt><dd>Recorded</dd></dl></section>';
+
+    /* ---------- CLS17 · result, limits, off, empty ---------- */
+    const remindResult = () => crop('<span class="eye">RAC17 · Remind · result, limits and empty</span>'
+      + '<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>11 of 12 were reminded on Axal at 15:20; one investor’s account is paused.</b><div>[Investor R] was not reminded: Not delivered · account paused. Nothing else was sent.</div></div><span class="bt"><button type="button" class="btn bsm">See who</button></span></div>'
+      + '<div style="display:grid;grid-template-columns:1.45fr 1fr;gap:14px">' + box('Rows at the limit', rtable([['[Investor P]', 'Chosen', 'Told on Axal', '', '', '', '12 Nov', 2, 0, 'Reminded twice · limit reached', 'no'], ['[Investor M]', 'Chosen', 'Told on Axal', '7 Nov', '', '', '14 Nov', 2, 0, 'Reminded twice · limit reached', 'oa'], ['[Investor W]', 'Chosen', 'Told on Axal', '', '', '', '12 Nov', 2, 0, 'Reminded twice · limit reached', 'no']]) + '<p class="raw">Greyed with the word and ⦸, never by colour alone. The checkbox is disabled and says why.</p>')
+      + box('Remind is off, with its reason', '<ul class="rac-off">' + J([['Past the close date', 'This call’s close date has passed. Extend the call to remind anyone.'], ['Closed', 'This call closed on 12 Oct. Nobody can be reminded.'], ['Awaiting counsel', 'The extension is with counsel. Reminders wait for approval.'], ['Read only', 'This call is read only for you.']].map(o => '<li><button type="button" class="btn p bsm" aria-disabled="true" aria-describedby="x">Remind</button><div><b>' + o[0] + '</b><span>' + o[1] + '</span></div></li>')) + '</ul><p class="raw">Remind is never on while the call is <code>read_only</code>.</p>') + '</div>'
+      + box('Empty · everyone answered', filterRow(true) + '<div class="nt"><span class="ic" aria-hidden="true">0</span><div><b>Everyone you asked has answered. Nothing to remind.</b><div class="mu">An example call where 30 of 30 recipients responded. These are measured zeros, not missing data.</div></div><span class="bt"><button type="button" class="btn p bsm">See responses</button></span></div>'), 1400);
+
+    /* ---------- CLS18 / 19 · Export ---------- */
+    const exportSheet = () => '<div class="dim1"></div><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="exh" style="top:60px;width:1000px"><div class="drh"><div class="tr"><span class="eye">[Seed extension] · Export</span><button type="button" class="ib" aria-label="Close">✕</button></div><h2 id="exh">Export responses</h2></div>'
+      + '<div class="drb" style="gap:16px"><fieldset class="rac-fmt"><legend class="eye">Format</legend><label><input type="radio" name="f"> <b>CSV</b><span>For the cap table. One row per named recipient.</span></label><label class="on"><input type="radio" name="f" checked> <b>PDF</b><span>For counsel. Terms, responses and questions, dated.</span></label></fieldset>'
+      + '<div class="rac-two"><section><h3>Included</h3><ul>' + J(['Call name, terms and the counsel approval date (29 Sep)', 'Each named recipient: opened, data room and responded dates (20 named · 11 responded)', 'Indicated amounts, each marked “Indicated, not committed” · [$410,000] in total', 'Questions with their answers · 7 questions, 5 answered', 'The export date and who made it'].map(t => '<li>' + SH.ok + t + '</li>')) + '</ul></section><section class="w"><h3>Withheld</h3><ul>' + J(['[4] matching investors, not named (counted only)', 'Investor emails ' + FLAG('Q3 · A'), 'Eadwyn’s notes and proposals'].map(t => '<li>' + SH.na + t + '</li>')) + '</ul></section></div>'
+      + '<div><h3>Column headers in the file</h3><table class="tbl"><thead><tr><th>Recipient</th><th>Opened</th><th>Data room</th><th>Responded</th><th class="n">Indicated (USD), not committed</th><th>Questions</th></tr></thead><tbody><tr><td>[Investor A]</td><td class="mo">1 Oct</td><td class="mo">2 Oct</td><td class="mo">3 Oct</td><td class="n">[$50,000]</td><td>2 · 2 answered</td></tr></tbody></table></div></div>'
+      + '<div class="drf" style="border-radius:0 0 16px 16px"><p class="ln">Counsel is not notified; the export is logged on the call ' + FLAG('Q5 · A') + ' ' + BE('#6053 export route and log') + '</p><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Export</button></div></div></div>';
+    const exportRows = () => crop('<span class="eye">RAC18 · After exporting: the dated export row on the call page</span><section class="cd"><div class="ch"><h2>Exports</h2><span class="sm">Logged on this call ' + BE('#6053') + '</span></div><table class="tbl"><thead><tr><th>File</th><th>Format</th><th>Exported by</th><th>When</th><th>Marked</th><th></th></tr></thead><tbody><tr class="cur"><td><b>[Seed extension] · responses · 14 Nov 2026</b></td><td>PDF · for counsel</td><td>' + OWN + ' (you)</td><td class="mo">14 Nov 15:32</td><td>' + st('Ready', 'Complete') + '</td><td style="text-align:right"><a class="btn bsm" href="#">Download</a></td></tr><tr><td><b>[Seed extension] · responses · 13 Oct 2026</b></td><td>CSV · for the cap table</td><td>' + OWN + '</td><td class="mo">13 Oct 09:10</td><td>' + st('Partial', 'Questions could not be read') + '</td><td style="text-align:right"><a class="btn bsm" href="#">Download</a></td></tr></tbody></table></section>', 1200);
+    const exportStates = () => crop('<span class="eye">RAC19 · Export · empty and partial · never silently short</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'
+      + box('No responses yet', '<div class="nt"><span class="ic" aria-hidden="true">○</span><div><b>Nothing to export yet. Responses appear once an investor answers.</b><div class="mu">0 of 30 recipients have responded since 6 Nov.</div></div></div><label class="rac-fmtl"><input type="radio" checked> <b>Terms-only PDF</b> · call name, terms, counsel approval date</label><div style="display:flex;justify-content:flex-end"><button type="button" class="btn p bsm">Export terms PDF</button></div>')
+      + box('Partial · the questions read failed', '<div class="nt a" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Questions could not be read.</b><div>The file will be marked “Questions could not be read” on its first page and in the export row.</div></div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div><dl class="kv2" style="grid-template-columns:150px minmax(0,1fr)"><dt>Responses</dt><dd>' + st('Ready', '11 read') + '</dd><dt>Questions</dt><dd>' + st('Unavailable') + '</dd></dl><div style="display:flex;justify-content:flex-end"><button type="button" class="btn p bsm">Export marked file</button></div>') + '</div>', 1200);
+
+    /* ---------- CLS20 / 21 · New call from a closed one ---------- */
+    const seedClosedPage = (now) => (now ? seedNow() : seedHead('Start a new call from this', '<button type="button" class="btn">Export responses</button>')) + seedFig() + seedTerms()
+      + '<section class="cd"><div class="ch"><h2>Responses</h2><span class="sm">11 of 24 responded · 1 Oct to 12 Oct</span></div>' + seedTable() + '</section>';
+    const STEPS = (n) => '<ol class="rac-steps">' + J(['Terms', 'Materials', 'Audience', 'Counsel'].map((t, i) => '<li class="' + (i + 1 < n ? 'd' : i + 1 === n ? 'on' : '') + '"' + (i + 1 === n ? ' aria-current="step"' : '') + '><span>' + (i + 1) + '</span>' + t + '</li>')) + '</ol>';
+    const BANNER = '<div class="rac-ban"><b>Copied from [Seed extension], closed 12 Oct.</b><span>Edit anything below. Nothing is sent; this is a draft.</span>' + BE('“Started from” is not stored · #6053') + '</div>';
+    const fld = (l, v, tag, hint) => '<div class="fld"><label>' + l + (tag ? ' <span>' + tag + '</span>' : '') + '</label><div class="selb">' + v + '</div>' + (hint ? '<span class="raw">' + hint + '</span>' : '') + '</div>';
+    const CAR = '<span class="rac-car">↺ Carried</span>', NEWF = '<span class="rac-nw">Re-enter</span>';
+    const step1 = () => '<div class="dim1"></div><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="ncs" style="top:40px;width:1000px"><div class="drh"><div class="tr"><span class="eye">New call · draft</span><button type="button" class="ib" aria-label="Close">✕</button></div><h2 id="ncs">New call · terms</h2>' + STEPS(1) + '</div><div class="drb" style="gap:14px">' + BANNER
+      + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">' + fld('Call name', '[Bridge call]', '', 'New name required') + fld('Amount', '<span class="mo">[$400,000]</span>', CAR, 'Edited · was [$500,000]') + fld('Instrument', 'SAFE', CAR) + fld('Minimum cheque', '<span class="mo">[$25,000]</span>', CAR) + fld('Valuation cap', '<span class="mo">[$8,000,000]</span>', CAR) + fld('Discount', '<span class="nrec">— Not recorded</span>', CAR, 'Optional') + fld('Pre-money', '<span class="nrec">— Not recorded</span>', CAR, 'Optional') + fld('Close date', '<span class="ra-mut">dd mmm yyyy</span>', NEWF, 'Not carried. Today or later.') + fld('Data room', '[Northwind data room]', CAR, 'Still recorded') + '</div>'
+      + fld('Plain terms', 'A SAFE at an [$8,000,000] cap, [$25,000] minimum, for the bridge to our seed close…', CAR)
+      + prop('Eadwyn · proposal · plain terms only', 'A shorter plain-terms paragraph for a bridge', 'Drafted from the carried terms. Eadwyn does not change amounts, the audience or the close date.')
+      + '<div class="rac-two"><section><h3>Not carried</h3><ul><li>' + SH.na + 'Close date: re-enter it</li><li>' + SH.na + 'Counsel approval: a new call always needs counsel again (step 4)</li><li>' + SH.na + 'Deck version: the latest deck, v6, is offered. The closed call used version 5.</li><li>' + SH.na + 'Matching investors: re-matched, never copied</li></ul></section><section class="w"><h3>Audience (step 3)</h3><ul><li>' + SH.ok + 'Chosen investors from the closed call are pre-ticked; the owner sets the audience</li></ul></section></div></div>'
+      + '<div class="drf" style="border-radius:0 0 16px 16px"><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Save draft and continue</button></div></div></div>';
+    const AUD = [['[Investor A]', 'Responded', 1, ''], ['[Investor B]', 'Responded', 1, ''], ['[Investor C]', 'Responded', 1, ''], ['[Investor H]', 'Did not respond', 1, ''], ['[Investor J]', 'Did not respond', 1, ''], ['[Investor T]', 'Not delivered', 1, ''], ['[Investor U]', 'Did not respond', 0, 'No longer verified · accreditation expired 1 Nov'], ['[Investor V]', 'Responded', 0, 'No longer verified · account closed']];
+    const step3 = (cof) => '<div class="drb" style="gap:12px">' + (cof ? '<div class="nt"><span class="ic" aria-hidden="true">⦸</span><div><b>The audience is set by ' + OWN + '.</b><div class="mu">You can see who is ticked. Only the venture’s owner can change it (D1222).</div></div></div>' : prop('Eadwyn · proposal', 'Leave out 3 who never opened [Seed extension]', '[Investor J] and two more chosen investors did not open the closed call in 12 days. Nothing changes until you accept.')) + '<div class="chips" role="group" aria-label="Filter past recipients">' + J([['All chosen', '18', true], ['Responded', '9', false], ['Did not respond', '7', false], ['Not delivered', '2', false]].map(c => '<button type="button" aria-pressed="' + c[2] + '" aria-checked="' + c[2] + '">' + c[0] + ' <span>' + c[1] + '</span></button>')) + '</div>'
+      + '<table class="tbl"><thead><tr><th style="width:28px"><span class="sr">Include</span></th><th>Investor</th><th>On [Seed extension]</th><th>Today</th></tr></thead><tbody>' + J(AUD.map(a => '<tr class="' + (a[3] ? 'rac-dis' : '') + '"><td>' + cb(a[2], cof || !!a[3], 'Include ' + a[0]) + '</td><td><b>' + a[0] + '</b>' + (a[3] ? '<small>⦸ ' + a[3] + '</small>' : '') + '</td><td>' + a[1] + '</td><td>' + (a[3] ? st('Restricted', 'Not verified') : st('Ready', 'Verified')) + '</td></tr>')) + '</tbody></table><p class="raw">Showing 8 of 18 · 16 ticked (every chosen investor still verified). Matching investors are re-matched when you preview the audience, never copied from the closed call.</p></div>';
+    const step3Page = () => '<div class="dim1"></div><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="nc3" style="top:40px;width:900px"><div class="drh"><div class="tr"><span class="eye">New call · [Bridge call] · draft</span><button type="button" class="ib" aria-label="Close">✕</button></div><h2 id="nc3">Audience</h2>' + STEPS(3) + '</div>' + step3(false) + '<div class="drf" style="border-radius:0 0 16px 16px"><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Back</button><button type="button" class="btn p">Preview audience</button></div></div></div>';
+
+    /* ---------- CLS22 · response to commitment ---------- */
+    const drawer = (after) => '<div class="dim1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="iah" style="width:560px"><div class="drh"><div class="tr"><span class="eye">Responder · [Seed extension]</span><button type="button" class="ib" aria-label="Close">✕</button></div><h2 id="iah">[Investor A]</h2><div class="mt">' + st('Ready', 'Responded 3 Oct') + '<span class="mu">Chosen · told on Axal 1 Oct</span></div></div>'
+      + '<div class="drb"><dl class="kv2" style="grid-template-columns:150px minmax(0,1fr)"><dt>Opened</dt><dd class="mo">1 Oct</dd><dt>Data room</dt><dd class="mo">2 Oct</dd><dt>Last response</dt><dd class="mo">5 Oct</dd></dl>'
+      + '<div class="rac-ind"><b>Indicated <span class="mo">[$50,000]</span> on <span class="mo">3 Oct</span> through [Seed extension]</b><p>This is an intention, not a commitment. In Capital relationships it is listed as Indicated and as Committed · Soft. Neither counts toward the target.</p></div>'
+      + (after ? '<div class="rac-rec"><span>' + SH.ok + ' Recorded · Signed · <b class="mo">[$45,000]</b> · <span class="mo">14 Nov</span></span><a href="#">Open in Capital relationships →</a></div>' : '')
+      + '<div><h3>Questions</h3><ol class="rac-q"><li><span class="mo">2 Oct</span><div><b>Is the cap post-money?</b><small>Answered 2 Oct by ' + OWN + '</small></div></li><li><span class="mo">5 Oct</span><div><b>“We signed the SAFE this morning, where do we wire?”</b><small>Answered 6 Oct by ' + COF + '</small></div></li></ol></div></div>'
+      + '<div class="drf"><p class="ln">Owner or co-founder (D1191). Only record what the investor has signed or wired.</p><div style="display:flex;gap:8px;justify-content:flex-end">' + (after ? '<button type="button" class="btn p">Done</button>' : '<button type="button" class="btn p">Record a commitment</button>') + '</div></div></aside>';
+    const confirmSheet = () => '<div class="dim2"></div><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cfh" style="top:150px;width:560px;z-index:8"><div class="drh"><div class="tr"><span class="eye">[Investor A] · Capital relationships</span><button type="button" class="ib" aria-label="Close">✕</button></div><h2 id="cfh">Record a commitment</h2></div><div class="drb" style="gap:14px">'
+      + '<fieldset class="rac-fmt" style="grid-template-columns:1fr 1fr"><legend class="eye">Status</legend><label class="on"><input type="radio" name="s" checked> <b>Signed</b><span>Counts toward the target</span></label><label><input type="radio" name="s"> <b>Wired</b><span>Counts toward the target</span></label></fieldset><p class="raw" style="margin-top:-6px">Soft stays as it is and is not counted.</p>'
+      + '<div class="fld"><label for="amt">Amount <span>USD · typed by you</span></label><div class="selb" id="amt"><span class="mo">[$45,000]</span></div><span class="rac-diff">≠ Differs from the indicated [$50,000]</span></div>'
+      + '<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Only record what the investor has signed or wired. Indicated amounts are never counted.</b></div></div>'
+      + '<p class="raw">Writes the investor’s pipeline line from Soft to Signed (<code>PUT /api/contacts/raise-prospects/:id</code>) ' + FLAG('Q4 · A') + '. The link back to this response is not stored ' + BE('#6053') + '; until it is, this sheet names the call in its own copy.</p></div>'
+      + '<div class="drf" style="border-radius:0 0 16px 16px"><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Record as Signed</button></div></div></div>';
+    const commitRail = prop('Proposal · a reason to confirm', '[Investor A] wrote “signed the SAFE” in a question on 5 Oct', 'This could mean the SAFE is signed. Check with the investor before you record it.', ['Accept as a note', 'Edit', 'Discard']) + '<p class="raw">Eadwyn never records a commitment.</p>';
+    const CRL = [['[Investor A]', [['Signed', '[$45,000]', 1, 'Moved from Soft · 14 Nov'], ['Indicated through [Seed extension]', '[$50,000]', 0, '']], 1], ['[Investor D]', [['Wired', '[$50,000]', 1, ''], ['Indicated through [Seed extension]', '[$75,000]', 0, '']], 0], ['[Investor B]', [['Soft', '[$100,000]', 0, ''], ['Indicated through [Seed extension]', '[$100,000]', 0, '']], 0], ['[Investor E]', [['Signed · EUR', '[€45,000]', 0, 'Other currency'], ['Indicated through [Seed extension]', '[$50,000]', 0, '']], 0]];
+    const commitments = () => mhead('Capital relationships / Commitments', 'Fundraising pipeline', 'Investors, conversations and commitments for [Seed round].', 'Follow up (3)', '<button type="button" class="btn">Add investor</button>', TABS, 'Commitments')
+      + '<div class="rac-cm">' + kfig([['Committed against the target', '[$695,000]', 'of [$1,500,000] · was [$650,000] before 14 Nov']]) + '<dl><dt>' + SH.ok + ' Counts</dt><dd>Received · Signed · Wired · Confirmed · Pending</dd><dt>' + SH.na + ' Listed, never counted</dt><dd>Indicated · Soft · Status not recorded · Other currency</dd></dl></div>'
+      + '<section class="cd"><div class="ch"><h2>Commitments by investor</h2><span class="sm">Each investor counts once, by their strongest line · showing 4 of 14</span></div><table class="tbl"><thead><tr><th>Investor</th><th>Line</th><th class="n">Amount</th><th>Counted</th><th>Note</th></tr></thead><tbody>'
+      + J(CRL.map(c => J(c[1].map((l, i) => '<tr class="' + (c[2] && i === 0 ? 'rac-hl' : '') + '"><td>' + (i === 0 ? '<b>' + c[0] + '</b>' : '') + '</td><td>' + l[0] + '</td><td class="n">' + l[1] + '</td><td>' + (l[2] ? st('Ready', 'Counted') : st('Not applicable', 'Not counted')) + '</td><td class="raw">' + l[3] + '</td></tr>')))) + '</tbody></table><p class="raw">The Indicated line names its call. The Signed line keeps no call uid yet ' + BE('#6053 link to the response') + '</p></section>';
+
+    /* ---------- CLS23 · conflicts ---------- */
+    const conflicts = () => crop('<span class="eye">RAC23 · Confirm · conflicts</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">'
+      + box('Already recorded', '<p style="font-size:12.5px">[Investor D] indicated <span class="mo">[$75,000]</span> on 5 Oct.</p><button type="button" class="btn bsm" aria-disabled="true">' + SH.ok + ' Already recorded as Wired · [$50,000]</button><p class="raw">The response never overwrites a Signed or Wired line.</p>')
+      + box('Other currency', '<p style="font-size:12.5px">[Investor E]’s line is <span class="mo">[€45,000]</span>; the round is in USD.</p>' + st('Not applicable', 'Other currency') + '<p class="raw">Listed, never added to the USD total.</p>')
+      + box('Withdrawn or blank', '<p style="font-size:12.5px">[Investor F] replaced the response on 8 Oct with no amount.</p><dl class="kv2" style="grid-template-columns:90px minmax(0,1fr)"><dt>Indicated</dt><dd>' + NREC + '</dd></dl><p class="raw">Amount not recorded is never drawn as $0. Record a commitment opens with Amount empty.</p>')
+      + box('No pipeline line', '<p style="font-size:12.5px">[Investor G] is not in Capital relationships yet.</p><button type="button" class="btn bsm" aria-disabled="true" aria-describedby="g1">Record a commitment</button><span class="raw" id="g1">Off: there is no line to record against.</span><button type="button" class="btn p bsm" style="align-self:flex-start">Add to Capital relationships</button>') + '</div>', 1300);
+
+    /* ---------- CLS24 · states ---------- */
+    const sk = (w) => '<span class="sk" style="height:12px;width:' + w + '%"></span>';
+    const states = () => crop('<span class="eye">RAC24 · States · Zero, Not recorded and Unavailable never look alike</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">'
+      + box('Loading', '<div aria-busy="true" style="display:flex;flex-direction:column;gap:8px">' + sk(40) + sk(80) + sk(65) + '</div><p class="raw">Each sheet (Remind, Export, New call, Record) announces “Loading [sheet]”; its primary stays off.</p>')
+      + box('Not recorded', '<dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Last reminded</dt><dd>' + NREC + '</dd><dt>Counsel approved</dt><dd>' + NREC + '</dd><dt>Cap · discount</dt><dd>' + NREC + '</dd><dt>Indicated</dt><dd>' + NREC + '</dd><dt>Answer</dt><dd>' + NREC + '</dd></dl>')
+      + box('Measured zero', '<dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Not opened</dt><dd class="mo">' + st('Measured zero', '0 of 30') + '</dd></dl><p class="raw">Read and counted: nobody is left.</p>')
+      + box('Call unreadable', '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">✕</span><div><b>[Seed extension] could not be read.</b><div>Remind, Export and Start a new call are off. The summary from the list still shows.</div></div></div><p class="raw">Closed 12 Oct · 11 of 24 responded · [$410,000] indicated</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button>')
+      + box('Commitments unreadable', '<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Capital relationships could not be read; your record is saved.</b><div>Signed · [$45,000] was written to the pipeline.</div></div></div>' + st('Unavailable', 'Committed total unavailable'))
+      + box('Refused · co-founder', '<div class="nt"><span class="ic" aria-hidden="true">⦸</span><div><b>Only the venture’s owner can do this. Ask ' + OWN + '.</b></div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn bsm" aria-disabled="true">Remind</button><button type="button" class="btn bsm" aria-disabled="true">Export</button><button type="button" class="btn bsm">Record a commitment</button><button type="button" class="btn bsm">Start a new call</button></div>')
+      + box('Admin and Explorer · HQ counsel', '<div class="nt"><span class="ic" aria-hidden="true">⦸</span><div><b>You do not have access to this call.</b><div class="mu">Admin and Explorer see CLS14’s card. HQ counsel reads only and sees none of these actions.</div></div></div>')
+      + box('Saving and save failed', st('In progress', 'Saving…') + '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">✕</span><div><b>Someone else changed this call.</b><div><code>call_changed</code>: reload. Your edits are kept here; nothing is lost.</div></div><span class="bt"><button type="button" class="btn bsm">Reload</button></span></div>') + '</div>', 1400);
+
+    /* ---------- phones ---------- */
+    const phone = (title, body, sheet) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative;overflow:hidden"><div class="pt"><button type="button" class="pi" aria-label="Back">‹</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn">E</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (sheet || '') + '</div></div>';
+    const full = (title, inner, foot) => '<div class="rac-full" role="dialog" aria-modal="true" aria-label="' + title + '"><div class="pt"><button type="button" class="pi" aria-label="Close">✕</button><b style="font-size:15px">' + title + '</b><span style="width:44px"></span></div><div class="pbd" style="overflow:hidden">' + inner + '</div>' + (foot ? '<div class="rac-sticky">' + foot + '</div>' : '') + '</div>';
+    const mcard = (r) => '<label class="mc rac-mc' + (r[9] ? ' rac-dis' : '') + '"><div class="r1"><span style="display:flex;gap:10px;align-items:center">' + cb(r[8], !!r[9], 'Select ' + r[0]) + '<b>' + r[0] + '</b></span></div><small>' + (r[3] ? 'Opened ' + r[3] + ' · not answered' : 'Not opened') + ' · ' + (r[6] === 'Never' ? 'never reminded' : 'reminded ' + r[6]) + '</small>' + (r[9] ? '<small>⦸ ' + r[9] + '</small>' : '') + '</label>';
+    const MOB = {
+      RAC25a: () => phone('[Bridge call]', '<div class="rax-sl">' + st('In progress', 'Open') + '<span class="stt">Closes <span class="mo">&nbsp;27 Nov</span></span></div><div class="chips" style="flex-wrap:nowrap;overflow:hidden">' + J([['Not opened', '9', 1], ['Opened, not answered', '7', 1], ['Not delivered', '1', 0]].map(c => '<button type="button" aria-pressed="' + !!c[2] + '" aria-checked="' + !!c[2] + '" style="min-height:44px">' + c[0] + ' <span>' + c[1] + '</span></button>')) + '</div><span class="raw">Since 6 Nov · out of 30 recipients · chips scroll sideways</span>' + J([RROWS[0], RROWS[2], RROWS[4], RROWS[5]].map(mcard)), '<div class="rac-sticky"><span>12 selected</span><button type="button" class="btn p" style="min-height:48px">Remind (12)</button></div>'),
+      RAC25b: () => phone('[Bridge call]', '', full('Remind 12', '<span class="eye">What they receive</span><div class="rac-pv"><b>A private round call</b><p>[Northwind Labs] invited you to a private round call. It closes on 27 Nov.</p></div><p class="raw">No email. Nothing about who else was asked.</p><dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Not answered</dt><dd>6 · 1 not named</dd><dt>Not opened</dt><dd>6 · 1 not named</dd></dl><p style="font-size:13px">At most 2 per recipient, 3 days apart.</p>' + FLAG('Q2 · A'), '<button type="button" class="btn" style="min-height:48px">Cancel</button><button type="button" class="btn p" style="min-height:48px">Remind 12</button>')),
+      RAC25c: () => phone('[Seed extension]', '', full('Export responses', '<span class="eye">Format</span><fieldset class="rac-fmt" style="grid-template-columns:1fr"><label><input type="radio" name="f"> <b>CSV</b><span>For the cap table</span></label><label class="on"><input type="radio" name="f" checked> <b>PDF</b><span>For counsel</span></label></fieldset><span class="eye">Included</span><p style="font-size:13px">Terms and counsel approval, 20 named recipients’ dates, indicated amounts marked “Indicated, not committed”, 7 questions.</p><span class="eye">Withheld</span><p style="font-size:13px">[4] matching investors (counted only), emails, Eadwyn’s notes.</p>', '<button type="button" class="btn" style="min-height:48px">Cancel</button><button type="button" class="btn p" style="min-height:48px">Export</button>')),
+      RAC26a: () => phone('Calls', '<div class="mc"><div class="r1"><b>[Seed extension]</b>' + st('Shared', 'Closed') + '</div><small>Closed 12 Oct · 11 of 24 responded</small><small>[$410,000] indicated, not committed</small><button type="button" class="btn p" style="min-height:48px">Start a new call from this</button></div><span class="raw">Drawn as of 3 Nov, before [Bridge call] existed.</span>'),
+      RAC26b: () => phone('Calls', '', full('New call · terms', BANNER.replace(BE('“Started from” is not stored · #6053'), '') + STEPS(1) + fld('Amount', '<span class="mo">[$400,000]</span>', CAR, 'Was [$500,000]') + fld('Instrument', 'SAFE', CAR) + fld('Close date', '<span class="ra-mut">dd mmm yyyy</span>', NEWF, 'Not carried. Today or later.') + '<p class="raw">Deck: v6 offered · the closed call used v5. Counsel is needed again.</p>', '<button type="button" class="btn p" style="min-height:48px;flex:1">Save draft and continue</button>')),
+      RAC26c: () => phone('[Investor A]', '<div class="rac-ind"><b>Indicated <span class="mo">[$50,000]</span> on 3 Oct through [Seed extension]</b><p>An intention, not a commitment. Not counted.</p></div><dl class="kv2" style="grid-template-columns:110px minmax(0,1fr)"><dt>Opened</dt><dd class="mo">1 Oct</dd><dt>Responded</dt><dd class="mo">3 Oct</dd></dl>', '<div class="dim2"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rcm"><div class="grab" aria-hidden="true"></div><div style="padding:10px 18px 22px;display:flex;flex-direction:column;gap:12px"><h2 id="rcm" style="font-size:17px;font-weight:800">Record a commitment</h2><fieldset class="rac-fmt" style="grid-template-columns:1fr 1fr"><legend class="sr">Status</legend><label class="on" style="min-height:44px"><input type="radio" checked> <b>Signed</b></label><label style="min-height:44px"><input type="radio"> <b>Wired</b></label></fieldset><div class="fld"><label>Amount <span>USD</span></label><div class="selb" style="min-height:44px"><span class="mo">[$45,000]</span></div><span class="rac-diff">≠ Differs from the indicated [$50,000]</span></div><p style="font-size:13px;font-weight:700">Only record what the investor has signed or wired. Indicated amounts are never counted.</p><button type="button" class="btn p" style="min-height:48px">Record as Signed</button><button type="button" class="btn" style="min-height:44px">Cancel</button></div></div>'),
+      RAC27P: () => phone('Calls', '<div class="nt"><span class="ic" aria-hidden="true">○</span><div><b>Calls for Capital are not switched on yet.</b><div class="mu">Remind, Export and Start a new call are not drawn (#1008 item 19).</div></div></div>'),
+      RAC27R: () => phone('[Bridge call]', '<span class="eye">Signed in as ' + COF + ' · co-founder</span><div class="nt"><span class="ic" aria-hidden="true">⦸</span><div><b>Only the venture’s owner can remind or export. Ask ' + OWN + '.</b></div></div><button type="button" class="btn" aria-disabled="true" style="min-height:44px">Remind</button><button type="button" class="btn" aria-disabled="true" style="min-height:44px">Export responses</button><div class="mc"><b>[Investor A] · responded</b><small>Indicated [$50,000], not counted</small><button type="button" class="btn p" style="min-height:48px">Record a commitment</button></div>')
+    };
+
+    /* ---------- CLS27 · switched off (desktop) ---------- */
+    const offDesk = () => crop('<span class="eye">RAC27 · ROUND_CALLS_ENABLED off · CLS1’s card</span><section class="cd" style="padding:24px 26px;gap:10px;align-items:flex-start"><h2 style="font-size:19px;font-weight:800">Calls for Capital are not switched on yet.</h2><p style="font-size:13.5px;color:var(--mu);max-width:620px">A call lets you invite verified investors privately, with counsel’s approval. It is waiting for counsel to sign off (#1008 item 19).</p><p class="raw">Remind, Export and Start a new call are not drawn at all, not drawn as off. <code>GET /api/round-calls/availability</code> decides.</p></section>', 900);
+
+    /* ---------- handoff ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const DOCS = {
+      RACH: () => dk('<h1>Handoff · Calls follow-through (#6053)</h1><p>Checked against main <code>6d7712c6d1</code> on 14 Nov 2026. Board numbers continue the brief’s CLS16 to CLS28 as RAC16 to RAC28, drawn in the Raise v2 look. The whole area is behind <code>ROUND_CALLS_ENABLED = "false"</code> in <code>wrangler.toml</code> (#1008 item 19), so none of it can be checked live until counsel answers.</p>'
+        + '<h2>Checked on main</h2>' + tbl(['File', 'What it showed'], [
+          ['services/roundCalls.ts', '<code>manageCall</code> (line 490) accepts only <code>close</code> and <code>extend</code>, owner only. <code>founderPage</code> returns recipients with origin, opened, data room, responded, delivery and indicated amount, the questions plus update-ask replies, <code>can.*</code> (draft and answer: owner or member; audience, send, extend, close: owner) and <code>read_only</code>.'],
+          ['sql/migrations/436, 456', '<code>round_call_recipients</code> has <code>notified_at</code> and <code>delivery_state</code> but no reminder columns. <code>round_calls</code> has no source-call column and no currency.'],
+          ['routes/round_calls.ts', 'No export, CSV or PDF route; no remind route.'],
+          ['services/capRelReads.ts', '<code>COUNTED</code> = received, signed, wired, confirmed, pending. Indicated, Soft, Status not recorded and other currency are listed, not counted. Investors are matched by email; the strongest line counts once.'],
+          ['routes/contacts.ts', '<code>PUT /api/contacts/raise-prospects/:id</code> (<code>updateLegacyProspect</code>) writes the pipeline line; <code>roundCallPipelineStatements</code> writes the Soft line on a response.'],
+          ['pages/raise/calls/callsModel.js', '<code>newCallState</code>: “One call at a time. [name] is open.” (used on RAC21).'],
+          ['RaiseCallPage.jsx, CallsTab.jsx', 'No export, remind or copy code.']])
+        + '<h2>Requires engineering ◇</h2>' + tbl(['Need', 'Detail'], [['Remind', 'A <code>remind</code> action (owner only), <code>last_reminded_at</code> and a reminder count per recipient, the limit, and a result with the not-delivered count. Migration named <code>YYYYMMDDHHMM_6053_round_call_reminders.sql</code>.'], ['Export', 'CSV and PDF routes, the withheld rules, a “Questions could not be read” mark, and an export log (who, when).'], ['Started from', 'A source-call column on <code>round_calls</code>.'], ['Line to response link', 'A call uid on the typed Signed or Wired line, so it can link back to its response.']])
+        + '<h2>Pending the owner ⚑ (option A drawn)</h2><p>Q1 remind and export: owner only. Q2 limit: 2 per recipient per call, 3 days apart. Q3 emails withheld from the export. Q4 Record a commitment writes the pipeline line Soft to Signed or Wired. Q5 counsel is not notified of an export.</p>'
+        + '<h2>Frontend only</h2><p>Filter chips and the selection on the call page, the Remind and Export sheets’ layout, the copied banner and carried-field marks in the new-call sheet, the indicated-versus-recorded block in the drawer, the confirm sheet over the existing write, phone cards, sticky bar, full-screen sheets and dark tokens.</p>'
+        + '<h2>Handoff paths</h2><p>Confirm ends on Capital relationships › Commitments (CRL9) with the investor’s line highlighted. A new call goes to the new-call sheet (CLS4) as a draft, then to counsel (CLS6). Export ends on the call page with the dated export row.</p>'
+        + '<h2>Accessibility</h2><p>Filter chips are toggle buttons with <code>aria-pressed</code> and counts in text. Disabled checkboxes and actions carry their reason in text (<code>aria-describedby</code>). Sheets are modal dialogs that trap and return focus; the result line uses <code>role=status</code>, failures <code>role=alert</code>. States carry a word and a glyph: ⦸ limit, ◷ too soon, ≠ differs, ✓ counted. Phone targets 44px, primary 48px; no table wider than the screen.</p>')
+    };
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'RAC16') html = page(remindPage(), { h: 1240, rail: remindRail });
+    else if (B === 'RAC16B') html = page(remindPage(), { h: 1240, overlay: remindSheet() });
+    else if (B === 'RAC17') html = remindResult();
+    else if (B === 'RAC18') html = page(seedClosedPage(true), { h: 960, overlay: exportSheet() });
+    else if (B === 'RAC18B') html = exportRows();
+    else if (B === 'RAC19') html = exportStates();
+    else if (B === 'RAC20') html = page(seedClosedPage(), { h: 960 });
+    else if (B === 'RAC20B') html = page(seedClosedPage(), { h: 1120, overlay: step1() });
+    else if (B === 'RAC20C') html = page(seedClosedPage(), { h: 960, overlay: step3Page() });
+    else if (B === 'RAC20D') html = crop('<span class="eye">Step 3 · a co-founder who started the copy</span><section class="cd" style="padding:0">' + step3(true) + '</section>', 900);
+    else if (B === 'RAC21') html = crop('<span class="eye">RAC21 · Start a new call · blocked</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' + box('Another call is open', '<div class="mc"><div class="r1"><b>[Seed extension]</b>' + st('Shared', 'Closed 12 Oct') + '</div><small>11 of 24 responded · [$410,000] indicated, not committed</small><div style="display:flex;gap:10px;align-items:center"><button type="button" class="btn bsm" aria-disabled="true" aria-describedby="r21">Start a new call from this</button><span class="raw" id="r21">One call at a time. [Bridge call] is open.</span></div></div><p class="raw">Same reason text as CLS2’s New call (<code>newCallState</code>).</p>') + box('No closed call yet', '<div class="mc"><div class="r1"><b>[Bridge call]</b>' + st('In progress', 'Open') + '</div><small>Sent 6 Nov · closes 27 Nov</small></div><p class="raw">This venture has no closed call, so “Start a new call from this” does not appear anywhere. Nothing is drawn off.</p>') + '</div>', 1100);
+    else if (B === 'RAC22') html = page(seedNow() + seedFig() + '<section class="cd"><div class="ch"><h2>Responses</h2></div>' + seedTable('[Investor A]') + '</section>', { h: 960, rail: commitRail, overlay: drawer(false).replace('style="width:560px"', 'style="width:560px;right:330px"') });
+    else if (B === 'RAC22B') html = page(seedNow() + seedFig() + '<section class="cd"><div class="ch"><h2>Responses</h2></div>' + seedTable('[Investor A]') + '</section>', { h: 960, overlay: drawer(false) + confirmSheet() });
+    else if (B === 'RAC22C') html = page(commitments(), { h: 900, overlay: '<div class="toast" role="status"><span class="ok" aria-hidden="true">✓</span>Recorded as Signed · [$45,000] · [Investor A]<a href="#">Open line</a></div>' });
+    else if (B === 'RAC22D') html = crop('<span class="eye">The drawer after saving</span><div style="position:relative;height:720px;border:1px solid var(--hair);border-radius:12px;overflow:hidden">' + drawer(true).replace('<div class="dim1"></div>', '').replace('style="width:560px"', 'style="width:100%;border-radius:0;box-shadow:none;border-left:0"') + '</div>', 600);
+    else if (B === 'RAC23') html = conflicts();
+    else if (B === 'RAC24') html = states();
+    else if (MOB[B]) html = MOB[B]();
+    else if (B === 'RAC27') html = offDesk();
+    else if (B === 'RAC28') html = page(remindPage(), { h: 1240, rail: remindRail });
+    else if (B === 'RAC28B') html = page(seedNow() + seedFig() + '<section class="cd"><div class="ch"><h2>Responses</h2></div>' + seedTable('[Investor A]') + '</section>', { h: 960, overlay: drawer(false) + confirmSheet() });
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = page(remindPage(), { h: 1240, rail: remindRail });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

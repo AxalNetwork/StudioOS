@@ -52,7 +52,8 @@ test('1. the SQL page answers exactly what the in-memory path answers', async ()
   const all = await solutionFeatureRows({ DB: d1Over(varied.db) } as any, PROJECT);
   assert.equal(all.length, 90);
   const sorts = ['', 'impact', '-impact', 'effort', '-effort', 'feature', '-pain_theme', 'bogus'];
-  const filters = ['', 'linked:yes', 'linked:no', 'impact:high', 'impact:', 'effort:HIGH', 'impact:low,linked:no', 'feature:synthetic feature 3', 'nocolon', ':empty'];
+  // #6030: the evidence filter's three kinds page in SQL as in memory too.
+  const filters = ['', 'linked:yes', 'linked:no', 'evidence:pain', 'evidence:hypothesis', 'evidence:none', 'impact:low,evidence:none', 'impact:high', 'impact:', 'effort:HIGH', 'impact:low,linked:no', 'feature:synthetic feature 3', 'nocolon', ':empty'];
   const searches = ['', 'feature 1', 'links to', 'TEAMS'];
   const pages = ['', '2', '4', '0', 'abc'];
   let checked = 0;

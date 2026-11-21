@@ -395,8 +395,9 @@ test('one failed block fails only itself: the Lab series, a queue, a card figure
   try {
     assert.equal(view.textOf('programs-chart-joins-missing-lab'), 'Lab applications: Could not be read. Lab applications could not be read on this database. That is not the same as none.');
     assert.ok(view.has('programs-chart-joins-chart'), 'the other series stand');
-    assert.match(view.textOf('programs-card-perks-figure').trim(), /^Live perks could not be read\./);
-    assert.match(view.textOf('programs-card-spinout-lab-applications').trim(), /^Lab applications could not be read\./);
+    // D5129 (Q2 = A): the shared Unreadable leads with the word Unavailable.
+    assert.match(view.textOf('programs-card-perks-figure').trim(), /^UnavailableLive perks could not be read\./);
+    assert.match(view.textOf('programs-card-spinout-lab-applications').trim(), /^UnavailableLab applications could not be read\./);
     assert.equal(view.textOf('programs-card-spinout-lab-figure'), '2 cohort applications waiting');
     assert.equal(view.textOf('programs-tile-waiting-value'), '8');
   } finally { await view.close(); }
@@ -422,7 +423,7 @@ test('the catalogue for a Super Admin (PG2): HQ\'s line, the credits tile and ch
     assert.equal(view.textOf('programs-chart-credits-foot'), CREDIT_FOOT);
     for (const k of ['spinout-lab', 'mentor-cohorts', 'refer-and-earn', 'perks']) assert.ok(!view.has(`programs-card-${k}-needs`), `${k} draws a Needs-you pill for HQ`);
     assert.equal(view.textOf('programs-card-product-testing-figure'), '2 open · 9 applied, not withdrawn');
-    assert.ok(view.hrefs().includes('/admin?tab=product-testing'));
+    assert.ok(view.hrefs().includes('/admin/platform/product-testing/programs'));
     await view.click('programs-layout-cards'); // D4873: "Who · Join" is the card layout's line
     assert.match(view.textOf('programs-card-learning-who'), /Join: Open or by invitation$/);
     assert.ok(!/in the programs assigned to you/.test(view.textOf('programs-chart-joins')));
@@ -555,9 +556,9 @@ test('D4807: five dimensions, each its own row: Learning is Live and running yet
   assert.equal(learning.access, program('learning').who === 'Not open to members yet' ? 'Not open to members yet' : 'Open or by invitation');
   assert.equal(learning.offering, 'Held by HQ');
   assert.equal(learning.grants, 'Granted to 0 studios', 'the policy says HQ holds it; the grants say no studio does');
-  // A program that is not built has no operation, whatever its assignment door says.
-  const investors = dim(program('investor-cohorts'), {});
-  assert.deepEqual([investors.build, investors.operation, investors.access, investors.offering], ['Not built yet', 'Not running', 'Assigned by an admin', 'Not offered to studios yet']);
+  // Build progress doesn't open investor cohorts or override the registry's recorded member access.
+  const investors = dim({ ...program('investor-cohorts'), row: { member_access: 'not_open' } }, {});
+  assert.deepEqual([investors.build, investors.operation, investors.access, investors.offering], ['Partly built', 'Not running', 'Not open to members yet', 'Not offered to studios yet']);
   assert.equal(dim(program('referral-partners'), {}).operation, 'Running in part');
 });
 

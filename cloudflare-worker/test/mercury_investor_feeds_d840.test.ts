@@ -47,6 +47,7 @@ function seed() {
   // D1217 (#3214): Accept writes Sent on D1215's closing line when one is open, so the four closing stores are here.
   for (const stmt of migration('612_closings.sql').split(/;\s*\n/).map((x) => x.replace(/^\s*--[^\n]*\n/gm, '').trim())
     .filter((x) => /^CREATE (TABLE|UNIQUE INDEX|INDEX) IF NOT EXISTS \w+ (\(|ON closing)|^CREATE TABLE IF NOT EXISTS closing/.test(x))) db.exec(noFks(stmt + ';'));
+  db.exec(noFks(migration('202611151545_6198_closing_sender_declarations.sql'))); // D6198: the line status reads the sender's declarations
   db.exec(noFks(migration('613_company_receiving_accounts.sql')));
   db.exec(`UPDATE users SET investor_tier = 'institutional', investor_subscription_status = 'active' WHERE id IN (${INVESTOR}, ${OTHER_INVESTOR})`);
   db.exec(`INSERT INTO integrations (id, uid, user_id, provider_key, status, auth_type) VALUES (${INTEGRATION}, 'int-own', ${INVESTOR}, 'mercury', 'active', 'oauth2')`);

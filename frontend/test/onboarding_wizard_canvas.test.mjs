@@ -69,7 +69,7 @@ test('the wizard body is the landscape, edge to edge, with no footer', () => {
   assert.match(app, /ONBOARDING_CANVAS_PATHS\.includes\(location\.pathname\)/);
   assert.match(app, /data-onboarding-canvas/);
   assert.match(app, /onboardingCanvas \? ' flex w-full min-h-full flex-1 flex-col'/);
-  assert.match(app, /\{!onboardingCanvas && \(/,
+  assert.match(app, /\{!onboardingCanvas && !pitchFocused && \(/,
     'the footer is a band of the body; the landscape has to reach the bottom');
   assert.match(css, /main\[data-onboarding-canvas\]/);
   assert.match(css, /url\(\/auth\/login-background\.webp\)/);

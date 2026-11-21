@@ -125,7 +125,8 @@ test('a recorded field shows its value, a skipped one says so, an unanswered one
   assert.match(html, /href="#studio-chat"[^>]*>Continue in the chat ↑/);
   assert.match(html, /Answered, value not stored/);
   assert.match(html, /href="\/account"[^>]*>Settings →/);
-  assert.doesNotMatch(html, /\d\s*%|<progress|role="progressbar"|<svg/, 'the posture grew a percentage, a bar or a chart');
+  // D5129: the Not recorded chip's aria-hidden glyph is an <svg> too; a chart would not be aria-hidden.
+  assert.doesNotMatch(html, /\d\s*%|<progress|role="progressbar"|<svg(?![^>]*aria-hidden="true")/, 'the posture grew a percentage, a bar or a chart');
 });
 
 test('a failed posture read is one Unreadable with a retry, not eleven Not recorded rows', () => {

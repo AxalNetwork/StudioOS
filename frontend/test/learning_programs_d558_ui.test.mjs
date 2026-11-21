@@ -610,6 +610,9 @@ test('ProgramsTable: each scope draws what its route counts, zero in words, a mi
   assert.doesNotMatch(flat(studio), /\b0 (members|admins|items)\b/, 'a zero count was drawn as a bare 0');
   const mine = html(h(ProgramsTable, { status: 'ready', scope: 'assigned', programs: [{ ...NORDICS, learners: 3, contents: 5 }, { ...DACH, learners: 1, contents: 0 }] }));
   assert.match(mine, /href="\/learning\/programs\/p-nordics"/);
+  for (const list of [mine, studio]) {
+    assert.match(list, /href="\/admin\/programs\/learning"[^>]*>Learning overview in Programs<\/a>/);
+  }
   assert.doesNotMatch(mine, /href="\/learning\/studio/, 'an assigned admin was sent to the studio');
   assert.match(flat(sliceFrom(mine, 'program-row-p-nordics', 'program-row-p-dach')), /Nordics Published Nordics 3 members By invitation 5 items/);
   assert.match(flat(sliceFrom(mine, 'program-row-p-dach')), /DACH Draft Region not recorded 1 member By invitation No content/);

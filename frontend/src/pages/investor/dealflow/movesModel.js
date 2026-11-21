@@ -11,8 +11,8 @@
  *   - Passed is reached only through the pass, with one of the five reasons.
  * The pass is the investor's alone: the round stays open for everyone else.
  */
-import { PASS_TAXONOMY } from '../../../lib/dealFlow.js';
-import { BOARD_STAGES, ENTERED_WORD, shortDayOf } from './flowModel';
+import { PASS_TAXONOMY, dayWithYear, passReasonLabel } from '../../../lib/dealFlow.js';
+import { BOARD_STAGES, ENTERED_WORD, STAGE_WORD, shortDayOf } from './flowModel';
 
 const order = (s) => BOARD_STAGES.indexOf(s);
 
@@ -61,11 +61,11 @@ export function passBody({ reason, revisit = 'next_round', revisitAt = '', note 
 /** The intro line, with its count; never "0 new". */
 export function inboxIntro(n) {
   const head = n === 1 ? '1 new, newest first.' : `${n} new, newest first.`;
-  return `${head} Ventures already in Mine are not listed. Nothing is added until you press Add to my deal flow. Not for me hides a row and asks for an optional reason.`;
+  return `${head} Ventures already in Mine are not listed. A pass whose date to come back has arrived is the one exception. Nothing is added until you press Add to my deal flow. Not for me hides a row and asks for an optional reason.`;
 }
 
 /** The chip a row carries: how it would enter the flow. */
-export const inboxChip = (item) => ENTERED_WORD[item?.entered_via] || 'Not recorded';
+export const inboxChip = (item) => (item?.source === 'revisit' ? 'Back from your pass' : ENTERED_WORD[item?.entered_via] || 'Not recorded');
 
 /** The line under the name: what brought it here, in the item's own facts. */
 export function inboxLine(item = {}) {
@@ -77,8 +77,24 @@ export function inboxLine(item = {}) {
     case 'introduction': return 'The founder accepted your introduction.';
     case 'syndicate': return 'A syndicate is open on this round.';
     case 'watchlist': return day ? `Converted on ${day}.` : 'A venture on your watchlist opened a round.';
+    // D6148: the firm's own pass, back on the date it chose.
+    case 'revisit': {
+      const passed = dayWithYear(item.return?.passed_at);
+      const on = dayWithYear(item.return?.revisit_at);
+      return `You passed${passed ? ` on ${passed}` : ''} (${passReasonLabel(item.return?.reason)}) and asked to see it again${on ? ` on ${on}` : ''}.`;
+    }
+    case 'thesis': return thesisReasonsLine(item.reasons);
     default: return null;
   }
+}
+
+/** D6147: a thesis match's criteria in words, in the fit's order (D1239's four). */
+const REASON_WORD = Object.freeze({ sector: 'sector', stage: 'stage', region: 'market region', ticket: 'minimum check within your ticket' });
+const listWords = (w) => (w.length < 2 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`);
+/** "Matches your thesis: sector and minimum check within your ticket." The top reasons are the matching criteria, at most three. */
+export function thesisReasonsLine(reasons) {
+  const words = (Array.isArray(reasons) ? reasons : []).map((r) => REASON_WORD[r]).filter(Boolean).slice(0, 3);
+  return words.length ? `Matches your thesis: ${listWords(words)}.` : 'Matches your thesis.';
 }
 
 /**
@@ -88,12 +104,14 @@ export function inboxLine(item = {}) {
  */
 export function inboxActions(item = {}) {
   if (item.source === 'room') return { add: false, pass: false, dismiss: false, open: !!item.can_open };
+  // D6148: a return is already in the flow, at Passed: it moves back to Screening, or Not for me hides it.
+  if (item.source === 'revisit') return { add: false, pass: false, reopen: true, dismiss: true, open: !!item.can_open };
   return { add: true, pass: true, dismiss: true, open: !!item.can_open };
 }
 
 const SOURCE_WORD = Object.freeze({
   invitation: 'invitations', room: 'invitations you asked for', commitment: 'commitments', introduction: 'introductions',
-  syndicate: 'open syndicates', watchlist: 'your watchlist',
+  syndicate: 'open syndicates', watchlist: 'your watchlist', revisit: 'passes due back', thesis: 'matches to your thesis',
 });
 
 /** The ways in that could not be read, in words; the rest still list. */
@@ -101,6 +119,43 @@ export function unreadSources(sources = {}) {
   return Object.entries(sources || {}).filter(([k, v]) => SOURCE_WORD[k] && v && v.unreadable).map(([k]) => SOURCE_WORD[k]);
 }
 
-/** Matches to the thesis, when the read says none are recorded: the reason, never "no matches". */
-export const thesisLine = (sources = {}) => (sources?.thesis && sources.thesis.recorded === false
-  ? (sources.thesis.reason || 'Matches to your thesis are not recorded yet.') : null);
+/** D6148: Next round is not detected; the read says so, and so does the page. */
+export const nextRoundLine = (sources = {}) => (sources?.next_round && sources.next_round.detected === false
+  ? (sources.next_round.reason || 'A new round on a venture you passed is not detected.') : null);
+
+/** #6146: describe only the event's recorded fields; actor/time are rendered separately. */
+export function flowEventSentence(event, enteredVia) {
+  const stage = (key) => STAGE_WORD[key] || 'Not recorded';
+  switch (event?.kind) {
+    case 'entered': return `Entered at ${stage(event.to)} · ${ENTERED_WORD[enteredVia] || 'Not recorded'}.`;
+    case 'moved': return `Moved from ${stage(event.from)} to ${stage(event.to)}.`;
+    case 'passed': return `Passed · ${PASS_REASONS.find((r) => r.key === event.reason)?.label || 'Reason: Not recorded'}.`;
+    case 'owner': return 'Owner changed.';
+    case 'note': return 'Note changed.';
+    default: return `Recorded change: ${event?.kind || 'Not recorded'}.`;
+  }
+}
+
+/** The current row's return rule is not historical event data. Never attach it to an old pass. */
+export function currentReturnLine(pass) {
+  if (!pass) return null;
+  if (pass.revisit === 'next_round') return 'Current pass · returns next round.';
+  if (pass.revisit === 'date' && pass.revisit_at) return `Current pass · return date: ${pass.revisit_at}.`;
+  return 'Current pass · return date: Not recorded.';
+}
+/**
+ * D6147 — the thesis source's line, from its one `{ recorded, reason }` shape:
+ *   - not recorded (no thesis set): its reason, with the way to set it;
+ *   - unreadable: nothing here, `unreadSources` names it;
+ *   - recorded: the cap, when there were more High-fit matches than are listed.
+ * Never "no matches" for a source that could not say.
+ */
+export const thesisLine = (sources = {}) => {
+  const t = sources?.thesis;
+  if (!t || t.unreadable) return null;
+  if (t.recorded === false) return t.reason || 'Matches to your thesis are not recorded yet.';
+  if (t.recorded === true && t.more && t.cap) return `Only the newest ${t.cap} matches to your thesis are listed. Each is a High fit.`;
+  return null;
+};
+/** Whether the line offers Set your thesis: the read says no thesis is set. */
+export const thesisNeedsSetting = (sources = {}) => sources?.thesis?.recorded === false && sources.thesis.thesis_set === false;

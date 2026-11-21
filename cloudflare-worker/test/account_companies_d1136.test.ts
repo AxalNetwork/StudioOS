@@ -28,6 +28,8 @@ function fixture() {
   db.exec(tableFromBaseline(baseline, 'incorporations'));
   db.exec(readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8'));
+  // D6687: the order's subject company, which the formation join also reads.
+  db.exec('ALTER TABLE incorporations ADD COLUMN subject_company_id INTEGER');
   // Both cycle reads need only a store's project_id.
   for (const s of STORES) db.exec(`CREATE TABLE ${s} (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER)`);
   // A required column the row does not name gets a neutral value, so each row says only what the test is about.

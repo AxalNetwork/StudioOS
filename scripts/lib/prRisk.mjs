@@ -200,10 +200,14 @@ export function dedupe(prs) {
 export const isStale = (listed, detail) => SHA.test(listed?.head?.sha ?? '') && SHA.test(detail?.head?.sha ?? '') && listed.head.sha !== detail.head.sha;
 
 const pathsOf = pr => [...new Set((pr.files ?? []).flatMap(f => typeof f === 'string' ? [f] : [f.filename, f.previous_filename]).filter(Boolean))].sort();
-/** The dated advisory baseline record (#5580): uploaded as a workflow artifact, never committed. */
-export function snapshot({ generatedAt, repo, prs, overlaps, notes = [], partial = false }) {
+/**
+ * The dated advisory baseline record (#5580): uploaded as a workflow artifact, never committed. v2 (part 2) is v1
+ * plus `workInFlight`, the derived WorkIntents; every v1 field keeps its name and meaning.
+ */
+export function snapshot({ generatedAt, repo, prs, overlaps, notes = [], partial = false, work = null }) {
   return {
-    schema: 'studioos-pr-overlap-snapshot/v1', decision: 'D5580', generatedAt, repo, partial, notes,
+    schema: 'studioos-pr-overlap-snapshot/v2', decision: 'D5580', generatedAt, repo, partial, notes,
+    workInFlight: work ?? { status: 'not read', reason: 'claims were not read in this run', partial: true, intents: [], refused: [], notes: [] },
     prs: [...prs].sort((a, b) => a.number - b.number).map(pr => ({
       number: pr.number, draft: Boolean(pr.draft), stale: Boolean(pr.stale),
       headSha: SHA.test(pr.head?.sha ?? '') ? pr.head.sha : null, baseRef: typeof pr.base?.ref === 'string' ? pr.base.ref : null,

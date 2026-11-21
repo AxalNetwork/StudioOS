@@ -67,6 +67,30 @@ export function commonDuration(tiers) {
   return d.length === 1 ? durationWord(d[0]) : null;
 }
 
+/*
+ * D6993 (#6993): what /influencers promises. The earnings are a share of each
+ * subscription for a set period (the tier's duration), never "every invoice".
+ * The hero and the page description say it in words; the numbers sit beside
+ * Apply and come only from the tiers read.
+ */
+export const HERO_LINE = 'Share your own handle. When someone subscribes through it, you earn a share of their subscription for a set period.';
+export const RATES_UNAVAILABLE = 'Rates unavailable. See the tiers below.';
+export const STRATEGIC_NOTE = 'A strategic agreement can differ; its terms are in the agreement.';
+
+/** The line beside Apply, from the tiers read: null while it loads, no number when it failed. */
+export function rateLine(read) {
+  if (read?.status === 'error') return RATES_UNAVAILABLE;
+  if (read?.status !== 'ready') return null;
+  const list = Array.isArray(read.data?.tiers) ? read.data.tiers : [];
+  const range = rateRange(list);
+  if (!range) return 'A share of each subscription, for the paid invoices your tier sets.';
+  const duration = commonDuration(list);
+  return `${range} of each subscription${duration ? `, for ${duration} per member` : ''}.`;
+}
+
+/** Whether the read returned a strategic tier, whose agreement can set other terms. */
+export const hasStrategicTier = (tiers) => (Array.isArray(tiers) ? tiers : []).some((t) => String(t?.tier || '').startsWith('strategic'));
+
 /** The milestones that pay a one-time bonus (services/influencerCommission.ts BONUS_MILESTONES); each amount is the influencer's terms'. */
 export const BONUS_MILESTONES = Object.freeze([10, 25, 50, 100]);
 

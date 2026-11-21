@@ -184,10 +184,7 @@ export default function PublicDirectoryPage() {
               <label htmlFor="ax-dir-rate">Max hourly rate (USD)</label>
               <input id="ax-dir-rate" type="number" min="0" value={filters.rate_max} onChange={set('rate_max')} className="ax-nw-input" />
             </div>
-            <label className="ax-dir-check">
-              <input type="checkbox" checked={filters.verified_only} onChange={set('verified_only')} />
-              KYB-verified partners only
-            </label>
+            {/* D5513 (#5513): no KYB-verified filter: the directory read records no KYB status, so the filter never narrowed anything. */}
           </div>
         )}
 
@@ -207,7 +204,7 @@ export default function PublicDirectoryPage() {
         </div>
 
         <p className="ax-dir-foot">
-          Verified members only. <Link to="/contact">Request directory access →</Link>
+          Verified members only. <Link to="/contact?topic=directory">Request directory access →</Link>
         </p>
       </div>
     </SitePage>

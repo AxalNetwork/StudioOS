@@ -163,10 +163,21 @@ export default function ZoneDraft({
   // front and the sentence is shown beside it. Left out — every other mount —
   // the button is enabled as before, and a refusal is learnt from the 409.
   blocked = null,
+  // D7168: why Accept must wait, when the host knows its record is mid-edit:
+  // the fund dossier passes "Save your note first…" while the note has unsaved
+  // text, because the brief is appended after the SAVED note. Accept is
+  // disabled with the sentence beside it. Left out, Accept is as before.
+  acceptBlocked = null,
   // D771–D775 (D720 §11): the option's `<verb>:<object>` key on its page, from
   // the profile's list in `lib/railOptions/`, where it differs from the
   // registry's `draft:<surface>`. Left out, the band names that key (D770).
   railOption = null,
+  // D5938 (#5938): the edit control's own words where a canvas names it
+  // otherwise ("Edit terms" on the negotiation counter), and a short status
+  // drawn beside the label only while a draft is shown ("Not sent"). Left
+  // out, every other mount draws "Edit first" and no status, as before.
+  editLabel = 'Edit first',
+  status = null,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
@@ -244,7 +255,7 @@ export default function ZoneDraft({
   };
 
   const doAccept = async () => {
-    if (!item) return;
+    if (!item || acceptBlocked) return;
     setBusy('accept'); setNote('');
     const mine = runFor.current;
     const action = ++actionFor.current;
@@ -291,6 +302,11 @@ export default function ZoneDraft({
           <Sparkles aria-hidden="true" className="h-3 w-3" />
           {label}
         </span>
+        {item && status ? (
+          <span data-testid="zone-draft-status" className={`rounded-[4px] border border-current px-1.5 py-0.5 text-[10px] font-extrabold ${skin.ink}`}>
+            {status}
+          </span>
+        ) : null}
         {item ? (
           <span className={`ml-auto whitespace-nowrap font-mono text-[10.5px] ${skin.ink}`}>
             {formatCost(item.cost_usd)}
@@ -312,7 +328,13 @@ export default function ZoneDraft({
             <p className={bodyClass}>{item.body}</p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button type="button" className={skin.button} onClick={doAccept} disabled={busy !== ''}>
+            <button
+              type="button"
+              className={skin.button}
+              onClick={doAccept}
+              disabled={busy !== '' || Boolean(acceptBlocked)}
+              aria-describedby={acceptBlocked ? `${blockedId}-accept` : undefined}
+            >
               {busy === 'accept' ? 'Saving…' : accept}
             </button>
             <button
@@ -321,13 +343,18 @@ export default function ZoneDraft({
               onClick={() => setEditing(editing != null ? null : item.body)}
               disabled={busy !== ''}
             >
-              {editing != null ? 'Stop editing' : 'Edit first'}
+              {editing != null ? 'Stop editing' : editLabel}
             </button>
             <button type="button" className={GHOST} onClick={doDiscard} disabled={busy !== ''}>
               {busy === 'discard' ? 'Discarding…' : 'Discard'}
             </button>
             {item.accepted ? (
               <span className="text-[10.5px] font-bold text-axal-positive dark:text-emerald-400">Accepted</span>
+            ) : null}
+            {acceptBlocked ? (
+              <span id={`${blockedId}-accept`} data-testid="zone-draft-accept-blocked" className="basis-full text-[11px] text-amber-800 dark:text-amber-300">
+                {acceptBlocked}
+              </span>
             ) : null}
             {foot ? <span className="ml-auto text-[10px] text-gray-600 dark:text-gray-400">{foot}</span> : null}
           </div>

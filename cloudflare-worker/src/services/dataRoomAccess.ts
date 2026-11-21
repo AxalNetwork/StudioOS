@@ -29,12 +29,13 @@
  * one predicate still decides.
  */
 import type { Env } from '../types';
+import { liveFiles } from './dataRoomTrash';
 
 export const ACCESS_TIERS = ['invited', 'committed', 'nobody'] as const;
 export type AccessTier = typeof ACCESS_TIERS[number];
 export const isAccessTier = (v: unknown): v is AccessTier => typeof v === 'string' && (ACCESS_TIERS as readonly string[]).includes(v);
 
-export type TieredFile = { access_tier?: string | null; access_expires_at?: string | null; folder_id?: number | null };
+export type TieredFile = { access_tier?: string | null; access_expires_at?: string | null; folder_id?: number | null; removed_at?: string | null };
 
 /** The folders a grant opens: their ids, subfolders included, or null for every folder. */
 export type FolderScope = ReadonlySet<number> | null;
@@ -55,6 +56,8 @@ export function expiryMs(v: string | null | undefined): number | null {
  * nobody can check is not a promise to keep showing it.
  */
 export function tierAdmits(f: TieredFile, committed: boolean, now: number = Date.now(), folders: FolderScope = null): boolean {
+  // D6073 — a file in Trash admits no one, whichever reader selected it (`SELECT *` carries the stamp).
+  if (f.removed_at != null) return false;
   const tier = f.access_tier == null || f.access_tier === '' ? 'invited' : f.access_tier;
   // `nobody`, and any value this code does not know, admits no one.
   if (tier !== 'invited' && tier !== 'committed') return false;
@@ -79,7 +82,7 @@ export const folderInScope = (folderId: number | null | undefined, folders: Fold
  * grant's own project. Fails closed: a scope that cannot be read is an empty
  * set, which opens nothing, never the whole room.
  */
-export async function grantFolderScope(env: Env, grantId: number): Promise<FolderScope> {
+export async function grantFolderScope(env: Env, grantId: number, throwOnError = false): Promise<FolderScope> {
   try {
     const grant = await env.DB.prepare(
       'SELECT project_id, folders_scoped FROM data_room_grants WHERE id = ?',
@@ -100,6 +103,7 @@ export async function grantFolderScope(env: Env, grantId: number): Promise<Folde
     ).bind(grant.project_id, grantId, grant.project_id).all<{ id: number }>();
     return new Set((rows.results || []).map((r) => Number(r.id)));
   } catch (e) {
+    if (throwOnError) throw e;
     console.error('[data_room] folder scope unreadable', (e as Error)?.message);
     return new Set();
   }
@@ -110,7 +114,7 @@ export async function grantFolderScope(env: Env, grantId: number): Promise<Folde
  * a read that cannot be done (a store not yet migrated) is "not committed", so
  * a committed-only file stays hidden.
  */
-export async function investorCommitted(env: Env, projectId: number, userId: number): Promise<boolean> {
+export async function investorCommitted(env: Env, projectId: number, userId: number, throwOnError = false): Promise<boolean> {
   try {
     const row = await env.DB.prepare(
       `SELECT 1 AS yes FROM raise_prospects rp JOIN users u ON u.id = ?
@@ -120,7 +124,8 @@ export async function investorCommitted(env: Env, projectId: number, userId: num
         LIMIT 1`,
     ).bind(userId, projectId).first<{ yes: number }>();
     return !!row;
-  } catch {
+  } catch (e) {
+    if (throwOnError) throw e;
     return false;
   }
 }
@@ -133,7 +138,7 @@ export async function admittedCounts(
   env: Env, projectId: number, committed: boolean, nda: boolean, folders: FolderScope = null,
 ): Promise<{ total: number; open: number }> {
   const res = await env.DB.prepare(
-    'SELECT visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE project_id = ?',
+    `SELECT visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)}`,
   ).bind(projectId).all<{ visibility: string; access_tier: string | null; access_expires_at: string | null; folder_id: number | null }>();
   const now = Date.now();
   const admitted = (res.results || []).filter((f) => tierAdmits(f, committed, now, folders));

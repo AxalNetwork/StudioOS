@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus } from 'lucide-react';
 import { connectorsApi } from '../../lib/api/connectors';
-import { BrandIcon, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, VerifiedBadge, usePhoneWidth } from '../../ui';
+import { PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, VerifiedBadge, usePhoneWidth } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
 import { Banner, Group, useConnectors } from './ConnectorSheet';
+import ConnectorMark from './ConnectorMark';
 import Lightbox from '../../ui/Lightbox';
 import { BuilderHandoff } from './builder/BuilderSection';
 import { ChannelsSection } from './ChannelsGroup';
@@ -79,7 +80,7 @@ export function YoursTable({ rows, role = null }) {
         <Link key={p.key} to={connectorPagePath(p.key)} state={{ connectorsTab: 'yours' }} data-testid={`connector-row-${p.key}`}
           className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-b border-axal-hairline px-4 py-2.5 text-left text-[13px] last:border-b-0 hover:bg-axal-ground/60 md:grid-cols-[minmax(0,1.5fr)_100px_80px_minmax(0,1.3fr)_80px_110px_140px] dark:border-gray-800 dark:hover:bg-gray-800/40 ${status.why ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
           <span className="flex min-w-0 items-center gap-2.5">
-            <BrandIcon provider={p.key} name={p.display_name} />
+            <ConnectorMark p={p} />
             <span className="flex min-w-0 flex-col">
               <span className="truncate font-bold text-axal-ink dark:text-gray-100">{p.display_name}</span>
               {makerLine(p) && <span className="truncate text-[11.5px] text-axal-muted dark:text-gray-400">{makerLine(p)}</span>}
@@ -121,7 +122,7 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = 
   if (act === 'unavailable') corner = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable || p.connectionUnreadable ? 'Status unreadable' : 'Not set up here'}</span>;
   return (
     <article className={`${TONE_CLS} relative flex h-full flex-col gap-2 p-3.5 focus-within:ring-2 focus-within:ring-axal-violet/40`} data-testid={`connector-card-${p.key}`} data-action={act}>
-      <div className="flex min-h-[46px] items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{corner}</div>
+      <div className="flex min-h-[46px] items-start justify-between"><ConnectorMark p={p} />{corner}</div>
       <h4 className="flex items-center gap-1.5 text-sm font-bold text-axal-ink dark:text-gray-100">
         <Link to={to} state={state} data-testid={`connector-open-${p.key}`} className="after:absolute after:inset-0 after:rounded-axal-sm focus:outline-none focus-visible:underline">
           {p.display_name}{act === 'connected' && <span className="sr-only"> · Connected</span>}
@@ -259,7 +260,7 @@ export function yoursGroup({ data, rows, paged, setPage = () => {}, label = ACCO
   if (!rows.length) return { ...group, note: 'None of your connectors matches this search.' };
   group.rows = paged.rows.map(({ p, status }) => ({
     key: p.key,
-    icon: <BrandIcon provider={p.key} name={p.display_name} />,
+    icon: <ConnectorMark p={p} />,
     title: p.display_name,
     description: [status.why, yoursFeedsLabel(p, role), lastSyncLabel(p.connection, now)].filter(Boolean).join(' · '),
     pill: { label: status.label, tone: status.tone },
@@ -299,7 +300,7 @@ export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.conne
     const keys = keysHref(p, { superAdmin });
     return {
       key: p.key,
-      icon: <BrandIcon provider={p.key} name={p.display_name} />,
+      icon: <ConnectorMark p={p} />,
       title: p.display_name,
       description: keys ? 'Add its keys in Integration keys.' : p.why || p.description,
       pill,

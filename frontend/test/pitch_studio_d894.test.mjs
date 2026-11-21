@@ -302,7 +302,7 @@ test('every investor link is reachable: the links read a page at a time, under a
   assert.match(renderedText(between(page1, 'pitch-studio-links-pager')), /Links 1–25 of 30\s*Previous\s*Next/);
   assert.match(page1, /disabled=""[^>]*data-testid="pitch-studio-links-prev"/);
   assert.doesNotMatch(page1, /disabled=""[^>]*data-testid="pitch-studio-links-next"/);
-  assert.match(renderedText(between(analytics(reads()), 'pitch-studio-links-pager')), /^Links 1–6 of 6$/, 'one page: the total, and no pager buttons');
+  assert.match(renderedText(between(analytics(reads()), 'pitch-studio-links-pager', 'deck-grants')), /^Links 1–6 of 6$/, 'one page: the total, and no pager buttons');
 });
 
 test('the cover reads the title slide\'s headline and tagline, never its section name', () => {
@@ -381,8 +381,8 @@ test('the old ?mode=workspace address opens the editor with the moved notice dra
   assert.deepEqual(builderTarget('?project_id=12&method_id=yc_seed', '#x'), { pathname: STUDIO_PATH, search: `?project_id=12&method_id=yc_seed&moved=${BUILDER_MOVED_KEY}`, hash: '#x' });
   assert.equal(ventureQuery(12), '?project_id=12');
   assert.equal(ventureQuery(null), '');
-  // D905 (#2684) adds the Notes tab (PD21). D4254: the tile row; the Overview at STUDIO_PATH lights no tile.
-  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Decks', '/raise/pitch/decks'], ['Script & rehearsal', '/raise/pitch/script'], ['Review', REVIEW_PATH], ['Share & analytics', '/raise/pitch/share'], ['Notes', '/raise/pitch/notes']]);
+  // D905 (#2684) adds the Notes tab (PD21). D6055 adds Overview to the same tab model.
+  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Overview', STUDIO_PATH], ['Decks', '/raise/pitch/decks'], ['Script & rehearsal', '/raise/pitch/script'], ['Review', REVIEW_PATH], ['Share & analytics', '/raise/pitch/share'], ['Notes', '/raise/pitch/notes']]);
   assert.equal(TITLE, 'Pitch');
   assert.equal(LINE, 'Your deck, what to say, and who has seen it, in one place.', 'the canvas line (D4254)');
   assert.equal(NOT_RECORDED, 'Not recorded');
@@ -471,7 +471,7 @@ test('Review mounts the reviewer whatever the ventures read says, and draws no "
 test('the tabs keep the venture in the address while the ventures read is loading, and after it fails', async () => {
   const hrefs = (html) => [...html.matchAll(/data-testid="pitch-studio-tab-\w+" href="([^"]*)"/g)].map((x) => x[1]);
   const loading = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/raise/pitch?project_id=12'] }, h(PitchStudio, { tab: 'decks' })));
-  assert.deepEqual(hrefs(loading), ['/raise/pitch/decks?project_id=12', '/raise/pitch/script?project_id=12', '/raise/pitch/review?project_id=12', '/raise/pitch/share?project_id=12', '/raise/pitch/notes?project_id=12']);
+  assert.deepEqual(hrefs(loading), ['/raise/pitch?project_id=12', '/raise/pitch/decks?project_id=12', '/raise/pitch/script?project_id=12', '/raise/pitch/review?project_id=12', '/raise/pitch/share?project_id=12', '/raise/pitch/notes?project_id=12']);
   const m = await mount(h(PitchStudio, { tab: 'analytics' }), '/raise/pitch/analytics?project_id=12', { listProjects: async () => { throw new Error('read failed'); } });
   try {
     assert.match(m.text(), /Your ventures could not be read/);
@@ -677,7 +677,7 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
 });
 
 test('every link that carried the old address carries the new one', () => {
-  assert.match(read('frontend/src/pages/cycles/ValidateSections.jsx'), /<Link to="\/raise\/pitch\/edit" title=\{PROBLEM_SLIDE_NOTE\}/);
+  assert.match(read('frontend/src/pages/cycles/ValidateSections.jsx'), /<Link to=\{`\/raise\/pitch\/edit\$\{ventureSearch\(projectId\)\}`\} title=\{PROBLEM_SLIDE_NOTE\}/);
   const rail = read('frontend/src/lib/railOptions/founder.js');
   assert.doesNotMatch(rail, /\/raise\/pitch\?mode=workspace/);
   // D898 group E: the builder retired; Fill from project is the studio's, a template New deck's.

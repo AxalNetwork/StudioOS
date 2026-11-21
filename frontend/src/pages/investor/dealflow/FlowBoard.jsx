@@ -6,9 +6,12 @@
  * takes its reason (part 5's dialog).
  */
 import React, { useState } from 'react';
+// D5900 (#5900): the board and the phone draw the Deals v2 card (DE01, DE01b); FlowCard below stays until #6417 lands.
+import { DealCard } from './DealCard';
 import { AskCell, DaysCell, FitCell, OwnerCell, ScopeCell, VentureCell } from './FlowCells';
 import { BOARD_STAGES, SCOPE_LABEL, STAGE_WORD, columnAsks, enteredWord, moveTargets } from './flowModel';
 import { MAX_COMPARE } from './dealFlowModel';
+import { passReturnWord } from '../../../lib/dealFlow.js';
 
 const COL = 'flex min-w-[240px] flex-1 flex-col gap-2 rounded-xl border border-axal-hairline bg-gray-50 p-2.5 dark:border-gray-800 dark:bg-gray-950';
 const CARD = 'flex flex-col gap-1.5 rounded-lg border border-axal-hairline bg-white p-2.5 text-[12.5px] dark:border-gray-800 dark:bg-gray-900';
@@ -26,6 +29,7 @@ export function FlowCard({ row, cards, picked, onPick, onMove, busy, draggable =
         {row.enteredVia && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 dark:bg-gray-800 dark:text-gray-300">{enteredWord(row.enteredVia)}</span>}
       </div>
       <AskCell row={row} />
+      {row.stage === 'passed' && <span className={MUTED} data-testid={`dealflow-card-${row.id}-return`}>{passReturnWord(row.pass) || 'Comes back: not recorded'}</span>}
       <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5">
         {cards.map((k) => (
           <React.Fragment key={k}><dt className={MUTED}>{SCOPE_LABEL[k]}</dt><dd className="m-0 text-right"><ScopeCell scores={row.scores} scope={k} testId={`dealflow-card-${row.id}-${k}`} /></dd></React.Fragment>
@@ -65,7 +69,7 @@ function Column({ stage, rows, cards, picked, onPick, onMove, busy, byId, onPeek
         {asks && <span className={MUTED} data-testid={`dealflow-col-${stage}-asks`}>{asks}</span>}
         {over && <span className="text-[12px] font-semibold text-violet-700 dark:text-violet-300">Drop to move to {STAGE_WORD[stage]}</span>}
       </header>
-      {rows.map((r) => <FlowCard key={r.id} row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} onPeek={onPeek} />)}
+      {rows.map((r) => <DealCard key={r.id} row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} onPeek={onPeek} />)}
     </section>
   );
 }
@@ -101,14 +105,15 @@ export function PhoneBoard({ rows, cards, picked, onPick, onMove, busy, showPass
   const stage = stages.includes(chosen) ? chosen : stages[0];
   return (
     <div className="flex flex-col gap-2" data-testid="dealflow-phone-board">
-      <nav aria-label="Stage" className="flex gap-1 overflow-x-auto">
+      {/* D5902 (DE03b): the tabs scroll sideways inside their own strip, never the page; each is a 44px target. */}
+      <nav aria-label="Stage" className="flex max-w-full gap-1 overflow-x-auto" data-testid="dealflow-phone-stage-tabs">
         {stages.map((s) => (
           <button key={s} type="button" aria-pressed={stage === s} onClick={() => setStage(s)}
-            className={`whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-semibold ${stage === s ? 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
+            className={`min-h-[44px] flex-none whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-semibold ${stage === s ? 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`dealflow-phone-stage-${s}`}>{STAGE_WORD[s]} {rows.filter((r) => r.stage === s).length}</button>
         ))}
       </nav>
-      {rows.filter((r) => r.stage === stage).map((r) => <FlowCard key={r.id} row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} draggable={false} onPeek={onPeek} />)}
+      {rows.filter((r) => r.stage === stage).map((r) => <DealCard key={r.id} row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} draggable={false} onPeek={onPeek} />)}
     </div>
   );
 }

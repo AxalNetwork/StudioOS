@@ -107,11 +107,11 @@ test.describe('the integrated editor', () => {
     const m = await prepare(page, request);
     await openEditor(page, m.matrix[0].projectId);
     await page.getByTestId('deck-more-open').click();
-    await expect(page.getByTestId('deck-more')).toHaveScreenshot('deck-more-menu.png');
+    await expect(page.getByTestId('deck-more-menu')).toHaveScreenshot('deck-more-menu.png');
     await page.keyboard.press('Escape');
     await page.getByTestId('pitch-ask').click();
     await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('pitch-header-ask')).toHaveScreenshot('deck-ask.png');
+    await expect(page.getByTestId('pitch-ask-sheet')).toHaveScreenshot('deck-ask.png');
   });
 
   test('Studio home', async ({ page, request }) => {

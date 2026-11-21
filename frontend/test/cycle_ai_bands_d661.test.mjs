@@ -74,6 +74,8 @@ const BANDS = {
   grow: [['team-expansion', 'grow/talent']],
   build: [
     ['product-roadmap', 'build/roadmap'],
+    // D6042 (#6042): Founding team's and Company creation's record-only drafts.
+    ['founding-team', 'build/founding'], ['company-creation', 'build/company'],
     ['operating-systems', 'build/this-week'], ['operating-systems', 'build/retro'], ['operating-systems', 'build/kpi'],
   ],
 };
@@ -118,8 +120,8 @@ test('a band is drawn only with the switch on and a venture chosen, and spends n
   const drafts = CYCLES.map((cycle) => cycleDraftsBlock(route, cycle)).join('\n');
   for (const field of ['label', 'run', 'accept', 'empty', 'nothingToDraft', 'foot']) {
     const n = (drafts.match(new RegExp(`\\b${field}: '`, 'g')) || []).length;
-    // D4493: ten, since Distribution's outreach-sequence band was retired.
-    assert.equal(n, 10, `${n} of the ten bands carry ${field}`);
+    // D4493: ten, since Distribution's outreach-sequence band was retired; D6042 adds Build's two.
+    assert.equal(n, 12, `${n} of the twelve bands carry ${field}`);
   }
   // D424's voice rule, kept from the desks: Eadwyn's output is never advice.
   assert.doesNotMatch(drafts, /\b(advice|recommend\w*)\b/i, 'a band calls what Eadwyn produces advice');

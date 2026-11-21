@@ -24,6 +24,7 @@ import { storedPmfChecklist } from '../scoring/pmfStore';
  */
 import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
 import { activeGrant, dataRoomOwner, projectNdaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
+import { liveFiles } from '../dataRoomTrash';
 import { ACCESS_TIERS, grantFolderScope, investorCommitted, tierAdmits } from '../dataRoomAccess';
 import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
@@ -180,7 +181,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   // Decision 8: the Data room item only, from the diligence checklist; not services/dueDiligence.ts.
   section('mock-diligence', 'Mock diligence', async (rc) => {
     const res = await rc.env.DB.prepare(
-      `SELECT checklist_item, name FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL
+      `SELECT checklist_item, name FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL${await liveFiles(rc.env.DB)}
         ORDER BY updated_at DESC, id DESC`,
     ).bind(rc.projectId).all<{ checklist_item: string; name: string }>();
     const file = new Map<string, string>();
@@ -359,15 +360,17 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
 }, async (rc) => {
   // Investor types, saved versions to start from, and the two check sources (decision 7).
   // D909: the live wording is the Spin-Out deck's, offered to Spin-Out ventures only (owner question 5 on #2454).
+  // D6069: any venture with a saved deck version may start from that deck's words; `deck` names the current deck version.
   const versions = await loadVersions(ctxOf(rc));
-  const { spinout } = await deckReaders(rc.env, rc.projectId);
+  const { spinout, deck } = await deckReaders(rc.env, rc.projectId);
   return {
     investor_types: INVESTOR_TYPES.map((t) => ({ value: t, label: typeLabel(t) })),
-    start_from: START_FROM.filter((k) => spinout || k !== 'live')
-      .map((k) => ({ value: k, label: k === 'live' ? 'The Spin-Out deck wording' : k === 'version' ? 'A saved version' : 'Blank' })),
+    start_from: START_FROM.filter((k) => (k === 'live' ? spinout : k === 'deck' ? deck != null : true))
+      .map((k) => ({ value: k, label: k === 'live' ? 'The Spin-Out deck wording' : k === 'version' ? 'A saved version' : k === 'deck' ? `Pitch deck v${deck!.version}'s words` : 'Blank' })),
     versions: versions.map((x) => ({ value: String(x.version), label: `v${x.version} · ${typeLabel(x.investor_type).toLowerCase()}` })),
     check_against: opts([['deck', 'Pitch deck'], ['metrics', 'Metrics']]),
     spinout,
+    deck: deck ? { version: deck.version } : null,
   };
 });
 
@@ -500,7 +503,7 @@ const dataRoom: ModuleSpec = { ...spec('data_room_files', 'data-room', async (rc
     `SELECT f.id, f.uid, f.name, f.folder_id, f.visibility, f.checklist_item, f.dd_request_id, f.access_tier, f.access_expires_at,
             f.size_bytes, f.created_at, d.name AS folder, u.name AS uploader
        FROM data_room_files f LEFT JOIN data_room_folders d ON d.id = f.folder_id LEFT JOIN users u ON u.id = f.uploaded_by_user_id
-      WHERE f.id = ? AND f.project_id = ?`,
+      WHERE f.id = ? AND f.project_id = ?${await liveFiles(rc.env.DB, 'f')}`,
   ).bind(Number(id), rc.projectId).first<any>();
   const requestId = Number(f.dd_request_id);
   const titles = await requestTitles(ctxOf(rc), Number.isInteger(requestId) && requestId > 0 ? [requestId] : []);
@@ -588,10 +591,10 @@ const dataRoom: ModuleSpec = { ...spec('data_room_files', 'data-room', async (rc
       }) };
     }),
   },
-  // The same delete as `DELETE /:projectUid/files/:fileUid`, with its versions' objects.
+  // The same Remove as `DELETE /:projectUid/files/:fileUid`: to Trash for 30 days, with its versions (D6073).
   {
     key: 'remove', label: 'Remove', kind: 'write', tone: 'danger',
-    confirm: { title: 'Remove this file?', body: 'The file and its earlier versions are deleted. Investors stop seeing it.', cta: 'Remove' },
+    confirm: { title: 'Remove this file?', body: 'Moves the file and its earlier versions to Trash for 30 days. Investors stop seeing it now. Copies already saved are not recalled.', cta: 'Move to Trash' },
     execute: (c, fileId) => refusing(async () => {
       const out = await removeDataRoomFile(c.env, { project: await projectUid(c), userId: userId(c), fileId: Number(fileId) });
       if (!out) refuse(404, 'File not found');
@@ -1029,7 +1032,7 @@ const capital = spec('raise_prospects', 'capital-relationships', async (rc, id) 
                  JOIN users u ON u.id = l.user_id
                  JOIN raise_prospects p ON p.id = ? AND p.project_id = l.project_id
                 WHERE l.project_id = ? AND l.action = 'download' AND p.email IS NOT NULL AND LOWER(u.email) = LOWER(p.email)) AS opened,
-              (SELECT COUNT(DISTINCT COALESCE(folder_id, 0)) FROM data_room_files WHERE project_id = ?) AS total`,
+              (SELECT COUNT(DISTINCT COALESCE(folder_id, 0)) FROM data_room_files WHERE project_id = ?${await liveFiles(rc.env.DB)}) AS total`,
     ).bind(Number(id), rc.projectId, rc.projectId).first<{ opened: number; total: number }>();
     if (Number(room?.opened ?? 0) > 0) rows.push({ a: 'Data room', b: `${Number(room?.opened)} of ${plural(Number(room?.total ?? 0), 'folder', 'folders')}` });
     return { rows, empty: 'No material opened yet.' };

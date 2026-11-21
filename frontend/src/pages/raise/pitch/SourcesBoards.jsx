@@ -192,7 +192,7 @@ export function useDeckSources(projectId, { includeScoring = false } = {}) {
     setState({ status: 'loading', data: null });
     deckSourcesApi.list(projectId, { includeScoring }).then(
       (data) => { if (live) setState({ status: 'ok', data }); },
-      (e) => { if (live) setState({ status: 'error', data: null }); reportError('pitch-studio:sources', e); },
+      (e) => { if (live) setState({ status: 'error', data: null, error: e }); reportError('pitch-studio:sources', e); },
     );
     return () => { live = false; };
   }, [projectId, includeScoring, tick]);

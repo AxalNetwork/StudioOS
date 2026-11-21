@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { Link } from 'react-router-dom';
+import { api, dd } from '../../../lib/api';
 import { dataRoomApi } from '../../../lib/api/dataRoom';
 import { Unreadable } from '../../../ui';
 import DataRoomDialog from './DataRoomDialog.jsx';
@@ -27,6 +28,28 @@ const PILL = {
   other: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
 };
 const Pill = ({ t }) => <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[t] || PILL.other}`}>{t}</span>;
+
+/** D6295: the subject's queue is available from the room without a notice. */
+export function DiligenceRequestsLink({ load = dd.myRequests, reload = 0 }) {
+  const [count, setCount] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setCount(null);
+    load().then(({ items }) => {
+      if (alive && Array.isArray(items) && items.length) {
+        setCount(items.filter((item) => item.state === 'requested').length);
+      }
+    }).catch(() => { if (alive) setCount(null); });
+    return () => { alive = false; };
+  }, [load, reload]);
+  if (count === null) return null;
+  return (
+    <Link to="/due-diligence/requests" className={`${BTN_G} flex-wrap justify-start gap-2`}>
+      Diligence requests
+      {count > 0 && <span className="font-mono text-amber-800 dark:text-amber-300">{count} waiting</span>}
+    </Link>
+  );
+}
 
 /** The queue, read on its own: a failure here never blanks the room. */
 function useRequests(projectUid, reload) {
@@ -140,6 +163,7 @@ export default function DataRoomRequests({ room, projectUid, reload: reloadRoom 
       <section className={CARD} data-testid="requests-diligence">
         <div className="border-b border-axal-hairline px-4 py-3 dark:border-gray-800"><h2 className={`m-0 text-[15px] font-extrabold ${INK}`}>Diligence requests</h2></div>
         <div className="flex flex-col px-4 py-3">
+          <DiligenceRequestsLink reload={reload} />
           {q.status === 'ready' && dil === null ? <Unreadable what="The diligence requests" claim="This is not a claim that none were sent." onRetry={retry} /> : null}
           {q.status === 'ready' && dil && !dil.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="diligence-none">No diligence request has been sent to this venture.</p> : null}
           {(dil || []).map((d) => (

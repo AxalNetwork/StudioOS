@@ -83,7 +83,7 @@ test('Manage opens the right company: the switcher, Account menu, and Your compa
   assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/);
   assert.equal(SIDEBAR_LABEL, 'Portfolio', 'D1413 name retained in Account (D4416)');
   assert.doesNotMatch(sidebar, />\s*Company Settings\s*</);
-  const settings = read('frontend/src/pages/SettingsPage.jsx');
+  const settings = read('frontend/src/pages/account/AccountEntityRecords.jsx');
   const card = settings.slice(settings.indexOf('function YourCompaniesSection'));
   assert.match(card, /to=\{c\.uid \? companyPathFor\(c\.uid\) : '\/account\/portfolio'\}/, 'Manage does not open the row\'s own company');
   assert.equal(companyPathFor('acme'), '/account/portfolio/acme');

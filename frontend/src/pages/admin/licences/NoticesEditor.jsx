@@ -2,6 +2,13 @@
  * #4707 — the HQ licence page's compliance notices. Moved out of `AdminLicences.jsx`
  * unchanged when the page was split by domain; the comments below are the
  * original ones.
+ *
+ * D4819 part 12 (#5923) — board L12's Compliance. The heading carries how many
+ * notices are outstanding (`complianceState`), and each notice's row carries
+ * its state in words, who it is for and its deadline, so an outstanding one is
+ * seen without opening it; the notice's text, the answer and HQ's note open
+ * under "Open notice". A notice is the ladder's own record, apart from the
+ * licence's suspension reason. A failed read says Unavailable with Try again.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, AlertTriangle, Check, X, Send } from 'lucide-react';
@@ -11,6 +18,8 @@ import { useReasonDialog } from '../LicenceReasonDialog';
 import { LICENCE_REASONS } from '../licenceReasonModel';
 import { FREEZING_STATUSES, NOTICE_KINDS, daysTo, noticeKindLabel, noticeRank } from '../../../lib/notices';
 import { NOTICE_TONE, RESPOND_DAYS, Chip } from './licenceShared';
+import { FactState, TryAgain } from './LicenceOverview';
+import { complianceState, isOutstanding, noticeStateWord } from '../licenceOperationsModel';
 
 /* ------------------------------------------------------------------ *
  * Notices — the compliance ladder, from HQ's end                       *
@@ -47,6 +56,7 @@ export function NoticesEditor({ licence, onSaved }) {
 
   const load = useCallback(() => {
     setLoadErr(null);
+    setItems((cur) => (cur === null ? undefined : cur));
     api.licenceNotices(licence.uid)
       .then((d) => {
         // `notices_available: false` arrives with a 200 and an empty array, so
@@ -101,6 +111,7 @@ export function NoticesEditor({ licence, onSaved }) {
     });
   }, [items]);
 
+  const head = complianceState(items);
   const days = Number(form.respond_days);
   const canIssue = form.email.trim().length > 0
     && form.subject.trim().length >= 3
@@ -108,9 +119,12 @@ export function NoticesEditor({ licence, onSaved }) {
     && Number.isFinite(days) && days >= RESPOND_DAYS.min && days <= RESPOND_DAYS.max;
 
   return (
-    <div data-testid="licence-notices">
+    <section data-testid="licence-notices" aria-label="Compliance" className="min-w-0 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
       {reasonDialog}
-      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Compliance notices</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Compliance</h3>
+        <span className="text-sm"><FactState state={head.state} testId="licence-compliance-state">{head.word}</FactState></span>
+      </div>
       <p className="mt-1 text-[11px] text-gray-500">
         A notice is the first rung: the administrator is told what is wrong and by when to answer.
         A deadline that passes unanswered freezes their account and suspends this licence — writes
@@ -121,7 +135,8 @@ export function NoticesEditor({ licence, onSaved }) {
       {items === undefined && <p className="mt-3 text-sm text-gray-500">Loading…</p>}
       {items === null && (
         <p data-testid="licence-notices-unreadable" className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
-          {loadErr} This is not the same as there being none — nothing was read.
+          {loadErr} This is not the same as there being none — nothing was read.{' '}
+          <TryAgain what="the compliance notices" onClick={load} />
         </p>
       )}
       {Array.isArray(items) && items.length === 0 && (
@@ -156,7 +171,8 @@ export function NoticesEditor({ licence, onSaved }) {
             const frozenDays = FREEZING_STATUSES.has(n.status) ? daysTo(n.froze_at) : null;
             const due = daysTo(n.respond_by);
             return (
-              <li key={n.uid} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+              <li key={n.uid} data-testid={`licence-notice-${n.uid}`} data-outstanding={isOutstanding(n) ? 'true' : 'false'}
+                className={`rounded-lg border p-3 ${isOutstanding(n) ? 'border-amber-300 dark:border-amber-800' : 'border-gray-200 dark:border-gray-800'}`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{n.subject}</div>
@@ -165,7 +181,7 @@ export function NoticesEditor({ licence, onSaved }) {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Chip tone={NOTICE_TONE[n.status]}>{String(n.status || '').replace(/_/g, ' ')}</Chip>
+                    <Chip tone={NOTICE_TONE[n.status]}><span data-testid="licence-notice-state">{noticeStateWord(n.status)}</span></Chip>
                     <button
                       type="button" disabled={busy || !reviewable}
                       onClick={async () => {
@@ -197,8 +213,6 @@ export function NoticesEditor({ licence, onSaved }) {
                   </div>
                 </div>
 
-                <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{n.body}</p>
-
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500">
                   <span>
                     Due {String(n.respond_by || '').slice(0, 10)}
@@ -217,23 +231,26 @@ export function NoticesEditor({ licence, onSaved }) {
                   {n.reviewed_at && <span>Reviewed {String(n.reviewed_at).slice(0, 10)}</span>}
                 </div>
 
-                {n.response
-                  ? (
+                {!n.response && (
+                  <p className="mt-2 text-[11px] text-gray-500">
+                    Accept and Reject are available once the administrator has answered — there is
+                    nothing to review until they have.
+                  </p>
+                )}
+
+                <details className="mt-2 text-sm" data-testid="licence-notice-open">
+                  <summary className="cursor-pointer text-[11px] font-medium text-gray-600 underline dark:text-gray-400">Open notice</summary>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{n.body}</p>
+                  {n.response && (
                     <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 p-2.5 dark:border-gray-800 dark:bg-gray-900">
                       <div className="text-[11px] font-medium text-gray-500">Their response</div>
                       <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{n.response}</p>
                     </div>
-                  )
-                  : (
-                    <p className="mt-2 text-[11px] text-gray-500">
-                      Accept and Reject are available once the administrator has answered — there is
-                      nothing to review until they have.
-                    </p>
                   )}
-
-                {n.review_note && (
-                  <p className="mt-2 text-[11px] text-gray-500">Your note: {n.review_note}</p>
-                )}
+                  {n.review_note && (
+                    <p className="mt-2 text-[11px] text-gray-500">Your note: {n.review_note}</p>
+                  )}
+                </details>
               </li>
             );
           })}
@@ -332,6 +349,6 @@ export function NoticesEditor({ licence, onSaved }) {
         Issuing and reviewing need a recent TOTP step-up as well as the Super Admin elevation, so a
         403 can mean &quot;step up and try again&quot; rather than &quot;you may not&quot;.
       </p>
-    </div>
+    </section>
   );
 }

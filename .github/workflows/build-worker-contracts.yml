@@ -2,6 +2,7 @@ name: Build Worker contracts
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - 'cloudflare-worker/src/routes/cycle_build.ts'
@@ -24,6 +25,8 @@ concurrency:
 jobs:
   contracts:
     name: Build connector and mapping contracts
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

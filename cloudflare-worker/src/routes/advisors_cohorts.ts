@@ -1023,15 +1023,25 @@ advisors.get('/me/thinking', async (c) => {
       `SELECT COUNT(*) AS total,
               COALESCE(SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END), 0) AS published,
               MAX(CASE WHEN status = 'published' THEN COALESCE(views, 0) END) AS best_reach,
-              SUM(CASE WHEN status = 'published' THEN COALESCE(views, 0) END) AS total_reach
+              SUM(CASE WHEN status = 'published' THEN COALESCE(views, 0) END) AS total_reach,
+              COALESCE(SUM(CASE WHEN status IN ('draft', 'changes_requested') THEN 1 ELSE 0 END), 0) AS needs_you,
+              COALESCE(SUM(CASE WHEN status IN ('submitted', 'in_review')
+                                  OR (status = 'approved' AND publish_at IS NULL) THEN 1 ELSE 0 END), 0) AS with_editors
          FROM articles WHERE author_user_id = ?`
-    ).bind(user.id).first<{ total: number; published: number; best_reach: number | null; total_reach: number | null }>();
+    ).bind(user.id).first<{ total: number; published: number; best_reach: number | null; total_reach: number | null; needs_you: number; with_editors: number }>();
     const total = Number(whole?.total) || 0;
     const published = Number(whole?.published) || 0;
     return c.json({
       items,
       page: pageFacts(w, total, items.length),
       counts: {
+        // D4826 part 2 (#4826): the figures EX-11's chips carry, over the
+        // whole shelf. `needs_you` and `with_editors` are the sets
+        // `expertiseModel.THINKING_VIEWS` filters by — an approved piece with a
+        // `publish_at` is Scheduled (D484) and in neither, like Not accepted.
+        total,
+        needs_you: Number(whole?.needs_you) || 0,
+        with_editors: Number(whole?.with_editors) || 0,
         published,
         drafts: total - published,
         // Opens here on Axal, from a counter incremented on every published

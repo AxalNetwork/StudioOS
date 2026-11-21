@@ -191,7 +191,7 @@ test('P1: a provider the label map does not know shows its key, and the map is t
   const worker = raw('cloudflare-worker/src/services/providerOauthKeys.ts');
   const w = worker.indexOf('export const MANAGED_PROVIDERS');
   const list = worker.slice(w, worker.indexOf('];', w));
-  const managed = [...list.matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
+  const managed = [...list.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
   assert.deepEqual(Object.keys(PROVIDER_LABEL).sort(), [...managed].sort());
 });
 

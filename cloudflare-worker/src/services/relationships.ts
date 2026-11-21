@@ -354,6 +354,16 @@ export async function requestOf(env: Env, user: User, requestUid: string, side: 
   return row;
 }
 
+/**
+ * #5310 (NW3.2): one request as its record, for the two people on it only. Anyone else, or a uid that is not
+ * an intro request, is 404 "Not found." before anything is read: the asker never reads the introducer's
+ * delivery, exactly as on the log (`interactionView`).
+ */
+export async function introRequest(env: Env, user: User, requestUid: string) {
+  await requestOf(env, user, requestUid, 'either');
+  return viewOf(env, user, requestUid);
+}
+
 async function viewOf(env: Env, user: User, requestUid: string) {
   const row = (await env.DB.prepare('SELECT * FROM relationship_interactions WHERE uid = ?').bind(requestUid).first<Interaction>())!;
   const outcome = await env.DB.prepare(

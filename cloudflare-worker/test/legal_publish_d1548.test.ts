@@ -37,7 +37,7 @@ test('no Terms re-acceptance is asked while the v4 slot is still a draft for cou
     // Counsel's text has landed: the switch may be on, but only with the v4
     // template live and a version the accept writer records.
     assert.match(mod, /import tos\s+from '\.\.\/templates\/legal\/tos_v4\.md\?raw';/);
-    if (TERMS_REACCEPT_FROM !== null) assert.ok(TERMS_REACCEPT_FROM <= LEGAL_DOCUMENT_VERSIONS.tos_v1);
+    if (TERMS_REACCEPT_FROM !== null) assert.ok(String(TERMS_REACCEPT_FROM) <= String(LEGAL_DOCUMENT_VERSIONS.tos_v1));
   }
 });
 

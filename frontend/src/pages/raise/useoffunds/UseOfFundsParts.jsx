@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toMajorString } from '../../../lib/money.js';
 import { Link } from 'react-router-dom';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
 import {
-  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, money, roundSourceRows, sectionOf, splitCheck, sourceText,
+  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, hireBody, planViewer, money, roundSourceRows, sectionOf, sectionSheet, splitCheck, sourceText, tiesRows,
 } from './useOfFundsModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
@@ -12,7 +12,8 @@ import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 /**
  * D1177 (#3104) — the Use of funds tool's shared parts: the plan read, the
  * cards, tiles and pills, three small charts that each have a table view, and
- * the dialogs (Edit split UF3, Add milestone UF6, Choose the round size UF13d).
+ * the dialogs (Edit split UF3, Add milestone and Add a hire UF6, Choose the round size UF13d),
+ * and D6083's section sheet (UF4, UF21c).
  * Every change opens one of these; never a browser pop-up. Eadwyn fills
  * nothing here: no amount, share, runway, burn, hire cost or driver.
  */
@@ -91,26 +92,8 @@ export function Skeleton({ lines = 3, testId }) {
   );
 }
 
-/** One read, its state and its retry. `read` is called with nothing; a null `key` makes no read. */
-export function useRead(read, key) {
-  const [state, setState] = useState({ status: 'loading', data: null });
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (key == null) return undefined;
-    let alive = true;
-    setState((s) => ({ status: 'loading', data: s.data }));
-    Promise.resolve().then(read)
-      .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: 'unreadable', data: null, code: error?.code || null }); });
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, n]);
-  const reload = useCallback(() => setN((x) => x + 1), []);
-  return { ...state, reload };
-}
-
-/** The plan read (D1176's `GET /plan`). */
-export const usePlan = (projectId, api = useOfFundsApi) => useRead(() => api.plan(projectId), projectId ? `plan:${projectId}` : null);
+/** The plan read and its hook live in `useOfFundsRead.js` (D5081), so CycleRoute can hold Home's read without this step. */
+export { useRead, usePlan } from './useOfFundsRead.js';
 
 /** The banner an admin or Super Admin works under (UF16): their changes are logged under their name. */
 export function AdminBanner({ viewer }) {
@@ -209,7 +192,7 @@ export function Columns({ groups, label, testId, format = (v) => v }) {
  * Dialogs
  * ------------------------------------------------------------------ */
 
-function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
+export function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   return (
     <div className="flex justify-end gap-2 max-md:[&>*]:flex-1">
       <button type="button" className={BTN_GHOST} onClick={onClose} disabled={busy}>Cancel</button>
@@ -218,11 +201,13 @@ function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   );
 }
 
-const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
+export const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
 /** D5069: the plan changed after the dialog opened. Nothing was written. */
-export const isStale = (e) => e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.code === 'changed_since_open');
+// D6082: `scenario_changed` is the same refusal, met when another save lands between the read and the write.
+const STALE_CODES = new Set(['changed_since_open', 'scenario_changed']);
+export const isStale = (e) => e?.status === 409 && (STALE_CODES.has(e?.code) || STALE_CODES.has(e?.data?.code));
 /** Review latest: closes the dialog and reads the plan again; the person's typed values stay in their head, not in a stale save. */
-function ReviewLatest({ onReview }) {
+export function ReviewLatest({ onReview }) {
   return <button type="button" className="self-start rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-bold text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" onClick={onReview} data-testid="uof-review-latest">Review latest</button>;
 }
 export const REVIEWED = 'Showing the latest plan. Your change was not saved; make it again from here.';
@@ -341,6 +326,53 @@ export function AddMilestoneDialog({ projectId, revision, onClose, onSaved, api 
 }
 
 /**
+ * D6082: change or remove one milestone. A milestone is part of its scenario, so the scenario's revision goes with
+ * the save (in the body) and the removal (in the query); a plan changed in another tab is refused (409, the dialog
+ * stays open, Review latest). An emptied cost is sent as null and stays Not costed, never 0.
+ */
+export function EditMilestoneDialog({ projectId, milestone, revision, currency = 'usd', onClose, onSaved, api = useOfFundsApi }) {
+  const [label, setLabel] = useState(milestone?.label ?? '');
+  const [section, setSection] = useState(milestone?.category_key ?? 'product');
+  const [by, setBy] = useState(milestone?.due_on ?? '');
+  const [cost, setCost] = useState(milestone?.cost_cents == null ? '' : (toMajorString(milestone.cost_cents, String(currency).toUpperCase()) ?? ''));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
+  const cents = cost.trim() === '' ? null : centsFromTyped(cost);
+  const byOk = by === '' || /^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$/.test(by);
+  const run = async (work, done) => {
+    setBusy(true); setError('');
+    try { await work(); onSaved(done); } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
+    setBusy(false);
+  };
+  const save = () => run(() => api.updateMilestone(projectId, milestone.id, { label: label.trim(), category_key: section, due_on: by || null, cost_cents: cents, expected_revision: revision }),
+    cents == null ? 'The milestone is saved. It stays Not costed until you add a cost.' : 'The milestone is saved.');
+  const remove = () => run(() => api.deleteMilestone(projectId, milestone.id, revision), 'The milestone is removed.');
+  return (
+    <Lightbox label="Edit milestone" title="Edit milestone" sub="A milestone names what a section’s money pays for, by a month." onClose={onClose} width={520} phone="sheet" testId="uof-edit-milestone"
+      footer={<div className="flex justify-between gap-2 max-md:flex-col">
+        <button type="button" className={BTN_GHOST} onClick={remove} disabled={busy} data-testid="uof-ms-remove">Remove milestone</button>
+        <DialogButtons busy={busy} onClose={onClose} go={save} goLabel="Save milestone" disabled={!label.trim() || !byOk || (cost.trim() !== '' && cents == null)} testId="uof-ms-save" />
+      </div>}>
+      <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Name</span><input className={FIELD} value={label} onChange={(e) => setLabel(e.target.value)} data-testid="uof-ms-label" /></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Section</span>
+          <select className={FIELD} value={section} onChange={(e) => setSection(e.target.value)} data-testid="uof-ms-edit-section">
+            {SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>By</span><input className={`${FIELD} ${MONO}`} placeholder="2027-03" value={by} onChange={(e) => setBy(e.target.value)} data-testid="uof-ms-by" />
+          {!byOk ? <span className="text-[12px] text-red-700 dark:text-red-300">A month is written like 2027-03.</span> : null}</label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Cost · optional</span>
+          <input className={`${FIELD} ${MONO}`} inputMode="decimal" placeholder="Leave empty to keep it Not costed" value={cost} onChange={(e) => setCost(e.target.value)} data-testid="uof-ms-cost" />
+          <span className={`text-[12px] ${MUTED}`}>An empty cost stays Not costed, never 0.</span></label>
+        {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-ms-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+/**
  * D5375: edit or remove one planned hire. The hire's own `revision` goes with the save and the removal, so a
  * hire changed in another tab is refused (409, the dialog stays open, Review latest) instead of replaced.
  * The cost a year and its currency are not edited here, so nothing is converted through a fixed factor.
@@ -378,6 +410,134 @@ export function EditHireDialog({ projectId, hire, onClose, onSaved, api = useOfF
         {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Lightbox>
+  );
+}
+
+/**
+ * D6083 (#6083) — Add a hire (UF6): role, section, the month it starts, its cost a year and the
+ * currency, in a centred dialog (a bottom sheet on a phone, as Add milestone). It saves through
+ * `POST /hires`, the store's own rules and audit, at revision 0. An empty cost stays Not recorded.
+ */
+export function AddHireDialog({ projectId, section: first = 'product', currency: planCurrency = 'usd', onClose, onSaved, api = useOfFundsApi }) {
+  const [role, setRole] = useState('');
+  const [section, setSection] = useState(sectionOf(first) ? first : 'product');
+  const [starts, setStarts] = useState('');
+  const [cost, setCost] = useState('');
+  const [currency, setCurrency] = useState(String(planCurrency || 'usd').toLowerCase());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const currencies = [...new Set([String(planCurrency || 'usd').toLowerCase(), 'usd', 'eur', 'gbp'])];
+  const draft = hireBody({ role, section, starts, cost, currency });
+  // Say what to fix once the person has typed something; an empty role just keeps the button off.
+  const hint = role.trim() || starts || cost ? draft.error : null;
+  const save = async () => {
+    if (!draft.body) return;
+    setBusy(true); setError('');
+    try {
+      await api.createHire(projectId, draft.body);
+      onSaved(draft.body.annual_cents == null ? 'The hire is added. Its cost stays Not recorded until you add one.' : 'The hire is added.');
+    } catch (e) { setError(refusal(e)); }
+    setBusy(false);
+  };
+  return (
+    <Lightbox label="Add a hire" title="Add a hire" sub="A hire is paid from its section from the month it starts." onClose={onClose} width={520} phone="sheet" testId="uof-add-hire"
+      footer={<DialogButtons busy={busy} onClose={onClose} go={save} goLabel="Add hire" disabled={!draft.body} testId="uof-add-hire-save" />}>
+      <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Role</span><input className={FIELD} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Data engineer" data-testid="uof-add-hire-role" /></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Section</span>
+          <select className={FIELD} value={section} onChange={(e) => setSection(e.target.value)} data-testid="uof-add-hire-section">
+            {SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Starts</span><input className={`${FIELD} ${MONO}`} placeholder="2027-04" value={starts} onChange={(e) => setStarts(e.target.value)} data-testid="uof-add-hire-starts" /></label>
+        <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-2">
+          <label className="flex flex-col gap-1"><span className={EYEBROW}>Cost a year</span>
+            <input className={`${FIELD} ${MONO}`} inputMode="decimal" placeholder="140,000" value={cost} onChange={(e) => setCost(e.target.value)} data-testid="uof-add-hire-cost" /></label>
+          <label className="flex flex-col gap-1"><span className={EYEBROW}>Currency</span>
+            <select className={FIELD} value={currency} onChange={(e) => setCurrency(e.target.value)} data-testid="uof-add-hire-currency">
+              {currencies.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+            </select></label>
+        </div>
+        <span className={`text-[12px] ${MUTED}`}>An empty cost stays Not recorded, never 0.</span>
+        {hint ? <span className="text-[12px] text-red-700 dark:text-red-300" data-testid="uof-add-hire-hint">{hint}</span> : null}
+        {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-add-hire-error">{error}</p> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+/**
+ * D6083 (#6083) — the section sheet (UF4; a bottom sheet on a phone, UF21c): the section's share and
+ * amount, its milestones, its hires with what they cost against the amount (and the warning when they
+ * cost more), its planned share against the actual one, and what it feeds. The actual share is
+ * Mercury's and the founder's alone (D1174): anyone else is told so and is shown no bank figure.
+ */
+export function SectionSheet({ plan, sectionKey, mercury, mercuryState = 'ready', onClose, onAddHire }) {
+  const base = plan?.base?.value || null;
+  const v = sectionSheet(base, sectionKey, mercury);
+  if (!v) return null;
+  const cur = base?.currency;
+  const founderOnly = planViewer(plan)?.mercury === false;
+  const deck = tiesRows(plan).find((r) => r.key === 'deck');
+  const heading = (t) => <h4 className={`m-0 ${EYEBROW}`}>{t}</h4>;
+  const block = 'flex flex-col gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800';
+  return (
+    <Sheet label={v.label} eyebrow="Allocation · Section" title={v.label} onClose={onClose} width={560} phone="sheet" testId="uof-section-sheet"
+      footer={<div className="flex justify-end max-md:hidden"><button type="button" className={BTN_GHOST} onClick={onClose} data-testid="uof-section-sheet-close">Close</button></div>}>
+      <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill tone="violet">{v.share != null ? `${v.share}% of the raise` : 'Share Not recorded'}</Pill>
+          {v.source ? <Source source={v.source} /> : null}
+        </div>
+        <dl className="m-0 grid grid-cols-2 gap-2" data-testid="uof-section-facts">
+          <div><dt className={EYEBROW}>Amount</dt><dd className={`m-0 ${MONO} text-[15px] font-bold`}>{money(v.amountCents, cur) || <NotRecorded />}</dd></div>
+          <div><dt className={EYEBROW}>{base?.target_runway_months ? `A month over ${base.target_runway_months} months` : 'A month'}</dt><dd className={`m-0 ${MONO} text-[15px] font-bold`}>{money(v.monthlyCents, cur) || <NotRecorded />}</dd></div>
+        </dl>
+        <section className={block} data-testid="uof-section-milestones">
+          {heading('Milestones in this section')}
+          {v.milestoneItems.length ? <ul className="m-0 flex list-none flex-col gap-1.5 p-0">{v.milestoneItems.map((m) => (
+            <li key={m.id}><span className="block text-[13.5px] font-bold">{m.label}</span>
+              <span className={`${MONO} text-[12px] ${MUTED}`}>By {m.due_on || NOT_RECORDED} · {m.cost_cents == null ? 'Not costed' : money(m.cost_cents, cur)}</span></li>
+          ))}</ul> : <p className={`m-0 text-[12.5px] ${MUTED}`}>No milestones in this section yet.</p>}
+        </section>
+        <section className={block} data-testid="uof-section-hires">
+          <div className="flex items-center justify-between gap-2">{heading('Hires')}
+            {planViewer(plan)?.can_write && v.hireItems ? <button type="button" className={BTN_GHOST} onClick={onAddHire} data-testid="uof-section-add-hire">Add a hire</button> : null}</div>
+          {v.hireItems == null ? <BlockError text={base?.hires?.reason || 'Hires could not be read.'} />
+            : v.hireItems.length ? (
+              <>
+                <ul className="m-0 flex list-none flex-col gap-1.5 p-0">{v.hireItems.map((h) => (
+                  <li key={h.id} className="flex items-start justify-between gap-2" data-testid="uof-section-hire">
+                    <span><span className="block text-[13.5px] font-bold">{h.role || NOT_RECORDED}</span>
+                      <span className={`${MONO} text-[12px] ${MUTED}`}>From {h.start_month || NOT_RECORDED} · {money(h.annual_cents, h.currency) ? `${money(h.annual_cents, h.currency)} a year` : 'cost Not recorded'}</span></span>
+                    <span className={`${MONO} text-[12.5px]`}>{typeof h.annual_cents === 'number' ? `${money(Math.round(h.annual_cents / 12), h.currency)} a month` : ''}</span>
+                  </li>
+                ))}</ul>
+                <p className={`m-0 text-[12px] ${MUTED}`} data-testid="uof-section-hire-cost">{`Hires cost ${money(v.hireCostCents, cur) || NOT_RECORDED} a year of this section’s ${money(v.amountCents, cur) || NOT_RECORDED}.`}</p>
+                {v.overBudget ? <BlockError tone="amber" testId="uof-section-over" text={`${v.label}: hires cost ${money(v.hireCostCents, cur)} a year; this section has ${money(v.amountCents, cur)}. The split still saves; the warning stays until the hires fit.`} /> : null}
+              </>
+            ) : <p className={`m-0 text-[12.5px] ${MUTED}`}>No hires planned in this section.</p>}
+        </section>
+        <section className={block} data-testid="uof-section-actual">
+          {heading('Plan vs actual')}
+          <div className="flex justify-between text-[12.5px]"><span>Planned share</span><span className={MONO}>{v.share != null ? `${v.share}%` : NOT_RECORDED}</span></div>
+          <div className="flex justify-between text-[12.5px]"><span>Actual · last {v.months} months</span>
+            <span className={MONO} data-testid="uof-section-actual-value">{founderOnly ? <span className={MUTED}>Founder only</span>
+              : mercuryState === 'unreadable' ? <span className={MUTED}>Unreadable</span>
+                : v.actual != null ? `${v.actual}%` : <span className={MUTED}>{NOT_RECORDED}</span>}</span></div>
+          <p className={`m-0 text-[11.5px] ${MUTED}`}>{founderOnly ? 'Mercury figures are visible to the founder only.'
+            : v.actual != null ? `Connector · Mercury${v.asOf ? `, as of ${dayText(v.asOf) || v.asOf}` : ''}.` : 'The actual share reads Mercury, from the categories you mapped.'}</p>
+        </section>
+        <section className={block} data-testid="uof-section-feeds">
+          {heading('Feeds')}
+          {deck ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[13px] font-bold">Pitch deck{deck.text ? ` · ${deck.text}` : ''}</span>
+              <span className="flex items-center gap-2">{deck.pill ? <Pill tone={deck.tone}>{deck.pill}</Pill> : null}{deck.href ? <Link className={LINK} to={deck.href}>Open ›</Link> : null}</span>
+            </div>
+          ) : <p className={`m-0 text-[12.5px] ${MUTED}`}>The pitch deck’s Ask slide reads this split. No deck is recorded.</p>}
+        </section>
+      </div>
+    </Sheet>
   );
 }
 
@@ -438,7 +598,7 @@ export function WhereUsedDialog({ plan, rows, onClose, onRound }) {
         {plan?.round?.disagreements?.length ? (
           <div className="flex flex-wrap items-center gap-2" data-testid="uof-round-differs">
             <Pill tone="amber">! Recorded round sizes differ</Pill>
-            {plan?.viewer?.can_write ? <button type="button" className={BTN_GHOST} onClick={onRound}>Choose the round size</button> : null}
+            {planViewer(plan)?.can_write ? <button type="button" className={BTN_GHOST} onClick={onRound}>Choose the round size</button> : null}
           </div>
         ) : null}
         {rows.filter((r) => r.key !== 'round').map((r) => (

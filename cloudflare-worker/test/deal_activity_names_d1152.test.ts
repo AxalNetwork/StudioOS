@@ -1,3 +1,4 @@
+import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
 /**
  * D1152 (#3057, DL14) — the deal's activity names other investors only for
  * an admin and the deal's own founder, as the commitments read does. An
@@ -14,8 +15,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import deals from '../src/routes/deals.ts';
@@ -23,20 +22,14 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-function ddl(name: string): string {
-  const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
-  assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
-  return BASELINE.slice(at, BASELINE.indexOf(');', at) + 2);
-}
 
 const ADMIN = 1, ADA = 2, BEN = 3, FOUNDER = 5, PARTNER = 6;
 const ROLE: Record<number, string> = { 1: 'admin', 2: 'investor', 3: 'investor', 5: 'founder', 6: 'partner' };
 const NAMES: Record<number, string> = { 1: 'Sam Staff', 2: 'Ada Angel', 3: 'Ben Backer', 5: 'Fay Founder', 6: 'Pat Partner' };
 
 function freshDb() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments']) db.exec(ddl(t));
+  const db = migratedDatabase();
+  // #6193: the activity also reads documents and diligence, each behind its own rule.
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, NAMES[Number(id)], `u${id}@example.test`);
   db.exec(`UPDATE users SET founder_id = 50 WHERE id = ${FOUNDER}`);
@@ -93,3 +86,5 @@ test('an admin, the deal\'s founder and an Operating Partner read every investor
     }
   } finally { db.close(); }
 });
+
+test.after(removeMigratedDatabases);

@@ -136,7 +136,8 @@ test('"Not recorded" is muted and never a zero: spend, last activity, title, cou
   assert.equal((card.match(/Not recorded/g) || []).length, 3, 'this month (the phone line and its column) and last activity');
   assert.doesNotMatch(card, /\$0(\.00)?\b/);
   const html = render(h(AgentsCard, { block: { available: true, value: { agents: [AGENTS[2]] } }, kind: 'project', companyName: 'x', now: NOW }));
-  assert.match(html, /<span class="italic text-gray-500 dark:text-gray-400">Not recorded<\/span>/, 'muted, not red');
+  // D5129: the shared Not recorded chip (dotted border, dash glyph), muted grey.
+  assert.match(html, /<span class="[^"]*border-dotted[^"]*text-gray-600 dark:[^"]*text-gray-400"[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not recorded<\/span>/, 'muted, not red');
   const sam = peopleFromCompany(COMPANY, 1, VOCAB).find((p) => p.userId === 3);
   assert.equal(sam.title, null);
   assert.match(renderedText(render(h(PeopleCard, { kind: 'company', people: [sam], canEdit: false }))), /\[Sam Okafor\][^]*FounderNot recordedWork/);

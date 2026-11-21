@@ -3,8 +3,10 @@ import { EMPTY_DRAFT, blockedLine, draftFrom, latestOnly, saveRequest } from './
 import { useMutations, useZoneRead, failureNote, stated } from './useZoneMutations';
 import { DeliveryNote } from './deliveryEdits';
 import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
+import { HistoryPager, useMorePages } from './historyPages';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { partnerDeliveryHistoryApi } from '../../../lib/api/partnerDeliveryHistory';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
   // `StatCard` went with the three tiles it drew. The strip is the artboard's
@@ -97,7 +99,96 @@ function ReportBlocked({ report }) {
   );
 }
 
-function ReportCard({ report, sending, discarding, onEdit, onSend, onDelete, note }) {
+/**
+ * #4709 (D4709): which blockers a report row names. A draft names the
+ * engagement's open blockers now. A sent report names the ones open when it
+ * was sent, or says that was not recorded; today's open blockers are labelled
+ * as now, never passed off as the report's.
+ */
+export function reportBlockerLine(report) {
+  const list = Array.isArray(report?.blockers) ? report.blockers : [];
+  const now = Array.isArray(report?.current_blockers) ? report.current_blockers : [];
+  const source = report?.blockers_source || (report?.state === 'sent' ? 'not_recorded' : 'live');
+  return {
+    source,
+    list,
+    label: source === 'at_send' ? 'Open when it was sent' : source === 'live' ? 'Open now' : 'Open when it was sent',
+    notRecorded: source === 'not_recorded',
+    // Shown beside a sent report only, and only when something is open now.
+    now: report?.state === 'sent' ? now : [],
+  };
+}
+
+function ReportBlockers({ report }) {
+  const line = reportBlockerLine(report);
+  if (report.state !== 'sent') return null;
+  return (
+    <div className="mt-3 grid gap-3 md:grid-cols-2 text-[12px]" data-testid="report-blockers" data-source={line.source}>
+      <div>
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{line.label}</div>
+        {line.notRecorded
+          ? <p className="mt-1"><Unrecorded>Not recorded: this report was sent before the open blockers were kept with it.</Unrecorded></p>
+          : (line.list.length === 0
+            ? <p className="mt-1 text-axal-muted">Nothing was open.</p>
+            : <ul className="mt-1 space-y-0.5 text-axal-muted">{line.list.map((b, i) => (
+              <li key={i}>{b.summary} <span className="text-axal-faint">· {b.side === 'client' ? 'client side' : 'our side'}</span></li>
+            ))}</ul>)}
+      </div>
+      {line.now.length > 0 && (
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Open now, after this report</div>
+          <ul className="mt-1 space-y-0.5 text-axal-muted">{line.now.map((b, i) => (
+            <li key={i}>{b.summary} <span className="text-axal-faint">· {b.side === 'client' ? 'client side' : 'our side'}</span></li>
+          ))}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** #4709: a sent report's amendments, and the form that adds one. The report itself never changes. */
+function Amendments({ report, amending, onAmend }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const list = Array.isArray(report.amendments) ? report.amendments : [];
+  return (
+    <div className="mt-3" data-testid="report-amendments">
+      {list.length > 0 && (
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Amendments</div>
+          <ol className="mt-1 space-y-1 text-[12px] text-axal-muted">
+            {list.map((a) => (
+              <li key={a.id}>
+                <span className="whitespace-pre-wrap">{a.note}</span>
+                <span className="text-axal-faint"> · {a.amended_by_name || 'Someone at the firm'}, {formatDay(a.amended_at)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {open ? (
+        <div className="mt-2 space-y-2">
+          <Field label="Amendment" hint="Say what the sent report got wrong. It is added beside the report with your name and the date; the report stays as the client received it.">
+            <textarea className={inputClass} rows={2} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
+          </Field>
+          <div className="flex gap-2">
+            <button type="button" className={buttonClass} aria-disabled={amending || !text.trim() || undefined}
+              onClick={async () => {
+                if (amending || !text.trim()) return;
+                const ok = await onAmend(report, text.trim());
+                if (ok) { setText(''); setOpen(false); }
+              }}>{amending ? 'Adding…' : 'Add amendment'}</button>
+            <button type="button" className={ghostButtonClass} onClick={() => { setOpen(false); setText(''); }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className={`${ghostButtonClass} mt-2`} onClick={() => setOpen(true)}>Add an amendment</button>
+      )}
+    </div>
+  );
+}
+
+function ReportCard({ report, sending, discarding, amending = false, onEdit, onSend, onDelete, onAmend, note }) {
   const busy = sending || discarding;
   const sent = report.state === 'sent';
   return (
@@ -150,10 +241,14 @@ function ReportCard({ report, sending, discarding, onEdit, onSend, onDelete, not
       </div>
 
       {sent ? (
-        <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
-          This is a record of what the client received, so it is not editable and
-          not deletable. Write the next period’s report instead.
-        </p>
+        <>
+          <ReportBlockers report={report} />
+          <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
+            Sent reports are records, not editable rows: this is what the client
+            received. To correct it, add an amendment.
+          </p>
+          <Amendments report={report} amending={amending} onAmend={onAmend} />
+        </>
       ) : (
         <div className="mt-3 flex">
           <button
@@ -443,6 +538,9 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
   );
 }
 
+const reportKey = (r) => r.id;
+const fetchReportsPage = (o) => partnerDeliveryHistoryApi.partnerStatusReportsPage(o);
+
 export default function PartnerStatusReportsZone() {
   // The skeleton is for the first read. A later one (every save or send) keeps
   // the composer and what is typed in it on screen (#4698).
@@ -497,7 +595,9 @@ export default function PartnerStatusReportsZone() {
   // two shapes the JSX has to tell apart.
   // D4822 part 2: `?engagement=` narrows the feed to one engagement, and the composer starts on it.
   const focus = useEngagementFocus();
-  const allItems = (Array.isArray(d?.items) ? d.items : [])
+  // #4709: the read is the feed's first page; Load more adds the rest.
+  const more = useMorePages(d, fetchReportsPage, reportKey);
+  const allItems = (Array.isArray(more?.items) ? more.items : [])
     .map((r) => ({ ...r, blockers: Array.isArray(r.blockers) ? r.blockers : [] }));
   const items = allItems.filter((r) => matchesFocus(r, focus.key));
   const engagements = state.engagements || [];
@@ -660,22 +760,26 @@ export default function PartnerStatusReportsZone() {
                 // WHAT THE FIRM WROTE, not what the log says was sent. The two
                 // are different claims and the composer keeps them apart.
                 r.shipped ? { text: r.shipped } : { nr: true },
-                // READ LIVE, NEVER STORED. A blocker cleared since the report
-                // was written stops showing here, which is the point.
-                r.blockers.length === 0
+                // #4709: a draft's blockers are read live; a sent report's are
+                // the ones open when it was sent, or Not recorded.
+                r.state === 'sent' && r.blockers_source === 'not_recorded'
+                  ? { nr: true, sub: 'not recorded at the send' }
+                  : r.blockers.length === 0
                   ? { text: '—' }
                   : {
                     text: r.blockers.map((b) => b.summary).join(' · '),
                     ...(client.length ? { pill: 'Blocked', pillTone: 'danger' } : { pill: 'Blocked', pillTone: 'warn' }),
-                    sub: client.length
+                    sub: `${client.length
                       ? `${client.length} on the client’s side`
-                      : 'on ours',
+                      : 'on ours'}${r.state === 'sent' ? ' · when sent' : ' · now'}`,
                   },
               ],
             };
           })}
-          note={'A draft names the client as the blocker where that is what happened — the direction that was asked for and not given, the review that has not come — and states plainly that the deadline does not move because of it: not our delay, still our problem. Blockers are read live at this moment rather than copied into the report when it was written, so one cleared since is gone from this row and one raised since is on it; a prose copy would have gone stale the instant either happened, and the side, which is the whole reason the sentence can be said without leaning on it, is exactly what a stale copy loses. And nothing here sends anything: a draft waits for a person, and `Sent` records that a person sent it.'}
+          note={'A draft names the client as the blocker where that is what happened — the direction that was asked for and not given, the review that has not come — and states plainly that the deadline does not move because of it: not our delay, still our problem. A draft\u2019s blockers are read live, so one cleared since is gone from its row and one raised since is on it. A sent report shows the blockers that were open when it was sent, kept with it at the send; one sent before that was kept reads Not recorded, and today\u2019s blockers are shown on its card as now, never as its own. And nothing here sends anything: a draft waits for a person, and `Sent` records that a person sent it.'}
         />
+        <HistoryPager page={more.page} shown={allItems.length} noun="reports"
+          loadingMore={more.loadingMore} moreError={more.moreError} onMore={more.loadMore} />
 
         {items.length > 0 && visible.length === 0 && (
           <p className="text-[12px] text-axal-muted">
@@ -724,7 +828,13 @@ export default function PartnerStatusReportsZone() {
                 report={r}
                 sending={isPending(`send:${r.id}`)}
                 discarding={isPending(`discard:${r.id}`)}
+                amending={isPending(`amend:${r.id}`)}
                 note={note}
+                onAmend={(rep, text) => run(
+                  `amend:${rep.id}`,
+                  () => partnerDeliveryHistoryApi.amendPartnerStatusReport(rep.id, text),
+                  'Amendment added. The report is unchanged.', `rep:${rep.id}`,
+                )}
                 onEdit={(rep) => {
                   setEditTarget({ engagement_id: rep.engagement_id, period: rep.period, tick: Date.now() + Math.random() });
                   setComposing(true);
@@ -761,17 +871,19 @@ export default function PartnerStatusReportsZone() {
           <p className="mt-2">
             <strong>A sent report cannot be edited or deleted.</strong> It is a
             record of what a client already received; changing it would make our
-            record disagree with theirs with no trace of the difference. Write the
-            next period instead.
+            record disagree with theirs with no trace of the difference. A
+            correction is an amendment, added beside it with who wrote it and
+            when.
           </p>
           <p className="mt-2">
             <strong>Blocked is what you write; the blockers are its evidence.</strong> The
             Blocked section is saved with the report, like Shipped and Next,
-            because it is part of what the client receives. The engagement’s
-            open blockers, with their side, are read live beneath it and never
-            copied in — a copy would go stale the instant one cleared. A report
+            because it is part of what the client receives. While it is a draft,
+            the engagement’s open blockers are read live beside it. When it is
+            sent, the ones open at that moment are kept with it, so a later look
+            shows what was blocked then; today’s are labelled as now. A report
             saved before the section existed reads Not recorded, not “nothing
-            blocked”.
+            blocked”, and one sent before blockers were kept says so too.
           </p>
         </StatedLimit>
       </div>

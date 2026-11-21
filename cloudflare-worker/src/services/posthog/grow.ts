@@ -6,7 +6,7 @@
  *   - every metric tracked in either module; each is a KPI row
  *     `posthog-<uid>` on Revenue and traction (D1609), read only from PostHog;
  *   - for a tracked metric whose role is retention, its cohorts by first-seen
- *     week (`retention:<uid>`): shown BESIDE revenue cohort retention,
+ *     date with the insight's interval (`retention:<uid>`): shown BESIDE revenue cohort retention,
  *     labelled apart, never written to `monthly_churn_pct` or merged;
  *   - each survey's counts, with its NPS or average score when PostHog gives
  *     one (`survey_stats`, Product improvement).
@@ -36,17 +36,28 @@ const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === '
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const day = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
 
+// `week` is the stored cohort start date, including for non-weekly insights.
 export interface Cohort { week: string; size: number; pct: Array<number | null> }
+type RetentionInterval = 'day' | 'week' | 'month';
+
+/** PostHog saves a RetentionQuery directly or under an InsightVizNode source. */
+function intervalOf(value: unknown): RetentionInterval | null {
+  const result = obj(value);
+  const query = obj(result?.query) ?? result;
+  const source = obj(query?.source) ?? query;
+  const period = obj(source?.retentionFilter)?.period ?? result?.interval;
+  const interval = typeof period === 'string' ? period.toLowerCase() : null;
+  return interval === 'day' || interval === 'week' || interval === 'month' ? interval : null;
+}
 
 /**
- * A retention insight's cohorts by first-seen week: each cohort's size and the
- * share of it seen again each week after, as percentages. A week PostHog gives
- * no count for is null, never 0.
+ * Each cohort's size and the share seen again each period after it. A missing
+ * count stays null. Keep the newest dates regardless of the source row order.
  */
 export function cohortsOf(result: unknown): Cohort[] {
   const rows = Array.isArray(obj(result)?.results) ? obj(result)!.results as unknown[] : Array.isArray(result) ? result as unknown[] : [];
   const out: Cohort[] = [];
-  for (const r of rows.slice(0, MAX_COHORTS)) {
+  for (const r of rows) {
     const o = obj(r);
     const week = day(o?.date ?? o?.label);
     const values = Array.isArray(o?.values) ? o!.values as unknown[] : [];
@@ -55,7 +66,7 @@ export function cohortsOf(result: unknown): Cohort[] {
     if (!week || size == null || size <= 0) continue;
     out.push({ week, size, pct: counts.slice(1, 13).map((c) => (c == null ? null : Math.round((c / size) * 1000) / 10)) });
   }
-  return out;
+  return out.sort((a, b) => a.week.localeCompare(b.week)).slice(-MAX_COHORTS);
 }
 
 /** A survey's counts, and its NPS or average score when PostHog states one. */
@@ -75,10 +86,23 @@ export async function syncGrow(env: Env, reads: PosthogReads, ctx: SyncContext) 
   if (r.partial) return r;
   for (const m of (await trackedOf(env, ctx.projectId, 'revenue_and_traction')).filter((t) => t.role === 'retention')) {
     try {
-      const cohorts = cohortsOf(await reads.runInsight(m.insight_short_id));
+      const result = await reads.runInsight(m.insight_short_id);
+      const cohorts = cohortsOf(result);
       if (!cohorts.length) { r.unread.push(`retention:${m.uid}`); continue; }
-      counted(r, await landFact(env, ctx, { module: 'revenue_and_traction', kind: 'metric', fact_key: `retention:${m.uid}`, period: ctx.today, value: null, value_json: { cohorts }, label: m.insight_name, source_ref: m.insight_short_id, as_of: ctx.today }));
-    } catch (e) { if (stopsSync(e)) { r.partial = true; return r; } r.unread.push(`retention:${m.uid}`); }
+      let interval = intervalOf(result);
+      if (!interval) {
+        try { interval = intervalOf((await reads.insight(m.insight_short_id)).definition); }
+        catch (e) {
+          if (stopsSync(e)) r.partial = true;
+          else r.unread.push(`retention_interval:${m.uid}`);
+        }
+      }
+      counted(r, await landFact(env, ctx, { module: 'revenue_and_traction', kind: 'metric', fact_key: `retention:${m.uid}`, period: ctx.today, value: null, value_json: { interval, cohorts }, label: m.insight_name, source_ref: m.insight_short_id, as_of: ctx.today }));
+    } catch (e) {
+      if (stopsSync(e)) r.partial = true;
+      else r.unread.push(`retention:${m.uid}`);
+    }
+    if (r.partial) return r;
   }
   let surveys: Awaited<ReturnType<PosthogReads['surveys']>> = [];
   try { surveys = await reads.surveys(); } catch (e) { if (stopsSync(e)) { r.partial = true; return r; } r.unread.push('surveys'); }

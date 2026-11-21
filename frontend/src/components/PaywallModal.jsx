@@ -44,7 +44,8 @@ export const TIER_PLANS = {
     blurb: 'Raise the money, then grow the company.',
     // D683: the second group keeps everything in the first, as Pricing's card leads its lines.
     lead: 'Everything in Validate + Build, plus:',
-    features: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
+    // D4653 part 3 (#4653): the catalogue's Studio entry states its startup and interview limits.
+    features: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
   },
   // D1334: Investor Plus, sold monthly between Basic and Pro.
   plus: {
@@ -52,14 +53,14 @@ export const TIER_PLANS = {
     label: 'Investor Plus',
     blurb: 'For angel investors, independent investors and investment professionals.',
     plan: 'investor_plus_monthly',
-    features: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
+    features: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'AI usage from your plan allowance and AI tokens'],
   },
   professional: {
     key: 'investor:professional',
     label: 'Investor Pro',
     blurb: 'For professional angels, investment analysts and smaller firms.',
     plan: 'investor_pro_monthly',
-    features: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
+    features: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'AI usage from your plan allowance and AI tokens', 'More advanced investment workflows'],
   },
   institutional: {
     key: 'investor:institutional',

@@ -43,11 +43,12 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import DsrOutcomeNotice from '../src/components/DsrOutcomeNotice.jsx';
+import { readAccountPage } from './_accountSource.mjs';
 
 const at = (p) => resolve(process.cwd(), p);
 const raw = (p) => readFileSync(at(p), 'utf8');
 
-const PAGE = raw('frontend/src/pages/SettingsPage.jsx');
+const PAGE = readAccountPage();
 const PAGE_CODE = codeOnly(PAGE);
 const API = codeOnly(raw('frontend/src/lib/api.js'));
 

@@ -153,7 +153,7 @@ test('the module read query, the count, the pages, the cells and the links a rea
   assert.equal(safeHref('/validate/x'), '/validate/x');
   for (const bad of ['//evil.test', 'https://evil.test', 'javascript:alert(1)', 'validate', null]) assert.equal(safeHref(bad), null, String(bad));
   assert.deepEqual(cycleTabs('build', [{ slug: 'founding-team', name: 'Founding team' }], 'founding-team').map((t) => [t.name, t.href, t.active]),
-    [['Overview', '/build', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Tools history is its second tab (#1597)');
+    [['Overview', '/build', false], ['Plan', '/build/plan', false], ['Progress', '/build/plan/progress', false], ['Tools', '/build/operating-systems#tools', false], ['Founding team', '/build/founding-team', true]], 'Build\'s Plan and Progress lead (D6029), then its Tools history (#1597)');
 });
 
 test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module page keep `?project_id=`', () => {
@@ -204,9 +204,10 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
     { key: 'board_cadence', label: 'Board meeting cadence agreed', done: false, source: null, done_at: null },
   ] }));
   assert.match(text(list), /Durability checklist 2 of 3 done/);
-  assert.match(text(list), /Tax ID \(EIN\) received Done · Spin-Out Lab · 2026-09-01/);
-  assert.match(text(list), /Key-person cover set up Done · typed/);
-  assert.match(text(list), /Board meeting cadence agreed Not done/);
+  // D6122 (GR-24): how each item was ticked, or how it will be.
+  assert.match(text(list), /Tax ID \(EIN\) received , done Spin-Out Lab · 1 Sept? 2026/);
+  assert.match(text(list), /Key-person cover set up , done By hand/);
+  assert.match(text(list), /Board meeting cadence agreed , open Open · Tick by hand/);
   assert.equal(html(h(DurabilityChecklist, { items: null })), '', 'nothing to list draws nothing');
   const route = cycleRouteText();
   // D686 §5.1: Share an update opens at /grow/update over the page; a sent
@@ -272,7 +273,7 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   const route = cycleRouteText();
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
   // D914 (#2698): an admin reading the Investor narrative is offered no Add.
-  assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
+  assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction, defCtx\)\}/);
   // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
   assert.match(route, /onSubmit=\{\(values, memory\) => formOpen\.submit\(formWrites, projectId, values, memory\)\}/);
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
@@ -394,7 +395,8 @@ test('the five card states (variant=states and variant=new), each with its sente
   const fresh = text(html(h(FigureTile, { fig: figure('p', 'Pain themes', null, 'count', { delta_30d: null }) })));
   assert.match(fresh, /Pain themes Not recorded nothing recorded yet/);
   assert.doesNotMatch(html(h(FigureTile, { fig: figure('p', 'Pain themes', 2, 'count', { spark: [1, 2] }) })), /<svg/, 'a two-point sparkline is not drawn');
-  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Stripe could not be read/);
+  // D4846 part 2 (#6032): the failed source says Unavailable (D5129's chip) before naming it, in muted ink, not red.
+  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Unavailable Stripe could not be read/);
 });
 
 test('the overview while loading and when the whole read fails', () => {
@@ -418,7 +420,9 @@ test('EVERY MODULE RENDERS FROM THE SHARED READ: all 26 module pages, with their
       assert.ok(t.includes(`What ${name} shows.`) && t.includes(`${name} · at a glance`) && !t.includes(`Next: Next step for ${name}.`), name);
       assert.ok(t.includes(`${name} one`) && t.includes(`${name} two`), `${name} lists its records`);
       const currentLabel = cycle === 'grow' ? ({ 'product-improvement': 'Customers', distribution: 'Distribution', 'revenue-and-traction': 'Focus', 'team-expansion': 'Talent', 'partner-network': 'Partnerships', 'market-expansion': 'Markets', 'durable-company-building': 'Company' }[c.slug] || name) : name;
-      assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
+      // D6029 (BD23): Build's desktop module switcher is the sidebar, so its page marks the module in the picker.
+      if (cycle === 'build') assert.match(out, new RegExp(`<option value="${c.slug}" selected="">`), `${name} is the picked module`);
+      else assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
       n += 1;
     }
   }
@@ -470,6 +474,12 @@ test('each chart kind draws what it is given, and says Not recorded where a valu
   assert.match(text(draw({ kind: 'rows', items: [{ label: 'Mismatches', value: null }] })), /Mismatches Not recorded/);
   assert.match(text(draw({ kind: 'big', value: '57%', label: 'need-to-have' })), /57% need-to-have/);
   assert.match(draw({ kind: 'line', values: [1, 2, 3], target: 5, mark: 1, mark_label: 'ship' }), /stroke-dasharray="5 4"[\s\S]*ship/);
+  // D6025 (#6025): Prototype / MVP's burn-up by ISO week, as the Worker writes it: the labels are drawn as given,
+  // in order, a dot for each real point and none for the Ship slot, the mark at the Ship slot.
+  const weekly = draw({ kind: 'line', values: [1, 2, null, 3], target: 4, labels: ['W45', 'W46', 'Ship', 'W48'].map((label, at) => ({ at, label })), mark: 2, mark_label: 'Ship 2026-11-20' });
+  assert.match(text(weekly), /Ship 2026-11-20 W45 W46 Ship W48 $/);
+  assert.equal((weekly.match(/<circle/g) || []).length, 3);
+  assert.match(weekly, /<line x1="350" y1="8" x2="350"/, 'the Ship mark at the third of four slots');
   assert.match(draw({ kind: 'stack', rows: [{ label: 'A', parts: [1, 1] }], tones: ['v1', 'v2'], legend: [{ label: 'Strong', tone: 'v1' }] }), /fill-axal-violet[\s\S]*Strong/);
   assert.equal((draw({ kind: 'dots', values: [true, false, true] }).match(/title="Held"/g) || []).length, 2);
   assert.equal((draw({ kind: 'heat', rows: [{ label: 'M1', cells: [1, null, 0.5] }] }).match(/<rect/g) || []).length, 2, 'a missing cell is not drawn');

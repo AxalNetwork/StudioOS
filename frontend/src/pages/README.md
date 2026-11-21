@@ -40,6 +40,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `articles/` | D1408 (#3694): the member's own articles, from the Article Authoring canvas (AR1–AR6) — the library, Eadwyn's writing panel, the image sheet, Publish… and the pure rules they share. `ArticleAuthorPage.jsx` mounts them at `/articles/draft` and `/articles/edit/:id`. |
 | `email/` | D1344 (#3552): Email, `/email` and `/email/settings`, in every profile's shell: People, the conversation, What Eadwyn knows, the composer, connect and the sent log. |
 | `deal/` | D1152: the deal page's frame for `DealRoomPage.jsx` — the key strip, the stage track and its one next action, the investor's Overview, Notes and Activity, and the states, with the pure model they share. |
+| `share/` | D6864 (#6864): pages a founder shares outside Axal, opened without a sign-in by the token in the address: `EvidencePackPage.jsx` is a Raise evidence pack (`/share/evidence/:token`), dated and frozen when it was made. |
 | `partner/` | Partner-side operations (BD console). |
 | `research/` | Research zone bodies. Library and Ask are on every licence. Funds is the founder shortlist, and `FundDossier.jsx` is one row of it at `/research/funds/:uid`. `CompanyCandidate.jsx` is one competitor at `/research/companies/:analysisId/:candidateId`. |
 | `raise/` | Round-manager panels. |
@@ -67,6 +68,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `profile/` | The founder's profile pages (D702): You, Your venture, What others see and Visibility, at `/profile`, `/profile/venture`, `/profile/preview` and `/profile/visibility`, for founders only, with their shared frame and pure model. Documented in its own README. |
 | `cycles/` | The four cycle overviews and their module pages (D661), drawn from #1469's shared read: the model, the SVG charts, the overview and the module page. Not mounted until each cycle's read lands. Start at `cycles/README.md`. |
 | `portfolio/` | D4817 part 1 (#5311): the Portfolio v2 frame every Portfolio board draws in (local navigation, basis context, document title, rail slot), the shared metric, attention and reporting-obligation parts, and their pure model. PF-01's Overview is `investor/InvestorPortfolioCanvas.jsx`. Start at `portfolio/README.md`. |
+| `programs/` | D6966 (#6966): program presentations — the kit, the key → page → PDF map (one file per program in `programs/catalog/` and `programs/content/`), the public Programs index (`/programs`) and a program's address (`/programs/:key`). Adding a program adds files there and edits nothing shared. Start at `programs/README.md`. |
 
 ## Rules
 

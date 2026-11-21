@@ -1,0 +1,111 @@
+name: Landing bot ejection handler
+
+# #6476: classify each merge-queue ejection, label it, and restore only an entry
+# a person made on a head no model changed (owner, 2026-11-16: after a conflict,
+# cascade, flake or infrastructure ejection, at most 2 per PR per 24 hours).
+# No workflow_run trigger: the #4571 guard (WF-4) forbids it, so this sweeps
+# every 10 minutes instead. No pull_request trigger either: it would run the
+# PR's copy of this file and never fire for a conflicted PR.
+
+on:
+  schedule:
+    - cron: '3-59/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The one ejected pull request to handle
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: studioos-landing-bot-ejection
+  cancel-in-progress: false
+
+jobs:
+  handle:
+    name: Classify and handle ejections
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      (vars.LANDING_BOT_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' && vars.LANDING_BOT_ENABLED == 'dispatch'))
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+      checks: read
+    outputs:
+      keeper: ${{ steps.sweep.outputs.keeper }}
+      repair: ${{ steps.sweep.outputs.repair }}
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_DAILY_REQUEUES: ${{ vars.LANDING_BOT_DAILY_REQUEUES }}
+      LANDING_BOT_QUEUE_FAIL_BREAKER: ${{ vars.LANDING_BOT_QUEUE_FAIL_BREAKER }}
+      EJECTION_PR: ${{ inputs.pr }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Get the landing bot's installation token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - name: Sweep
+        id: sweep
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EJECTION_APP_TOKEN: ${{ steps.app.outputs.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+        run: node scripts/landing-bot/ejection.mjs
+
+  dispatch:
+    name: Ask the keeper or red-PR repair
+    needs: handle
+    if: needs.handle.outputs.keeper != '[]' || needs.handle.outputs.repair != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: .github/workflows
+      - name: Dispatch, once per PR, to workflows that exist on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEPER: ${{ needs.handle.outputs.keeper }}
+          REPAIR: ${{ needs.handle.outputs.repair }}
+        run: |
+          set -euo pipefail
+          prs() { node -e 'for (const n of JSON.parse(process.argv[1] || "[]")) if (Number.isSafeInteger(n) && n > 0) console.log(n)' "$1"; }
+          for pr in $(prs "$KEEPER"); do
+            gh workflow run landing-bot-keeper.yml --repo "$GITHUB_REPOSITORY" --ref main -f pr="$pr"
+          done
+          if [ -f .github/workflows/landing-bot-red-pr.yml ]; then
+            for pr in $(prs "$REPAIR"); do
+              gh workflow run landing-bot-red-pr.yml --repo "$GITHUB_REPOSITORY" --ref main -f pr="$pr"
+            done
+          else
+            echo "Red-PR repair (#5622) is not on main yet; own failures stay labelled ejected." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -37,9 +37,9 @@ export const ADVISOR_COPY = {
  * `ORG_BACKED` below is `{founder, investor, partner}`. A founder's zone
  * groups `contacts.organization`, which migration 386 (D551, #1144) added and
  * `PUT /api/contacts/:uid` sets; a partner's groups the book's own column
- * (migration 224). The investor path still ends at
- * `metadata.organization_name`, which nothing writes — #1023's IN3 is to read
- * the same `contacts.organization` there.
+ * (migration 224). An investor's groups each counterpart's own company,
+ * `other.company` on `GET /api/partnernet/relationships` (D572 part 3): the
+ * company that person links on their account, read since D6258.
  *
  * Founder and investor have a body that says what is and is not recorded — a
  * table, its empty state and the zone's notes. Advisor and operator have no body, so
@@ -105,12 +105,14 @@ export const NETWORK_ORG_COPY = {
  */
 export const RESEARCH_STORE_GAPS = {
   // D392 — CORRECTED AND SCOPED. This said the page "reads instead ... the
-  // signals feed". It has not since `/research/markets` became `MarketZone`:
+  // signals feed". It has not since `/research/markets` became `MarketZone`
+  // (replaced by `MarketDirectoryZone` in D593, deleted in D6285):
   // comparable readings a person enters, dated and age-gated (migration 223),
   // with the feed kept at `/signals` (until D670). The missing store it names is still
   // missing and still what the founder and investor canvases narrow — so the
   // entry stays for them. For partner and advisor, whose canvases draw exactly
-  // the readings `MarketZone` holds, it is not shown (`roles`).
+  // the readings `MarketDirectoryZone`'s readings card holds, it is not shown
+  // (`roles`).
   //
   // D593 — `why` said the page holds "comparable readings" instead, and since
   // D533 it is the market directory first: the taxonomy's markets by tracked

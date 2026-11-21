@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import BuildFacts from './BuildFacts.jsx';
+import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PhoneBar, PhoneRows, Unreadable } from '../../ui';
+import { EadwynButton, PhoneBar, PhoneRows, Unreadable } from '../../ui';
 import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
-import { cardView, cellView, cycleOf, isPlainClick, recordsCount, safeHref } from './cycleModel';
+import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
+import { phoneStateRow } from './BuildStates.jsx';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
-import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
-import { Sources } from './CycleModulePage.jsx';
+import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
+import { ExportButton, Sources } from './CycleModulePage.jsx';
+import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
+import { asksCountLabel } from './buildEadwyn.js';
+import { buildOutcome } from './buildNav.js';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -35,10 +40,11 @@ export const PHONE_GUTTER = 'px-[22px] pt-[14px] pb-[18px]';
  * #1661's `PhoneBar`, lifted out of the body's gutter and kept at the top of
  * the scroll area (CO:24-25), with the body's 14px under it.
  */
-export function CycleBar({ back, title, sub, eadwynLabel }) {
+export function CycleBar({ back, title, sub, eadwynLabel, more }) {
   return (
     <div className="sticky top-0 z-10 -mx-[22px] -mt-[14px] mb-[14px]" data-testid="cycle-bar">
-      <PhoneBar back={back} title={title} sub={sub} eadwynLabel={eadwynLabel} />
+      <PhoneBar back={back} title={title} sub={sub} eadwynLabel={eadwynLabel}
+        action={more ? <div className="flex shrink-0 items-center gap-2">{more}{eadwynLabel && <EadwynButton label={eadwynLabel} />}</div> : undefined} />
     </div>
   );
 }
@@ -53,9 +59,13 @@ export function phoneRow(cols, row) {
   const title = cells[0] ? cells[0].text : 'Not recorded';
   const second = cells[1];
   const toned = cells.find((v) => !v.nr && v.tone);
+  const target = row?.cells?.target;
+  const comparison = row?.cells?.vs_target;
+  const targetLine = target?.separateLink === true ? `Target: ${cellView(target).text}${typeof comparison === 'string' ? ` · ${comparison}` : ''}` : null;
   return {
     title,
-    description: second ? second.text : undefined,
+    // #6006: the title cell's first note (a theme's rank reason) follows the second cell on a phone.
+    description: [second?.text, cells[0]?.note?.[0], targetLine].filter(Boolean).join(' · ') || undefined,
     pill: toned ? { label: toned.text, tone: PILL_TONE[toned.tone] || 'neutral' } : undefined,
   };
 }
@@ -64,6 +74,31 @@ export function phoneRow(cols, row) {
 function firstAdd(add, records) {
   const list = Array.isArray(add) ? add : [add || records?.add].filter(Boolean);
   return list.find((a) => a?.text && (a.onClick || safeHref(a.href))) || null;
+}
+
+/**
+ * D5077 (#5077, BD24 A): Ask, folded, on a phone module with nothing recorded yet: one row naming how
+ * many asks this module has. It opens the one Ask panel (a bottom sheet here), whose chips lead with
+ * them; no model, price or allowance is drawn inline. Nothing where Ask does not serve the viewer.
+ */
+export function PhoneAskEntryView({ asks, available, onOpen }) {
+  const n = Array.isArray(asks) ? asks.filter((a) => typeof a === 'string' && a.trim()).length : 0;
+  if (!available || n === 0 || typeof onOpen !== 'function') return null;
+  return (
+    <button type="button" onClick={onOpen} data-testid="phone-module-ask"
+      className="mt-[18px] flex min-h-[52px] w-full items-center gap-3 rounded-[14px] border border-gray-200 bg-white px-4 text-left dark:border-gray-800 dark:bg-gray-900">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <b className="text-[14px] text-gray-900 dark:text-gray-100">Ask Eadwyn</b>
+        <span className="text-[12.5px] text-gray-600 dark:text-gray-400">{asksCountLabel(asks)}</span>
+      </span>
+      <span aria-hidden="true" className="text-[18px] text-gray-500 dark:text-gray-400">›</span>
+    </button>
+  );
+}
+
+function PhoneAskEntry({ asks }) {
+  const ask = useAskPanel();
+  return <PhoneAskEntryView asks={asks} available={ask.available} onOpen={() => openAskPanel()} />;
 }
 
 function Cta({ add }) {
@@ -75,7 +110,17 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
+  // D6031: a module's own phone row (Prototype / MVP's carries Due, Test, Built and Tested); `phoneRow` by default.
+  phoneRow: rowOf = phoneRow,
+  showAboveRecordsWhenEmpty = false,
+  // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
+  sources = null, sourcesAction = null, asks = null,
+  // D5081 (#5081, RA-14): a tool that owns its page; its `subnav` is the page, as on the desktop (`CycleModulePage`).
+  owned = null,
+  // D6049 (#6049, RA-16): a module that owns its page (Fundraising readiness) draws `home(...)` in place of
+  // One next thing, the chart and the rows, with the bar's line (`sub`) its own; the same props as the desktop page.
+  home = null, sub = undefined,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -88,7 +133,9 @@ export default function PhoneModulePage({
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
   const bar = header === undefined ? (
-    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={card?.caption || undefined}
+    // D5081 part 4 (#5081): a tool that owns its page says its own line, as the desktop header does, never the
+    // caption of the generic card it no longer draws.
+    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : owned ? owned.sub : (meta.key === 'build' && buildOutcome(slug)) || card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
@@ -107,11 +154,19 @@ export default function PhoneModulePage({
     </div>;
   }
 
+  if (owned) {
+    return <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">{bar}{tabs}
+      {Children.toArray(children).length > 0 && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+    </div>;
+  }
+
   const rStatus = recordsStatus || (recs ? 'ready' : status);
   // D5076: the same stages as the desktop table (progressiveList.js).
   const progressive = progressiveFor(meta.key, slug);
-  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? listStage(recs, query) : 'many';
+  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? moduleStage(recs, query, progressive) : 'many';
   const zero = stage === 'zero';
+  // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
+  const hasChildren = Children.toArray(children).length > 0;
   const controls = stage === 'many';
   const addOne = zero ? dominantAdd(add, recs, progressive, (a) => a.onClick || safeHref(a.href)) : firstAdd(add, recs);
   const headline = zero ? progressive.heading : card?.next?.text || addOne?.text || null;
@@ -123,17 +178,35 @@ export default function PhoneModulePage({
   const title = data?.module?.records_title || name;
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
-  const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
+  const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href)); // D6010: `tool` may be several
+  if (typeof home === 'function') {
+    const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
+    return (
+      <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">
+        {bar}
+        {tabs}
+        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true })}
+        {toolLinks.map((item) => (
+          <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">
+            {item.label || `Open ${name}`}
+          </Link>
+        ))}
+        {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+        {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}
+      </div>
+    );
+  }
 
   const group = {
     label: `${title} · ${controls ? count.label : fewCountLabel(recs, progressive)}`,
     testid: 'phone-module-records',
     rows: rows.map((r, i) => {
-      const base = phoneRow(cols, r);
+      const base = rowOf(cols, r);
       const href = rowLinks(recs, r) ? recordHref(meta.key, slug, recordId(r), search) : null;
       const act = !href && typeof rowAction === 'function' ? rowAction(r) : null;
       return {
-        key: r.id ?? i, ...base, testid: 'phone-module-row',
+        // D4846 part 2 (#6032, BD14m): a row whose pill is a state draws that state's chip, as the desktop cell does.
+        key: r.id ?? i, ...phoneStateRow(base), testid: 'phone-module-row',
         ...(href ? { to: href } : act?.text && typeof act.onClick === 'function' ? { onClick: act.onClick } : {}),
       };
     }),
@@ -163,9 +236,10 @@ export default function PhoneModulePage({
         {interviewLine && <p className="m-0 mt-2.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
       </section>
 
+      <BuildFacts cycle={cycle} slug={slug} data={data} status={status} />
+      {/* Partnerships can have a pending proposal before the first partner exists. */}
+      {showRecords && aboveRecords && (!zero || showAboveRecordsWhenEmpty) && <div className="mt-[22px]">{aboveRecords}</div>}
       {showRecords && <>{!zero && <>
-      {/* #3938 (D1478 part 9): a control that acts on the records themselves, as on the desktop page. */}
-      {aboveRecords && <div className="mt-[22px]">{aboveRecords}</div>}
       {controls && <div className="mt-[22px] flex flex-col gap-2" data-testid="phone-module-controls">
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
@@ -177,7 +251,7 @@ export default function PhoneModulePage({
               <select key={f.key} aria-label={f.label} className={CONTROL} value={query.filter?.[f.key] || ''}
                 onChange={(e) => set({ filter: { ...(query.filter || {}), [f.key]: e.target.value } })}>
                 <option value="">{f.label}: all</option>
-                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{optionLabel(o)}</option>)}
               </select>
             ))}
             {sorts.length > 0 && (
@@ -193,10 +267,13 @@ export default function PhoneModulePage({
         {rStatus === 'unreadable' && <div className="px-[22px]"><Unreadable what={`The ${String(title || 'records').toLowerCase()}`} claim={recordsMessage || 'This is not a claim that there are none.'} onRetry={onRetryRecords || onRetry} /></div>}
         {rStatus === 'loading' && <div className="flex flex-col gap-2 px-[22px]" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-[56px] rounded bg-gray-100 dark:bg-gray-800" />)}</div>}
         {rStatus === 'ready' && <PhoneRows groups={[group]} />}
+        {/* D6124: the table's Export, under its rows as the desktop draws it beside Add. */}
+        {rStatus === 'ready' && rows.length > 0 && typeof onExport === 'function' && <div className="mt-2 flex flex-wrap items-center gap-2 px-[22px]"><ExportButton onExport={onExport} className={CONTROL} /></div>}
         {rStatus === 'ready' && rows.length === 0 && (
           <p className="m-0 px-[22px] text-[13px] text-gray-600 dark:text-gray-400" data-testid="phone-module-empty">{searching ? 'Nothing matches this search.' : 'No records yet.'}</p>
         )}
       </div>
+      {/* D6043 (#6043): Export from the 'few' stage on, under the list, full width. */}
       {rStatus === 'ready' && count.pages > 1 && (
         <nav aria-label="Pages" className="mt-2 flex items-center justify-between gap-2" data-testid="phone-module-pages">
           <button type="button" className={CONTROL} disabled={count.page <= 1} onClick={() => onQuery?.({ ...query, page: count.page - 1 })} aria-label="Previous page">‹</button>
@@ -210,7 +287,13 @@ export default function PhoneModulePage({
           {item.label || `Open ${name}`}
         </Link>
       ))}
-      {children && (zero ? <Sources phone>{children}</Sources> : <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>)}
+      {zero && <PhoneAskEntry asks={asks} />}
+      {zero
+        ? (hasChildren || sources) && <Sources phone zero action={sourcesAction} drafts={hasChildren} fold={progressive?.fold}>{children}{sources}</Sources>
+        : <>
+          {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+          {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}
+        </>}
     </div>
   );
 }

@@ -5,11 +5,16 @@
  *   GET /overview?project=:pid
  *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7], focus, meter, index }
  *       (D692: the phone's parts, in the shape all four cycles share; services/cycleFocus.ts)
+ *       D6045 (#6045): + `stage`, `primary_action { key, label, href, rule }` (null for staff), the Pitch
+ *       card's `pitch_state` and `investor_activity` (services/raiseJourney.ts); a source that could not
+ *       be read makes the fields it feeds `{ state: 'unreadable', reason }`, never a guessed stage.
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module: { slug, name, records_title }, card: Card,
  *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? }, parts? }
  *     Investor narrative's `parts.narrative` (D909): every version with its
  *     based-on, saved, by and read-by; the newest's check; the current deck.
+ *     D6068: `claims`, the newest's claim store tally (backed of total, and
+ *     the sections with a Mismatch), unreadable on its own.
  *     `{ state: 'unreadable' }` when it could not be read.
  *     The first sort is the default. Row ids are D691's (#1699): an item key,
  *     a version, a link, file or prospect id, a cap-table `h-`/`e-` key or
@@ -19,7 +24,7 @@
  *   POST  /readiness/rescore         { items?, since?, pmf? }
  *   GET   /pmf/history?project=&limit=&before=  stored Product-market fit points
  *   D1146 (#3032): GET /pmf/model?project=  → { version, stored, scored_with, published_at, model, grades }, RD4's model
- *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
+ *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, deck_version? (D6069, with start_from: deck), one_liner?, why_now?, ask?, check_against? }
  *   PATCH /narrative-versions/:version   the same fields but start_from
  *   D908 (#2692): the narrative's own stores (`services/narrative/store.ts`).
  *   GET   /narrative/compare?a=&b=   → { a, b, pairs: [{ key, label, a: { body }, b: { body }, state }] }
@@ -105,6 +110,7 @@
  *   POST /capital-relationships/proposals/:uid/accept { edited? }  written through the one prospect writer
  *   POST /capital-relationships/proposals/accept-batch { uids }    D5073: up to 50, one result per proposal
  *   POST /capital-relationships/drafts               { prospect_id, purpose, via? }  one run; the founder sends it
+ *   POST /capital-relationships/feedback-pattern     CRL11 (#6080): one run over recorded feedback → up to three cited themes; writes nothing
  *   A draft or proposal is edited or dismissed through `/api/ai/rail/proposals/:uid/decide`.
  *
  * The reads are `services/raiseCycle.ts`; the writes are
@@ -189,17 +195,22 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
-import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
+import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PATTERN_OPTION, PROPOSAL_PAGE, acceptProposal, feedbackPattern, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
 import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
 import {
-  CapitalAccessError, capitalCanWork, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
+  CapitalAccessError, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
+import { journeyUnreadable, raiseJourney } from '../services/raiseJourney';
 import { prospectBrief } from '../services/prospectBrief';
+import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
+import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
+import { addTypedEvidence, createPackLink, createReadinessLink, createPackPdf, createReadinessPdf, listPackLinks, revokePackLink, EvidenceShareError } from '../services/raiseEvidenceShare';
+import { createStatusLink, createStatusPdf, statusBody, type StatusDeps } from '../services/raiseStatusPage';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -215,7 +226,7 @@ function capitalFailure(c: any, error: unknown): Response {
 }
 
 /** The project in `?project=`, and the caller, or the Response that refuses them. */
-async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
+async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef; caprel?: CapRelCapabilities } | Response> {
   let user: User;
   try {
     user = (await requireAuth(c)) as User;
@@ -235,15 +246,16 @@ async function scope(c: any): Promise<{ user: User; projectId: number; project: 
     return refuse(c, 403, { code: 'support_session_refused', message: 'Use your own staff account and give a reason for a support read.' });
   }
   if (capitalPath(path)) {
-    if (capitalStaff(user)) {
+    // D5074 slice 4: who the caller is, once, as the capability map the module read returns.
+    let caprel: CapRelCapabilities;
+    try { caprel = capRelCapabilities(await capRelStanding(c.env, project, user)); }
+    catch (error) { return capitalFailure(c, error); }
+    if (capRelCan(caprel, 'admin_reason_required')) {
       if (!capitalStaffRequestAllowed(c.req.method, c.req.path)) return refuse(c, 403, c.req.method === 'GET'
         ? { code: 'support_read_required', message: 'Give a reason for a read-only support view.' }
         : { code: 'admin_read_only', message: 'Staff read a summary or make a reasoned support read. They do not change the pipeline.' });
-    } else {
-      try { if (!await capitalCanWork(c.env, project, user)) return c.json({ detail: 'Forbidden' }, 403); }
-      catch (error) { return capitalFailure(c, error); }
-    }
-    return { user, projectId, project };
+    } else if (!capRelCan(caprel, 'work')) return c.json({ detail: 'Forbidden' }, 403);
+    return { user, projectId, project, caprel };
   }
   if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
   return { user, projectId, project };
@@ -356,19 +368,28 @@ cycleRaise.get('/overview', async (c) => {
   const ctx = ctxOf(c, s.projectId);
   // D1610 W5: the Cap table card says which plan records it.
   const withPlan = (cs: Card[]) => cs.map((card) => (card.slug === 'cap-table' ? { ...card, plan: capTablePlan(s.user) } : card));
-  if (capitalStaff(s.user)) {
-    const [figs, cs, steps, tools] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
+  // D6045: the stage, the primary action, the Pitch card's state and investor activity, from recorded state.
+  // Staff read counts only (no investor names) and are offered no action.
+  const staff = capitalStaff(s.user);
+  const journeyRead = raiseJourney(ctx, { currentDeck: () => currentDeck(c.env, s.projectId) }, { names: !staff, act: !staff })
+    .catch((e) => { console.warn('[cycle_raise] journey unreadable:', (e as Error)?.message); return journeyUnreadable(!staff); });
+  const withPitch = (cs: Card[], j: Awaited<typeof journeyRead>) =>
+    cs.map((card) => (card.slug === 'pitch-deck' ? { ...card, pitch_state: j.pitch_state } : card));
+  if (staff) {
+    const [figs, cs, steps, tools, j] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
       m.slug === 'capital-relationships' ? capitalSummaryCard(c.env, s.projectId)
-        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx)]);
-    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: withPlan(cs), next_steps: steps, connectors: tools });
+        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx), journeyRead]);
+    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: withPitch(withPlan(cs), j), next_steps: steps, connectors: tools,
+      stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity });
   }
   // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
   // The other six cards are built as `cards()` builds them.
   const owner = isRoomOwner(s);
   const cardsRead = owner ? cards(ctx)
     : Promise.all(MODULES.map((m) => (m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))));
-  const [figs, cs, steps, tools] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx)]);
-  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: withPlan(cs), next_steps: steps, connectors: tools, ...(await raisePhone(ctx, figs, cs)) });
+  const [figs, cs, steps, tools, j] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx), journeyRead]);
+  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: withPitch(withPlan(cs), j), next_steps: steps, connectors: tools, ...(await raisePhone(ctx, figs, cs)),
+    stage: j.stage, primary_action: j.primary_action, investor_activity: j.investor_activity });
 });
 
 cycleRaise.get('/modules/:slug', async (c) => {
@@ -382,6 +403,7 @@ cycleRaise.get('/modules/:slug', async (c) => {
     const rows = summary.stages.map(row => ({ id: `summary-${row.stage}`, cells: { stage: row.stage.replace(/_/g, ' '), count: row.count } }));
     if (summary.state === 'ok') rows.push({ id: 'summary-unrecorded', cells: { stage: 'Status not recorded', count: summary.status_not_recorded } });
     return c.json({ module: { slug: mod.slug, name: mod.name, records_title: 'Pipeline counts' }, mode: 'summary', read_only: true,
+      capabilities: (s as { caprel?: CapRelCapabilities }).caprel,
       card: await capitalSummaryCard(c.env, s.projectId), summary,
       records: { state: summary.state, reason: summary.reason, cols: [{ key: 'stage', label: 'Stage' }, { key: 'count', label: 'Investors' }],
         rows, total: summary.state === 'ok' ? rows.length : null, page: 1, page_size: 25, linkable: false } });
@@ -413,10 +435,13 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (pmf) parts.pmf = pmf;
   // D909 (#2693): Home's tiles, Needs you and the Versions tab. It fails on its own, never the module.
   if (slug === 'investor-narrative') {
-    parts.narrative = await narrativeHome(ctx).catch((e) => {
+    const home = await narrativeHome(ctx, sectionOfField).catch((e) => {
       console.warn('[cycle_raise] narrative part unreadable:', (e as Error)?.message);
       return { state: 'unreadable', reason: 'The narrative versions could not be read' };
     });
+    // D5074 part 7: the caller's narrative map rides with the part, so the overview card and the cycle's New version
+    // dialog draw from the map the writes refuse from (part 3), never from the account.
+    parts.narrative = { ...home, capabilities: narrativeCapabilities(await narrativeStanding(c, s.user, s.projectId)) };
   }
   // The Mercury part fails on its own: an owner check that cannot be read shows no part, never a failed module.
   // D882: the founder with no usable sign-in reads how to connect, never an empty figure.
@@ -438,7 +463,9 @@ cycleRaise.get('/modules/:slug', async (c) => {
     } catch { parts.google = { state: 'unreadable', reason: 'What Google fed this module could not be read' }; }
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: mod.records_title }, card, records,
-    ...(Object.keys(parts).length ? { parts } : {}) });
+    ...(Object.keys(parts).length ? { parts } : {}),
+    // D5074 slice 4: Capital relationships' read carries the caller's capabilities; its requests refuse from the same map.
+    ...(slug === 'capital-relationships' ? { capabilities: (s as { caprel?: CapRelCapabilities }).caprel } : {}) });
 });
 
 // D1190 (#3124): Commitments and Match, each one read. The module's gate (`scope`) applies.
@@ -457,6 +484,8 @@ cycleRaise.post('/capital-relationships/support-read', async (c) => {
   try {
     const s = await scope(c);
     if (s instanceof Response) return s;
+    // D5074: the reasoned support view is `support_read` in the capability map.
+    if (!capRelCan(s.caprel, 'support_read')) return refuse(c, 403, { code: 'admin_required', message: 'Admin role required' });
     const input = await body(c);
     const prospectId = input.prospect_id == null ? null : idParam(String(input.prospect_id));
     if (input.prospect_id != null && prospectId == null) return c.json({ detail: 'Invalid investor' }, 400);
@@ -477,7 +506,8 @@ cycleRaise.get('/capital-relationships/support-reads', async (c) => {
   try {
     const s = await scope(c);
     if (s instanceof Response) return s;
-    if (!await capitalCanWork(c.env, s.project, s.user)) return c.json({ detail: 'Forbidden' }, 403);
+    // D5074: the founder's list of reasoned reads is `support_reads` in the capability map.
+    if (!capRelCan(s.caprel, 'support_reads')) return c.json({ detail: 'Forbidden' }, 403);
     return c.json(await capitalSupportHistory(c.env, s.projectId, capitalPage(c.req.query('page'))));
   } catch (error) { return capitalFailure(c, error); }
 });
@@ -615,6 +645,26 @@ cycleRaise.post('/capital-relationships/drafts', async (c) => {
   } catch (e) { return capRelTabFailed(c, e, 'draft run'); }
 });
 
+// CRL11 (#6080): a pattern across investor feedback. One metered run over the venture's recorded feedback, under
+// `scope` (the owner or a co-founder; staff and readers are refused before it). It writes nothing. With fewer than
+// two investors' feedback it runs nothing and says so; AI off, out of tokens and a refused run answer as every
+// Eadwyn run here does (`refuseRun`).
+cycleRaise.post('/capital-relationships/feedback-pattern', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try {
+    const rail = railFor(c, { page: PROPOSAL_PAGE, option: PATTERN_OPTION }, null);
+    const out = await feedbackPattern(c.env, s.projectId, Number(s.user.id), rail);
+    if (out.state === 'too_few') {
+      return c.json({ state: 'too_few', feedback: out.feedback, investors: out.investors, themes: [],
+        detail: 'A pattern needs feedback from at least two investors. Record what each one said on their record first. Nothing was run.' });
+    }
+    if (out.state === 'run_failed') return refuseRun(c, out.result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read the feedback just now. Nothing was charged. Try again.' });
+    return c.json({ state: 'ok', feedback: out.feedback, investors: out.investors, themes: out.themes, dropped: out.dropped,
+      basis: 'Read from the feedback recorded on each investor. Nothing here is saved.' });
+  } catch (e) { return capRelTabFailed(c, e, 'feedback pattern'); }
+});
+
 cycleRaise.get('/pmf/history', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
@@ -657,7 +707,7 @@ cycleRaise.post('/readiness/rescore', async (c) => {
 });
 
 const narrativeFields = (b: Record<string, unknown>) => ({
-  investorType: b.investor_type, basedOnVersion: b.based_on_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
+  investorType: b.investor_type, basedOnVersion: b.based_on_version, deckVersion: b.deck_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
 });
 
 cycleRaise.post('/narrative-versions', async (c) => {
@@ -859,7 +909,8 @@ cycleRaise.get('/narrative/reads', async (c) => {
 cycleRaise.delete('/narrative/reads/mine', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
-  if (!isAdmin(s.user)) return c.json({ detail: 'Only an admin ends a narrative read.', code: 'admins_only' }, 403);
+  // D5074: `end_read` from the narrative's capability map, the one the versions read returns.
+  if (!narrativeCan(narrativeCapabilities({ admin: isAdmin(s.user), founder: false }), 'end_read')) return c.json({ detail: 'Only an admin ends a narrative read.', code: 'admins_only' }, 403);
   try {
     return c.json({ read: await endRead(c.env, s.projectId, s.user) });
   } catch (e) {
@@ -990,7 +1041,7 @@ cycleRaise.delete('/narrative/objections/:objection/answer', async (c) => {
 async function keptScope(c: any): Promise<{ user: User; projectId: number; key: string } | Response> {
   const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
-  if (!(await narrativeFounder(c, s.user, s.projectId))) return refuse(c, 403, { code: 'founder_only', message: QA_FOUNDER_ONLY });
+  if (!(await narrativeChecks(c, s.user, s.projectId))) return refuse(c, 403, { code: 'founder_only', message: QA_FOUNDER_ONLY });
   const key = String(c.req.param('question') || '');
   if (!QUESTION_KEY.test(key)) return refuse(c, 404, { code: 'question_not_found', message: 'That question is not one of this deck’s likely questions.' });
   return { user: s.user, projectId: s.projectId, key };
@@ -1070,16 +1121,9 @@ cycleRaise.get('/narrative/:version', async (c) => {
 // D912 (#2696): the narrative's claims (NAR6, NAR7) and its check (NAR8).
 // The states are D1264's; reading them as the founder checks the version, as
 // the Evidence read checks the newest. An admin with a reason reads states.
-async function narrativeFounder(c: any, user: User, projectId: number): Promise<boolean> {
-  if (isAdmin(user) || await isSupportSession(c)) return false;
-  try {
-    const company = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
-    return (await raiseEvidenceContext(c.env, user, projectId, company)).founder;
-  } catch (e) {
-    if (e instanceof RaiseEvidenceError) return false;
-    throw e;
-  }
-}
+/** D5074: the check's writes refuse from the narrative's capability map, the one the versions read returns. */
+const narrativeChecks = async (c: any, user: User, projectId: number): Promise<boolean> =>
+  narrativeCan(narrativeCapabilities(await narrativeStanding(c, user, projectId)), 'check');
 const founderOnlyCheck = (c: any) => c.json({ code: 'founder_only', detail: 'Only the venture’s founder checks the narrative against the records.' }, 403);
 const savedVersion = async (c: any, projectId: number): Promise<number | Response> => {
   try {
@@ -1094,7 +1138,7 @@ cycleRaise.get('/narrative/:version/claims', async (c) => {
   const version = await savedVersion(c, s.projectId);
   if (version instanceof Response) return version;
   try {
-    const founder = await narrativeFounder(c, s.user, s.projectId);
+    const founder = await narrativeChecks(c, s.user, s.projectId);
     const check = founder ? await checkNarrativeVersion(c.env, s.projectId, version) : null;
     return c.json({ ...(await narrativeClaims(c.env, s.projectId, version, { founder, computed: check?.claims })), can_check: founder });
   } catch (e) { return unreadable(c, e); }
@@ -1108,7 +1152,7 @@ cycleRaise.get('/narrative/:version/check', async (c) => {
   try {
     const at = await c.env.DB.prepare(`SELECT MAX(checked_at) AS at FROM raise_claims WHERE project_id = ? AND surface = 'narrative' AND surface_version = ?`)
       .bind(s.projectId, `v${version}`).first<{ at: string | null }>();
-    return c.json({ ...(await narrativeCheckRows(c.env, s.projectId, version)), checked_at: at?.at ?? null, can_check: await narrativeFounder(c, s.user, s.projectId) });
+    return c.json({ ...(await narrativeCheckRows(c.env, s.projectId, version)), checked_at: at?.at ?? null, can_check: await narrativeChecks(c, s.user, s.projectId) });
   } catch (e) { return unreadable(c, e); }
 });
 
@@ -1117,7 +1161,7 @@ cycleRaise.post('/narrative/:version/check', async (c) => {
   if (s instanceof Response) return s;
   const version = await savedVersion(c, s.projectId);
   if (version instanceof Response) return version;
-  if (!(await narrativeFounder(c, s.user, s.projectId))) return founderOnlyCheck(c);
+  if (!(await narrativeChecks(c, s.user, s.projectId))) return founderOnlyCheck(c);
   try {
     await runCheck(c.env, s.projectId, version);
     const now = new Date().toISOString();
@@ -1142,7 +1186,7 @@ cycleRaise.post('/narrative/:version/claims/:uid/use-record', async (c) => {
   if (s instanceof Response) return s;
   const version = await savedVersion(c, s.projectId);
   if (version instanceof Response) return version;
-  if (!(await narrativeFounder(c, s.user, s.projectId))) return founderOnlyCheck(c);
+  if (!(await narrativeChecks(c, s.user, s.projectId))) return founderOnlyCheck(c);
   const b = await body(c);
   const expected = Number(b.record_value);
   if (b.record_value == null || !Number.isFinite(expected)) return c.json({ code: 'record_value_required', detail: 'Say which record figure to use.' }, 400);
@@ -1675,7 +1719,7 @@ cycleRaise.delete('/google/facts/:id', async (c) => {
 });
 
 // D1263: the evidence paths use scope(), then active-company and founder-only decision gates.
-async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
+export async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
   c.header('Cache-Control', 'no-store');
   const s = await scope(c);
   if (s instanceof Response) return s;
@@ -1686,7 +1730,7 @@ async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceConte
   if (write && !ctx.founder) throw new RaiseEvidenceError('forbidden', 403);
   return ctx;
 }
-function evidenceFailure(c: any, error: unknown) {
+export function evidenceFailure(c: any, error: unknown) {
   if (error instanceof RaiseEvidenceError) return c.json({ error: error.code, message: error.sentence }, error.status);
   return c.json({ error: 'evidence_unreadable', message: 'Evidence could not be read or saved. Try again.' }, 503);
 }
@@ -1754,6 +1798,58 @@ cycleRaise.delete('/evidence/claims/:id/note', async c => {
 cycleRaise.delete('/evidence/claims/:id/link', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c), true)); }
   catch (error) { return evidenceFailure(c, error); }
+});
+// D6864 (#6864, canvas D6054 RA-27/RA-29/RA-32): evidence added by hand, and packs shared outside Axal as links.
+// Founder-only; nothing here sends anything. The reader's public page is routes/evidence_share_public.ts.
+function shareFailure(c: any, error: unknown) {
+  return error instanceof EvidenceShareError ? c.json({ error: error.code, message: error.sentence }, error.status) : evidenceFailure(c, error);
+}
+cycleRaise.post('/evidence/items', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await addTypedEvidence(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.get('/evidence/share-links', async c => {
+  try {
+    const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx;
+    return c.json(await listPackLinks(ctx, async () => (await statusBody(ctxOf(c, ctx.projectId), statusDeps(c, ctx.projectId))).hash));
+  }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/evidence/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createPackLink(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 (#6897, RA-30): the readiness snapshot as a link. Listed and revoked with the pack links above.
+cycleRaise.post('/readiness/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createReadinessLink(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 part 2 (RA-28 C, RA-30 B): the same content as a PDF copy; listed on Shared links, never stoppable.
+cycleRaise.post('/evidence/pdf-copies', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createPackPdf(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/readiness/pdf-copies', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createReadinessPdf(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 part 4 (RA-31): the Raise status page, a one-page summary of the Overview, as a link or a PDF copy.
+// Listed and revoked with the links above; the reader's page is routes/status_share_public.ts.
+const statusDeps = (c: any, projectId: number): StatusDeps => ({
+  currentDeck: () => currentDeck(c.env, projectId),
+  roomCard: () => roomSummaryCard(c.env, projectId),
+});
+cycleRaise.post('/status/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createStatusLink(ctx, await evidenceBody(c), statusDeps(c, ctx.projectId)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/status/pdf-copies', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createStatusPdf(ctx, await evidenceBody(c), statusDeps(c, ctx.projectId)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/evidence/share-links/:uid/revoke', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await revokePackLink(ctx, c.req.param('uid'))); }
+  catch (error) { return shareFailure(c, error); }
 });
 
 export default cycleRaise;

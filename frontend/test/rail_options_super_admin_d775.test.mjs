@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_FUND_ADMIN_ASK_CHIPS } from '../src/lib/railOptions/superAdmin.js';
 /**
  * D775 (#2101) PR 1 — the Super Admin's boards draw the rail, and their
  * options are listed for D764.
@@ -123,4 +124,14 @@ test('the one row reaches the model: the worker route runs the router', () => {
   assert.deepEqual(SUPER_ADMIN_RAIL_OPTIONS.map((o) => `${o.page} ${o.key}`), ['Super Admin · Content · Publications draft:publication-summary']);
   const route = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/admin_publications.ts'), 'utf8');
   assert.match(route, /draftSummary/, 'the publications draft no longer calls draftSummary');
+});
+
+// D6397: the off-canvas Fund Admin page keeps its no-model tasks out of unrelated boards.
+test('D6397: Super Admin · Fund Admin offers exactly the canvas five recorded-read Ask chips', () => {
+  assert.deepEqual(SUPER_ADMIN_FUND_ADMIN_ASK_CHIPS.map(chip => chip.label), ['Explain outstanding capital','Identify overdue LPs','Summarize reconciliation exceptions','Prepare a capital call','Identify incomplete fund setup']);
+  assert.ok(SUPER_ADMIN_FUND_ADMIN_ASK_CHIPS.every(chip => chip.page === 'Super Admin · Fund Admin' && chip.route === '/admin/fund-admin' && chip.handler === 'none' && chip.noModel === true));
+  const matrix = JSON.parse(readFileSync(new URL('../../cloudflare-worker/src/services/ai/railMatrix.json', import.meta.url), 'utf8'));
+  const rows = matrix.options.filter(row => row.pageKey === 'Super Admin · Fund Admin');
+  assert.deepEqual(rows.map(row => row.optionKey), SUPER_ADMIN_FUND_ADMIN_ASK_CHIPS.map(chip => chip.key));
+  assert.ok(rows.every(row => row.noModel === true && row.routeTask === 'none' && row.models.length === 0));
 });

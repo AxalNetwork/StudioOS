@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { changedFiles, classify } from '../../scripts/merge-policy.mjs';
+import { classify as bundledClassify } from '../../merge-control/src/lib/classify.mjs';
 
 function file(path, status = 'M', patch = '', previousPath) {
   return { path, status, patch, previousPath };
@@ -13,6 +14,10 @@ function file(path, status = 'M', patch = '', previousPath) {
 function hunk(...lines) {
   return ['@@ -1 +1 @@', ...lines].join('\n');
 }
+
+test('the script and the Merge Control Worker share one classifier (D5620)', () => {
+  assert.equal(classify, bundledClassify);
+});
 
 test('landing policy selects the most restrictive tier', () => {
   const docs = file('documentation/operations/guide.md');

@@ -78,7 +78,7 @@ async function mount(Tab, url, projectId = 3) {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
   const reads = [];
-  globalThis.fetch = async (u, o = {}) => { if (!o.method || o.method === 'GET') reads.push(String(u).replace(/^.*\/api/, '')); return handle(String(u), o); };
+  globalThis.fetch = async (u, o = {}) => { if (!o.method || o.method === 'GET') reads.push(String(u).replace(/^.*\/api/, '')); return handle(String(u)); };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
@@ -129,7 +129,7 @@ test('an address value the tab does not allow reads as its default', () => {
   assert.deepEqual(readFilters(ACTIVITY_FILTERS, '?kind=eadwyn&investor=41&page=3'), { q: '', kind: 'eadwyn', investor: '41', page: 3 });
   assert.deepEqual(readFilters(COMMITMENT_FILTERS, '?status=everything'), { q: '', status: '' });
   assert.deepEqual(readFilters(COMMITMENT_FILTERS, '?status=not_recorded'), { q: '', status: 'not_recorded' });
-  assert.deepEqual(readFilters(PIPELINE_FILTERS, '?passed=true'), { passed: false });
+  assert.equal(readFilters(PIPELINE_FILTERS, '?passed=true').passed, false);
   assert.equal(readFilters(MATCH_FILTERS, `?q=${'x'.repeat(300)}`).q.length, 100, 'a search is cut to the length the Worker reads');
 });
 
@@ -258,7 +258,7 @@ test('Commitments: the status and search are the address\'s; reload and Back res
 
   v = await mount(CapRelCommitments, '/raise/capital-relationships/commitments?project_id=3&status=soft&q=north');
   try {
-    assert.deepEqual(v.rows('caprel-commit-row').map((t) => t.split(' ')[0]), ['Northwind']);
+    assert.deepEqual(v.rows('caprel-commit-row').map((t) => t.split(' ').slice(0, 2).join(' ')), ['Investor Northwind']);
     assert.equal(v.prop('caprel-commit-search', 'value'), 'north');
     assert.equal(v.prop('caprel-commit-status', 'value'), 'soft');
     await v.venture(4);

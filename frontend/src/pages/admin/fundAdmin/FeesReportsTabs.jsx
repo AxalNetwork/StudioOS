@@ -15,7 +15,7 @@ import { useRead } from './useRead';
 
 // D1165: the remaining fund tabs, drawn from the approved FND13/FND14 boards.
 const amount = (cents) => money(cents) ?? 'Not recorded';
-const LABEL = 'text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200';
+const LABEL = 'text-[13px] font-semibold text-zinc-700 dark:text-gray-200';
 function Busy() { return <div className="px-4 py-3" aria-busy="true"><LoadingRows lines={3} /></div>; }
 function Failed({ read, what, claim }) { return <Note><Unreadable what={what} claim={claim} onRetry={read.reload} /></Note>; }
 function Alert({ text }) { return text ? <p role="alert" className="px-4 py-3 text-sm text-red-700 dark:text-red-300">{text}</p> : null; }
@@ -175,7 +175,7 @@ function DraftRow({ d, apis, access, onChanged, compact = false, items = [] }) {
         <Sheet phone="sheet" width={760} title={d.period_label || 'Report pack'} label="Report pack" testId={`draft-opened-${d.uid}`} onClose={() => { if (!busy) { setOpened(null); setMode(null); } }}>
         <div className="px-5 py-4">
           <PackFigures figures={opened.figures} />
-          <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Opened, and recorded in the audit log. Figures <span className={NUM}>{String(sha || '').slice(0, 12)}…</span></p>
+          <p className="text-[12px] text-axal-muted dark:text-gray-400">Opened, and recorded in the audit log. Figures <span className={NUM}>{String(sha || '').slice(0, 12)}…</span></p>
           <div className="mt-2 flex flex-wrap gap-2">
             {d.status === 'draft' && <button type="button" className={BTN.ghost} disabled={busy} onClick={() => setMode('prepare')} data-testid={`draft-prepare-${d.uid}`}>Prepare</button>}
             {d.status === 'prepared' && <button type="button" className={BTN.ghost} disabled={busy} onClick={() => setMode('return')} data-testid={`draft-return-${d.uid}`}>Return</button>}

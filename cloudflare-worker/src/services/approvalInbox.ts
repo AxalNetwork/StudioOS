@@ -16,20 +16,15 @@
  */
 import type { ApprovalItem, ApprovalLaneKey, ApprovalSource } from './approvalSources';
 import { isVisibleLane, type Assignee } from './approvalAssignments';
+import { INBOX_GROUPS, LANE_GROUP, type InboxGroup } from './approvalLaneRegistry';
 
-export const INBOX_GROUPS = ['people', 'programs', 'community', 'deals', 'hq'] as const;
-export type InboxGroup = typeof INBOX_GROUPS[number];
-
-/** Each lane's group, in the canvas's words (APR1). HQ's lanes are `hq`. */
-export const LANE_GROUP: Record<ApprovalLaneKey, InboxGroup> = {
-  kyc: 'people', kyb: 'people', partner_profiles: 'people', exploring: 'people', product_testers: 'people', lp: 'people',
-  cohort: 'programs', lab_hosts: 'programs', moderation: 'programs', referrals: 'programs',
-  strategic_access: 'programs', perk_listings: 'programs', best_fit: 'programs',
-  events: 'community', jobs: 'community', wellbeing_experts: 'community', comarketing: 'community', articles: 'community',
-  due_diligence: 'deals', score_flags: 'deals',
-  testing_programs: 'hq', learning: 'hq', tickets: 'hq', payouts: 'hq', ai_runs: 'hq',
-  notices: 'hq', support: 'hq', proposals: 'hq', grants: 'hq',
-};
+/**
+ * D5879: the groups and each lane's group live in `approvalLaneRegistry.ts`
+ * with the lane's other facts; they are re-exported here so every existing
+ * import keeps working. HQ's lanes are `hq`.
+ */
+export { INBOX_GROUPS, LANE_GROUP };
+export type { InboxGroup };
 
 export const AGE_BANDS = ['ok', 'due_soon', 'past', 'unknown'] as const;
 export const INBOX_SORTS = ['oldest', 'newest', 'lane', 'who'] as const;

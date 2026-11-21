@@ -34,3 +34,13 @@ test('trigger UPDATE OF columns are excluded while body table references remain'
   assert.deepEqual(referencedTables(sql), ['missing_proof_store']);
   assert.deepEqual(referencedTables('UPDATE of SET enabled = 1'), ['of']);
 });
+
+test('D5581: a WITH RECURSIVE CTE is an alias, not a table', () => {
+  // Mutation checked: RECURSIVE dropped from the guard's CTE pattern → `reach` is reported as a table.
+  const sql = `WITH RECURSIVE reach(id, depth) AS (
+      SELECT id, 0 FROM actual_store UNION SELECT reach.id + 1, reach.depth + 1 FROM reach WHERE reach.depth < 2)
+    SELECT id FROM reach`;
+  const db = new DatabaseSync(':memory:'); db.exec('CREATE TABLE actual_store (id INTEGER); INSERT INTO actual_store VALUES (0)');
+  assert.equal(db.prepare(sql).all().length, 3);
+  assert.deepEqual(referencedTables(sql), ['actual_store']); db.close();
+});

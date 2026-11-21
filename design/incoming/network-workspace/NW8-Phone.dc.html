@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Network overview on phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hrow h1{font-size:22px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.lst li:first-child{border-top:0}
+.lst b{font-size:13.5px}
+.lst small{grid-column:1;font-size:12px;color:var(--mu)}
+</style>
+</helmet>
+<div class="cv ph" style="width:390px;min-height:1560px">
+<div class="pt"><button type="button" class="pi" aria-label="Open menu">☰</button><b style="font-size:15px">Network</b><div style="display:flex"><button type="button" class="pi" aria-label="Ask Eadwyn"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)">E</span></button><button type="button" class="pi" aria-label="Notifications"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></button></div></div>
+<main class="pbd">
+<header style="display:flex;flex-direction:column;gap:8px">
+<span class="eye">Network · Relationship intelligence</span>
+<div class="hrow"><div><h1>Your network</h1><p>Know who you can reach, which relationships need attention, and which introductions are moving.</p></div></div>
+<button type="button" class="btn p" style="width:100%;font-size:14px">Request introduction</button>
+</header>
+<label class="eye" for="mod">Section</label>
+<select id="mod" class="msel" aria-label="Network section"><option selected="selected">Overview</option><option>Relationships · 142</option><option>Introductions · 9</option><option>Organizations · 38</option></select>
+
+<section class="kp" aria-label="Network summary">
+<a class="k" href="#"><span class="eye">Connections</span><span class="kv">142</span><span class="ks">in your book</span></a>
+<a class="k att" href="#"><span class="eye">Needs attention</span><span class="kv">7</span><span class="ks">◷ follow-ups overdue</span></a>
+<a class="k att" href="#"><span class="eye">My action</span><span class="kv">3</span><span class="ks">! decisions waiting</span></a>
+<a class="k" href="#"><span class="eye">Active intros</span><span class="kv">5</span><span class="ks">2 waiting · 3 accepted</span></a>
+</section>
+
+<section class="cd" aria-labelledby="pa">
+<div class="ch"><h2 id="pa">Awaiting my decision</h2><span class="sm">3</span></div>
+<ul class="lst">
+<li><div><b>Dev Varma → Lena Sato</b><small>Requested 2026-11-05</small></div><a class="btn" href="#">Decide</a></li>
+<li><div><b>Iris Chen → Paul Grant</b><small>Requested 2026-11-04</small></div><a class="btn" href="#">Decide</a></li>
+</ul>
+<a class="btn t" href="#" style="min-height:44px;align-self:flex-start">All 3 →</a>
+</section>
+
+<section class="cd" aria-labelledby="pn">
+<div class="ch"><h2 id="pn">Needs attention</h2><span class="sm">7</span></div>
+<ul class="lst">
+<li><div><b>Ada Okafor</b><small>“Send Q3 update” due 2026-10-28</small></div><span class="pl a">◷ 10 d late</span></li>
+<li><div><b>Ben Larsen</b><small>“Ask about pilot” due 2026-11-02</small></div><span class="pl a">◷ 5 d late</span></li>
+<li><div><b>Chloé Marin</b><small>“Coffee in Lisbon” due 2026-11-05</small></div><span class="pl a">◷ 2 d late</span></li>
+</ul>
+<p class="foot">Relationship strength: Not recorded.</p>
+</section>
+
+<section class="cd" aria-labelledby="pi">
+<div class="ch"><h2 id="pi">Introductions in progress</h2></div>
+<ul class="lst">
+<li><div><b>You → Priya Nair</b><small>via Tom Becker · accepted, not yet made</small></div><span class="pl v">✓ Accepted</span></li>
+<li><div><b>You → Marco Ruiz</b><small>via Iris Chen · waiting on Iris</small></div><span class="pl">◷ Waiting</span></li>
+<li><div><b>You → Sara Holm</b><small>via Iris Chen · made 2026-10-22</small></div><span class="pl g">✓✓ Made</span></li>
+</ul>
+</section>
+
+<section class="cd" aria-labelledby="pm">
+<div class="ch"><h2 id="pm">People you may know</h2><span class="sm">4 credits</span></div>
+<div style="display:flex;flex-direction:column;gap:6px"><b>Nadia Kim</b><span class="foot">GP, Latitude Seed · invests pre-seed B2B SaaS</span><span class="foot">Accepting spends 1 credit · 3 left after</span>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button type="button" class="btn">Decline</button><button type="button" class="btn p">Accept</button></div></div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

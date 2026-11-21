@@ -46,6 +46,7 @@ const routes = read('frontend/src/workspaces/partner/PartnerBucketRoutes.jsx');
 const apiJs = read('frontend/src/lib/api.js');
 const spec = raw('cloudflare-worker/src/routes/research.ts');
 
+const V2 = raw('design/incoming/Pipeline v2 Page.dc.html');
 const P1 = CANVAS.slice(
   CANVAS.indexOf('<section class="ab" id="p1">'),
   CANVAS.indexOf('<section class="ab" id="p2">'),
@@ -74,26 +75,22 @@ test('the route stopped rendering the shared marketplace board', () => {
   assert.ok(routes.includes("pipeline/LeadsZone"), 'the leads zone is not imported');
 });
 
-test('the strip is the artboard’s four tiles, and one of them is nullable', () => {
-  const stats = between(CANVAS, 'l_stats: [', 'l_leads:');
-  const labels = [...stats.matchAll(/label: ?'([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(labels, ['Open leads', 'Strong fit', 'Warm path', 'Passed this quarter']);
-  const tiles = [...zone.matchAll(/<LeadTile\b[\s\S]{0,500}?label="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(tiles, ['Open leads', 'Strong fit', 'Warm path', 'Passed'],
-    'the strip is no longer the artboard’s four tiles in its order');
-
-  const strip = between(zone, '<LeadTile', '{d?.scoring');
-  assert.ok(flat(strip).includes('none of them already bid'), 'the artboard’s Open leads note is gone');
-  assert.ok(flat(strip).includes('all with a reason on record'), 'the artboard’s Passed note is gone');
+test('the strip is the PP03 canvas’s four tiles, and each is built over its population', () => {
+  // #5935 (D4838): Pipeline v2 replaced the p1 strip (`Warm path`, `Passed
+  // this quarter`) with `Open leads · Strong fit · Unscored · Passed this period`.
+  const leads = between(V2, 'const leads = () =>', 'const passDlg');
+  const labels = [...leads.slice(leads.indexOf('kpi4')).matchAll(/\[\['?([^']+)'|\], \['([^']+)'/g)]
+    .map((m) => m[1] || m[2]).slice(0, 4);
+  assert.deepEqual(labels, ['Open leads', 'Strong fit', 'Unscored', 'Passed this period']);
+  const model = read('frontend/src/pages/partner/pipeline/leadsModel.js');
+  const strip = between(model, 'export function leadStrip(', 'export function emptyViewLine');
+  const tiles = [...strip.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(tiles)], labels, 'the strip is no longer the canvas’s four tiles in its order');
   // NULL, NOT ZERO. "No strong fits" and "no rules to judge fit with" are
   // different answers, and only one of them is about the leads.
-  assert.match(strip, /nr=\{d\?\.strong_fit_count == null\}/,
+  assert.ok(/if \(strong == null\) tiles\.push\(\{ label: 'Strong fit', value: null, note: 'no rule to score against yet' \}\)/.test(strip),
     'Strong fit shows a number where nothing can be scored');
-  assert.ok(flat(strip).includes('no rule to score against yet'),
-    'the Strong fit tile stopped saying why it is absent');
-  // `Warm path` IS TRUE AND IT IS THE FINDING: every lead came the same way.
-  assert.ok(flat(strip).includes('all via the marketplace — no other source is recorded'),
-    'the Warm path tile claims a channel this firm has no record of');
+  assert.ok(zone.includes('tiles.map((t) => <LeadTile'), 'the zone stopped drawing the model’s tiles');
 });
 
 test('a lead with no rules behind it is unscored, and an exclusion is not a low score', () => {
@@ -118,11 +115,10 @@ test('a lead with no rules behind it is unscored, and an exclusion is not a low 
     'a gap is being counted into the score it was excluded from');
 
   // AND THE PAGE DRAWS BOTH ABSENCES DIFFERENTLY.
+  // Behaviour is pinned in `pipeline_leads_pp03_5935.test.mjs`; here, the source.
   const card = between(zone, 'function LeadCard(', 'export default function');
-  assert.ok(/row\.excluded_by\s*\n?\s*\?\s*<Pill tone="neutral">Excluded<\/Pill>/.test(card),
-    'an excluded lead is drawn as a score');
-  assert.ok(/row\.score == null\s*\n?\s*\?\s*<NotRecorded \/>/.test(card),
-    'an unscored lead is drawn as a number');
+  assert.ok(/fit\.state === 'excluded' \|\| fit\.state === 'unscored'\s*\n?\s*\?\s*<Pill tone="neutral">\{fit\.text\}<\/Pill>/.test(card),
+    'an excluded or unscored lead is drawn as a score');
 });
 
 test('every receipt names the rule it came from', () => {
@@ -130,7 +126,7 @@ test('every receipt names the rule it came from', () => {
   assert.ok(flat(P1).includes('the receipt behind every score'),
     'the artboard stopped asking for receipts');
   const card = between(zone, 'function LeadCard(', 'export default function');
-  assert.ok(/row\.receipts\.map\(/.test(card), 'the card stopped drawing the receipts');
+  assert.ok(/reasons\.map\(/.test(card) && /explain\.receipts\.map\(/.test(card), 'the card stopped drawing the receipts');
   const fn = between(worker, 'function scoreLead(', '/**\n * `GET /leads`');
   for (const phrase of ['· match', 'No listed capability named', 'At or above your floor',
     'Below your floor', 'Budget not stated by the client']) {
@@ -237,13 +233,12 @@ test('the whole Pipeline bucket has its chip rows, and the guard can now read th
     || /sc-for list="\\\{\\\{/.test(guard),
     'the guard lost the section-markup reader that makes the Pipeline labels checkable');
 
+  // #5935 (D4838): the Pipeline v2 row (PP03) replaced p1's. `Warm intros`,
+  // which had always been prose, left with it.
   const row = between(filters, "'pipeline/leads': [", '],');
   assert.deepEqual([...row.matchAll(/canvas: '([^']+)'/g)].map((m) => m[1]),
-    ['Open', 'Strong fit', 'Warm intros', 'Passed', 'All sources']);
-  // `Warm intros` IS PROSE, and the reason is the same one the strip states:
-  // every lead is a marketplace need, so the chip would select the whole list.
-  assert.ok(/canvas: 'Warm intros',\s*\n\s*unbuilt:/.test(row),
-    'Warm intros became a live chip over a distinction the reader cannot see');
+    ['All', 'Strong fit', 'Unscored', 'Excluded', 'Recent']);
+  assert.ok(!/unbuilt/.test(row), 'a Leads view became prose again');
 });
 
 test('the capability-weights op links to where the rules are actually written', () => {

@@ -91,3 +91,15 @@ export const ADMIN_QUIET_CONTROLS = [
 export function railOptionsFor(boardId) {
   return ADMIN_OPTIONS.filter((o) => o.page === boardId);
 }
+
+/** D6397: the canvas's five recorded-read tasks; never model-running rail controls. */
+export const FUND_ADMIN_ASK_CHIPS = Object.freeze([
+  ['explain:fund-outstanding', 'Explain outstanding capital'],
+  ['identify:fund-overdue-lps', 'Identify overdue LPs'],
+  ['summarize:fund-reconciliation', 'Summarize reconciliation exceptions'],
+  ['prepare:fund-capital-call', 'Prepare a capital call'],
+  ['identify:fund-incomplete-setup', 'Identify incomplete fund setup'],
+].map(([key, label]) => ({ key, label, kind: 'numbers', handler: 'none', noModel: true })));
+export const ADMIN_ASK_CHIPS = Object.freeze(FUND_ADMIN_ASK_CHIPS.map(chip => ({
+  ...chip, page: 'Admin · Fund Admin', route: '/admin/fund-admin',
+})));

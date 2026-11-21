@@ -17,6 +17,7 @@
  * the grant, declining keeps the reason the investor was told.
  */
 import type { Env } from '../types';
+import { investorHasProjectDeal } from './dealAccess';
 
 export const REQUEST_SOURCES = ['round_call', 'deal_page'] as const;
 export type RequestSource = (typeof REQUEST_SOURCES)[number];
@@ -119,5 +120,50 @@ export async function readRequests(env: Env, projectId: number): Promise<AccessR
     decline_reason: r.decline_reason ?? null,
     nda: r.nda_status === 'active' ? 'active' : r.nda_status === 'pending' ? 'pending' : 'none',
     has_access: Boolean(Number(r.has_access)),
+  }));
+}
+
+/**
+ * #6267 — the investor's own requests, for `research.ts GET /diligence`. This returns only the caller's rows (`investor_user_id = ?`), only
+ * `open` and `declined` ones, and only where no live grant answers them: an accepted request IS the
+ * room in `items`, not a request. A declined one carries the founder's reason and date.
+ *
+ * THE VENTURE'S NAME is returned only where the investor could already see it on what produced the
+ * request: a round call they received (`round_call_recipients`; the call page names its company,
+ * D1226), or a deal on that venture they may open (`investorHasProjectDeal`, the deal page's own
+ * rule). Otherwise `project_name` is null — the request is still theirs, and still listed.
+ * Throws when the store cannot be read; the route answers `requests: null`, never an empty list.
+ */
+export type InvestorRoomRequest = {
+  uid: string; project_name: string | null; state: 'open' | 'declined'; created_at: string;
+  decided_at: string | null; decline_reason: string | null; source: string;
+};
+export async function investorRoomRequests(env: Env, userId: number): Promise<InvestorRoomRequest[]> {
+  const rows = (await env.DB.prepare(
+    `SELECT q.uid, q.project_id, q.state, q.source, q.created_at, q.decided_at, q.decline_reason,
+            p.name AS project_name,
+            (q.source = 'round_call' AND EXISTS (SELECT 1 FROM round_call_recipients rr JOIN round_calls rc ON rc.id = rr.call_id
+               WHERE rr.call_id = q.round_call_id AND rr.investor_user_id = q.investor_user_id AND rc.project_id = q.project_id)) AS via_call
+       FROM data_room_access_requests q
+       LEFT JOIN projects p ON p.id = q.project_id AND p.deleted_at IS NULL
+      WHERE q.investor_user_id = ? AND q.state IN ('open', 'declined')
+        AND NOT EXISTS (SELECT 1 FROM data_room_grants g
+                         WHERE g.project_id = q.project_id AND g.investor_user_id = q.investor_user_id AND g.status = 'active'
+                           AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now')))
+      ORDER BY q.created_at DESC, q.id DESC LIMIT 100`,
+  ).bind(userId).all<any>()).results || [];
+  const onDeal = new Map<number, boolean>();
+  for (const r of rows) {
+    const pid = Number(r.project_id);
+    if (!Number(r.via_call) && r.project_name != null && !onDeal.has(pid)) onDeal.set(pid, await investorHasProjectDeal(env, userId, pid));
+  }
+  return rows.map((r) => ({
+    uid: String(r.uid),
+    project_name: r.project_name != null && (Number(r.via_call) === 1 || onDeal.get(Number(r.project_id)) === true) ? String(r.project_name) : null,
+    state: r.state,
+    created_at: String(r.created_at),
+    decided_at: r.decided_at ?? null,
+    decline_reason: r.state === 'declined' ? (r.decline_reason ?? null) : null,
+    source: String(r.source),
   }));
 }

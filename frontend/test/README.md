@@ -28,6 +28,9 @@ also exercises a `project_id` deep link.
 
 | File | Guarantee |
 | --- | --- |
+| `macbook_worker_7881.test.mjs` | D7881: exact dispatch ownership, bounded busy/offline/API fallback, cancellation, failure identities and real Mac test failure propagation. |
+| `macbook_admission_7881.test.mjs` | D7881: active parent delegation, exact source and plan artifact, complete same-repository merge-queue provenance, and final liveness recheck. |
+| `macbook_workflow_7881.test.mjs` | D7881: trusted checkout ordering, plan selection, original gate semantics, trace transfer, owned-child cancellation and run-scoped cleanup, with mutation/restoration cases. |
 | `persona_segment_scopes_4438.test.mjs` | D4438: scope changes update SEG7, waiting suggestions, stale reply guards, failures and missing figures. |
 | `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
@@ -35,11 +38,24 @@ also exercises a `project_id` deep link.
 | `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
 | `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
 | `learning_studio_stream_copy_integration_4742.test.mjs` | #4742: Copy to Stream wired into the Studio (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid` drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal. |
+| `dr_cleanup_7917.test.mjs` | D7917: fake-CLI exact-run cleanup, unsafe-record refusal, retry and workflow timeout/always contract. |
 | `restore_d1_d5337.test.mjs` | D5337: `scripts/restore-d1.sh` run against a fake `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared path with the drill, and the runbook's reasons. |
+| `d1_backup_stream_d7142.test.mjs` | D7142: the backup manifest and the drill split stream the export: byte-identical to the frozen pre-D7142 code (`fixtures/d7142_old_*.mjs`) at read sizes down to one byte, a statement or `;` across a read boundary counted once, and an export bigger than the heap read under a heap cap (the >600 MiB run with `D7142_LARGE=1`). |
 | `_dr_fakes.mjs` | D5337: the `age` key pair and the fake `aws` store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`). |
 | `email_conversation_history_4662.test.mjs` | D4662: mounted person-bearing manual/AI sends, completion refresh, paging, retries, uid reconciliation and late person/account replies. |
 | `account_regressions_4618.test.mjs` | D4618: the real Account page (and auto-reload card, `useConnectors`) with `fetch` stubbed and answered late: overlapping privacy, category and public-profile saves, session rows by status, Display name, the shared billing overview and its invalidation, degraded card reads, either auto-reload read order, pack retry, and a failed connection list. |
 | `grow_overview_4862.test.mjs` | #4862: taxonomy, context, primary actions, zero values, failed reads and read-only Grow states. |
+| `landing_gate_classifier_5606.test.mjs` | D5606: coexisting aggregate gates preserve setup fingerprints, leaf inheritance and queue-stall diagnosis while deleted refs and test/fast-check failures remain excluded. |
+| `queue_stall_chains_7125.test.mjs` | D7125: the queue-stall alert opens only when one failure identity is in two merge-queue chains on three heads, names the base or the PR it starts at, replays 2026-11-17 (`fixtures/queue_stall_7125.json`), and `test-drift-parts.mjs` writes the escaped `ci-failure-id` annotations only under `merge_group`. |
+| `build_parts_contract_5507.test.mjs` | D5507: THE contract for Build's connector parts: every module's complete, ordered list, written by hand; provider suites assert only their own key. Update it, once, when a part is added, removed or moved. |
+| `_buildParts.mjs` | D5507: a provider suite's view of `BUILD_PARTS`: the modules its key sits on, before/after a named neighbour, and what its part mounts. |
+| `_storageAreasContract.mjs` | D5507: THE contract for the storage areas: key, kind and where its file opens, written by hand; read by the two suites below and the Worker's `usage_storage_d1169`. |
+| `storage_areas_contract_5507.test.mjs` | D5507: the Usage card, the Storage page's places and kinds, and ROUTE_MAP's D642 section each keep the storage-area contract. |
+| `build_overview_v2_6028.test.mjs` | D6028 (#6028): Build Overview V2's states (loading, empty venture, partial read, refused, read only, a failed overview), one primary, Not recorded never 0, and the phone root's parts. |
+| `runner_admission.test.mjs` | D7886: durable receipt bindings, source/queue/child provenance and fail-closed missing authority. |
+| `runner_executor.test.mjs` | D7886: exact plans, fixed profile targets, runtime checks, real test failure, scoped lifecycle and workflow mutation checks. |
+
+| `runner_catalog_7906.test.mjs` | D7906: real catalog translation, approved group refusal, exact pins and native shard limits. |
 
 ## Conventions
 
@@ -200,3 +216,58 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
 | `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
 | `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
+| `shared_arr_retention_6178.test.mjs` | #6178: canonical ARR/retention tiles, typed provenance, as-of, zero/absence and the existing founder Metrics step. |
+| `onboarding_followups_d6135.test.mjs` | D6135: actual investor wizard failure/retry/continuation, retained progress and legacy steps, consent, unused-slider removal and role-safe fund handoff. |
+| `diligence_doors_d6292.test.mjs` | D6292: investor sidebar eligibility, scoped recorded context links, shared URL reload, filters/search/history/paging and stale response protection. |
+| `report_print_6094.test.mjs` | #6094: frozen print provenance, zero/absence, literal narrative and reader/private-recipient boundaries. |
+| `workflow_channel_delivery_6370.test.mjs` | D6370: dedicated private destinations, terminal attempts, cursor rollback, replay, provider refusal and acknowledgement. |
+| `workflow_channel_registry.test.mjs` | D6370: validate operator registry construction against private Slack membership. |
+| `workflow_channel_inventory.test.mjs` | D6370: workflow inventory coverage, unique hashtags and registered identities. |
+| `build_feature_removal_6024.test.mjs` | D6024: mounted record confirmation/cancel/refusal/retry and list return for both removal actions; retained plan history suppresses removed/demoted record links. |
+| `unused_imports_attributes_6381.test.mjs` | D6381: attributed and side-effect imports preserve real uses, offsets and newlines; unused bindings still fail, and the unchanged workflow delivery regression stays clean. |
+
+| `fund_admin_prepare_6397.test.mjs` | D6397: consume the scoped call-preparation navigation once, retaining blank amount/date and verified preview permission. |
+
+| `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
+| `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
+| `practice_cockpit_4829.test.mjs` | D4829: source isolation, canonical counts, timezone boundaries, pagination, record destinations, retry and Client Sheet. |
+| `practice_delivery_shell_4833.test.mjs` | D4833-p4: Delivery in the Practice v2 shell: PX-06's heading, line and header primary read from the canvas, the primary in every list state, no chips over an empty or unread list, the PX-06 A order, and the card's Client Sheet. |
+| `network_picker_6637.test.mjs` | D6637: mounted picker selection, eligibility and submission. |
+| `network_picker_6636.test.mjs` | D6636: mounted picker selection, eligibility and submission. |
+
+| `deal_flow_attention_6424.test.mjs` | D6424: recorded stale/new/waiting badges, unset rule, firm setting and failed attention-source rendering. |
+| `licence_agreement_replacement_6562.test.mjs` | D6562: rendered replacement readiness, frozen preview and hash, honest unknown comparison and send gating. |
+| `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
+| `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |
+| `scan_remediation_6935.test.mjs` | D6935/D7899 alert tracking, S21 handoff, existing-PR linking, retries and default-branch verification without GitHub AI or generated fixes. |
+| `free_security_workflows_7899.test.mjs` | D7899 immutable PR/queue dependency comparisons, read-only review authority, trusted public-main posture admission and successful-only SARIF uploads, with mutation/restoration cases. |
+| `free_secret_detection_7899.test.mjs` | D7899 dedicated Axal bearer detection, public-prefix/placeholder exclusions and refusal of blanket JWT exemptions. |
+| `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
+| `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+| `portfolio_mark_today_d6226.test.mjs` | D6226: Positions counts stale marks from the positions read's own `today` with the reporting read failing; the company Latest FMV Stale chip; the reference-date order. |
+| `_approvalBoardPages_5876.mjs` | Shared fixtures for the approval board summary and active-page contracts (#5876). |
+| `approval_board_pages_5876.test.mjs` | Mounted regressions for lane counts and active-page reads (#5876). |
+
+`release_phases_5667.test.mjs` verifies release/target isolation, ordered receipt selection, phase failures and the existing publication relay boundary.
+## Observable readiness (D5504)
+
+| File | Guarantee |
+| --- | --- |
+| `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
+| `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+
+Prefer scoped business clocks and explicit observable outcomes to a fixed count
+of event-loop turns. The migration inventory and first changed-test command are
+in `documentation/architecture/decisions/D5504.md`; the coordinated future-clock
+run remains the integration signal for JavaScript, SQLite and child processes.
+| `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
+| `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
+
+`icp_complete_6003.test.mjs` (D6003) renders and round-trips the missing five-step fields without blanking omitted values.
+`build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
+
+`runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).
+| `macbook_orphan_7902.test.mjs` | D7902: stale queued-child ownership/lease cleanup, pickup races and redacted API-status diagnostics. |
+
+| `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
+| `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |

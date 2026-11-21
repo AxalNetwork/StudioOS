@@ -50,11 +50,16 @@
  *          It is PlatformOverview.jsx over the same reads, plus one more —
  *          the build route — and it draws no handler either. The zones below
  *          stay as the detail every block summarises.
+ *   Scope  (D5757) The overview narrows to one subsidiary at `?scope=<code>`
+ *          and is HQ-wide without it. A subsidiary is read from its own
+ *          route (D5786) alone: the HQ-wide overview and the detail zones
+ *          below, whose stores are HQ's, are not drawn under it. The
+ *          switcher is links, so the page still has no handler.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import DeployVersion from '../../components/DeployVersion';
 import { utcMinute } from '../../lib/utcStamp';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
@@ -69,6 +74,9 @@ import { platformBuildApi } from '../../lib/api/platformBuild.js';
 import { publishPlatformReads } from '../../lib/platformStrip';
 import { GUIDE_PREFIX } from '../../lib/integrationKeys';
 import { plainStripeAmount } from '../../lib/money';
+import { platformScopesApi } from '../../lib/api/platformScopes.js';
+import { ScopeSwitcher, ScopedOverview } from './PlatformScope';
+import { scopeFromSearch, scopeOptions, scopeCoverage, scopeReadFailure } from './platformScopeModel';
 
 // Re-exported, not redeclared: Platform → Switches draws the same tones, and
 // the list lives once in lib/platformSwitches.js (D203).
@@ -610,6 +618,9 @@ export const PROVIDER_LABEL = {
   github: 'GitHub',
   vercel: 'Vercel',
   tiktok: 'TikTok',
+  x: 'X (founders app)',
+  google_search_console: 'Google Search Console',
+  typeform: 'Typeform',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',
@@ -1130,6 +1141,30 @@ export default function PlatformPage() {
     platformBuildApi.read().then(setBuild, (e) => { reportError('hq-platform:build', e); setBuild('unavailable'); });
   }, []);
 
+  // D5757 — the scope in the address: null is HQ-wide, the default. The three
+  // reads above stay HQ-wide in every position (the strip shows them); a
+  // subsidiary's reading is its own request and replaces none of them.
+  const { search } = useLocation();
+  const scope = scopeFromSearch(search);
+  const [scopeList, setScopeList] = useState(null);
+  useEffect(() => {
+    platformScopesApi.list().then(setScopeList, (e) => { reportError('hq-platform:scopes', e); setScopeList(UNAVAILABLE); });
+  }, []);
+  const [scoped, setScoped] = useState({ code: null, reading: null, failed: null });
+  const loadScope = useCallback(() => {
+    if (!scope) return undefined;
+    let live = true;
+    setScoped({ code: scope, reading: null, failed: null });
+    platformScopesApi.read(scope).then(
+      (v) => { if (live) setScoped({ code: scope, reading: v, failed: null }); },
+      (e) => { reportError('hq-platform:scope', e); if (live) setScoped({ code: scope, reading: null, failed: scopeReadFailure(e, scope) }); },
+    );
+    return () => { live = false; };
+  }, [scope]);
+  useEffect(() => loadScope(), [loadScope]);
+  // A reading of a scope the address has left is never drawn under the new one.
+  const scopedNow = scoped.code === scope ? scoped : { code: scope, reading: null, failed: null };
+
   const ready = data && data !== UNAVAILABLE;
   const integrations = ready ? data.integrations : null;
   const jobs = ready ? data.jobs : null;
@@ -1174,7 +1209,11 @@ export default function PlatformPage() {
       ? `Catalog mirror${paymentsCatalog.catalog.stripe_mode === 'live' || paymentsCatalog.catalog.stripe_mode === 'test' ? `, ${paymentsCatalog.catalog.stripe_mode} mode` : ''}: ${num(paymentsCatalog.catalog.products.active)} active products, ${num(paymentsCatalog.catalog.prices.active)} active prices` : null,
     promoCodes?.available
       ? `${num(promoCodes.total)} promo codes, ${num(promoCodes.counts.active)} active` : null,
-  ].filter(Boolean);
+  ].filter(Boolean)
+    // D5757 — under a subsidiary scope the rail reads back that scope's
+    // reading, never the HQ-wide lines above.
+    .filter(() => !scope)
+    .concat(scope ? scopeCoverage(scopedNow.reading, scope) : []);
 
   const rail = (
     <WorkerRail
@@ -1185,6 +1224,7 @@ export default function PlatformPage() {
       note="This rail summarises connection counts, where each platform key lives, the ticket mirror, the payments catalog, the promo codes, scheduled-job health, the dead-letter backlog, the broadcast channels, the platform switches and the branch deployment registry. It reads no key material, throws no switch and rolls nothing back."
       coverage={coverage}
       coverageNote={coverage.length ? undefined
+        : scope ? (scopedNow.failed ? `The reading for ${scope} did not answer, so there is nothing to read back.` : `Reading ${scope}…`)
         : (data === UNAVAILABLE || deps === UNAVAILABLE
           ? 'Neither read answered, so there is nothing to read back — this is not a claim that nothing is connected.'
           : 'Loading the platform summary…')}
@@ -1232,10 +1272,18 @@ export default function PlatformPage() {
           </div>
           <div className="flex flex-col items-end gap-2">
             <HeaderAsk />
+            <ScopeSwitcher key={scope || 'hq'} scope={scope} options={scopeOptions(scopeList, UNAVAILABLE)} />
             <VersionContext build={build} observedAt={observed.summary} />
           </div>
         </header>
 
+        {scope && (
+          <div className="mt-4">
+            <ScopedOverview code={scope} reading={scopedNow.reading} failed={scopedNow.failed} onRetry={loadScope} />
+          </div>
+        )}
+
+        {!scope && (<>
         {data === UNAVAILABLE && (
           <div className="mt-4">
             <Unreadable
@@ -1670,6 +1718,7 @@ export default function PlatformPage() {
             </Zone>
           </div>
         </div>
+        </>)}
       </div>
 
     </RailFrame>

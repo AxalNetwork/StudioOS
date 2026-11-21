@@ -11,7 +11,14 @@
  *   - a measure with no source is `{ available: false, reason }`, and an observed zero stays 0;
  *   - #3851's proposal-acceptance board (`evaluation.ts`) is not read or relabelled.
  *
- * The route's two reads and the fixed query count are tested in hq_skill_lifecycle_d4160.
+ * D4536-p2 (#5969), `publishedEvaluation`:
+ *   - a version with no rows is not evaluated (`available: false`), never 0 of 0; an observed zero is 0;
+ *   - a required model with no result is named; the latest row per version, case and model counts once;
+ *   - regressions use skillEvalCompare's comparability rule; time to resolve one is unavailable;
+ *   - campaign coverage is #4668's progress, never full on one batch;
+ *   - the route's reads name the published history only.
+ *
+ * The route's reads and the fixed query count are tested in hq_skill_lifecycle_d4160.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/skill_coverage_4536.test.ts
@@ -19,7 +26,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { THIN_BELOW, catalogueCoverage, type CoverageRow } from '../src/services/agents/skillCoverage.ts';
+import {
+  THIN_BELOW, catalogueCoverage, publishedEvaluation,
+  type CampaignCoverageRow, type CoverageRow, type PublishedVersionRow, type VersionEvalRow,
+} from '../src/services/agents/skillCoverage.ts';
 
 const CATEGORY = new Map([['investor_reporting', 'finance_ops'], ['cash_mgmt', 'finance_ops'], ['eng_frontend', 'engineering']]);
 const ROLE_KEYS = ['ceo', 'cfo', 'cto'];
@@ -109,15 +119,125 @@ test('library files, seeded skills and published skills are three counts', () =>
   assert.deepEqual(c.sources, { library_files: 3, source_only: ['not-seeded'], seeded: 2, seeded_published: 1, authored_in_store: 1 });
 });
 
-test('linked agents are adoption, and executions and overlap are unavailable rather than zero', () => {
+test('linked agents are adoption, and executions are unavailable rather than zero', () => {
   const c = cover([row()], { adoption: { links: 4, agents: 3, behind_current: 1, published_without_links: 0 } });
   assert.deepEqual(c.adoption, { links: 4, agents: 3, pinned_behind_current: 1, published_without_links: 0 });
-  for (const m of [c.executions, c.overlap]) {
-    assert.equal(m.available, false);
-    assert.ok(m.reason.length > 0);
-    assert.ok(!('count' in m) && !('value' in m), 'no number stands in for a missing measure');
-  }
+  assert.equal(c.executions.available, false);
+  assert.ok(!('count' in c.executions) && !('value' in c.executions), 'no number stands in for a missing measure');
   assert.match(c.executions.reason, /#4667/);
+});
+
+// ── D4536-p2 (#5969): publishedEvaluation, the published versions' evaluation ─────────────────────────────
+
+const M1 = 'model-one', M2 = 'model-two', SHA = 'a'.repeat(64), EV = 3;
+const NOW = new Date('2026-11-15T12:00:00Z');
+const ver = (o: Partial<PublishedVersionRow> = {}): PublishedVersionRow => ({
+  skill_uid: 's1', version: 1, case_keys: ['k1'], required_models: [M1], models_source: 'version_evidence', ...o,
+});
+const ev = (o: Partial<VersionEvalRow> = {}): VersionEvalRow => ({
+  kind: 'latest', skill_uid: 's1', version: 1, case_key: 'k1', model_id: M1, result: 'pass', run_at: '2026-11-15 09:00:00',
+  evaluator_version: EV, case_sha256: SHA, ...o,
+});
+const evaluate = (v: PublishedVersionRow[], r: VersionEvalRow[], campaign: Parameters<typeof publishedEvaluation>[2]['campaign'] = null) =>
+  publishedEvaluation(v, r, { currentEvaluatorVersion: EV, now: NOW, campaign });
+
+test('D4536-p2: a version with no rows is not evaluated, never 0 of 0; an observed zero is a number', () => {
+  const none = evaluate([ver()], []);
+  assert.deepEqual(none.versions, { published: 1, evaluated: 0, unevaluated: 1, unevaluated_skills: ['s1'] });
+  for (const m of [none.results, none.freshness, none.identity, none.skills[0].results, none.skills[0].regressions, none.regressions.since_previous_run]) {
+    assert.equal((m as any).available, false);
+    assert.ok(!('pass' in (m as object)) && !('fail' in (m as object)), 'no count stands in for a missing measure');
+  }
+  assert.deepEqual([none.required.units, none.required.recorded, none.required.missing], [1, 0, 1]);
+  // Rows exist and none failed: fail is an observed 0, not a missing measure.
+  const seen = evaluate([ver()], [ev()]);
+  assert.deepEqual(seen.results, { pass: 1, fail: 0, not_run: 0 });
+  assert.deepEqual(seen.skills[0].results, { pass: 1, fail: 0, not_run: 0 });
+  assert.equal(seen.versions.unevaluated, 0);
+});
+
+test('D4536-p2: a required model with no result is named, apart from the models that ran', () => {
+  const e = evaluate([ver({ case_keys: ['k1', 'k2'], required_models: [M1, M2] })], [ev(), ev({ case_key: 'k2', result: 'fail' })]);
+  const s = e.skills[0];
+  assert.deepEqual(s.required.models_without_result, [M2]);
+  assert.deepEqual(s.required.missing, [{ case_key: 'k1', model_id: M2 }, { case_key: 'k2', model_id: M2 }]);
+  assert.deepEqual([e.required.units, e.required.recorded, e.required.missing, e.required.models_without_result, e.required.versions_incomplete], [4, 2, 2, 1, 1]);
+  assert.deepEqual(s.by_model, { [M1]: { pass: 1, fail: 1, not_run: 0 } });
+});
+
+test('D4536-p2: a unit counts once, the latest; rows of another version or skill are not this version\'s', () => {
+  const e = evaluate([ver({ version: 2 })], [
+    ev({ version: 2, result: 'pass', run_at: '2026-11-14 09:00:00' }),
+    // Mutation checked: keeping the first row seen instead of the later one → pass 1, fail 0 and this fails.
+    ev({ version: 2, result: 'fail', run_at: '2026-11-15 09:00:00' }),
+    ev({ version: 3, result: 'not_run' }),
+    ev({ skill_uid: 'other', version: 2, result: 'not_run' }),
+  ]);
+  assert.deepEqual(e.results, { pass: 0, fail: 1, not_run: 0 });
+  assert.equal(e.skills[0].cases.length, 1);
+});
+
+test('D4536-p2: regressions follow skillEvalCompare: same case text, model and evaluator, or not comparable', () => {
+  const v = ver({ version: 2 });
+  const prior = (o: Partial<VersionEvalRow>) => ev({ kind: 'prior', version: 2, run_at: '2026-11-14 09:00:00', ...o });
+  const regressed = evaluate([v], [prior({}), ev({ version: 2, result: 'fail' })]);
+  assert.equal(regressed.regressions.since_previous_run.regressed, 1);
+  assert.equal(regressed.skills[0].regressions.since_previous_run, 1);
+  // The evaluator moved between the runs: not a regression, said as evaluator_changed.
+  // Mutation checked: comparing results without pairOutcome (pass → fail alone) counts it and this fails.
+  const judged = evaluate([v], [prior({ evaluator_version: EV - 1 }), ev({ version: 2, result: 'fail' })]);
+  assert.deepEqual([judged.regressions.since_previous_run.regressed, judged.regressions.since_previous_run.evaluator_changed], [0, 1]);
+  const text = evaluate([v], [prior({ case_sha256: 'b'.repeat(64) }), ev({ version: 2, result: 'fail' })]);
+  assert.deepEqual([text.regressions.since_previous_run.regressed, text.regressions.since_previous_run.case_changed], [0, 1]);
+  // Against the previous version's latest rows.
+  const release = evaluate([v], [ev({ version: 1 }), ev({ version: 2, result: 'fail' })]);
+  assert.equal(release.skills[0].regressions.since_previous_version, 1);
+  assert.equal((release.regressions.since_previous_version as any).regressed, 1);
+  // v1 has no previous version: unavailable, not zero.
+  assert.equal((evaluate([ver()], [ev()]).regressions.since_previous_version as any).available, false);
+  assert.equal(evaluate([ver()], [ev()]).skills[0].regressions.since_previous_version, null);
+  assert.equal(release.regressions.time_to_resolve.available, false);
+});
+
+test('D4536-p2: freshness is the time since the latest run; identity names the evaluator and unrecorded case text', () => {
+  const e = evaluate([ver(), ver({ skill_uid: 's2' })], [
+    ev({ run_at: '2026-11-15 09:00:00' }),
+    ev({ skill_uid: 's2', run_at: '2026-11-13 12:00:00', evaluator_version: null, case_sha256: null }),
+  ]);
+  assert.deepEqual(e.freshness, { newest_run_at: '2026-11-15 09:00:00', hours_since_newest: 3, oldest_last_run_at: '2026-11-13 12:00:00', hours_since_oldest: 48 });
+  assert.deepEqual(e.skills.map((s) => s.hours_since_last_run), [3, 48]);
+  assert.deepEqual(e.identity, {
+    current_evaluator_version: EV, evaluator_versions: [EV],
+    rows_on_current_evaluator: 1, rows_on_other_evaluator: 0, rows_evaluator_not_recorded: 1, rows_case_text_not_recorded: 1,
+  });
+  assert.deepEqual((e.skills[1].identity as any), { evaluator_versions: [], on_current_evaluator: false, evaluator_not_recorded: 1, case_text_not_recorded: 1 });
+});
+
+test('D4536-p2: campaign coverage is #4668 progress; one batch is never full coverage', () => {
+  const camp = (o: Partial<CampaignCoverageRow>): CampaignCoverageRow => ({
+    uid: 'c'.repeat(32), status: 'complete', started_at: '2026-11-14 09:00:00', finished_at: '2026-11-14 10:00:00',
+    total: 2, done: 2, skipped: 0, pending: 0, published_not_done: 0, ...o,
+  });
+  const full = (o: Partial<CampaignCoverageRow>) => (evaluate([ver()], [ev()], camp(o)).campaign as any).full_coverage;
+  assert.equal(full({}), true);
+  assert.equal(full({ status: 'running', done: 1, pending: 1, finished_at: null }), false, 'a first batch');
+  // Mutation checked: dropping the published_not_done term reads a stale campaign as full and this fails.
+  assert.equal(full({ published_not_done: 1 }), false, 'a version published since the campaign started');
+  assert.equal(full({ status: 'cancelled' }), false);
+  assert.equal((evaluate([ver()], [ev()], null).campaign as any).available, false);
+  assert.equal((evaluate([ver()], [ev()], 'unreadable').campaign as any).available, false);
+});
+
+test('D4536-p2: the route\'s published reads name the published history only, never the draft history or a proposal table', () => {
+  const src = readFileSync(new URL('../src/routes/admin_hq_skills.ts', import.meta.url), 'utf8');
+  for (const name of ['PUBLISHED_VERSIONS_SQL', 'PUBLISHED_EVALS_SQL', 'LATEST_CAMPAIGN_SQL']) {
+    const m = new RegExp(`const ${name} = \`([^\`]*)\``).exec(src);
+    assert.ok(m, `${name} is a literal`);
+    assert.doesNotMatch(m![1], /agent_skill_eval_results|draft_hash|evidence_hash|proposal/i, `${name} reads another history`);
+  }
+  assert.match(/const PUBLISHED_EVALS_SQL = `([^`]*)`/.exec(src)![1], /FROM agent_skill_version_evals/);
+  const svc = readFileSync(new URL('../src/services/agents/skillCoverage.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(svc, /prepare\(/, 'the measures are pure; the route reads');
 });
 
 test('#3851\'s proposal acceptance board is not reused or relabelled as skill quality', () => {

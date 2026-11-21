@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Relationships with person sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.hdr{display:flex;flex-direction:column;gap:6px}
+.hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn.ask .em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.a .ic{background:var(--amT)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.tbl tr.cur td{background:var(--lav)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.tl{display:flex;flex-direction:column}
+.tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.tl li:first-child{border-top:0}
+.tl .mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.tl .mk.ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.tl .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.sec h3{font-size:13.5px;font-weight:800}
+.ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+</style>
+</helmet>
+<div class="cv" style="width:1440px;min-height:1240px">
+<div class="sh" style="min-height:1240px">
+<aside class="sd">
+<div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div>
+<button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company: Northwind Labs">Northwind Labs <span aria-hidden="true">▾</span></button>
+<span class="eye grp">Founder</span>
+<nav aria-label="Founder">
+<a href="#">Home</a><a href="#">Validate</a><a href="#">Build</a><a href="#">Raise</a><a href="#">Grow</a><a href="#" aria-current="page">Network</a><a href="#">Research</a><a href="#">Trust</a><a href="#">Company Settings</a>
+</nav>
+</aside>
+<div class="mn">
+<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></button><span class="av" role="img" aria-label="Account">MR</span></div></div>
+<main class="bd">
+<header class="hdr">
+<span class="eye">Network · Relationship intelligence</span>
+<div class="hrow">
+<div><h1>Relationships</h1><p>Your private relationship book, and the leads your pages collect, kept apart.</p></div>
+<div class="acts"><button type="button" class="btn ask"><span class="em" aria-hidden="true">E</span>Ask</button><button type="button" class="btn p">Request introduction</button></div>
+</div>
+</header>
+<nav class="ptabs" aria-label="Network">
+<a href="#">Overview</a><a href="#" aria-current="page">Relationships <span>142</span></a><a href="#">Introductions <span>9</span></a><a href="#">Organizations <span>38</span></a>
+</nav>
+
+<section class="cd" aria-labelledby="mr">
+<div class="ch"><h2 id="mr">My relationships</h2><span class="sm">142 people · private to you</span></div>
+<div class="tools">
+<label for="q" class="eye" style="position:absolute;width:1px;height:1px;overflow:hidden">Search by name or organization</label>
+<input id="q" class="inp" style="color:var(--ink);font-family:var(--sg)" placeholder="Search by name or organization">
+<button type="button" class="dd" aria-haspopup="listbox">Source: All ▾</button>
+<label class="dd"><input type="checkbox" style="accent-color:#7c3aed;margin:0"> Has open follow-up</label>
+<div class="seg" role="radiogroup" aria-label="Layout"><button type="button" role="radio" aria-checked="true">Rows</button><button type="button" role="radio" aria-checked="false">Cards</button></div>
+<span style="margin-left:auto" class="acts"><button type="button" class="ib" aria-label="Refresh relationships">↻</button><button type="button" class="btn">Import contacts</button><button type="button" class="btn">Invite to Axal</button><button type="button" class="btn p">Add person</button></span>
+</div>
+<table class="tbl">
+<thead><tr><th scope="col">Person</th><th scope="col">Organization</th><th scope="col">Role / context</th><th scope="col">Last activity</th><th scope="col">Open follow-ups</th><th scope="col">Source</th><th scope="col"><span style="position:absolute;width:1px;height:1px;overflow:hidden">Actions</span></th></tr></thead>
+<tbody>
+<tr class="cur"><td><a href="#"><b>Ada Okafor</b></a></td><td>Harbor Seed</td><td>Partner · investor</td><td class="mo">2026-09-27<small>intro made</small></td><td><span class="pl a">◷ 1 overdue</span></td><td>LinkedIn import</td><td><button type="button" class="btn t" aria-label="More actions for Ada Okafor">⋯</button></td></tr>
+<tr><td><a href="#"><b>Ben Larsen</b></a></td><td>Quill Analytics</td><td>Head of Ops · customer</td><td class="mo">2026-09-05<small>note</small></td><td><span class="pl a">◷ 1 overdue</span></td><td>Added by you</td><td><button type="button" class="btn t" aria-label="More actions for Ben Larsen">⋯</button></td></tr>
+<tr><td><a href="#"><b>Chloé Marin</b></a></td><td class="na">Not recorded</td><td>Angel</td><td class="mo">2026-10-30<small>imported</small></td><td><span class="pl a">◷ 1 overdue</span></td><td>LinkedIn import</td><td><button type="button" class="btn t" aria-label="More actions for Chloé Marin">⋯</button></td></tr>
+<tr><td><a href="#"><b>Dev Varma</b></a></td><td>Fieldline</td><td>Founder · peer</td><td class="mo">2026-11-05<small>intro requested</small></td><td class="na">None</td><td>CSV import</td><td><button type="button" class="btn t" aria-label="More actions for Dev Varma">⋯</button></td></tr>
+<tr><td><a href="#"><b>Eva Lindqvist</b></a></td><td>Northstar Capital</td><td>Principal · investor</td><td class="mo">2026-10-12<small>follow-up done</small></td><td>1 · due 2026-11-20</td><td>Added by you</td><td><button type="button" class="btn t" aria-label="More actions for Eva Lindqvist">⋯</button></td></tr>
+<tr><td><a href="#"><b>Farid Haddad</b></a></td><td>Quill Analytics</td><td>CTO · customer</td><td class="na">Not recorded</td><td class="na">None</td><td>LinkedIn import</td><td><button type="button" class="btn t" aria-label="More actions for Farid Haddad">⋯</button></td></tr>
+</tbody>
+</table>
+<div class="pg"><span>1–25 of 142</span><div class="pb"><button type="button" aria-label="Previous page" aria-disabled="true">‹</button><button type="button" aria-current="page">1</button><button type="button">2</button><button type="button">3</button><span>…</span><button type="button">6</button><button type="button" aria-label="Next page">›</button></div></div>
+</section>
+
+<section class="cd" aria-labelledby="lp">
+<div class="ch"><h2 id="lp">Leads from your pages</h2><span class="sm">31 · not in your relationship book</span></div>
+<p class="sub">People who left their details through one of your pages or invitation flows.</p>
+<table class="tbl">
+<thead><tr><th scope="col">Person</th><th scope="col">Source page</th><th scope="col">Lead type</th><th scope="col">Status</th><th scope="col">Last activity</th><th scope="col">Follow-up</th></tr></thead>
+<tbody>
+<tr><td><b>Gus Demo</b></td><td>/careers</td><td>Talent</td><td><span class="pl v">● Contacted</span></td><td class="mo">2026-11-04</td><td>Call · 2026-11-10</td></tr>
+<tr><td><b>Hana Ito</b></td><td>/pricing</td><td>Customer</td><td><span class="pl">○ New</span></td><td class="mo">2026-11-06</td><td class="na">None</td></tr>
+</tbody>
+</table>
+<div class="cf"><span class="foot">Promote a lead to add them to your relationship book. Counts are never combined.</span><a class="btn t" href="#">All 31 leads →</a></div>
+</section>
+</main>
+</div>
+<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask about your network</span></aside>
+</div>
+
+<div class="dim" aria-hidden="true"></div>
+<aside class="sheet-r" role="dialog" aria-modal="true" aria-labelledby="ps">
+<div class="dh"><div style="display:flex;gap:12px;align-items:center"><span class="av" style="width:40px;height:40px;font-size:12px">AO</span><div><span class="eye">Relationship</span><h2 id="ps">Ada Okafor</h2><p class="sub">Partner · Harbor Seed · <a href="#">LinkedIn profile ↗</a></p></div></div><button type="button" class="ib" aria-label="Close person sheet">✕</button></div>
+<div class="dc" style="overflow:hidden">
+<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Unsaved note.</b> Your note is not saved yet. <button type="button" class="btn t" style="min-height:24px">Save note</button></div></div>
+<div class="sec" style="border-top:0;padding-top:0"><h3>Relationship context</h3><p class="sub">Imported from LinkedIn on 2026-10-30 · connected since 2021-03-14. Relationship strength: <b>Not recorded</b>.</p></div>
+<div class="sec"><h3>Follow-ups</h3>
+<label class="ck"><input type="checkbox"> Send Q3 update <span class="pl a">◷ Overdue</span><small>due 2026-10-28</small></label>
+<label class="ck"><input type="checkbox" checked="checked"> Thank-you after intro <small>done 2026-09-30</small></label>
+<button type="button" class="btn" style="align-self:flex-start">Add follow-up</button></div>
+<div class="sec"><h3>Private notes <span class="foot">· only you can read these</span></h3>
+<label for="nn" style="position:absolute;width:1px;height:1px;overflow:hidden">New private note</label>
+<textarea id="nn" rows="2" style="width:100%;border:1px solid var(--lavE);border-radius:8px;padding:8px 10px;font:500 12.5px var(--sg);color:var(--ink)">Interested in our Lisbon pilot numbers</textarea>
+<p class="sub"><span class="mo">2026-09-28</span> · Met at Web Summit, wants quarterly updates.</p></div>
+<div class="sec"><h3>Interaction history</h3>
+<ul class="tl"><li><span class="mk ok" aria-hidden="true">✓</span><div>Introduction made · you → Ada, via Iris Chen</div><span class="w">2026-09-27</span></li><li><span class="mk" aria-hidden="true">⇩</span><div>Imported from LinkedIn</div><span class="w">2026-10-30</span></li></ul></div>
+<div class="sec"><h3>Who on my team knows them</h3><p class="sub">Iris Chen shares her book with Northwind Labs and has Ada recorded.</p></div>
+</div>
+<div class="df"><button type="button" class="btn ask"><span class="em" aria-hidden="true">E</span>Ask</button><div class="acts"><button type="button" class="btn">Add follow-up</button><button type="button" class="btn p">Request introduction</button></div></div>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

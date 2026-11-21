@@ -23,6 +23,7 @@ import {
   waitingFigure, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, cardAge, filterCount,
 } from './inboxModel';
 import { FOOT, PhoneBack, usePopoverPlace } from './boardParts';
+import { debounceApprovalSearch, startApprovalRead } from './approvalReads';
 import { aboutHistory, decidedFilterCount, decidedHq, decidedItemPath, laneGroups, lanesBanner, matchReviewers, noteKind } from './lanesDecidedModel';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -96,7 +97,8 @@ export function LaneDoor({ k }) {
     case 'referrals': return <Link to="/admin/programs/refer-and-earn/queue" className={LINK}>Refer & Earn › Queue</Link>;
     case 'strategic_access': return <Link to="/admin/programs/refer-and-earn" className={LINK}>Refer & Earn</Link>;
     case 'perk_listings': return <Link to="/admin/programs/perks" className={LINK}>Perks</Link>;
-    case 'best_fit': return <span className={SUB}>Best-Fit · no review page yet</span>;
+    // D5885: Best-Fit is decided on its own board here.
+    case 'best_fit': return <Link to="/admin/approvals/best-fit" className={LINK}>Best-Fit</Link>;
     case 'events': return <Link to="/admin/events/review" className={LINK}>Events › Review</Link>;
     case 'jobs': return <Link to="/admin/jobs" className={LINK}>Jobs</Link>;
     case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={LINK}>Wellbeing experts</Link>;
@@ -130,6 +132,11 @@ function DoorFor({ lane }) {
   return hq ? <HqDoor lane={hq} /> : <LaneDoor k={lane} />;
 }
 
+/** D5885: a Best-Fit item opens on its board, at its own address (a literal template). */
+function BestFitItemDoor({ id }) {
+  return <Link to={`/admin/approvals/best-fit/${id}`} className={LINK}>Best-Fit</Link>;
+}
+
 /**
  * D4814: a lane's door dressed as a button or a list action — "Continue
  * review in KYC & KYB →", "Open in Due diligence ↗". The door itself stays the
@@ -138,7 +145,7 @@ function DoorFor({ lane }) {
  * control, so all of it is the target. A lane with no page to open (Best-Fit,
  * an HQ page not built yet) is plain words, never a control that goes nowhere.
  */
-function DressedDoor({ lane, before, after, className, plain, testId }) {
+function DressedDoor({ lane, itemId = null, before, after, className, plain, testId }) {
   const dest = reviewDestination(lane);
   const box = useRef(null);
   // The link's own text is the lane alone; its name is the whole control ("Open in KYC & KYB").
@@ -150,7 +157,7 @@ function DressedDoor({ lane, before, after, className, plain, testId }) {
   return (
     <span ref={box} data-testid={testId}
       className={`relative ${className} [&_a]:font-[inherit] [&_a]:text-inherit [&_a]:after:absolute [&_a]:after:inset-0 [&_a]:after:content-[''] [&_a]:focus-visible:outline-none focus-within:ring-2 focus-within:ring-axal-violet`}>
-      <span>{before}<DoorFor lane={lane} />{after}</span>
+      <span>{before}{lane === 'best_fit' && itemId != null ? <BestFitItemDoor id={itemId} /> : <DoorFor lane={lane} />}{after}</span>
     </span>
   );
 }
@@ -166,13 +173,11 @@ function useRead(fn, key, enabled = true) {
   call.current = fn;
   useEffect(() => {
     if (!enabled) return undefined;
-    let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
-    call.current().then(
-      (reply) => { if (!cancelled) setState({ status: 'ready', reply, error: null }); },
-      (error) => { if (!cancelled) setState({ status: 'error', reply: null, error }); },
+    return startApprovalRead(call.current,
+      (reply) => setState({ status: 'ready', reply, error: null }),
+      (error) => setState({ status: 'error', reply: null, error }),
     );
-    return () => { cancelled = true; };
   }, [key, tick, enabled]);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { ...state, reload };
@@ -261,7 +266,7 @@ function RowActions({ row, onAssign, onCopy }) {
         <div id={popId} aria-label={`Actions for ${row.who}`} role="group" style={place || undefined} className={`${CARD} ${place ? '' : 'absolute right-0 mt-1'} z-30 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
           <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(true); onAssign([row]); }}>Assign…</button>
           <button type="button" data-testid={`approvals-menu-${row.key}-copy`} className={ITEM} onClick={() => { close(true); onCopy(row); }}>Copy link</button>
-          <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
+          <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} itemId={row.id} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
         </div>
       ) : null}
     </div>
@@ -364,7 +369,7 @@ function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTake }) {
       footer={ready ? (
         <div className="flex flex-col gap-2" data-testid="approvals-item-continue">
           <div className="flex flex-wrap items-center gap-2 max-sm:flex-col-reverse max-sm:items-stretch">
-            <DressedDoor lane={v.lane} before="Continue review in " after=" →" className={`${BTN_PRIMARY} flex-1`} plain={`flex-1 ${SUB}`} testId="approvals-item-continue-link" />
+            <DressedDoor lane={v.lane} itemId={v.id} before="Continue review in " after=" →" className={`${BTN_PRIMARY} flex-1`} plain={`flex-1 ${SUB}`} testId="approvals-item-continue-link" />
             <button type="button" className={BTN} onClick={onClose}>Close</button>
           </div>
           <p className={`m-0 ${SUB}`} data-testid="approvals-item-why">{continueLine(v.lane)}</p>
@@ -489,7 +494,7 @@ function RowSheet({ row, onAssign, onCopy, onClose }) {
       <div className="flex flex-col gap-1 px-3 py-3">
         <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onAssign([row]); }} data-testid="approvals-row-sheet-assign">Assign…</button>
         <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onCopy(row); }} data-testid="approvals-row-sheet-copy">Copy link</button>
-        <span onClickCapture={onClose}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={SHEET_ITEM} plain={`${SHEET_ITEM} text-axal-muted dark:text-gray-400`} testId="approvals-row-sheet-open-in" /></span>
+        <span onClickCapture={onClose}><DressedDoor lane={row.lane} itemId={row.id} before="Open in " after=" ↗" className={SHEET_ITEM} plain={`${SHEET_ITEM} text-axal-muted dark:text-gray-400`} testId="approvals-row-sheet-open-in" /></span>
       </div>
     </Lightbox>
   );
@@ -615,7 +620,18 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
     const s = p.toString();
     navigate({ pathname: '/admin/approvals', search: s ? `?${s}` : '' }, { replace: true });
   };
+  const applySearch = useRef(null);
+  applySearch.current = (value) => {
+    if (value !== (q.filters.q || '')) setParams({ q: value || null });
+  };
+  const [search] = useState(() => debounceApprovalSearch((value) => applySearch.current(value)));
+  useEffect(() => () => search.cancel(), [search]);
+  useEffect(() => {
+    search.cancel();
+    setTyped(q.typed);
+  }, [q.typed, search]);
   const clearFilters = () => {
+    search.cancel();
     setTyped('');
     setParams({ q: null, group: null, lane: null, age: null, ...(/^[1-9]\d*$/.test(q.filters.assigned || '') ? { assigned: null } : {}) });
   };
@@ -662,7 +678,11 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
     const i = WORK_VIEWS.findIndex((v) => v.key === view);
     chooseView(WORK_VIEWS[(i + step + WORK_VIEWS.length) % WORK_VIEWS.length].key);
   };
-  const onType = (v) => { setTyped(v); const t = v.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); };
+  const onType = (v) => {
+    setTyped(v);
+    const term = v.trim();
+    search.schedule(term.length >= SEARCH_MIN ? term : '');
+  };
   const callout = ownershipCallout(inbox);
   // D4814 (AP-01): Assign overdue… reads the overdue items nobody holds from
   // every lane (not this page), oldest first, up to what one Assign takes.
@@ -741,7 +761,7 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
                   <span key={c.key} className="inline-flex items-center gap-1 rounded-full border border-axal-violet bg-axal-lavender py-0.5 pl-2.5 pr-1 text-[12px] font-bold text-axal-ink dark:bg-violet-950/40 dark:text-gray-100" data-testid={`approvals-chip-${c.key}`}>
                     {c.text}
                     <button type="button" aria-label={`Remove ${c.text}`} className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-white/60 dark:hover:bg-gray-800"
-                      onClick={() => { if (c.key === 'q') setTyped(''); setParams(c.key === 'assigned' ? { assigned: null } : { [c.key]: null }); }} data-testid={`approvals-chip-remove-${c.key}`}>✕</button>
+                      onClick={() => { if (c.key === 'q') { search.cancel(); setTyped(''); } setParams(c.key === 'assigned' ? { assigned: null } : { [c.key]: null }); }} data-testid={`approvals-chip-remove-${c.key}`}>✕</button>
                   </span>
                 ))}
                 <button type="button" className={LINK} onClick={clearFilters} data-testid="approvals-chips-clear">Clear all</button>
@@ -1183,7 +1203,7 @@ export function ApprovalsPage({ viewer = null }) {
   const iq = inboxQueryOf(loc.search, superAdmin);
   // D4814 (AP-06): Lanes reads the inbox too, unfiltered, for each lane's overdue count.
   const inboxKey = tab === 'lanes' ? 'lanes' : JSON.stringify(iq.filters) + iq.page;
-  const inbox = useRead(() => (tab === 'lanes' ? adminApprovalsApi.inbox(1, {}) : adminApprovalsApi.inbox(iq.page, iq.filters)), inboxKey, onInbox || tab === 'lanes');
+  const inbox = useRead((signal) => (tab === 'lanes' ? adminApprovalsApi.inbox(1, {}, signal) : adminApprovalsApi.inbox(iq.page, iq.filters, signal)), inboxKey, onInbox || tab === 'lanes');
   const weekly = useRead(() => adminApprovalsApi.weekly(), 'weekly', onInbox);
   // D4814: Waiting on HQ is a studio's outbound list; the HQ-held shell neither draws nor reads it.
   const studio = Boolean(branchOfUser(user));
@@ -1192,7 +1212,7 @@ export function ApprovalsPage({ viewer = null }) {
   // D4814: "Include HQ lanes" off is a Super Admin's; a plain Admin never sends hq.
   if (!decidedHq(loc.search, superAdmin)) delete dq.hq;
   const { page: dPage, ...dFilters } = dq;
-  const decided = useRead(() => adminApprovalsApi.decided(dPage, dFilters), JSON.stringify(dq), tab === 'decided');
+  const decided = useRead((signal) => adminApprovalsApi.decided(dPage, dFilters, signal), JSON.stringify(dq), tab === 'decided');
 
   const [assignFor, setAssignFor] = useState(null);
   const [toastText, setToastText] = useState(null);

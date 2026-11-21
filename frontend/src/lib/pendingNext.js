@@ -137,7 +137,15 @@ export function pendingNextRedirected() {
  * else to a bare `/login`, as before; an area joins this list when its deep links (a course, a lesson, a webinar) are
  * shared and must survive sign-in.
  */
-export const RETURN_AFTER_LOGIN_PREFIXES = Object.freeze(['/learning', '/grow']);
+export const RETURN_AFTER_LOGIN_PREFIXES = Object.freeze(['/learning', '/grow', '/research/companies', '/research/funds']);
+
+/**
+ * D7166 (#7166): a Funds directory link longer than the return cap (`sanitizeNextPath`, 200 characters) cannot be
+ * kept whole. It returns to the Directory without its filters, and `FUNDS_FILTERS_DROPPED` tells the page to say so
+ * (RFD-04, option A as drawn). Any other area falls back to `/login`, as before.
+ */
+export const FUNDS_FILTERS_DROPPED = 'filters_dropped';
+const FUNDS_PREFIX = '/research/funds';
 
 const underPrefix = (pathname, prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`);
 const pathOf = (p) => String(p || '').split(/[?#]/)[0];
@@ -152,8 +160,53 @@ export function loginRedirectFor(location) {
   const pathname = String(location?.pathname || '');
   const here = `${pathname}${location?.search || ''}${location?.hash || ''}`;
   const kept = RETURN_AFTER_LOGIN_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  const safe = kept ? sanitizeNextPath(here) : null;
+  let safe = kept ? sanitizeNextPath(here) : null;
+  const directory = new URLSearchParams(location?.search || '').get('view') === 'directory';
+  if (!safe && kept && pathname === FUNDS_PREFIX && here.length > 200) {
+    safe = sanitizeNextPath(`${FUNDS_PREFIX}?${directory ? 'view=directory&' : ''}${FUNDS_FILTERS_DROPPED}=1`);
+  }
+  if (safe && pathname === FUNDS_PREFIX && directory) rememberFundsReturn(safe);
   return safe ? `/login?next=${encodeURIComponent(safe)}` : '/login';
+}
+
+// ---------------------------------------------------------------------------
+// D7166 part 2 (#7166, RFD-04B, RFD-06): "Signed in. This is the search you opened."
+// ---------------------------------------------------------------------------
+
+const FUNDS_RETURN_KEY = 'gvpn:funds-return';
+
+/** The path and query of a kept destination, without its fragment: what the Directory compares on arrival. */
+const withoutHash = (p) => String(p || '').split('#')[0];
+
+/**
+ * The guard sent a signed-out visitor away from a Directory link and kept it as `next`. Remember that link, for as
+ * long as a kept destination lives (24 hours, the verification email's life), so the Directory can say once, on
+ * arriving at that same link signed in, that it is the search they opened. The marker is only ever a same-origin
+ * path that passed `sanitizeNextPath`; it names nothing but the link.
+ */
+export function rememberFundsReturn(path) {
+  const p = sanitizeNextPath(path);
+  if (!p || pathOf(p) !== FUNDS_PREFIX) return;
+  safeWriteJSON(FUNDS_RETURN_KEY, { path: withoutHash(p), ts: Date.now() });
+}
+
+/**
+ * True once, when the Directory opens at the link the guard kept: the marker is fresh and names this same path and
+ * query. A match, a stale marker or a bad one is cleared; a fresh marker for another link is left for that link. The
+ * Directory is signed in by the time it renders (App.jsx's guard), so a match means the visitor signed in to get here.
+ */
+export function consumeFundsReturn(here) {
+  const v = safeReadJSON(FUNDS_RETURN_KEY, null);
+  if (!v || typeof v !== 'object') return false;
+  const p = sanitizeNextPath(v.path);
+  const fresh = Number.isFinite(v.ts) && Date.now() - v.ts <= TTL_MS && Date.now() >= v.ts;
+  if (!p || !fresh) {
+    safeRemove(FUNDS_RETURN_KEY);
+    return false;
+  }
+  if (p !== withoutHash(here)) return false;
+  safeRemove(FUNDS_RETURN_KEY);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +228,23 @@ const DESTINATION_AREAS = Object.freeze([
       ? 'You need a founder, advisor or operating partner account.'
       : 'You need a founder account.'),
   },
+  // D7178 (#7044, RS-16 A): Companies keeps the exact company or filtered results. The screens name only the area;
+  // the query, the company and any project stay in the URL and are never shown before sign-in. `ready` is the one
+  // screen after required setup ("Your account is ready · Continue to Companies").
+  {
+    prefix: '/research/companies',
+    name: 'Companies',
+    what: 'Companies is the Research directory of companies, each with the public sources behind it.',
+    who: () => 'You need a Founder or Advisor licence.',
+    ready: true,
+  },
+  {
+    // D7166 (#7166): RFD-04's "Sign in to continue to Funds". App.jsx guards /research/funds to founders and admins.
+    prefix: '/research/funds',
+    name: 'Funds',
+    what: 'Funds is the Research fund directory and your shortlist of funds.',
+    who: () => 'You need a founder account.',
+  },
 ]);
 
 /**
@@ -186,16 +256,20 @@ export function destinationArea(next) {
   if (!p) return null;
   const pathname = pathOf(p);
   const area = DESTINATION_AREAS.find((a) => underPrefix(pathname, a.prefix));
-  return area ? { name: area.name, what: area.what, who: area.who(pathname) } : null;
+  return area ? { name: area.name, what: area.what, who: area.who(pathname), ready: area.ready === true } : null;
 }
 
 /**
  * What the sign-in page shows for a kept destination (#4579): its area, and a sign-up link that keeps the same
  * destination. Null for a direct visit or an unsafe `next`, which keep the generic page.
  */
-export function signInContextFor(next) {
+export function signInContextFor(next, search = '') {
   const area = destinationArea(next);
-  return area ? { area, registerHref: `/register?next=${encodeURIComponent(sanitizeNextPath(next))}` } : null;
+  if (!area) return null;
+  // D7178: `ended=1` is set by a 401 on a protected page (`sessionEndedRedirectFor`); the page then says why.
+  let ended = null;
+  try { ended = new URLSearchParams(search || '').get('ended') === '1' ? sessionEndedLine(area) : null; } catch { ended = null; }
+  return { area, registerHref: `/register?next=${encodeURIComponent(sanitizeNextPath(next))}`, ended };
 }
 
 /**
@@ -203,7 +277,7 @@ export function signInContextFor(next) {
  * up (RequireAuth exempts the pending target from its setup gates); a Grow page does not, because it needs the
  * founder account setup creates. So setup runs first, and the destination is kept until it finishes.
  */
-export const SETUP_BEFORE_DESTINATION_PREFIXES = Object.freeze(['/grow']);
+export const SETUP_BEFORE_DESTINATION_PREFIXES = Object.freeze(['/grow', '/research/companies']);
 
 export function destinationNeedsSetup(path) {
   const p = sanitizeNextPath(path);
@@ -234,4 +308,51 @@ export function destinationAfterSetup() {
 /** Used once: cleared as the visitor is sent there (or arrives some other way). */
 export function clearDestinationAfterSetup() {
   safeRemove(AFTER_SETUP_KEY);
+}
+
+// ---------------------------------------------------------------------------
+// D7178 (#7044, RS-16) — Companies: a stale session keeps the page, and the page says it was restored.
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a 401 on a protected page sends the tab: the route guard's own answer (`loginRedirectFor`, the same
+ * sanitiser), with `ended=1` when a destination is kept, so the sign-in page can say the session ended. An area that
+ * keeps no destination still goes to a bare `/login`, as before.
+ */
+export function sessionEndedRedirectFor(location) {
+  const to = loginRedirectFor(location);
+  return to === '/login' ? to : `${to}&ended=1`;
+}
+
+/** The line the sign-in page shows after `sessionEndedRedirectFor`, for a kept destination in a named area. */
+export function sessionEndedLine(area) {
+  return area ? `Your session ended. Sign in again to go back to ${area.name}.` : null;
+}
+
+let restoredSpent = false;
+let restoredTo = null;
+
+/** After required setup, "Continue to …" sends the visitor here; the page it opens then reads as restored. */
+export function markRestoredArrival(path) {
+  const p = sanitizeNextPath(path);
+  if (!p) return;
+  restoredTo = p;
+  restoredSpent = false;
+}
+
+/**
+ * True when this page load returned to `path` (path and query) from sign-in, sign-up or setup, and the page has not
+ * said so yet. Pure: a page reads it once (a `useState` initialiser) and then calls `spendRestoredArrival`, so a later
+ * visit in the same load (Back to Companies, then the profile again) does not say it twice.
+ */
+export function isRestoredArrival(path) {
+  if (restoredSpent) return false;
+  const kept = restoredTo || (consumed || redirected ? value : null);
+  if (!kept) return false;
+  const here = sanitizeNextPath(path);
+  return !!here && here.split('#')[0] === kept.split('#')[0];
+}
+
+export function spendRestoredArrival() {
+  restoredSpent = true;
 }

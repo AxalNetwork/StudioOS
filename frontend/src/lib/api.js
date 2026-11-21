@@ -1,3 +1,4 @@
+import { announceInvestorPreviewRefusal, investorPreviewHeaders } from './investorPreview';
 import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
@@ -5,6 +6,7 @@ import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
 import { rememberLabVenture } from './labVenture.js';
 import { readAllPages } from './pagedRead.js';
+import { sessionEndedRedirectFor } from './pendingNext.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, so unrelated features stop colliding in this file.
@@ -147,6 +149,8 @@ export function isPublicPath(pathname) {
     // Printable Program Brief — public brochure page; /spinout-lab/apply
     // is intentionally NOT listed (auth-only, a 401 there should bounce).
     || currentPath === '/spinout-lab/brief'
+    // D7121 (#7121): the public Wellness presentation; /wellbeing itself stays auth-only.
+    || currentPath === '/programs/wellness'
     // Audience product pages (For Founders / Investors & LPs / Service
     // Partners / Advisors) — public marketing surfaces. A background
     // settings/me 401 for an anonymous visitor must not bounce them to
@@ -216,6 +220,12 @@ export function isPublicPath(pathname) {
     // D1564 (#3811): a published deck framed on a site its founder listed.
     || currentPath.startsWith('/embed/')
     || currentPath.startsWith('/share/captable/')
+    // D6864 (#6864): an evidence pack a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/evidence/')
+    // D6897 (#6897): a readiness snapshot a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/readiness/')
+    // D6897 part 4 (#6897): a Raise status page a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/status/')
     || currentPath.startsWith('/insights')
     // ROUTE literals, not API paths — this whole predicate reads
     // window.location. /account/email/* is the live pair; /settings/email/*
@@ -223,6 +233,9 @@ export function isPublicPath(pathname) {
     // 401 bounce to /login is exactly what breaks an email-change flow.
     || currentPath.startsWith('/account/email/')
     || currentPath.startsWith('/settings/email/')
+    // D6966 (#6966): the public Programs index and each program's presentation address.
+    || currentPath === '/programs'
+    || currentPath.startsWith('/programs/')
     // Task #5 — Public event surface (no auth)
     || currentPath === '/events'
     || currentPath.startsWith('/events/')
@@ -534,7 +547,12 @@ export async function refusalError(res, fallback) {
   const e = new Error(message || res.statusText || fallback);
   e.status = res.status;
   if (code) e.code = code;
+  announceInvestorPreviewRefusal(res.status, code);
   return e;
+}
+
+function getInvestorPreviewHeader(method) {
+  return MUTATING_METHODS.has(method?.toUpperCase()) ? investorPreviewHeaders() : {};
 }
 
 /**
@@ -545,7 +563,7 @@ export async function refusalError(res, fallback) {
  * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
  */
 export function rawRequestHeaders(method = 'GET') {
-  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders(), ...getInvestorPreviewHeader(method) };
 }
 
 /**
@@ -586,9 +604,10 @@ export async function request(path, options = {}) {
     const companyHeader = getActiveCompanyHeader();
     // D765: the rail's page (and option), so the Worker records and switches each run by it.
     const railHeader = railPageHeaders();
+    const previewHeader = getInvestorPreviewHeader(options.method);
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
@@ -609,6 +628,7 @@ export async function request(path, options = {}) {
       headers: baseHeaders,
       signal: deadline.signal,
     });
+    if (res.status === 204) return null;
     if (!res.ok) {
       // Public token-gated endpoints (partner onboarding, esign signing,
       // public profile reads) must never trigger an auth-redirect — a 401
@@ -654,7 +674,9 @@ export async function request(path, options = {}) {
           // even though we're about to leave the page; this is what makes a
           // silent "session expired → /login" redirect debuggable in prod.
           reportError('api:session-expired-redirect', new Error(`401 on ${path}; redirecting ${currentPath} → /login`));
-          window.location.href = '/login';
+          // D7178 (#7044, RCL04B): an area that keeps its destination (Companies, Grow, Learning) goes to
+          // `/login?next=<this page>&ended=1`, through the route guard's own sanitiser; every other page to `/login`.
+          window.location.href = sessionEndedRedirectFor(window.location);
         }
         throw new Error('Session expired');
       }
@@ -675,6 +697,7 @@ export async function request(path, options = {}) {
       const e = new Error(msg);
       e.status = res.status;
       if (refusal.code) e.code = refusal.code;
+      announceInvestorPreviewRefusal(res.status, refusal.code);
       e.data = detailObj || errorObj || err || null;
       // Task #16 — surface per-field validation errors (e.g. ProfileValidationError)
       // so form components can highlight the offending input.
@@ -1151,6 +1174,7 @@ export const api = {
     set('limit', params.limit);
     set('tz', params.tz);
     set('budget_max', params.budget_max);
+    set('personalise', params.personalise ? 1 : null);
     (params.want_categories || []).forEach((v) => q.append('want_category', v));
     (params.want_languages || []).forEach((v) => q.append('want_language', v));
     (params.want_sectors || []).forEach((v) => q.append('want_sector', v));
@@ -1497,7 +1521,10 @@ export const api = {
   dealsTransfers: () => request('/deals/transfers'),
   dealClosingChecklist: (id) => request(`/deals/${id}/closing-checklist`),
   dealClosingChecklistApply: (id, templateSlug) => request(`/deals/${id}/closing-checklist/apply`, { method: 'POST', body: JSON.stringify({ template_slug: templateSlug }) }),
-  dealClosingChecklistAddItem: (id, label) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ label }) }),
+  // D6156: an item may carry owner_user_id, owner_label, due_date (YYYY-MM-DD)
+  // and note; a PATCH sends any of those and/or state, null clearing a field.
+  // Every write appends one event, read through dealClosingHistoryApi.
+  dealClosingChecklistAddItem: (id, label, fields = {}) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ ...fields, label }) }),
   dealClosingChecklistSetItem: (id, itemUid, data) => request(`/deals/${id}/closing-checklist/items/${itemUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
@@ -3296,7 +3323,7 @@ export const api = {
   // pages render "Not recorded" rather than an invented figure.
   fundsAnalytics: () => request('/funds/analytics'),
   fundAnalytics: (id) => request(`/funds/${id}/analytics`),
-  fundsLpPortal: () => request('/funds/lp-portal'),
+  fundsLpPortal: ({ view } = {}) => request(view === 'studio' ? '/funds/lp-portal?view=studio' : '/funds/lp-portal'),
   // GP-only. Returns ONE limited partner's reporting data in the same shape as
   // fundsLpPortal, so the quarterly-report renderer is a single code path
   // whether the LP downloads their own statement or the GP produces it.
@@ -4056,7 +4083,9 @@ export const api = {
   revokeInvestorSeat: (id) =>
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
   introductionsQuota: () => request('/introductions/quota'),
-  listIntroductions: () => request('/introductions/'),
+  // D6260: no trailing slash. The Worker mounts GET `/` under /api/introductions
+  // and Hono is strict, so `/api/introductions/` is a 404 and the Asked view read as unavailable.
+  listIntroductions: () => request('/introductions'),
   // Task #82 — request a warm intro to a founder/project. Consumes the intro
   // quota; on exhaustion the worker returns 402 {code:'quota_intros_exhausted',
   // message, upgrade_to, checkout_path} WITHOUT a `required` field, so the
@@ -4204,14 +4233,7 @@ export const api = {
   deleteReference: (id) => request(`/references/${id}`, { method: 'DELETE' }),
   captureReferenceConsent: (id, data) =>
     request(`/references/${id}/consent`, { method: 'POST', body: JSON.stringify(data) }),
-  uploadReferenceRecording: (id, file) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return request(`/references/${id}/recording`, { method: 'POST', body: fd });
-  },
-  getReferenceRecordingUrl: (id) => request(`/references/${id}/recording-url`),
-  transcribeReference: (id) =>
-    request(`/references/${id}/transcribe`, { method: 'POST' }),
+  // D6183: Eadwyn summarises the typed notes; no recording or transcript route exists.
   summarizeReference: (id) =>
     request(`/references/${id}/summarize`, { method: 'POST' }),
 
@@ -5159,9 +5181,6 @@ export const api = {
   fundSimScenarioGet: (uid) => request(`/fund-sim/scenarios/${uid}`),
   fundSimScenarioDelete: (uid) =>
     request(`/fund-sim/scenarios/${uid}`, { method: 'DELETE' }),
-  // Reuse the existing /api/capital/funds endpoint for the fund picker —
-  // it returns the canonical VCFund list with id/uid/name/total_commitment.
-  capitalFundsList: () => request('/capital/funds'),
 
   // Task #8 (IH) — Data import + migration tools.
   importsList: () => request('/imports/'),
@@ -5334,6 +5353,10 @@ export const api = {
       return request(`/research/ask/sessions?${q}`);
     },
     askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),
+    // D6272: Clear history hides the caller's sessions (`cleared_at`); Restore
+    // brings them back. `scope=cleared` on `askSessions` reads them meanwhile.
+    askClearHistory: () => request('/research/ask/history/clear', { method: 'POST', body: JSON.stringify({}) }),
+    askRestoreHistory: () => request('/research/ask/history/restore', { method: 'POST', body: JSON.stringify({}) }),
     askSaveAnswer: (uid, saved) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, {
       method: 'PATCH', body: JSON.stringify({ saved: !!saved }),
     }),
@@ -5448,12 +5471,20 @@ export const api = {
     ),
 
     // Diligence — no store of its own. Room access assembled from the grants
-    // this investor already holds.
+    // this investor already holds. #6267: each room carries `nda: { status:
+    // none | out_for_signature | on_file, valid_until }`, and the read adds
+    // `requests`, the investor's own open and declined room requests no live
+    // grant answers (`project_name` null where the call or deal behind it did
+    // not name the venture); `requests: null` with `requests_unreadable` when
+    // they could not be read, never an empty list.
+    // D6266: each room also carries `deals`: the permitted deals on its company
+    // (`{ id, stage, name }`), and `deal_stage_note` only when there are none.
     diligence: () => request('/research/diligence'),
     // One room and one document in it, keyed by the grant the investor holds.
     // A grant they do not hold is a 404 (`room_not_found`), the same as one
     // that does not exist; a document behind an NDA they have not signed is a
     // 403 (`nda_required`) that carries the room and nothing about the file.
+    // #6267: the room carries the same `nda` status object as the list.
     diligenceRoom: (grantUid) => request(`/research/diligence/${encodeURIComponent(grantUid)}`),
     diligenceFile: (grantUid, fileUid) =>
       request(`/research/diligence/${encodeURIComponent(grantUid)}/files/${encodeURIComponent(fileUid)}`),
@@ -5464,6 +5495,8 @@ export const api = {
 // founders are blocked at the worker level (any 403 surfaces directly).
 export const dd = {
   catalog: () => request('/dd/catalog'),
+  // Every filter the Worker's list reads passes through, `subject_id` among
+  // them (D6181: one subject's cases, exactly, under the same reader scope).
   listCases: (params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return request(`/dd/cases${q ? `?${q}` : ''}`);
@@ -5900,11 +5933,11 @@ export const spinoutLab = {
   cohort: () => request('/spinout-lab/cohort'),
   // Public — real hero stats (companies built, total raised by graduates).
   stats: () => request('/spinout-lab/stats'),
-  // Public — the six live values the Programme Brief prints, and only those
-  // (D141). The brief's tracks, tools, gates and jurisdictions are the
-  // programme's own description and come from `lib/spinoutBrief.js` and
-  // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
-  // invented so a page could look dynamic.
+  // Public — the cohort's live values (D141): the Spin-Out Lab presentation's
+  // availability panel reads them (D6966). Everything else the presentation
+  // says is the programme's own description, in
+  // `pages/programs/content/spinout-lab.js`; a route serving that too would be a
+  // store invented so a page could look dynamic.
   brief: () => request('/spinout-lab/brief'),
   // D383 — the caller's own application lifecycle. No id in any path: each
   // acts on the signed-in account's draft or latest application only.
@@ -5981,13 +6014,15 @@ export const events = {
 // Public (no-auth) event surface — feed, detail, register, invite response.
 export const eventsPublic = {
   // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
-  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
+  // #5868 (D3724 gap 5): `topic`, one of the Worker's `EVENT_TOPICS` (D1487).
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price, topic } = {}) => {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     if (type) qs.set('type', type);
     if (format) qs.set('format', format);
     if (price) qs.set('price', price);
+    if (topic) qs.set('topic', topic);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
     if (q) qs.set('q', q);

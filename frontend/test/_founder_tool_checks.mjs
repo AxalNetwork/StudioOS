@@ -39,7 +39,7 @@ export const RETURNS = [
   ['/build/marketplace','/validate/customer-research','← Validate › Customer research'],
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
-  ['/comarketing','/grow/partner-network','← Grow › Partner network'],
+  ['/comarketing','/grow/partnerships','← Grow › Partnerships'], // D6118: Partner network's page
   // D1180 (#3107) and D1194 (#3128): /raise/capital, /raise/capital/model and
   // /raise/capital/pipeline only forward, so none has a module return.
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
@@ -54,7 +54,7 @@ export const RETURNS = [
 ];
 export const checks = {
   doors(m=actual) {
-    const groups = [['grow','distribution'],['raise','cap-table'],['build','company-creation'],['raise','capital-relationships'],['raise','data-room'],['grow','partner-network']];
+    const groups = [['grow','distribution'],['raise','cap-table'],['build','company-creation'],['raise','capital-relationships'],['raise','data-room'],['grow','partner-network'],['grow','team-expansion']];
     const out = groups.map(([cycle,slug])=>{
       const tools=m.navigation.moduleToolLinks(cycle,slug,founder,'?project_id=41');
       return links(render(m.CycleModulePage,{cycle,slug,tools,data:{module:{name:slug},records:{cols:[],rows:[],total:0}}}), 'cycle-module-tool');
@@ -69,6 +69,8 @@ export const checks = {
       // D1109: the files tool's door (D696) left with the tool; the module page is the Data room tool.
       [],
       [{href:'/grow/partner-network/co-marketing?project_id=41',label:'Open co-marketing',quiet:true}],
+      // #6109: Team expansion opens where headcount and the hiring plan are edited.
+      [{href:'/build/team?project_id=41',label:'Open team roster and hiring plan',quiet:true}],
     ]);
   },
   gates(m=actual) {
@@ -136,6 +138,8 @@ export const checks = {
       const block=route(t.path)||'';
       const roles=block.match(/guard\((?:labRoles\()?\[([^\]]*)\]/)?.[1]||'';
       return [t.path,t.roles.every(r=>roles.includes("'"+r+"'"))];
-    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-relationships/match',true],['/grow/partner-network/co-marketing',true]]);
+    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-relationships/match',true],
+      // #6109: Team expansion's door to the roster and hiring plan, gated as /build/team is.
+      ['/build/team',true],['/grow/partner-network/co-marketing',true]]);
   },
 };

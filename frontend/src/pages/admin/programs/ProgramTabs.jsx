@@ -50,9 +50,12 @@ export function MentorTabs() {
   return (
     <Strip label="Mentor cohort access">
       <Tab to="/admin/programs/mentor-cohorts" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/mentor-cohorts/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/mentor-cohorts/people" testId="programs-tab-people">People</Tab>
-      <Tab to="/admin/programs/mentor-cohorts/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/people" testId="programs-tab-people">Cohorts</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }
@@ -61,10 +64,12 @@ export function ReferTabs({ queue }) {
   return (
     <Strip label="Refer & Earn">
       <Tab to="/admin/programs/refer-and-earn" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/refer-and-earn/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/refer-and-earn/queue" count={queue} testId="programs-tab-queue">Queue</Tab>
+      <Tab to="/admin/programs/refer-and-earn/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/refer-and-earn/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/refer-and-earn/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/refer-and-earn/queue" count={queue} testId="programs-tab-queue">Referral queue</Tab>
+      <Tab to="/admin/programs/refer-and-earn/activity" testId="programs-tab-activity">History</Tab>
       <Tab to="/admin/programs/refer-and-earn/settings" testId="programs-tab-settings">Settings</Tab>
-      <Tab to="/admin/programs/refer-and-earn/activity" testId="programs-tab-activity">Activity</Tab>
     </Strip>
   );
 }
@@ -88,25 +93,39 @@ export function PerksTabs({ queue }) {
   );
 }
 
+/**
+ * D5887 (#5887): Learning in the generic shell (PG03a), as Perks moved in D5313. The shell's six core sections in its
+ * order and words, and the Learners module (People's address) between Participation and History.
+ */
 export function LearningTabs() {
   return (
     <Strip label="Learning">
       <Tab to="/admin/programs/learning" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/learning/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/learning/people" testId="programs-tab-people">People</Tab>
-      <Tab to="/admin/programs/learning/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/learning/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/learning/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/learning/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/learning/people" testId="programs-tab-people">Learners</Tab>
+      <Tab to="/admin/programs/learning/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/learning/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }
 
-// D963 (#2796): Referral partners' Queue (terms sent to HQ) and Activity, and Investor cohort access's Activity.
+/**
+ * D963 (#2796): Referral partners' Queue (terms sent to HQ) and Activity. D5888 (#5888): in the generic shell
+ * (PG03a), the six core sections in its order and words, and the Referral queue module between Participation and
+ * History, carrying the count of terms waiting for HQ.
+ */
 export function PartnersTabs({ queue }) {
   return (
     <Strip label="Referral partners">
       <Tab to="/admin/programs/referral-partners" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/referral-partners/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/referral-partners/queue" count={queue} testId="programs-tab-queue">Queue</Tab>
-      <Tab to="/admin/programs/referral-partners/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/referral-partners/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/referral-partners/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/referral-partners/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/referral-partners/queue" count={queue} testId="programs-tab-queue">Referral queue</Tab>
+      <Tab to="/admin/programs/referral-partners/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/referral-partners/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }
@@ -115,7 +134,11 @@ export function InvestorTabs() {
   return (
     <Strip label="Investor cohort access">
       <Tab to="/admin/programs/investor-cohorts" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/investor-cohorts/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/investor-cohorts/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/investor-cohorts/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/investor-cohorts/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/investor-cohorts/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/investor-cohorts/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }
@@ -124,13 +147,33 @@ export function InvestorTabs() {
 export function InfluencerTabs({ queue }) {
   return (
     <Strip label="Influencers">
-      <Tab to="/admin/programs/influencer/how-it-runs" end testId="programs-tab-how">How it runs</Tab>
+      <Tab to="/admin/programs/influencer" end testId="programs-tab-overview">Overview</Tab>
+      <Tab to="/admin/programs/influencer/how-it-runs" end testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/influencer/availability" end testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/influencer/participation" end testId="programs-tab-participation">Participation</Tab>
       <Tab to="/admin/programs/influencer/applications" count={queue} testId="programs-tab-applications">Applications</Tab>
       <Tab to="/admin/programs/influencer/influencers" testId="programs-tab-influencers">Influencers</Tab>
       <Tab to="/admin/programs/influencer/offers" testId="programs-tab-offers">Offers</Tab>
       <Tab to="/admin/programs/influencer/payouts" testId="programs-tab-payouts">Payouts</Tab>
-      <Tab to="/admin/programs/influencer/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/influencer/activity" testId="programs-tab-activity">History</Tab>
       <Tab to="/admin/programs/influencer/settings" testId="programs-tab-settings">Settings</Tab>
+    </Strip>
+  );
+}
+
+/**
+ * D5895 (#5895): AI-native Venture in the generic shell (PG03a): the shell's six core sections, no module tab. The
+ * paths stay literal, as every strip here is, so the reachability walk reads each one as a door.
+ */
+export function AiNativeTabs() {
+  return (
+    <Strip label="AI-native Venture">
+      <Tab to="/admin/programs/ai-native-venture" end testId="programs-tab-overview">Overview</Tab>
+      <Tab to="/admin/programs/ai-native-venture/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/ai-native-venture/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/ai-native-venture/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/ai-native-venture/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/ai-native-venture/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }

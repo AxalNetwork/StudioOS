@@ -4,8 +4,15 @@
 file below. ID1 Pipeline (`PipelineZone.jsx`) was retired by D1243 (#3256):
 Deal flow's table at `/deals?view=table` does its job, and `/deals/pipeline`
 forwards there with its query kept (`../dealflow/DealsPipelineRedirect.jsx`).
-The bucket root (`pages/investor/InvestorDealsWorkspace.jsx`) draws only the
-deal-invitation queue, which no artboard covers.
+The bucket root `/deals` is My Deal Flow (`../dealflow/DealFlow.jsx`, D4815),
+drawn by `workspaces/investor/InvestorDealsRoutes.jsx`. The deal rooms are at
+`/deals/rooms` and Compare at `/deals/compare`.
+
+`pages/investor/InvestorDealsWorkspace.jsx` (the invitation queue) is no longer
+part of this bucket. It renders only from `pages/investor/InvestorWorkspacePage.jsx`,
+on `/pipeline`, for a session browsing as an investor that holds neither the
+Investor nor the Operating Partner licence (an investor licence goes to Deal
+flow). Its Pass is the one control that answers an invitation `passed` (#6152).
 
 `design/canvases/integrated/Pages · Investor Deals.dc.html` draws four
 artboards — **ID1 Pipeline**, **ID2 Screening**, **ID3 Commit**, **ID4
@@ -15,17 +22,20 @@ band underneath.
 
 | File | Artboard | Route | Architecture |
 | --- | --- | --- | --- |
-| `ScreeningZone.jsx` | ID2 · Deals · Screening | `/deals/screening` | ANALYTICS. D1260: the deals you can read with each one's venture scorecard strip (`POST /api/venture-scores/batch`), and the pass taxonomy. No Lab score, tier or flag, and no memo |
-| `CommitZone.jsx` | ID3 · Deals · Commit | `/deals/commit` | LEDGER |
-| `ClosingZone.jsx` | ID4 · Deals · Closing | `/deals/closing` | COLLECTION |
+| `ScreeningZone.jsx` | ID2 · Deals · Screening, redrawn to Deals v2 board DE06 (D4815, #5909) | `/deals/screening` | DECISION TABLE. The deals you can read, each with its venture scorecard strip (`POST /api/venture-scores/batch`), thesis fit and your decision (Move to diligence, Pass with a reason, through your deal flow); the pass taxonomy is a secondary view behind a disclosure. No Lab score, tier or flag, and no memo |
+| `screeningModel.js` | — | — | The decision table's pure rules: the four summary figures, the Confidence cell and Your decision. Read by `ScreeningZone.jsx` and its test |
+| `CommitZone.jsx` | ID3 · Deals · Commit, redrawn to Deals v2 DE07 and DE07b as the Investment committee page (D4815 part 7, #5910) | `/deals/commit` | LEDGER |
+| `ClosingZone.jsx` | ID4 · Deals · Closing, redrawn to DX8 board DE08 A (D4815 part 8) | `/deals/closing` | COLLECTION. A deal-first list under a five-figure strip |
+| `closingListModel.js` | (DX8) | — | The Closing zone's joins, pure: `closingKpis` and `closingRows`. The one file that changes when `GET /api/deals/closing-overview` (#6157) lands |
+| `ClosingWorkspace.jsx` | DX17 to DX26 · the closing workspace (D6866, #6866) | `/deals/closing?deal=<id>` | WORKSPACE. One deal's Checklist, Paper, Conditions, Transfer and Audit tabs, rendered by `ClosingZone.jsx` when `?deal=` is set; the checklist item side sheet; the before-close rules. Every read is a route main serves, scoped at the route |
+| `closingWorkspaceModel.js` | (DX17 to DX26) | — | The workspace's pure rules: status words and glyphs, Overdue, condition order, the transfer hold, the Audit merge, the close rules and the side sheet's patch. Read by `ClosingWorkspace.jsx` and its test |
 
 ## The rule for adding to this folder
 
 One file per artboard, named `<Zone>Zone.jsx`, and register it in `ZONES` in
-`frontend/src/workspaces/investor/InvestorDealsRoutes.jsx`. A slug that is not
-in that registry falls through to `pages/investor/InvestorDealsWorkspace.jsx`,
-which is what shipped before the artboards and still serves the bucket root at
-`/deals` where all four sections stack.
+`frontend/src/workspaces/investor/InvestorDealsRoutes.jsx`. Every zone the shell
+config lists (`screening`, `commit`, `closing`) is in that registry, so a zone
+route always renders its own file; there is no fall-through (#6152).
 
 **The chip and ops rows are declared, not written here.**
 `workspaces/investorZoneFilters.js` and `workspaces/investorZoneActions.js`

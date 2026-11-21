@@ -191,10 +191,11 @@ test('one list of sources, read by both the board and the backlog count', () => 
   // shared predicate, and that predicate still keeps a closed under_review
   // row out of the count.
   const moderationLane = SOURCES.slice(
-    SOURCES.indexOf("key: 'moderation'"),
-    SOURCES.indexOf("key: 'kyc'"),
+    // D5879: a source names its lane as `...studioSource('<key>')`.
+    SOURCES.indexOf("...studioSource('moderation')"),
+    SOURCES.indexOf("...studioSource('kyc')"),
   );
-  assert.ok(moderationLane.includes("key: 'moderation'"), 'the moderation lane left the shared list');
+  assert.ok(moderationLane.includes("...studioSource('moderation')"), 'the moderation lane left the shared list');
   const awaitingUses = moderationLane.match(/\+ MODERATION_AWAITING_SQL/g) || [];
   assert.equal(
     awaitingUses.length,

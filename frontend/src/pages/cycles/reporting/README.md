@@ -8,6 +8,7 @@ Grow's Reporting desk, Duties and one report, from the owner's canvas "Reporting
 | `builderModel.js` | The builder's and the sent report's rules over part 3's routes (D1059): values (never 0 for a missing one), source chips, figures by module, readiness, the Accept rule for Eadwyn's lines (#2431), recipients, Send's lines and refusals, the revision strip and the report's address |
 | `DeskBlocks.jsx` | Due next, Needs you, the calendar (one tab stop, arrow keys, View as table), Duties and its drawer (the shared `Sheet`, D1317). They read nothing themselves |
 | `ReportingDialogs.jsx` | The in-page dialogs: Give an expected date, Reminder settings, Send and Correct, each keeping its refusal |
+| `printing/` | #6094: the isolated light print document, native print control and audience-safe frozen projection |
 | `ReportPage.jsx` | One report: the four-step builder for a draft (founders only), and the sent report with Correct, read only for anyone else the Worker admits |
 
 **Adding to it:** a number comes from a Worker read, never from the page; a figure with no value is a dash with the Worker's reason. The page sends choices (in or out, a reason, a share), never a figure's value, except the founders' own typed figures. Who may write is the Worker's `can_write` (the desk) or `view: 'team'` (a report), never the role alone. A change opens a dialog in the page; never a browser pop-up.

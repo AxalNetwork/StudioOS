@@ -107,6 +107,8 @@ function fixture(entries: number) {
            CREATE TABLE portfolio_positions (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, fund_id INTEGER);`);
   db.exec(file('237'));
   db.exec(file('202611092215')); // D4642: the route reads revision and updated_by
+  db.exec(file('202611150140')); // D6202: the lifecycle columns and states
+  db.exec(file('202611152342')); // D6216: originating ask link
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(ADMIN, 'admin', 'Root', 'root@example.test');
   const p = db.prepare('INSERT INTO projects (id, uid, name) VALUES (?,?,?)');
   p.run(1, 'p-1', 'One');
@@ -217,11 +219,23 @@ test('an outstanding promise can be asked for directly, however deep the history
 // 7 ───────────────────────────────────────────────────────────────────────────
 test('a failed figures read says Unreadable; it does not report an empty ledger', async () => {
   const db = fixture(10);
-  // The page read and the figures read are separate statements. Dropping the
-  // table makes both fail; the response must not then claim zero support.
-  db.exec('DROP TABLE portfolio_support_entries');
-  const res = await get(db, '');
+  // The page read and the figures read are separate statements. Only the
+  // figures fail here (#5847: a failed entries read answers 503 instead, see
+  // portfolio_unreadable_reads_5847.test.ts); the response must not then claim zero support.
+  const real = d1Over(db) as any;
+  const refuse = () => Promise.reject(new Error('synthetic read failure'));
+  const DB = { ...real, prepare: (sql: string) => {
+    if (!/GROUP BY s\.(project_id|kind)/.test(sql)) return real.prepare(sql);
+    const stmt: any = { bind: () => stmt, all: refuse, first: refuse, run: refuse };
+    return stmt;
+  } };
+  const token = await new SignJWT({ user_id: ADMIN, role: 'admin' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const r = await app.fetch(new Request('http://t/api/portfolio-support', { headers: { Authorization: `Bearer ${token}` } }),
+    { JWT_SECRET, ENVIRONMENT: 'development', DB } as any, ctx as any);
+  const res = { status: r.status, body: await r.json() as any };
   assert.equal(res.status, 200, 'the ledger still answers');
+  assert.equal(res.body.entries.length, 10, 'with the entries it could read');
   assert.equal(res.body.totals, null, 'with no figures at all rather than zeros');
   assert.match(res.body.totals_reason, /^Unreadable/);
   assert.equal(res.body.page_state, 'unreadable');
@@ -371,6 +385,8 @@ test('a ledger whose every entry is untimed reports no hours and counts them all
            CREATE TABLE portfolio_positions (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, fund_id INTEGER);`);
   db.exec(file('237'));
   db.exec(file('202611092215')); // D4642: the route reads revision and updated_by
+  db.exec(file('202611150140')); // D6202: the lifecycle columns and states
+  db.exec(file('202611152342')); // D6216: originating ask link
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)').run(ADMIN, 'admin', 'Root', 'root@example.test');
   db.prepare("INSERT INTO projects (id, uid, name) VALUES (1, 'p-1', 'One')").run();
   const ins = db.prepare(`INSERT INTO portfolio_support_entries

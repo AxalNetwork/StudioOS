@@ -26,7 +26,6 @@ const ARTWORK = new Map([
   ['raise_cap_table', 'tool-captable'],
   ['raise_data_room', 'tool-capital'],
   ['raise_capital_relationships', 'tool-capital'],
-  ['scored_opportunities', 'tool-scoring'],
 ]);
 
 function ArtifactCover({ mod }) {

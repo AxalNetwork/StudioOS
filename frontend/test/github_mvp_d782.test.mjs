@@ -6,11 +6,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import MvpFromGithub from '../src/pages/cycles/MvpFromGithub.jsx';
+import { partElement } from './_buildParts.mjs'; // #5507: this provider's line only; the full list is build_parts_contract_5507's
 import { mustHaveView, pullHref, pullNumber, releaseCheckView, releaseChecksCount, releaseHref } from '../src/pages/cycles/mvpGithub.js';
 
 const h = React.createElement;
@@ -99,7 +99,9 @@ test('the words, alone: a link out only to a pull request or release page on git
 
 test('Build draws the part on Prototype / MVP', () => {
   // Mutation checked: drop the 'prototype-mvp' part → this fails.
-  // D1311: Build's parts live in buildParts.jsx, one line per connector.
-  const route = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
-  assert.ok(route.includes("['github', (data) => <MvpFromGithub github={data?.parts?.github} />],"));
+  // D1311: Build's parts live in buildParts.jsx, one line per connector; read through its export (#5507).
+  const github = { state: 'ok' };
+  const el = partElement('prototype-mvp', 'github', { parts: { github } });
+  assert.equal(el.type, MvpFromGithub);
+  assert.deepEqual(el.props, { github });
 });

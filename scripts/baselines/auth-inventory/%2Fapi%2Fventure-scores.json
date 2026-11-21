@@ -2,31 +2,36 @@
   "GET /api/venture-scores/:projectId": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_venture_scores_d4570.test.ts",
+    "note": "The venture's founder, an accepted owner or co-founder, an Operating Partner or Admin (every venture, by D1256), or an advisor the founder shared it with (read-only, no analyst note) reads it. Another venture's founder, an advisor with no share or a share switched off, a removed co-founder, a roster advisor and an investor by venture id get 403 naming nothing; no credentials or a disabled founder get 401."
   },
   "GET /api/venture-scores/:projectId/sharing": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_venture_scores_d4570.test.ts",
+    "note": "Only the venture's founders (the founder entity, an accepted owner or co-founder) read who sees its scorecard. Operating Partners, Admins, the shared advisor, a removed co-founder and another venture's founder get 403 naming nothing."
   },
   "GET /api/venture-scores/:projectId/trajectory": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
-  },
-  "GET /api/venture-scores/deal/:dealId": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_venture_scores_d4570.test.ts",
+    "note": "The venture's founders, Operating Partners and Admins read it; staff reads are logged. Any advisor, a removed co-founder, an investor and another venture's founder get 403 naming nothing."
   },
   "POST /api/venture-scores/:projectId/corrections": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_venture_scores_d4570.test.ts",
+    "note": "Only the venture's founders ask to correct an input; Operating Partners, Admins, the shared advisor, a removed co-founder, an investor and another venture's founder get 403 with a valid body, and no correction or log row is written."
   },
   "POST /api/venture-scores/:projectId/recompute": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_venture_scores_d4570.test.ts",
+    "note": "The venture's founders, Operating Partners and Admins re-score it; any advisor, a removed co-founder, an investor and another venture's founder get 403 and no score row is written."
   }
 }

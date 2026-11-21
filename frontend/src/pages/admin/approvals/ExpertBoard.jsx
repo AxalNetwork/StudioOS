@@ -25,22 +25,6 @@ import Sheet from '../../../ui/Sheet.jsx';
 
 const CRUMB = boardCrumb('Wellbeing experts');
 const NEW_PILL = { label: 'New lane', tone: 'held' };
-export const EXPERT_READ_PAGES = 5;
-
-/** Every expert on the review read, two hundred a page, up to a thousand. */
-export async function readAllExperts(client = approvalBoardsApi) {
-  let items = [];
-  let total = null;
-  for (let page = 0; page < EXPERT_READ_PAGES; page += 1) {
-    const reply = await client.experts({ state: 'all', limit: 200, offset: page * 200 });
-    const got = Array.isArray(reply?.items) ? reply.items : [];
-    items = items.concat(got);
-    total = Number.isFinite(Number(reply?.total)) ? Number(reply.total) : null;
-    if (total === null || items.length >= total || !got.length) break;
-  }
-  return { items, total };
-}
-
 const today = () => new Date().toISOString().slice(0, 10);
 const expiredOn = (c) => (c?.expires_on && c.expires_on < today() ? c.expires_on : null);
 
@@ -185,15 +169,22 @@ export default function ExpertBoard({ at }) {
   const b = BOARDS['wellbeing-experts'];
   const loc = useLocation();
   const navigate = useNavigate();
-  const read = useLoad(() => readAllExperts(), 'experts', { what: 'approvals:wellbeing' });
-  const [page, setPage] = useState(0);
+  const summary = useLoad((signal) => approvalBoardsApi.expertSummary({ signal }), 'experts-summary', { what: 'approvals:wellbeing:summary' });
+  const [paging, setPaging] = useState(null);
   const [done, setDone] = useState(null);
   const tab = EXPERT_TABS.find((t) => t.key === at.tab) || EXPERT_TABS[0];
+  const page = paging?.tab === tab.key ? paging.page : 0;
+  const setPage = (next) => setPaging({ tab: tab.key, page: next });
+  const read = useLoad((signal) => approvalBoardsApi.experts({ tab: tab.key, limit: PAGE, offset: page * PAGE, signal }),
+    `experts-${tab.key}-${page}`, { what: 'approvals:wellbeing:page' });
   const board = read.status === 'ready' ? expertBoard(read.reply, tab.key) : null;
-  const verifyBoard = read.status === 'ready' ? expertBoard(read.reply, 'verify') : null;
+  const counts = summary.status === 'ready' ? summary.reply?.counts : null;
   const from = at.item ? (loc.state?.from || tabPath('wellbeing-experts', 'verify')) : loc.pathname;
-  const count = (k) => (read.status === 'loading' ? { kind: 'load' } : !board ? { kind: 'dash', tip: 'The experts could not be read.' }
-    : board.partial ? { kind: 'dash', tip: `Counted over the first ${board.read} of ${board.total ?? 'an unknown number of'} experts.` } : { kind: 'num', value: nf(board.counts[k]) });
+  const count = (key) => {
+    if (summary.status === 'loading') return { kind: 'load' };
+    return Number.isSafeInteger(counts?.[key]) ? { kind: 'num', value: nf(counts[key]) }
+      : { kind: 'dash', tip: 'The expert counts could not be read.' };
+  };
   // Literal paths, so the reachability walk finds every tab.
   const tabs = (
     <>
@@ -204,23 +195,26 @@ export default function ExpertBoard({ at }) {
       <HeaderTab to="/admin/approvals/wellbeing-experts/hidden" count={count('hidden')} data-testid="experts-tab-hidden">Hidden</HeaderTab>
     </>
   );
-  const decided = (line) => { setDone(line); read.reload(); };
+  const reload = () => { summary.reload(); read.reload(); };
+  const decided = (line) => { setDone(line); setPage(0); reload(); };
   const own = useBoardOwners('wellbeing-experts', setDone);
   const pick = useBoardPick(`${tab.key}|${page}`);
-  const strip = boardStrip({ status: read.status, label: 'Needs verification', total: verifyBoard && !verifyBoard.partial ? verifyBoard.counts.verify : null,
-    rows: verifyBoard ? verifyBoard.rows : [], complete: !!verifyBoard && !verifyBoard.partial, owners: own.owners, noun: 'experts' });
-  const rows = board ? board.rows.slice(page * PAGE, page * PAGE + PAGE) : [];
+  const rows = board?.rows ?? [];
+  const waitingRows = tab.key === 'verify' && page === 0 ? rows : [];
+  const waiting = Number.isSafeInteger(counts?.verify) ? counts.verify : null;
+  const strip = boardStrip({ status: summary.status, label: 'Needs verification', total: waiting,
+    rows: waitingRows, complete: waiting !== null && waiting === waitingRows.length, owners: own.owners, noun: 'experts' });
   const decidedTab = tab.key === 'verified' || tab.key === 'declined';
   return (
     <div className="flex flex-col gap-5" data-testid="approvals-board-wellbeing-experts">
       <AdminPageHeader crumb={CRUMB} title={b.title} pills={[NEW_PILL]} line={b.line} scope tabs={tabs} data-testid="approvals-board-header" />
-      <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { read.reload(); setDone(null); }} />
+      <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { reload(); setDone(null); }} />
       <BoardStrip cells={strip} testId="experts-strip" />
+      {summary.status === 'error' ? <Failed what="The expert counts" onRetry={summary.reload} testId="experts-summary-failed" /> : null}
       {read.status === 'error' ? <Failed what="The experts" onRetry={read.reload} testId="experts-failed" />
         : read.status === 'loading' ? <Skeleton.Text lines={4} />
           : (
             <>
-              {board.partial ? <p className={`m-0 ${SUB}`} data-testid="experts-partial">{`This list is the first ${board.read} of ${board.total ?? 'an unknown number of'} experts, so the counts are not drawn.`}</p> : null}
               {board.rows.length ? (
                 <section className={`${CARD} flex flex-col`} data-testid="experts-table">
                   <div className="relative overflow-x-auto">
@@ -268,7 +262,7 @@ export default function ExpertBoard({ at }) {
                     )}
                   </div>
                   {tab.key === 'verify' ? <BoardBulkBar pick={pick} rows={rows} onAssign={(picked) => own.assign(picked.map((r) => ({ id: r.id, name: r.name })))} testId="experts-bulk" /> : null}
-                  <Pager page={page} total={board.rows.length} onPage={setPage} testId="experts-pager" />
+                  <Pager page={page} total={board.total} onPage={setPage} testId="experts-pager" />
                 </section>
               ) : <p className={`m-0 ${SUB}`} data-testid="experts-empty">{`No expert is in ${tab.label}.`}</p>}
             </>

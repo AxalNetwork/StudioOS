@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 Report Questions · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Grow · Reporting · Report questions · #6096 · addendum to Reporting (RPT22–RPT26)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Questions on a sent report — an investor asks about a figure or the whole report, the founders answer in one place</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An investor who received a sent report opens it in the 640 reader on /portfolio/companies/:uid/reports (full screen on a phone) and asks a Question about one figure or the whole report; the founders see every question on the sent report at /grow/reporting/:id and as rows on the desk’s Needs you, and reply there. The word is Question, never Ask: “Ask for this report” already chases a late period. Drawn with the brief’s picks: questions are private to the asking investor and the venture’s founders, kept in a new store, stay on the revision they were asked on, and admins, advisors and partners read them read-only. Nothing posts before a press; Eadwyn only proposes wording and never sends. The founder side reuses the Grow v2 shell, the investor side the Portfolio v2 shell. States follow Platform States (Unavailable on screen as “could not be read”). Violet dashed ◇ tags mark backend work for #6096 (no question store exists on main); amber ⚑ tags mark the owner’s pending picks. Board ids GRQ22–GRQ27 map to the Reporting canvas’s RPT22–RPT26.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Lumen Robotics], [Harbor Capital], [Axal VC Fund I], [Kestrel Angels], [Dana Ruiz], [Priya Shah], [Leo Grant], [Maya Lind] and every bracketed figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 Report Questions Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GRQ22', 'Reader · question on a figure (RPT22)', 'The RPT11 reader with a 44px “Question about this figure” link on every figure row. It opens an inline composer under the row: what it is about (figure, period, value, source, as-of), a 600-character box, the privacy line, Cancel and Send question. Customers already carries “1 question”. Eadwyn on the rail rewords the investor’s text to name the figure and period; accept, edit or discard.', [F('GRQ22', false, 1920)]],
+      ['GRQ22a', 'Reader · whole report and the thread (RPT22a)', '“Your questions” under “What was left out, and why”: each with its subject, date and pill (◷ Sent · not yet read, ● Read, ✓ Answered, – Withdrawn), the founder’s reply with their name, and Withdraw on unanswered ones. “Ask about the whole report” opens the same composer. Then the withdraw dialog and its result.', [F('GRQ22a', false, 2060), C('GRQ22w', 'Withdraw · in-page dialog and result', 1280, 409)]],
+      ['GRQ22b', 'Reader · none yet (RPT22b)', '“You have not asked about this report.” One action, Ask about the whole report, plus the per-figure links.', [F('GRQ22b', false, 1420)]],
+      ['GRQ23', 'Founder · sent report with questions (RPT23)', 'RPT6 with a Questions section above the frozen report: one card per question with the investor, subject, date and state (● Unread, ◷ Open, ✓ Answered, – Withdrawn). Reply opens a 1,200-character box named for the replying founder; replies are never edited. Frozen figures with a question carry a chip that jumps to it. Eadwyn drafts a reply citing the report’s own source and as-of, and marks the claim to check.', [F('GRQ23', false, 2000)]],
+      ['GRQ23a', 'Founder · Needs you with question rows (RPT23a)', 'The desk keeps its order — late and missing, then “? Asked” requests — and adds Question rows after them with an Unread or Open pill and Open and reply. The count chip counts every row (4). NEEDS_YOU_LINE stays.', [F('GRQ23a', false, 900)]],
+      ['GRQ23b', 'Founder · no questions (RPT23b)', '“No investor has asked about this report.” No action. Needs you shows no question row and no 0.', [C('GRQ23b', false, 1340, 329)]],
+      ['GRQ24', 'States (RPT24)', 'Loading on both sides with the frozen report still drawn; a Not recorded figure that can still be asked about; questions unreadable (“This is not a claim that nobody asked”); refused for an admin, advisor or partner (read-only), a support session and a non-recipient; saving and a failed privacy check that keeps the text; withdrawn while the founder replied; a corrected report linking to questions on revision 1.', [C('GRQ24', false, 1440, 1259)]],
+      ['GRQ25', 'Phone 390 · investor (RPT25)', 'The reader full screen under “‹ Reports”, figure rows with their links, Your questions, and Ask about the whole report pinned. The composer opens as a full-screen sheet with Send question pinned.', [P('GRQ25', 'Reader'), P('GRQ25s', 'Composer sheet')]],
+      ['GRQ25a', 'Phone 390 · founder (RPT25a)', 'The desk with question rows in Needs you, the sent report’s Questions as cards, and the reply sheet with Eadwyn’s draft above the box (Accept / Edit / Discard) and Send reply pinned.', [P('GRQ25a', 'Desk · Needs you'), P('GRQ25b', 'Sent report · Questions'), P('GRQ25r', 'Reply sheet')]],
+      ['GRQ26', 'Dark (RPT26)', 'GRQ22a and GRQ23 on the dark tokens; pills keep their words and glyphs.', [F('GRQ26', 'Reader · thread · dark', 2060), F('GRQ26b', 'Founder · sent report · dark', 2000)]],
+      ['GRQ27', 'Handoff', 'What was checked on main, the store, reads, writes, events, notifications, privacy check and deep links the build needs, the owner’s pending picks, frontend-only work, open questions and accessibility.', [W('GRQ27')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

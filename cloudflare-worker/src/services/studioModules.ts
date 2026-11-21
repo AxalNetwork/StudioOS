@@ -105,7 +105,7 @@ export const CYCLE_PURPOSE: Readonly<Record<string, string>> = {
   'grow/distribution': 'Channels, and what they brought.',
   'grow/revenue-and-traction': 'MRR and paying customers, from your tools.',
   'grow/team-expansion': 'Roles open and filled.',
-  'grow/partner-network': 'Partners signed and in talks.',
+  'grow/partner-network': 'Partners by stage and the revenue they bring.',
   'grow/market-expansion': 'Markets served and entering.',
   'grow/durable-company-building': 'The checklist for a lasting company.',
 };
@@ -143,10 +143,16 @@ export const STUDIO_MODULES: readonly StudioModule[] = [
   { key: 'deal_lifecycle', profile: 'investor', title: 'Deal lifecycle', group: 'investor', purpose: 'Deals by stage. Read-only here.', href: null, reads: ['/api/dashboard/investor-lifecycle'], default_size: '1/2' },
   // The canvas draws this locked to Investor Pro; `/api/dashboard` is not behind a paywall, so it is not locked (D1418).
   // D4623: its scores are the retired matching engine's (D378), historical and never recalculated; the title says so.
-  { key: 'scored_opportunities', profile: 'investor', title: 'Historical match scores', group: 'investor', purpose: 'Historical scores from the retired matching engine, as recorded.', href: null, reads: ['/api/dashboard'], default_size: '1/2' },
   { key: 'quick_stats', profile: 'investor', title: 'Quick stats', group: 'investor', purpose: 'Your flow, watchlist and commitments.', href: null, reads: ['/api/dashboard', '/api/dashboard/investor-lifecycle'], default_size: '1/2' },
   { key: 'portfolio_glance', profile: 'investor', title: 'Portfolio glance', group: 'investor', purpose: 'Companies, invested and returns.', href: null, reads: ['/api/positions/analytics'], default_size: '1/2' },
   { key: 'upcoming_events', profile: 'investor', title: 'Upcoming events', group: 'investor', purpose: 'Events you are going to.', href: null, reads: ['/api/calendar/events'], default_size: '1/2' },
+  // D6129 (#6129, canvas D6126 SM17, SM18): #6132's two keys, drawn to the canvas. The key stays `fund_commitment`, so saved layouts keep it.
+  { key: 'fund_commitment', profile: 'investor', title: 'Funds', group: 'investor', purpose: 'Committed, called, received, due and uncalled per fund.', href: null, reads: ['/api/funds/lp-portal'], default_size: 'full' },
+  { key: 'needs_you', profile: 'investor', title: 'Needs you', group: 'investor', purpose: 'Money due, things to sign and Trust requirements.', href: null, reads: ['/api/funds/lp-portal', '/api/fund-notices/mine', '/api/fund-booklets/mine', '/api/trust/me', '/api/notifications/unread-count'], default_size: 'full' },
+  // D6129 (SM19 to SM21): the three new modules, on reads that exist. Thesis fit reads the flow and the fit read under /api/deals, so a plan below Investor Pro locks it (lockOf).
+  { key: 'returns', profile: 'investor', title: 'Returns', group: 'investor', purpose: 'IRR, TVPI, MOIC and DPI for your book, gross.', href: null, reads: ['/api/positions/analytics'], default_size: '1/2' },
+  { key: 'thesis_fit', profile: 'investor', title: 'Thesis fit on live deals', group: 'investor', purpose: 'Your thesis against the deals in your flow.', href: null, reads: ['/api/deals/flow', '/api/deals/fit'], default_size: '1/2' },
+  { key: 'arrivals', profile: 'investor', title: 'Arrivals', group: 'investor', purpose: 'Founder updates, fund reports and deals offered.', href: null, reads: ['/api/portfolio-updates/latest', '/api/funds/lp-portal', '/api/dashboard'], default_size: '1/2' },
   // Advisor — AdvisorStudioHome.jsx
   { key: 'today', profile: 'advisor', title: 'Today', group: 'advisor', purpose: 'Your sessions today, and your open slots.', href: null, reads: ['/api/advisors/me/bookings', '/api/calendar/events'], default_size: '1/2' },
   { key: 'storefront', profile: 'advisor', title: 'Storefront', group: 'advisor', purpose: 'How members find you, and whether you are published.', href: null, reads: ['/api/advisors/me'], default_size: '1/2' },
@@ -177,13 +183,16 @@ export const STUDIO_DEFAULTS: Record<StudioProfile, ReadonlyArray<{ key: string;
     { key: 'eadwyn_questions', size: '1/2' },
     { key: 'lab_tools', size: '1/2' },
   ],
+  // D6129 (#6129): D6126's default under the owner's pick A on question 1. Quick stats and Portfolio glance stay placeable; Historical match scores is retired (#6622).
   investor: [
+    { key: 'needs_you', size: 'full' },
+    { key: 'fund_commitment', size: 'full' },
+    { key: 'returns', size: '1/2' },
+    { key: 'thesis_fit', size: '1/2' },
+    { key: 'arrivals', size: '1/2' },
+    { key: 'upcoming_events', size: '1/2' },
     { key: 'usage_quota', size: '1/2' },
     { key: 'deal_lifecycle', size: '1/2' },
-    { key: 'scored_opportunities', size: '1/2' },
-    { key: 'quick_stats', size: '1/2' },
-    { key: 'portfolio_glance', size: '1/2' },
-    { key: 'upcoming_events', size: '1/2' },
   ],
   advisor: [
     { key: 'today', size: '1/2' },

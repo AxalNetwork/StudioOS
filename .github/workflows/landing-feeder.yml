@@ -1,0 +1,80 @@
+name: Feed the merge queue
+
+on:
+  schedule:
+    - cron: '4-59/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Eligible pull request number to queue
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: studioos-landing-feeder
+  cancel-in-progress: false
+
+jobs:
+  feed:
+    name: Feed the merge queue
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      github.run_attempt == 1 && vars.LANDING_AUTO == 'true' &&
+      (vars.LANDING_BOT_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' && vars.LANDING_BOT_ENABLED == 'dispatch'))
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+      checks: read
+    env:
+      LANDING_AUTO: ${{ vars.LANDING_AUTO }}
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_FEED_PER_SWEEP: ${{ vars.LANDING_BOT_FEED_PER_SWEEP }}
+      LANDING_BOT_DAILY_FEEDS: ${{ vars.LANDING_BOT_DAILY_FEEDS }}
+      LANDING_BOT_QUEUE_FAIL_BREAKER: ${{ vars.LANDING_BOT_QUEUE_FAIL_BREAKER }}
+      FEED_PR: ${{ inputs.pr }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Select eligible PRs
+        id: plan
+        env:
+          # The landing App's login (`<slug>[bot]`): its keeper merges then count as no-model (owner, 2026-11-17).
+          LANDING_BOT_LOGIN: ${{ vars.LANDING_BOT_LOGIN }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/landing-bot/feeder.mjs plan
+      - name: Reserve daily queue slots
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.reservation }}
+          path: ${{ runner.temp }}/landing-feed-plan.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Get queue installation token
+        if: steps.plan.outputs.slots != '0'
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-pull-requests: write
+          permission-contents: write
+      - name: Recheck and queue each selected commit
+        if: steps.plan.outputs.slots != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FEED_APP_TOKEN: ${{ steps.app.outputs.token }}
+        run: node scripts/landing-bot/feeder.mjs apply

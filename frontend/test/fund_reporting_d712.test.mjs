@@ -88,11 +88,11 @@ test('the client calls only the queue\'s routes, and the screens follow the admi
   assert.match(period, /A Super Admin issues this period\./);
   assert.match(period, /The fund&apos;s GP of record issues this period\./);
   assert.match(period, /Build this quarter&apos;s pack/);
-  assert.match(period, /\{!admin && <button type="button" disabled=\{pending\} onClick=\{\(\) => setConfirm\(true\)\}>Issue<\/button>\}/, 'an admin has no Issue button on the period');
+  assert.match(period, /\{!admin && <button type="button" disabled=\{pending\} onClick=\{\(\) => \{ if \(validate\(\)\) setConfirm\(true\); \}\}>Issue<\/button>\}/, 'an admin has no Issue button on the period');
   // LPReportingPage.jsx was removed with /lp-reports (owner, 2026-10-20), and
   // with it the last client of the unqueued publish.
   assert.doesNotMatch(src('lib/api.js'), /lpReportPublish/);
   const workspace = src('pages/SpinoutLabLpWorkspacePage.jsx');
   assert.doesNotMatch(workspace.slice(workspace.indexOf('const generateReport'), workspace.indexOf('const kpis')), /issuedAt: new Date\(\),/, 'an issued period never prints today');
-  assert.match(workspace, /fundReportingApi\.read\(draft\.uid\)/, "an admin's live draft opens through the audited read");
+  assert.match(src('pages/investor/fund/GpReportDesk.jsx'), /fundReportingApi\.read\(draft\.uid\)/, "an admin's live draft opens through the audited read");
 });

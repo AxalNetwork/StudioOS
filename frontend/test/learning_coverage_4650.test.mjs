@@ -76,7 +76,8 @@ test('3. the view: loading, Unreadable, empty, and the table', () => {
   assert.match(ready, /Course i2<\/a><span[^>]*> \(program members only\)<\/span>/);
   assert.match(ready, /data-testid="coverage-stage-founder"[^>]*>1 without a stage recorded/);
   assert.match(ready, /data-testid="coverage-unknown-advisor"[^>]*>1 course</);
-  assert.match(ready, /data-testid="coverage-unknown-partner"[^>]*><span[^>]*>Not recorded<\/span>/);
+  // D5129: the shared Not recorded chip draws an aria-hidden dash glyph before its word.
+  assert.match(ready, /data-testid="coverage-unknown-partner"[^>]*><span[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not recorded<\/span>/);
   const pills = [['founder', 'Published'], ['investor', 'Not reachable'], ['advisor', 'Unknown'], ['partner', 'Missing']];
   for (const [journey, label] of pills) {
     const row = ready.slice(ready.indexOf(`coverage-row-${journey}`)).split('</tr>')[0];

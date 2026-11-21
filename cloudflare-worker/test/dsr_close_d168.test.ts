@@ -22,6 +22,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from './_admin_security_source.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -38,7 +39,7 @@ import {
 
 const root = process.cwd();
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
-const SECURITY = read('cloudflare-worker/src/routes/admin_security.ts');
+const SECURITY = readAdminSecurity();
 const SETTINGS = read('cloudflare-worker/src/routes/settings.ts');
 const SERVICE = read('cloudflare-worker/src/services/dsrRequests.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/272_dsr_requests.sql');

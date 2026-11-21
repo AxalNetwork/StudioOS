@@ -6,28 +6,27 @@
 // that does listen would run on a branch nobody reviewed.
 //
 // The required checks are the owner's ruleset "main: required checks"
-// (2026-11-02, on #4107). When the ruleset changes, change REQUIRED here.
+// (2026-11-02, on #4107). REQUIRED lives in scripts/lib/requiredChecks.mjs
+// (#5973) because the CI scorecard reads it too; change it there.
 //
 // Run with:
 //   node --test frontend/test/merge_queue_ci_4107.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { REQUIRED } from '../../scripts/lib/requiredChecks.mjs';
 const DIR = '.github/workflows';
-const REQUIRED = Object.freeze({
-  'test:drift (full suite)': 'ci.yml',
-  'worker (typecheck)': 'ci.yml',
-  'frontend (build)': 'ci.yml',
-  'api ↔ worker drift': 'ci.yml',
-  'applied migrations unchanged': 'migration-immutability.yml',
-  scan: 'gitleaks.yml',
-});
 const SHADOW = Object.freeze({ 'landing gate': 'ci.yml' });
 // The only workflows the queue runs. Adding one here is a decision: nothing in
 // a queue run may deploy, post a comment or touch production.
-const IN_QUEUE = Object.freeze(['ci.yml', 'gitleaks.yml', 'migration-immutability.yml']);
+// D7899: Dependency Review also runs in the queue, comparing the queue's own
+// base and head; it reads only and is advisory until its required-check
+// activation, so its job is exempt from the skip-in-queue rule below.
+const IN_QUEUE = Object.freeze(['ci.yml', 'dependency-review.yml', 'gitleaks.yml', 'migration-immutability.yml']);
+const ADVISORY_QUEUE_WORKFLOWS = Object.freeze({ 'dependency-review.yml': 'D7899' });
 
 const code = (file) => readFileSync(`${DIR}/${file}`, 'utf8').split('\n').filter((l) => !/^\s*#/.test(l));
 const unquote = (v) => v.trim().replace(/^(['"])(.*)\1$/, '$2');
@@ -72,16 +71,30 @@ function jobs(lines) {
 // a job whose need failed is SKIPPED by default, and a skipped required check
 // reports as passed. Both aggregators use `if: always()` so their own steps can report failure.
 const AGGREGATOR = 'test:drift (full suite)';
+const GATE_NAME = "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'test:drift (draft fast tier)' || 'test:drift (full suite)' }}";
+const DRAFT_SKIP = "github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)";
+const PLAN_IF = "${{ !cancelled() && needs.verified.outputs.run == '' && github.event_name != 'merge_group' }}";
+const queueName = job => job.id === 'gate' && job.name === GATE_NAME ? AGGREGATOR : job.name;
 
 // The forms of job-level `if:` that skip a job under merge_group.
 const SKIPS_IN_QUEUE = Object.freeze([
   "github.event_name != 'merge_group'",
+  DRAFT_SKIP,
   "github.event_name == 'pull_request'",
   "github.event_name == 'push'",
   // D5398: the failure classifier runs only after a PR's suite failed; it is a pull_request-only job, so never in the queue.
   "failure() && github.event_name == 'pull_request'",
   "always() && github.event_name == 'pull_request'",
+  // D7108 part 2: `plan` feeds the full-suite check but is skipped in the
+  // queue, where each suite part plans for itself; the gate requires that skip.
+  PLAN_IF,
 ]);
+
+// Jobs that run in the queue although no required check needs them, each with
+// why. D5608: `test-deps` merges the suite parts' traces into one artifact per
+// commit; a push that `verified` skips has none, so the queue run must make it.
+// test_tracer_5608.test.mjs keeps it advisory: neither gate needs it.
+const QUEUE_ADVISORY = Object.freeze({ 'test-deps': 'D5608' });
 
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
 
@@ -89,7 +102,7 @@ test('every required and shadow check comes from a job in its workflow, which li
   for (const [check, file] of Object.entries({ ...REQUIRED, ...SHADOW })) {
     const lines = code(file);
     assert.ok(events(lines).includes('merge_group'), `${file} gives the required check "${check}" and must listen for merge_group, or every queued PR waits forever`);
-    const matches = FILES.flatMap((f) => jobs(code(f)).filter((j) => j.name === check).map((j) => ({ ...j, file: f })));
+    const matches = FILES.flatMap((f) => jobs(code(f)).filter((j) => queueName(j) === check).map((j) => ({ ...j, file: f })));
     assert.deepEqual(matches.map((j) => j.file), [file], `"${check}" is one job's name, in ${file}`);
     const [job] = matches;
     // A skipped job reports as passed, so a required check that skips in the
@@ -119,10 +132,12 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
     const all = jobs(code(f));
     // What the required checks wait on. Such a job feeds a required check, so
     // it must RUN in the queue; the others already ran on the pull request.
-    const fed = new Set(all.filter((j) => required.has(j.name)).flatMap((j) => j.needs));
+    const fed = new Set(all.filter((j) => required.has(queueName(j))).flatMap((j) => j.needs));
     for (const j of all) {
-      if (required.has(j.name)) continue;
+      if (required.has(queueName(j))) continue;
       if (fed.has(j.id) && !SKIPS_IN_QUEUE.includes(j.if)) continue;
+      if (f === 'ci.yml' && Object.hasOwn(QUEUE_ADVISORY, j.id)) continue;
+      if (Object.hasOwn(ADVISORY_QUEUE_WORKFLOWS, f)) continue;
       assert.ok(
         SKIPS_IN_QUEUE.includes(j.if),
         `${f} › ${j.name} is not a required check and no required check needs it, so it is skipped in the queue (if: ${j.if})`,
@@ -133,15 +148,18 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
 
 test('D4130: the full-suite check passes only when every part passed, and trusts a queue run only on a push to main', () => {
   const all = jobs(code('ci.yml'));
-  const gate = all.find((j) => j.name === AGGREGATOR);
+  const gate = all.find((j) => queueName(j) === AGGREGATOR);
   const body = gate.body.join('\n');
   assert.deepEqual(gate.needs, ['verified', 'plan', 'suite']);
   // The two ways to pass, and nothing else.
   assert.match(body, /if \[ "\$EVENT" = "push" \] && \[ -n "\$VERIFIED_RUN" \] && \[ "\$SUITE" = "skipped" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
-  assert.match(body, /if \[ "\$PLAN" = "success" \] && \[ "\$SUITE" = "success" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
+  // D7108 part 2: `plan` succeeded off the queue, or was skipped in it.
+  assert.match(body, /if \{ \{ \[ "\$PLAN" = "success" \] && \[ "\$EVENT" != "merge_group" \]; \} \|\| \{ \[ "\$PLAN" = "skipped" \] && \[ "\$EVENT" = "merge_group" \]; \}; \} && \[ "\$SUITE" = "success" \]; then\n\s+if \[ "\$EVENT" = "pull_request" \] && \[ "\$DRAFT" = "true" \]; then\n\s+echo [^\n]+\n\s+else\n\s+echo [^\n]+\n\s+fi\n\s+exit 0\n\s+fi/);
   assert.match(body, /exit 0\n\s+fi\n\s+echo "::error::[^\n]+"\n\s+exit 1\s*$/, 'anything else fails');
   assert.equal((body.match(/exit 0/g) || []).length, 2, 'exactly two ways to pass');
   assert.match(body, /SUITE: \$\{\{ needs\.suite\.result \}\}/);
+  assert.match(body, /PLAN: \$\{\{ needs\.plan\.result \}\}/);
+  assert.equal(all.find((j) => j.id === 'plan').if, PLAN_IF, 'plan runs on a pull request and a push, never in the queue');
   assert.match(body, /EVENT: \$\{\{ github\.event_name \}\}/);
   assert.match(body, /VERIFIED_RUN: \$\{\{ needs\.verified\.outputs\.run \}\}/, 'the gate reads the queue run from the lookup');
   // The lookup: only a merge_group run of THIS workflow, on THIS commit, that succeeded.
@@ -158,6 +176,31 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   const suite = all.find((j) => j.id === 'suite');
   assert.equal(suite.if, "${{ !cancelled() && needs.verified.outputs.run == '' }}");
   assert.match(suite.body.join('\n'), /fail-fast: \$\{\{ github\.event_name == 'merge_group' \}\}/);
+});
+
+test('D7108 part 2: the full-suite gate, executed, needs a skipped plan in the queue and a successful one elsewhere', () => {
+  const raw = readFileSync(`${DIR}/ci.yml`, 'utf8');
+  const gate = raw.slice(raw.indexOf('\n  gate:\n'));
+  const script = gate.match(/ {8}run: \|\n((?: {10}[^\n]*\n|\n)+)/)[1].replace(/^ {10}/gm, '');
+  const verdict = (EVENT, PLAN, SUITE, VERIFIED_RUN = '', DRAFT = '') =>
+    spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, EVENT, PLAN, SUITE, VERIFIED_RUN, DRAFT } }).status;
+  for (const [event, plan, suite, status] of [
+    ['merge_group', 'skipped', 'success', 0],
+    ['merge_group', 'success', 'success', 1],
+    ['merge_group', 'skipped', 'failure', 1],
+    ['merge_group', 'skipped', 'skipped', 1],
+    ['merge_group', 'skipped', 'cancelled', 1],
+    ['merge_group', 'failure', 'success', 1],
+    ['pull_request', 'success', 'success', 0],
+    ['pull_request', 'skipped', 'success', 1],
+    ['pull_request', 'success', 'failure', 1],
+    ['push', 'success', 'success', 0],
+    ['push', 'skipped', 'success', 1],
+    ['push', 'failure', 'success', 1],
+  ]) assert.equal(verdict(event, plan, suite), status, `${event} plan=${plan} suite=${suite}`);
+  assert.equal(verdict('push', 'skipped', 'skipped', 'https://example.test/run/1'), 0, 'a push the queue already verified');
+  assert.equal(verdict('merge_group', 'skipped', 'skipped', 'https://example.test/run/1'), 1, 'only a push may rely on a queue run');
+  assert.equal(verdict('pull_request', 'success', 'success', '', 'true'), 0, 'the draft tier');
 });
 
 test('the diffing gates compare against the queue entry\'s base, never the PR\'s, under merge_group', () => {

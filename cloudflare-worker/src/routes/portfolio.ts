@@ -29,6 +29,9 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { requireFundGp } from '../services/fundGpAccess';
 import { getMemberProjectIds } from '../services/projectAccess';
 import { type Scored, healthOf, scorable } from '../services/portfolioHealthSources';
+import { raiseAttentionAlerts } from '../services/portfolioAttentionAlerts';
+import { positionScope, type PositionScope } from './positions';
+import { CHASE_SKIP_MESSAGES, type ChaseSkipReason, chaseObligation } from '../services/chaseEligibility';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -144,6 +147,11 @@ async function upsertSnapshot(env: Env, project: any): Promise<{ row: SnapRow | 
   const row = await env.DB.prepare(
     'SELECT * FROM portfolio_health_snapshots WHERE project_id = ? AND snapshot_date = ?'
   ).bind(project.id, today).first<SnapRow>();
+  // D6218: a change into Attention tells the company's holders, once. An alert that fails is logged; the recompute answers as before.
+  if (row) {
+    try { await raiseAttentionAlerts(env, project, row); }
+    catch (e) { console.warn('[portfolio] attention alert failed', e); }
+  }
   return { row: row!, scored };
 }
 
@@ -180,10 +188,34 @@ r.get('/health', async (c) => {
     // name, with the state the snapshot store is actually in for them.
     const notMeasured: Array<{ uid: string; name: string; state: string; reason: string }> = [];
     const filtered = Boolean(badge) || interventionOnly;
+    type HealthListRow = SnapRow & { previous_status: string | null; status_changed_at: string | null };
+    const snapshots = new Map<number, HealthListRow>();
+    // Use the same authorized project set as the list, in bounded batches. The schema has one snapshot per project and date.
+    for (let offset = 0; offset < projects.length; offset += 50) {
+      const ids = projects.slice(offset, offset + 50).map((p) => p.id);
+      const { results } = await c.env.DB.prepare(
+        `WITH latest_dates AS (
+           SELECT project_id, MAX(snapshot_date) AS snapshot_date
+           FROM portfolio_health_snapshots WHERE project_id IN (SELECT value FROM json_each(?)) GROUP BY project_id
+         ), latest AS (
+           SELECT h.* FROM portfolio_health_snapshots h JOIN latest_dates d
+             ON h.project_id = d.project_id AND h.snapshot_date = d.snapshot_date
+         ), previous_dates AS (
+           SELECT l.project_id, MAX(h.snapshot_date) AS snapshot_date
+           FROM latest l JOIN portfolio_health_snapshots h
+             ON h.project_id = l.project_id AND h.badge <> l.badge AND h.snapshot_date < l.snapshot_date
+           GROUP BY l.project_id
+         )
+         SELECT l.*, p.badge AS previous_status,
+           (SELECT MIN(h.snapshot_date) FROM portfolio_health_snapshots h
+            WHERE h.project_id = l.project_id AND h.snapshot_date > d.snapshot_date) AS status_changed_at
+         FROM latest l LEFT JOIN previous_dates d ON l.project_id = d.project_id
+         LEFT JOIN portfolio_health_snapshots p ON p.project_id = d.project_id AND p.snapshot_date = d.snapshot_date`
+      ).bind(JSON.stringify(ids)).all<HealthListRow>();
+      for (const row of results || []) snapshots.set(row.project_id, row);
+    }
     for (const p of projects) {
-      const row = await c.env.DB.prepare(
-        'SELECT * FROM portfolio_health_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC LIMIT 1'
-      ).bind(p.id).first<SnapRow>();
+      const row = snapshots.get(p.id);
       if (!row) {
         // Only when the caller asked for the whole portfolio: a badge filter
         // is a request for a subset, and an unscored project is in no subset.
@@ -197,7 +229,8 @@ r.get('/health', async (c) => {
       }
       if (badge && row.badge !== badge) continue;
       if (interventionOnly && !row.intervention) continue;
-      items.push({ ...snapDto(row, p), ...staleness(row.snapshot_date) });
+      items.push({ ...snapDto(row, p), ...staleness(row.snapshot_date),
+        previous_status: row.previous_status, status_changed_at: row.status_changed_at });
       if (!asOf || row.snapshot_date > asOf) asOf = row.snapshot_date;
     }
     items.sort((a, b) => (Number(b.intervention) - Number(a.intervention)) || (a.score - b.score));
@@ -416,6 +449,11 @@ async function projectTeamUserIds(env: Env, project: { id: number; founder_id: n
 // company for its update; the chase is LOGGED (migration 337) and the founder
 // is notified. The notification type's settings row is Session 4's to add;
 // notify() delivers without it (channels default on, Slack falls through).
+//
+// D7650 (#7650): a company is chased only when a reporting obligation applies
+// to it in the caller's book and its current period is due or overdue and
+// unreported (`services/chaseEligibility.ts`). Every other target is skipped
+// with a typed reason, before any chase row or notification is written.
 // ---------------------------------------------------------------------------
 
 r.get('/chases', async (c) => {
@@ -452,23 +490,42 @@ r.post('/chase', async (c) => {
       return c.json({ error: 'chase_targets_required', message: 'Name the companies to chase.' }, 400);
     }
     const visible = await visibleProjectIds(c, user);
+    const cadence = body?.cadence === 'monthly' ? 'monthly' : 'quarterly';
+    const today = new Date().toISOString().slice(0, 10);
+    // D7650: the caller's book, read once. A failed read leaves every target unreadable.
+    let scope: PositionScope | null = null;
+    let scopeRead = true;
+    try { scope = await positionScope(c, user); } catch { scopeRead = false; }
     const chased: any[] = [];
+    // `skipped` keeps its shape (the ids); `skips` says why each one was skipped.
     const skipped: number[] = [];
+    const skips: Array<{ project_id: number; reason: ChaseSkipReason; message: string; period: string | null; due_date: string | null }> = [];
+    const skipAs = (pid: number, reason: ChaseSkipReason, period: string | null = null, due_date: string | null = null) => {
+      skipped.push(pid);
+      skips.push({ project_id: pid, reason, message: CHASE_SKIP_MESSAGES[reason], period, due_date });
+    };
     for (const pid of ids.slice(0, 100)) {
-      // The tenancy gate is on the project, not on the page's overdue list.
-      if (visible != null && !visible.includes(pid)) { skipped.push(pid); continue; }
+      // The tenancy gate is on the project, not on the page's overdue list. A
+      // company outside the book reads as having no obligation in it, which
+      // says nothing about whether it exists.
+      if (visible != null && !visible.includes(pid)) { skipAs(pid, 'no_obligation'); continue; }
       const project = await c.env.DB.prepare('SELECT id, uid, name, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
         .bind(pid).first<any>();
-      if (!project) { skipped.push(pid); continue; }
+      if (!project) { skipAs(pid, 'no_obligation'); continue; }
+      const due = scopeRead
+        ? await chaseObligation(c.env, scope, Number(user.id), pid, cadence, today)
+        : { eligible: false as const, reason: 'unreadable' as const, period: null, due_date: null };
+      if (!due.eligible) { skipAs(pid, due.reason, due.period, due.due_date); continue; }
       // A repeat chase inside the hour answers the existing row rather than
-      // re-notifying the founder — a double-click is not a second ask.
+      // re-notifying the founder — a double-click is not a second ask. Both
+      // sides are normalised (D7650): `created_at` is written as ISO text.
       const recent = await c.env.DB.prepare(
         `SELECT uid, created_at FROM portfolio_update_chases
-          WHERE project_id = ? AND chased_by = ? AND created_at > datetime('now', '-1 hour')
-          ORDER BY created_at DESC LIMIT 1`
+          WHERE project_id = ? AND chased_by = ? AND datetime(created_at) > datetime('now', '-1 hour')
+          ORDER BY datetime(created_at) DESC LIMIT 1`
       ).bind(pid, user.id).first<any>();
       if (recent) {
-        chased.push({ project_id: pid, uid: recent.uid, created_at: recent.created_at, already: true });
+        chased.push({ project_id: pid, uid: recent.uid, created_at: recent.created_at, already: true, period: due.period, due_date: due.due_date });
         continue;
       }
       const uid = newUid();
@@ -476,7 +533,7 @@ r.post('/chase', async (c) => {
       await c.env.DB.prepare(
         'INSERT INTO portfolio_update_chases (uid, project_id, chased_by, created_at) VALUES (?, ?, ?, ?)'
       ).bind(uid, pid, user.id, at).run();
-      chased.push({ project_id: pid, uid, created_at: at, already: false });
+      chased.push({ project_id: pid, uid, created_at: at, already: false, period: due.period, due_date: due.due_date });
       // The founder behind the project is notified. Best-effort: the chase
       // row is the record, and a failed notify must not unwrite it.
       try {
@@ -498,7 +555,7 @@ r.post('/chase', async (c) => {
         }
       } catch (e) { console.warn('[portfolio] chase notify failed', (e as any)?.message); }
     }
-    return c.json({ chased, skipped });
+    return c.json({ chased, skipped, skips });
   } catch (e) { return mapError(c, e); }
 });
 

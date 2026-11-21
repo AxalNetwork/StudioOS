@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Comparable Prices · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Markets · #7039 · Research Markets brief 4 of 4, extends Research v2 and Market Reading</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Markets — recording a comparable price range and keeping every amount to the cent</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The comparable-price path from /research/markets (Your market readings) to /research/markets/:uid for a service provider: the readings list, Record a reading, a populated USD range, the saved detail, reopening a reading in its form, and a fresh reading. Amounts are stored as integer cents and are written with two decimals everywhere: form, saved detail, reopened form, list, export and Eadwyn summaries. $99.50 – $99.99 is never rounded or collapsed. The comparable range, the catalog price, the comparable count and the run date are four separate labels. A new run is a new record. The shell is the Research v2 shell with the union sidebar, a company switcher and Eadwyn as the one rail; one h1 and one violet primary per screen. States follow Platform States (D5129; a failed read says Unavailable). Violet dashed ◇ tags mark backend work on #7039; amber ⚑ tags mark owner questions, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · [Calder & Wren Advisory], [Halden Grid], every reading, range, count, catalog price and quote are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Markets Comparable Prices Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RMP-00', 'Journey and the cent rule', 'The clickable path frame by frame, the four labels that never merge, and the state vocabulary used.', [W('RMP00')]],
+      ['RMP-01', 'Readings list · desktop 1440', 'Your market readings on /research/markets: what it prices, scope, the comparable range to the cent, comparables, run date and age in words and shapes. Two service lines have no reading yet. Record a reading is the one primary.', [F('RMP01', false, 900)]],
+      ['RMP-02', 'Record a reading', 'The form opened from the list with blank amounts and today’s run date. The Service line picker appears only because this member has service lines; without them the reading is named by what it prices (#6279).', [F('RMP02', false, 1240), C('RMP02B', 'No service lines · free text', 1040, 504)]],
+      ['RMP-03', 'A populated USD range, saving and failure', '99.50 and 99.99 typed and sent as 9950 and 9999 cents. Save in progress locks the fields; a failed save keeps every input to the cent.', [C('RMP03', 'Populated', 1040, 557), C('RMP03B', 'Save in progress', 1040, 526), C('RMP03C', 'Save failed · inputs kept', 1040, 596)]],
+      ['RMP-04', 'Saved detail', 'Success opens the stored reading: $99.50 – $99.99 from 7 comparables, run 2026-11-16, Current, Attachable. The catalog price ($120.00) is drawn apart from the range. Age and sample in plain words. Back on Markets, the new reading leads the list.', [F('RMP04', false, 1420), C('RMP04B', 'Back on Markets', 1220, 437)]],
+      ['RMP-05', 'Reopen in its existing form', 'Opening the reading again fills the form with 99.50 and 99.99, not the 100 and 100 main fills today.', [C('RMP05', false, 1040, 508)]],
+      ['RMP-06', 'Stale reading and a fresh run', 'Fractional CFO, 138 days old: Stale, Blocked from proposals, with Record a fresh reading as the primary. The fresh form starts with both amounts blank and today’s date; the save is a new record and the old one is unchanged.', [F('RMP06', false, 1480), C('RMP06B', 'Fresh reading · amounts blank', 1040, 435), C('RMP06C', 'Saved as a new record', 1040, 225)]],
+      ['RMP-07', 'Cents, whole dollars, zero, never read', 'One money rule. $99.50 – $99.99, $4,500.00 – $6,000.00, a true $0.00 – $0.00 marked as a value, and No reading yet, never $0. Main today versus drawn, place by place.', [C('RMP07', false, 1220, 462)]],
+      ['RMP-08', 'Inline validation', 'Reversed range, missing amount, too many decimals and an invalid count. Each correction sits under its field; every input stays as typed.', [C('RMP08', false, 1280, 1024)]],
+      ['RMP-09', 'List and detail states', 'Loading, a successful empty list, a failed read with Retry (Unavailable), and the detail loading, failed and not found.', [C('RMP09', false, 1280, 397)]],
+      ['RMP-10', 'Age and sample size in plain words', 'Current to 30 days, Ageing to 90, Stale after. A thin base under 6 comparables. A stored count names no engagements and shows no demand.', [C('RMP10', false, 1220, 391)]],
+      ['RMP-11', 'Roles', 'Proposal actions only where the role and the record support them: a service provider with quotes, one without, a founder (#6279 own-record line) and an investor, for whom pricing readings are hidden (RS-17, D6273 Q2).', [C('RMP11', false, 1280, 231)]],
+      ['RMP-12', 'Export and summaries', 'CSV of your readings with 99.50 and 99.99 as written, empty cells for Not recorded, and the Eadwyn summary to the cent (◇ #7039).', [C('RMP12', false, 1220, 324)]],
+      ['RMP-13', 'Phone 390', 'The list as cards; the form with the decimal keyboard open, labels, cents, the reversed-range error and Record this reading all visible above it; the populated form; the saved detail; a fresh reading with blank amounts.', [P('RMP13A', 'A · Readings'), P('RMP13B', 'B · Error, keyboard open'), P('RMP13C', 'C · 99.50 and 99.99, keyboard open'), P('RMP13D', 'D · Saved detail'), P('RMP13E', 'E · Fresh reading')]],
+      ['RMP-14', 'Dark', 'The saved detail, the form with a decimals error and a save failure, and the phone form with a missing amount, on the dark tokens.', [F('RMP14', 'Saved detail · dark', 1420), C('RMP14B', 'Form errors · dark', 1040, 583), P('RMP14P', 'Phone · dark')]],
+      ['RMP-H', 'Handoff', 'Checked on main, preserved, frontend only, backend required (#7039), owner questions, which states use existing data, and accessibility.', [W('RMPH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

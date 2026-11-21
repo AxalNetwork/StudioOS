@@ -23,6 +23,8 @@ export const STEP_ERRORS = {
   filed_on_invalid: 'The filing date is not a calendar date.',
   filed_on_future: 'The filing date is in the future.',
   filed_on_before_payment: 'The filing date is before the order was paid.',
+  // D6686: a v2 formation case is moved on by its own engine, not by these two legacy steps.
+  case_not_legacy: 'This order belongs to a newer formation case, which these steps do not move.',
 };
 
 export const STATUS_LABEL = {

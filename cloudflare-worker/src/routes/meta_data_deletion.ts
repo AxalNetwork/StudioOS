@@ -1,4 +1,4 @@
-/** D5292: authenticated-by-signature Meta deletion callback and completion receipt. */
+/** D5292: authenticated-by-signature Meta deletion callback and completion receipt. D5859: it deletes the Grow facts too. */
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { Env } from '../types';
@@ -6,6 +6,7 @@ import { constantTimeEqual } from '../rpc/secret';
 import { metaApp, metaHmac } from '../services/meta/app';
 import { stripTrailingSlashes } from '../util/url';
 import '../integrations/providers/facebook';
+import { purgeByAccountStatements } from '../services/facebook/grow';
 
 const routes = new Hono<{ Bindings: Env }>();
 const hex = (value: ArrayBuffer) => [...new Uint8Array(value)].map(byte => byte.toString(16).padStart(2, '0')).join('');
@@ -34,6 +35,8 @@ routes.post('/', bodyLimit({ maxSize: 8192 }), async c => {
   if (!account) return c.json({ error: 'invalid_signed_request' }, 400);
   try {
     await c.env.DB.batch([
+      // D5859/D5860: the Grow facts, proposals, ledger and Page links, before the connections they name.
+      ...purgeByAccountStatements(c.env, account),
       c.env.DB.prepare("DELETE FROM integration_logs WHERE provider_key = 'facebook' AND integration_id IN (SELECT id FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?)").bind(account),
       c.env.DB.prepare("DELETE FROM integration_companies WHERE integration_id IN (SELECT id FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?)").bind(account),
       c.env.DB.prepare("DELETE FROM integrations WHERE provider_key = 'facebook' AND external_account_id = ?").bind(account),

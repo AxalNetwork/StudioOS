@@ -61,6 +61,10 @@ export const GROUPS = [
  *   isNew   one of the nine lanes this redesign adds.
  * The door's address is written as a literal link in AdminApprovals.jsx
  * (`LaneDoor`), so the reachability walk sees every one.
+ * D5880: key, label, group and scope (this list is `studio`, `HQ_LANES` is
+ * `hq`) must match the Worker's `services/approvalLaneRegistry.ts`, and each
+ * door must be a registered route; `approval_lanes_registry_5880.test.mjs`
+ * fails on any difference it does not list with a reason.
  */
 export const LANES = [
   { key: 'kyc', group: 'people', label: 'KYC', glance: 'kyc', door: 'KYC & KYB' },
@@ -366,10 +370,20 @@ export function profileChart(rows, { complete = true, now = Date.now() } = {}) {
   if (!complete) return { partial: true, bars: [], total: null, sentence: 'Not every tester could be read, so the chart is not drawn.' };
   const since = now - 84 * 24 * 3_600_000;
   const recent = (Array.isArray(rows) ? rows : []).filter((t) => { const h = hoursSince(t.applied_at, now); return h !== null && now - h * 3_600_000 >= since; });
-  const bars = PROFILES.map((p) => ({ role: p.role, label: p.label, n: recent.filter((t) => t.member?.role === p.role).length }));
-  const other = recent.length - bars.reduce((a, b) => a + b.n, 0);
+  const counts = new Map();
+  for (const row of recent) {
+    const role = row.member?.role;
+    counts.set(role, (counts.get(role) ?? 0) + 1);
+  }
+  return profileChartFromCounts(Array.from(counts, ([role, n]) => ({ role, n })));
+}
+
+export function profileChartFromCounts(counts) {
+  const byRole = new Map(counts.map(({ role, n }) => [role, n]));
+  const bars = PROFILES.map((p) => ({ role: p.role, label: p.label, n: byRole.get(p.role) ?? 0 }));
+  const total = counts.reduce((sum, row) => sum + row.n, 0);
+  const other = total - bars.reduce((sum, row) => sum + row.n, 0);
   if (other) bars.push({ role: 'other', label: 'Other', n: other });
-  const total = recent.length;
   const sentence = total
     ? `Applications to test products in the last 12 weeks: ${bars.map((b) => `${b.label.toLowerCase()} ${b.n}`).join(', ')}.`
     : 'No application to test products in the last 12 weeks.';

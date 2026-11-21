@@ -24,6 +24,7 @@ import { newVersionLine } from '../raise/narrative/narrativeModel.js';
 import { CHANNEL_KINDS, channelOptions } from './distribution/channelsModel.js';
 
 import { queueRefusal } from '../raise/dataRoomRead.js';
+import { currencyCode, plainAmount, parseMinor, toMajorString } from '../../lib/money.js';
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
@@ -366,6 +367,12 @@ const OBLIGATION_KIND = opts([['governance', 'Governance'], ['compliance', 'Comp
 const REPEATS = opts([['once', 'Once'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly']]);
 const remindField = { kind: 'CK', name: 'remind', k: 'Remind', opts: [{ value: '14', label: '14 days before', checked: true }, { value: '1', label: 'The day before', checked: true }] };
 const remindDays = (v) => (Array.isArray(v.remind) ? v.remind.map(Number).filter(Number.isInteger) : []);
+// D6790 (#6790, GR-23): the owner is picked from the company team that Durable's form-options lists as `owners`.
+const ownerField = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [{ value: NONE, label: 'No one yet' }], def: 0, optionsFrom: 'owners' };
+/** D6790: the owner listbox's choices — No one yet, then the company team. */
+export function obligationOwnerOptions(read) {
+  return { owner_user_id: { opts: [{ value: NONE, label: 'No one yet' }, ...growChips(read?.owners)] } };
+}
 const obligation = {
   key: 'obligation', cta: 'Add obligation', button: 'Add obligation',
   title: 'Add obligation',
@@ -376,11 +383,12 @@ const obligation = {
     { kind: 'CH', name: 'kind', k: 'Kind', opts: OBLIGATION_KIND, def: 0, required: true },
     // The route refuses an obligation without a date (#1696).
     { kind: 'T', name: 'due_at', k: 'Due', input: 'date', ph: '12 Dec', required: true },
-    { kind: 'T', name: 'owner_name', k: 'Owner', ph: 'Name', max: 120 },
+    ownerField,
     { kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 2 },
     remindField,
   ],
-  toBody: (v) => ({ title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v) }),
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'durable-company-building').then(obligationOwnerOptions),
+  toBody: (v) => ({ title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_user_id: str(v.owner_user_id), repeats: v.repeats || null, remind_days: remindDays(v) }),
   submit: (w, projectId, v) => w.grow.obligation(projectId, obligation.toBody(v)),
 };
 
@@ -459,16 +467,20 @@ const INVESTOR_TYPE = opts([['angel', 'Angel'], ['pre_seed_fund', 'Pre-seed fund
 const LIVE = 'live';
 const BLANK = 'blank';
 const VERSION = 'version-';
+const DECK = 'deck-';
 /**
  * Start from (NAR11): each saved version, newest first; the Spin-Out deck's
  * wording, for a Spin-Out venture only (owner question 5 on #2454, read as A;
- * form-options' `spinout`); then blank. D909.
+ * form-options' `spinout`); the current pitch deck version's words, for any
+ * venture with a saved deck version (D6069, form-options' `deck`); then blank. D909.
  */
-export function startFromChips(versions, spinout = false) {
+export function startFromChips(versions, spinout = false, deck = null) {
   const saved = chipsOf(versions).filter((o) => /^[1-9][0-9]{0,8}$/.test(o.value)).sort((a, b) => Number(b.value) - Number(a.value));
+  const deckVersion = posId(deck?.version);
   return [
     ...saved.map((o) => ({ value: VERSION + o.value, label: o.label, meta: 'Copies its words, sections and positioning.' })),
     ...(spinout ? [{ value: LIVE, label: 'The Spin-Out deck wording', meta: 'Starts from the wording of your Spin-Out deck.' }] : []),
+    ...(deckVersion ? [{ value: DECK + deckVersion, label: `Pitch deck v${deckVersion}'s words`, meta: `Copies the words of pitch deck v${deckVersion}, card by card. The deck does not change.` }] : []),
     { value: BLANK, label: 'Blank', meta: 'Sections only, nothing written.' },
   ];
 }
@@ -486,27 +498,29 @@ const narrative = {
   key: 'narrative-version', cta: 'Create version', button: 'New version',
   title: 'New version',
   sub: 'One narrative per investor type. Each is checked for consistency.',
-  foot: 'Start from a version or blank; you edit.',
+  foot: 'Start from a version, the pitch deck or blank; you edit.',
   fields: [
     { kind: 'CH', name: 'investor_type', k: 'Audience', opts: INVESTOR_TYPE, def: 'seed_fund', required: true },
     // D909 (NAR11): the dialog says what it creates and that the version it starts from does not change.
     { kind: 'CH', name: 'start_from', k: 'Start from', opts: startFromChips([]), def: 0, note: (v) => newVersionLine(v, []) },
     ...narrativeWords,
   ],
-  // The newest saved version is chosen; with none, the Spin-Out wording for a Spin-Out venture, else blank.
+  // The newest saved version is chosen; with none, the Spin-Out wording for a Spin-Out venture, else the pitch deck's words (D6069), else blank.
   loadOptions: (w, projectId) => raiseOptions(w, projectId, 'investor-narrative').then((r) => {
     const saved = chipsOf(r?.versions);
-    return { start_from: { opts: startFromChips(r?.versions, r?.spinout === true), def: 0, note: (v) => newVersionLine(v, saved) } };
+    return { start_from: { opts: startFromChips(r?.versions, r?.spinout === true, r?.deck), def: 0, note: (v) => newVersionLine(v, saved) } };
   }),
   // NAR12's "Make vN the start of a new version" opens this dialog with vN chosen.
   fromQuery: (q) => (/^version-[1-9][0-9]{0,8}$/.test(q.get('start_from') || '') ? { start_from: q.get('start_from') } : {}),
   toBody: (v) => {
     const from = String(v.start_from || BLANK);
     const based = from.startsWith(VERSION) ? posId(from.slice(VERSION.length)) : null;
+    const deck = from.startsWith(DECK) ? posId(from.slice(DECK.length)) : null;
     return {
       investor_type: v.investor_type || null,
-      start_from: based ? 'version' : from === BLANK ? BLANK : LIVE,
+      start_from: based ? 'version' : deck ? 'deck' : from === BLANK ? BLANK : LIVE,
       ...(based ? { based_on_version: based } : {}),
+      ...(deck ? { deck_version: deck } : {}),
       ...narrativeWordsBody(v),
     };
   },
@@ -862,6 +876,16 @@ const buildId = (prefix) => (row) => {
 /** An Edit saves with "Save" (D695 decision 7); its row button stays "Edit". */
 const EDIT = { button: 'Edit', cta: 'Save' };
 
+/**
+ * Validate's rows carry no `edit`, so each Edit opens from its record's own
+ * Edit action (#1658's `cyclesApi.record`), on a row or the record page: its
+ * values go through `valuesOf` as the row's `edit`, then `editFieldsFor`
+ * (`recordModel.js`'s `recordFormFor`). #6111: Grow's Roles, Partners,
+ * Markets and Obligations open the same way, so their Edits show every
+ * stored value, not the few a module row carries.
+ */
+const FROM_RECORD = { readsRecord: true };
+
 // Grow's Edits (D695 decision 9, #1657): the Add's fields each PATCH takes.
 // A row carries only some current values (`adapters/grow.js`), so an Edit's
 // chips have no default and a field is sent only when the row carried it or
@@ -872,6 +896,21 @@ const sentOnly = (v, body, carried, from = {}) => Object.fromEntries(Object.entr
   const f = from[k] ?? k;
   return carried.includes(f) || filled(v[f]);
 }));
+/** A value as the form holds it, for comparing: a list in any order, nothing as ''. */
+const asSame = (x) => (Array.isArray(x) ? x.map(String).sort().join('\n') : x == null ? '' : String(x).trim());
+/**
+ * #6111: an Edit opened from its record (`was`, the values it opened with)
+ * sends only the keys whose field the founder changed, so Save on an
+ * untouched Edit sends nothing. Without `was` it is `sentOnly`.
+ */
+const sentChanged = (v, body, was, carried, from = {}) => (was && typeof was === 'object'
+  ? Object.fromEntries(Object.entries(body).filter(([k]) => { const f = from[k] ?? k; return asSame(v[f]) !== asSame(was[f]); }))
+  : sentOnly(v, body, carried, from));
+/** #6111: a stored minor amount as a founder types it ("90,000", "40.50"), at its currency's decimals (D5373); '' for none. */
+const centsText = (c, code) => {
+  if (c == null || c === '') return '';
+  return plainAmount(Number(c), currencyCode(String(code || '').toUpperCase()) || 'USD', { trimWhole: true }) ?? '';
+};
 /** A field with no default, so an Edit never sends a value the founder did not choose. */
 const bare = ({ def: _def, required: _required, ...f }) => f;
 // A stored value the Add does not offer is still a choice on Edit.
@@ -973,74 +1012,127 @@ const enterKpi = {
 
 // Opened from a row it draws no Post to: publishing is the role's host's, declared on the record (#1698).
 const editRole = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-role',
   title: 'Edit role',
   sub: role.sub,
-  fields: [{ ...roleFields[0], required: false }, bare(roleFields[1]), bare(roleFields[2]), roleFields[3], roleFields[4], roleFields[5]],
+  // #6111: a stored team the chips do not list is kept as a chip, and the start is typed as the
+  // record stores it ("2027-01" or a day), which a date box would refuse.
+  fields: [{ ...roleFields[0], required: false }, { ...bare(roleFields[1]), keep: (c) => (asText(c.team) ? { value: c.team, label: c.team } : null) },
+    bare(roleFields[2]), { ...roleFields[3], input: 'text', ph: 'YYYY-MM or YYYY-MM-DD' }, roleFields[4], roleFields[5]],
   check: roleCheck,
+  loadOptions: role.loadOptions,
   idOf: (row) => { const n = Number(row?.recordId ?? row?.edit?.id ?? row?.id); return Number.isSafeInteger(n) && n > 0 ? n : null; },
-  valuesOf: () => ({}),
-  toBody: (v) => sentOnly(v, roleBody(v), [], { comp_min_cents: 'band', comp_max_cents: 'band', comp_currency: 'band', comp_public: 'band', equity_pct: 'equity' }),
-  submit: (w, projectId, id, v) => w.grow.roleUpdate(projectId, id, editRole.toBody(v)),
+  // #6111: the record's Edit gives the band as cents and the jobs-board switch as ['1'].
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const lo = centsText(e.comp_min_cents, e.comp_currency); const hi = centsText(e.comp_max_cents, e.comp_currency);
+    const shown = Array.isArray(e.comp_public) ? e.comp_public.map(String).includes('1') : Number(e.comp_public) === 1;
+    return { title: asText(e.title), team: asText(e.team), type: asText(e.type ?? e.employment_type), target_start: asText(e.target_start),
+      band: lo && hi && lo !== hi ? `${lo}–${hi}` : lo || hi, equity: asText(e.equity_pct), comp_public: shown ? [SHOW_BAND] : [] };
+  },
+  // The switch goes with a changed band (so a typed band with it off turns it off), and on its own once it changes.
+  toBody: (v, was) => {
+    const full = roleBody(v);
+    const body = sentChanged(v, full, was, [], { comp_min_cents: 'band', comp_max_cents: 'band', comp_currency: 'band', comp_public: 'band', equity_pct: 'equity' });
+    if (was && Object.hasOwn(full, 'comp_public') && asSame(v.comp_public) !== asSame(was.comp_public)) body.comp_public = full.comp_public;
+    return body;
+  },
+  submit: (w, projectId, id, v, was) => w.grow.roleUpdate(projectId, id, editRole.toBody(v, was)),
 };
 
 const PARTNER_CARRIED = ['type', 'stage', 'terms'];
 const editPartner = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-partner',
   title: 'Edit partner',
   sub: partner.sub,
   fields: [
+    // #6111: the name and renewal, as the record's own Edit draws them. Not required, as Edit role's title is not:
+    // a row that carries no name opens without one, and an untouched name is not sent.
+    { ...partner.fields[0], required: false },
     { ...withChips(partner.fields[1], [['other', 'Other']]), required: true },
     { ...withChips(partner.fields[2], [['ended', 'Ended']]), required: true },
-    bare(termsFields[0]), termsFields[1], termsFields[2],
-    // The free text an older partner was added with.
+    bare(termsFields[0]), termsFields[1],
+    { kind: 'T', name: 'renewal_on', k: 'Renewal', input: 'date' },
+    termsFields[2],
+    // The free text an older partner was added with. The record's Edit does not carry it, so it is drawn only from a row that does.
     { kind: 'T', name: 'terms', k: 'Notes on terms', input: 'textarea', max: 400 },
   ],
   check: termsCheck,
   idOf: (row) => growEdit(row)?.uid ?? null,
-  valuesOf: (row) => { const e = growEdit(row) || {}; return { type: asText(e.type), stage: asText(e.stage), terms: asText(e.terms) }; },
-  toBody: (v) => sentOnly(v, { type: v.type, stage: v.stage, ...termsBody(v), terms: str(v.terms) }, PARTNER_CARRIED,
+  // #6111: the typed terms as the one Amount box takes them ("20%", or dollars), and the contact.
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const amount = e.terms_pct != null && e.terms_pct !== '' ? `${e.terms_pct}%` : centsText(e.terms_amount_cents, e.terms_currency);
+    const has = (k) => Object.hasOwn(e, k);
+    return {
+      ...(has('name') ? { name: asText(e.name) } : {}), type: asText(e.type), stage: asText(e.stage),
+      ...(has('terms_kind') ? { terms_kind: asText(e.terms_kind), amount } : {}),
+      ...(has('renewal_on') ? { renewal_on: dateText(e.renewal_on) } : {}),
+      ...(has('contact_name') ? { contact_name: asText(e.contact_name) } : {}),
+      ...(has('contact_email') ? { contact_email: asText(e.contact_email) } : {}),
+      ...(has('terms') ? { terms: asText(e.terms) } : {}),
+    };
+  },
+  toBody: (v, was) => sentChanged(v, { name: str(v.name), type: v.type, stage: v.stage, ...termsBody(v), renewal_on: str(v.renewal_on), terms: str(v.terms) }, was, PARTNER_CARRIED,
     { terms_pct: 'amount', terms_amount_cents: 'amount', terms_currency: 'amount' }),
-  submit: (w, projectId, id, v) => w.grow.partnerUpdate(projectId, id, editPartner.toBody(v)),
+  submit: (w, projectId, id, v, was) => w.grow.partnerUpdate(projectId, id, editPartner.toBody(v, was)),
 };
 
+/** A market record's decision, from its Change decision form; undefined when the read has none. */
+function marketDecision(record) {
+  const action = (Array.isArray(record?.actions) ? record.actions : []).find((a) => a?.key === 'change-decision');
+  const f = (action?.form?.fields || []).find((x) => (x?.key ?? x?.name) === 'decision');
+  return f && Object.hasOwn(f, 'value') ? f.value : undefined;
+}
 const MARKET_CARRIED = ['state', 'decision', ...MARKET_PARTS.flatMap(([k]) => [`${k}_score`, `${k}_source`])];
 const editMarket = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-market',
   title: 'Edit market',
   sub: 'Its state, your decision, and each part’s score with its source. Emptying a score clears it.',
   fields: [
     { ...withChips(market.fields[1], [['entering', 'Entering'], ['not_now', 'Not now']]), required: true },
     { kind: 'CH', name: 'decision', k: 'Decision', opts: opts([['enter', 'Enter'], ['not_yet', 'Not yet'], ['exit', 'Exit']]) },
-    { ...scoreField, opts: scoreField.opts.map((o) => ({ ...o, checked: false })) }, ...partFields, bare(attachField),
+    { ...scoreField, opts: scoreField.opts.map((o) => ({ ...o, checked: false })) }, ...partFields,
+    // #6111: the attached country is kept as a chip until the geographies answer, or if they do not list it.
+    { ...bare(attachField), keep: (c) => (asText(c.geography_ref) ? { value: c.geography_ref, label: c.geography_ref } : null) },
   ],
   check: marketCheck,
+  loadOptions: market.loadOptions,
   idOf: (row) => growEdit(row)?.uid ?? null,
+  // #6111: the decision is the record's own Change decision form, so it is read from there.
   valuesOf: (row) => {
     const e = growEdit(row) || {};
-    const scored = MARKET_PARTS.map(([k]) => k).filter((k) => e[`${k}_score`] != null);
-    return { state: asText(e.state), decision: asText(e.decision), parts: scored,
-      ...Object.fromEntries(MARKET_PARTS.flatMap(([k]) => [[`${k}_score`, asText(e[`${k}_score`])], [`${k}_source`, asText(e[`${k}_source`])]])) };
+    const scored = MARKET_PARTS.map(([k]) => k).filter((k) => e[`${k}_score`] != null && e[`${k}_score`] !== '');
+    const decided = marketDecision(row?.record);
+    const decision = Object.hasOwn(e, 'decision') ? e.decision : decided;
+    return { state: asText(e.state), ...(decision !== undefined ? { decision: asText(decision) } : {}), parts: scored,
+      ...Object.fromEntries(MARKET_PARTS.flatMap(([k]) => [[`${k}_score`, asText(e[`${k}_score`])], [`${k}_source`, asText(e[`${k}_source`])]])),
+      ...(Object.hasOwn(e, 'geography_ref') ? { geography_ref: asText(e.geography_ref) } : {}) };
   },
   // Every carried part is sent: a row scored before is cleared only when its score is emptied.
-  toBody: (v) => {
+  toBody: (v, was) => {
     const parts = Object.fromEntries(MARKET_PARTS.flatMap(([k]) => {
       const sc = toScore(v[`${k}_score`]);
       return [[`${k}_score`, sc], [`${k}_source`, sc == null ? null : str(v[`${k}_source`])]];
     }));
-    return sentOnly(v, { state: v.state, decision: v.decision || null, ...parts, geography_ref: str(v.geography_ref) }, MARKET_CARRIED);
+    return sentChanged(v, { state: v.state, decision: v.decision || null, ...parts, geography_ref: str(v.geography_ref) }, was, MARKET_CARRIED);
   },
-  submit: (w, projectId, id, v) => w.grow.marketUpdate(projectId, id, editMarket.toBody(v)),
+  submit: (w, projectId, id, v, was) => w.grow.marketUpdate(projectId, id, editMarket.toBody(v, was)),
 };
 
 const OBLIGATION_STATE = opts([['upcoming', 'Upcoming'], ['scheduled', 'Scheduled'], ['draft', 'Draft'], ['done', 'Done'], ['not_set_up', 'Not set up']]);
 // #4046: the title is carried too, now that the Edit draws it (and Ask fills it when blank).
-const OBLIGATION_CARRIED = ['title', 'status', 'owner_name', 'due_at'];
+const OBLIGATION_CARRIED = ['title', 'status', 'owner_user_id', 'due_at'];
+/** D6790: a name typed before owners were picked from the team stays until someone is picked; this chip sends nothing. */
+const KEEP_TYPED_OWNER = '__typed';
+// #6111: every reminder the record can hold, labelled as the Worker labels it (`growDaily.ts`).
+const REMIND_PRESETS = [30, 14, 7, 1, 0];
+const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
 const editObligation = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-obligation',
   title: 'Edit obligation',
   sub: 'Its title, kind, date, owner, how it repeats, its reminders and its state.',
@@ -1049,16 +1141,37 @@ const editObligation = {
     obligation.fields[0],
     withChips(obligation.fields[1], [['tax', 'Tax'], ['other', 'Other']]),
     { kind: 'T', name: 'due_at', k: 'Due', input: 'date' },
-    obligation.fields[3],
+    // D6790: the row's own owner stays a choice when the team list does not carry it (a typed name, or someone who left).
+    { ...bare(ownerField), keep: (c) => (c.owner_user_id === KEEP_TYPED_OWNER ? { value: KEEP_TYPED_OWNER, label: `${asText(c.owner_name)} (typed, not on the team)` }
+      : asText(c.owner_user_id) ? { value: c.owner_user_id, label: asText(c.owner) || 'The picked owner' } : null) },
     bare(obligation.fields[4]),
-    { ...remindField, opts: remindField.opts.map((o) => ({ ...o, checked: false })) },
-    { kind: 'CH', name: 'status', k: 'State', opts: OBLIGATION_STATE, required: true },
+    { ...remindField, opts: REMIND_PRESETS.map((n) => ({ value: String(n), label: reminderLabel(n), checked: false })) },
+    // Overdue and Snoozed are states the record reads, so its Edit can open on them.
+    { kind: 'CH', name: 'status', k: 'State', opts: [...OBLIGATION_STATE, ...opts([['overdue', 'Overdue'], ['snoozed', 'Snoozed']])], required: true },
   ],
   idOf: (row) => growEdit(row)?.id ?? null,
-  valuesOf: (row) => { const e = growEdit(row) || {}; return { title: asText(e.title), status: asText(e.status), owner_name: asText(e.owner_name), due_at: dateText(e.due_at) }; },
-  toBody: (v) => sentOnly(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
-    OBLIGATION_CARRIED, { remind_days: 'remind' }),
-  submit: (w, projectId, id, v) => w.grow.obligationUpdate(projectId, id, editObligation.toBody(v)),
+  // #6111: the record's Edit gives the reminders as `remind_days`, which this form calls Remind.
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const has = (k) => Object.hasOwn(e, k);
+    // D6790: the record's Owner fact names who is shown (the picked member, else the typed name), when the row does not.
+    const shown = asText(e.owner) || asText((row?.record?.facts ?? []).find((f) => f?.label === 'Owner')?.value);
+    const picked = e.owner_user_id != null && e.owner_user_id !== '';
+    const typed = asText(e.owner_name) || (picked ? '' : shown);
+    const ownerId = picked ? asText(e.owner_user_id) : typed ? KEEP_TYPED_OWNER : '';
+    // `owner` and `owner_name` label the kept chip (`keep`); they are not fields, so they are never sent.
+    return { title: asText(e.title), status: asText(e.status), owner_user_id: ownerId, owner: shown, owner_name: typed, due_at: dateText(e.due_at),
+      ...(has('kind') ? { kind: asText(e.kind) } : {}), ...(has('repeats') ? { repeats: asText(e.repeats) } : {}),
+      ...(has('remind_days') ? { remind: (Array.isArray(e.remind_days) ? e.remind_days : []).map(String) } : {}) };
+  },
+  toBody: (v, was) => {
+    const body = sentChanged(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_user_id: str(v.owner_user_id), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
+      was, OBLIGATION_CARRIED, { remind_days: 'remind' });
+    if (v.owner_user_id === KEEP_TYPED_OWNER) delete body.owner_user_id;
+    return body;
+  },
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'durable-company-building').then(obligationOwnerOptions),
+  submit: (w, projectId, id, v, was) => w.grow.obligationUpdate(projectId, id, editObligation.toBody(v, was)),
 };
 
 // Raise's Edits (D695 decision 9, #1657): the fields each PATCH takes. A
@@ -1359,16 +1472,18 @@ const SINCE = 'since';
 const segmentFields = [
   { kind: 'T', name: 'name', k: 'Segment', ph: 'Segment name', required: true, max: 120 },
   { kind: 'T', name: 'who_they_are', k: 'Who they are', ph: 'Role at company type, size, where', max: 1000 },
+  { kind: 'T', name: 'context', k: 'Context', ph: 'When and where the need arises', max: 1000 },
   { kind: 'T', name: 'job_to_be_done', k: 'Job to be done', ph: 'What they are trying to get done', max: 1000 },
   { kind: 'CH', name: 'urgency', k: 'Urgency', opts: URGENCY, def: 2 },
   { kind: 'T', name: 'value_promised', k: 'Value promised', ph: 'What changes for them', max: 1000 },
+  { kind: 'T', name: 'value_source', k: 'Source for the value', ph: 'The evidence behind the promised value', max: 1000 },
   { kind: 'CH', name: 'score_against', k: 'Score against', opts: [{ value: 'all', label: 'All interviews' }, { value: SINCE, label: 'Interviews since a date' }], def: 0 },
   // The second chip reveals its date (decision 2).
   { kind: 'T', name: 'score_since', k: 'Interviews since', input: 'date', required: true, when: { name: 'score_against', value: SINCE } },
 ];
 const segmentBody = (v) => ({
-  name: str(v.name), who_they_are: str(v.who_they_are), job_to_be_done: str(v.job_to_be_done),
-  urgency: v.urgency || null, value_promised: str(v.value_promised),
+  name: str(v.name), who_they_are: str(v.who_they_are), context: str(v.context), job_to_be_done: str(v.job_to_be_done),
+  urgency: v.urgency || null, value_promised: str(v.value_promised), value_source: str(v.value_source),
   score_since: v.score_against === SINCE ? str(v.score_since) : null,
 });
 const segment = {
@@ -1388,7 +1503,8 @@ const WATCH = [
   { value: 'hiring', label: 'Hires', meta: 'roles and team size', checked: false },
 ];
 const kindField = { kind: 'CH', name: 'kind', k: 'Kind', opts: COMPETITOR_KIND, def: 0, note: 'Direct: solves the same problem for the same customer. Adjacent: one of the two.' };
-const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH };
+const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH,
+  note: 'These settings filter which signal types a re-run keeps and which appear on the record. Axal does not monitor competitors automatically.' };
 const whyField = { kind: 'T', name: 'why', k: 'Why it matters', ph: 'One line, optional', max: 1000 };
 const watchBody = (v) => Object.fromEntries(WATCH.map((o) => [o.value, checked(v.watch, o.value)]));
 /**
@@ -1430,21 +1546,43 @@ const competitor = {
 const SIGNAL_KIND = [
   { value: 'need_to_have', label: 'Need-to-have mention' }, { value: 'waitlist', label: 'Waitlist sign-up' },
   { value: 'pre_sale', label: 'Pre-sale' }, { value: 'loi', label: 'Letter of intent' },
+  { value: 'would_pay', label: 'Would pay' },
 ];
 /** The kinds the route takes an amount for (`writeDemandSignal`). */
-export const AMOUNT_KINDS = ['pre_sale', 'loi'];
+export const AMOUNT_KINDS = ['pre_sale', 'loi', 'would_pay'];
 const SIGNAL_STATUS = [{ value: 'confirmed', label: 'Confirmed' }, { value: 'to_confirm', label: 'To confirm' }];
 const signalFields = [
   { kind: 'CH', name: 'kind', k: 'Kind', opts: SIGNAL_KIND, def: 2, required: true },
   { kind: 'T', name: 'who', k: 'Who', ph: 'Customer, lead or interviewee', max: 200 },
-  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '$1,200 · pre-sales and letters of intent only', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '1,200 · amount in selected currency', note: 'For an unlisted currency, enter a count followed by minor units.', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'currency', k: 'Currency', ph: 'EUR', def: 'usd', max: 3, when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'CH', name: 'period', k: 'Period', opts: [{ value: '', label: 'Not recorded' }, { value: 'once', label: 'Once' }, { value: 'month', label: 'Monthly' }, { value: 'year', label: 'Yearly' }], def: '', when: (v) => AMOUNT_KINDS.includes(v.kind) },
   { kind: 'T', name: 'signal_date', k: 'Date', input: 'date', ph: '12 Oct' },
   { kind: 'CH', name: 'status', k: 'Status', opts: SIGNAL_STATUS, def: 0, note: 'To confirm: said, not yet in writing.' },
 ];
+// Unknown historical codes retain an explicit minor-unit count.
+const signalAmount = (v) => {
+  const code = String(str(v.currency) || 'usd').toUpperCase();
+  const text = String(v.amount || '').trim();
+  if (!currencyCode(code) && /^[A-Z]{3}$/.test(code)) {
+    const count = /^(\d+)\s+minor units?$/i.exec(text);
+    const minor = count ? Number(count[1]) : Number.NaN;
+    if (Number.isSafeInteger(minor) && minor > 0) return { ok: true, minor };
+    return { ok: false, message: 'For this currency, enter a positive count such as 4321 minor units.' };
+  }
+  const typed = code === 'USD' ? text.replace(/^\$/, '') : text;
+  return parseMinor(typed, code);
+};
 // A hidden Amount is not submitted, so a kind that takes none sends null.
 const signalBody = (v) => {
-  const amount = AMOUNT_KINDS.includes(v.kind) ? toCents(v.amount) : null;
-  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : 'usd', signal_date: str(v.signal_date), status: v.status || null };
+  const amount = AMOUNT_KINDS.includes(v.kind) && str(v.amount) ? signalAmount(v).minor ?? Number.NaN : null;
+  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : String(str(v.currency) || 'usd').toLowerCase(), period: amount == null ? null : str(v.period), signal_date: str(v.signal_date), status: v.status || null };
+};
+const signalCheck = (v) => {
+  if (!AMOUNT_KINDS.includes(v.kind) || !str(v.amount)) return {};
+  const parsed = signalAmount(v);
+  if (!parsed.ok) return { amount: parsed.message };
+  return parsed.minor > 0 ? { amount: null } : { amount: 'Enter an amount greater than zero, or leave it empty.' };
 };
 const signal = {
   key: 'signal', cta: 'Record signal', button: 'Record signal',
@@ -1452,6 +1590,7 @@ const signal = {
   sub: 'Evidence that someone wants this, with its date.',
   foot: 'Waitlist sign-ups count toward the bar you set.',
   fields: signalFields,
+  check: signalCheck,
   toBody: signalBody,
   submit: (w, projectId, v) => w.validate.signal(projectId, signal.toBody(v)),
 };
@@ -1497,6 +1636,61 @@ const hypothesis = {
   submit: (w, projectId, v) => w.validate.hypothesis(projectId, hypothesis.toBody(v)),
 };
 
+// ---------- Customer research's recruiting pipeline (D6001, #6001) ----------
+//
+// Neither form is a `FORMS.validate` entry: Customer research's Add and its
+// `/new` stay Record a session (D695), so these open as dialogs over the
+// table. Add a lead writes `POST /progress/discovery/:projectId` at stage
+// `lead`; Move stage is the interview record's `set-stage` action, so the
+// move lands in the record's activity.
+
+/** A lead's channel, as the interview stores it: "Call" is `video`, typed notes `manual`. */
+export const LEAD_CHANNELS = [
+  { value: 'in_person', label: 'In person' }, { value: 'video', label: 'Call' },
+  { value: 'text', label: 'Text chat' }, { value: 'manual', label: 'Typed notes' },
+];
+export const addLead = {
+  key: 'lead', cta: 'Add a lead', button: 'Add lead',
+  title: 'Add a lead',
+  sub: 'Someone to talk to. They start at stage Lead.',
+  foot: 'Move them to Invited, Booked and Done from the list.',
+  fields: [
+    { kind: 'T', name: 'interviewee_name', k: 'Name', ph: 'Who you will talk to', required: true, max: 200 },
+    { kind: 'T', name: 'interviewee_company', k: 'Company', ph: 'Optional', max: 200 },
+    { kind: 'T', name: 'interviewee_role', k: 'Role', ph: 'Optional', max: 200 },
+    // No chip is chosen until the founder picks one: an unknown channel stays Not recorded.
+    { kind: 'CH', name: 'channel', k: 'Channel', opts: LEAD_CHANNELS, note: 'Optional. How you plan to talk.' },
+  ],
+  toBody: (v) => ({
+    interviewee_name: str(v.interviewee_name), interviewee_company: str(v.interviewee_company),
+    interviewee_role: str(v.interviewee_role), channel: v.channel || null, stage: 'lead',
+  }),
+  submit: (w, projectId, v) => w.validate.lead(projectId, addLead.toBody(v)),
+};
+
+export const STAGE_WORDS = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
+/**
+ * Move stage for one row (`{ name, stage }`, the Worker's `stage`): the four
+ * stages, the current one marked. None is chosen: a row with no stage reads
+ * as Done, and saving that reading would write a stage nobody picked.
+ */
+export function moveStageForm(row) {
+  const now = Object.hasOwn(STAGE_WORDS, row?.stage) ? row.stage : null;
+  const name = str(row?.name) || 'this interview';
+  return {
+    key: 'set-stage', cta: 'Move', button: 'Move',
+    title: `Move ${name}`,
+    sub: 'Its stage now, with the date it got there.',
+    foot: 'The move is logged on the interview.',
+    fields: [
+      { kind: 'CH', name: 'stage', k: 'Stage', required: true,
+        opts: Object.entries(STAGE_WORDS).map(([value, label]) => ({ value, label, ...(value === now ? { meta: 'current' } : {}) })) },
+      { kind: 'T', name: 'at', k: 'Date reached · optional', input: 'date', note: 'Today when left empty.' },
+    ],
+    toBody: (v) => ({ stage: v.stage || null, ...(str(v.at) ? { at: str(v.at) } : {}) }),
+  };
+}
+
 /** Validate's Add forms, by module slug, registered as `FORMS.validate`. */
 export const VALIDATE_FORMS = {
   'problem-discovery': [theme],
@@ -1539,14 +1733,6 @@ export function editFieldsFor(form, current) {
  */
 const onlyShown = (v, body, from = {}) => Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(v, from[k] ?? k)));
 
-/**
- * Validate's rows carry no `edit`, so each Edit opens from its record's own
- * Edit action (#1658's `cyclesApi.record`), on a row or the record page: its
- * values go through `valuesOf` as the row's `edit`, then `editFieldsFor`
- * (`recordModel.js`'s `recordFormFor`).
- */
-const FROM_RECORD = { readsRecord: true };
-
 const editTheme = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-theme', title: 'Edit theme', sub: theme.sub,
@@ -1563,7 +1749,7 @@ const editSegment = {
   fields: segmentFields,
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
-    const v = carried(['name', 'who_they_are', 'job_to_be_done', 'urgency', 'value_promised', 'score_since'])(row);
+    const v = carried(['name', 'who_they_are', 'context', 'job_to_be_done', 'urgency', 'value_promised', 'value_source', 'score_since'])(row);
     if (Object.hasOwn(growEdit(row) || {}, 'score_since')) v.score_against = v.score_since ? SINCE : 'all';
     if (v.score_since) v.score_since = dateText(v.score_since);
     return v;
@@ -1594,20 +1780,27 @@ const editSignal = {
   ...EDIT, ...FROM_RECORD,
   key: 'edit-signal', title: 'Edit signal', sub: signal.sub,
   fields: signalFields,
+  check: signalCheck,
   // Only a `signal-` record is the founder's own (a `revenue-` or `waitlist-` one is not).
   idOf: recordId(/^signal-[1-9]\d*$/),
   valuesOf: (row) => {
     const e = growEdit(row) || {};
     const v = carried(['kind', 'who', 'signal_date', 'status'])(row);
+    for (const key of ['currency', 'period']) if (Object.hasOwn(e, key)) v[key] = e[key] ?? '';
     if (v.signal_date) v.signal_date = dateText(v.signal_date);
     // The record's Edit gives no amount as '', which is no amount, not 0.
-    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null || e.amount_cents === '' ? '' : String(Number(e.amount_cents) / 100);
+    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null || e.amount_cents === '' ? '' : toMajorString(e.amount_cents, String(e.currency || 'usd').toUpperCase()) ?? `${e.amount_cents} minor units`;
     return v;
   },
   // An amount is sent when its box was shown, and cleared when the kind takes none.
   toBody: (v) => {
-    const body = onlyShown(v, signalBody(v), { amount_cents: 'amount', currency: 'amount' });
-    if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null });
+    const body = onlyShown(v, signalBody(v), { amount_cents: 'amount' });
+    if (!Object.hasOwn(v, 'amount')) {
+      delete body.currency;
+      if (Object.hasOwn(v, 'period')) body.period = str(v.period);
+    }
+    if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null, period: null });
+    if (Object.hasOwn(v, 'amount') && !str(v.amount)) Object.assign(body, { amount_cents: null, currency: null, period: null });
     return body;
   },
   submit: (w, projectId, id, v) => w.validate.signalUpdate(projectId, id, editSignal.toBody(v)),
@@ -1744,6 +1937,11 @@ const itemBody = (v) => {
   const owner = idOrNull(v.owner_user_id);
   return { title: str(v.title), column: v.column || null, kpi_key: str(v.kpi_key), feedback_theme: str(v.feedback_theme), ...(owner == null ? {} : { owner_user_id: owner }), target_date: str(v.target_date) };
 };
+/** A theme as Grow stores one (trimmed, at most 80 characters); anything else chooses nothing. */
+const feedbackThemeOf = (raw) => {
+  const theme = typeof raw === 'string' ? raw.trim() : '';
+  return theme && theme.length <= 80 && !/[\u0000-\u001f\u007f]/.test(theme) ? { feedback_theme: theme } : {};
+};
 const buildItem = {
   key: 'item', cta: 'Add item', button: 'Add item',
   title: 'Add item',
@@ -1751,6 +1949,8 @@ const buildItem = {
   foot: 'Issues from a connected GitHub repository land here too.',
   fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' }],
   toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id) }),
+  // D6097: a feedback record's Add to roadmap (`/build/product-roadmap/new?feedback_theme=Speed`) opens it with that theme chosen.
+  fromQuery: (q) => feedbackThemeOf(q.get('feedback_theme')),
   // Answers feedback theme keeps None chosen, and Waits on keeps Nothing first (CO:313).
   loadOptions: buildOptions('product-roadmap', (read) => ({
     kpi_key: thenNone(read, 'kpi_key', NONE_CHIP), feedback_theme: { options: [...readChips(read, 'feedback_theme'), NONE_CHIP], def: NONE_CHIP.value },
@@ -2130,5 +2330,6 @@ export function validate(form, values) {
     const kept = typeof f.keep === 'function' ? f.keep(values || {}) : null;
     if (kind === 'CH' && text && !choicesOf(f).some((o) => o.value === text) && String(kept?.value ?? '') !== text) errors[f.name] = `Pick one of the choices for ${String(label).toLowerCase()}.`;
   }
-  return { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
+  const checked = { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
+  return Object.fromEntries(Object.entries(checked).filter(([, message]) => message));
 }

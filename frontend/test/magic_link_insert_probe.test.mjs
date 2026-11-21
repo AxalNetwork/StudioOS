@@ -22,7 +22,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -30,6 +30,7 @@ import {
   TEMPLATE_KEY, describeRefusal, maxIdOf, missingConfig, readEnvelope, redactError,
   sendPollDone, sendRowOf, sendVerdict, verdicts,
 } from '../../scripts/check-magic-link-insert.mjs';
+import { latestCanarySlot } from '../../scripts/check-magic-link-canary.mjs';
 import { withoutSafeComments } from '../../scripts/check-unused-imports.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -92,10 +93,15 @@ function fireMinutes(cron) {
 const cronsOf = (wf) => [...read(wf).matchAll(/^\s*- cron: '([^']+)'/gm)].map((m) => m[1]);
 
 /** The closest two schedules ever come, in minutes, midnight not being a wall. */
-function closestGapMinutes(aCrons, bCrons) {
+function canaryFireMinutes() {
+  return Array.from({ length: 1440 }, (_, i) => i)
+    .filter((minute) => latestCanarySlot(minute * 60_000) === minute * 60_000);
+}
+
+function closestGapMinutes(aMinutes, bMinutes) {
   let closest = Infinity;
-  for (const a of aCrons.flatMap(fireMinutes)) {
-    for (const b of bCrons.flatMap(fireMinutes)) {
+  for (const a of aMinutes) {
+    for (const b of bMinutes) {
       const d = Math.abs(a - b);
       closest = Math.min(closest, Math.min(d, 1440 - d));
     }
@@ -109,12 +115,12 @@ test('the fire-minute expansion is right before anything leans on it', () => {
   assert.deepEqual(fireMinutes('15 4 * * *'), [255]);
 });
 
-test('the two probes can never fire inside each other window', () => {
+test('the nominal request schedules leave the mailbox observation window clear', () => {
   // If they can, the mailbox probe passes on the insert probe's email. The gap
   // is measured against the mailbox probe's OWN budget, read from its source,
   // so moving either one alone fails here.
-  const insert = cronsOf(INSERT_WF);
-  const mail = cronsOf(MAIL_WF);
+  const insert = canaryFireMinutes();
+  const mail = cronsOf(MAIL_WF).flatMap(fireMinutes);
   assert.ok(insert.length && mail.length, 'one of the probes has no schedule');
 
   const budgetMs = defaultOf('MAGIC_MAIL_BUDGET_MS', MAIL_SCRIPT);
@@ -129,7 +135,7 @@ test('the gap also clears this probe own budgets, which are much longer', () => 
   // The send budget is three minutes. A gap that only beat the mailbox probe's
   // 120s would let this probe still be polling when the other one starts asking.
   const ours = defaultOf('MAGIC_ROW_BUDGET_MS') + defaultOf('MAGIC_SEND_BUDGET_MS');
-  const closest = closestGapMinutes(cronsOf(INSERT_WF), cronsOf(MAIL_WF));
+  const closest = closestGapMinutes(canaryFireMinutes(), cronsOf(MAIL_WF).flatMap(fireMinutes));
   assert.ok(
     closest * 60_000 > ours,
     `the probes fire ${closest} minutes apart but this one can still be running ${ours}ms in`,
@@ -154,7 +160,7 @@ test('both schedules together stay inside the per-address rate limit', () => {
   assert.ok(lim, 'could not read the per-address limiter');
   const [limit, windowSec] = [Number(lim[1]), Number(lim[2])];
 
-  const all = [...cronsOf(INSERT_WF), ...cronsOf(MAIL_WF)].flatMap(fireMinutes).sort((a, b) => a - b);
+  const all = [...canaryFireMinutes(), ...cronsOf(MAIL_WF).flatMap(fireMinutes)].sort((a, b) => a - b);
   let minGap = 1440 - all[all.length - 1] + all[0];
   for (let i = 1; i < all.length; i += 1) minGap = Math.min(minGap, all[i] - all[i - 1]);
   const perWindow = Math.floor(windowSec / (minGap * 60)) + 1;
@@ -429,23 +435,22 @@ test('only status sent is a passing send', () => {
   }
 });
 
-test('no send-log row at all is reported as the errand never starting', () => {
+test('a missing send-log row leaves provider acceptance unverified', () => {
   for (const row of [null, undefined]) {
     const v = sendVerdict({ row, sendBudgetMs: 180_000 });
     assert.equal(v.ok, false);
-    assert.match(v.detail, /never reached its own INSERT/, 'it does not say the send errand never ran');
-    assert.match(v.detail, /no mail was ever queued/);
+    assert.match(v.detail, /no email_send_log row/);
+    assert.match(v.detail, /provider acceptance is unverified/);
   }
 });
 
-test('a row stuck at queued is named as the silent waitUntil failure', () => {
+test('a queued row reports the elapsed budget without assuming a delivery result', () => {
   // The whole reason this verdict exists: the token row is committed, the
   // endpoint answered fast, and no mail was sent. Both other verdicts pass.
   const v = sendVerdict({ row: { status: 'queued', lastError: null }, sendBudgetMs: 180_000 });
   assert.equal(v.ok, false);
   assert.match(v.detail, /still queued after 180000ms/, 'it does not say how long it waited');
-  assert.match(v.detail, /waitUntil/, 'it does not name the mechanism that fails this way');
-  assert.match(v.detail, /no mail was sent/);
+  assert.match(v.detail, /provider acceptance was not recorded within budget/);
 });
 
 test('a failed send carries its cause, redacted', () => {
@@ -518,7 +523,7 @@ test('the probe claims the Gmail handoff and disclaims arrival', () => {
 
   assert.match(src, /NOT CHECKED HERE: that the mail ARRIVED/, 'the script stopped disclaiming arrival');
   assert.match(src, /Gmail accepted the message/, 'the script no longer claims the handoff it can prove');
-  assert.match(wf, /does not prove it arrived/i, 'the pass annotation stopped disclaiming arrival');
+  assert.match(wf, /mailbox probe checks arrival and sign-in/i, 'the pass annotation stopped identifying the separate arrival check');
   assert.match(wf, /magic-link-probe\.yml/, 'the workflow no longer points at the probe that CAN see arrival');
 
   // It must not borrow the mailbox probe's verdict names: `mail_delivered`
@@ -733,61 +738,101 @@ function runBlockOf(wf, stepName) {
   return body.join('\n');
 }
 
-test('only a passing probe is green, and the two failures are told apart', () => {
+test('the report publishes the observed outcome and fails closed on incomplete results', (t) => {
   const script = runBlockOf(read(INSERT_WF), 'Report the outcome');
   const dir = mkdtempSync(join(tmpdir(), 'insert-probe-'));
-  const sh = join(dir, 'report.sh');
-  writeFileSync(sh, script);
-  const run = (code) => {
-    const summary = join(dir, `s-${code || 'empty'}.md`);
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const summary = join(dir, 'summary.md');
+  const run = (code, outcome = '', startStatus = '', failed = '') => {
     writeFileSync(summary, '');
-    const r = spawnSync('bash', [sh], {
+    const result = spawnSync('bash', ['-c', script], {
       encoding: 'utf8',
-      env: { ...process.env, PROBE_CODE: code, GITHUB_STEP_SUMMARY: summary },
+      env: {
+        ...process.env, GITHUB_STEP_SUMMARY: summary, PROBE_CODE: code,
+        PROBE_OUTCOME: outcome, PROBE_START_STATUS: startStatus, PROBE_FAILED_CHECKS: failed,
+      },
     });
-    return { status: r.status, out: `${r.stdout}${r.stderr}`, summary: readFileSync(summary, 'utf8') };
+    return { status: result.status, log: result.stdout, summary: readFileSync(summary, 'utf8') };
   };
 
-  const pass = run('0');
-  assert.equal(pass.status, 0, 'a passing probe failed the job');
-  assert.match(pass.out, /::notice/);
-  assert.match(pass.summary, /Arrival is NOT covered here/, 'the pass summary stopped disclaiming arrival');
-  assert.match(pass.summary, /status=sent/, 'the pass summary does not say what proved the send');
+  const pass = run('0', 'ACCEPTED_NOT_VERIFIED', '202');
+  assert.equal(pass.status, 0);
+  assert.match(pass.log, /::notice/);
+  assert.match(pass.summary, /status=sent/);
+  assert.match(pass.summary, /mailbox probe checks arrival and sign-in/);
 
-  const cannot = run('2');
-  assert.equal(cannot.status, 1, 'COULD NOT RUN went green — a pass it never earned');
-  assert.match(cannot.out, /::error.*COULD NOT RUN/);
-  assert.match(cannot.summary, /MAGIC_PROBE_EMAIL/, 'the summary does not name the secret to add');
-  assert.match(cannot.summary, /not.{0,4} a finding about the sign-in flow/i,
-    'the summary lets could-not-run read as a broken flow');
+  for (const outcome of ['EDGE_CHALLENGED', 'APPLICATION_REFUSED', 'REFUSED_UNATTRIBUTED']) {
+    const r = run('1', outcome);
+    assert.equal(r.status, 1);
+    assert.match(r.log, /::error/);
+    assert.ok(r.summary.includes(outcome));
+    assert.match(r.summary, /Token insertion and mail handoff were NOT CHECKED/);
+    if (outcome === 'EDGE_CHALLENGED') assert.match(r.summary, /cf-ray/);
+  }
 
-  const broke = run('1');
-  assert.equal(broke.status, 1, 'a failed probe went green');
-  assert.match(broke.out, /::error/);
-  assert.match(broke.summary, /token_row_written/);
-  assert.match(broke.summary, /start_latency/);
-  assert.match(broke.summary, /mail_send_recorded/, 'the failure summary omits the send verdict');
-  // The three shapes of a failed send are what turn the annotation into a
-  // starting point rather than a puzzle.
-  assert.match(broke.summary, /stuck at `queued`/, 'the failure summary does not name the silent-send shape');
-  assert.match(broke.summary, /last_error/, 'the failure summary does not say where the cause is recorded');
-  // D173 — the refusal shape. Without it the summary offers three diagnoses,
-  // none of which is the one that was actually true for thirty-nine runs, and
-  // it sends a reader to `routes/auth.ts` for a bug that is not there.
-  assert.match(broke.summary, /endpoint_accepted/, 'the failure summary omits the refusal verdict');
-  assert.match(broke.summary, /refused at the door/i, 'the summary does not name the refusal as its own shape');
-  assert.match(broke.summary, /NOT CHECKED/, 'the summary does not say the downstream verdicts go unchecked on a refusal');
-  assert.match(broke.summary, /cf-ray/, 'the summary does not name the header that identifies the responder');
-  assert.match(broke.summary, /WAF/, 'the summary does not say where to look when the EDGE refused it');
-  // And it must say plainly that the edge case is not ours to fix in code,
-  // because that is what stops the next reader hunting a Worker bug.
-  assert.match(broke.summary, /no code change in this repo can fix it/i,
-    'the summary lets an edge refusal read as a bug in this codebase');
+  const unavailable = run('2');
+  assert.equal(unavailable.status, 1);
+  assert.match(unavailable.log, /::error.*COULD NOT RUN/);
+  assert.match(unavailable.summary, /missing configuration or D1 read error/);
+  const partial = run('2', '', '202');
+  assert.equal(partial.status, 1);
+  assert.match(partial.summary, /accepted the request .*202.*D1 read failed/);
 
-  // Anything unplanned — a step killed before it wrote its output, an exit code
-  // from something else — is not a pass.
-  for (const code of ['', '3', '127', 'null']) {
-    assert.equal(run(code).status, 1, `PROBE_CODE=${JSON.stringify(code)} was treated as a pass`);
+  const failure = run('1', 'APPLICATION_FAILED', '202', 'mail_send_recorded');
+  assert.equal(failure.status, 1);
+  assert.match(failure.summary, /Failed checks: mail_send_recorded/);
+  const noResponse = run('1', 'APPLICATION_FAILED');
+  assert.equal(noResponse.status, 1);
+  assert.match(noResponse.summary, /no HTTP response/);
+
+  for (const [code, outcome] of [['', ''], ['0', ''], ['0', 'EDGE_CHALLENGED'], ['1', ''], ['3', ''], ['127', ''], ['null', '']]) {
+    const r = run(code, outcome);
+    assert.equal(r.status, 1);
+    assert.match(r.summary, /INCOMPLETE PROBE RESULT/);
+  }
+});
+
+test('the CLI publishes the edge challenge and distinguishes D1 failures before and after HTTP 202', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'insert-d1-error-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const stub = join(dir, 'fetch.mjs');
+  writeFileSync(stub, `
+    let accepted = false;
+    globalThis.fetch = async (url) => {
+      const path = new URL(url).pathname;
+      if (path === '/api/auth/magic/start') {
+        if (process.env.FAIL_PHASE === 'challenge') return new Response('<html>Challenge</html>', {
+          status: 403, headers: { 'content-type': 'text/html', 'cf-ray': 'test-ray' },
+        });
+        accepted = true;
+        return new Response(null, { status: 202 });
+      }
+      if (process.env.FAIL_PHASE === 'before' || accepted) throw new TypeError('network error');
+      const result = path.endsWith('/database') ? [{ name: 'studioos-db', uuid: 'fixture' }] : [{ results: [{ id: 0 }] }];
+      return Response.json({ success: true, result });
+    };
+  `);
+  for (const phase of ['before', 'after', 'challenge']) {
+    const output = join(dir, phase);
+    writeFileSync(output, '');
+    const result = spawnSync(process.execPath, ['--import', stub, INSERT_SCRIPT], {
+      encoding: 'utf8', timeout: 5_000,
+      env: {
+        GITHUB_ACTIONS: 'true', GITHUB_OUTPUT: output, MAGIC_PROBE_EMAIL: 'fixture@example.invalid', FAIL_PHASE: phase,
+        CLOUDFLARE_ACCOUNT_ID: 'fixture', CLOUDFLARE_API_TOKEN: 'fixture',
+      },
+    });
+    const outputs = readFileSync(output, 'utf8');
+    if (phase === 'challenge') {
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stdout, /::notice title=StudioOS auth probe::edge-refused/);
+      assert.match(outputs, /^outcome=EDGE_CHALLENGED$/m);
+      assert.match(outputs, /^failed_checks=endpoint_accepted$/m);
+    } else {
+      assert.equal(result.status, 2, result.stderr);
+      assert.match(result.stderr, /D1 read failed/);
+      assert.equal(outputs, phase === 'after' ? 'start_status=202\n' : '');
+    }
   }
 });
 
@@ -798,6 +843,9 @@ test('the probe step publishes its exit code, and the report reads it via env', 
   assert.match(step, /code=\$code" >> "\$GITHUB_OUTPUT"/, 'the exit code is not published');
   assert.match(step, /exit \$code/, 'the probe step swallows its own failure');
   assert.match(wf, /PROBE_CODE: \$\{\{ steps\.probe\.outputs\.code \}\}/, 'the code is not passed through env');
+  for (const [name, output] of [['PROBE_OUTCOME', 'outcome'], ['PROBE_START_STATUS', 'start_status'], ['PROBE_FAILED_CHECKS', 'failed_checks']]) {
+    assert.ok(wf.includes(name + ': ${{ steps.probe.outputs.' + output + ' }}'));
+  }
   const report = wf.slice(wf.indexOf('name: Report the outcome'));
   assert.doesNotMatch(report.slice(report.indexOf('run:')), /\$\{\{/,
     'a workflow expression is interpolated into the report shell');
@@ -822,10 +870,19 @@ test('the workflow header names every verdict the code actually produces', () =>
     `the header does not say ${words[keys.length]} VERDICTS — the probe now reports ${keys.length}`);
 });
 
-test('it can be dispatched by hand, and it stays on a schedule', () => {
+test('scheduled runs only observe D1, while manual runs default to checking the public edge', () => {
   const wf = read(INSERT_WF);
-  assert.match(wf, /^ {2}workflow_dispatch:$/m, 'it cannot be triggered by hand, which is how it gets its first run');
-  assert.match(wf, /^ {2}schedule:$/m, 'the schedule block is gone — the cron line survives as inert YAML');
+  assert.match(wf, /^ {2}workflow_dispatch:$/m);
+  assert.match(wf, /default: public-edge/);
+  const lagMinutes = 15;
+  const observers = cronsOf(INSERT_WF).flatMap(fireMinutes);
+  assert.deepEqual(canaryFireMinutes().map((minute) => (minute + lagMinutes) % 1440).sort((a, b) => a - b), observers);
+  const observerStep = wf.slice(wf.indexOf('name: Observe the scheduled'), wf.indexOf('name: Ask for a link'));
+  assert.match(observerStep, /if: github\.event_name == 'schedule' \|\| inputs\.probe == 'scheduled-canary'/);
+  assert.match(observerStep, /run: node scripts\/check-magic-link-canary\.mjs/);
+  for (const step of wf.split('      - name: ').filter((x) => x.startsWith('Ask for a link') || x.startsWith('Report the outcome'))) {
+    assert.match(step, /if: github\.event_name == 'workflow_dispatch' && inputs\.probe != 'scheduled-canary'/);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -836,9 +893,9 @@ test('the new probe is documented where the other live probes are', () => {
   assert.match(scripts, /`check-magic-link-insert\.mjs`/, 'add it to the live-probes table in scripts/README.md');
   const wfReadme = read('.github/workflows/README.md');
   assert.match(wfReadme, /`magic-link-insert-probe\.yml`/, 'add the row to .github/workflows/README.md');
-  // Anchored on the row's first cell — see the same fix in
+  // Select this workflow's configuration bullet, not the summary inventory row. See
   // magic_link_probe.test.mjs; a mention in someone else's row is not this row.
-  const row = wfReadme.split('\n').find((l) => l.startsWith('| `magic-link-insert-probe.yml` |')) || '';
+  const row = wfReadme.split('\n').find((l) => l.startsWith('- `magic-link-insert-probe.yml` ·')) || '';
   assert.match(row, /MAGIC_PROBE_EMAIL/, 'the row does not name the one secret to add');
   assert.match(row, /CLOUDFLARE_API_TOKEN/, 'the row does not say the Cloudflare secrets are reused');
   assert.match(row, /mail_send_recorded/, 'the row does not mention the send verdict');

@@ -71,10 +71,12 @@ test('the sign-in page says where it leads for Grow, keeps Grow on its sign-up l
   assert.equal(signInContextFor('//evil.example/grow'), null, 'an unsafe next named an area');
   // The page draws it: the heading, the line, and the sign-up link; the generic page when there is none.
   assert.match(login, /const \[context\] = useState\(signInContext\);/);
-  assert.match(login, /\{context \? `Sign in to continue to \$\{context\.area\.name\}` : 'Sign in'\}/);
+  // #6958 (Sign In v2): the generic heading is "Sign in to Axal VC".
+  assert.match(login, /heading\(context \? `Sign in to continue to \$\{context\.area\.name\}` : 'Sign in to Axal VC'\)/);
   assert.match(login, /\{context\.area\.what\} \{context\.area\.who\}/);
-  assert.match(login, /applyHref=\{context\?\.registerHref \|\| '\/register'\}/);
-  assert.match(login, /return signInContextFor\(safeNextPath\(\)\);/, 'the page reads next some other way than its validated one');
+  assert.match(login, /<Link to=\{context\?\.registerHref \|\| '\/register'\}>Create an account<\/Link>/);
+  // D7178: the second argument is the page's own query, read only for `ended=1` (a session that ended).
+  assert.match(login, /return signInContextFor\(safeNextPath\(\), window\.location\.search\);/, 'the page reads next some other way than its validated one');
 });
 
 test('sign-up says it continues to Grow and keeps it on the sign-in link', () => {
