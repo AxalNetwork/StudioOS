@@ -125,6 +125,7 @@ export function guideOutline(sub, { related = 0, feedback = false, stuck = false
     sub?.overview && { id: 'overview', label: 'Overview' },
     Array.isArray(sub?.beforeYouStart) && sub.beforeYouStart.length > 0 && { id: 'before-you-start', label: 'Before you start' },
     Array.isArray(sub?.howto) && sub.howto.length > 0 && { id: 'steps', label: 'Steps' },
+    Array.isArray(sub?.recoveryRows) && sub.recoveryRows.length > 0 && { id: 'recovery', label: 'Connector recovery' },
     Array.isArray(sub?.tips) && sub.tips.length > 0 && { id: 'tips', label: 'Tips' },
     Array.isArray(sub?.pitfalls) && sub.pitfalls.length > 0 && { id: 'pitfalls', label: 'Pitfalls' },
     related > 0 && { id: 'related', label: 'Related guides' },
