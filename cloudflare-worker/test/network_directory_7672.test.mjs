@@ -6,6 +6,7 @@ import { readFileSync, mkdtempSync, rmSync, writeFileSync, statSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { buildDirectoryPlan, professionalUrl, WRITE_TABLES } from '../../scripts/lib/networkDirectoryPlan.mjs';
 import { loadSchema, SCHEMA_OPTIONS } from './_schema_once.mjs';
 
@@ -237,5 +238,7 @@ test('CLI creates restricted local plan, prints only counts and has no execute o
     const bad=spawnSync(process.execPath,[...args.slice(0,-1),'scripts/should-not-exist.json'],{encoding:'utf8'});assert.equal(bad.status,1);
     writeFileSync(m,JSON.stringify({...input.manifest,source_snapshot_sha256:{'records.json':'0'.repeat(64)}}));
     const mismatch=spawnSync(process.execPath,[...args.slice(0,-1),join(dir,'mismatch.json')],{encoding:'utf8'});assert.equal(mismatch.status,1);
+    writeFileSync(m,JSON.stringify({...input.manifest,source_snapshot_sha256:{'records.json':createHash('sha256').update(readFileSync(r)).digest('hex')}}));
+    const matched=spawnSync(process.execPath,[...args.slice(0,-1),join(dir,'matched.json')],{encoding:'utf8'});assert.equal(matched.status,0,matched.stderr);
   } finally {rmSync(dir,{recursive:true,force:true});}
 });

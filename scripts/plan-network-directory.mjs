@@ -1,15 +1,22 @@
 /** D7672 (#7672): offline import planner. Writes restricted parameterized batches outside this public checkout; never executes them. */
-import { readFileSync, writeFileSync, realpathSync, statSync } from 'node:fs';
+import { openSync, closeSync, fstatSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { resolve, dirname, basename, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { buildDirectoryPlan } from './lib/networkDirectoryPlan.mjs';
 
-function readJson(path) {
-  if (statSync(path).size > 32*1024*1024) throw new Error('Input exceeds 32 MiB');
-  return JSON.parse(readFileSync(path,'utf8'));
+// One descriptor per input: the size check, the snapshot hash and the parse all see the same bytes.
+function readInput(path) {
+  const fd=openSync(path,'r');
+  try {
+    if (fstatSync(fd).size > 32*1024*1024) throw new Error('Input exceeds 32 MiB');
+    const bytes=readFileSync(fd);
+    if (bytes.length > 32*1024*1024) throw new Error('Input exceeds 32 MiB');
+    return bytes;
+  } finally { closeSync(fd); }
 }
+const readJson=(path)=>JSON.parse(readInput(path).toString('utf8'));
 function outputPath(path) {
   const absolute=resolve(path), parent=realpathSync(dirname(absolute));
   const root=realpathSync(fileURLToPath(new URL('../',import.meta.url)));
@@ -22,10 +29,10 @@ try {
   const out=outputPath(values.out), report=values.report?outputPath(values.report):null;
   const manifest=readJson(values.manifest);
   const records=values.records.flatMap(path=>{
-    const r=readJson(path);if(!Array.isArray(r))throw new Error('Record input must be an array');
+    const bytes=readInput(path), r=JSON.parse(bytes.toString('utf8'));if(!Array.isArray(r))throw new Error('Record input must be an array');
     if(manifest.source_snapshot_sha256){
       const expected=manifest.source_snapshot_sha256[basename(path)];
-      const actual=createHash('sha256').update(readFileSync(path)).digest('hex');
+      const actual=createHash('sha256').update(bytes).digest('hex');
       if(!expected || expected!==actual)throw new Error('Reviewed source snapshot mismatch');
     }
     return r;
