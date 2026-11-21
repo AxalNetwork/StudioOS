@@ -10,7 +10,8 @@
  *         a `docker://` image pinned by digest, are the other two forms);
  *   WF-2  every container image is pinned by digest, or is a recorded finding;
  *   WF-3  every workflow declares its token's permissions, at the top or on
- *         every job, and never `write-all`;
+ *         every job, and never `write-all`; D7999 keeps the reviewed workflows
+ *         read-only by default and preserves their required job scopes;
  *   WF-4  no `pull_request_target`, and no `workflow_run` except the reviewed
  *         TRUSTED_WORKFLOW_RUN entries: a fork's pull request never runs with
  *         this repository's secrets or a write token;
@@ -34,6 +35,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { parse as parseYaml } from 'yaml';
 
 const ROOT = new URL('../../', import.meta.url);
 const DIR = new URL('.github/workflows/', ROOT);
@@ -178,6 +180,41 @@ test('WF-3: every workflow declares its token permissions (top level or every jo
     if (!jobs.length || missing.length) bad.push(`${f}: no top-level permissions, and job(s) ${missing.join(', ') || '(none found)'} declare none`);
   }
   assert.deepEqual(bad, [], 'an undeclared token gets the repository default, which an owner can widen without touching this file');
+});
+
+const SCOPED_PERMISSIONS = [
+  ['branch-provision.yml', 'provision', { contents: 'write', 'pull-requests': 'write' }],
+  ['claude-code.yml', 'claude', { contents: 'write', issues: 'write', 'pull-requests': 'write', 'id-token': 'write' }],
+  ['codeql.yml', 'analyze', { contents: 'read', actions: 'read', 'security-events': 'write' }],
+  ['deck-visual.yml', 'visual', { contents: 'read' }],
+  ['release-alpha-rename.yml', 'rename', { contents: 'write' }],
+  ['release-draft.yml', 'draft', { contents: 'write' }],
+  ['release-published.yml', 'redeploy', { actions: 'write', contents: 'read' }],
+  ['research-import.yml', 'import', { contents: 'write' }],
+  ['semgrep.yml', 'scan', { contents: 'read', actions: 'read', 'security-events': 'write' }],
+];
+
+test('WF-3: reviewed workflows start new jobs with explicit read-only defaults (D7999)', () => {
+  const bad = [];
+  for (const [file] of SCOPED_PERMISSIONS) {
+    const defaults = parseYaml(read(file)).permissions;
+    if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults) ||
+        Object.values(defaults).some((value) => value !== 'read' && value !== 'none')) {
+      bad.push(file);
+    }
+  }
+  assert.deepEqual(bad, [], 'new jobs must start without write access; writers declare their required scopes');
+});
+
+test('WF-3: job scoping retains the required upload, release, import and automation permissions', () => {
+  // A job map replaces the workflow map: adding only a write scope would drop
+  // the reads needed by checkout and artifact access (D7999).
+  for (const [file, job, expected] of SCOPED_PERMISSIONS) {
+    const workflow = parseYaml(read(file));
+    const effective = Object.hasOwn(workflow.jobs[job], 'permissions')
+      ? workflow.jobs[job].permissions : workflow.permissions;
+    assert.deepEqual(effective, expected, `${file}: ${job}'s effective token permissions`);
+  }
 });
 
 test('WF-4: no pull_request_target, and workflow_run only in the reviewed trusted workflows', () => {

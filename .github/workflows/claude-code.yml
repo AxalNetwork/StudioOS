@@ -45,14 +45,15 @@ concurrency:
   group: claude-code-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
+permissions: {}
 
 jobs:
   claude:
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
     # Only run on `@claude` mentions or manual dispatch — keeps cost down
     # and avoids accidental fires on unrelated comments.
     #

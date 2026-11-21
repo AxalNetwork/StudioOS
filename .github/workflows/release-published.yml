@@ -8,12 +8,13 @@ on:
   release:
     types: [published]
 
-permissions:
-  actions: write
-  contents: read
+permissions: {}
 
 jobs:
   redeploy:
+    permissions:
+      actions: write
+      contents: read
     name: redeploy main with the new release
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -13,7 +13,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
   actions: read
 
 # One scan per event and ref at a time. On a pull request a newer push
@@ -103,6 +102,10 @@ jobs:
           esac
 
   analyze:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     name: analyze (${{ matrix.language }})
     needs: [scope, visibility]
     if: needs.scope.outputs.scan == 'true'
