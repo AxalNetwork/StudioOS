@@ -36,7 +36,7 @@ export interface ProviderInventoryCheckpoint {
 /** One shared request budget; partial, repeated or rate-limited pages are unavailable capacity. */
 export async function collectProviderInventory(provider: RunnerScaleProvider, budget: { remaining: number }, cursor: string | null = null,
   checkpoint?: { snapshot: ProviderInventoryCheckpoint; persist: (snapshot: ProviderInventoryCheckpoint) => Promise<void> }) {
-  if (!provider.apiVerified || !Number.isSafeInteger(budget.remaining) || budget.remaining < 1 || budget.remaining > 100) throw Error('provider_api_unverified');
+  if (provider.apiVerified !== true || !Number.isSafeInteger(budget.remaining) || budget.remaining < 1 || budget.remaining > 100) throw Error('provider_api_unverified');
   if (cursor !== null && !checkpoint) throw Error('provider_checkpoint_invalid');
   const scan = structuredClone(checkpoint?.snapshot ?? { cursor: null, instances: [], complete: false, requestsUsed: 0, pages: 0, seen: [] });
   if (scan.complete !== false || scan.cursor !== cursor || !Array.isArray(scan.instances) || scan.instances.length > 1000
