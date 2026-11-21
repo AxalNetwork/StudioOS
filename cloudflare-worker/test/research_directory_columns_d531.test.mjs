@@ -85,8 +85,15 @@ const probesOf = (db) => ({
 test('D531: the repo now builds production\'s 37 columns for this table, and lacks exactly the 24 without 375', () => {
   // D531 compares the 2026-10-04 production snapshot. Migration 405 later adds
   // sic_codes, and D7175's adds website_verified_at, so keep those later
-  // columns out of this historical comparison.
-  const LATER = new Set(['405_research_company_directory_companies_house.sql', '202611180051_7175_competitor_subject_and_verified_website.sql']);
+  // columns out of this historical comparison. D7821's classification
+  // migration reads sic_codes and its crosswalk seed fills the table that one
+  // creates, so both leave with 405.
+  const LATER = new Set([
+    '405_research_company_directory_companies_house.sql',
+    '202611180051_7175_competitor_subject_and_verified_website.sql',
+    '202611200102_7821_research_company_classification.sql',
+    '202611200106_7821_research_classification_crosswalk_uk_sic.sql',
+  ]);
   const later = postCutoffMigrations(ROOT).filter((m) => !LATER.has(m.name));
   assert.ok(later.some((m) => m.name === FILE), '375 is not among the migrations above the cutoff');
   const prod = only(columnsOf(productionShape()));
