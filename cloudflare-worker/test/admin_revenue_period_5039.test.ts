@@ -201,7 +201,7 @@ test('quarterFromKey is exact, and agrees with quarterOf', () => {
 
 // ── D5950 (#5950): the read model's metrics on the summary ─────────────────────
 
-test('D5950: every metric follows ?period, with no network access, and the named gaps stay gaps', async t => {
+test('D5950: every metric follows ?period, with no network access', async t => {
   let calls = 0;
   t.mock.method(globalThis, 'fetch', () => { calls++; throw new Error('unexpected network access'); });
   const db = freshDb();
@@ -224,12 +224,55 @@ test('D5950: every metric follows ?period, with no network access, and the named
   assert.equal(q4.body.metrics.subscription_revenue.state, 'complete');
   assert.deepEqual(q4.body.metrics.subscription_revenue.currencies, ['EUR']);
   assert.equal(q3.body.metrics.subscription_revenue.state, 'not_recorded');
-  assert.equal(q4.body.metrics.revenue_per_subsidiary.pending_issue, 5947);
-  assert.equal(q4.body.metrics.ai_margin_per_licence.pending_issue, 5948);
+  // This fixture predates migrations 202611161359 (#5947) and 202611150131 (#5948): those two metrics are unreadable,
+  // never a zero, and the rest answer.
+  assert.equal(q4.body.metrics.revenue_per_subsidiary.state, 'unreadable');
+  assert.equal(q4.body.metrics.ai_margin_per_licence.state, 'unreadable');
   // This fixture predates migration 202611150136: the promo metric alone is unreadable.
   assert.equal(q4.body.metrics.promo_issued_per_licence.state, 'unreadable');
   assert.equal(q4.body.metrics.refunds_and_disputes.state, 'complete');
   assert.equal(SUMMARY_TEMPORAL.metrics, 'period');
+  assert.equal(calls, 0);
+});
+
+test('D5950 part 2: revenue per subsidiary and AI margin per licence follow ?period, with no network access', async t => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', () => { calls++; throw new Error('unexpected network access'); });
+  const db = freshDb();
+  for (const m of ['202611161359_5947_usage_report_source', '202611150131_5948_ai_licence_uid']) {
+    db.exec(readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${m}.sql`), 'utf8'));
+  }
+  db.exec("UPDATE ai_licence_attribution_start SET started_at = '2026-10-01 00:00:00'");
+  // lic_fr measured Q3's subscriptions, and has not reported Q4.
+  db.exec(`UPDATE subsidiary_usage_reports SET gross_cents = 4200, currency = 'EUR', state = 'complete',
+             source = 'financial_events', source_as_of = '2026-09-30T05:59:00Z' WHERE period = '2026-Q3'`);
+  // One member run in Q4 under lic_fr, half paid from top-ups, $1 provider cost.
+  db.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,status,settlement_uid,
+      actual_included_microusd,actual_topup_microusd,expires_at,created_at,updated_at,licence_uid)
+    VALUES('h1',?,'2026-11-02','2026-11',1000000,1000000,'settled','s-h1',1000000,1000000,'2026-11-02 10:01:00','2026-11-02 10:00:00','2026-11-02 10:01:00','lic_fr')`).run(MEMBER);
+  db.prepare("INSERT INTO ai_usage_logs (user_id, task, model, est_cost_usd, reservation_uid, licence_uid, created_at) VALUES (?, 't', 'm', 1, 'h1', 'lic_fr', '2026-11-02 10:00:30')").run(MEMBER);
+
+  const q3 = await call(db, SUPER, '?period=2026-Q3');
+  const q4 = await call(db, SUPER, '?period=2026-Q4');
+  assert.equal(q4.status, 200, JSON.stringify(q4.body));
+  const r3 = q3.body.metrics.revenue_per_subsidiary, r4 = q4.body.metrics.revenue_per_subsidiary;
+  assert.equal(r3.state, 'complete');
+  assert.deepEqual(r3.currencies, ['EUR']);
+  assert.equal(r3.values.by_licence[0].streams[0].gross_cents, 4200);
+  assert.equal(r4.state, 'not_recorded', 'Q3\'s report was read as Q4\'s');
+  assert.equal(r4.values, null);
+  const a3 = q3.body.metrics.ai_margin_per_licence, a4 = q4.body.metrics.ai_margin_per_licence;
+  assert.equal(a4.state, 'complete');
+  assert.deepEqual(a4.values.by_licence.map((l: any) => [l.licence_uid, l.billed_microusd, l.cost_microusd, l.margin_microusd]),
+    [['lic_fr', 1_000_000, 500_000, 500_000]]);
+  assert.equal(a3.state, 'not_recorded', 'Q4\'s run was read as Q3\'s');
+  assert.equal(a3.coverage.state, 'none');
+  for (const m of [r3, r4, a3, a4]) assert.equal(m.pending_issue, null);
+  // The fields the built page reads are unchanged.
+  assert.equal(q4.body.revenue_per_subsidiary_available, false);
+  assert.equal(q4.body.token_pl_per_subsidiary_available, false);
+  assert.equal(q4.body.quarter.key, '2026-Q4');
+  assert.equal(q4.body.period_requested, true);
   assert.equal(calls, 0);
 });
 

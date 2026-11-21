@@ -50,7 +50,7 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
     }
     case 'customer_segments': {
       const n = numeric(value);
-      return n !== null && !!await db.prepare('SELECT 1 FROM customer_segments WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+      return n !== null && !!await db.prepare('SELECT 1 FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL').bind(n, projectId).first();
     }
     case 'competitor_candidates':
       return !!await db.prepare(

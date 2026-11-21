@@ -1153,10 +1153,10 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
   'ideal-customer-profile': {
     cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated'],
     filters: [
-      { key: 'evidence', label: 'Evidence', options: [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), opt('measured', 'Measured'), NOT_RECORDED] },
+      { key: 'evidence', label: 'Evidence', options: [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), NOT_RECORDED] },
       { key: 'fit', label: 'Fit', options: [opt('strong', 'Has a strong fit'), opt('none', 'No strong fit')] },
     ],
-    sorts: [{ key: 'evidence', label: 'Evidence' }],
+    sorts: [{ key: 'evidence', label: 'Evidence' }, { key: 'name', label: 'Name' }, { key: 'strong', label: 'Strong fit' }, { key: 'interviews', label: 'Interviews' }],
   },
   'market-intelligence': {
     cols: ['Company', 'Kind', 'Latest signal', 'Date', 'Source'],

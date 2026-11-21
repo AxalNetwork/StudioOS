@@ -9,7 +9,9 @@
  *                 request, marked with the effect's idempotency key; retracted by deleting that comment.
  *   stream        the `STREAM` binding of `services/learningStream.ts`: the release is recorded on the named video's
  *                 `meta` under the effect's key, with signed playback kept on; retracted by removing that record.
- *   signed_document, website_cdn, external_distribution
+ *   signed_document  `services/workGraphReleaseSigning.ts` (part 4, D5585-p4): an e-sign envelope the release owner
+ *                 signs, through the native e-sign service; retracted by voiding it.
+ *   website_cdn, external_distribution
  *                 refuse with `target_not_configured` on every call and call nothing (D5585-p3 §2 says why each).
  *
  * EVERY ADAPTER:
@@ -30,6 +32,7 @@ import { STREAM_UID_RE, streamOf } from './learningStream';
 import { drainEffects, type DeliveryResult, type EffectHandler } from './workGraphEffects';
 import type { BlobCost } from './workGraphBlobs';
 import { EFFECT_TARGETS, type EffectTarget } from './workGraphReleases';
+import { signedDocumentAdapter } from './workGraphReleaseSigning';
 import {
   DeliveryRetry, releaseEffectHandlers,
   type ReleaseAdapters, type ReleaseDeliveryAdapter, type ReleaseDeliveryRequest,
@@ -205,7 +208,7 @@ export function releaseAdapters(env: Env, meter: ProviderMeter): Required<Releas
   return {
     github_pr: githubPrAdapter(env, meter),
     stream: streamAdapter(env, meter),
-    signed_document: unconfiguredAdapter(),
+    signed_document: signedDocumentAdapter(env, meter),
     website_cdn: unconfiguredAdapter(),
     external_distribution: unconfiguredAdapter(),
   };
