@@ -9,6 +9,7 @@ and by a person deciding whether a thing exists.
 | Path | What it is |
 | --- | --- |
 | `branches/` | One file per subsidiary deployment — the branch registry. Start at its README. |
+| `runners/` | D7889: disabled image preparation requested by #7889; separate from the branch resource registry and never evidence of a deployed resource. |
 
 **HQ is not in here.** The `studioos` Worker, `studioos-db` and their bindings
 are declared in `wrangler.toml`, which deploys them; adding a second record of
