@@ -39,7 +39,7 @@
  *                           writes its row before it ever looks the account up,
  *                           so this need not be a registered user — but it IS
  *                           sent a real email, so it must be an inbox you own.
- *   CLOUDFLARE_API_TOKEN    already a repository secret (D1 scope)
+ *   CLOUDFLARE_API_TOKEN    production-ops environment secret (D1 access)
  *   CLOUDFLARE_ACCOUNT_ID   already a repository secret
  *   MAGIC_PROBE_HOST        default https://axal.vc
  *   MAGIC_START_BUDGET_MS   default 5000
@@ -465,8 +465,8 @@ async function main() {
   const missing = missingConfig();
   if (missing.length) {
     console.error(`check-magic-link-insert: NOT CONFIGURED — missing ${missing.join(', ')}`);
-    console.error('  CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are already repository secrets;');
-    console.error('  MAGIC_PROBE_EMAIL is the one to add. This is not a pass.');
+    console.error('  Set CLOUDFLARE_API_TOKEN in the production-ops environment.');
+    console.error('  Also check CLOUDFLARE_ACCOUNT_ID and MAGIC_PROBE_EMAIL.');
     process.exit(2);
   }
 

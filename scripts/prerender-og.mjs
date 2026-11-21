@@ -40,6 +40,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { OG_ROUTES, ogTagsFor } from '../frontend/src/lib/ogRegistry.js';
+import { programOgRoutes } from './lib/programCatalog.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -112,8 +113,8 @@ ${lines.map((l) => (l ? `  ${l}` : '')).join('\n')}
 }
 
 /** Replace the shell's head metadata with this route's. */
-function renderRoute(shell, pathname) {
-  const tags = ogTagsFor(pathname);
+function renderRoute(shell, pathname, overrides = {}) {
+  const tags = ogTagsFor(pathname, overrides);
 
   // Drop any previously-injected block first so re-running is idempotent. The
   // leading `\n?` pairs with the newline added at injection time — without it
@@ -140,7 +141,10 @@ function outFileFor(pathname) {
     : path.join(OUT_DIR, pathname.replace(/^\//, ''), 'index.html');
 }
 
-function main() {
+async function main() {
+  // D6966 (#6966): each program presentation's own page, from its map entry, after the registry's
+  // routes (a program's page that is also a registry path keeps the program's title).
+  const routes = [...OG_ROUTES, ...(await programOgRoutes())];
   const shellFile = path.join(OUT_DIR, 'index.html');
   if (!fs.existsSync(shellFile)) {
     console.error(
@@ -155,8 +159,8 @@ function main() {
   const problems = [];
   let written = 0;
 
-  for (const route of OG_ROUTES) {
-    const { html, tags } = renderRoute(shell, route.path);
+  for (const route of routes) {
+    const { html, tags } = renderRoute(shell, route.path, route.overrides);
     const outFile = outFileFor(route.path);
 
     if (CHECK) {
@@ -182,11 +186,14 @@ function main() {
       console.error('\nRun: node scripts/prerender-og.mjs');
       process.exit(1);
     }
-    console.log(`Prerender check passed — ${OG_ROUTES.length} routes up to date.`);
+    console.log(`Prerender check passed — ${routes.length} routes up to date.`);
     return;
   }
 
   console.log(`\nPrerendered ${written} routes into ${path.relative(ROOT, OUT_DIR)}/`);
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
