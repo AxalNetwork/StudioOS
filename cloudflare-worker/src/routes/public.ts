@@ -30,6 +30,7 @@ import { REGISTRY } from '../integrations/registry';
 import { MCP_PROVIDERS } from '../integrations/mcpProviders';
 import { channelRollout } from '../services/channels/connections';
 import { jsonWithEtag } from '../util/httpCache';
+import { routeMcp } from '../mcp/oauth';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -726,9 +727,13 @@ async function probeMcpServer(c: Parameters<typeof requireAuth>[0]): Promise<Ser
   try {
     const origin = new URL(c.req.url).origin;
     const [authorizationResponse, resourceResponse, transportResponse] = await Promise.all([
-      fetch(`${origin}/.well-known/oauth-authorization-server`, { headers: { 'User-Agent': 'axal-status-page' } }),
-      fetch(`${origin}/.well-known/oauth-protected-resource/mcp`, { headers: { 'User-Agent': 'axal-status-page' } }),
-      fetch(`${origin}/mcp`, {
+      routeMcp(new Request(`${origin}/.well-known/oauth-authorization-server`, {
+        headers: { 'User-Agent': 'axal-status-page' },
+      }), c.env, c.executionCtx),
+      routeMcp(new Request(`${origin}/.well-known/oauth-protected-resource/mcp`, {
+        headers: { 'User-Agent': 'axal-status-page' },
+      }), c.env, c.executionCtx),
+      routeMcp(new Request(`${origin}/mcp`, {
         method: 'POST',
         headers: {
           'User-Agent': 'axal-status-page',
@@ -737,7 +742,7 @@ async function probeMcpServer(c: Parameters<typeof requireAuth>[0]): Promise<Ser
           'MCP-Protocol-Version': '2025-06-18',
         },
         body: JSON.stringify({ jsonrpc: '2.0', id: 'status-probe', method: 'tools/list', params: {} }),
-      }),
+      }), c.env, c.executionCtx),
     ]);
     if (!authorizationResponse.ok || !resourceResponse.ok || transportResponse.status !== 401) {
       return { ...base, status: 'down' };
