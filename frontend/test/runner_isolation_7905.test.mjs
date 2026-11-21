@@ -13,7 +13,7 @@ function fixture(t){
  if(!clocked.has(t)){t.mock.timers.enable({apis:['Date'],now:NOW});clocked.add(t);}
  const root=mkdtempSync(join(tmpdir(),'isolation-7905-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const source=join(root,'source'),plan=join(root,'plan.json');mkdirSync(source);writeFileSync(plan,'{}');
- const calls=[],runtime={node:"22.23.3",python:"3.11.18"};let state;
+ const calls=[],staged=[],runtime={node:"22.23.3",python:"3.11.18",readable:true};let state;
  const engine=(args,options)=>{
   calls.push({args,options});
   if(args[0]==='create'){
@@ -23,12 +23,13 @@ function fixture(t){
     Mounts:[{Type:'bind',Source:source,Destination:'/input',RW:false,Propagation:'rprivate'},{Type:'bind',Source:plan,Destination:'/input-plan.json',RW:false,Propagation:'rprivate'}]};return CID+'\n';
   }
   if(args[0]==='inspect')return JSON.stringify([state]);
+  if(args[0]==='exec'&&args.includes('/usr/local/bin/node')&&args.includes('-e'))return runtime.readable?'readable':'';
   if(args[0]==='exec'&&args.includes('/usr/local/bin/node'))return runtime.node+'\n';
   if(args[0]==='exec'&&args.includes('/usr/local/bin/python3'))return runtime.python+'\n';
   return '';
  };
- const job=new JobContainer({version:1,image:IMAGE,nodeVersion:'22.23.3',pythonVersion:'3.11.18'},{engine,namespace:()=>true});
- return {job,calls,runtime,source,plan,state:()=>state,create:()=>job.create(receipt(),{source,plan})};
+ const job=new JobContainer({version:1,image:IMAGE,nodeVersion:'22.23.3',pythonVersion:'3.11.18'},{engine,namespace:()=>true,stage:inputs=>staged.push(inputs)});
+ return {job,calls,staged,runtime,source,plan,state:()=>state,create:()=>job.create(receipt(),{source,plan})};
 }
 test('D7905 creates a per-run unprivileged container with only read-only inputs and no listener or engine socket',t=>{
  const f=fixture(t);assert.equal(f.create(),CID);assert.equal(f.job.verifyIsolation({receipt:receipt()}),true);
@@ -125,4 +126,15 @@ test('D7905 the container lifetime survives host loss and its init identity diff
   const expired=fixture(t);assert.throws(()=>expired.job.create({...receipt(),executionDeadline},{source:expired.source,plan:expired.plan}),/invalid_container_deadline/);
   assert.equal(expired.calls.length,0);
  }
+});
+test('D7905 inputs are staged for the candidate before create, and an input the candidate cannot read fails isolation',t=>{
+ const f=fixture(t);f.create();
+ assert.equal(f.staged.length,1);assert.equal(f.staged[0].plan,f.plan);assert.equal(f.calls[0].args[0],'create');
+ const probe=f.calls.find(c=>c.args[0]==='exec'&&c.args.includes('-e'));
+ assert.equal(probe.args[probe.args.indexOf('--user')+1],'10000:10000');
+ assert.match(probe.args.at(-1),/\/input-plan\.json/);assert.match(probe.args.at(-1),/\/input\/package\.json/);
+ assert.equal(f.job.verifyIsolation({receipt:receipt()}),true);
+ f.runtime.readable=false;assert.equal(f.job.verifyIsolation({receipt:receipt()}),false);
+ const g=fixture(t);g.runtime.readable=false;assert.throws(()=>g.create(),/container_start_or_isolation_failed/);
+ assert.deepEqual(g.calls.at(-1).args,['rm','--force',CID]);
 });
