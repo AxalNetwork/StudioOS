@@ -1,3 +1,8 @@
+/**
+ * #3590: `spaChunks.mjs` over the built Vite fixture: lazy JS and CSS named,
+ * malformed or unsafe dependency lists fail closed, module-script entries only,
+ * and which retained generation is captured.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';

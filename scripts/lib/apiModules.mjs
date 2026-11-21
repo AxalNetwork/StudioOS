@@ -1,4 +1,12 @@
 /**
+ * Which files hold the SPA's client calls — `frontend/src/lib/api.js` and every
+ * module under `frontend/src/lib/api/` — the generated re-export index's exact
+ * text and whether the built one names exactly those modules in alphabetical
+ * order (#4105) from a deterministic generator, untracked by git (D5612),
+ * whether `api.js` re-exports it, and whether each `request()` call has a
+ * Worker route (D527). Owned by `../check-api-drift.mjs` and
+ * `../build-api-index.mjs`.
+ *
  * The SPA's API client, read as text: `frontend/src/lib/api.js` and every
  * domain module under `frontend/src/lib/api/` (D527).
  *

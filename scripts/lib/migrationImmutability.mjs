@@ -1,4 +1,12 @@
 /**
+ * Which changes may land under `cloudflare-worker/sql/migrations/`: an
+ * addition, and nothing that alters a file already on the base. It parses `git
+ * diff --name-status -z`, refuses a status letter it does not know, and
+ * resolves the base — a pull request's base branch, or on a push to main the
+ * commit main pointed at before it — refusing any branch name or commit id git
+ * could read as something else. Owned by `../migration-immutability-gate.mjs`
+ * (D269).
+ *
  * A migration that has been applied is never edited, deleted or renamed.
  * The rule, with no side effects, so a test can drive it.
  *

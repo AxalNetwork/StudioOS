@@ -1,4 +1,9 @@
 /**
+ * GitHub health alerts for Slack: which transitions open or close an `[alert]
+ * ...` issue (main red, reviewer calling no model, Actions queue backed up),
+ * the failing tests in a future-clock TAP log, and the Slack text. Owned by
+ * `../github-alerts.mjs`.
+ *
  * GitHub health alerts for a Slack channel: the pure half. The CLI that does
  * the effects (GitHub API, Slack webhook) is `../github-alerts.mjs`.
  *

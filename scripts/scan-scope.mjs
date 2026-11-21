@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-/** D5602: GitHub file inventory, bounded SARIF snapshots and prior-main artifact reads for scan policy. */
+/**
+ * D5602: scan admission, authenticated prior-run artifact proof, opaque SARIF
+ * snapshots and main baseline preparation.
+ *
+ * D5602: GitHub file inventory, bounded SARIF snapshots and prior-main artifact
+ * reads for scan policy.
+ */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, closeSync, mkdirSync, mkdtempSync, openSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

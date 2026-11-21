@@ -1,4 +1,17 @@
 #!/usr/bin/env node
+// #6462: read-only report of effective Actions concurrency. Rebuilds jobs
+// executing per minute over a window (default 24 h) from every run's job
+// timestamps: the effective ceiling (the level executing sat at while jobs
+// queued), peak, the highest level held for 10 minutes, share of time at the
+// ceiling, queued jobs per minute, slot-minutes per workflow and per event
+// (draft vs ready PRs from each PR's timeline), whether phantom queued runs
+// ever held a slot, and which plan cap (20, 40, 60, 500) the ceiling matches.
+// #6676: also a merge-candidate table (`merge_group` runs of `ci.yml`: minutes
+// from run creation to the first job with a runner and to the first `landing
+// gate` result, p50/p90 by UTC hour). GET requests only, capped (`--cap`,
+// `--reserve`); prints how much of the window it covered. `--save`/`--load`
+// re-render without the API. Logic in `lib/actionsConcurrency.mjs`.
+//
 // #6462: read-only Actions concurrency report — rebuilds jobs executing per minute over a window from job timestamps. GET requests only.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { analyse, phantomVerdict, report } from './lib/actionsConcurrency.mjs';

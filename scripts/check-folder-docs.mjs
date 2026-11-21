@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 /**
+ * A folder that carries weight without explaining itself, or a README naming a
+ * file that does not exist.
+ *
  * check-folder-docs — every folder that matters explains itself, and the
  * explanation is checked against reality.
  *

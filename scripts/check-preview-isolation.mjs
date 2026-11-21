@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * #4566: is preview provably separate from production? `--static` (in
+ * `test:guards`) fails when `[env.preview]` declares a production identity (D1,
+ * KV, queue, DLQ, Workflow, Durable Object owner, R2, AI Gateway slug, Worker
+ * name), an unknown binding kind, or production's agent switches are not
+ * off/manual. `--observed <file>` (the owner, before every hosted run) also
+ * compares the deployed preview's observed ids and secret names, and exits 0
+ * only on `isolated`. Rules in `lib/previewIsolation.mjs`; the runbook is
+ * `documentation/operations/AGENT_EXECUTION_VALIDATION.md`.
+ *
  * #4566 — the preview isolation preflight (rules: `scripts/lib/previewIsolation.mjs`).
  *
  *   node scripts/check-preview-isolation.mjs --static

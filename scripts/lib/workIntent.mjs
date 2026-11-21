@@ -1,4 +1,10 @@
 /**
+ * D5580 part 2: the WorkIntent view derived from the #5617 claim ref, STATUS
+ * claims and the claimant's open PRs (WorkItem fields it cannot fill are null),
+ * the duplicate/stale/disappeared-PR/invalid-slot/expiry rules and the soft
+ * proceed/coordinate/wait/serialize recommendation; tested in
+ * `workIntent.test.mjs`.
+ *
  * D5580 (#5580 part 2): the WorkIntent view and its soft proceed/coordinate/wait/serialize recommendation. Pure: the
  * CLI `../pr-overlap.mjs` reads GitHub and hands the rows in; `walkClaim` takes its commit reader handed in.
  *

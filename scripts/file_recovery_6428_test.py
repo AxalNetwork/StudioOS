@@ -1,3 +1,5 @@
+# D6428: synthetic registry, lock duration, archive immutability, corruption,
+# copy failure and suppression regressions.
 """D6428: synthetic-only backup, immutable archive, corruption, registry, lock and suppression regressions."""
 import importlib.util
 import tempfile

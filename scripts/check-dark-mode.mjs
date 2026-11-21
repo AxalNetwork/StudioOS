@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /**
+ * A surface with no dark variant.
+ *
  * Task #17 — Dark-mode regression guard.
  *
  * Fails when a JSX/TSX file under `frontend/src/{pages,components}`

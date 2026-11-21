@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 /**
+ * SEC EDGAR's public company list (the company tickers exchange file on
+ * sec.gov), one row per CIK with its name, ticker and exchange, each citing
+ * EDGAR, its URL, its licence and the date read (D595). The header number is
+ * the leading digits of `--out`. Migration 404 created the empty table; the
+ * rows are migration 412. It never writes to a database. The SEC requires a
+ * descriptive User-Agent, and this one names `SECURITY.md`'s public contact.
+ * `node scripts/import-sec-edgar.mjs --out
+ * cloudflare-worker/sql/migrations/412_research_public_companies_edgar.sql`, or
+ * `--from` a saved copy with `--as-of YYYY-MM-DD`. The default path is still
+ * 404's applied file, so a run passes `--out`. The rules live in
+ * `lib/secEdgarCompanies.mjs`.
+ *
  * Writes a migration from SEC EDGAR's public company list (#1230, D595).
  *
  *   node scripts/import-sec-edgar.mjs --out <path>    fetch the file from sec.gov and write that migration

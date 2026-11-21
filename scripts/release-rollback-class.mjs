@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// D7151: report-only release step that records, before any write, whether the
+// release could be rolled back automatically (`auto`, `auto-additive`,
+// `manual`), the reasons and the rollback target, into the release evidence and
+// job summary. Always exits 0. Rules in `lib/rollbackClass.mjs`.
+//
 // D7151 (#7151): record whether this release could be rolled back
 // automatically. REPORT ONLY: it writes evidence and a job-summary section and
 // always exits 0, so it can never change what the release does. #7152 acts on

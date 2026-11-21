@@ -1,3 +1,10 @@
+/**
+ * D5617: the work-in-progress report `../claim.mjs` prints and caps on: open
+ * PRs per slot (from a `Closes`/`Part of` body line or an
+ * `agent/<slot>/<issue>-` branch), their state (draft, red, conflicted, green,
+ * waiting), expired claims, the `--wip` cap's parse and the PRs that block a
+ * claim at the cap.
+ */
 import { readFileSync } from 'node:fs';
 import { claimRef, isExpired, parseClaim } from './claims.mjs';
 

@@ -35,6 +35,7 @@ import { buildEntry, writeEntry } from '../../scripts/write-branch-registry.mjs'
 import { principalSql, sqlLiteral } from '../../scripts/seed-branch-principal.mjs';
 import { addServiceBinding, bindingName } from '../../scripts/open-branch-link-pr.mjs';
 import { validateBranch } from '../../scripts/lib/branchConfig.mjs';
+import { headerComment, indexMode } from '../../scripts/lib/folderFiles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -342,8 +343,11 @@ test('the HQ binding is added to BOTH tables, once', () => {
 
 test('the workflow and its scripts are on the record', () => {
   assert.match(read('.github/workflows/README.md'), /branch-provision\.yml/);
+  // #6470: scripts/README.md's list is generated from each script's header comment.
   const scripts = read('scripts/README.md');
+  assert.equal(indexMode(scripts), 'generated');
   for (const s of ['write-branch-registry', 'seed-branch-principal', 'open-branch-link-pr']) {
-    assert.match(scripts, new RegExp(s), `${s}.mjs must be listed in scripts/README.md`);
+    assert.match(scripts, new RegExp(s), `${s}.mjs must be named under "Deploying a branch" in scripts/README.md`);
+    assert.match(headerComment(`${s}.mjs`, read(`scripts/${s}.mjs`)), /\S/, `${s}.mjs needs a header comment for scripts/README.md's generated list`);
   }
 });

@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 /**
+ * #4570: the authorization inventory of the production Worker — every route's
+ * gate (super_admin, hq_admin, admin, cf_access, authenticated, service,
+ * optional_auth, forwarded, public) and the ownership checks it reaches, read
+ * statically from the same mounts as the API drift guard. With no flag it
+ * writes the inventory as AUTH_INVENTORY.json beside the route map in
+ * documentation/architecture (build output, gitignored; CI keeps it in the
+ * `routing-docs` artifact). `--check`, in `test:guards`, fails on a route that
+ * needs review and has no entry in `baselines/auth-inventory/`, on a stale or
+ * changed entry, and on a mount that resolves to no route: unknown
+ * authorization is review required. `--seed` adds the missing entries as
+ * `unreviewed`. The reader lives in `lib/authInventory.mjs`.
+ *
  * #4570 (S1 of #4554) — the authorization inventory of the production Worker.
  *
  *   node scripts/build-auth-inventory.mjs           writes documentation/architecture/AUTH_INVENTORY.json:

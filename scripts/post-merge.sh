@@ -1,4 +1,6 @@
 #!/bin/bash
+# Replit post-merge hook: installs the Python dependencies (uv, else pip) and
+# the frontend and worker npm packages after a merge.
 set -e
 
 if [ -f pyproject.toml ] && command -v uv >/dev/null 2>&1; then

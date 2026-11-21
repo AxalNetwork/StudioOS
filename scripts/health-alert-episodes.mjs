@@ -1,3 +1,5 @@
+// D5663: paginated health episodes with persistent transition delivery intents.
+//
 // D5663: issue-backed health episodes and durable delivery intent; transports are injected for tests/adapters.
 import { ALERT_KINDS, mainState, message, safeStallIdentities } from './lib/githubAlerts.mjs';
 const marker = /\n?<!-- studioos-health:v1 ([^\n]+) -->/g;

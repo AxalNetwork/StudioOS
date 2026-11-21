@@ -1,5 +1,18 @@
 #!/usr/bin/env node
 /**
+ * A **real magic-link sign-in**, end to end: POST `/api/auth/magic/start`, read
+ * the link out of a real inbox, follow it, assert a session. Three verdicts
+ * reported separately, because D74 moved the email send to `waitUntil` and so
+ * `/magic/start` can answer `202` in 200ms while the mail never arrives — a
+ * fast endpoint is necessary and nowhere near sufficient. Needs a dedicated
+ * production test account and read access to its mailbox (`MAGIC_PROBE_EMAIL`,
+ * `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`); **exits 2
+ * and verifies nothing without them, never 0**. Cannot run from an agent
+ * sandbox — that proxy answers `403 CONNECT` for `axal.vc` — so its home is
+ * `.github/workflows/magic-link-probe.yml`. Guarded by
+ * `frontend/test/magic_link_probe.test.mjs`; see
+ * `documentation/architecture/DECISIONS.md` D78.
+ *
  * Task #168 — does the magic-link sign-in actually work in production?
  *
  * A successful /magic/start accepts the email for queued delivery. It can

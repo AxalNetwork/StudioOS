@@ -1,3 +1,8 @@
+// #6462: per-minute executing and queued job levels from job timestamps (a job
+// executes only once a runner took it), effective ceiling (the level held while
+// jobs queue), slot shares, PR draft state at run time and the plan-cap match;
+// `actionsConcurrency.test.mjs` holds the fixture jobs.
+//
 // #6462: rebuild Actions job concurrency per minute from job timestamps; saturation ceiling, queue depth, slot shares, plan-cap match.
 const minute = 60_000;
 const stamp = value => (typeof value === 'string' && value ? Date.parse(value) : NaN);

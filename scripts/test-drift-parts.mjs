@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * D4130 (not a check): cuts `npm run test:drift` into the parts CI runs in
+ * parallel, derived from `package.json` — the frontend and worker suites as
+ * `--test-shard` shards (`SHARDS`), everything else as `rest`. `--list` prints
+ * the parts; `<part>` runs one. `frontend/test/ci_suite_parts_4130.test.mjs`
+ * holds the union to the suite and ci.yml's matrix to the parts. Locally, run
+ * the whole suite with `npm run test:drift`.
+ *
  * D5609 (#5609): test:drift parts derived from package scripts. SHARDS is the
  * only count source. --plan <timings.json> writes suite-plan.json and emits
  * a compact JSON array of names; --without-rest omits rest from that array.

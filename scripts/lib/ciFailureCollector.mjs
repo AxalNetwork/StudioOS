@@ -1,3 +1,4 @@
+/** D5502: bounded Actions artifact reads, archive validation and tested-base comparison. */
 /** D5502 (#5502): read bounded failure artifacts and compare only the run's recorded base, never latest main. */
 import { inflateRawSync, crc32 } from 'node:zlib';
 import { readCentralDirectory } from './previewArtifact.mjs';

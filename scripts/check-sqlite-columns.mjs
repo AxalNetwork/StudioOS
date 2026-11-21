@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 /**
+ * SQL naming a column that does not exist. D1 rejects the whole statement, so
+ * this renders as an empty screen rather than an error.
+ *
  * Fails the build when the worker INSERTs into a column nothing creates.
  *
  * The sibling of `check-sqlite-tables.mjs`, one level finer. A missing table

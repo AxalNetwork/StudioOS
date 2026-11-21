@@ -1,5 +1,13 @@
 /**
  * D7146 (#7146): what the trusted preview deploy accepts from a pull request's
+ * build artifact. Reads the zip's central directory itself and returns its
+ * files only when every entry passes: regular files and directories, static
+ * extensions, safe names (no `..`, absolute path, backslash or leading dot
+ * except `.well-known/`), none of the configuration names wrangler reads
+ * (`CONTROL_NAMES`), exact sizes and CRCs, file-count and byte caps. Owned by
+ * `../check-preview-artifact.mjs`; tested in `previewArtifact.test.mjs`.
+ *
+ * D7146 (#7146): what the trusted preview deploy accepts from a pull request's
  * build artifact. The artifact was built by pull-request code, so it is
  * untrusted data: this module reads the zip GitHub serves for it, byte by byte,
  * and either returns the static files it holds or refuses the whole archive.
