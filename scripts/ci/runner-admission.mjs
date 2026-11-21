@@ -18,7 +18,12 @@ export const EXECUTION_BUDGETS=Object.freeze({
  hosted:Object.freeze({startMs:10*60000,executionMs:40*60000,jobMinutes:45,testMinutes:41}),
  'linux-x64':Object.freeze({startMs:90000,executionMs:25*60000,jobMinutes:35,testMinutes:26}),
  'macos-arm64':Object.freeze({startMs:90000,executionMs:25*60000,jobMinutes:35,testMinutes:26}),
+ // D7907: provisional until the bounded canary measures a full shard on this runner; must equal the coordinator's included budgets.
+ 'github-8':Object.freeze({startMs:3*60000,executionMs:28*60000,jobMinutes:38,testMinutes:29}),
 });
+export const PROFILES=Object.freeze(['hosted','github-8','linux-x64','macos-arm64']);
+/** D7907: the one reviewed included-compute target (group 6). Never derived from a request, receipt or workflow input. */
+export const INCLUDED_TARGET=Object.freeze({group:'StudioOS Included Compute',groupId:6,labels:Object.freeze(['studioos-bench-linux-8'])});
 
 class Denied extends Error {}
 const requireThat = (condition,reason)=>{if(!condition)throw new Denied(reason);};
@@ -41,7 +46,7 @@ function validateReceipt(envelope,request,context,now,phase){
  requireThat(sameId(receipt.generation,request.generation),'receipt_generation_mismatch');
  requireThat(sameId(receipt.childRunId,context.childRunId)&&sameId(receipt.childAttempt,context.childAttempt),'receipt_child_mismatch');
  requireThat(SHA.test(receipt.sourceSha)&&SHA.test(receipt.executorSha)&&receipt.executorSha===context.executorSha,'receipt_source_or_executor_invalid');
- requireThat(['hosted','linux-x64','macos-arm64'].includes(receipt.profile)&&receipt.profile===request.profile,'receipt_profile_mismatch');
+ requireThat(PROFILES.includes(receipt.profile)&&receipt.profile===request.profile,'receipt_profile_mismatch');
  requireThat(SHARD.test(receipt.logicalShard)&&receipt.logicalShard===request.shard,'receipt_shard_mismatch');
  requireThat(['push','merge_group'].includes(receipt.event),'receipt_original_event_invalid');
  requireThat(receipt.event==='push'?receipt.queueBaseSha===null:SHA.test(receipt.queueBaseSha),'receipt_original_base_invalid');
@@ -56,10 +61,16 @@ function validateReceipt(envelope,request,context,now,phase){
 
 /** Resolved values come from #7885's trusted catalog adapter, never workflow inputs or receipt-supplied runs-on. */
 export function executionTarget(profile){
- requireThat(profile&&['hosted','linux-x64','macos-arm64'].includes(profile.id),'unknown_profile');
+ requireThat(profile&&PROFILES.includes(profile.id),'unknown_profile');
  requireThat(/^22\.[0-9]+\.[0-9]+$/.test(profile.nodeVersion??'')&&/^3\.11\.[0-9]+$/.test(profile.pythonVersion??''),'profile_runtime_not_pinned');
  if(profile.id==='hosted'){
   requireThat(profile.target==='ubuntu-latest'&&profile.platform==='linux'&&profile.arch==='x64','invalid_hosted_target');return 'ubuntu-latest';
+ }
+ if(profile.id==='github-8'){
+  requireThat(profile.platform==='linux'&&profile.arch==='x64','profile_platform_mismatch');
+  requireThat(profile.approvedGroupId===INCLUDED_TARGET.groupId&&profile.target?.group===INCLUDED_TARGET.group&&JSON.stringify(profile.target.labels)===JSON.stringify(INCLUDED_TARGET.labels),'invalid_included_target');
+  requireThat(Array.isArray(profile.eligibleShards)&&profile.eligibleShards.length>0&&profile.eligibleShards.every(shard=>SHARD.test(shard)),'invalid_profile_shards');
+  return{group:INCLUDED_TARGET.group,labels:[...INCLUDED_TARGET.labels]};
  }
  const linux=profile.id==='linux-x64',labels=['self-hosted',linux?'Linux':'macOS',linux?'X64':'ARM64','studioos-worker-v1'];
  requireThat(profile.platform===(linux?'linux':'darwin')&&profile.arch===(linux?'x64':'arm64'),'profile_platform_mismatch');
@@ -185,7 +196,7 @@ export async function admitRunnerJob(request,{api,readReceipt,resolveProfile,ver
  const denied={allowed:false,reason:'admission_not_completed'};
  try{
   requireThat(phase==='start'||phase==='execute','invalid_admission_phase');
-  requireThat(REQUEST.test(request?.requestId??'')&&ID.test(String(request?.generation??''))&&SHARD.test(request?.shard??'')&&['hosted','linux-x64','macos-arm64'].includes(request?.profile),'invalid_request');
+  requireThat(REQUEST.test(request?.requestId??'')&&ID.test(String(request?.generation??''))&&SHARD.test(request?.shard??'')&&PROFILES.includes(request?.profile),'invalid_request');
   requireThat(context&&SHA.test(context.executorSha??'')&&ID.test(String(context.childRunId??''))&&ID.test(String(context.childAttempt??'')),'invalid_executor_context');
   requireThat(typeof readReceipt==='function','receipt_authority_unconfigured');
   requireThat(typeof api==='function','github_api_unavailable');
