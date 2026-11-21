@@ -45,6 +45,7 @@ permissions:
 
 jobs:
   stage-a:
+    environment: production-ops
     name: one hosted lifecycle per path, then teardown
     runs-on: ubuntu-latest
     timeout-minutes: 90

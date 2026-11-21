@@ -312,6 +312,11 @@
       "channel": "#axalvc-actions-round-call-worker-contracts"
     },
     {
+      "id": null,
+      "path": ".github/workflows/included-compute-canary.yml",
+      "channel": "#axalvc-actions-included-compute-canary"
+    },
+    {
       "id": 416139951,
       "path": ".github/workflows/runner-benchmark.yml",
       "channel": "#axalvc-actions-runner-benchmark"

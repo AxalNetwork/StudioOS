@@ -9,13 +9,14 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { recordedRelevance } from '../pages/research/companyCandidateRead';
-import { exportProblem } from '../pages/research/companyAnalysisDraft';
+import { exportFilename, exportProblem } from '../pages/research/companyAnalysisDraft';
+import ExportPreview from '../pages/research/ExportPreview.jsx';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { useRailOption, useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions/index.js';
 import { railPressHeaders } from '../lib/railPage.js';
 import { EvidenceChip, NoSubject, SubjectBar, SubjectCard, useSubjectRecord } from '../pages/research/AnalysisSubject.jsx';
-import { isSubjectName, splitNames, subjectCard } from '../pages/research/companyAnalysisRead';
+import { addKnown, isSubjectName, splitNames, subjectCard } from '../pages/research/companyAnalysisRead';
 
 // Competitor Analysis — in-house, Cloudflare-native competitive intelligence.
 // Discovery + controlled public-web crawl + Workers AI synthesis. Prefills from
@@ -91,17 +92,30 @@ export async function fetchExport(url) {
  * 2xx, or a body that is not Markdown, throws, and nothing is downloaded.
  */
 export async function fetchMarkdown(url) {
+  return (await loadExport(url, 'md')).text;
+}
+
+/**
+ * D7175 part 2 (RS-13 B5): one export read for the preview, checked as a
+ * download is: a status that is not 2xx, or a body of another type than the
+ * format's, throws with what came back, and the preview downloads nothing.
+ */
+export async function loadExport(url, format) {
   const got = await fetchExport(url);
-  const problem = exportProblem(got.status, got.type, 'md');
+  const problem = exportProblem(got.status, got.type, format);
   if (problem) {
+    const label = format === 'md' ? 'Markdown' : 'JSON';
     const e = new Error(problem.kind === 'status'
-      ? `The Markdown export failed. Nothing was downloaded. The server answered ${problem.status}.`
-      : `The export did not return Markdown. Nothing was downloaded. The server answered ${problem.status} with ${problem.type}.`);
+      ? `The ${label} export failed. Nothing was downloaded. The server answered ${problem.status}.`
+      : `The export did not return ${label}. Nothing was downloaded. The server answered ${problem.status} with ${problem.type}.`);
     e.status = got.status;
     throw e;
   }
-  return got.text;
+  return got;
 }
+
+/** The time a run started, as the running bar prints it (HH:MM, local time). */
+export const startClock = (ms) => new Date(ms).toTimeString().slice(0, 5);
 
 /**
  * `zoneActions` is a render prop, called with the saved analyses on screen —
@@ -220,8 +234,23 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   const subjectLinkName = embedded ? '' : (searchParams.get('name') || '').slice(0, 200);
   const { read: subjectRead, retry: retrySubject } = useSubjectRecord(subjectUid);
   const subject = subjectUid ? subjectCard(subjectRead, subjectLinkName) : null;
+  // What self-match protection compares a typed name with: the record's name and site, and the uid.
+  const subjectForMatch = subject ? { ...subject, uid: subjectUid } : null;
   // A refusal the run came back with, drawn in its own words (403, 400 market_required).
   const [refusal, setRefusal] = useState(null);
+  // D7175 part 2 (RS-13 A2): the name being typed into Known competitors, and
+  // the names the field last refused because they are the subject.
+  const [knownDraft, setKnownDraft] = useState('');
+  const [knownRefused, setKnownRefused] = useState([]);
+  // RS-13 A4: who the run is for. A subject in the link makes it a directory
+  // company; without one the reader may pick either, and it starts custom.
+  const [forPick, setForPick] = useState('custom');
+  const runsFor = subjectUid ? 'company' : forPick;
+  // RS-13 A5: when this browser started the run, for the running bar.
+  const [startedAt, setStartedAt] = useState(null);
+  // RS-13 C4: Market takes focus when a custom market is chosen; the results heading after a run.
+  const marketRef = useRef(null);
+  const resultsRef = useRef(null);
 
   const applySaved = useCallback((list) => {
     if (list === READ_FAILED) { setSavedState('failed'); return; }
@@ -365,9 +394,11 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     setStatus('');
     setAnalyzing(true); setRunning('analyze');
     setAnalysis(null);
+    setStartedAt(Date.now());
     const run = ++runFor.current;
     try {
-      const payload = { ...inputs };
+      // D7175 part 2: a name still being typed into Known competitors runs with the tokens.
+      const payload = { ...inputs, known_competitors: addKnown(splitNames(inputs.known_competitors), knownDraft, subjectForMatch).tokens.join(', ') };
       if (mode === 'startup' && projectId) { payload.project_id = projectId; payload.mode = 'startup'; }
       else payload.mode = 'custom';
       // D7175: the subject rides by its uid; the Worker reads the record again.
@@ -377,12 +408,14 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       if (runFor.current !== run) { applySaved(await api.competitors.list().catch(() => READ_FAILED)); return; }
       // D313 — in the Research zone a finished run opens on its own page, the
       // same place the saved list links; elsewhere it opens in place.
+      // D7175 part 2 (RS-13 C4): focus lands on the results heading, there or here.
       if (linkToDossier && full?.id) {
-        navigate(`/research/companies/${encodeURIComponent(full.id)}`);
+        navigate(`/research/companies/${encodeURIComponent(full.id)}`, { state: { focusResults: true } });
         return;
       }
       setAnalysis(full);
       setDirty(false);
+      setTimeout(() => resultsRef.current?.focus?.(), 0);
       // A successful run clears a failed read: the list just answered.
       applySaved(await api.competitors.list().catch(() => READ_FAILED));
     } catch (e) {
@@ -504,10 +537,62 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   }
 
   // D7175: the subject cannot be its own competitor; the field refuses it.
-  const selfMatch = subject ? splitNames(inputs.known_competitors).filter((n) => isSubjectName({ ...subject, uid: subjectUid }, n)) : [];
+  // D7175 part 2 (RS-13 A2): the field is tokens; the name being typed counts too.
+  const knownTokens = splitNames(inputs.known_competitors);
+  const selfMatch = subject ? [...knownTokens, knownDraft.trim()].filter((n) => n && isSubjectName(subjectForMatch, n)) : [];
   // A subject that is still loading, unreadable or not in the directory is not one a run can start on.
   const subjectBlocks = !!subject && subject.state !== 'ok';
-  const canAnalyze = inputs.market.trim() && !analyzing && !selfMatch.length && !subjectBlocks;
+  // RS-13 A4: "A directory company" with none chosen yet waits for one.
+  const companyUnpicked = runsFor === 'company' && !subjectUid;
+  const canAnalyze = inputs.market.trim() && !analyzing && !selfMatch.length && !subjectBlocks && !companyUnpicked;
+
+  /** Commit `typed` as tokens; the subject is refused, and a refused name stays in the field. */
+  function commitKnown(typed, keep = '') {
+    const { tokens, refused } = addKnown(knownTokens, typed, subjectForMatch);
+    setInput('known_competitors', tokens.join(', '));
+    setKnownRefused(refused);
+    setKnownDraft(refused.length && !keep ? refused.join(', ') : keep);
+  }
+  function onKnownChange(value) {
+    // A comma, semicolon or new line ends a name: what comes before it becomes a token.
+    if (/[,;\n]/.test(value)) {
+      const parts = value.split(/[,;\n]/);
+      const last = parts.pop().replace(/^\s+/, '');
+      commitKnown(parts.join(','), last);
+      return;
+    }
+    setKnownRefused([]);
+    setKnownDraft(value);
+  }
+  function onKnownKey(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (knownDraft.trim()) commitKnown(knownDraft);
+    } else if (e.key === 'Backspace' && !knownDraft && knownTokens.length) {
+      removeKnown(knownTokens[knownTokens.length - 1]);
+    }
+  }
+  function removeKnown(name) {
+    setInput('known_competitors', knownTokens.filter((t) => t !== name).join(', '));
+    setKnownRefused([]);
+  }
+
+  /** RS-13 A4: run for a directory company or a custom market. A custom market drops the subject and focuses Market. */
+  function pickRunsFor(next) {
+    if (next === runsFor) { if (next === 'custom') marketRef.current?.focus?.(); return; }
+    setForPick(next);
+    if (next === 'custom' && subjectUid) {
+      const p = new URLSearchParams(searchParams);
+      for (const k of ['company', 'name', 'website']) p.delete(k);
+      navigate({ search: `?${p.toString()}` });
+    }
+    if (next === 'custom') setTimeout(() => marketRef.current?.focus?.(), 0);
+  }
+  function runsForKeys(e) {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    e.preventDefault();
+    pickRunsFor(runsFor === 'company' ? 'custom' : 'company');
+  }
   // Embedded: scope the saved list to this startup only.
   const visibleSaved = embedded && project
     ? saved.filter((a) => Number(a.project_id) === Number(project.id))
@@ -603,19 +688,51 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           groups (Market question, the optional startup, Known competitors),
           then More context and the run bar, sticky on a phone. */}
       <div ref={formRef} className={`${CARD} p-5 mb-5`}>
+        {/* D7175 part 2 (RS-13 A4): who the run is for. A custom market drops the subject and moves focus to Market. */}
+        {!embedded && (chromeless || subjectUid) && (
+          <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="analysis-runs-for">
+            <span id="ca-runs-for" className="text-xs font-semibold text-gray-700 dark:text-gray-300">Run for</span>
+            <div role="radiogroup" aria-labelledby="ca-runs-for" onKeyDown={runsForKeys}
+              className="inline-flex overflow-hidden rounded-full border border-gray-200 dark:border-gray-700">
+              {[['company', 'A directory company'], ['custom', 'A custom market']].map(([k, label]) => (
+                <button key={k} type="button" role="radio" aria-checked={runsFor === k ? 'true' : 'false'} tabIndex={runsFor === k ? 0 : -1}
+                  onClick={() => pickRunsFor(k)}
+                  className={`min-h-[44px] px-4 text-sm font-medium sm:min-h-[36px] ${runsFor === k
+                    ? 'bg-violet-600 text-white dark:bg-violet-500 dark:text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className={HELP}>
+              {subjectUid ? `Started from ${subject?.name || 'a company profile'} · the subject stays until you change it`
+                : runsFor === 'custom' ? 'Started from Saved analyses · no company is the subject' : 'Pick the company in the Directory'}
+            </span>
+          </div>
+        )}
         {!embedded && subjectUid && (
           <div className="mb-4">
             <SubjectCard read={subjectRead} linkName={subjectLinkName} onRetry={retrySubject} onChange={() => navigate('/research/companies')} />
           </div>
         )}
-        {!embedded && !subjectUid && chromeless && <div className="mb-4"><NoSubject /></div>}
+        {!embedded && !subjectUid && chromeless && runsFor === 'custom' && <div className="mb-4"><NoSubject /></div>}
+        {!embedded && companyUnpicked && (
+          <section aria-label="Subject" data-testid="analysis-subject" data-subject-state="unpicked"
+            className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-violet-300 bg-violet-50/60 p-3 dark:border-violet-800 dark:bg-violet-950/30">
+            <p className="text-sm text-gray-800 dark:text-gray-200">
+              <span className="font-bold">Subject</span>{' '}
+              <span className="text-gray-600 dark:text-gray-400">No company chosen yet. Open one in the Directory and press Run competitor analysis on its profile: it arrives here as the subject.</span>
+            </p>
+            <Link to="/research/companies" className="text-sm font-semibold text-violet-700 underline dark:text-violet-300">Pick a company from the Directory</Link>
+          </section>
+        )}
 
         <fieldset className="mb-4">
           <legend className={GROUP}>Market question</legend>
           <p className={HELP}>What the run searches for. Required.</p>
           <div className="mt-2 mb-3">
             <label htmlFor="ca-market" className={LABEL}>Market / industry *</label>
-            <input id="ca-market" aria-label="Market or industry, required" aria-describedby="ca-market-help" aria-required="true"
+            <input id="ca-market" ref={marketRef} aria-label="Market or industry, required" aria-describedby="ca-market-help" aria-required="true"
               value={inputs.market} onChange={(e) => { setInput('market', e.target.value); if (refusal?.code === 'market_required') setRefusal(null); }}
               placeholder="e.g. AI sales enablement for SMBs" className={INPUT} />
             <p id="ca-market-help" className={`${HELP} mt-1`}>
@@ -710,16 +827,39 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           <legend className={GROUP}>Known competitors (optional)</legend>
           <p className={HELP}>Companies you already know compete. They are added as candidates and marked “Named by you”.</p>
           <label htmlFor="ca-known" className={`${LABEL} mt-2`}>Known competitors</label>
-          <input id="ca-known" aria-describedby="ca-known-help" value={inputs.known_competitors} onChange={(e) => setInput('known_competitors', e.target.value)} placeholder="comma-separated" className={INPUT} />
+          {/* D7175 part 2 (RS-13 A2): removable tokens; Enter or a comma ends a name; the subject is refused in place. */}
+          <div data-testid="known-tokens"
+            className="flex min-h-[42px] w-full flex-wrap items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2 py-1.5 focus-within:ring-2 focus-within:ring-violet-400/40 dark:border-gray-800 dark:bg-gray-950">
+            {knownTokens.map((t) => {
+              const refused = !!subjectForMatch && isSubjectName(subjectForMatch, t);
+              return (
+                <span key={t} data-known-token={t} data-refused={refused ? 'true' : undefined}
+                  className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-2.5 pr-1 text-xs font-semibold ${refused
+                    ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200'
+                    : 'border-gray-300 bg-gray-50 text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'}`}>
+                  {t}{refused ? ' · the subject' : ''}
+                  <button type="button" aria-label={`Remove ${t}`} onClick={() => removeKnown(t)}
+                    className="grid h-7 w-7 place-items-center rounded-full text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-800 sm:h-5 sm:w-5">✕</button>
+                </span>
+              );
+            })}
+            <input id="ca-known" aria-describedby="ca-known-help" value={knownDraft} onChange={(e) => onKnownChange(e.target.value)} onKeyDown={onKnownKey}
+              placeholder="Type a name and press Enter"
+              className="min-w-[160px] flex-1 border-0 bg-transparent py-1 text-sm text-gray-900 placeholder-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder-gray-500" />
+          </div>
           {selfMatch.length ? (
             <p id="ca-known-help" role="alert" className="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">
               {`${selfMatch.join(', ')}: the subject cannot be its own competitor. Remove it to run.`}
             </p>
+          ) : knownRefused.length ? (
+            <p id="ca-known-help" role="alert" className="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">
+              {`${knownRefused.join(', ')} not added: the subject cannot be its own competitor.`}
+            </p>
           ) : (
             <p id="ca-known-help" className={`${HELP} mt-1`}>
               {subject?.name
-                ? `Comma separates names. ${subject.name}${subject.host ? ` and ${subject.host}` : ''} are refused here: the subject cannot be its own competitor.`
-                : 'Comma separates names.'}
+                ? `Comma or Enter separates names. ${subject.name}${subject.host ? ` and ${subject.host}` : ''} are refused here: the subject cannot be its own competitor.`
+                : 'Comma or Enter separates names.'}
             </p>
           )}
         </fieldset>
@@ -772,10 +912,12 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
         <div className={`${CARD} p-8 text-center mb-5`} data-testid="analysis-running">
           {/* D7175 (RS-13 A5): the subject stays on screen while the one request runs. */}
           {!embedded && (subjectUid || chromeless) && (
-            <div className="mb-4 text-left"><SubjectBar uid={subjectUid} read={subjectRead} onRetry={retrySubject} running /></div>
+            <div className="mb-4 text-left"><SubjectBar uid={subjectUid} read={subjectRead} onRetry={retrySubject} running startedAt={startedAt ? startClock(startedAt) : null} /></div>
           )}
           <Loader2 size={28} className="animate-spin text-violet-500 mx-auto mb-3" />
           <p role="status" className="text-sm text-gray-600 dark:text-gray-400">Discovering candidates, reading public sites and writing the summary…</p>
+          {/* D7175 part 2 (RS-13 A5): the start time, also where no subject bar is drawn. */}
+          {startedAt && !(!embedded && (subjectUid || chromeless)) ? <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{`Started ${startClock(startedAt)}`}</p> : null}
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">No step-by-step progress is recorded; the run returns once, complete or failed. You can leave: the run still saves to Saved analyses.</p>
         </div>
       )}
@@ -799,7 +941,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           setManual={setManual}
           onAddManual={onAddManual}
           linkToDossier={linkToDossier}
-          onExportError={setError}
+          headingRef={resultsRef}
         />
       )}
 
@@ -967,7 +1109,7 @@ function AnalysisResults(props) {
     analysis, dirty, savingEdits, analyzing, onSave, onRerun, onRefresh,
     onRemoveCandidate, updateCandidate, updateOutput, setTitle,
     showManual, setShowManual, manual, setManual, onAddManual,
-    linkToDossier, onExportError,
+    linkToDossier, headingRef,
   } = props;
   const out = analysis.output || {};
   const candidates = analysis.candidates || [];
@@ -978,21 +1120,30 @@ function AnalysisResults(props) {
     return map;
   }, [sources]);
 
-  function exportJson() {
-    download(`competitor-analysis-${analysis.id.slice(0, 8)}.json`, JSON.stringify(analysis, null, 2), 'application/json');
-  }
-  async function exportMd() {
-    // D7176: a failed export downloads nothing and says why.
-    try {
-      const md = await fetchMarkdown(api.competitors.exportUrl(analysis.id, 'md'));
-      download(`competitor-analysis-${analysis.id.slice(0, 8)}.md`, md, 'text/markdown');
-    } catch (e) {
-      onExportError?.(e?.message || 'The Markdown export failed. Nothing was downloaded.');
-    }
-  }
+  // D7175 part 2 (RS-13 B5): both downloads go through the preview, which
+  // reads the Worker's export of the saved version (D7176: never the panel's
+  // own copy) and downloads nothing that is not the format's file. Closing it
+  // returns focus to the button that opened it (RS-13 C4).
+  const [previewing, setPreviewing] = useState(null); // 'md' | 'json'
+  const opener = useRef(null);
+  const openPreview = (format, e) => { opener.current = e?.currentTarget || null; setPreviewing(format); };
+  const closePreview = () => { setPreviewing(null); setTimeout(() => opener.current?.focus?.(), 0); };
+  const loadFile = async (format) => {
+    const got = await loadExport(api.competitors.exportUrl(analysis.id, format), format);
+    return { text: got.text, version: got.version, name: exportFilename(analysis.id, got.version || analysis.version || 1, format) };
+  };
+  const downloadFile = ({ format, text, name }) => {
+    download(name, text, format === 'md' ? 'text/markdown' : 'application/json');
+    closePreview();
+  };
 
   return (
     <div>
+      {/* RS-13 C4: focus lands here after a run. */}
+      <h2 ref={headingRef} tabIndex={-1} data-testid="analysis-results-heading"
+        className="mb-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-gray-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 dark:text-gray-400 dark:focus-visible:ring-offset-gray-950">
+        Results
+      </h2>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <input
@@ -1005,11 +1156,16 @@ function AnalysisResults(props) {
         </button>
         <button onClick={onRerun} disabled={analyzing} className={BTN_GHOST}><Sparkles size={15} /> Re-run</button>
         <button onClick={onRefresh} disabled={analyzing} className={BTN_GHOST}><RefreshCw size={15} className={analyzing ? 'animate-spin' : ''} /> Refresh sources</button>
-        <button onClick={exportJson} className={BTN_GHOST}><Download size={15} /> JSON</button>
-        <button onClick={exportMd} className={BTN_GHOST}><Download size={15} /> Markdown</button>
+        <button onClick={(e) => openPreview('json', e)} className={BTN_GHOST}><Download size={15} /> JSON</button>
+        <button onClick={(e) => openPreview('md', e)} className={BTN_GHOST}><Download size={15} /> Markdown</button>
         {/* D7175: the run's evidence status, in the vocabulary the saved list uses. */}
         <EvidenceChip evidence={analysis.evidence} />
       </div>
+      {previewing && (
+        <ExportPreview initialFormat={previewing} load={loadFile} onDownload={downloadFile} onClose={closePreview}
+          evidence={<EvidenceChip evidence={analysis.evidence} short />}
+          note={dirty ? 'Exports write the saved version. Your unsaved edits are not in this file: save first to include them.' : null} />
+      )}
 
       {/* Market summary */}
       <Section title="Market summary">
