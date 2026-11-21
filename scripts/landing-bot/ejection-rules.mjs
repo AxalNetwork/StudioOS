@@ -145,7 +145,7 @@ const retryableEligibility = (r) => RETRYABLE_ELIGIBILITY.some((re) => re.test(S
 /**
  * What to do. Re-queue only when everything holds. A condition that clears on its own (\`retry\`) waits, unlabelled,
  * for the next sweep inside RECOVERY_WINDOW_HOURS; one that needs the owner (\`owner\`) labels \`ejected\` at once.
- * @param c { klass, stillConflicting, keeperMerged, removedAt, consent, checks: 'green'|'pending'|'failed'|'unknown'|'changed'
+ * @param c { klass, mergeable: GitHub's fresh true | false | null (unknown), keeperMerged, removedAt, consent, checks: 'green'|'pending'|'failed'|'unknown'|'changed'
  *            (or the older checksGreenOnHead boolean), headUnchangedSinceChecks, eligible: { ok, reasons }, breakers: { open, reasons },
  *            openAlertTitles, requeues: [{ pr, at }] (bot re-queues), pr, now, env, queueRuns: [{ conclusion }] (last 20) }
  * @returns { action: 'requeue'|'keeper'|'repair'|'label'|'wait', label?, reasons, retryUntil? }
@@ -161,7 +161,16 @@ export function decide(c) {
     if (c.now >= deadline) return label([...retry, `still not restorable ${RECOVERY_WINDOW_HOURS} hours after the ejection: the owner re-queues it`]);
     return { action: 'wait', reasons: retry, retryUntil: new Date(deadline).toISOString() };
   };
-  if (c.klass === 'conflict' && c.stillConflicting !== false) {
+  // Owner addition (#6476, 2026-11-21): only a positive \`true\` admits. An explicit \`false\` is a conflict whatever the
+  // ejection's class (main can move under a cascade or infrastructure ejection too); \`null\` or unread waits.
+  const neverRequeued = !REQUEUE_CLASSES.includes(c.klass);
+  if (!neverRequeued && (c.mergeable === false || (c.klass === 'conflict' && c.mergeable !== true))) {
+    if (c.mergeable !== false) {
+      retry.push('GitHub has not yet said whether the head merges cleanly');
+      return waitOrHandBack();
+    }
+    // A class that GitHub did not call a conflict, now conflicting, without consent: nothing to restore, so no keeper.
+    if (c.klass !== 'conflict' && !c.consent?.valid) return label([c.consent?.reason ?? 'no consent', 'it now conflicts with main']);
     // The keeper's no-model merge did not clear it: a person resolves it. Never re-dispatched, never re-queued.
     if (c.keeperMerged) return label(['the branch keeper merged main and GitHub still reports a conflict: a person resolves it']);
     if (removedAt !== null && c.now - removedAt < KEEPER_DISPATCH_MINUTES * 60_000) {
@@ -172,7 +181,8 @@ export function decide(c) {
   }
   if (c.klass === 'own-failure') return { action: 'repair', label: LABELS.ejected, reasons: ['its own failure: never re-queued; red-PR repair (#5622) is asked when it exists'] };
   if (c.klass === 'incompatible') return label(['red only in its merge group: compare it with the entry ahead before it re-enters']);
-  if (!REQUEUE_CLASSES.includes(c.klass)) return label([`class ${c.klass} is never re-queued`]);
+  if (neverRequeued) return label([`class ${c.klass} is never re-queued`]);
+  if (c.mergeable !== true) retry.push('GitHub has not yet said whether the head merges cleanly');
 
   if (!c.consent?.valid) owner.push(c.consent?.reason ?? 'no consent');
   const checks = c.checks ?? (c.checksGreenOnHead === true ? 'green' : 'unknown');

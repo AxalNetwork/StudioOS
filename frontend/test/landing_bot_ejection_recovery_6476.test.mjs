@@ -51,7 +51,7 @@ function world({ removalReason = 'MERGE_CONFLICT' } = {}) {
       if (p.startsWith('issues?state=open')) return [];
       if (p === 'pulls/7/files?per_page=100') return [{ filename: 'frontend/src/a.js' }];
       if (p === 'pulls/7/commits?per_page=100') return s.commits;
-      if (p === 'pulls/7') return { number: 7, mergeable: s.mergeable === 'CONFLICTING' ? false : true, head: { sha: s.head } };
+      if (p === 'pulls/7') return { number: 7, mergeable: { CONFLICTING: false, MERGEABLE: true }[s.mergeable] ?? null, head: { sha: s.head } };
       if (p === 'issues/7/comments?per_page=100') return s.comments;
       throw new Error(`unexpected GET ${p}`);
     },
@@ -203,6 +203,65 @@ test('#6476 S1: a stranded App label from before the cutover gets one bounded lo
     .map((p) => p.stranded), [true], 'a recent stranded App label is a candidate, marked stranded');
 });
 
+test('#8054 review (P2): a hand-back on a stranded App label is final; a later green head is not restored', async () => {
+  const strandedWorld = () => {
+    const w = world({ removalReason: 'QUEUE_CLEARED' });
+    w.s.mergeable = 'MERGEABLE';
+    w.s.labels = ['ejected'];
+    w.s.timeline[0].createdAt = '2026-11-20T22:00:00Z'; w.s.timeline[1].createdAt = '2026-11-20T22:30:00Z';
+    w.s.timeline.push({ __typename: 'LabeledEvent', createdAt: '2026-11-20T23:00:00Z', actor: { login: BOT, __typename: 'Bot' }, label: { name: 'ejected' } });
+    w.s.commits = [work(SHA1, '2026-11-20T21:00:00Z')];
+    return w;
+  };
+  // Expired window → green: the reviewer's reproduction. Nov 22 10:00 is past 24 hours after the 22:30 ejection.
+  const expired = strandedWorld();
+  expired.s.evidence = pending(SHA1);
+  await expired.run(24 * 60);
+  assert.match(expired.s.comments[0].body, /24 hours after the ejection: the owner re-queues it/);
+  assert.deepEqual(expired.s.labels, ['ejected']);
+  expired.s.evidence = green(SHA1);
+  await expired.run(24 * 60 + 10);
+  assert.deepEqual(expired.s.enqueues, [], 'no enqueue after the hand-back');
+  assert.deepEqual(expired.s.labels, ['ejected'], 'the hand-back marker stays');
+  // Failed checks → green, inside the window.
+  const failedThenGreen = strandedWorld();
+  failedThenGreen.s.evidence = failed(SHA1);
+  await failedThenGreen.run(10);
+  assert.match(failedThenGreen.s.comments[0].body, /a required check failed/);
+  failedThenGreen.s.evidence = green(SHA1);
+  await failedThenGreen.run(20);
+  assert.deepEqual([failedThenGreen.s.enqueues, failedThenGreen.s.labels], [[], ['ejected']]);
+  // A fresh hand-back (not stranded) is final the same way.
+  const plain = world({ removalReason: 'QUEUE_CLEARED' });
+  plain.s.mergeable = 'MERGEABLE'; plain.s.evidence = failed(SHA1);
+  await plain.run(10);
+  plain.s.evidence = green(SHA1);
+  await plain.run(20);
+  assert.deepEqual([plain.s.enqueues, plain.s.labels], [[], ['ejected']]);
+});
+
+test('#6476 owner addition: only a positive mergeable admits, for every class', async () => {
+  // An infrastructure ejection that now conflicts goes to the keeper, never straight back into the queue.
+  const nowConflicting = world({ removalReason: 'QUEUE_CLEARED' });
+  nowConflicting.s.mergeable = 'CONFLICTING';
+  assert.deepEqual((await nowConflicting.run(10)).keeper, [7]);
+  assert.deepEqual(nowConflicting.s.enqueues, []);
+  // GitHub has not computed mergeability yet: wait, no enqueue, no label.
+  const unknown = world({ removalReason: 'QUEUE_CLEARED' });
+  unknown.s.mergeable = 'UNKNOWN';
+  await unknown.run(10);
+  assert.deepEqual([unknown.s.enqueues, unknown.s.labels], [[], []]);
+  assert.match(unknown.s.comments[0].body, /has not yet said whether the head merges cleanly/);
+  unknown.s.mergeable = 'MERGEABLE';
+  await unknown.run(20);
+  assert.deepEqual(unknown.s.enqueues, [SHA1], 'restored once GitHub says it merges');
+  // A conflict ejection whose mergeability is still unknown waits rather than asking the keeper or re-queueing.
+  const conflictUnknown = world();
+  conflictUnknown.s.mergeable = 'UNKNOWN';
+  assert.deepEqual((await conflictUnknown.run(10)).keeper, []);
+  assert.deepEqual(conflictUnknown.s.enqueues, []);
+});
+
 test('#6476 S1: the evidence states, and failed or unknown never counts as green', () => {
   assert.equal(evidenceState(green(SHA1), SHA1), 'green');
   assert.equal(evidenceState(pending(SHA1), SHA1), 'pending');
@@ -228,7 +287,7 @@ test('#6476 S1: eligible() reasons split into retryable and the owner\'s', () =>
 
 test('#6476 S1: decide() keeps the owner\'s lanes out of automatic re-queue whatever else waits', () => {
   const NOW = Date.parse(T(30));
-  const c = { klass: 'flake', removedAt: T(5), consent: { valid: true }, checks: 'green', headUnchangedSinceChecks: true,
+  const c = { klass: 'flake', mergeable: true, removedAt: T(5), consent: { valid: true }, checks: 'green', headUnchangedSinceChecks: true,
     eligible: { ok: true, reasons: [] }, breakers: { open: false, reasons: [] }, openAlertTitles: [], requeues: [], pr: 7, now: NOW,
     env: ENV, queueRuns: Array(20).fill({ conclusion: 'success' }) };
   assert.equal(decide(c).action, 'requeue');

@@ -168,12 +168,15 @@ Otherwise it either waits or hands back (#6476 S1, D6476-p4):
 - **Hands back with `ejected`** when the owner must act: no consent (a person removed it, or a commit other than a
   no-model merge of main), a failed required check, `bot:off`, a `repair/` branch, a `.gitattributes` change, or a
   class that is never re-queued.
+- **Mergeability:** a re-queue needs GitHub's `mergeable: true` on the fresh read, for every class. An explicit
+  `false` (even after a cascade or infrastructure ejection) is a conflict; `null` waits.
 - **A conflict** asks the keeper only in the first 20 minutes after the ejection; after that the keeper's own
   15-minute schedule runs. If the keeper's merge landed and GitHub still reports a conflict, it hands back.
 
 One sticky comment says which, and a sweep whose outcome has not changed writes nothing. `ejected` labels the App
 wrote before 2026-11-21, when it labelled the waiting cases too, get one fresh look on removals under 7 days old;
-on a restore the App removes only its own label. A label a person added is never second-guessed.
+on a restore the App removes only its own label, and on a hand-back it re-labels so the hand-back is final. A label a
+person added is never second-guessed.
 ## The serial refresh
 
 `.github/workflows/landing-bot-refresh.yml` (#6478) acts only when main's newest completed CI push run is green

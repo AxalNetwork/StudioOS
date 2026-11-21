@@ -139,7 +139,7 @@ export async function sweep(env, {
     try { ev = await evidence(pr.number, pr.head.sha); } catch (e) { ev = { ok: false, headSha: null, required: null, detail: `evidence unreadable: ${String(e?.message ?? e).slice(0, 120)}` }; }
     const fresh = await gh.get(`pulls/${pr.number}`);
     const d = decide({
-      klass: k.class, stillConflicting: fresh.mergeable === false, keeperMerged: keeperMergedSince(commits, removal.at, botLogin),
+      klass: k.class, mergeable: typeof fresh.mergeable === 'boolean' ? fresh.mergeable : null, keeperMerged: keeperMergedSince(commits, removal.at, botLogin),
       removedAt: removal.at, consent: consent({ ...pr, commits }, { botLogin }),
       checks: evidenceState(ev, pr.head.sha), checksDetail: ev.detail,
       headUnchangedSinceChecks: fresh.head?.sha === pr.head.sha && ev.headSha === pr.head.sha,
@@ -157,7 +157,11 @@ export async function sweep(env, {
       if (pr.stranded) await app.del(`issues/${pr.number}/labels/${encodeURIComponent(LABELS.ejected)}`).catch(() => {});
     } else if (d.action === 'keeper') keeper.push(pr.number);
     else if (d.action !== 'wait') {
-      if (!pr.labels.includes(LABELS.ejected)) await app.post(`issues/${pr.number}/labels`, { labels: [LABELS.ejected] });
+      // Review on #8054 (P2): a stranded PR already carries the App's pre-cutover label, so adding it again writes no
+      // event and the next sweep would treat it as stranded again. Re-label it so the hand-back is a post-cutover event
+      // and final; only the App's own label is touched (a person's label never makes a PR stranded).
+      if (pr.stranded) await app.del(`issues/${pr.number}/labels/${encodeURIComponent(LABELS.ejected)}`);
+      if (pr.stranded || !pr.labels.includes(LABELS.ejected)) await app.post(`issues/${pr.number}/labels`, { labels: [LABELS.ejected] });
       if (d.action === 'repair') repair.push(pr.number);
     }
     const comments = await gh.get(`issues/${pr.number}/comments?per_page=100`);
