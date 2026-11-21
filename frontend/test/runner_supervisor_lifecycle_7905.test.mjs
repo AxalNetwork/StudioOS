@@ -47,12 +47,13 @@ const realSpawn = scripts => args => {
   const script = args.at(-1).includes('npm ci') ? scripts.install : scripts.test;
   return spawn('/bin/sh', ['-c', script], { stdio: 'ignore' });
 };
-function supervisor(t, f, { scripts = { install: 'exit 0', test: 'exit 0' }, admit = async () => live(), signal = new AbortController().signal, exporter = null } = {}) {
+const completeExport = async () => ({ state: 'complete', files: 1, bytes: 10 });
+function supervisor(t, f, { scripts = { install: 'exit 0', test: 'exit 0' }, admit = async () => live(), signal = new AbortController().signal, exporter = completeExport, recheck = async () => true } = {}) {
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const job = new JobContainer(POLICY, { engine: f.engine, spawnEngine: realSpawn(scripts), stage: () => {}, namespace: () => true });
   const store = recoveryStore({ root: f.storeRoot, create: true });
   const logs = [], outputs = [];
-  const run = () => runInContainer({ job, executionIsolation: async () => true, admit, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal, store, exporter, log: l => logs.push(l), output: o => outputs.push(o) });
+  const run = () => runInContainer({ job, executionIsolation: async () => true, admit, recheck, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal, store, exporter, log: l => logs.push(l), output: o => outputs.push(o) });
   return { job, store, logs, outputs, run, outcome: () => JSON.parse(logs.find(l => l.includes('container_outcome'))) };
 }
 const records = f => existsSync(f.storeRoot) ? readdirSync(f.storeRoot) : [];
@@ -65,12 +66,12 @@ test('D7905 success: install then test in separate execs, removal verified, reco
   assert.deepEqual(atStart, ['202-1-1.json'], 'the durable record exists before the candidate runs');
   const o = s.outcome();
   assert.equal(o.result, 'success');
-  assert.deepEqual([o.install.status, o.test.status, o.test.exitCode, o.cleanup.state, o.export.state], ['success', 'success', 0, 'complete', 'not_configured']);
+  assert.deepEqual([o.category, o.install.status, o.test.status, o.test.exitCode, o.cleanup.state, o.export.state, o.cleanupComplete], ['success', 'success', 'success', 0, 'complete', 'complete', true]);
   const execs = f.calls.filter(c => c[0] === 'exec' && c.includes('/bin/sh')).map(c => c.at(-1));
   assert.equal(execs.length, 0, 'phases go through the interruptible spawner, not the sync engine');
   assert.deepEqual(f.calls.filter(c => c[0] === 'rm'), [['rm', '--force', CID]]);
   assert.deepEqual(records(f), []);
-  assert.deepEqual(s.outputs, [{ result: 'success', test_exit: 0, cleanup: 'complete', export: 'not_configured' }]);
+  assert.deepEqual(s.outputs, [{ category: 'success', result: 'success', test_exit: 0, cleanup: 'complete', export: 'complete' }]);
 });
 
 test('D7905 a real test failure keeps its raw exit, and an install failure is never a test failure', async t => {
@@ -104,7 +105,7 @@ test('D7905 a failed or unverifiable removal keeps the recovery record and never
   for (const [options, state] of [[{ rmFails: true }, 'failed'], [{ survivesRm: true }, 'unverified'], [{ inspectAfterRm: new Error('daemon timeout') }, 'unverified']]) {
     const f = engineFixture(t, options), s = supervisor(t, f);
     assert.equal(await s.run(), 1, state);
-    assert.deepEqual([s.outcome().result, s.outcome().test.status, s.outcome().cleanup.state, s.outcome().cleanup.retained], ['cleanup_failure', 'success', state, true]);
+    assert.deepEqual([s.outcome().category, s.outcome().result, s.outcome().test.status, s.outcome().cleanup.state, s.outcome().cleanup.retained, s.outcome().cleanupComplete], ['incomplete_cleanup', 'cleanup_failure', 'success', state, true, false]);
     assert.deepEqual(records(f), ['202-1-1.json'], 'the exact ownership evidence survives');
     t.mock.timers.reset();
   }
@@ -209,24 +210,43 @@ test('D8010 export runs while the container still exists, inside the lease; a fa
   assert.equal(await s.run(), 5, 'a known test failure survives a failed export');
 });
 
-test('D8010 classification precedence is fixed: real test exit, cancelled, timed out, then infrastructure', () => {
+test('D8010 classification: real test exit, cancelled, timed out, infrastructure, incomplete cleanup; no exporter is not success', () => {
   const ok = { state: 'complete' }, none = { state: 'not_configured' };
   const pass = { status: 'success', exitCode: 0 };
   const rows = [
-    [{ install: pass, test: pass, exported: none, cleanup: ok }, 'success', 0],
-    [{ install: pass, test: { status: 'failure', exitCode: 4 }, exported: none, cleanup: { state: 'failed' }, aborted: true }, 'test_failure', 4],
-    [{ install: pass, test: { status: 'cancelled', exitCode: null }, exported: none, cleanup: ok, aborted: true }, 'cancelled', 130],
-    [{ install: { status: 'timed_out', exitCode: null }, test: { status: 'not_run' }, exported: none, cleanup: ok }, 'timed_out', 124],
-    [{ install: null, test: null, exported: none, cleanup: ok, infrastructure: 'container_start_or_isolation_failed' }, 'infrastructure', 1],
-    [{ install: { status: 'engine_failed', exitCode: 126 }, test: { status: 'not_run' }, exported: none, cleanup: ok }, 'install_failure', 1],
-    [{ install: pass, test: { status: 'unknown', exitCode: null }, exported: none, cleanup: ok }, 'unknown', 1],
-    [{ install: pass, test: pass, exported: { state: 'skipped_no_budget' }, cleanup: ok }, 'export_failure', 1],
-    [{ install: pass, test: pass, exported: none, cleanup: { state: 'unverified' } }, 'cleanup_failure', 1],
-    [{ install: null, test: null, exported: none, cleanup: { state: 'none' }, aborted: true }, 'cancelled', 130],
+    [{ install: pass, test: pass, exported: ok, cleanup: ok }, 'success', 'success', 0, true],
+    [{ install: pass, test: pass, exported: none, cleanup: ok }, 'export_failure', 'infrastructure', 1, true],
+    [{ install: pass, test: { status: 'failure', exitCode: 4 }, exported: none, cleanup: { state: 'failed' }, aborted: true }, 'test_failure', 'test_failure', 4, false],
+    [{ install: pass, test: { status: 'cancelled', exitCode: null }, exported: ok, cleanup: ok, aborted: true }, 'cancelled', 'cancelled', 130, true],
+    [{ install: { status: 'timed_out', exitCode: null }, test: { status: 'not_run' }, exported: ok, cleanup: ok }, 'timed_out', 'timed_out', 124, true],
+    [{ install: null, test: null, exported: none, cleanup: ok, infrastructure: 'container_start_or_isolation_failed' }, 'infrastructure', 'infrastructure', 1, true],
+    [{ install: pass, test: { status: 'not_run' }, exported: ok, cleanup: ok, infrastructure: 'boundary_recheck_failed' }, 'infrastructure', 'infrastructure', 1, true],
+    [{ install: { status: 'engine_failed', exitCode: 126 }, test: { status: 'not_run' }, exported: ok, cleanup: ok }, 'install_failure', 'infrastructure', 1, true],
+    [{ install: pass, test: { status: 'unknown', exitCode: null }, exported: ok, cleanup: ok }, 'unknown', 'infrastructure', 1, true],
+    [{ install: pass, test: pass, exported: { state: 'skipped_no_budget' }, cleanup: ok }, 'export_failure', 'infrastructure', 1, true],
+    [{ install: pass, test: pass, exported: ok, cleanup: { state: 'unverified' } }, 'cleanup_failure', 'incomplete_cleanup', 1, false],
+    [{ install: null, test: null, exported: none, cleanup: { state: 'none' }, aborted: true }, 'cancelled', 'cancelled', 130, true],
   ];
-  for (const [input, result, code] of rows) assert.deepEqual(classifyOutcome(input), { result, code }, result);
+  for (const [input, result, category, code, cleanupComplete] of rows) assert.deepEqual(classifyOutcome(input), { result, category, code, cleanupComplete }, result);
 });
 
+test('D8010 without an exporter a passing test is not successful proof', async t => {
+  const f = engineFixture(t), s = supervisor(t, f, { exporter: null });
+  assert.equal(await s.run(), 1);
+  assert.deepEqual([s.outcome().category, s.outcome().result, s.outcome().test.status, s.outcome().export.state], ['infrastructure', 'export_failure', 'success', 'not_configured']);
+});
+
+test('D8007 the boundary is re-checked before tests: a failed or changed recheck runs no test and still cleans up', async t => {
+  let f = engineFixture(t), s = supervisor(t, f, { recheck: async () => false });
+  assert.equal(await s.run(), 1);
+  assert.deepEqual([s.outcome().infrastructure, s.outcome().install.status, s.outcome().test.status, s.outcome().cleanup.state], ['boundary_recheck_failed', 'success', 'not_run', 'complete']);
+  t.mock.timers.reset();
+  f = engineFixture(t);
+  s = supervisor(t, f, { recheck: async () => { s.job.owned.id = 'c'.repeat(64); return true; } });
+  assert.equal(await s.run(), 1);
+  assert.equal(s.outcome().infrastructure, 'boundary_recheck_failed');
+  assert.equal(f.calls.filter(c => c[0] === 'exec' && c.includes('/bin/sh')).length, 0);
+});
 test('D7905 the interruptible phase returns observations from real processes and never removes the container', async t => {
   const f = engineFixture(t);
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
@@ -276,4 +296,18 @@ test('D7905 an abort or deadline that lands after the process exited, before clo
     assert.deepEqual(kills, [], 'nothing to kill after exit');
     job.cleanup(identity());
   }
+});
+
+test('D8007 run mode has no route but a verified boundary job: hosted, Mac and empty dependencies refuse', async () => {
+  const { requireExecutionBoundary } = await import('../../scripts/ci/runner-execution.mjs');
+  const { isolationFor } = await import('../../scripts/ci/runners/executor-isolation.mjs');
+  for (const deps of [{}, undefined, isolationFor('hosted'), isolationFor('github-8'), isolationFor('macos-arm64'), { job: {} }, { executionIsolation: async () => true }]) {
+    assert.throws(() => requireExecutionBoundary(deps), /execution_boundary_unavailable/);
+  }
+  const job = { id: 'container' };
+  assert.equal(requireExecutionBoundary({ job, executionIsolation: async () => true }), job);
+  const source = (await import('node:fs')).readFileSync(new URL('../../scripts/ci/runner-execution.mjs', import.meta.url), 'utf8');
+  const run = source.split("return await withCancellation(async signal=>{")[1].split('\n });')[0];
+  assert.match(run, /const job=requireExecutionBoundary\(dependencies\);/);
+  assert.doesNotMatch(run, /executeShard\(/, 'the direct-host path is not reachable from run mode');
 });

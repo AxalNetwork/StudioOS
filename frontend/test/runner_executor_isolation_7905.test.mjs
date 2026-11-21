@@ -14,13 +14,17 @@ const receipt = { profile: 'linux-x64', childRunId: 202, childAttempt: 1 };
 const deps = extra => linuxExecutorDependencies({ readPolicy: () => POLICY, engine: () => '27.0', platform: 'linux', aclTool: () => true, ...extra });
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-test('D7905 only linux-x64 has an isolation implementation; Mac, hosted and github-8 get none', () => {
-  for (const id of ['macos-arm64', 'hosted', 'github-8', undefined, 'LINUX-X64']) assert.equal(isolationFor(id), null);
+test('D7905 linux-x64 gets the container; hosted and github-8 get only the refusing hosted port; Mac gets none', async () => {
+  for (const id of ['macos-arm64', undefined, 'LINUX-X64', 'self-hosted']) assert.equal(isolationFor(id), null);
   const linux = isolationFor('linux-x64', { readPolicy: () => POLICY, engine: () => '', platform: 'linux' });
   assert.equal(typeof linux.admissionIsolation, 'function');
   assert.equal(typeof linux.executionIsolation, 'function');
+  for (const id of ['hosted', 'github-8']) {
+    const hosted = isolationFor(id);
+    assert.deepEqual(Object.keys(hosted), ['admissionIsolation'], 'no execution job: run mode refuses');
+    assert.equal(await hosted.admissionIsolation({ receipt: { profile: id }, context, profile: { id } }), false);
+  }
 });
-
 test('D7905 a missing, untrusted or non-Linux setup fails closed before any adapter exists', () => {
   assert.throws(() => linuxExecutorDependencies({ readPolicy: () => { throw new Error('untrusted_container_policy'); }, platform: 'linux' }), /untrusted_container_policy/);
   assert.throws(() => linuxExecutorDependencies({ readPolicy: () => POLICY, platform: 'darwin' }), /linux_isolation_unavailable/);
@@ -108,14 +112,15 @@ test('D7905 the receipt reader and catalog are composed only from repository con
   assert.equal((await trustedAuthority(env, { loadClient: async () => ({ ...client, createReceiptReader: () => { throw new Error('capacity_authority_unconfigured'); } }) })).readReceipt, undefined);
 });
 
-test('D7905 the executor never installs or tests candidate code on a Linux self-hosted host, and grants no OIDC yet', () => {
+test('D7905 no profile installs or tests candidate code as a host step, uploads only a committed offer, and grants no OIDC yet', () => {
   const text = read('../../.github/workflows/runner-executor.yml');
-  for (const name of ['Install admitted Worker dependencies', 'Install admitted root dependencies']) {
-    const step = text.split(`- name: ${name}\n`)[1].split('\n      - name:')[0];
-    assert.match(step, /^\s+if: inputs\.profile != 'linux-x64'$/m, name);
-  }
+  assert.doesNotMatch(text, /Install admitted (Worker|root) dependencies/);
+  assert.doesNotMatch(text, /run: npm ci/);
   assert.doesNotMatch(text, /id-token:\s*write/, 'OIDC for the receipt reader is enablement work, not this change');
   assert.equal(text.match(/CI_CAPACITY_URL: \$\{\{ vars\.CI_CAPACITY_URL \}\}/g).length, 3);
+  const upload = text.split('- name: Upload test traces\n')[1].split('\n      - name:')[0];
+  assert.match(upload, /trace-export\/\*\/ready\n/);
+  assert.doesNotMatch(upload, /test-traces\n/);
   const cleanup = text.split('- name: Remove only this child\'s files\n')[1].split('\n      - name:')[0];
   assert.match(cleanup, /if: always\(\)/);
   assert.match(cleanup, /runner-execution\.mjs" cleanup/);

@@ -155,8 +155,10 @@ const REMOVAL_RESERVE_MS=60000;
 
 /**
  * Proposed supervisor exit (D8010): a real nonzero TEST exit first; then cancelled 130, timed out 124; zero only
- * for an observed test success whose removal was verified and whose export (when configured) completed. An
- * install, infrastructure, export or cleanup failure is never reported as a test failure, and never as success.
+ * for an observed test success whose removal was verified AND whose traces were exported to a completed offer.
+ * An absent exporter or unverified cleanup is never successful proof. `category` is the coarse truth the
+ * coordinator needs: success | test_failure | cancelled | timed_out | infrastructure | incomplete_cleanup.
+ * `cleanupComplete` is always reported too, so a test failure with incomplete cleanup still says so.
  */
 export function classifyOutcome({install,test,exported,cleanup,infrastructure,aborted}){
  const realTestFailure=test?.status==='failure'&&Number.isSafeInteger(test.exitCode)&&test.exitCode>0;
@@ -164,13 +166,20 @@ export function classifyOutcome({install,test,exported,cleanup,infrastructure,ab
  const cancelled=statuses.includes('cancelled')||(aborted&&!realTestFailure&&test?.status!=='success');
  const timedOut=statuses.includes('timed_out');
  const testPassed=test?.status==='success';
- const exportOk=['complete','not_configured'].includes(exported?.state);
+ const exportOk=exported?.state==='complete';
  const cleanupOk=['complete','none'].includes(cleanup?.state);
  const result=realTestFailure?'test_failure':cancelled?'cancelled':timedOut?'timed_out'
   :infrastructure?'infrastructure':install&&install.status!=='success'?'install_failure'
   :testPassed&&!cleanupOk?'cleanup_failure':testPassed&&!exportOk?'export_failure':testPassed?'success':'unknown';
+ const category={test_failure:'test_failure',cancelled:'cancelled',timed_out:'timed_out',cleanup_failure:'incomplete_cleanup',success:'success'}[result]??'infrastructure';
  const code=realTestFailure?test.exitCode:cancelled?130:timedOut?124:result==='success'?0:1;
- return {result,code};
+ return {result,category,code,cleanupComplete:cleanupOk};
+}
+
+/** Installs and tests run only inside a verified execution boundary job; any other route refuses (#7905, D8007). */
+export function requireExecutionBoundary(dependencies){
+ need(dependencies?.job&&typeof dependencies.executionIsolation==='function','execution_boundary_unavailable');
+ return dependencies.job;
 }
 
 /**
@@ -178,7 +187,7 @@ export function classifyOutcome({install,test,exported,cleanup,infrastructure,ab
  * then verified exact-ID removal. Ownership evidence is written to the durable store before start and removed
  * only once the engine reports the exact container gone; any failed or uncertain removal keeps it.
  */
-export async function runInContainer({job,executionIsolation,admit,current,paths,planPath,signal,store,exporter=null,now=Date.now,log=console.error,output=null}){
+export async function runInContainer({job,executionIsolation,admit,recheck=null,current,paths,planPath,signal,store,exporter=null,now=Date.now,log=console.error,output=null}){
  need(current?.profile?.id==='linux-x64'&&typeof executionIsolation==='function'&&typeof admit==='function'&&store,'container_profile_mismatch');
  const identity=current.identity;
  let record=null,infrastructure=null,install=null,test=null,exported={state:exporter?'not_run':'not_configured'},cleanup={state:'none'};
@@ -191,8 +200,12 @@ export async function runInContainer({job,executionIsolation,admit,current,paths
     if(!(live?.allowed===true&&JSON.stringify(live.identity)===JSON.stringify(identity)))infrastructure='receipt_superseded_or_isolation_refused';
     else{
      install=await job.runCandidateInterruptible({receipt:identity,admitted:live,signal,phase:'install'});
-     test=install.status==='success'?await job.runCandidateInterruptible({receipt:identity,admitted:live,signal,phase:'test'})
-      :{phase:'test',status:'not_run',exitCode:null,signal:null};
+     // D8007: the same verified boundary instance is re-checked before tests; a changed or unverifiable one stops here.
+     const instance=job.boundaryIdentity?.()??null;
+     if(install.status!=='success')test={phase:'test',status:'not_run',exitCode:null,signal:null};
+     else if(!(instance&&typeof recheck==='function'&&await recheck()===true&&JSON.stringify(job.boundaryIdentity())===JSON.stringify(instance))){
+      infrastructure='boundary_recheck_failed';test={phase:'test',status:'not_run',exitCode:null,signal:null};
+     }else test=await job.runCandidateInterruptible({receipt:identity,admitted:live,signal,phase:'test'});
     }
    }
   }
@@ -211,8 +224,8 @@ export async function runInContainer({job,executionIsolation,admit,current,paths
   }catch{cleanup={state:'failed',retained:true};}
  }
  const outcome=classifyOutcome({install,test,exported,cleanup,infrastructure,aborted:Boolean(signal?.aborted)});
- log(JSON.stringify({component:'runner-executor',event:'container_outcome',result:outcome.result,supervisorExit:outcome.code,install,test,export:exported,cleanup,infrastructure}));
- if(output)output({result:outcome.result,test_exit:test?.exitCode??'',cleanup:cleanup.state,export:exported.state});
+ log(JSON.stringify({component:'runner-executor',event:'container_outcome',category:outcome.category,result:outcome.result,supervisorExit:outcome.code,cleanupComplete:outcome.cleanupComplete,install,test,export:exported,cleanup,infrastructure}));
+ if(output)output({category:outcome.category,result:outcome.result,test_exit:test?.exitCode??'',cleanup:cleanup.state,export:exported.state});
  return outcome.code;
 }
 
@@ -282,14 +295,16 @@ export async function main(mode,env=process.env,dependencies={}){
  }
  // Cancellation is live before any container exists, so a stop during create, re-admission or the run cleans up.
  return await withCancellation(async signal=>{
-  if(dependencies.job){
-   // Linux self-hosted: installs and tests both run inside the per-run container; nothing candidate-controlled runs on the host.
-   const {job,executionIsolation,admissionIsolation:_pre,store:_store,exporter:_exporter,...rest}=dependencies;
-   return runInContainer({job,executionIsolation,current,paths,planPath,signal,store:dependencies.store,exporter:dependencies.exporter??null,
+  {
+   // Installs and tests run only inside a verified boundary job (the Linux container today); nothing runs on the host.
+   const job=requireExecutionBoundary(dependencies);
+   const {executionIsolation,job:_job,admissionIsolation:_pre,store:_store,exporter:_exporter,...rest}=dependencies;
+   const exporter=dependencies.exporter??(await import('./runners/trace-exporter.mjs')).createTraceExporter({stagingRoot:join(paths.temp,'trace-export'),engine:job.engine});
+   return runInContainer({job,executionIsolation,current,paths,planPath,signal,store:dependencies.store,exporter,
+    recheck:()=>executionIsolation({receipt:current.identity,context,profile:current.profile,phase:'execute',signal}),
     output:env.GITHUB_OUTPUT?values=>appendFileSync(env.GITHUB_OUTPUT,Object.entries(values).map(([k,v])=>`${k}=${v}\n`).join('')):null,
     admit:verifyIsolation=>admitRunnerJob(request,{api:githubReadApi(env.GH_TOKEN),...rest,verifyIsolation,context,phase:'execute',signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])})});
   }
-  const result=await executeShard({admitted:current,paths,testDriver:join(paths.source,'scripts','test-drift-parts.mjs'),planPath,readReceipt,signal});return result.code;
  });
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

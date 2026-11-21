@@ -25,6 +25,6 @@ const job = new JobContainer({ version: 1, image: 'sha256:' + 'a'.repeat(64), no
 });
 job.verifyIsolation = () => true;
 const logs = [];
-const code = await withCancellation(signal => runInContainer({ job, executionIsolation: async () => true, admit: async () => admitted, current: { profile: { id: 'linux-x64' }, identity }, paths: { source }, planPath: plan, signal, store: recoveryStore({ root: storeRoot, create: true }), log: l => logs.push(l) }));
+const code = await withCancellation(signal => runInContainer({ job, executionIsolation: async () => true, admit: async () => admitted, recheck: async () => true, exporter: async () => ({ state: 'complete' }), current: { profile: { id: 'linux-x64' }, identity }, paths: { source }, planPath: plan, signal, store: recoveryStore({ root: storeRoot, create: true }), log: l => logs.push(l) }));
 const outcome = JSON.parse(logs.find(l => l.includes('container_outcome')));
 process.stdout.write(JSON.stringify({ code, result: outcome.result, test: outcome.test.status, cleanup: outcome.cleanup.state, removed: calls.includes('rm'), records: readdirSync(storeRoot) }) + '\n');

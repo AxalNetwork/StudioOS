@@ -191,6 +191,8 @@ export class JobContainer {
    });
   });
  }
+ /** The verified boundary instance this job owns; the supervisor requires it unchanged across phase rechecks. */
+ boundaryIdentity() { return this.owned?{kind:'linux-container',instanceId:this.owned.id,owner:this.owned.owner}:null; }
  /** After removal: the exact recorded ID is gone. Unreadable engine state is never treated as removed. */
  verifyRemoved(record) { return JobContainer.isRemoved(record,{engine:this.engine}); }
  static isRemoved(record,{engine=dockerEngine}={}) {
