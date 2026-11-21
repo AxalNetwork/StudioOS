@@ -198,6 +198,41 @@
         "agent-compute/Dockerfile",
         "meeting-bot/Dockerfile"
       ]
+    },
+    {
+      "label": "s09_qualification_target",
+      "revision": "c36bf920613ff28bb7c3571d78994cf1a5d7f18c",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "sha256": "00a8cf3ff24aa60e0795874743c5add4016f72fdb846d17ae9d158160568b26a"
+        },
+        {
+          "path": "scripts/ci/runners/executor-isolation.mjs",
+          "sha256": "ac1e048586ee2a8d005bd0048b3795d801c4048f7422fb7087e20862cae46583"
+        },
+        {
+          "path": "scripts/ci/runners/trace-exporter.mjs",
+          "sha256": "5b4bd5bea35399918f131041f610d0dce10dc709a463cd88c5ea3ed9d5c9f529"
+        },
+        {
+          "path": "scripts/ci/runners/recovery-store.mjs",
+          "sha256": "b54b8c30903a11049f1a5ee3b9b0579cdce4186c2f83bd3edc002f9e7b4b353c"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "sha256": "526bd1ab4f8f7650c908379041ee584c099c6b8356ea5dc3436cf7b8c0dbc894"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "sha256": "dce31e429f4b8b4dbf3821884a9e7861fb03e8697d8ca24338fc3514ed5f96ce"
+        }
+      ],
+      "role": "Exact independently ingested delivered S09 contract, not a combined S39 revision"
     }
   ],
   "artifacts": [
@@ -269,7 +304,7 @@
     },
     {
       "id": "build_utilities",
-      "detail": "Pinned sha256sum, tar with gzip, ln and build-time dependencies in rootfs; include all bytes in rootfs ledger"
+      "detail": "Pinned sha256sum, tar with gzip, ln and build-time dependencies in rootfs; include all bytes in rootfs ledger c36 requires date +%s and POSIX shell arithmetic/exec sleep."
     },
     {
       "id": "build_toolchain",
@@ -286,6 +321,10 @@
     {
       "id": "upstream_authentication",
       "detail": "Official HTTPS Node checksum and Python release digest match the acquired runtime archives. Release signatures/attestations and the eventual rootfs authenticity still need policy verification."
+    },
+    {
+      "id": "operator_engine_baseline",
+      "detail": "Exact intended node OS/kernel/architecture, Docker client/server version and digests, cgroup/freezer/security configuration, approved native builder/toolchain and current bounded operating authorization remain unsupplied. Source pins no Docker version."
     }
   ],
   "locks": [

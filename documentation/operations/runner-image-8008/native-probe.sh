@@ -5,7 +5,10 @@ set -eu
 test "$(id -u):$(id -g)" = 10000:10000
 test "$(uname -s):$(uname -m)" = Linux:x86_64
 test "$HOME" = /work/home
-for cmd in sh sleep mkdir cp chmod git npm; do command -v "$cmd" >/dev/null; done
+for cmd in sh sleep date mkdir cp chmod git npm; do command -v "$cmd" >/dev/null; done
+epoch=$(date +%s)
+case "$epoch" in ''|*[!0-9]*) echo 'FAIL: date +%s unavailable' >&2; exit 1;; esac
+test "$((epoch + 1 - epoch))" -eq 1
 test -x /usr/local/bin/node
 test -x /usr/local/bin/python3
 test -r /input-plan.json

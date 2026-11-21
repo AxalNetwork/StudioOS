@@ -408,6 +408,72 @@
       "stdout": "\u2713 decision-appends: against the merge base d990215df2 with origin/main, 0 of the 2296 decision files already there changed, and none gained a section or more than 10 lines.\n",
       "stderr": "",
       "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py"
+      ],
+      "exit": 0,
+      "stdout": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, upstream_authentication, operator_engine_baseline\n",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "sh",
+        "-n",
+        "documentation/operations/runner-image-8008/native-probe.sh"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 check-folder-docs: 166 folders documented; every name they cite resolves; 4 file list(s) generated, every file described.\n",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {readFileSync} from 'node:fs'; import {allDecisionProblems,readDecisionFiles} from './scripts/check-decision-ids.mjs'; const errors=allDecisionProblems(readFileSync('documentation/architecture/DECISIONS.md','utf8'),readDecisionFiles()); console.log(JSON.stringify({errors})); process.exitCode=errors.length?1:0;"
+      ],
+      "exit": 0,
+      "stdout": "{\"errors\":[]}\n",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {main} from './scripts/check-decision-appends.mjs'; process.exitCode=main();"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 decision-appends: against the merge base d990215df2 with origin/main, 0 of the 2296 decision files already there changed, and none gained a section or more than 10 lines.\n",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "phase": "verified delivered S09 c36 source reconciliation"
     }
   ],
   "tools": {
@@ -450,7 +516,8 @@
     "No Docker parser/build, SBOM, scan, provenance or node qualification was run.",
     "Decision CLI entry guards also do not execute from this space-containing path; actual decision validation used their exported APIs and recorded output/exits. The initial silent exit-0 calls are not counted as checks."
   ],
-  "updated_utc": "2026-11-21T18:06:50.356065+00:00",
+  "updated_utc": "2026-11-21T23:26:27.750619+00:00",
   "shared_readme_registration": "Completed locally with explicit owner authorization; documentation guard passes.",
-  "qualification_follow_up": "Verified acquired runtime hashes/static ELF and current published-source compatibility recorded in qualification-progress.json. Native builder/rootfs/node inputs requested from operator; no actual image build, scan or native runtime result exists."
+  "qualification_follow_up": "Verified acquired runtime hashes/static ELF and current published-source compatibility recorded in qualification-progress.json. Native builder/rootfs/node inputs requested from operator; no actual image build, scan or native runtime result exists.",
+  "s09_source_delivery": "Received cumulative c36bf920 snapshot and verified packet checksums, Git head/parent/tree, profiles and syntax; requirements reconciled. Exact source delivery is no longer missing. Native builder/rootfs and intended-node baseline remain unsupplied."
 }

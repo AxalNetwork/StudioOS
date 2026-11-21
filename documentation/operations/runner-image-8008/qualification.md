@@ -111,7 +111,9 @@ signing, registry access, OIDC use or publication.
 
 ## 4. Native runtime and actual-node boundary (not performed)
 
-S09 first reconciles the workflow/adapter integration discrepancy in `contract.md`.
+Use the verified S09 c36 source and updated contract in `contract.md`.
+Reconcile any later S39 composition at its exact head before testing; c36 intake
+does not qualify a different integrated tree.
 On an explicitly authorized isolated canary, use the reviewed JobContainer and
 its ownership/receipt cleanup, not a hand-written relaxed `docker run`. The
 operator must demonstrate host inspection of all restrictions, mount ACLs,

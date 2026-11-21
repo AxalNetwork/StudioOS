@@ -442,11 +442,291 @@
   "pending": [
     "operator-approved native Linux amd64 builder access or immutable OCI/build evidence",
     "approved rootfs/system package ledger and toolchain/scanner pins",
-    "exact unpublished S09 executor artifact and intended node OS/kernel/Docker/security baseline",
     "native reproducible image build and mapping OCI manifest to Docker config ID",
     "complete image/dependency SBOM and accepted immutable scan",
     "signature/provenance policy verification",
-    "intended-node native runtime, six worker shards and isolation/cleanup evidence"
+    "intended-node native runtime, six worker shards and isolation/cleanup evidence",
+    "operator-approved intended node OS/kernel/Docker/security baseline; later S39 composition requires its own exact-revision reconciliation"
   ],
-  "operator_coordination": "Sent requested inputs to Axal VC Actions runners operator chat. No approved builder or node inventory has yet been supplied. No live infrastructure action, dispatch or publication."
+  "operator_coordination": "S09 source received and verified at c36bf920. Operator-approved builder/rootfs and intended node baseline remain unsupplied, as confirmed by the operator continuation task. No live infrastructure action, dispatch or publication.",
+  "s09_source_intake": {
+    "status": "VERIFIED source intake only",
+    "packet": {
+      "zip_sha256": "9c79c766eed5cc3bdca014eec8c1750ee6081c4bf31e8cd133c40a6c52e60b78",
+      "top_level_manifest_verified": [
+        {
+          "path": "README.md",
+          "sha256": "292a151cad483a3717d35940d1aecde3c8c06075f11eaef309ead13ecd045267"
+        },
+        {
+          "path": "RUNTIME-AND-CONTRACT.md",
+          "sha256": "cf81cc0384b2a6af67bf5839af538c5e0e07f351d4197e24dc7161e6adaa693e"
+        },
+        {
+          "path": "S09-C36-transfer.tar.gz",
+          "sha256": "55401a9e6b0c26e297761310e569789208f9423e248b381545b23964fc123ec7"
+        },
+        {
+          "path": "S39-INTEGRATION.md",
+          "sha256": "04e20c433c256753b6d7443c9345b0459661ce77259591ef97cac16ffb6d61bb"
+        },
+        {
+          "path": "SESSION-TASKS.md",
+          "sha256": "e76fadf034b32f98ac53b3e3a7661810b4ea38090a54f06ed896f7741703ed65"
+        },
+        {
+          "path": "coordinator-verification.json",
+          "sha256": "be99be9fcedd4187ad3b0ec0631bd614e83beedc7acca47774013449b9ce2d5c"
+        },
+        {
+          "path": "source/S09-7905-cumulative.bundle",
+          "sha256": "4d30cfb4299adc1d62489a7167083b0576f614ea755ec19184d83e7515ba880c"
+        },
+        {
+          "path": "source/SHA256SUMS",
+          "sha256": "6804a036b94463d64bea56819241eb0c245780ef1cfed778e6206f5129f4b9f7"
+        },
+        {
+          "path": "source/logs/mutations-at-c36bf920.log",
+          "sha256": "0672b359f3affed3d7c2d95a3dfeb1f113421480a29730fc7157332c68366b66"
+        },
+        {
+          "path": "source/logs/related-tests.log",
+          "sha256": "9969832db4c669441e059ac0796e3adc78fd39081d258bfc62ea20cbdff26175"
+        },
+        {
+          "path": "source/logs/s33-vectors-crosscheck.log",
+          "sha256": "05af7366433398ac7b0dc675e25df1f58949cde24b864d979e15c20c9d8a6060"
+        }
+      ],
+      "bundle_sha256": "4d30cfb4299adc1d62489a7167083b0576f614ea755ec19184d83e7515ba880c"
+    },
+    "audit": {
+      "schema_version": 1,
+      "recorded_utc": "2026-11-21T23:24:04.126442+00:00",
+      "head": "c36bf920613ff28bb7c3571d78994cf1a5d7f18c",
+      "parent": "cc3c3367ff6dfa803103414e998289c3b5793d0d",
+      "base": "4d6047987b3f26b1b1c9988f412f60b2fb081567",
+      "tree": "1b87eae7f4e4de9f6ed1b23f7770930450f47fa3",
+      "files": [
+        {
+          "path": "scripts/ci/runners/profiles.json",
+          "git_blob": "74d6bc48fe5be244e6b12171aa6a1b3dc12db041",
+          "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+        },
+        {
+          "path": "scripts/ci/runners/job-container.mjs",
+          "git_blob": "fca6d32490be5d113a2b658b67e177230a372375",
+          "sha256": "00a8cf3ff24aa60e0795874743c5add4016f72fdb846d17ae9d158160568b26a"
+        },
+        {
+          "path": "scripts/ci/runners/executor-isolation.mjs",
+          "git_blob": "0cfb7c3545ea612add2f188f2d619781e17284f7",
+          "sha256": "ac1e048586ee2a8d005bd0048b3795d801c4048f7422fb7087e20862cae46583"
+        },
+        {
+          "path": "scripts/ci/runners/trace-exporter.mjs",
+          "git_blob": "df7c7fa51997b6312d3576bb92b13d752a2ebc61",
+          "sha256": "5b4bd5bea35399918f131041f610d0dce10dc709a463cd88c5ea3ed9d5c9f529"
+        },
+        {
+          "path": "scripts/ci/runners/recovery-store.mjs",
+          "git_blob": "011690ecd650629ee1de08e7c7821cc74202d2f4",
+          "sha256": "b54b8c30903a11049f1a5ee3b9b0579cdce4186c2f83bd3edc002f9e7b4b353c"
+        },
+        {
+          "path": "scripts/ci/runner-execution.mjs",
+          "git_blob": "9f7a0a25122574db64babbe877c0d603b07f6037",
+          "sha256": "526bd1ab4f8f7650c908379041ee584c099c6b8356ea5dc3436cf7b8c0dbc894"
+        },
+        {
+          "path": ".github/workflows/runner-executor.yml",
+          "git_blob": "e7e41b153402fdd4d26ffdb7eb594438c7b8eb23",
+          "sha256": "dce31e429f4b8b4dbf3821884a9e7861fb03e8697d8ca24338fc3514ed5f96ce"
+        }
+      ],
+      "commands": [
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c^{tree}"
+          ],
+          "exit": 0,
+          "stdout": "1b87eae7f4e4de9f6ed1b23f7770930450f47fa3\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c^"
+          ],
+          "exit": 0,
+          "stdout": "cc3c3367ff6dfa803103414e998289c3b5793d0d\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "merge-base",
+            "--is-ancestor",
+            "4d6047987b3f26b1b1c9988f412f60b2fb081567",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/profiles.json"
+          ],
+          "exit": 0,
+          "stdout": "74d6bc48fe5be244e6b12171aa6a1b3dc12db041\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/job-container.mjs"
+          ],
+          "exit": 0,
+          "stdout": "fca6d32490be5d113a2b658b67e177230a372375\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runners/job-container.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/executor-isolation.mjs"
+          ],
+          "exit": 0,
+          "stdout": "0cfb7c3545ea612add2f188f2d619781e17284f7\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runners/executor-isolation.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/trace-exporter.mjs"
+          ],
+          "exit": 0,
+          "stdout": "df7c7fa51997b6312d3576bb92b13d752a2ebc61\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runners/trace-exporter.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runners/recovery-store.mjs"
+          ],
+          "exit": 0,
+          "stdout": "011690ecd650629ee1de08e7c7821cc74202d2f4\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runners/recovery-store.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:scripts/ci/runner-execution.mjs"
+          ],
+          "exit": 0,
+          "stdout": "9f7a0a25122574db64babbe877c0d603b07f6037\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "<intake-source>/scripts/ci/runner-execution.mjs"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "rev-parse",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c:.github/workflows/runner-executor.yml"
+          ],
+          "exit": 0,
+          "stdout": "e7e41b153402fdd4d26ffdb7eb594438c7b8eb23\n",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "git",
+            "diff",
+            "--stat",
+            "4d6047987b3f26b1b1c9988f412f60b2fb081567",
+            "c36bf920613ff28bb7c3571d78994cf1a5d7f18c"
+          ],
+          "exit": 0,
+          "stdout": " .github/workflows/runner-executor.yml              |  13 +-\n documentation/architecture/decisions/D7905-p3.md   |  48 ++++\n documentation/architecture/decisions/D7905-p4.md   |  57 ++++\n frontend/test/fixtures/runner_cancel_7905.mjs      |  46 +--\n frontend/test/runner_executor.test.mjs             |   3 +-\n .../test/runner_executor_isolation_7905.test.mjs   | 162 ++---------\n frontend/test/runner_isolation_7905.test.mjs       |  16 +-\n .../test/runner_supervisor_lifecycle_7905.test.mjs | 313 +++++++++++++++++++++\n frontend/test/runner_trace_exporter_7905.test.mjs  | 190 +++++++++++++\n scripts/ci/runner-execution.mjs                    | 169 ++++++++---\n scripts/ci/runners/README.md                       |   2 +\n scripts/ci/runners/executor-isolation.mjs          |  23 +-\n scripts/ci/runners/job-container.mjs               | 105 +++++--\n scripts/ci/runners/recovery-store.mjs              |  55 ++++\n scripts/ci/runners/trace-exporter.mjs              | 176 ++++++++++++\n 15 files changed, 1121 insertions(+), 257 deletions(-)\n",
+          "stderr": ""
+        }
+      ],
+      "profile_unchanged_from_preparation": true,
+      "profile_runtime": {
+        "node": "22.23.3",
+        "python": "3.11.18",
+        "arch": "x64"
+      },
+      "contract_changes": [
+        "STUDIOOS_JOB_DEADLINE absolute epoch seconds replaces relative MAX_SECONDS; keeper executes shell arithmetic/date +%s/exec sleep",
+        "Installs and tests are separate candidate exec phases; supervisor retains the exact container through capture/export/removal",
+        "Exporter pauses exact container, copies /work/traces with Docker cp to a strictly bounded uncompressed USTAR parser, and publishes complete ready offer only",
+        "Durable ownership records retained until exact absence confirmed; host supports exclusive no-follow fsync/rename filesystem semantics"
+      ],
+      "engine_version_pin": "none supplied in source; operator must identify and qualify exact binary/server/build/security baseline",
+      "native_status": "NOT RUN; approved builder/rootfs and node baseline still not supplied",
+      "evidence_class": "source reconciliation only; not build, scan, image approval or native compatibility"
+    },
+    "independent_checks_not_claimed": "Retained S09 author test/mutation logs were checksum-verified, not rerun. No independent native execution or actual Docker behavior has been measured."
+  }
 }
