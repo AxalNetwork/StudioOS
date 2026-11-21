@@ -494,3 +494,16 @@ export async function fetchIssue(env: Env, issueNumber: number): Promise<GhResul
 export async function fetchComments(env: Env, issueNumber: number): Promise<GhResult> {
   return ghFetch(env, `/issues/${issueNumber}/comments?per_page=50`, { method: 'GET' });
 }
+
+/**
+ * D5585 part 3 — one page (100) of an issue's or pull request's comments, oldest first, so a caller can read them
+ * all before concluding a comment is absent (`fetchComments` reads the first 50 only).
+ */
+export async function fetchCommentsPage(env: Env, issueNumber: number, page: number): Promise<GhResult> {
+  return ghFetch(env, `/issues/${issueNumber}/comments?per_page=100&page=${page}`, { method: 'GET' });
+}
+
+/** D5585 part 3 — delete one issue or pull request comment by its id. GitHub answers 204; an absent one is 404. */
+export async function deleteComment(env: Env, commentId: number): Promise<GhResult> {
+  return ghFetch(env, `/issues/comments/${commentId}`, { method: 'DELETE' }, { retry: false });
+}

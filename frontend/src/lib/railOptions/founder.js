@@ -443,10 +443,7 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Research · Companies', key: 'analyse:again', route: '/research/companies/1', label: 'Re-run', kind: 'research', handler: 'draft',
     at: [[COMPETITORS, 'api.competitors.rerun('], [ANALYSIS, 'api.competitors.rerun(']],
   },
-  {
-    page: 'Founder · Research · Companies', key: 'analyse:sources', route: '/research/companies/1', label: 'Refresh sources', kind: 'research', handler: 'draft',
-    at: [[COMPETITORS, 'api.competitors.refresh('], [ANALYSIS, 'api.competitors.refresh(']],
-  },
+  // D7652: Refresh sources re-fetches the stored pages and runs no model (D7176), so it is not a row.
   // Runs a model only with "Crawl site" ticked and a URL given.
   {
     page: 'Founder · Research · Companies', key: 'extract:candidate', route: '/research/companies/1', label: 'Add', kind: 'research', handler: 'draft',

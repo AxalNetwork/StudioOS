@@ -262,6 +262,22 @@ private registries, destination checks, canary receipts and rollback.
       prefix lock are verified. Live restore additionally awaits #6654's
       suppression adapter. See `documentation/operations/INCIDENT_RESPONSE.md`
       § Backups & Recovery. No values are recorded here.
+- [ ] D6653 independent file recovery: owner-provisioned `DR_COPY_ENDPOINT`,
+      `DR_COPY_BUCKET`, optional `DR_COPY_REGION`, and age public recipient
+      `DR_AGE_RECIPIENT`; separate write-only-content/metadata-HEAD secrets
+      `FILE_DR_COPY_ACCESS_KEY_ID` / `FILE_DR_COPY_SECRET_ACCESS_KEY`.
+      `FILE_DR_SECOND_COPY_ENABLED` stays off until separation and retention
+      approval. Non-R2 providers also require owner-confirmed
+      `FILE_DR_EXTERNAL_ACCOUNT_CONFIRMED`. The private age key stays offline.
+      The hourly observer uses separate heartbeat-only reader secrets
+      `FILE_RECOVERY_HEALTH_ACCESS_KEY_ID` /
+      `FILE_RECOVERY_HEALTH_SECRET_ACCESS_KEY`, not archive access.
+      Synthetic proofs use an independent preview bucket configured by
+      `FILE_DR_PREVIEW_ENABLED`, `FILE_DR_PREVIEW_ENDPOINT`,
+      `FILE_DR_PREVIEW_BUCKET`, optional `FILE_DR_PREVIEW_REGION`, and the
+      `FILE_DR_PREVIEW_COPY_*` / `FILE_DR_PREVIEW_RESTORE_*` credential pairs.
+      No value or live activation is implied. See the D6653 section in
+      `documentation/operations/INCIDENT_RESPONSE.md`.
 - [ ] `WORKGRAPH_INGEST_TOKEN` – optional, the same value as the Worker secret of that name (above); `pr-overlap.yml` posts each hourly snapshot with it (D5580 part 4).
 - [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
       independent receiver's observer secret. It is neither the Slack token nor

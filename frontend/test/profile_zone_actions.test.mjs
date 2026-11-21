@@ -1310,7 +1310,9 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       checked += 1;
       assert.match(src, /const unlinked = isNoPartnerProfile\(state\.error\);/,
         `${f} no longer derives the no-firm state as a flag`);
-      assert.match(src, /notice=\{unlinked \? <NoPartnerProfile \/> : null\}/,
+      // The notice may carry more lines after the gate (D5941: the pipeline's setup and read status), as long as
+      // the no-firm branch is the first thing it decides and it names the boundary.
+      assert.match(src, /notice=\{(?:<>\{)?unlinked \? <NoPartnerProfile \/> :/,
         `${f} takes the no-firm branch without saying why the zone is empty`);
       assert.match(src, /isEmpty=\{unlinked \|\|/,
         `${f} would infer emptiness from rows that never arrived`);

@@ -889,6 +889,13 @@ r.post('/:uid/vote', async (c) => {
         message: 'This decision has a voting roster and you are not on it. The person who opened it, or an Admin, picks who votes.',
       }, 403);
     }
+    // D7920: scope/roster checks still run first. A decided record accepts no
+    // later vote or recusal, including a stale client replay.
+    const votingClosed = () => c.json({
+      error: 'voting_closed',
+      message: 'Voting is closed because this decision has been recorded. No later vote or recusal is recorded.',
+    }, 409);
+    if (d.status === 'decided') return votingClosed();
     const rationale = body.rationale ? String(body.rationale).slice(0, 2000) : null;
     if (vote === 'recused' && !rationale?.trim()) {
       return c.json({
@@ -908,7 +915,8 @@ r.post('/:uid/vote', async (c) => {
     // replay leaves it equal to the request. The guard IN the upsert
     // (`WHERE ic_votes.vote <> 'recused'`) covers a recusal that lands
     // between that read and this write: the recused row is never updated, and
-    // zero changed rows is the refusal (D1 reports `meta.changes`).
+    // no returned row is the refusal. RETURNING works even when a driver
+    // does not include a change count in its metadata.
     const prior = await c.env.DB.prepare('SELECT vote FROM ic_votes WHERE ic_decision_id = ? AND user_id = ?')
       .bind(d.id, user.id).first<{ vote: string }>();
     let refused = prior?.vote === 'recused';
@@ -926,11 +934,21 @@ r.post('/:uid/vote', async (c) => {
     if (!refused) {
       const write = await c.env.DB.prepare(
         `INSERT INTO ic_votes (ic_decision_id, user_id, vote, rationale, created_at)
-         VALUES (?, ?, ?, ?, ?)
+         SELECT ?, ?, ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM ic_decisions WHERE id = ? AND status <> 'decided')
          ON CONFLICT(ic_decision_id, user_id) DO UPDATE SET vote=excluded.vote, rationale=excluded.rationale, created_at=excluded.created_at
-          WHERE ic_votes.vote <> 'recused'`
-      ).bind(d.id, user.id, vote, rationale, nowIso()).run();
-      refused = (write as any)?.meta?.changes === 0;
+          WHERE ic_votes.vote <> 'recused'
+         RETURNING id`
+      ).bind(d.id, user.id, vote, rationale, nowIso(), d.id).first<{ id: number }>();
+      refused = !write;
+      // The initial read may predate a concurrent recording. The SQL above
+      // orders the vote against that recording in one atomic statement and
+      // gates inserts AND conflict updates. Refuse before touching the journal.
+      if (refused) {
+        const current = await c.env.DB.prepare('SELECT status FROM ic_decisions WHERE id = ?')
+          .bind(d.id).first<{ status: string }>();
+        if (current?.status === 'decided') return votingClosed();
+      }
     }
     if (refused) {
       return c.json({
@@ -940,7 +958,7 @@ r.post('/:uid/vote', async (c) => {
     }
     // First vote moves a draft into the voting stage.
     if (d.status === 'draft') {
-      await c.env.DB.prepare("UPDATE ic_decisions SET status='voting', updated_at=? WHERE id=?").bind(nowIso(), d.id).run();
+      await c.env.DB.prepare("UPDATE ic_decisions SET status='voting', updated_at=? WHERE id=? AND status='draft'").bind(nowIso(), d.id).run();
     }
     // Task #83 — auto-draft a PRIVATE decision-journal entry for the voter, so
     // every IC vote lands in the ledger (audit ⑧) without re-typing. It is a
