@@ -19,11 +19,22 @@
  * mounted at `/api/research` ahead of it, matches any of these paths, so
  * mounting them ahead of the rest of `research.ts` changes no precedence
  * (`D4574-p8.md` holds the route inventory before and after).
+ *
+ * ADDED SINCE THE MOVE. `GET /market-readings/:uid/summary` (D7651, #7651):
+ * the Eadwyn summary of one reading, computed from the stored row with no
+ * model call, amounts in cents and two-decimal text. `GET /market-readings/summary`
+ * (D7651 part 2): the same summary for every reading on the caller's card,
+ * registered AHEAD of `GET /market-readings/:uid` so that route never reads
+ * "summary" as a uid (Hono runs matching handlers in registration order).
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
+import {
+  catalogPriceCents, proposalName, readingIsStale, readingSummary, readingsSummary, type SummaryRow,
+} from '../services/marketReadingRead';
+import { holdsOnlyLicence } from '../services/accountLicences';
+import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 import researchRoutes from './research';
 
@@ -74,11 +85,13 @@ research.get('/market-readings', async (c) => {
       WHERE owner_user_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 200`
   ).bind(user.id).all<{ id: number; uid: string; title: string; price_usd: number | null; price_cents: number | null }>();
   const readings = await c.env.DB.prepare(
-    `SELECT * FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 500`
+    `SELECT * FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC, id DESC LIMIT 500`
   ).bind(user.id).all<ReadingRow>();
 
   // Newest first out of the query, so the first one seen per offering is the
-  // newest — no comparison, no tie-break, no chance of picking the wrong run.
+  // newest — no comparison, no chance of picking the wrong run. Two runs on
+  // the same day fall back to the later one saved (`id DESC`, D7651 part 2),
+  // the same order the summary of these readings uses.
   const newest = new Map<number, ReadingRow>();
   const loose: ReadingRow[] = [];
   for (const r of readings.results || []) {
@@ -158,6 +171,45 @@ research.post('/market-readings', async (c) => {
 });
 
 /**
+ * D7651 part 2 (#7651) — the Eadwyn summary of all of the caller's readings,
+ * to the cent (canvas D7039, board RMP-12, under the readings card's CSV export).
+ *
+ * COMPUTED FROM THE STORED ROWS, NO MODEL (the owner's answer A, 2026-11-19).
+ * Each line is `readingSummary` of one row, the same as
+ * `GET /market-readings/:uid/summary`; the card's own rows are summarised
+ * (newest per active service line, and every reading not on one), with how
+ * many readings are stored in all, how many lines are current, ageing and
+ * stale by the page's age bands, and the newest run date.
+ *
+ * AN INVESTOR IS REFUSED before anything is read (D6273 Q2). Only the caller's
+ * own rows are read: every statement is `owner_user_id = ?`.
+ *
+ * REGISTERED BEFORE `GET /market-readings/:uid`, which would otherwise answer
+ * this path with a 404 for a reading called "summary".
+ */
+research.get('/market-readings/summary', async (c) => {
+  const user = await requireAuth(c);
+  if (holdsOnlyLicence(user, 'investor')) {
+    return refuse(c, 403, {
+      code: 'readings_hidden_for_investors',
+      message: 'Market readings are not shown on an investor licence.',
+    });
+  }
+  const stored = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM research_market_readings WHERE owner_user_id = ?`
+  ).bind(user.id).first<{ n: number }>();
+  const rows = await c.env.DB.prepare(
+    `SELECT r.uid, r.offering_id, r.metric, r.scope, r.range_low_cents, r.range_high_cents, r.comparable_count, r.ran_at,
+            o.uid AS offering_uid, o.is_active AS offering_active, o.price_usd AS price_usd, o.price_cents AS price_cents
+       FROM research_market_readings r
+       LEFT JOIN service_offerings o ON o.id = r.offering_id AND o.owner_user_id = r.owner_user_id
+      WHERE r.owner_user_id = ?
+      ORDER BY r.ran_at DESC, r.id DESC LIMIT 500`
+  ).bind(user.id).all<SummaryRow>();
+  return c.json({ summary: readingsSummary(rows.results || [], Number(stored?.n || 0)) });
+});
+
+/**
  * One reading, for `/research/markets/:uid`.
  *
  * THE LIST KEEPS THE NEWEST PER OFFERING. This read is the row itself, including
@@ -227,6 +279,46 @@ research.delete('/market-readings/:uid', async (c) => {
   ).bind(c.req.param('uid'), user.id).run();
   if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
   return c.json({ ok: true });
+});
+
+/**
+ * D7651 (#7651) — the Eadwyn summary of one reading, to the cent (canvas D7039,
+ * board RMP-12 and the rail's "Summaries" line).
+ *
+ * COMPUTED FROM THE STORED ROW, NO MODEL. The `research/market` draft surface
+ * D6285 removed from `research.ts` sent the readings to a model and rounded
+ * them to whole dollars; this read writes the reading's own range, count,
+ * scope and run date, and its catalog price where it is a service line
+ * (`services/marketReadingRead.ts`, `readingSummary`). Amounts leave as
+ * cents and as two-decimal text.
+ *
+ * AN INVESTOR IS REFUSED (D6273 Q2): pricing readings are hidden from the
+ * investor view, so an investor-only account gets a refusal, not a summary,
+ * before anything is read. A reading that is not the caller's is a 404, the
+ * same as a missing one.
+ */
+research.get('/market-readings/:uid/summary', async (c) => {
+  const user = await requireAuth(c);
+  if (holdsOnlyLicence(user, 'investor')) {
+    return refuse(c, 403, {
+      code: 'readings_hidden_for_investors',
+      message: 'Market readings are not shown on an investor licence.',
+    });
+  }
+  const row = await c.env.DB.prepare(
+    `SELECT r.uid, r.metric, r.scope, r.range_low_cents, r.range_high_cents, r.comparable_count, r.ran_at,
+            o.uid AS offering_uid, o.price_usd AS price_usd, o.price_cents AS price_cents
+       FROM research_market_readings r
+       LEFT JOIN service_offerings o ON o.id = r.offering_id AND o.owner_user_id = r.owner_user_id
+      WHERE r.uid = ? AND r.owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<{
+    uid: string; metric: string; scope: string | null;
+    range_low_cents: number | null; range_high_cents: number | null;
+    comparable_count: number | null; ran_at: string | null;
+    offering_uid: string | null; price_usd: number | null; price_cents: number | null;
+  }>();
+  if (!row) return refuse(c, 404, { code: 'not_found', message: 'This reading is not on your list.' });
+  return c.json({ summary: readingSummary(row) });
 });
 
 // ---------------------------------------------------------------------------

@@ -27,7 +27,7 @@
  * `fill_provenance` exists to prevent one layer down.
  */
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 /**
  * The writable fields, and the column each lands in.
@@ -49,6 +49,11 @@ export const ASSUMPTION_COLUMNS: Record<string, string> = {
   winRate: 'win_rate',
   runway: 'runway',
   capacity: 'capacity',
+  // D7704 (#7704): the inputs formula version 2 reads beside the ones above.
+  horizonMonths: 'horizon_months',
+  salesCycleMonths: 'sales_cycle_months',
+  retentionPct: 'retention_pct',
+  tamOverrideReason: 'tam_override_reason',
   cagr: 'cagr',
   growthDriver: 'growth_driver',
   maturity: 'maturity',
@@ -94,6 +99,10 @@ export interface MarketAssumptions {
   winRate: string | null;
   runway: string | null;
   capacity: string | null;
+  horizonMonths: string | null;
+  salesCycleMonths: string | null;
+  retentionPct: string | null;
+  tamOverrideReason: string | null;
   cagr: string | null;
   growthDriver: string | null;
   maturity: string | null;
@@ -125,10 +134,19 @@ export async function ensureMarketAssumptionsSchema(env: Env): Promise<void> {
       + 'runway TEXT, capacity TEXT, cagr TEXT, growth_driver TEXT, '
       + "maturity TEXT DEFAULT 'Growing', "
       + 'seg_filter_json TEXT, '
+      + 'horizon_months TEXT, sales_cycle_months TEXT, retention_pct TEXT, tam_override_reason TEXT, '
       + 'updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL, '
       + "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
       + "updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
+    // D7704: the four columns migration 202611191932 adds, on a table an older
+    // dev database created before them.
+    await runSchemaBootstrap(env, [
+      'ALTER TABLE project_market_assumptions ADD COLUMN horizon_months TEXT',
+      'ALTER TABLE project_market_assumptions ADD COLUMN sales_cycle_months TEXT',
+      'ALTER TABLE project_market_assumptions ADD COLUMN retention_pct TEXT',
+      'ALTER TABLE project_market_assumptions ADD COLUMN tam_override_reason TEXT',
+    ]);
     READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[market] ensureMarketAssumptionsSchema:', (e as Error).message);
@@ -185,7 +203,8 @@ export async function loadAssumptions(
   const row = await env.DB.prepare(
     `SELECT category, geography, target_year, methodology, population, acv,
             tam_override, sam_pct, win_rate, runway, capacity, cagr,
-            growth_driver, maturity, seg_filter_json, updated_at
+            growth_driver, maturity, seg_filter_json, horizon_months,
+            sales_cycle_months, retention_pct, tam_override_reason, updated_at
        FROM project_market_assumptions WHERE project_id = ?`,
   ).bind(projectId).first<Record<string, unknown>>();
 
@@ -209,6 +228,10 @@ export async function loadAssumptions(
     winRate: get('win_rate'),
     runway: get('runway'),
     capacity: get('capacity'),
+    horizonMonths: get('horizon_months'),
+    salesCycleMonths: get('sales_cycle_months'),
+    retentionPct: get('retention_pct'),
+    tamOverrideReason: get('tam_override_reason'),
     cagr: get('cagr'),
     growthDriver: get('growth_driver'),
     maturity: get('maturity'),
@@ -233,15 +256,30 @@ export async function saveAssumptions(
   env: Env, projectId: number, raw: unknown, userId: number | null,
 ): Promise<{ assumptions: MarketAssumptions; rejected: string[] }> {
   await ensureMarketAssumptionsSchema(env);
+  const { statements, rejected } = assumptionStatements(env, projectId, raw, userId);
+  for (const st of statements) await st.run();
+  return { assumptions: await loadAssumptions(env, projectId), rejected };
+}
+
+/**
+ * The statements `saveAssumptions` runs, unrun, so a caller can put them in its
+ * own `DB.batch` (D7704: a sizing version saves its assumptions in the same
+ * all-or-nothing write as its figures). The caller must have run
+ * `ensureMarketAssumptionsSchema` first. Unknown keys are returned in
+ * `rejected` and never reach a statement.
+ */
+export function assumptionStatements(
+  env: Env, projectId: number, raw: unknown, userId: number | null,
+): { statements: D1PreparedStatement[]; rejected: string[] } {
   const { patch, segFilter, rejected } = sanitizeAssumptions(raw);
   if (segFilter !== undefined) patch[SEG_FILTER_COLUMN] = JSON.stringify(segFilter);
 
   // The row has to exist before it can be patched, and `ON CONFLICT DO NOTHING`
   // makes first-write and every-later-write the same two statements rather than
   // a read-then-branch that two requests can interleave through.
-  await env.DB.prepare(
+  const statements: D1PreparedStatement[] = [env.DB.prepare(
     'INSERT INTO project_market_assumptions (project_id) VALUES (?) ON CONFLICT(project_id) DO NOTHING',
-  ).bind(projectId).run();
+  ).bind(projectId)];
 
   // FILTERED THROUGH THE CLOSED SET AT THE POINT OF USE, not upstream. The join
   // below puts these names in the query TEXT where no binding protects them, so
@@ -252,13 +290,13 @@ export async function saveAssumptions(
   const columns = Object.keys(patch).filter((c) => WRITABLE_COLUMNS.has(c));
   if (columns.length) {
     const sets = columns.map((c) => `${c} = ?`).join(', ');
-    await env.DB.prepare(
+    statements.push(env.DB.prepare(
       `UPDATE project_market_assumptions
           SET ${sets}, updated_by = ?, updated_at = datetime('now')
         WHERE project_id = ?`,
-    ).bind(...columns.map((c) => patch[c]), userId ?? null, projectId).run();
+    ).bind(...columns.map((c) => patch[c]), userId ?? null, projectId));
   }
-  return { assumptions: await loadAssumptions(env, projectId), rejected };
+  return { statements, rejected };
 }
 
 /**

@@ -26,6 +26,14 @@
  * linked. A comparison the old one-by-one save left short (fewer than two
  * columns) or doubled is flagged "Saved part-way" (D7043 ⚑, option A): the
  * member completes it or deletes it, and nothing is merged or removed.
+ *
+ * D7167 part 2 (#7167, FND-P08 D and E): a comparison of funds on a phone
+ * switches By fund and By attribute. By fund pages one fund at a time with
+ * Previous and Next and "Fund 3 of 6"; By attribute is the list above. Its
+ * line says n of 6 funds, as each source reported them, with no conversion,
+ * total or score. Companies keep By attribute and By company. A removed
+ * column hands focus to the column that took its place, or to Add fund when
+ * none is left (FND-P10).
  */
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -33,7 +41,7 @@ import { BTN_PRIMARY } from '../hq/security/ActionDialog.jsx';
 import { researchProjectComparisonsApi } from '../../lib/api/researchProjectComparisons.js';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
-import { KIND_WORDS, comparisonError, comparisonsView, subjectHref } from './researchComparisons.js';
+import { KIND_WORDS, columnAfterRemoval, comparisonError, comparisonsView, fundPage, subjectHref } from './researchComparisons.js';
 import { columnPage, partWay, stepAttribute } from './comparisonSave.js';
 
 const CARD = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
@@ -161,7 +169,7 @@ function ByAttribute({ set, attr, onStep, onPick, onRetry, scope }) {
       <ul className="flex flex-col divide-y divide-axal-hairline rounded-lg border border-axal-hairline dark:divide-gray-800 dark:border-gray-700" aria-label={`${row.label} for each column`}>
         {set.members.map((m, i) => (
           <li key={m.uid} className="flex flex-col gap-1 px-3 py-2.5 text-[12.5px]" data-testid={`attr-row-${scope}-${set.uid}-${m.uid}`}>
-            <Link to={m.href} className={`font-extrabold ${LINK}`}>{m.name}</Link>
+            <Link to={m.href} className={`font-extrabold ${LINK}`} data-col-focus={set.uid} data-col-uid={m.uid}>{m.name}</Link>
             {m.note ? <span className="text-[11.5px] text-amber-800 dark:text-amber-300">{m.note}</span> : <Value c={row.cells[i]} onRetry={onRetry} />}
           </li>
         ))}
@@ -184,11 +192,50 @@ function Segmented({ label, value, options, onChange, className = '', testId }) 
   );
 }
 
+/** One column as a card: its name, Remove, its note and every attribute with its value. */
+function MemberCard({ set, m, i, archived, onRemove, onChanged, removeLabel = 'Remove' }) {
+  return (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <Link to={m.href} className={`font-extrabold ${LINK}`} data-col-focus={set.uid} data-col-uid={m.uid}>{m.name}</Link>
+        {!archived ? <button type="button" className={SECONDARY} onClick={() => onRemove(m)} data-testid={`button-card-remove-${set.uid}-${m.uid}`}>{removeLabel}</button> : null}
+      </div>
+      {m.note ? <span className="text-[11.5px] text-amber-800 dark:text-amber-300">{m.note}</span> : null}
+      <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[12.5px]">
+        {set.rows.map((r) => <React.Fragment key={r.key}><dt className="font-bold text-axal-muted dark:text-gray-400">{r.label}</dt><dd><Value c={r.cells[i]} onRetry={onChanged} /></dd></React.Fragment>)}
+      </dl>
+    </>
+  );
+}
+
+/** FND-P08 E: By fund, one fund at a time with Previous and Next; it stops at either end. */
+function FundPager({ set, index, onIndex, archived, onRemove, onChanged }) {
+  const p = fundPage(set.members.length, index);
+  const m = set.members[p.index];
+  if (!m) return null;
+  const STEP = 'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink hover:bg-axal-ground disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+  return (
+    <div className="flex flex-col gap-2" data-testid={`comparison-by-fund-${set.uid}`}>
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" className={STEP} disabled={p.first} onClick={() => onIndex(p.index - 1)} aria-label="Previous fund" data-testid={`button-fund-prev-${set.uid}`}>‹</button>
+        <span className={MUTED} aria-live="polite" data-testid={`fund-page-${set.uid}`}>{p.label}</span>
+        <button type="button" className={STEP} disabled={p.last} onClick={() => onIndex(p.index + 1)} aria-label="Next fund" data-testid={`button-fund-next-${set.uid}`}>›</button>
+      </div>
+      <div className="flex flex-col gap-2 rounded-lg border border-axal-hairline p-3 dark:border-gray-700" data-testid={`fund-card-${set.uid}-${m.uid}`}>
+        <MemberCard set={set} m={m} i={p.index} archived={archived} onRemove={onRemove} onChanged={onChanged} removeLabel="Remove from comparison" />
+      </div>
+    </div>
+  );
+}
+
 function ComparisonCard({ projectUid, set, archived, onChanged, flag }) {
   const words = KIND_WORDS[set.kind];
   // D7177: Table or By attribute from a tablet up; By attribute or By company on a phone.
   const [layout, setLayout] = useState('table');
   const [phoneLayout, setPhoneLayout] = useState('attribute');
+  // D7167 part 2: funds switch By fund (a pager) and By attribute on a phone.
+  const isFund = set.kind === 'fund';
+  const [fundIndex, setFundIndex] = useState(0);
   const [attr, setAttr] = useState(0);
   const [page, setPage] = useState(0);
   const pager = columnPage(set.members.length, page);
@@ -202,6 +249,20 @@ function ComparisonCard({ projectUid, set, archived, onChanged, flag }) {
     setFailure(null);
     try { await fn(); onChanged(); return true; } catch (err) { setFailure(`${comparisonError(err, fallback)} Nothing was changed.`); return false; }
   };
+  // FND-P10: once the read no longer holds the removed column, focus the one that took its place, else Add fund.
+  const [refocus, setRefocus] = useState(null);
+  const removeColumn = async (m) => {
+    const at = set.members.findIndex((x) => x.uid === m.uid);
+    if (await act(() => researchProjectComparisonsApi.removeMember(projectUid, set.uid, m.uid), 'It could not be removed.')) setRefocus({ at, gone: m.uid });
+  };
+  useEffect(() => {
+    if (!refocus || set.members.some((x) => x.uid === refocus.gone)) return;
+    setRefocus(null);
+    const next = columnAfterRemoval(set.members, refocus.at);
+    if (typeof document.querySelectorAll !== 'function') return;
+    const el = next ? [...document.querySelectorAll(`[data-col-focus="${set.uid}"]`)].find((e) => e.getAttribute('data-col-uid') === next && e.offsetParent !== null) : null;
+    (el || document.getElementById(`add-column-${set.uid}`))?.focus?.();
+  }, [refocus, set.members, set.uid]);
   const rename = async (e) => {
     e?.preventDefault?.();
     if (!title.trim()) { setFailure('A comparison needs a title.'); return; }
@@ -220,12 +281,14 @@ function ComparisonCard({ projectUid, set, archived, onChanged, flag }) {
         ) : (
           <div className="min-w-0">
             <h2 id={`cmp-${set.uid}`} tabIndex={-1} className={`${H2} focus:outline-none`}>{set.title}</h2>
-            <span className={FAINT}>{set.members.length} {set.members.length === 1 ? 'column' : 'columns'} · {words.title} · as of each source’s date · no composite score</span>
+            <span className={FAINT} data-testid={`comparison-line-${set.uid}`}>{isFund
+              ? `${set.members.length} of ${set.limit} ${set.members.length === 1 ? words.one : words.many} · as reported by each source · no conversion, total or score`
+              : `${set.members.length} ${set.members.length === 1 ? 'column' : 'columns'} · ${words.title} · as of each source’s date · no composite score`}</span>
           </div>
         )}
         {!archived && !renaming ? (
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" className={SECONDARY} onClick={() => setAdding((a) => !a)} aria-expanded={adding ? 'true' : 'false'} data-testid={`button-add-column-${set.uid}`}>{words.add}</button>
+            <button type="button" id={`add-column-${set.uid}`} className={SECONDARY} onClick={() => setAdding((a) => !a)} aria-expanded={adding ? 'true' : 'false'} data-testid={`button-add-column-${set.uid}`}>{words.add}</button>
             <button type="button" className={SECONDARY} onClick={() => setRenaming(true)} data-testid={`button-rename-${set.uid}`}>Rename</button>
             <button type="button" className={SECONDARY} onClick={() => setConfirming(true)} data-testid={`button-delete-comparison-${set.uid}`}>Delete</button>
           </div>
@@ -273,10 +336,10 @@ function ComparisonCard({ projectUid, set, archived, onChanged, flag }) {
                   {set.members.map((m, i) => (
                     <th key={m.uid} scope="col" className={`px-3 py-2 align-top ${i < pager.from || i >= pager.to ? 'sm:hidden lg:table-cell' : ''}`}>
                       <span className="flex items-start justify-between gap-2">
-                        <Link to={m.href} className={`font-extrabold ${LINK}`}>{m.name}</Link>
+                        <Link to={m.href} className={`font-extrabold ${LINK}`} data-col-focus={set.uid} data-col-uid={m.uid}>{m.name}</Link>
                         {!archived ? (
                           <button type="button" aria-label={`Remove ${m.name} from this comparison`} className="text-[12px] font-bold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-white"
-                            onClick={() => act(() => researchProjectComparisonsApi.removeMember(projectUid, set.uid, m.uid), 'It could not be removed.')} data-testid={`button-remove-column-${set.uid}-${m.uid}`}>✕</button>
+                            onClick={() => removeColumn(m)} data-testid={`button-remove-column-${set.uid}-${m.uid}`}>✕</button>
                         ) : null}
                       </span>
                       {m.note ? <span className="block text-[11px] font-normal text-amber-800 dark:text-amber-300" data-testid={`column-note-${set.uid}-${m.uid}`}>{m.note}</span> : null}
@@ -299,19 +362,20 @@ function ComparisonCard({ projectUid, set, archived, onChanged, flag }) {
             </table>
           </div>
           {/* Phone: By attribute (RS-15 D) reads one attribute across every column with no panning; By company keeps RS-10's cards. */}
-          <Segmented label="Layout" value={phoneLayout} options={[['attribute', 'By attribute'], ['company', 'By company']]} onChange={setPhoneLayout} className="sm:hidden" testId={`phone-layout-${set.uid}`} />
+          <Segmented label="Comparison view" value={phoneLayout} options={isFund ? [['fund', 'By fund'], ['attribute', 'By attribute']] : [['attribute', 'By attribute'], ['company', 'By company']]}
+            onChange={setPhoneLayout} className="sm:hidden" testId={`phone-layout-${set.uid}`} />
           {phoneLayout === 'attribute' ? <div className="sm:hidden"><ByAttribute scope="phone" set={set} attr={attr} onStep={step} onPick={setAttr} onRetry={onChanged} /></div> : null}
+          {phoneLayout === 'fund' ? (
+            <div className="sm:hidden">
+              <FundPager set={set} index={fundIndex} onIndex={setFundIndex} archived={archived} onChanged={onChanged}
+                onRemove={removeColumn} />
+            </div>
+          ) : null}
           <ul className={phoneLayout === 'company' ? 'flex flex-col gap-2 sm:hidden' : 'hidden'} data-testid={`comparison-cards-${set.uid}`}>
             {set.members.map((m, i) => (
               <li key={m.uid} className="flex flex-col gap-2 rounded-lg border border-axal-hairline p-3 dark:border-gray-700">
-                <div className="flex items-start justify-between gap-2">
-                  <Link to={m.href} className={`font-extrabold ${LINK}`}>{m.name}</Link>
-                  {!archived ? <button type="button" className={SECONDARY} onClick={() => act(() => researchProjectComparisonsApi.removeMember(projectUid, set.uid, m.uid), 'It could not be removed.')}>Remove</button> : null}
-                </div>
-                {m.note ? <span className="text-[11.5px] text-amber-800 dark:text-amber-300">{m.note}</span> : null}
-                <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[12.5px]">
-                  {set.rows.map((r) => <React.Fragment key={r.key}><dt className="font-bold text-axal-muted dark:text-gray-400">{r.label}</dt><dd><Value c={r.cells[i]} onRetry={onChanged} /></dd></React.Fragment>)}
-                </dl>
+                <MemberCard set={set} m={m} i={i} archived={archived} onChanged={onChanged}
+                  onRemove={removeColumn} />
               </li>
             ))}
           </ul>

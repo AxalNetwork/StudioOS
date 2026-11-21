@@ -283,6 +283,16 @@ const ROUTES = [
     prefix: true,
   },
   {
+    // D7121 (#7121): the public Wellness presentation. Its words are the page's purpose sentence; it names no
+    // expert, member or entry. `/wellbeing`, the private workspace, has no entry and is never the shared link.
+    path: '/programs/wellness',
+    title: 'Wellness · Programs',
+    description:
+      'A private place in your Axal VC account to check in with yourself each week, find qualified support and book a 1:1 session on your own terms.',
+    type: 'website',
+    section: 'content',
+  },
+  {
     path: '/circles',
     title: 'Communities & Circles',
     description: 'Focused communities inside the Axal VC network.',

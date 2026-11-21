@@ -387,3 +387,116 @@ export function staleAttachmentSentence(ranAt, now = new Date()) {
 export function ageingAttachmentNote(days) {
   return `This one is ${days} days old — still attachable, and the date says so on the quote.`;
 }
+
+// ---------------------------------------------------------------------------
+// D7651 (#7651) — the Eadwyn summary of this reading, to the cent
+// ---------------------------------------------------------------------------
+
+/**
+ * Two-decimal text from the Worker, back to cents through the money layer.
+ * Null unless it reads as money AND equals the cents sent beside it, so a
+ * summary whose text and cents disagree is never drawn as a figure.
+ */
+function summaryCents(text, cents) {
+  if (typeof text !== 'string') return null;
+  const read = parseMinor(text, USD);
+  if (!read.ok || read.minor !== cents) return null;
+  return read.minor;
+}
+
+/** The words the summary line says around, or instead of, its figures. */
+export const SUMMARY_COPY = Object.freeze({
+  heading: 'Eadwyn summary of this reading',
+  basis: 'From the stored reading only. No model is called and nothing is rounded.',
+  loading: 'Reading the summary.',
+  notRecorded: 'This reading has no range to summarise.',
+  unreadableWhat: 'The summary',
+  unreadableClaim: 'This is not a claim that the reading has no range.',
+});
+
+/**
+ * `GET /research/market-readings/:uid/summary`'s `summary` → what RMP-12's
+ * line draws: `{ state: 'recorded', lead, range, tail, catalog }`, or
+ * `{ state: 'not_recorded', reason }`. `range` is "$99.50 – $99.99" from the
+ * two-decimal text, read back through `parseMinor` and written by
+ * `formatMinor`; nothing rounds.
+ */
+export function summaryView(summary) {
+  const range = summary?.range;
+  if (!summary || range?.status !== 'recorded') {
+    return { state: 'not_recorded', reason: range?.reason || SUMMARY_COPY.notRecorded };
+  }
+  const low = summaryCents(range.low_usd, range.low_cents);
+  const high = summaryCents(range.high_usd, range.high_cents);
+  if (low == null || high == null || high < low) {
+    return { state: 'not_recorded', reason: SUMMARY_COPY.notRecorded };
+  }
+  const n = summary.comparable_count;
+  const tail = [
+    Number.isInteger(n) && n > 0 ? `from ${n} comparable${n === 1 ? '' : 's'}` : null,
+    summary.ran_at ? `run ${summary.ran_at}` : null,
+  ].filter(Boolean);
+  const cat = summary.catalog_price || {};
+  const catCents = cat.status === 'recorded' ? summaryCents(cat.usd, cat.cents) : null;
+  const catalog = !summary.service_line || cat.status === 'not_applicable'
+    ? null
+    : (catCents != null ? { state: 'recorded', text: catalogLine(catCents) } : { state: 'not_recorded' });
+  return {
+    state: 'recorded',
+    lead: `${summary.metric}${summary.scope ? ` (${summary.scope})` : ''}`,
+    range: `${usd(low)} – ${usd(high)}`,
+    tail: tail.length ? `, ${tail.join(', ')}` : '',
+    catalog,
+  };
+}
+
+/**
+ * The rail's "Summaries" line (D7039 rail): what the summary quotes, to the
+ * cent, once it is read, and what it cannot quote otherwise. Null while it
+ * loads, so the rail says nothing it has not read.
+ */
+export function railSummaryLine(status, view) {
+  if (status !== 'ready' && status !== 'unavailable') return null;
+  if (status === 'unavailable') return 'Summaries: the summary of this reading could not be read.';
+  if (!view || view.state !== 'recorded') return 'Summaries: not recorded. This reading has no range to quote.';
+  return `Summaries: when Eadwyn summarises this reading it quotes ${view.range}, to the cent.`;
+}
+
+// ---------------------------------------------------------------------------
+// D7651 part 2 (#7651) — the Eadwyn summary of all of your readings
+// ---------------------------------------------------------------------------
+
+/** The words the readings card's summary says around, or instead of, its lines (RMP-12). */
+export const READINGS_SUMMARY_COPY = Object.freeze({
+  heading: 'Eadwyn summary of your readings',
+  basis: 'From your stored readings only. No model is called and nothing is rounded.',
+  loading: 'Reading the summary of your readings.',
+  none: 'No readings recorded, so there is nothing to summarise.',
+  unreadableWhat: 'The summary of your readings',
+  unreadableClaim: 'This is not a sign you have none.',
+});
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * `GET /research/market-readings/summary`'s `summary` → what RMP-12 draws
+ * under the CSV export: `{ state: 'recorded', facts, lines }`, `{ state:
+ * 'none' }` with no readings, or `{ state: 'not_recorded' }` when the answer
+ * is not a summary. Each line is `summaryView` of one row, so its range is
+ * the Worker's two-decimal text read back to the cent, or Not recorded.
+ * Counts are the Worker's; nothing here counts or rounds.
+ */
+export function readingsSummaryView(summary) {
+  if (!summary || !Array.isArray(summary.lines) || !summary.age) return { state: 'not_recorded' };
+  if (!summary.lines.length) return { state: 'none' };
+  const lines = summary.lines.map((l) => ({ uid: l.uid, metric: l.metric, age: l.age || null, ...summaryView(l) }));
+  const a = summary.age;
+  const bands = [`${a.current} current`, `${a.ageing} ageing`, `${a.stale} stale`];
+  if (a.undated) bands.push(`${a.undated} undated`);
+  const facts = [
+    `${plural(summary.readings, 'reading')} stored, ${lines.length} summarised below`,
+    bands.join(', '),
+    summary.newest_ran_at ? `newest run ${summary.newest_ran_at}` : null,
+  ].filter(Boolean).join(' · ');
+  return { state: 'recorded', facts, lines };
+}
