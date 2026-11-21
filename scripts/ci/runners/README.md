@@ -10,6 +10,7 @@ required checks, provider resources or shard counts.
 | `job-container.mjs` | D7905: inactive trusted-host Linux container boundary, actual inspection adapter and exact-ID cleanup; Mac and enrollment remain blocked pending canary. |
 | `executor-isolation.mjs` | D7905: binds the container boundary to the trusted executor for `linux-x64` only: a pre-checkout readiness port and the live-container adapter. Not isolation proof by itself. |
 | `profiles.json` | Schema v1 profile enums, shared AND labels and reviewed archive digests; hosted Ubuntu is a separate pool. |
+| `verify-capacity.mjs` | D7888/D7974: bounded GET-only timing observations and structural six-Worker pilot audit; never aggregate-check authority. |
 | `ephemeral-supervisor.mjs` | D7889: pure one-job enrollment/drain proposals and filtered environment; no live issuer or process launcher. |
 
 Start at [RUNNER_BOOTSTRAP.md](../../../documentation/operations/RUNNER_BOOTSTRAP.md).
