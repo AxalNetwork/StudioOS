@@ -28,6 +28,8 @@ export type CapacityPolicy = {
   maxIncludedWorkerShards: number;
   minimumHostedWorkerShards: number;
   approvedGroupId: number;
+  /** Pilot narrows the existing eight-request authority bound without increasing it. */
+  maxActiveRequests?: number;
   budgets: CapacityBudgets;
 };
 export type CiSubmission = {
@@ -102,7 +104,11 @@ export type CiAttempt = Omit<ExecutionReceipt, 'childRunId'> & {
   reason: string | null;
   /** Negative test truth survives cancellation/cleanup; cleanup-unknown attempts retain their reservation. */
   verifiedTestFailure?: boolean;
+  /** Owned dispatch at an unreviewed moving-main revision: cancellation only, never admission. */
+  rejectedWorkflowSha?: string;
 };
+/** A trusted adapter proved that no dispatch request was sent. Other errors remain ambiguous. */
+export class CapacityDispatchRefused extends Error {}
 export type LogicalShard = { name: string; generation: number; attempts: CiAttempt[] };
 export type PrerequisiteResult = { name: string; conclusion: 'success' | 'failure' | 'pending' };
 export type CapacityRequest = {
@@ -131,7 +137,8 @@ export type ChildObservation = {
   /** Trusted provider/authority observations, never caller-supplied result JSON. */
   completedAt?: number | null;
   cleanupConfirmed?: boolean;
-  executionOutcome?: 'completed' | 'setup_failure' | 'timed_out' | 'cleanup_failure' | 'unknown';
+  exportComplete?: boolean;
+  executionOutcome?: 'completed' | 'setup_failure' | 'timed_out' | 'cleanup_failure' | 'export_failure' | 'unknown';
 };
 export type Aggregate = { status: 'pending' | 'success' | 'failure' | 'cancelled'; reason: string };
 
@@ -148,7 +155,8 @@ export function validateCapacityPolicy(policy: CapacityPolicy): void {
       || !Number.isSafeInteger(policy.maxExternalWorkerShards) || policy.maxExternalWorkerShards < 0
       || policy.maxExternalWorkerShards > 2 || !positive(policy.minimumHostedWorkerShards)
       || !Number.isSafeInteger(policy.maxIncludedWorkerShards) || policy.maxIncludedWorkerShards < 0
-      || policy.maxIncludedWorkerShards > 1) {
+      || policy.maxIncludedWorkerShards > 1
+      || (policy.maxActiveRequests !== undefined && (!positive(policy.maxActiveRequests) || policy.maxActiveRequests > 8))) {
     throw new Error('capacity_policy_refused');
   }
   if (Object.keys(b).length !== Object.keys(CI_CAPACITY_BUDGETS).length
@@ -261,6 +269,8 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
   const shard = request.shards.find(s => s.name === observation.receipt.logicalShard);
   const attempt = shard?.attempts.find(a => a.generation === observation.receipt.generation);
   if (!shard || !attempt || !validChildObservation(attempt, observation)) return false;
+  if(attempt.rejectedWorkflowSha&&(observation.status!=='completed'||observation.conclusion!=='cancelled'
+    ||observation.testStep!=='not_run'||observation.cleanupConfirmed!==true))return false;
   const alreadyEnded = ['passed', 'failed', 'cancelled'].includes(attempt.phase);
   const ended = alreadyEnded || (observation.status === 'completed' && observation.cleanupConfirmed === true);
   if (observation.testStep === 'failure') {
@@ -287,7 +297,8 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
     if (observation.cleanupConfirmed !== true) {
       attempt.phase = 'cancellation_unknown'; attempt.reason = 'cleanup_or_termination_unverified'; return true;
     }
-    if (observation.conclusion === 'success' && observation.jobConclusion === 'success' && observation.testStep === 'success') {
+    if (observation.conclusion === 'success' && observation.jobConclusion === 'success' && observation.testStep === 'success'
+        && observation.exportComplete !== false && (observation.executionOutcome === undefined || observation.executionOutcome === 'completed')) {
       if (attempt.phase === 'cancelling' || attempt.phase === 'cancellation_unknown') {
         attempt.phase = 'cancelled'; attempt.reason = 'completed_after_fence';
       } else { attempt.phase = 'passed'; attempt.reason = null; }

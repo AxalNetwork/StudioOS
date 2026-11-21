@@ -1,7 +1,7 @@
 /** D7887: durable CI coordinator core; no production adapter or result producer is enabled here. */
 import {
   activeAttempt, admitReceipt, aggregateCapacity, applyObservation, selectPools, submissionMatches,
-  validateCapacityPolicy, HOSTED_JOB_CEILING_MS,
+  validateCapacityPolicy, HOSTED_JOB_CEILING_MS, receiptMatches, CapacityDispatchRefused,
 } from './lib/ciCapacityPolicy.ts';
 import type {
   Aggregate, CapacityInventory, CapacityPolicy, CapacityRequest, ChildObservation, CiAttempt,
@@ -116,9 +116,9 @@ export interface CapacityPorts {
   parent(input: CiSubmission): Promise<boolean>;
   prerequisites(input: CiSubmission): Promise<PrerequisiteResult[] | null>;
   dispatch(attempt: Readonly<CiAttempt>): Promise<number>;
-  discover(attempt: Readonly<CiAttempt>): Promise<number | null>;
-  observe(receipt: ExecutionReceipt): Promise<ChildObservation | null>;
-  cancel(receipt: ExecutionReceipt): Promise<void>;
+  discover(attempt: Readonly<CiAttempt>): Promise<number | { childRunId: number; rejectedWorkflowSha: string } | null>;
+  observe(receipt: ExecutionReceipt,rejectedWorkflowSha?:string): Promise<ChildObservation | null>;
+  cancel(receipt: ExecutionReceipt,rejectedWorkflowSha?:string): Promise<void>;
 }
 
 const terminal = (a: CiAttempt) => ['passed', 'failed', 'cancelled'].includes(a.phase);
@@ -164,7 +164,7 @@ export class CiCapacity {
       if (requests.some(r => r.submission.parentRunId === input.parentRunId
         && r.submission.parentAttempt >= input.parentAttempt)) throw new Error('capacity_parent_conflict');
       const now = this.now();
-      if (requests.filter(r => aggregateCapacity(r, now).status === 'pending' || r.shards.some(s => s.attempts.some(a => !terminal(a)))).length >= 8) {
+      if (requests.filter(r => aggregateCapacity(r, now).status === 'pending' || r.shards.some(s => s.attempts.some(a => !terminal(a)))).length >= (this.policy.maxActiveRequests ?? 8)) {
         throw new Error('capacity_active_bound');
       }
       let inventory: CapacityInventory | null = null;
@@ -235,7 +235,7 @@ export class CiCapacity {
       if (!request) return false;
       const attempt = request.shards.flatMap(s => s.attempts).find(a => a.childRunId === childRunId);
       if (!attempt) return false;
-      const observation = await this.ports.observe(this.bound(attempt));
+      const observation = await this.ports.observe(this.bound(attempt),attempt.rejectedWorkflowSha);
       if (!observation || !applyObservation(request, observation, this.now())) return false;
       if (aggregateCapacity(request, this.now()).status === 'success') request.completedAt ??= this.now();
       this.store.save(request);
@@ -251,8 +251,27 @@ export class CiCapacity {
 
   private bound(a: CiAttempt): ExecutionReceipt {
     if (a.childRunId === null) throw new Error('capacity_unbound_child');
-    const { phase: _phase, cancelDeadline: _cancelDeadline, reason: _reason, verifiedTestFailure: _failure, ...receipt } = a;
+    const { phase: _phase, cancelDeadline: _cancelDeadline, reason: _reason, verifiedTestFailure: _failure, rejectedWorkflowSha: _rejected, ...receipt } = a;
     return { ...receipt, childRunId: a.childRunId };
+  }
+
+  /** Historical ownership only, never execution admission. Late failures remain attributable after fencing. */
+  ownsResult(receipt: ExecutionReceipt): { current: boolean; receipt: ExecutionReceipt } | null {
+    const request=this.store.get(receipt.requestId),shard=request?.shards.find(s=>s.name===receipt.logicalShard);
+    const attempt=shard?.attempts.find(a=>a.generation===receipt.generation);
+    if(!attempt||attempt.childRunId===null||!receiptMatches(this.bound(attempt),receipt))return null;
+    return {current:attempt.generation===shard!.generation,receipt:this.bound(attempt)};
+  }
+
+  /** Called only after authenticated job verification. Negative truth fences immediately; cleanup is re-observed. */
+  recordExecutionFailure(receipt: ExecutionReceipt,jobId: number): Promise<void> {
+    return this.ordered(async()=>{
+      const request=this.store.get(receipt.requestId);
+      if(!request||!this.ownsResult(receipt)||!validRunId(jobId))throw new Error('capacity_result_owner');
+      if(!applyObservation(request,{receipt,workflowPath:'.github/workflows/runner-executor.yml',workflowAttempt:1,jobId,
+        runnerProfile:receipt.profile,status:'in_progress',conclusion:null,jobConclusion:null,testStep:'failure',startedAt:null,cleanupConfirmed:false},this.now()))throw new Error('capacity_result_owner');
+      this.store.save(request);
+    });
   }
 
   status(id: string): Aggregate | null {
@@ -294,7 +313,7 @@ export class CiCapacity {
           // Recover observations from older owned children too. Contradictory test failure stays sticky.
           for (const previous of shard.attempts.filter(a => a.generation !== shard.generation && a.childRunId !== null)) {
             try {
-              const observation = await this.ports.observe(this.bound(previous));
+              const observation = await this.ports.observe(this.bound(previous),previous.rejectedWorkflowSha);
               if (observation) applyObservation(request, observation, this.now());
             } catch { /* Unknown is not success. */ }
           }
@@ -302,14 +321,21 @@ export class CiCapacity {
           if (a.phase === 'dispatching') { a.phase = 'dispatch_unknown'; a.reason = 'dispatch_interrupted'; this.store.save(request); }
           if (a.phase === 'dispatch_unknown') {
             try {
-              const id = await this.ports.discover(structuredClone(a));
+              const found = await this.ports.discover(structuredClone(a));
+              const id=typeof found==='object'&&found!==null?found.childRunId:found;
               if (id !== null && validRunId(id)
-                  && !this.store.ownsChild(id)) { a.childRunId = id; a.phase = 'queued'; a.reason = null; this.store.save(request); }
+                  && !this.store.ownsChild(id)) {
+                if(typeof found==='object'&&found!==null){
+                  if(!/^[a-f0-9]{40}$/.test(found.rejectedWorkflowSha)||found.rejectedWorkflowSha===a.executorSha)throw new Error('capacity_discovery_revision');
+                  a.childRunId=id;a.rejectedWorkflowSha=found.rejectedWorkflowSha;a.phase='cancelling';a.reason='unreviewed_child_revision';
+                }else{a.childRunId = id; a.phase = 'queued'; a.reason = null;}
+                this.store.save(request);
+              }
             } catch { /* Never repeat a dispatch with an uncertain outcome. */ }
           }
           if (a.childRunId !== null && !terminal(a)) {
             try {
-              const observation = await this.ports.observe(this.bound(a));
+              const observation = await this.ports.observe(this.bound(a),a.rejectedWorkflowSha);
               if (observation) applyObservation(request, observation, this.now());
             } catch { /* Persisted deadlines below still apply during an API outage. */ }
           }
@@ -326,7 +352,7 @@ export class CiCapacity {
             a.phase = now >= a.cancelDeadline ? 'cancellation_unknown' : 'cancelling';
             a.reason ??= stopped ? 'request_stopped' : 'lease_expired';
             this.store.save(request); // Fence receipt before cancellation, even if the API hangs/fails.
-            try { await this.ports.cancel(this.bound(a)); } catch { /* Only observed termination permits fallback. */ }
+            try { await this.ports.cancel(this.bound(a),a.rejectedWorkflowSha); } catch { /* Only observed termination permits fallback. */ }
           }
           if (!stopped && a.phase === 'cancelled' && a.profile !== 'hosted'
               && now + this.policy.budgets.hostedStartMs + this.policy.budgets.hostedExecutionMs
@@ -348,7 +374,10 @@ export class CiCapacity {
                 throw new Error('capacity_dispatch_id_refused');
               }
               a.childRunId = id; a.phase = 'queued'; a.reason = null;
-            } catch { a.phase = 'dispatch_unknown'; a.reason = 'dispatch_outcome_unknown'; }
+            } catch(error) {
+              if(error instanceof CapacityDispatchRefused){a.phase=a.profile==='hosted'?'failed':'cancelled';a.reason='dispatch_not_sent';}
+              else{a.phase = 'dispatch_unknown'; a.reason = 'dispatch_outcome_unknown';}
+            }
             this.store.save(request); // Exact returned run ID is durable before any later observation/wait.
           }
           this.store.save(request);

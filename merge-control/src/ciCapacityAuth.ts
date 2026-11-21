@@ -14,6 +14,7 @@ export type CapacityIdentity = {
   repository: string; repository_id: string; run_id: string; run_attempt: string;
   event_name: string; ref: string; sha: string; workflow_ref: string; workflow_sha: string;
   exp: number; job_workflow_ref?: string; job_workflow_sha?: string;
+  check_run_id?: string; runner_environment?: string;
 };
 /** The runtime and verifier consume the same bounded bearer; it never comes from JSON. */
 export function capacityBearer(request: Request): string {
@@ -27,7 +28,7 @@ export async function capacityBody(body: ReadableStream<Uint8Array>|null, max: n
   try {
     return await Promise.race([ (async()=>{
       const chunks:Uint8Array[]=[];let size=0;
-      for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>max)throw new Error('capacity_body_bound');chunks.push(value);}
+      for(let n=0;;n++){if(n>=4096)throw new Error('capacity_chunk_bound');const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>max)throw new Error('capacity_body_bound');chunks.push(value);}
       return new Uint8Array(Buffer.concat(chunks));
     })(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('capacity_body_timeout')),10000);})]);
   }finally{clearTimeout(timer);void reader.cancel().catch(()=>undefined);}

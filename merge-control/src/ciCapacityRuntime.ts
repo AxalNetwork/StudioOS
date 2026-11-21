@@ -1,8 +1,8 @@
-/** D7973: unbound inactive capacity Durable Object entrypoint; deployment/permissions remain #7909. */
+/** D7909: default-off capacity service; deployment, permissions and activation remain held. */
 import { DurableObject } from 'cloudflare:workers';
 import { CiCapacity, SqlCapacityStore } from './ciCapacity.ts';
 import { authenticateCapacity, capacityBearer, capacityBody, capacityPlatformFetch } from './ciCapacityAuth.ts';
-import { capacityGithubClient, GithubCapacityPorts } from './ciCapacityGithub.ts';
+import { capacityGithubClient, capacityInventoryClient, GithubCapacityPorts } from './ciCapacityGithub.ts';
 import type { CapacityConfig, CapacityExecutionResultReader } from './ciCapacityGithub.ts';
 import { CapacityOutbox } from './ciCapacityOutbox.ts';
 import { CapacityTransport, capacityIdentityLane } from './ciCapacityTransport.ts';
@@ -11,10 +11,13 @@ import { CapacityIssuerKeys, CapacityRequestBudget } from './lib/ciCapacityAuthP
 import type { CapacityBudgetStore, CapacityBudgetWindow } from './lib/ciCapacityAuthPolicy.ts';
 import { ownerAuthorized } from './webhook.ts';
 import type { Env } from './types.ts';
-/** Prepared contract only: no binding, migration, route or live variable is added to wrangler. */
+import { SqlCapacityResults } from './lib/ciCapacityResults.ts';
+/** Default-off service contract. Checked-in configuration does not grant live access or activate work. */
 export type CapacityEnv = Pick<Env,'REPOSITORY'|'GITHUB_APP_ID'|'GITHUB_INSTALLATION_ID'|'GITHUB_APP_PRIVATE_KEY'> & {
   CAPACITY_OWNER_TOKEN?: string; CAPACITY_AUDIENCE?: string; CAPACITY_ENABLED?: string;
   CAPACITY_CONFIG?: string;
+  CAPACITY_PUBLICATION?: string;
+  CAPACITY_INVENTORY_TOKEN?: string;
 };
 type Settings = CapacityConfig & { maxExternalWorkerShards: number; maxIncludedWorkerShards: number; appId: number; publication: 'pilot'|'full-suite' };
 /** D8011: one canonical window, committed atomically before accepting any reservation. */
@@ -42,25 +45,31 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
   private store: SqlCapacityStore;
   private keys: CapacityIssuerKeys;
   private budget: CapacityRequestBudget;
+  private results: SqlCapacityResults;
   constructor(ctx: DurableObjectState, env: CapacityEnv) {
     super(ctx,env); this.store=new SqlCapacityStore(ctx.storage);
     this.keys = new CapacityIssuerKeys(capacityPlatformFetch);
     this.budget = new CapacityRequestBudget(new SqlCapacityBudgetStore(ctx.storage));
+    this.results = new SqlCapacityResults(ctx.storage);
   }
   private ordered<T>(fn:()=>Promise<T>):Promise<T>{const result=this.serial.then(fn);this.serial=result.catch(()=>undefined);return result;}
   private async enabled(){return this.env.CAPACITY_ENABLED==='true'&&(await this.ctx.storage.get<boolean>('capacity-kill'))===false;}
   private settings():Settings {
     const settings=JSON.parse(this.env.CAPACITY_CONFIG??'null') as Settings|null;
     if(!settings||settings.repository!==this.env.REPOSITORY||!Number.isSafeInteger(settings.appId)||settings.appId<=0||!['pilot','full-suite'].includes(settings.publication))throw new Error('capacity_configuration_missing');
+    if(this.env.CAPACITY_PUBLICATION==='pilot'&&settings.publication!=='pilot')throw new Error('capacity_pilot_publication_only');
+    if(settings.publication==='pilot'&&settings.maxIncludedWorkerShards!==0)throw new Error('capacity_pilot_included_disabled');
     return settings;
   }
   private async components() {
-    const config=this.settings(), api=await capacityGithubClient(this.env,capacityPlatformFetch),ports=new GithubCapacityPorts(api,config,Date.now,this.executionResultReader);
+    const config=this.settings(), api=await capacityGithubClient(this.env,capacityPlatformFetch);
+    const inventoryApi=this.env.CAPACITY_INVENTORY_TOKEN?capacityInventoryClient(this.env,capacityPlatformFetch):undefined;
+    const ports=new GithubCapacityPorts(api,config,Date.now,this.executionResultReader??(async(receipt,job)=>this.results.read(receipt,job,Date.now())),inventoryApi,config.publication==='pilot');
     const parent=ports.parent.bind(ports),dispatch=ports.dispatch.bind(ports);
     ports.parent=async input=>await this.enabled()?parent(input):false;
     ports.dispatch=async attempt=>{if(!await this.enabled())throw new Error('capacity_disabled');return dispatch(attempt);};
-    const capacity=new CiCapacity(this.store,ports,this.env.REPOSITORY,{version:1,maxExternalWorkerShards:config.maxExternalWorkerShards,maxIncludedWorkerShards:config.maxIncludedWorkerShards,minimumHostedWorkerShards:1,approvedGroupId:config.approvedGroupId,budgets:{...CI_CAPACITY_BUDGETS}});
-    return {capacity,config,transport:new CapacityTransport(capacity,config,()=>this.enabled(),()=>this.ctx.storage.setAlarm(Date.now()+1000))};
+    const capacity=new CiCapacity(this.store,ports,this.env.REPOSITORY,{version:1,maxExternalWorkerShards:config.maxExternalWorkerShards,maxIncludedWorkerShards:config.maxIncludedWorkerShards,minimumHostedWorkerShards:1,approvedGroupId:config.approvedGroupId,maxActiveRequests:config.publication==='pilot'?1:8,budgets:{...CI_CAPACITY_BUDGETS}});
+    return {capacity,config,ports,transport:new CapacityTransport(capacity,config,()=>this.enabled(),()=>this.ctx.storage.setAlarm(Date.now()+1000))};
   }
   async fetch(request:Request):Promise<Response>{
     const path=new URL(request.url).pathname;
@@ -79,7 +88,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
         if(!ownerAuthorized(request,this.env.CAPACITY_OWNER_TOKEN))return new Response('unauthorized',{status:401});
         return await this.ordered(async()=>Response.json({enabled:await this.enabled(),pending:this.store.pending().length}));
       }
-      if(request.method!=='POST'||!['/capacity/submit','/capacity/receipt'].includes(path))return new Response('not found',{status:404});
+      if(request.method!=='POST'||!['/capacity/submit','/capacity/receipt','/capacity/outcome'].includes(path))return new Response('not found',{status:404});
       if(this.env.CAPACITY_ENABLED!=='true')return Response.json({error:'capacity_disabled'},{status:503});
       const token=capacityBearer(request),config=this.settings();
       // Admission precedes body reads and ordered work, so unauthenticated waits cannot queue ahead of alarms.
@@ -90,15 +99,15 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
         },
         identity=>{
           const lane=capacityIdentityLane(identity,config);
-          return path===`/capacity/${lane}`?lane:null;
+          return path===`/capacity/${lane}`||(path==='/capacity/outcome'&&lane==='receipt')?lane:null;
         },
         async identity=>{
           if(!await this.enabled())throw new Error('capacity_disabled');
-          const body=JSON.parse(new TextDecoder().decode(await capacityBody(request.body,path.endsWith('/submit')?9*1024*1024:4096)));
+          const body=JSON.parse(new TextDecoder().decode(await capacityBody(request.body,path.endsWith('/submit')?9*1024*1024:path.endsWith('/outcome')?8192:4096)));
           return this.ordered(async()=>{
             if(!await this.enabled())throw new Error('capacity_disabled');
-            const {transport}=await this.components();
-            return path.endsWith('/submit')?transport.submit(body,identity):transport.receipt(body,identity);
+            const {transport,ports}=await this.components();
+            return path.endsWith('/submit')?transport.submit(body,identity):path.endsWith('/outcome')?transport.outcome(body,identity,ports,this.results):transport.receipt(body,identity);
           });
         },
         path==='/capacity/receipt'?{token,ownedReceipt:result=>'active' in result&&result.active===true&&result.receipt!==null}:undefined,

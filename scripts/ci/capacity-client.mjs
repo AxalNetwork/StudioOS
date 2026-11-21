@@ -1,11 +1,13 @@
 /** D7973: opt-in authenticated capacity caller; no polling or hosted job waiting. */
 const REPOSITORY='AxalNetwork/StudioOS';
-async function json(response,max=32*1024){
+export async function capacityJson(response,max=32*1024){
  if(!response.ok)throw new Error('capacity_authority_unavailable');
  const reader=response.body?.getReader();if(!reader)throw new Error('capacity_empty_response');
  const chunks=[];let size=0;
- for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>max){await reader.cancel();throw new Error('capacity_response_bound');}chunks.push(value);}
- return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+ try{
+  for(let n=0;;n++){if(n>=1024)throw new Error('capacity_response_chunks');const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>max)throw new Error('capacity_response_bound');chunks.push(value);}
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+ }finally{void reader.cancel().catch(()=>{});}
 }
 /** Only GitHub's reserved OIDC endpoint is accepted. Never hand this closure to candidate code. */
 export function githubOidcToken(env=process.env,fetcher=globalThis.fetch){
@@ -13,7 +15,7 @@ export function githubOidcToken(env=process.env,fetcher=globalThis.fetch){
   const endpoint=new URL(env.ACTIONS_ID_TOKEN_REQUEST_URL);
   if(endpoint.protocol!=='https:'||!endpoint.hostname.endsWith('.actions.githubusercontent.com')||endpoint.username||endpoint.password||endpoint.port)throw new Error('invalid_oidc_endpoint');
   endpoint.searchParams.set('audience',audience);
-  const result=await json(await fetcher(endpoint,{redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000),headers:{Authorization:`Bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}`}}));
+  const result=await capacityJson(await fetcher(endpoint,{redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000),headers:{Authorization:`Bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}`}}));
   if(typeof result.value!=='string'||result.value.length>16384)throw new Error('invalid_oidc_response');
   return result.value;
  };
@@ -43,7 +45,7 @@ function transport({url,audience,oidcToken,fetcher=globalThis.fetch},receiptCont
   const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000);
   const token=receiptContinuation?await receiptToken(scope,deadline):await oidcToken(audience,deadline);
   try{
-   const result=await json(await fetcher(new URL(path,endpoint),{method:'POST',redirect:'error',signal:deadline,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)}));
+   const result=await capacityJson(await fetcher(new URL(path,endpoint),{method:'POST',redirect:'error',signal:deadline,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)}));
    return validate?validate(result):result;
   }
   catch(error){cached=null;throw error;}
@@ -65,4 +67,8 @@ export function createReceiptReader(options){
 export async function submitCapacity(submission,{enabled=false,plan,...options}={}){
  if(enabled!==true)return {accepted:false,reason:'capacity_disabled'};
  return transport(options)('/capacity/submit',{submission,plan});
+}
+/** Trusted supervisor only, after native result/cleanup inspection; never give this capability to candidate code. */
+export async function reportExecutionResult(receipt,result,options){
+ return transport(options)('/capacity/outcome',{receipt,result});
 }

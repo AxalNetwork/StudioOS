@@ -174,6 +174,7 @@ jobs:
       actions: read
     outputs:
       parts: ${{ steps.plan.outputs.parts }}
+      capacity_submission: ${{ steps.capacity.outputs.capacity_submission }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
@@ -198,11 +199,24 @@ jobs:
           ' "$full_parts")
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: plan_artifact
         with:
           name: suite-plan
           path: suite-plan.json
           if-no-files-found: error
           retention-days: 3
+      # D7909: optional metadata only; no OIDC and no waiting. Failure cannot stop ordinary hosted CI.
+      - name: Prepare capacity pilot submission
+        id: capacity
+        if: github.repository == 'AxalNetwork/StudioOS' && github.event_name == 'push' && vars.CI_CAPACITY_ENABLED == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_CAPACITY_ENABLED: ${{ vars.CI_CAPACITY_ENABLED }}
+          CI_CAPACITY_EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CAPACITY_PLAN_ARTIFACT_ID: ${{ steps.plan_artifact.outputs['artifact-id'] }}
+          CAPACITY_PLAN_FILE: ${{ github.workspace }}/suite-plan.json
+        run: node scripts/ci/capacity-submission.mjs
 
   suite:
     name: suite (${{ matrix.part }})

@@ -43,7 +43,7 @@ function fixture(t: { after(fn: () => void): void }, patch: Partial<CapacityPoli
   } as unknown as Pick<DurableObjectStorage, 'sql' | 'transactionSync'>;
   const store = new SqlCapacityStore(storage);
   const state = { now: 1_000_000, live: true, trusted: true, inventoryDown: false, parentDown: false,
-    dispatchDown: false, cancelDown: false, nextId: 100, discovered: null as number | null,
+    dispatchDown: false, cancelDown: false, nextId: 100, discovered: null as Awaited<ReturnType<CapacityPorts['discover']>>,
     prerequisites: null as PrerequisiteResult[] | null };
   const dispatched: CiAttempt[] = [], cancelled: ExecutionReceipt[] = [], observed: number[] = [];
   const outcomes = new Map<number, ChildObservation>();
@@ -677,4 +677,35 @@ test('D8009 fallback waits for confirmed cancellation and fits the latest full b
       assert.equal(fallback.sourceSha, a.sourceSha); assert.equal(fallback.planDigest, a.planDigest);
     }
   }
+});
+
+test('D7909 pilot admits one request globally until every owned execution is independently ended',async t=>{
+ const f=fixture(t,{maxActiveRequests:1,maxIncludedWorkerShards:0}),c=f.create(),s=input();
+ await c.submit(s);await c.tick();
+ const second={...s,parentRunId:13,requestId:'00000000-0000-4000-8000-000000000002'};
+ await assert.rejects(c.submit(second),/active_bound/);
+ const attempts=f.get().shards.map(activeAttempt),failed=attempts[0];
+ f.outcomes.set(failed.childRunId!,f.observation(failed,{testStep:'failure',conclusion:'failure',jobConclusion:'failure',cleanupConfirmed:false}));
+ await c.tick();
+ assert.equal(c.status(s.requestId)?.status,'failure');
+ await assert.rejects(f.create().submit(second),/active_bound/);
+ for(const a of attempts)f.outcomes.set(a.childRunId!,f.observation(a,{testStep:a===failed?'failure':'not_run',conclusion:a===failed?'failure':'cancelled',jobConclusion:a===failed?'failure':'cancelled',cleanupConfirmed:true}));
+ await c.tick();
+ assert.equal((await f.create().submit(second)).accepted,true);
+ for(const maxActiveRequests of [0,9])assert.throws(()=>validateCapacityPolicy({...policy(),maxActiveRequests}),/policy_refused/);
+});
+
+test('D7909 discovered moving-main child is quarantined, persisted before cancellation and never admitted',async t=>{
+ const f=fixture(t),c=f.create(),s=input();f.state.dispatchDown=true;
+ await c.submit(s);await c.tick();f.state.dispatchDown=false;
+ const unexpected='d'.repeat(40);f.state.discovered={childRunId:999,rejectedWorkflowSha:unexpected};
+ const cancel=f.ports.cancel;f.ports.cancel=async(receipt,sha)=>{
+  assert.equal(sha,unexpected);assert.equal(f.attempt(receipt.logicalShard).rejectedWorkflowSha,unexpected);
+  assert.equal('rejectedWorkflowSha' in receipt,false);await cancel(receipt);
+ };
+ await c.tick();
+ const a=f.attempt('worker-1-of-6');assert.equal(a.childRunId,999);assert.equal(a.reason,'unreviewed_child_revision');
+ assert.equal(f.cancelled.length,1);assert.equal(await c.receipt(s.requestId,a.logicalShard,999,1),null);
+ await f.create().tick();assert.equal(f.attempt(a.logicalShard).generation,1);
+ assert.equal(f.dispatched.filter(row=>row.logicalShard===a.logicalShard).length,1);
 });

@@ -3,13 +3,17 @@ import { createHash } from 'node:crypto';
 import type { CapacityIdentity } from './ciCapacityAuth.ts';
 import type { CiCapacity } from './ciCapacity.ts';
 import type { CapacityConfig } from './ciCapacityGithub.ts';
-import type { CiSubmission } from './lib/ciCapacityPolicy.ts';
+import type { CiSubmission, ExecutionReceipt } from './lib/ciCapacityPolicy.ts';
+import type { GithubCapacityPorts } from './ciCapacityGithub.ts';
+import { executionResultBody } from './lib/ciCapacityResults.ts';
+import type { SqlCapacityResults } from './lib/ciCapacityResults.ts';
 /** Trusted claim-only admission, before reading a body; transport still binds exact evidence below. */
 export function capacityIdentityLane(identity: CapacityIdentity, config: CapacityConfig): 'submit'|'receipt'|null {
   if (identity.repository !== config.repository || Number(identity.repository_id) !== config.repositoryId) return null;
+  const plannerSha=config.plannerSha??config.executorSha;
   if (identity.workflow_ref === `${config.repository}/.github/workflows/ci.yml@${identity.ref}`
-    && identity.job_workflow_ref === `${config.repository}/.github/workflows/capacity-planner.yml@${config.executorSha}`
-    && identity.job_workflow_sha === config.executorSha
+    && identity.job_workflow_ref === `${config.repository}/.github/workflows/capacity-planner.yml@${plannerSha}`
+    && identity.job_workflow_sha === plannerSha
     && ((identity.event_name === 'push' && identity.ref === 'refs/heads/main')
       || (identity.event_name === 'merge_group' && /^refs\/heads\/gh-readonly-queue\/main\/pr-[1-9][0-9]*-[a-f0-9]{40}$/.test(identity.ref)))) return 'submit';
   if (identity.event_name === 'workflow_dispatch' && identity.ref === 'refs/heads/main'
@@ -41,5 +45,19 @@ export class CapacityTransport {
     const receipt=await this.capacity.receipt(body.requestId,body.shard,Number(identity.run_id),Number(identity.run_attempt));
     if(!receipt||receipt.executorSha!==identity.workflow_sha||receipt.generation!==body.generation||receipt.profile!==body.profile||(receipt.profile==='macos-arm64'&&!this.config.selfHostedProfiles.includes(receipt.profile)))return {active:false,receipt:null};
     return {active:true,receipt};
+  }
+  async outcome(body:{receipt:ExecutionReceipt;result:unknown},identity:CapacityIdentity,ports:GithubCapacityPorts,results:SqlCapacityResults){
+    if(!await this.enabled())throw new Error('capacity_disabled');
+    const receipt=body?.receipt;
+    if(capacityIdentityLane(identity,this.config)!=='receipt'||!receipt||receipt.repository!==this.config.repository
+      ||receipt.childRunId!==Number(identity.run_id)||receipt.childAttempt!==Number(identity.run_attempt)
+      ||receipt.executorSha!==identity.workflow_sha||receipt.profile==='macos-arm64')throw new Error('capacity_result_identity');
+    const owned=this.capacity.ownsResult(receipt),result=executionResultBody(body.result);
+    if(!owned||(!owned.current&&result.testStep!=='failure'))throw new Error('capacity_result_generation');
+    const jobId=await ports.resultJob(owned.receipt,identity);
+    if(!await this.enabled())throw new Error('capacity_disabled');
+    await this.wake();results.put(owned.receipt,jobId,result,Date.now());
+    if(result.testStep==='failure')await this.capacity.recordExecutionFailure(owned.receipt,jobId);
+    return {accepted:true};
   }
 }
