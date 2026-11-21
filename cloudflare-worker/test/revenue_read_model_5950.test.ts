@@ -1,8 +1,8 @@
 /**
  * D5950 (#5950) — the Revenue read model: every metric in one envelope, with its source, period, currencies, last
  * reconciliation, incomplete rows and coverage gap. Each metric is checked with an empty store, a partial store and a
- * failed read, and none of them may turn missing data into 0. The two metrics whose slices have not shipped (#5947,
- * #5948) must read as named gaps.
+ * failed read, and none of them may turn missing data into 0. Part 2 wires the last two: revenue per subsidiary from the
+ * branches' measured gross (#5947) and AI billed, cost and margin per licence from the licence on AI runs (#5948).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,10 +15,11 @@ import { FINANCIAL_EVENTS_DDL, writeFinancialEvent, setReconciliationState } fro
 import type { FinancialEventRow } from '../src/services/financialEvents.ts';
 import { subscriptionRevenue } from '../src/services/subscriptionRevenue.ts';
 import {
-  coverageFor, licenceInvoicesMetric, promoIssuedMetric, refundsAndDisputesMetric, revenueReadModel,
-  subscriptionRevenueMetric,
+  aiMarginPerLicenceMetric, coverageFor, licenceInvoicesMetric, promoIssuedMetric, refundsAndDisputesMetric,
+  revenuePerSubsidiaryMetric, revenueReadModel, subscriptionRevenueMetric,
 } from '../src/services/revenueReadModel.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 
 const Q4 = quarterFromKey('2026-Q4')!;
 const Q3 = quarterFromKey('2026-Q3')!;
@@ -42,8 +43,9 @@ function db(opts: { ledger?: string | null; promo?: boolean } = {}) {
     }
   }
   if (opts.promo !== false) {
-    sql.exec(`CREATE TABLE territory_licences (uid TEXT PRIMARY KEY, licence_ref TEXT, brand_name TEXT)`);
+    sql.exec(`CREATE TABLE territory_licences (uid TEXT PRIMARY KEY, licence_ref TEXT, brand_name TEXT, status TEXT NOT NULL DEFAULT 'active')`);
     sql.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/260_subsidiary_statements.sql'), 'utf8'));
+    sql.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611161359_5947_usage_report_source.sql'), 'utf8'));
     sql.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611150136_5949_promo_issued_reports.sql'), 'utf8'));
   }
   return { sql, env: { DB: d1Over(sql) } as Env };
@@ -93,22 +95,231 @@ test('every metric answers the same envelope, keyed by its own name and the requ
   }
 });
 
-test('revenue per subsidiary and AI margin per licence are named gaps for #5947 and #5948, never 0', async () => {
+test('no metric is a named gap any more: revenue per subsidiary and AI margin per licence read their stores', async () => {
   const model = await revenueReadModel(db().env, Q4, NOW, {
     subscriptions: { period: '2026-Q4', state: 'unreadable', reason: 'x' } as any,
     licenceInvoices: { available: false, reason: 'x' },
   });
-  for (const [k, n] of [['revenue_per_subsidiary', 5947], ['ai_margin_per_licence', 5948]] as const) {
-    const m = model.metrics[k];
-    assert.equal(m.state, 'not_available', `${k} is not a named gap`);
-    assert.equal(m.pending_issue, n);
-    assert.match(m.reason ?? '', new RegExp(`#${n}`), `${k}'s reason does not name #${n}`);
-    assert.equal(m.values, null);
-    assert.equal(m.currencies, null);
-    assert.equal(m.incomplete_rows, null);
-    assert.equal(m.coverage.state, 'none');
-    assert.deepEqual(numbers({ ...m, pending_issue: null }), [], `${k} carries a figure`);
+  for (const m of Object.values(model.metrics)) {
+    assert.notEqual(m.state, 'not_available', `${m.key} is still a named gap`);
+    assert.equal(m.pending_issue, null, `${m.key} still names a pending slice`);
   }
+});
+
+// ── Revenue per subsidiary (#5947) ────────────────────────────────────────────
+
+function report(sql: DatabaseSync, o: {
+  licence: string; stream?: string; period?: string; gross?: number | null; currency?: string; state?: string | null;
+  estimate?: number; reason?: string | null; asOf?: string | null;
+}) {
+  sql.prepare(
+    `INSERT INTO subsidiary_usage_reports
+       (licence_uid, branch_code, period, stream, gross_cents, currency, is_estimate, reported_at, state, reason, source, source_as_of)
+     VALUES (?, 'br', ?, ?, ?, ?, ?, '2026-11-16T05:10:00Z', ?, ?, ?, ?)`,
+  ).run(o.licence, o.period ?? '2026-Q4', o.stream ?? 'subscriptions', o.gross ?? null, o.currency ?? 'EUR', o.estimate ?? 0,
+    o.state === undefined ? 'complete' : o.state, o.reason ?? null, 'financial_events', o.asOf ?? '2026-11-16T05:09:00Z');
+}
+const LICENCES = `INSERT INTO territory_licences (uid, licence_ref, brand_name, status) VALUES
+  ('lic_fr', 'FR-001', 'France', 'active'), ('lic_de', 'DE-001', 'Germany', 'active'),
+  ('lic_uk', 'UK-001', 'UK', 'suspended'), ('lic_old', 'XX-001', 'Gone', 'terminated')`;
+
+test('revenue per subsidiary: an empty store is not recorded, never a zero per licence', async () => {
+  const bare = await revenuePerSubsidiaryMetric(db().env, Q4);
+  assert.equal(bare.state, 'not_recorded');
+  assert.equal(bare.values, null);
+  assert.deepEqual(bare.currencies, []);
+  assert.equal(bare.incomplete_rows, 0);
+
+  const { sql, env } = db();
+  sql.exec(LICENCES);
+  const m = await revenuePerSubsidiaryMetric(env, Q4);
+  assert.equal(m.state, 'not_recorded');
+  assert.equal(m.values, null, 'an unreported quarter carried figures');
+  assert.deepEqual(m.incomplete_detail, { not_reported: 3 }, 'a terminated licence was expected to report, or one was dropped');
+  assert.match(m.reason ?? '', /No branch has reported 2026-Q4/);
+  assert.equal(m.last_reconciled_at, null);
+  assert.equal(m.coverage.state, 'unknown');
+  assert.match(m.coverage.recorded_by, /202611161359_5947/);
+});
+
+test('revenue per subsidiary: reports with every stream unmeasured carry each branch\'s reason and no figure', async () => {
+  const { sql, env } = db();
+  sql.exec(LICENCES);
+  report(sql, { licence: 'lic_fr', state: 'not_recorded', reason: 'Ledger empty by design.' });
+  report(sql, { licence: 'lic_fr', stream: 'licence_fees', state: 'not_available' });
+  report(sql, { licence: 'lic_de', state: null }); // reported by a build before D5947
+  const m = await revenuePerSubsidiaryMetric(env, Q4);
+  assert.equal(m.state, 'not_recorded');
+  assert.deepEqual(m.currencies, []);
+  const by = Object.fromEntries(m.values!.by_licence.map((l) => [l.licence_uid, l]));
+  assert.deepEqual(by.lic_fr.streams.map((x) => [x.stream, x.gross_cents, x.currency, x.state]), [
+    ['licence_fees', null, null, 'not_available'], ['subscriptions', null, null, 'not_recorded'],
+  ]);
+  assert.equal(by.lic_fr.streams[1].reason, 'Ledger empty by design.');
+  assert.equal(by.lic_uk.reported, false);
+  // `not_available` is a stream the branch has no store for, by design: not a gap.
+  assert.deepEqual(m.incomplete_detail, { not_recorded: 1, no_state: 1, not_reported: 1 });
+  assert.equal(m.incomplete_rows, 3);
+});
+
+test('revenue per subsidiary: a partial store shows each figure in its own currency, totals nothing, counts the gaps', async () => {
+  const { sql, env } = db();
+  sql.exec(LICENCES);
+  report(sql, { licence: 'lic_fr', gross: 1200, currency: 'EUR' });
+  report(sql, { licence: 'lic_fr', stream: 'licence_fees', state: 'not_available' });
+  report(sql, { licence: 'lic_de', gross: 900, currency: 'gbp', state: 'incomplete', reason: 'Coverage began 2026-10-15.' });
+  // Stored with a number but a state that says nothing was measured: the number is not a figure.
+  report(sql, { licence: 'lic_de', stream: 'other', gross: 0, state: 'unreadable' });
+  report(sql, { licence: 'lic_fr', period: '2026-Q3', gross: 99 });
+  const m = await revenuePerSubsidiaryMetric(env, Q4);
+  assert.equal(m.state, 'incomplete');
+  assert.deepEqual(m.currencies, ['EUR', 'GBP']);
+  const by = Object.fromEntries(m.values!.by_licence.map((l) => [l.licence_uid, l]));
+  assert.deepEqual(by.lic_fr.streams.find((x) => x.stream === 'subscriptions')!.gross_cents, 1200);
+  assert.deepEqual(by.lic_de.streams.map((x) => [x.stream, x.gross_cents, x.currency]), [['other', null, null], ['subscriptions', 900, 'GBP']]);
+  assert.equal(by.lic_uk.reported, false);
+  assert.equal(by.lic_uk.streams.length, 0);
+  assert.equal(by.lic_old, undefined, 'a terminated licence that never reported was listed');
+  assert.deepEqual(m.incomplete_detail, { incomplete: 1, unreadable: 1, not_reported: 1 });
+  assert.equal(m.incomplete_rows, 3);
+  assert.equal(m.values!.by_licence.flatMap((l) => l.streams).length, 4, 'another period\'s report was read');
+  assert.ok(!/total/.test(JSON.stringify(m.values)), 'a total appeared');
+
+  // Every licence measured and complete, the `not_available` stream aside: complete.
+  sql.exec("DELETE FROM subsidiary_usage_reports WHERE licence_uid = 'lic_de'; UPDATE territory_licences SET status = 'terminated' WHERE uid <> 'lic_fr'");
+  const c = await revenuePerSubsidiaryMetric(env, Q4);
+  assert.equal(c.state, 'complete');
+  assert.equal(c.incomplete_rows, 0);
+  assert.equal(c.reason, null);
+});
+
+test('revenue per subsidiary: a failed read is unreadable, with no figure', async () => {
+  const { sql, env } = db();
+  sql.exec(LICENCES);
+  report(sql, { licence: 'lic_fr', gross: 1200 });
+  sql.exec('DROP TABLE subsidiary_usage_reports');
+  const m = await revenuePerSubsidiaryMetric(env, Q4);
+  assert.equal(m.state, 'unreadable');
+  assert.equal(m.values, null);
+  assert.equal(m.incomplete_rows, null);
+  assert.equal(m.currencies, null);
+  const gone = await revenuePerSubsidiaryMetric(db({ promo: false }).env, Q4);
+  assert.equal(gone.state, 'unreadable');
+});
+
+// ── AI billed, cost and margin per licence (#5948) ────────────────────────────
+
+const AI_MIGRATION = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611150131_5948_ai_licence_uid.sql'), 'utf8');
+
+function aiDb(opts: { migrated?: boolean; started?: string | null } = {}) {
+  const f = aiBudgetFixture();
+  if (opts.migrated !== false) {
+    f.db.exec(AI_MIGRATION);
+    if (opts.started === null) f.db.exec('DELETE FROM ai_licence_attribution_start');
+    else f.db.prepare('UPDATE ai_licence_attribution_start SET started_at = ? WHERE id = 1').run(opts.started ?? '2026-09-01 00:00:00');
+  }
+  return { db: f.db, env: { DB: f.DB } as Env };
+}
+function settled(sql: any, uid: string, o: { licence: string | null; created?: string; updated?: string; included?: number; topup?: number; cost?: number | null; user?: number }) {
+  const created = o.created ?? '2026-11-02 10:00:00', updated = o.updated ?? '2026-11-02 10:01:00';
+  sql.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,status,settlement_uid,
+      actual_included_microusd,actual_topup_microusd,expires_at,created_at,updated_at,licence_uid)
+    VALUES(?,?,?,?,?,?,'settled',?,?,?,?,?,?,?)`)
+    .run(uid, o.user ?? 2, created.slice(0, 10), created.slice(0, 7), o.included ?? 0, o.topup ?? 0, `s-${uid}`,
+      o.included ?? 0, o.topup ?? 0, updated, created, updated, o.licence);
+  if (o.cost !== null) {
+    sql.prepare("INSERT INTO ai_usage_logs(user_id,task,model,est_cost_usd,reservation_uid,licence_uid) VALUES(?,?,?,?,?,?)")
+      .run(o.user ?? 2, 'advisor_turn', 'm', o.cost ?? 1, uid, o.licence);
+  }
+}
+
+test('AI margin per licence: an empty store is not recorded, and says why at HQ', async () => {
+  const { db: sql, env } = aiDb();
+  try {
+    const m = await aiMarginPerLicenceMetric(env, Q4);
+    assert.equal(m.state, 'not_recorded');
+    assert.equal(m.values, null);
+    assert.deepEqual(m.currencies, []);
+    assert.deepEqual(m.incomplete_detail, { unattributed: 0, not_recorded: 0, pre_migration: 0 });
+    assert.match(m.reason ?? '', /No AI run settled in 2026-Q4 names a licence/);
+    assert.match(m.reason ?? '', /report to HQ carries no AI figure/, 'HQ did not say where branch runs are');
+    assert.equal(m.coverage.state, 'covered');
+    assert.equal(m.coverage.recorded_from, '2026-09-01T00:00:00Z', 'the SQLite UTC start was not read as UTC');
+
+    // HQ's own runs name no licence: counted as unattributed, still no per-licence figure.
+    settled(sql, 'h1', { licence: null, topup: 500_000 });
+    const hq = await aiMarginPerLicenceMetric(env, Q4);
+    assert.equal(hq.state, 'not_recorded');
+    assert.equal(hq.incomplete_rows, 1);
+    assert.equal(hq.values, null);
+  } finally { sql.close(); }
+});
+
+test('AI margin per licence: a partial store keeps per-licence figures in USD, and an uncosted licence reads null, not 0', async () => {
+  const { db: sql, env } = aiDb({ started: '2026-10-15 00:00:00' });
+  try {
+    settled(sql, 'a1', { licence: 'lic_a', created: '2026-11-02 10:00:00', included: 1_000_000, topup: 1_000_000, cost: 1 });
+    settled(sql, 'a2', { licence: 'lic_a', created: '2026-11-02 10:00:00', topup: 3_000_000, cost: 1 });
+    settled(sql, 'b1', { licence: 'lic_b', created: '2026-11-02 10:00:00', topup: 500_000, cost: null });
+    settled(sql, 'n1', { licence: null, created: '2026-11-02 10:00:00', topup: 700_000 });
+    settled(sql, 'p1', { licence: null, created: '2026-10-02 10:00:00', updated: '2026-10-20 10:00:00', topup: 700_000 });
+    settled(sql, 'q3', { licence: 'lic_a', created: '2026-08-02 10:00:00', updated: '2026-08-02 10:01:00', topup: 9_000_000 });
+    const m = await aiMarginPerLicenceMetric(env, Q4);
+    assert.equal(m.state, 'incomplete');
+    assert.deepEqual(m.currencies, ['USD']);
+    assert.equal(m.coverage.state, 'partial');
+    assert.deepEqual(m.values!.by_licence, [
+      { licence_uid: 'lic_a', runs: 2, runs_not_recorded: 0, included_microusd: 1_000_000, billed_microusd: 4_000_000, cost_microusd: 1_500_000, margin_microusd: 2_500_000 },
+      { licence_uid: 'lic_b', runs: 1, runs_not_recorded: 1, included_microusd: 0, billed_microusd: null, cost_microusd: null, margin_microusd: null },
+    ]);
+    assert.equal(m.values!.unattributed_runs, 1);
+    assert.equal(m.values!.pre_migration_runs, 1);
+    assert.deepEqual(m.incomplete_detail, { unattributed: 1, not_recorded: 1, pre_migration: 1 });
+    assert.equal(m.incomplete_rows, 3);
+    assert.equal(m.last_reconciled_at, null);
+    assert.ok(!/total/.test(JSON.stringify(m.values)), 'a total appeared');
+
+    // Q3 is wholly before attribution began: not recorded, no figure, even though a stamped row sits in it.
+    const q3 = await aiMarginPerLicenceMetric(env, Q3);
+    assert.equal(q3.state, 'not_recorded');
+    assert.equal(q3.coverage.state, 'none');
+    assert.equal(q3.values, null);
+  } finally { sql.close(); }
+});
+
+test('AI margin per licence: complete only with every run costed and attributed over a covered period', async () => {
+  const { db: sql, env } = aiDb();
+  try {
+    settled(sql, 'a1', { licence: 'lic_a', topup: 2_000_000, cost: 1 });
+    const m = await aiMarginPerLicenceMetric(env, Q4);
+    assert.equal(m.state, 'complete');
+    assert.equal(m.reason, null);
+    assert.equal(m.incomplete_rows, 0);
+    assert.equal(m.values!.by_licence[0].margin_microusd, 1_000_000);
+  } finally { sql.close(); }
+  // No start row: attribution's start is unknown, so even a clean licence is not complete.
+  const u = aiDb({ started: null });
+  try {
+    settled(u.db, 'a1', { licence: 'lic_a', topup: 2_000_000, cost: 1 });
+    const m = await aiMarginPerLicenceMetric(u.env, Q4);
+    assert.equal(m.state, 'incomplete');
+    assert.equal(m.coverage.state, 'unknown');
+    assert.equal(m.values!.pre_migration_runs, null);
+    assert.deepEqual(m.incomplete_detail, { unattributed: 0, not_recorded: 0 }, 'an unknown pre-migration count became 0');
+  } finally { u.db.close(); }
+});
+
+test('AI margin per licence: a failed read is unreadable, with no figure', async () => {
+  const { db: sql, env } = aiDb({ migrated: false });
+  try {
+    const m = await aiMarginPerLicenceMetric(env, Q4);
+    assert.equal(m.state, 'unreadable');
+    assert.equal(m.values, null);
+    assert.equal(m.incomplete_rows, null);
+    assert.equal(m.currencies, null);
+  } finally { sql.close(); }
+  const none = await aiMarginPerLicenceMetric(db().env, Q4);
+  assert.equal(none.state, 'unreadable');
 });
 
 test('subscription revenue: empty, partial, reconciled, before coverage and unreadable', async () => {
@@ -215,7 +426,7 @@ test('promo issued per licence: none set, reported, not reported, mismatch and u
   assert.equal(none.state, 'not_recorded');
   assert.equal(none.values, null);
 
-  sql.exec(`INSERT INTO territory_licences VALUES ('lic_fr', 'FR-001', 'France'), ('lic_de', 'DE-001', 'Germany'), ('lic_uk', 'UK-001', 'UK')`);
+  sql.exec(`INSERT INTO territory_licences (uid, licence_ref, brand_name) VALUES ('lic_fr', 'FR-001', 'France'), ('lic_de', 'DE-001', 'Germany'), ('lic_uk', 'UK-001', 'UK')`);
   const ceiling = sql.prepare(
     `INSERT INTO licence_promo_ceilings (licence_uid, period, ceiling_cents, currency, issued_cents, spent_cents, issued_currency, issued_reported_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -277,6 +488,9 @@ test('one unreadable store leaves the other metrics answering', async () => {
   assert.equal(model.metrics.subscription_revenue.state, 'unreadable');
   assert.equal(model.metrics.refunds_and_disputes.state, 'unreadable');
   assert.equal(model.metrics.promo_issued_per_licence.state, 'not_recorded');
+  assert.equal(model.metrics.revenue_per_subsidiary.state, 'not_recorded');
+  // No AI tables in this fixture: that metric alone is unreadable, and the rest still answer.
+  assert.equal(model.metrics.ai_margin_per_licence.state, 'unreadable');
 });
 
 test('coverage says covered, partial, none or unknown against the quarter', () => {

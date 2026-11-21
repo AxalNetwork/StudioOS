@@ -73,7 +73,7 @@ export async function stageRead(db: D1Database, x: any) {
   let stage: string | null = f.invitation ? 'Invited' : null, next = { label: f.invitation ? 'I’m interested' : 'View deal', href: `${base}/overview` };
   if (f.member || f.invitation?.status === 'interested') { stage = 'Reviewing'; next = { label: 'Ask for data room access', href: `${base}/documents` }; }
   if (f.dd) { stage = 'Diligence'; next = { label: 'Open the diligence case', href: `/due-diligence/${encodeURIComponent(f.dd.uid)}` }; }
-  if (f.ic) { stage = 'IC'; next = { label: 'Open IC record', href: `/ic/${encodeURIComponent(f.ic.uid)}` }; }
+  if (f.ic) { stage = 'IC'; next = { label: 'Open IC record', href: `/deals/commit/${encodeURIComponent(f.ic.uid)}` }; }
   if (f.ic?.terms || f.envelope) { stage = 'Terms'; next = { label: 'Review terms', href: `${base}/terms` }; }
   if (f.commitment) { stage = 'Committed'; next = { label: 'Review signing', href: `${base}/commitment` }; }
   if (f.envelope?.status === 'completed') { stage = 'Signed'; next = { label: 'Review funding', href: `${base}/commitment` }; }
