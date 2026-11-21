@@ -7,7 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AZURE_STATUS, createAzureJobsExecutor, executionKey, type ArmRequest, type ArmResponse, type AzureJobsConfig } from '../src/services/agents/azureJobsExecutor.ts';
+import { AZURE_STATUS, createAzureJobsExecutor, executionKey, type ArmRequest, type ArmResponse, type AzureJobsConfig, type AzureStartReservations } from '../src/services/agents/azureJobsExecutor.ts';
 import type { ExecutionRef, WorkspaceResult } from '../src/services/agents/workspaceSpec.ts';
 import { specFixture } from './_workspace_fake_5565.ts';
 
@@ -26,6 +26,13 @@ const config = (patch: Partial<AzureJobsConfig> = {}): AzureJobsConfig => ({ ena
 const azureSpec = (patch = {}) => specFixture({ allowed_providers: ['azure'], ...patch });
 
 /** A synthetic ARM endpoint for one job. `next` overrides the following start/stop answer. */
+function reservationStore(): AzureStartReservations {
+  const keys = new Set<string>();
+  return { async reserve(key) { if (keys.has(key)) return false; keys.add(key); return true; } };
+}
+const executor = (args: { config: AzureJobsConfig; transport: { request(req: ArmRequest): Promise<ArmResponse> }; starts?: AzureStartReservations }) =>
+  createAzureJobsExecutor({ ...args, starts: args.starts ?? reservationStore() });
+
 function fakeArm() {
   const executions = new Map<string, any>();
   const requests: ArmRequest[] = [];
@@ -65,16 +72,16 @@ function fakeArm() {
 }
 
 test('disabled by default: every call refuses before any request leaves', async () => {
-  const arm = fakeArm(), ex = createAzureJobsExecutor({ config: config({ enabled: false }), transport: arm.transport });
+  const arm = fakeArm(), ex = executor({ config: config({ enabled: false }), transport: arm.transport });
   refused(await ex.create(azureSpec()), 'provider_disabled');
   refused(await ex.estimate(azureSpec()), 'provider_disabled');
   assert.equal(arm.requests.length, 0);
-  assert.throws(() => createAzureJobsExecutor({ config: config({ subscription_id: 'not-a-uuid' }), transport: arm.transport }), /Invalid Azure Jobs configuration/);
-  assert.throws(() => createAzureJobsExecutor({ config: config({ registry_repository: 'repo:latest' }), transport: arm.transport }), /Invalid/);
+  assert.throws(() => executor({ config: config({ subscription_id: 'not-a-uuid' }), transport: arm.transport }), /Invalid Azure Jobs configuration/);
+  assert.throws(() => executor({ config: config({ registry_repository: 'repo:latest' }), transport: arm.transport }), /Invalid/);
 });
 
 test('create starts one execution pinned to the image digest, with references and no secret in the template', async () => {
-  const arm = fakeArm(), ex = createAzureJobsExecutor({ config: config(), transport: arm.transport });
+  const arm = fakeArm(), ex = executor({ config: config(), transport: arm.transport });
   const spec = azureSpec();
   const created = value(await ex.create(spec));
   assert.deepEqual([created.state, created.ref.provider, created.ref.region, created.ref.execution_id], ['provisioning', 'azure', 'weur', 'job-synthetic-1']);
@@ -104,16 +111,16 @@ test('an unsupported feature fails closed with the capability named, never a bes
     [{ concurrency_max: 0 }, {}, 'capacity_unverified'],
   ];
   for (const [patch, specPatch, capability] of cases) {
-    const ex = createAzureJobsExecutor({ config: config(patch), transport: arm.transport });
+    const ex = executor({ config: config(patch), transport: arm.transport });
     refused(await ex.create(azureSpec(specPatch)), 'capability_denied', capability);
   }
-  refused(await createAzureJobsExecutor({ config: config(), transport: arm.transport }).create(specFixture()), 'capability_denied', 'provider');
+  refused(await executor({ config: config(), transport: arm.transport }).create(specFixture()), 'capability_denied', 'provider');
   assert.equal(arm.requests.length, 0, 'nothing was sent for a refused spec');
 });
 
 test('an ambiguous start (202 or a dropped connection) is unknown, then located by its key; a retry never starts twice', async () => {
   for (const fault of ['ambiguous202', 'throwAfterStart'] as const) {
-    const arm = fakeArm(), ex = createAzureJobsExecutor({ config: config(), transport: arm.transport });
+    const arm = fakeArm(), ex = executor({ config: config(), transport: arm.transport });
     arm.faults.start = fault;
     const first = value(await ex.create(azureSpec()));
     assert.deepEqual([first.state, first.failure_code, first.ref.execution_id.startsWith('pending:')], ['unknown', 'start_ambiguous', true]);
@@ -122,18 +129,18 @@ test('an ambiguous start (202 or a dropped connection) is unknown, then located 
     value(await ex.create(azureSpec()));
     assert.equal(arm.starts(), 1, `${fault}: retried create found the execution`);
   }
-  // A start that never landed stays unknown until a retry starts it once.
-  const arm = fakeArm(), ex = createAzureJobsExecutor({ config: config(), transport: arm.transport });
+  // An absent execution is not proof that an ambiguous start never landed.
+  const arm = fakeArm(), ex = executor({ config: config(), transport: arm.transport });
   arm.faults.start = 'throw';
   const lost = value(await ex.create(azureSpec()));
   assert.equal(value(await ex.get(lost.ref)).state, 'unknown');
-  assert.equal(value(await ex.create(azureSpec())).state, 'provisioning');
-  assert.equal(arm.starts(), 2);
-  assert.equal(arm.executions.size, 1);
+  assert.equal(value(await ex.create(azureSpec())).state, 'unknown');
+  assert.equal(arm.starts(), 1);
+  assert.equal(arm.executions.size, 0);
 });
 
 test('each Azure status maps to one D5565 state; an unrecognised one is unknown', async () => {
-  const arm = fakeArm(), ex = createAzureJobsExecutor({ config: config(), transport: arm.transport });
+  const arm = fakeArm(), ex = executor({ config: config(), transport: arm.transport });
   const ref = value(await ex.create(azureSpec())).ref;
   const expected: Record<string, string> = { Processing: 'provisioning', Running: 'running', Succeeded: 'finished', Failed: 'failed',
     Degraded: 'failed', Stopped: 'cancelled', Unknown: 'unknown', SomethingNew: 'unknown' };
@@ -145,7 +152,7 @@ test('each Azure status maps to one D5565 state; an unrecognised one is unknown'
 });
 
 test('cancel and terminal calls: stop is sent once, a finished run is left alone, cleanup waits for the end', async () => {
-  const arm = fakeArm(), ex = createAzureJobsExecutor({ config: config(), transport: arm.transport });
+  const arm = fakeArm(), ex = executor({ config: config(), transport: arm.transport });
   const ref = value(await ex.create(azureSpec())).ref;
   arm.executions.get(ref.execution_id).properties.status = 'Running';
   refused(await ex.cleanup(ref), 'cleanup_not_terminal');
@@ -158,17 +165,17 @@ test('cancel and terminal calls: stop is sent once, a finished run is left alone
   assert.deepEqual(value(await ex.cleanup(ref)), { cleaned: true });
   assert.deepEqual(value(await ex.collect(ref)), { manifest_ref: null, checkpoint_manifest_ref: null });
   // A dropped stop is ambiguous, not cancelled.
-  const other = fakeArm(), ex2 = createAzureJobsExecutor({ config: config(), transport: other.transport });
+  const other = fakeArm(), ex2 = executor({ config: config(), transport: other.transport });
   const r2 = value(await ex2.create(azureSpec())).ref;
   other.faults.stop = 'throw';
   assert.deepEqual([value(await ex2.terminate(r2)).state, value(await ex2.terminate(r2)).state], ['unknown', 'cancelling']);
 });
 
 test('quota, revoked identity, a missing execution and cross-region refs are refused; provider text never travels', async () => {
-  const arm = fakeArm(), ex = createAzureJobsExecutor({ config: config(), transport: arm.transport });
+  const arm = fakeArm(), ex = executor({ config: config(), transport: arm.transport });
   for (const [status, code] of [[429, 'provider_quota'], [409, 'provider_quota'], [401, 'provider_auth_refused'], [403, 'provider_auth_refused'], [400, 'provider_rejected']] as const) {
     arm.faults.start = status;
-    const r = await ex.create(azureSpec());
+    const r = await ex.create(azureSpec({ execution_generation: status }));
     refused(r, code);
     assert.doesNotMatch(JSON.stringify(r), /synthetic provider text/);
   }
@@ -183,7 +190,7 @@ test('quota, revoked identity, a missing execution and cross-region refs are ref
 });
 
 test('a ref for another tenant or generation cannot read or stop an execution by naming it', async () => {
-  const arm = fakeArm(), ex = createAzureJobsExecutor({ config: config(), transport: arm.transport });
+  const arm = fakeArm(), ex = executor({ config: config(), transport: arm.transport });
   const ref = value(await ex.create(azureSpec())).ref;
   refused(await ex.get({ ...ref, tenant_id: ref.tenant_id + 1 }), 'execution_not_authorized');
   refused(await ex.terminate({ ...ref, execution_generation: ref.execution_generation + 1 }), 'execution_not_authorized');
@@ -193,8 +200,54 @@ test('a ref for another tenant or generation cannot read or stop an execution by
 
 test('an estimate needs priced rates: none is a refusal, never 0', async () => {
   const arm = fakeArm();
-  refused(await createAzureJobsExecutor({ config: config(), transport: arm.transport }).estimate(azureSpec()), 'estimate_unavailable');
-  const priced = createAzureJobsExecutor({ config: config({ rates: { vcpu_second_microusd: 24, gib_second_microusd: 3 } }), transport: arm.transport });
+  refused(await executor({ config: config(), transport: arm.transport }).estimate(azureSpec()), 'estimate_unavailable');
+  const priced = executor({ config: config({ rates: { vcpu_second_microusd: 24, gib_second_microusd: 3 } }), transport: arm.transport });
   // 60 s × (0.5 vCPU × 24 + 0.5 GiB × 3) = 810
   assert.deepEqual(value(await priced.estimate(azureSpec())), { cost_microusd: 810, measured: false });
+});
+
+
+test('concurrent adapters and retries before list visibility issue at most one start per generation', async () => {
+  const arm = fakeArm(), starts = reservationStore();
+  const transport = { async request(req: ArmRequest) {
+    if (req.method === 'GET' && req.path.startsWith(`${JOB}/executions?`)) return { status: 200, body: { value: [] } };
+    return arm.transport.request(req);
+  } };
+  const args = { config: config(), transport, starts };
+  arm.faults.start = 'ambiguous202';
+  const results = await Promise.all(Array.from({ length: 12 }, () => executor(args).create(azureSpec())));
+  assert.ok(results.every(r => r.ok));
+  assert.equal(arm.starts(), 1);
+  assert.equal(value(await executor(args).create(azureSpec())).failure_code, 'start_ambiguous');
+  assert.equal(arm.starts(), 1, 'recreating an adapter and an empty list do not permit another start');
+  value(await executor(args).create(azureSpec({ execution_generation: 2 })));
+  assert.equal(arm.starts(), 2, 'a new fenced generation has its own reservation');
+});
+
+test('a failed reservation sends no start, including a store that committed before losing its reply', async () => {
+  const arm = fakeArm(), store = reservationStore();
+  let fail = true;
+  const starts = { async reserve(key: string) { const won = await store.reserve(key); if (fail) { fail = false; throw new Error('lost reply'); } return won; } };
+  refused(await executor({ config: config(), transport: arm.transport, starts }).create(azureSpec()), 'start_reservation_unavailable');
+  assert.equal(value(await executor({ config: config(), transport: arm.transport, starts }).create(azureSpec())).state, 'unknown');
+  assert.equal(arm.starts(), 0);
+});
+
+test('an unlocated stop stays ambiguous and can stop the execution after it becomes visible', async () => {
+  const arm = fakeArm();
+  let visible = false;
+  const transport = { async request(req: ArmRequest) {
+    if (!visible && req.method === 'GET' && req.path.startsWith(`${JOB}/executions?`)) return { status: 200, body: { value: [] } };
+    return arm.transport.request(req);
+  } };
+  const ex = executor({ config: config(), transport });
+  arm.faults.start = 'ambiguous202';
+  const ref = value(await ex.create(azureSpec())).ref;
+  const stop = value(await ex.terminate(ref));
+  assert.equal(stop.state, 'unknown');
+  assert.equal(stop.failure_code, 'stop_ambiguous');
+  assert.equal(arm.requests.filter(r => r.path.includes('/stop')).length, 0);
+  visible = true;
+  assert.equal(value(await ex.terminate(ref)).state, 'cancelling');
+  assert.equal(value(await ex.get(ref)).state, 'cancelled');
 });
