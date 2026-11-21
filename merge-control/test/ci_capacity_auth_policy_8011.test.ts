@@ -256,7 +256,7 @@ test('ordinary verification concurrency cannot consume the proven-receipt slots'
   const finish = deferred<ReturnType<typeof identity>>();
   const starts = Array.from({ length: L.authConcurrent }, () => deferred<void>());
   const waiting = Promise.allSettled(starts.map(start => b.run(async () => { start.resolve(); return finish.promise; }, () => null, async () => assert.fail())));
-  await Promise.all(starts.map(s => s.promise));
+  await Promise.all(starts.map(start => start.promise));
   await assert.rejects(b.run(async () => known, () => 'receipt', async () => true), /auth_limited/);
   assert.equal(await b.run(async () => known, () => 'receipt', async () => true, progress), true);
   finish.resolve(identity());
