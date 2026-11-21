@@ -29,7 +29,7 @@ const SURFACES = [
   'components/spinout/LabIntro.jsx',
   'pages/SpinoutLabPage.jsx',
   'pages/SpinoutLabBriefPage.jsx',
-  'lib/spinoutBrief.js',
+  'pages/programs/content/spinout-lab.js',
   'pages/events/PublicEventsPage.jsx',
   'lib/siteMethod.js',
   'pages/site/MethodologyPage.jsx',
@@ -100,6 +100,11 @@ test('the Lab page and the brief draw the formation line once, under the gates',
   for (const w of LAB_WEEKS) assert.ok(gates.includes(w.name), `the gates name ${w.name}`);
   assert.equal(gates.split('Formation depends on your starting point').length - 1, 1);
   assert.ok(gates.includes(formationItemsFor('wy')[0]), 'with the chosen jurisdiction\'s incorporation line');
-  const brief = codeOnly(read('pages/SpinoutLabBriefPage.jsx'));
-  assert.equal(brief.split('{LAB_FORMATION}').length - 1, 1, 'the brief prints the formation line once');
+  // D6966: the brief's journey draws registering the company once, in the dashed band under the
+  // weeks, as "depends on your starting point" (owner decision F1), never inside a week.
+  const { default: content, WEEKS } = await import('../src/pages/programs/content/spinout-lab.js');
+  const journey = content.sections[1].blocks.find((b) => b.type === 'timeline');
+  assert.match(journey.span.note, /^Which week depends on your starting point\./);
+  assert.equal(journey.steps, WEEKS);
+  for (const w of WEEKS) for (const x of w.items) assert.ok(!/incorporat|regist/i.test(x), `${w.t} places registration in a week`);
 });
