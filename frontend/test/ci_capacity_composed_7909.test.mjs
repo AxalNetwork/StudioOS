@@ -135,3 +135,20 @@ test('D7909 ambiguously created resource cannot become cleanup proof or release 
  await bridge('cleanup',x.env,x.ports);assert.notEqual(x.results.read(),null,'acknowledgement cannot retire uncertain creation');
  x.f.result('failure');await x.f.tick();const a=new SqlCapacityStore(x.f.storage).get(x.s.requestId).shards[0].attempts[0];assert.equal(a.generation,1);assert.ok(['cancelling','cancellation_unknown'].includes(a.phase));
 });
+
+test('D7909 observed negative truth survives a supervisor-loss boundary before typed output or export',async t=>{
+ const x=await setup(t,{exit:9}),native=(await import('../../scripts/ci/runner-execution.mjs')).main;
+ x.ports.execute=async(mode,env,deps)=>{
+  if(mode!=='run')return native(mode,env,deps);
+  const admitted=JSON.parse(env.ADMITTED_JSON),receipt=admitted.identity,context={repository:REPO,executorSha:EXEC,childWorkflowSha:EXEC,childRunId:100,childAttempt:1};
+  await deps.readReceipt({request:{requestId:receipt.requestId,shard:receipt.logicalShard,generation:1,profile:'linux-x64'},context,phase:'execute'});
+  const paths=ownedPaths({runnerTemp:env.RUNNER_TEMP,workspace:env.GITHUB_WORKSPACE,childRunId:100,childAttempt:1});
+  deps.job.onOwned=r=>deps.store.write(r);deps.job.create(receipt,{source:paths.source,plan:join(paths.temp,'suite-plan.json')});
+  assert.equal((await deps.job.runCandidateInterruptible({receipt,admitted,phase:'test'})).exitCode,9);
+  throw Error('fixture supervisor lost before output');
+ };
+ await assert.rejects(bridge('run',x.env,x.ports),/supervisor lost/);assert.equal(x.reports(),0);
+ assert.equal(x.results.read().result.testStep,'failure');assert.equal(x.results.read().result.cleanupConfirmed,false);assert.equal(x.store.list().length,1);
+ assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+ const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,'failure');assert.equal(row.cleanupConfirmed,true);assert.equal(row.exportComplete,false);
+});
