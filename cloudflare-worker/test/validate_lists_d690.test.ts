@@ -124,8 +124,9 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
   },
   'ideal-customer-profile': {
     title: 'Segments', cols: ['Segment', 'Interviews', 'Strong fit', 'Evidence', 'Updated'],
-    filters: [['evidence', 'Evidence', ['anecdote', 'pattern', 'measured', 'not_recorded']], ['fit', 'Fit', ['strong', 'none']]],
-    sorts: ['evidence'],
+    // D6003: attainable evidence levels and every supported sort, default first.
+    filters: [['evidence', 'Evidence', ['anecdote', 'pattern', 'not_recorded']], ['fit', 'Fit', ['strong', 'none']]],
+    sorts: ['evidence', 'name', 'strong', 'interviews'],
   },
   'market-intelligence': {
     title: 'Competitors tracked', cols: ['Company', 'Kind', 'Latest signal', 'Date', 'Source'],

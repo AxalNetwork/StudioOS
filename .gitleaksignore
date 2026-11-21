@@ -298,6 +298,11 @@ e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_ac
 # #5791: the share-walkthrough frontend test used a base64-looking placeholder share token (synthetic, never a
 # credential). The fixture now uses 'synthetic-share-token-5791-not-a-jwt'. Scope this to the original finding.
 19ffa0d4df299a7c7523026e7c5e6aa8261c61ce:frontend/test/share_walkthrough_d5791.test.mjs:generic-api-key:32
+
+# D5531: documented public CodeQL archive SHA256, not an API key. Line 16 now labels it "SHA-256", which
+# gitleaks does not read as a key, so the merge queue's squashed commit has no finding; this entry covers
+# the PR's own history only (#7669).
+00888164d8e120c38d808247dbea41bf2cb01184:documentation/architecture/decisions/D5531.md:generic-api-key:16
 # #7073: false positives. scripts/agent-gateway-keys.mjs lists the names of the
 # Actions secrets it reads (the second and third Claude account slots); no value
 # is in the file. Scoped to these two findings in the commit that added them.
@@ -325,3 +330,7 @@ ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.te
 # literal; 62a7171032 assembles it at run time, so the squashed commit holds
 # no literal; this entry covers the PR's own history only.
 4d6854891ea6194cea00a2d89559e6f863ebc6db:cloudflare-worker/test/error_privacy_7256.test.ts:generic-api-key:18
+# #7926: ic_voting_closed_7920's first commit used a fixture secret gitleaks reads as
+# generic-api-key; the next commit switches to the standard test value. This covers that
+# PR commit only.
+9615940a3a9931caba3418527f7cd295ec27be07:cloudflare-worker/test/ic_voting_closed_7920.test.ts:generic-api-key:8

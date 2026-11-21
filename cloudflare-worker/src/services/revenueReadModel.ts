@@ -15,9 +15,9 @@
  * A figure the store does not hold is null, never 0. Money is integer minor units in its own currency, one bucket per
  * currency, and nothing here adds across currencies (there is no FX policy).
  *
- * WHAT IS NOT HERE YET (2026-11-16). Revenue per subsidiary needs branches to report a measured gross (#5947), and AI
- * billed, cost and margin per licence need the licence stamped on AI runs (#5948). Neither is merged, so both metrics
- * are `not_available` with the issue named, and read nothing.
+ * THE LAST TWO (D5950 part 2). Revenue per subsidiary reads the measured gross branches report since #5947, and AI
+ * billed, cost and margin per licence read the licence #5948 stamps on AI runs. No metric is `not_available` now; the
+ * state stays in the vocabulary for a store a later slice adds.
  *
  * NO STRIPE CALL. Every read is D1.
  */
@@ -25,6 +25,7 @@ import type { Env } from '../types';
 import { SUBSCRIPTION_LEDGER_ROWS, type subscriptionRevenue } from './subscriptionRevenue';
 import type { licenceFeeReceivables } from './licenceFeeReceivables';
 import { promoIssuedState, type LatestReport } from './promoIssuedReport';
+import { licenceAiPeriod, type LicenceAiPeriod } from './aiLicenceAttribution';
 
 export type MetricState = 'complete' | 'incomplete' | 'not_recorded' | 'not_available' | 'unreadable';
 
@@ -240,36 +241,252 @@ export async function refundsAndDisputesMetric(env: Env, quarter: Quarter): Prom
   }
 }
 
-// ── The two metrics whose slices have not shipped ─────────────────────────────
+// ── Revenue per subsidiary (#5947) ────────────────────────────────────────────
 
-function notAvailable(key: string, label: string, quarter: Quarter, issue: number, source: string, reason: string): RevenueMetric {
+export type SubsidiaryStreamLine = {
+  stream: string;
+  /** The branch's measured gross in `currency`; null when the branch measured none. Never added to another stream. */
+  gross_cents: number | null;
+  /** The figure's own currency; null when there is no figure to state it for. */
+  currency: string | null;
+  is_estimate: boolean;
+  /** What the branch said about the stream (D5947); null for a row a build before D5947 reported. */
+  state: string | null;
+  reason: string | null;
+  source: string | null;
+  source_as_of: string | null;
+  reported_at: string;
+};
+
+export type SubsidiaryRevenueLine = {
+  licence_uid: string;
+  licence_ref: string | null;
+  brand_name: string | null;
+  reported: boolean;
+  reported_at: string | null;
+  streams: SubsidiaryStreamLine[];
+};
+
+const UNMEASURED_STATES = new Set(['not_recorded', 'not_available', 'unreadable']);
+
+/**
+ * What each branch reported to HQ for the period, stream by stream, with the measured gross D5947 carries. One line per
+ * licence that is not terminated, plus any licence that reported without being one. Nothing is totalled: not across
+ * streams, licences or currencies.
+ */
+export async function revenuePerSubsidiaryMetric(env: Env, quarter: Quarter): Promise<RevenueMetric<{ by_licence: SubsidiaryRevenueLine[] }>> {
+  type Out = RevenueMetric<{ by_licence: SubsidiaryRevenueLine[] }>;
+  const base = {
+    key: 'revenue_per_subsidiary', label: 'Revenue per subsidiary',
+    source: "subsidiary_usage_reports: each branch's daily report of the quarter, per stream, with its measured gross, "
+      + 'currency, state, source and as-of time (D266, D5947)',
+    period: quarter.key,
+    last_reconciled_basis: 'HQ reconciles nothing against a branch report. Each stream carries `source_as_of`, when the '
+      + 'branch read its own ledger, which is not a reconciliation.',
+    pending_issue: null,
+  };
+  const coverage: MetricCoverage = {
+    state: 'unknown', recorded_from: null,
+    recorded_by: 'migration 202611161359_5947_usage_report_source (D5947) began storing a measured figure with its state '
+      + 'and source; a row with no state was reported by an earlier build, which measured nothing. The database does '
+      + 'not hold when the migration was applied.',
+  };
+  type ReportRow = {
+    licence_uid: string; stream: string; gross_cents: number | null; currency: string | null; is_estimate: number | null;
+    reported_at: string; state: string | null; reason: string | null; source: string | null; source_as_of: string | null;
+  };
+  let licences: { uid: string; licence_ref: string | null; brand_name: string | null }[];
+  let rows: ReportRow[];
+  try {
+    const l = await env.DB.prepare(
+      `SELECT uid, licence_ref, brand_name FROM territory_licences WHERE status != 'terminated' ORDER BY licence_ref, uid`,
+    ).all<{ uid: string; licence_ref: string | null; brand_name: string | null }>();
+    const r = await env.DB.prepare(
+      `SELECT licence_uid, stream, gross_cents, currency, is_estimate, reported_at, state, reason, source, source_as_of
+         FROM subsidiary_usage_reports
+        WHERE period = ?
+        ORDER BY licence_uid, stream`,
+    ).bind(quarter.key).all<ReportRow>();
+    if (!l.success || !r.success) throw new Error('usage reports unreadable');
+    licences = l.results || [];
+    rows = r.results || [];
+  } catch {
+    return unreadable(base, 'The subsidiary usage reports could not be read.', coverage) as Out;
+  }
+
+  const byLicence = new Map<string, SubsidiaryRevenueLine>();
+  for (const l of licences) {
+    byLicence.set(String(l.uid), {
+      licence_uid: String(l.uid), licence_ref: l.licence_ref ?? null, brand_name: l.brand_name ?? null,
+      reported: false, reported_at: null, streams: [],
+    });
+  }
+  const detail: Record<string, number> = {};
+  const bump = (k: string) => { detail[k] = (detail[k] ?? 0) + 1; };
+  const currencies = new Set<string>();
+  for (const x of rows) {
+    const uid = String(x.licence_uid);
+    const line = byLicence.get(uid) ?? {
+      licence_uid: uid, licence_ref: null, brand_name: null, reported: false, reported_at: null, streams: [],
+    };
+    const state = x.state ?? null;
+    // A figure is what the branch measured; a state that says it measured nothing keeps it null whatever was stored.
+    const gross = x.gross_cents === null || x.gross_cents === undefined || (state && UNMEASURED_STATES.has(state))
+      ? null : Number(x.gross_cents);
+    const currency = gross === null ? null : String(x.currency || '').toUpperCase() || null;
+    const estimate = Number(x.is_estimate) === 1;
+    if (gross !== null && currency === null) bump('no_currency');
+    else if (gross !== null) {
+      currencies.add(currency!);
+      if (estimate) bump('estimated');
+      else if (state === 'incomplete') bump('incomplete');
+      else if (state === null) bump('no_state');
+    } else if (state !== 'not_available') {
+      // `not_available` is a stream the branch has no store for (D5947), by design. Every other unmeasured stream is a gap.
+      bump(state ?? 'no_state');
+    }
+    line.streams.push({
+      stream: String(x.stream), gross_cents: currency === null ? null : gross, currency, is_estimate: estimate,
+      state, reason: x.reason ?? null, source: x.source ?? null, source_as_of: x.source_as_of ?? null,
+      reported_at: x.reported_at,
+    });
+    line.reported = true;
+    if (!line.reported_at || x.reported_at > line.reported_at) line.reported_at = x.reported_at;
+    byLicence.set(uid, line);
+  }
+  const lines = [...byLicence.values()];
+  const notReported = lines.filter((l) => !l.reported).length;
+  if (notReported) detail.not_reported = notReported;
+  const gaps = sum(detail);
+
+  if (!rows.length) {
+    return {
+      ...base, state: 'not_recorded',
+      reason: lines.length
+        ? `No branch has reported ${quarter.key} to HQ, so there is no figure for any of the ${lines.length} licences.`
+        : `No licence is in force and no branch has reported ${quarter.key}.`,
+      currencies: [], last_reconciled_at: null, incomplete_rows: gaps, incomplete_detail: detail, coverage, values: null,
+    };
+  }
+  if (!currencies.size) {
+    // Reports arrived and every stream in them is unmeasured: no figure, but each licence's line says why.
+    return {
+      ...base, state: 'not_recorded',
+      reason: `Every stream reported for ${quarter.key} arrived unmeasured, so there is no figure per subsidiary. `
+        + 'Each licence\'s streams carry the branch\'s own reason.',
+      currencies: [], last_reconciled_at: null, incomplete_rows: gaps, incomplete_detail: detail, coverage,
+      values: { by_licence: lines },
+    };
+  }
   return {
-    key, label, state: 'not_available', reason, source, period: quarter.key, currencies: null,
-    last_reconciled_at: null, last_reconciled_basis: `Nothing is recorded until #${issue} ships.`,
-    incomplete_rows: null, incomplete_detail: null,
-    coverage: { state: 'none', recorded_from: null, recorded_by: `Not recorded: #${issue} has not shipped.` },
-    pending_issue: issue, values: null,
+    ...base,
+    state: gaps ? 'incomplete' : 'complete',
+    reason: gaps
+      ? `${gaps} licences or streams for ${quarter.key} have no measured, complete figure; each figure is in its own `
+        + 'currency and none is totalled.'
+      : null,
+    currencies: [...currencies].sort(),
+    last_reconciled_at: null,
+    incomplete_rows: gaps,
+    incomplete_detail: detail,
+    coverage,
+    values: { by_licence: lines },
   };
 }
 
-/** Revenue per subsidiary. Not available until branches report a measured gross (#5947). */
-export function revenuePerSubsidiaryMetric(quarter: Quarter): RevenueMetric {
-  return notAvailable(
-    'revenue_per_subsidiary', 'Revenue per subsidiary', quarter, 5947,
-    'subsidiary_usage_reports.gross_cents, as each branch reports it (D266)',
-    'Not recorded yet. Branches report each stream to HQ with no measured amount, so there is no figure per '
-      + 'subsidiary. #5947 makes the branch report a measured gross, its currency and its source.',
-  );
+// ── AI billed, cost and margin per licence (#5948) ────────────────────────────
+
+export type AiLicenceLine = {
+  licence_uid: string;
+  runs: number;
+  runs_not_recorded: number;
+  included_microusd: number;
+  /** Null when no run of the licence has a usage row to cost it: unknown, not 0. */
+  billed_microusd: number | null;
+  cost_microusd: number | null;
+  margin_microusd: number | null;
+};
+
+const AI_START_BY = "ai_licence_attribution_start, written by migration 202611150131_5948_ai_licence_uid (D5948)";
+
+/** SQLite's `datetime('now')` (`YYYY-MM-DD HH:MM:SS`, UTC) as ISO, so it is never parsed as local time. */
+function sqliteUtc(at: string | null): string | null {
+  if (!at) return null;
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(at) ? `${at.replace(' ', 'T')}Z` : at;
 }
 
-/** AI billed, cost and margin per licence. Not available until AI runs carry their licence (#5948). */
-export function aiMarginPerLicenceMetric(quarter: Quarter): RevenueMetric {
-  return notAvailable(
-    'ai_margin_per_licence', 'AI billed, cost and margin per licence', quarter, 5948,
-    'ai_budget_reservations and ai_usage_logs, by licence',
-    'Not recorded yet. AI runs do not carry the licence they ran for, so cost, billed amount and margin cannot be '
-      + 'split by licence. #5948 stamps the licence on each run.',
-  );
+/**
+ * AI billed (top-up spend), provider cost and margin per licence, in micro-USD, from D5948's `licenceAiPeriod` over
+ * this Worker's own database. HQ's runs name no licence (U1), and a branch's runs sit in the branch's database: its
+ * report to HQ carries no AI figure (D5947, `token_margin` is `not_available`). So at HQ this metric reads as not
+ * recorded with the runs it could not attribute counted, and never as a zero per licence.
+ */
+export async function aiMarginPerLicenceMetric(
+  env: Env, quarter: Quarter,
+): Promise<RevenueMetric<{ unit: 'microusd'; by_licence: AiLicenceLine[]; unattributed_runs: number; pre_migration_runs: number | null }>> {
+  type Out = RevenueMetric<{ unit: 'microusd'; by_licence: AiLicenceLine[]; unattributed_runs: number; pre_migration_runs: number | null }>;
+  const base = {
+    key: 'ai_margin_per_licence', label: 'AI billed, cost and margin per licence',
+    source: "ai_budget_reservations and ai_usage_logs on this Worker's database: settled member holds by licence_uid, "
+      + "with tokenMargin's arithmetic (D762, D5948)",
+    period: quarter.key,
+    last_reconciled_basis: 'AI holds are settled by the Worker when the run ends, and nothing reconciles them against '
+      + "the provider's invoice, so there is no reconciliation time.",
+    pending_issue: null,
+  };
+  let p: LicenceAiPeriod;
+  try {
+    p = await licenceAiPeriod(env, { start: quarter.start, end: quarter.end });
+  } catch {
+    return unreadable(base, 'The AI holds and usage log could not be read by licence.',
+      { state: 'unknown', recorded_from: null, recorded_by: AI_START_BY }) as Out;
+  }
+  const coverage = coverageFor(sqliteUtc(p.attribution_started_at), quarter, AI_START_BY);
+  const notRecorded = p.licences.reduce((a, l) => a + l.runs_not_recorded, 0);
+  const detail: Record<string, number> = { unattributed: p.unattributed_runs, not_recorded: notRecorded };
+  if (p.pre_migration_runs !== null) detail.pre_migration = p.pre_migration_runs;
+  const gaps = sum(detail);
+  const notes: string[] = [];
+  if (coverage.state === 'unknown') notes.push('When attribution began cannot be read, so runs that name no licence are all counted as unattributed.');
+  if (coverage.state === 'partial') notes.push(`Runs began naming their licence on ${coverage.recorded_from}, during this period.`);
+  if (p.pre_migration_runs) notes.push(`${p.pre_migration_runs} runs settled in the period started before that and name no licence.`);
+  if (p.unattributed_runs) notes.push(`${p.unattributed_runs} runs name no licence.`);
+  if (notRecorded) notes.push(`${notRecorded} runs have no usage row to cost them, so they are outside the cost and margin.`);
+
+  if (coverage.state === 'none' || !p.licences.length) {
+    const why = coverage.state === 'none'
+      ? `Runs began naming their licence on ${coverage.recorded_from}, after this period.`
+      : `No AI run settled in ${quarter.key} names a licence on this database.`
+        + (env.BRANCH_CODE ? '' : ' HQ\'s own runs name none (no account names its licence yet), and a branch\'s runs '
+          + 'are recorded on its own database: its report to HQ carries no AI figure (D5947).');
+    return {
+      ...base, state: 'not_recorded', reason: [why, ...notes].join(' '),
+      currencies: [], last_reconciled_at: null, incomplete_rows: gaps, incomplete_detail: detail, coverage, values: null,
+    };
+  }
+  const lines: AiLicenceLine[] = p.licences.map((l) => {
+    // tokenMargin leaves an uncosted run out with COALESCE(…, 0); with no costed run at all, billed and cost are unknown.
+    const costed = l.runs - l.runs_not_recorded > 0;
+    return {
+      licence_uid: l.licence_uid, runs: l.runs, runs_not_recorded: l.runs_not_recorded,
+      included_microusd: l.included_microusd,
+      billed_microusd: costed ? l.billed_microusd : null,
+      cost_microusd: costed ? l.cost_microusd : null,
+      margin_microusd: costed ? l.margin_microusd : null,
+    };
+  });
+  const incomplete = gaps > 0 || coverage.state === 'partial' || coverage.state === 'unknown';
+  return {
+    ...base,
+    state: incomplete ? 'incomplete' : 'complete',
+    reason: notes.length ? notes.join(' ') : null,
+    currencies: ['USD'],
+    last_reconciled_at: null,
+    incomplete_rows: gaps,
+    incomplete_detail: detail,
+    coverage,
+    values: { unit: 'microusd', by_licence: lines, unattributed_runs: p.unattributed_runs, pre_migration_runs: p.pre_migration_runs },
+  };
 }
 
 // ── Promo issued per licence (#5949) ──────────────────────────────────────────
@@ -413,8 +630,8 @@ export async function revenueReadModel(
   const list = [
     await subscriptionRevenueMetric(env, quarter, reads.subscriptions),
     await refundsAndDisputesMetric(env, quarter),
-    revenuePerSubsidiaryMetric(quarter),
-    aiMarginPerLicenceMetric(quarter),
+    await revenuePerSubsidiaryMetric(env, quarter),
+    await aiMarginPerLicenceMetric(env, quarter),
     await promoIssuedMetric(env, quarter, now),
     licenceInvoicesMetric(quarter, reads.licenceInvoices),
   ];

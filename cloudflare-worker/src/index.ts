@@ -3307,9 +3307,12 @@ const studioos = {
           // Task #5 (AK) — every 6h (00:05/06:05/12:05/18:05 UTC), run
           // ALL free connectors regardless of their declared cadence.
           // The hourly slot above already pulls free hourly sources at
-          // :00 — overlapping by minute is acceptable since connectors
-          // are idempotent on (source_key, sector, ts) and the quota
-          // ledger short-circuits duplicate writes within the same day.
+          // :00, and nothing prevents the repeat: every run of a live
+          // source appends its rows again, unchanged figures included,
+          // and the quota ledger (market_intel_quota) only counts calls
+          // against a daily cap and backs off for an hour after a 429; it
+          // stops no duplicate write (D7707; storing an unchanged
+          // observation once is #7711).
           // This satisfies the spec contract that free sources refresh
           // every 6h end-to-end.
           if (hqCadences && [0, 6, 12, 18].includes(now.getUTCHours()) && now.getUTCMinutes() === 5) {
