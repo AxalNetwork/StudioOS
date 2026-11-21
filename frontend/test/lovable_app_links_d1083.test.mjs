@@ -168,5 +168,8 @@ test('Build: From Lovable sits on Prototype / MVP only, under From GitHub (LV7),
   const lovable = { state: 'ok' }; const reload = () => {};
   const el = partElement('prototype-mvp', 'lovable', { parts: { lovable } }, { projectId: 7, reload });
   assert.equal(el.type, FromLovable);
-  assert.deepEqual(el.props, { part: lovable, cycle: 'build', projectId: 7, onRetry: reload });
+  // BD8's optional handoff action is exercised by build_sources_eadwyn_d5077;
+  // this contract still holds every original source-read binding exactly.
+  const { action: _action, ...sourceProps } = el.props;
+  assert.deepEqual(sourceProps, { part: lovable, cycle: 'build', projectId: 7, onRetry: reload });
 });

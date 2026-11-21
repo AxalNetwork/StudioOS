@@ -94,7 +94,8 @@ const SKIPS_IN_QUEUE = Object.freeze([
 // why. D5608: `test-deps` merges the suite parts' traces into one artifact per
 // commit; a push that `verified` skips has none, so the queue run must make it.
 // test_tracer_5608.test.mjs keeps it advisory: neither gate needs it.
-const QUEUE_ADVISORY = Object.freeze({ 'test-deps': 'D5608' });
+// D5502: bounded read-only failure diagnostics also run after a queue failure.
+const QUEUE_ADVISORY = Object.freeze({ 'test-deps': 'D5608', classify: 'D5502' });
 
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
 
