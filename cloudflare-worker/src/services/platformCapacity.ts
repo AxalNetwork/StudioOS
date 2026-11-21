@@ -45,7 +45,7 @@ export const D1_CRIT_BYTES_DEFAULT = 7.5 * GB;
 /** A level is held until the value falls this far below the threshold that raised it. */
 export const D1_HYSTERESIS_BYTES = 0.25 * GB;
 
-/** Queue oldest-message age, seconds. Proposed, not yet approved by the owner. */
+/** Queue oldest-message age, seconds. Approved by the owner on 2026-11-21 (#4559). */
 export const QUEUE_AGE_WARN_S = 15 * 60;
 export const QUEUE_AGE_CRIT_S = 60 * 60;
 export const QUEUE_AGE_HYSTERESIS_S = 60;
@@ -208,7 +208,7 @@ export async function readQueue(env: Partial<Env>, binding: 'JOB_QUEUE' | 'AGENT
   const source = `${binding}.metrics()`;
   const ageThresholds: Thresholds = {
     warning: QUEUE_AGE_WARN_S, critical: QUEUE_AGE_CRIT_S, hysteresis: QUEUE_AGE_HYSTERESIS_S,
-    basis: 'Proposed: oldest-message age is the saturation signal (#4559). Not yet approved by the owner.',
+    basis: 'Oldest-message age is the saturation signal (#4559). Approved by the owner on 2026-11-21.',
   };
   const countBase = { key: `${key}.backlog_messages`, label: `${name} backlog`, source, unit: 'messages' as const, scope: 'deployment' as const, thresholds: null };
   const bytesBase = { key: `${key}.backlog_bytes`, label: `${name} backlog size`, source, unit: 'bytes' as const, scope: 'deployment' as const, thresholds: null };

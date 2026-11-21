@@ -245,8 +245,20 @@ async function pause(env: Env, a: AgentRow, reason: 'cap' | 'sponsor_left' | 'to
   await logEvent(env, a.id, null, 'paused', { reason });
 }
 
-async function refused(env: Env, a: AgentRow, r: AgentRefusal, module: string, option: string): Promise<AgentRefusal> {
-  try { await logEvent(env, a.id, a.sponsor_user_id, 'refused', { code: r.code, module, option }); } catch { /* the refusal still answers */ }
+/**
+ * D4536-p4 (#4536, owner answer A): every `run` and `refused` event from here on carries `outcome_v: 1`, and a refusal
+ * names the skill the run asked for (`skill: { uid, version }`, version null until the pin is read) and whether the
+ * engine ran it. Skill analytics count outcome rates over marked events only, so rows from before the change never
+ * enter a denominator.
+ */
+export const OUTCOME_V = 1;
+type RefusalInput = Pick<AgentRunInput, 'module' | 'option' | 'skill' | 'skillVersion' | 'engine'>;
+export function refusalDetail(r: Pick<AgentRefusal, 'code' | 'status'>, input: RefusalInput, version: number | null) {
+  const skill = typeof input.skill === 'string' && input.skill ? { uid: input.skill, version: version ?? input.skillVersion ?? null } : null;
+  return { code: r.code, status: r.status, module: input.module, option: input.option, outcome_v: OUTCOME_V, ...(skill ? { skill } : {}), ...(input.engine === true ? { engine: true } : {}) };
+}
+async function refused(env: Env, a: AgentRow, r: AgentRefusal, input: RefusalInput, version: number | null = null): Promise<AgentRefusal> {
+  try { await logEvent(env, a.id, a.sponsor_user_id, 'refused', refusalDetail(r, input, version)); } catch { /* the refusal still answers */ }
   return r;
 }
 
@@ -418,21 +430,21 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   const done = await railByRunKey(env, a.sponsor_user_id, runKey);
   if (done) return { ok: true, proposal: done, charged: await chargedFor(env, done.usage_log_id), usageLogId: done.usage_log_id, runKey, replayed: true };
   const bad = promptRefusal(input.prompt) ?? await taskRefusal(env, a, input.taskId);
-  if (bad) return refused(env, a, bad, input.module, input.option);
+  if (bad) return refused(env, a, bad, input);
   const c = await check(env, input);
-  if (!c.ok) return a.status === 'removed' || c.code === 'not_found' ? c : refused(env, a, c, input.module, input.option);
+  if (!c.ok) return a.status === 'removed' || c.code === 'not_found' ? c : refused(env, a, c, input);
   // D7073: the gateway fails closed, before the policy quote, the reads and the hold.
   const ungated = gatewayRefusal(env, input.engine === true);
-  if (ungated) return refused(env, a, ungated, input.module, input.option);
+  if (ungated) return refused(env, a, ungated, input);
   // D4162 (#4162): HQ's AI policy, before anything is read, held or charged.
   const held = await underPolicy(env, a, c);
-  if (held) return refused(env, a, held, input.module, input.option);
+  if (held) return refused(env, a, held, input);
   // Part 5: the named reads, through granted tools only, before the model sees anything.
   const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
-  if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);
+  if (!shaped.ok) return refused(env, a, shaped, input);
   // D1612 part D (#3954): a named skill runs at the agent's pinned version; its tools are checked again now.
   const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool), input.skillVersion ?? null) : null;
-  if (skill && !skill.ok) return refused(env, a, skill, input.module, input.option);
+  if (skill && !skill.ok) return refused(env, a, skill, input);
   // D4667-p2: a skill of the first ten runs only on evidence its readers can supply; before any text, read, hold or charge.
   let evidence: Pick<RunEvidence, 'slug' | 'limits'> & { blocks?: string[] } | null = null;
   if (skill) {
@@ -446,7 +458,7 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
         // D4667-p4: a run on one fund (`record`, `vc_fund:<id>`) reads that fund's recorded performance.
         fund: fundOfRecord(input.record),
       });
-      if (!checked.ok) return refused(env, a, checked, input.module, input.option);
+      if (!checked.ok) return refused(env, a, checked, input, skill?.ok ? skill.version.version : null);
       evidence = checked.evidence;
     }
   }
@@ -455,7 +467,7 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   let loaded: RunSkillText | null = null;
   if (skill) {
     loaded = await skillTextForRun(env, a.id, skill, engine, input.skillDeps);
-    if (!loaded.ok) return refused(env, a, no(409, 'skill_unavailable', 'This skill is no longer available to this agent, so it was not run.'), input.module, input.option);
+    if (!loaded.ok) return refused(env, a, no(409, 'skill_unavailable', 'This skill is no longer available to this agent, so it was not run.'), input, skill?.ok ? skill.version.version : null);
     c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${loaded.text}`;
     const limits = limitsPrompt(evidence);
     if (limits) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${limits}`;
@@ -464,7 +476,7 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
       const policy = await readPolicy(env);
       const over = policy ? await ceilingRefusal(env, c, policy.per_run_ceiling_microusd)
         : no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
-      if (over) return refused(env, a, over, input.module, input.option);
+      if (over) return refused(env, a, over, input, skill?.ok ? skill.version.version : null);
     }
   }
   // D4667-p2: a manual run carries the evidence its check read, as data, priced against the ceiling before any hold.
@@ -474,15 +486,15 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     const policy = await readPolicy(env);
     const over = policy ? await ceilingRefusal(env, c, policy.per_run_ceiling_microusd)
       : no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
-    if (over) return refused(env, a, over, input.module, input.option);
+    if (over) return refused(env, a, over, input, skill?.ok ? skill.version.version : null);
   }
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
   if ('disconnected' in read) {
     await pause(env, a, 'tool_disconnected');
     return refused(env, a, no(409, 'tool_disconnected', `${read.disconnected.name} is disconnected or one of its tools changed, so this agent is paused. Reconnect it, then resume the agent.`,
-      { server: read.disconnected }), input.module, input.option);
+      { server: read.disconnected }), input, skill?.ok ? skill.version.version : null);
   }
-  if (!read.ok) return refused(env, a, read, input.module, input.option);
+  if (!read.ok) return refused(env, a, read, input, skill?.ok ? skill.version.version : null);
   // D4667-p4: a first-ten skill run's approved MCP reads are their own evidence: named, and never an input it lacked.
   const mcp = evidence ? mcpPrompt(read.evidence) : null;
   if (mcp) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${mcp}`;
@@ -500,25 +512,25 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     if (landed) return { ok: true, proposal: landed, charged: await chargedFor(env, landed.usage_log_id), usageLogId: landed.usage_log_id, runKey, replayed: true };
     const holdStatus = r.replayedStatus ?? 'unknown';
     if (holdStatus === 'pending') {
-      return refused(env, a, no(409, 'step_in_flight', 'This step is still running. Try again in a moment.'), input.module, input.option);
+      return refused(env, a, no(409, 'step_in_flight', 'This step is still running. Try again in a moment.'), input, skill?.ok ? skill.version.version : null);
     }
     const lost: AgentStepLost = { ...no(409, 'step_lost', 'This step ran before, but what it wrote was not saved. Nothing more was charged.'), code: 'step_lost', holdStatus, runKey };
-    await refused(env, a, lost, input.module, input.option);
+    await refused(env, a, lost, input, skill?.ok ? skill.version.version : null);
     return lost;
   }
   if (!r.ok && gatewayId && gatewayLimited(r)) {
     // D1528: the `agents` gateway's limit is the platform's circuit breaker; the runtime pauses the engine.
-    return refused(env, a, no(503, 'gateway_limit', 'Agents reached the platform\'s limit, so they are paused for now. You can still work on this yourself.'), input.module, input.option);
+    return refused(env, a, no(503, 'gateway_limit', 'Agents reached the platform\'s limit, so they are paused for now. You can still work on this yourself.'), input, skill?.ok ? skill.version.version : null);
   }
   if (!r.ok && modelThrottled(r)) {
     // D7073: Workers AI was out of capacity. The task is tried again later; no agent and no engine is paused.
-    return refused(env, a, no(503, 'model_throttled', 'The model is busy right now, so the agent did not finish. Try again shortly.'), input.module, input.option);
+    return refused(env, a, no(503, 'model_throttled', 'The model is busy right now, so the agent did not finish. Try again shortly.'), input, skill?.ok ? skill.version.version : null);
   }
   if (!r.ok) {
     // The guard's own words (and its Wellbeing link) when it refused; else the router's.
     const words = r.guard?.refusal?.message ?? r.error ?? 'The agent could not run.';
     const link = r.guard?.refusal?.link;
-    return refused(env, a, no(runRefusalStatus(r.refusal), r.refusal ?? 'run_failed', words, link ? { link } : undefined), input.module, input.option);
+    return refused(env, a, no(runRefusalStatus(r.refusal), r.refusal ?? 'run_failed', words, link ? { link } : undefined), input, skill?.ok ? skill.version.version : null);
   }
   const usageLogId = r.usageLogId ?? null;
   if (skill) await tagUsage(env, usageLogId, skill.skill.id, skill.version.version);
@@ -530,12 +542,12 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
       taskId: input.taskId ?? null, runKey,
     });
   } catch {
-    return refused(env, a, no(500, 'proposal_not_saved', 'The agent ran, but its proposal could not be saved.'), input.module, input.option);
+    return refused(env, a, no(500, 'proposal_not_saved', 'The agent ran, but its proposal could not be saved.'), input, skill?.ok ? skill.version.version : null);
   }
   // The tools read are named, never their arguments or results.
   const tools = shaped.reads.map((t) => ({ integration_uid: t.integration_uid, tool: t.tool }));
   await logEvent(env, a.id, a.sponsor_user_id, 'run', {
-    module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}),
+    module: input.module, option: input.option, outcome_v: OUTCOME_V, ...(tools.length ? { tool_reads: tools } : {}),
     ...(skill ? { skill: { uid: skill.skill.uid, version: skill.version.version } } : {}),
     // D4555: only a run that asked for the SDK names its runtime; a legacy run's event is unchanged.
     ...(engine === 'cloudflare_sdk' && loaded?.ok ? { skill_runtime: { runtime: loaded.runtime, fallback: loaded.fallback } } : {}),
@@ -560,7 +572,7 @@ async function accountRun(env: Env, a: AgentRow, input: AgentRunInput, c: Extrac
   skill: { ok: true; skill: { id: number; uid: string }; version: { version: number } } | { ok: false } | null;
 }): Promise<AgentRunResult> {
   const policy = await readPolicy(env);
-  if (!policy) return refused(env, a, no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.'), input.module, input.option);
+  if (!policy) return refused(env, a, no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.'), input, ctx.skill?.ok ? ctx.skill.version.version : null);
   const models = [...new Set(accountSlots(env as never).slots.map((s) => s.model))];
   const allowedSet = new Set<string>();
   for (const m of models) {
@@ -577,7 +589,7 @@ async function accountRun(env: Env, a: AgentRow, input: AgentRunInput, c: Extrac
     const multiplier = await memberChargeMultiplier(env, c.opts.userId);
     const dearest = Math.max(0, ...accountSlots(env as never, allowed).slots.map((s) => slotQuote(s, request, multiplier)));
     if (dearest > policy.per_run_ceiling_microusd) {
-      return refused(env, a, no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(policy.per_run_ceiling_microusd / 1e6).toFixed(2)}. Nothing was charged.`), input.module, input.option);
+      return refused(env, a, no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(policy.per_run_ceiling_microusd / 1e6).toFixed(2)}. Nothing was charged.`), input, ctx.skill?.ok ? ctx.skill.version.version : null);
     }
   }
   const r = await runAccounts(env, {
@@ -588,7 +600,7 @@ async function accountRun(env: Env, a: AgentRow, input: AgentRunInput, c: Extrac
   if (!r.ok) {
     if (r.code === 'step_lost') {
       const lost: AgentStepLost = { ...no(409, 'step_lost', r.message), code: 'step_lost', holdStatus: 'settled', runKey: ctx.runKey };
-      await refused(env, a, lost, input.module, input.option);
+      await refused(env, a, lost, input, ctx.skill?.ok ? ctx.skill.version.version : null);
       return lost;
     }
     try {
@@ -608,12 +620,12 @@ async function accountRun(env: Env, a: AgentRow, input: AgentRunInput, c: Extrac
       taskId: input.taskId ?? null, runKey: ctx.runKey,
     });
   } catch {
-    return refused(env, a, no(500, 'proposal_not_saved', 'The agent ran, but its proposal could not be saved.'), input.module, input.option);
+    return refused(env, a, no(500, 'proposal_not_saved', 'The agent ran, but its proposal could not be saved.'), input, ctx.skill?.ok ? ctx.skill.version.version : null);
   }
   const tools = ctx.shaped.reads.map((t) => ({ integration_uid: t.integration_uid, tool: t.tool }));
   // The account that answered is named by slot, alias and model; never a key, a token or the prompt.
   await logEvent(env, a.id, a.sponsor_user_id, 'run', {
-    module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}),
+    module: input.module, option: input.option, outcome_v: OUTCOME_V, ...(tools.length ? { tool_reads: tools } : {}),
     ...(ctx.skill?.ok ? { skill: { uid: ctx.skill.skill.uid, version: ctx.skill.version.version } } : {}),
     account: account(r), accounts_tried: r.attempts.length,
   }, { usageLogId: r.usageLogId, proposalUid: proposal.uid });

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Requester Profile and Readiness · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Introductions · #7677 · part of #7675 · extends the #7069 Network canvases</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Requester profile and due-diligence readiness — what applies, what is missing, who acts next, and the way back to the request</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Network › Introductions for any authorized requester (founder, investor, advisor) who wants Axal to coordinate an introduction, often to a person who is not on Axal and owes nothing. It extends the landed Network canvases (#7069) in the #6256 look: the shell, the header with one primary, the four links, the Person Sheet, the request sheet and the one Eadwyn rail (#5130). Profile completeness, identity verification, due-diligence review, eligibility for one request and the existing Trust Center NDA (D7065) are separate facts with their own words and dates. Readiness is scoped to one capacity, organization and request type, decided by the server, and never inferred from a bar, a licence or an imported listing. Requirement names and validity are illustrative until the policy owner supplies them (#7673). Browsing and drafting never wait for readiness; saving, reviewing and submitting contact nobody outside Axal. Platform States (D5129) throughout. Violet dashed ◇ tags mark backend work and amber ⚑ tags mark owner picks drawn as option A; neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · [Iris Chen], [Harbor Lane Capital], [Jules Avery], [Elm Studio] and every person, company and figure (policy v0.3, 6 required + 1 optional items, 3 of 6 done, 6 cases in review, R-2291) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="17">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Requester Profile and Readiness Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NRD-00', 'The readiness contract', 'Five facts that are never merged, aggregate readiness worst first, the requirement row, the illustrative policy per capacity, and what each event does and does not do.', [W('NRD00')]],
+      ['NRD-01', 'Request readiness · investor', '[Iris Chen] asking as Investor for [Harbor Lane Capital], for an external introduction to [Jules Avery]. The saved draft, the capacity line, the aggregate (More information needed), the four facts with their own dates, and the requirement rows grouped Needs you, With a reviewer, Done, Optional. One primary: Answer the reviewer.', [F('NRD01', false, 1780)]],
+      ['NRD-01 B', 'Requirement statuses', 'The eleven row statuses with what each means, whether it blocks and who acts next, then rows drawn Declined, Expired, Unreadable and Not applicable.', [C('NRD01B', false, 1400, 1100)]],
+      ['NRD-02', 'Founder, investor and advisor', 'Three requesters with different applicable requirements: a founder Ready for [Kelp Bio] only, the investor needing more information, an advisor whose expertise review expired.', [C('NRD02', false, 1400, 700)]],
+      ['NRD-03', 'Capacity', 'A multi-role person switches from Advisor to Investor with a preview of what newly applies, stops applying (kept) and stays the same; the draft is kept. Then which organization they ask for and how representation reads in each state.', [C('NRD03', 'Switch with preview', 1400, 640), C('NRD03B', 'Represented organization', 1400, 480)]],
+      ['NRD-04', 'Professional profile', 'Grouped fields, required and optional, examples, the draft saved notice and the three-way title conflict the requester can correct but not approve. Eadwyn drafts a description after quoting its cost. Then the error summary, field errors, a failed save and a two-tab conflict.', [F('NRD04', 'Form with Eadwyn', 1180), C('NRD04B', 'Validation and save failures', 1400, 640)]],
+      ['NRD-05', 'Evidence and clarification', 'Reuse of the Trust Center identity check with its scope, entity verification outside scope (Refused), an unreadable upload, nothing on record, who sees evidence. Then the reviewer’s question, the answer, and waiting with no promised date.', [C('NRD05', 'Reuse, scope, unreadable', 1400, 700), C('NRD05B', 'More information needed', 1400, 620)]],
+      ['NRD-06', 'What Axal will share', 'The exact shareable profile and brief beside what stays private. Confirming records the preview version and sends nothing.', [F('NRD06', false, 900)]],
+      ['NRD-07', 'Back to the request', 'The draft with a blocked Submit that lists the three blocking items and links to each. Then Return to introduction, the submitted receipt (nobody contacted), the same receipt on a second click, expiry while drafting, a changed policy and a lost answer. Last, a submitted request whose readiness expired later: flagged for the operator, not cancelled.', [F('NRD07', 'Draft with blocked submit', 900), C('NRD07B', 'Return and submit outcomes', 1400, 700), C('NRD07C', 'Expired after submit', 1400, 320)]],
+      ['NRD-08', 'Reviewer', 'The queue (6 need review), the case with only the context the requirement needs, evidence references whose opening is logged, history, and a decision with a requester-visible explanation separate from the internal note. Then concurrent review, removed access, failed save, an earlier decision, a support session and the requester’s view.', [F('NRD08', 'Queue', 900), F('NRD08B', 'Case', 960), C('NRD08C', 'Edge states', 1400, 620)]],
+      ['NRD-09', 'Privacy and permissions', 'What other members, another investor, a support session and the directory see, then the applicant and reviewer permission and transition matrix.', [C('NRD09', 'Shared views', 1400, 620), W('NRD09B')]],
+      ['NRD-10', 'States', 'Loading, first use, missing and invalid fields, unreadable evidence, stale, expired, refused, in review, clarification, blocked, save failed, duplicate submit, success and readiness Unavailable.', [C('NRD10', false, 1400, 1000)]],
+      ['NRD-11', 'Tablet 768', 'The readiness page in one column with the four facts as a 2-by-2 grid.', [C('NRD11', false, 768, 1890)]],
+      ['NRD-12', 'Phone 390', 'Readiness, answering the reviewer, the profile with its error summary, the share preview, the blocked request and the submitted receipt. 44 px targets, one sticky primary.', [P('NRD12A', 'Readiness'), P('NRD12B', 'Answer'), P('NRD12C', 'Profile errors'), P('NRD12D', 'Share preview'), P('NRD12E', 'Blocked submit'), P('NRD12F', 'Submitted')]],
+      ['NRD-13', 'Dark', 'NRD01 and the phone answer on the dark tokens; states keep their words and shapes.', [F('NRD13', 'Readiness · dark', 1780), P('NRD13B', 'Answer · dark')]],
+      ['NRD-14', 'Frame index and accessibility', 'Each frame’s actor, capacity, policy dependency, evidence visibility, success event and next owner; keyboard order, error focus and announcements.', [W('NRD14')]],
+      ['Handoff', 'Handoff', 'Checked on main, preserved, backend required (◇ #7673 with #7672 and #7674), owner picks (⚑) and what is frontend only.', [W('NRDH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
