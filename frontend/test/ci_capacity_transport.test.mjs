@@ -99,7 +99,7 @@ function fixture(t) {
         return null;
       }
       if (child[2].endsWith("/jobs")&&incomplete)return {total_count:0,jobs:[]};
-      if (child[2].endsWith("/jobs")) return { total_count: 1, jobs: [{ id: run.id + 1e3, name: "Admitted Worker shard", run_id: run.id, run_attempt: 1, head_sha: EXEC, status: result === "queued" ? "in_progress" : "completed", conclusion: result === "queued" ? null : result, labels:run.capacityProfile==='hosted'?['ubuntu-latest']:resolveCatalogProfile(run.capacityProfile).target.labels, started_at: (new Date()).toISOString(), steps: [{ name: "Run admitted Worker shard", status: result === "queued" ? "queued" : "completed", conclusion: result === "queued" ? null : result }] }] };
+      if (child[2].endsWith("/jobs")) return { total_count: 1, jobs: [{ id: run.id + 1e3, name: "Admitted Worker shard", run_id: run.id, run_attempt: 1, head_sha: EXEC, status: result === "queued" ? "in_progress" : "completed", conclusion: result === "queued" ? null : result, labels:run.capacityProfile==='hosted'?['ubuntu-latest']:resolveCatalogProfile(run.capacityProfile).target.labels, started_at: (new Date()).toISOString(), completed_at: result === "queued" ? null : (new Date()).toISOString(), steps: [{ name: "Run admitted Worker shard", status: result === "queued" ? "queued" : "completed", conclusion: result === "queued" ? null : result, completed_at: result === "queued" ? null : (new Date()).toISOString() }] }] };
       return structuredClone(run);
     }
     if (p === PREFIX + "/check-runs" && method === "POST") {
@@ -130,10 +130,16 @@ function fixture(t) {
   };
   const ctx = { storage };
   const env = { REPOSITORY: REPO, CAPACITY_ENABLED: "true", CAPACITY_OWNER_TOKEN: "fixture-owner", CAPACITY_AUDIENCE: "fixture-capacity", CAPACITY_CONFIG: JSON.stringify(config), GITHUB_APP_ID: "23", GITHUB_INSTALLATION_ID: "2", GITHUB_APP_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString() };
-  let control = new CapacityControl(ctx, env);
+  // Simulated supervisor evidence, deliberately separate from the wrapper's GitHub conclusion.
+  class FixtureControl extends CapacityControl {
+    executionResultReader = async (receipt, jobId) => ({ receipt, jobId, observedAt: Date.now(),
+      testStep: result === 'failure' ? 'failure' : result === 'success' ? 'success' : 'not_run',
+      executionOutcome: result === 'queued' ? 'unknown' : 'completed', cleanupConfirmed: children.get(receipt.childRunId)?.status === 'completed' });
+  }
+  let control = new FixtureControl(ctx, env);
   const clientFetch = async (input, init) => control.fetch(new Request(input, init));
   return { storage, api, fetcher, parent, parentJobs, children, runners, missingResults:()=>{incomplete=true;}, checks, calls, env, alarm: () => alarm, restart: () => {
-    control = new CapacityControl(ctx, env);
+    control = new FixtureControl(ctx, env);
   }, tick: () => control.alarm(), clientFetch, control: () => control, result: (value) => {
     result = value;
     for (const r of children.values()) {
@@ -296,7 +302,11 @@ test("the real observation adapter distinguishes infrastructure before tests fro
   assert.equal(id, 100);
   const receipt = { ...attempt, childRunId: id };
   f.result("failure");
-  assert.equal((await ports.observe(receipt))?.testStep, "failure");
+  assert.equal((await ports.observe(receipt))?.testStep, "unknown");
+  const verified = new GithubCapacityPorts(f.api, config, Date.now, async (owned, jobId) => ({
+    receipt: owned, jobId, observedAt: Date.now(), testStep: 'failure', executionOutcome: 'completed', cleanupConfirmed: true,
+  }));
+  assert.equal((await verified.observe(receipt))?.testStep, 'failure');
   const infra = new GithubCapacityPorts(async (method, path, body) => {
     const value = await f.api(method, path, body);
     if (path.includes("/jobs")) value.jobs[0].steps[0] = { name: "Run admitted Worker shard", status: "completed", conclusion: "skipped" };
@@ -375,7 +385,7 @@ test('real ports allow one confirmed infrastructure fallback and preserve an old
    else if(method==='GET'){value.status='completed';value.conclusion='failure';}
   }
   return value;
- },config);
+ },config,Date.now,async(receipt,jobId)=>receipt.childRunId===100?{receipt,jobId,observedAt:Date.now(),testStep:infrastructure?'not_run':'failure',executionOutcome:infrastructure?'setup_failure':'completed',cleanupConfirmed:true}:null);
  const capacity=new CiCapacity(store,ports,REPO,{version:1,maxExternalWorkerShards:1,maxIncludedWorkerShards:0,minimumHostedWorkerShards:1,approvedGroupId:5,budgets:{...CI_CAPACITY_BUDGETS}});
  await capacity.submit(submission());await capacity.tick();await capacity.tick();await capacity.tick();
  const request=store.get(submission().requestId),shard=request.shards[0];
@@ -551,4 +561,40 @@ test('a persisted Mac generation cannot retrieve a receipt under the Linux miles
  const store=new SqlCapacityStore(f.storage),record=store.get(submission().requestId);record.shards[0].attempts[0].profile='macos-arm64';store.save(record);
  const response=await f.clientFetch('https://capacity.invalid/capacity/receipt',{method:'POST',headers:{authorization:'Bearer '+token(claims(100))},body:JSON.stringify({requestId:record.submission.requestId,shard:SHARDS[0],generation:1,profile:'macos-arm64'})});
  assert.deepEqual(await response.json(),{active:false,receipt:null});
+});
+
+test('D8009 trusted outcome evidence binds the complete receipt, job, freshness and types', async t => {
+  const f=fixture(t),ports=new GithubCapacityPorts(f.api,config);
+  const attempt={...submission(),logicalShard:SHARDS[0],profile:'hosted',generation:1,childRunId:null,childAttempt:1,startDeadline:Date.now()+60_000,executionDeadline:Date.now()+600_000};
+  await assert.rejects(ports.dispatch(attempt),/discovery_required/);
+  const receipt={...attempt,childRunId:await ports.discover(attempt)};f.result('failure');
+  const evidence={receipt,jobId:1100,observedAt:Date.now(),testStep:'failure',executionOutcome:'completed',cleanupConfirmed:true};
+  const read=async value=>new GithubCapacityPorts(f.api,config,Date.now,async()=>structuredClone(value)).observe(receipt);
+  assert.equal((await read(evidence)).testStep,'failure');
+  for(const field of ['version','requestId','repository','logicalShard','event','parentWorkflowId','parentRunId','parentAttempt','sourceSha','queueBaseSha','planDigest','planArtifactId','executorSha','profile','generation','childRunId','childAttempt','startDeadline','executionDeadline']){
+    assert.equal(await read({...evidence,receipt:{...receipt,[field]:'wrong'}}),null,field);
+  }
+  for(const patch of [{jobId:999},{observedAt:Date.now()+1},{observedAt:Date.now()-30_001},{testStep:'passed'},{executionOutcome:'retry'},{cleanupConfirmed:'true'}]){
+    assert.equal(await read({...evidence,...patch}),null,JSON.stringify(patch));
+  }
+  for(const executionOutcome of ['timed_out','cleanup_failure']){
+    const observed=await read({...evidence,testStep:'unknown',executionOutcome,cleanupConfirmed:false});
+    assert.equal(observed.testStep,'unknown');assert.equal(observed.cleanupConfirmed,false);assert.equal(observed.executionOutcome,executionOutcome);
+  }
+});
+
+test('D8009 adapter uses whole-job completion and refuses missing or incoherent timestamps', async t => {
+  const f=fixture(t),ports=new GithubCapacityPorts(f.api,config);
+  const attempt={...submission(),logicalShard:SHARDS[0],profile:'hosted',generation:1,childRunId:null,childAttempt:1,startDeadline:Date.now()+60_000,executionDeadline:Date.now()+600_000};
+  await assert.rejects(ports.dispatch(attempt),/discovery_required/);
+  const receipt={...attempt,childRunId:await ports.discover(attempt)};f.result('success');
+  const observed=await ports.observe(receipt);
+  assert.equal(observed.completedAt,Date.now());assert.equal(observed.cleanupConfirmed,true);
+  for(const bad of [null,'invalid',new Date(Date.now()-1).toISOString()]){
+    const missing=new GithubCapacityPorts(async(method,path,body)=>{
+      const value=await f.api(method,path,body);if(path.includes('/jobs'))value.jobs[0].completed_at=bad;return value;
+    },config);
+    const result=await missing.observe(receipt);
+    assert.equal(result.completedAt,null);assert.equal(result.cleanupConfirmed,false);
+  }
 });

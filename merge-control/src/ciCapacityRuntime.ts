@@ -3,7 +3,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { CiCapacity, SqlCapacityStore } from './ciCapacity.ts';
 import { authenticateCapacity, capacityBearer, capacityBody, capacityPlatformFetch } from './ciCapacityAuth.ts';
 import { capacityGithubClient, GithubCapacityPorts } from './ciCapacityGithub.ts';
-import type { CapacityConfig } from './ciCapacityGithub.ts';
+import type { CapacityConfig, CapacityExecutionResultReader } from './ciCapacityGithub.ts';
 import { CapacityOutbox } from './ciCapacityOutbox.ts';
 import { CapacityTransport, capacityIdentityLane } from './ciCapacityTransport.ts';
 import { CI_CAPACITY_BUDGETS } from './lib/ciCapacityPolicy.ts';
@@ -36,6 +36,8 @@ export class SqlCapacityBudgetStore implements CapacityBudgetStore {
   }
 }
 export class CapacityControl extends DurableObject<CapacityEnv> {
+  /** Inactive trusted-code port. No environment flag, request field or candidate artifact can supply it. */
+  protected executionResultReader?: CapacityExecutionResultReader;
   private serial: Promise<unknown> = Promise.resolve();
   private store: SqlCapacityStore;
   private keys: CapacityIssuerKeys;
@@ -53,7 +55,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     return settings;
   }
   private async components() {
-    const config=this.settings(), api=await capacityGithubClient(this.env,capacityPlatformFetch),ports=new GithubCapacityPorts(api,config);
+    const config=this.settings(), api=await capacityGithubClient(this.env,capacityPlatformFetch),ports=new GithubCapacityPorts(api,config,Date.now,this.executionResultReader);
     const parent=ports.parent.bind(ports),dispatch=ports.dispatch.bind(ports);
     ports.parent=async input=>await this.enabled()?parent(input):false;
     ports.dispatch=async attempt=>{if(!await this.enabled())throw new Error('capacity_disabled');return dispatch(attempt);};

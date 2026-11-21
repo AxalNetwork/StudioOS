@@ -18,6 +18,8 @@ export const CI_CAPACITY_BUDGETS = Object.freeze({
   inventoryMaxAgeMs: 30_000,
   reconcileMs: 15_000,
 });
+/** D8009: existing #7972 hosted job limit; never issue a longer lease even for immediate pickup. */
+export const HOSTED_JOB_CEILING_MS = 45 * 60_000;
 export type CapacityBudgets = { [K in keyof typeof CI_CAPACITY_BUDGETS]: number };
 export type CapacityPolicy = {
   version: typeof CI_CAPACITY_VERSION;
@@ -98,6 +100,8 @@ export type CiAttempt = Omit<ExecutionReceipt, 'childRunId'> & {
   phase: AttemptPhase;
   cancelDeadline: number | null;
   reason: string | null;
+  /** Negative test truth survives cancellation/cleanup; cleanup-unknown attempts retain their reservation. */
+  verifiedTestFailure?: boolean;
 };
 export type LogicalShard = { name: string; generation: number; attempts: CiAttempt[] };
 export type PrerequisiteResult = { name: string; conclusion: 'success' | 'failure' | 'pending' };
@@ -124,6 +128,10 @@ export type ChildObservation = {
   testStep: 'success' | 'failure' | 'not_run' | 'unknown';
   jobConclusion: 'success' | 'failure' | 'cancelled' | 'timed_out' | null;
   startedAt: number | null;
+  /** Trusted provider/authority observations, never caller-supplied result JSON. */
+  completedAt?: number | null;
+  cleanupConfirmed?: boolean;
+  executionOutcome?: 'completed' | 'setup_failure' | 'timed_out' | 'cleanup_failure' | 'unknown';
 };
 export type Aggregate = { status: 'pending' | 'success' | 'failure' | 'cancelled'; reason: string };
 
@@ -145,6 +153,7 @@ export function validateCapacityPolicy(policy: CapacityPolicy): void {
   }
   if (Object.keys(b).length !== Object.keys(CI_CAPACITY_BUDGETS).length
       || Object.keys(CI_CAPACITY_BUDGETS).some(key => !positive(b[key as keyof CapacityBudgets])) || b.queueMs > CI_CAPACITY_BUDGETS.queueMs
+      || b.hostedStartMs >= HOSTED_JOB_CEILING_MS
       || b.externalStartMs + b.externalExecutionMs + b.cancellationMs + b.hostedStartMs
         + b.hostedExecutionMs + b.controlMarginMs > b.queueMs
       // A fenced included attempt must still leave a full hosted fallback inside the request deadline.
@@ -233,7 +242,7 @@ export function activeAttempt(shard: LogicalShard): CiAttempt {
 
 export function admitReceipt(request: CapacityRequest, offered: ExecutionReceipt, now: number): boolean {
   const shard = request.shards.find(s => s.name === offered.logicalShard);
-  if (!shard || request.superseded || !request.parentLive || request.evidenceConflict || request.shards.some(s => s.attempts.some(a => a.phase === 'failed'))
+  if (!shard || request.superseded || !request.parentLive || request.evidenceConflict || request.shards.some(s => s.attempts.some(a => a.phase === 'failed' || a.verifiedTestFailure === true))
       || request.prerequisites.some(p => p.conclusion === 'failure') || now >= request.deadline) return false;
   const attempt = activeAttempt(shard);
   if (attempt.childRunId === null || !['queued', 'running'].includes(attempt.phase)) return false;
@@ -252,16 +261,31 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
   const shard = request.shards.find(s => s.name === observation.receipt.logicalShard);
   const attempt = shard?.attempts.find(a => a.generation === observation.receipt.generation);
   if (!shard || !attempt || !validChildObservation(attempt, observation)) return false;
+  const alreadyEnded = ['passed', 'failed', 'cancelled'].includes(attempt.phase);
+  const ended = alreadyEnded || (observation.status === 'completed' && observation.cleanupConfirmed === true);
   if (observation.testStep === 'failure') {
     if (attempt.generation !== shard.generation || attempt.phase === 'passed') request.evidenceConflict = true;
-    attempt.phase = 'failed'; attempt.reason = 'test_failed'; return true;
+    attempt.verifiedTestFailure = true;
+    attempt.phase = ended ? 'failed' : 'cancellation_unknown';
+    attempt.reason = ended ? 'test_failed' : 'test_failed_cleanup_unverified'; return true;
+  }
+  if (attempt.verifiedTestFailure) {
+    attempt.phase = ended ? 'failed' : 'cancellation_unknown';
+    attempt.reason = ended ? 'test_failed' : 'test_failed_cleanup_unverified'; return true;
   }
   if (attempt.generation !== shard.generation || ['passed', 'failed', 'cancelled'].includes(attempt.phase)) return false;
   if (observation.status === 'completed') {
-    if (observation.conclusion === 'success' && (now >= attempt.executionDeadline
+    const finish = observation.completedAt;
+    const finishedInLease = Number.isSafeInteger(finish) && finish! >= request.acceptedAt
+      && observation.startedAt !== null && finish! >= observation.startedAt
+      && finish! < attempt.executionDeadline && finish! <= now;
+    if (observation.conclusion === 'success' && (!finishedInLease
         || observation.startedAt === null || !Number.isSafeInteger(observation.startedAt)
         || observation.startedAt < request.acceptedAt || observation.startedAt > attempt.startDeadline)) {
       attempt.phase = 'cancellation_unknown'; attempt.reason = 'late_completion_unverified'; return true;
+    }
+    if (observation.cleanupConfirmed !== true) {
+      attempt.phase = 'cancellation_unknown'; attempt.reason = 'cleanup_or_termination_unverified'; return true;
     }
     if (observation.conclusion === 'success' && observation.jobConclusion === 'success' && observation.testStep === 'success') {
       if (attempt.phase === 'cancelling' || attempt.phase === 'cancellation_unknown') {
@@ -273,9 +297,9 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
       else { attempt.phase = 'cancelled'; attempt.reason = 'infrastructure_ended'; }
     } else if (observation.testStep === 'unknown') {
       attempt.phase = 'cancellation_unknown'; attempt.reason = 'test_outcome_unknown';
-    } else if (attempt.profile !== 'hosted' && observation.conclusion === 'failure' && observation.testStep === 'not_run') {
-      attempt.phase = 'cancelled'; attempt.reason = 'infrastructure_failed';
-    } else { attempt.phase = 'failed'; attempt.reason = 'execution_failed'; }
+    } else if (observation.conclusion === 'failure' && observation.testStep === 'not_run') {
+      attempt.phase = attempt.profile === 'hosted' ? 'failed' : 'cancelled'; attempt.reason = 'infrastructure_failed';
+    } else { attempt.phase = 'cancellation_unknown'; attempt.reason = 'execution_outcome_unverified'; }
     return true;
   }
   if (observation.status === 'in_progress' && attempt.phase === 'queued') {
@@ -289,7 +313,7 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
 }
 
 export function aggregateCapacity(request: CapacityRequest, now: number): Aggregate {
-  if (request.evidenceConflict || request.shards.some(s => s.attempts.some(a => a.phase === 'failed'))
+  if (request.evidenceConflict || request.shards.some(s => s.attempts.some(a => a.phase === 'failed' || a.verifiedTestFailure === true))
       || request.prerequisites.some(p => p.conclusion === 'failure')) return { status: 'failure', reason: 'verified_failure' };
   if (request.superseded || !request.parentLive) return { status: 'cancelled', reason: 'parent_inactive' };
   if (now >= request.deadline && (request.completedAt === null || request.completedAt >= request.deadline)) {

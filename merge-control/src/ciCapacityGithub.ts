@@ -3,6 +3,14 @@ import { createPrivateKey, sign } from 'node:crypto';
 import { boundedJson } from './ciCapacityAuth.ts';
 import type { CapacityPorts } from './ciCapacity.ts';
 import type { CiSubmission, CiAttempt, ExecutionReceipt, CiProvenance, ChildObservation, CapacityInventory, SelfHostedProfile } from './lib/ciCapacityPolicy.ts';
+import { receiptMatches } from './lib/ciCapacityPolicy.ts';
+/** D8009: supervisor-owned result evidence, not an artifact or payload supplied by candidate code. */
+export type CapacityExecutionResult = {
+  receipt: ExecutionReceipt; jobId: number; observedAt: number;
+  testStep: ChildObservation['testStep']; executionOutcome: NonNullable<ChildObservation['executionOutcome']>;
+  cleanupConfirmed: boolean;
+};
+export type CapacityExecutionResultReader = (receipt: ExecutionReceipt, jobId: number) => Promise<CapacityExecutionResult | null>;
 export type CapacityApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 export type CapacityConfig = {
   repository: string; repositoryId: number; executorSha: string; approvedGroupId: number;
@@ -41,8 +49,10 @@ export async function capacityGithubClient(env: { REPOSITORY: string; GITHUB_APP
 }
 export class GithubCapacityPorts implements CapacityPorts {
   readonly api: CapacityApi; readonly config: CapacityConfig; readonly now: () => number;
-  constructor(api: CapacityApi, config: CapacityConfig, now: () => number = Date.now) {
+  private resultReader?: CapacityExecutionResultReader;
+  constructor(api: CapacityApi, config: CapacityConfig, now: () => number = Date.now, resultReader?: CapacityExecutionResultReader) {
     this.api=api;this.config=config;this.now=now;
+    this.resultReader=resultReader;
     need(/^[\w.-]+\/[\w.-]+$/.test(config.repository)&&Number.isSafeInteger(config.repositoryId)&&config.repositoryId>0&&SHA.test(config.executorSha)&&config.approvedGroupId===5,'capacity_config_refused');
     need(Array.isArray(config.selfHostedProfiles)&&config.selfHostedProfiles.length===1&&config.selfHostedProfiles[0]==='linux-x64','capacity_linux_milestone_policy');
     need(Array.isArray(config.prerequisiteJobs)&&config.prerequisiteJobs.length>0&&config.prerequisiteJobs.length<=16&&new Set(config.prerequisiteJobs).size===config.prerequisiteJobs.length&&config.prerequisiteJobs.every(n=>typeof n==='string'&&n.length>0&&n.length<=120),'capacity_prerequisites_refused');
@@ -191,8 +201,25 @@ export class GithubCapacityPorts implements CapacityPorts {
       :['self-hosted','studioos-worker-v1',profile==='linux-x64'?'Linux':'macOS',profile==='linux-x64'?'X64':'ARM64'].every(l=>labels.includes(l));
     if(!target)return null;
     const outcome=(v:unknown)=>['success','failure','cancelled','timed_out'].includes(String(v))?v as 'success'|'failure'|'cancelled'|'timed_out':null;
-    const testStep=step.status==='completed'&&step.conclusion==='failure'?'failure':step.status==='completed'&&step.conclusion==='success'?'success':step.status==='completed'&&step.conclusion==='skipped'?'not_run':step.status==='queued'?'not_run':'unknown';
-    return {receipt,workflowPath:EXECUTOR,workflowAttempt:1,jobId:job.id,runnerProfile:profile,status:run.status,conclusion:outcome(run.conclusion),jobConclusion:outcome(job.conclusion),testStep,startedAt:Number.isFinite(Date.parse(job.started_at))?Date.parse(job.started_at):null};
+    // The wrapper includes setup, timeout and teardown: its failure alone cannot prove a failed test.
+    let testStep: ChildObservation['testStep']=step.status==='completed'&&step.conclusion==='success'?'success':step.status==='completed'&&step.conclusion==='skipped'?'not_run':step.status==='queued'?'not_run':'unknown';
+    const jobEnd=Date.parse(job.completed_at),stepEnd=Date.parse(step.completed_at);
+    const completedAt=run.status==='completed'&&job.status==='completed'&&Number.isFinite(jobEnd)&&Number.isFinite(stepEnd)&&stepEnd<=jobEnd?jobEnd:null;
+    let cleanupConfirmed=completedAt!==null&&run.conclusion==='success'&&job.conclusion==='success'&&testStep==='success';
+    let executionOutcome: NonNullable<ChildObservation['executionOutcome']>=cleanupConfirmed?'completed':'unknown';
+    if(this.resultReader){
+      const evidence=await this.resultReader(structuredClone(receipt),job.id),now=this.now();
+      // Missing evidence keeps unknown truth. Malformed/misbound evidence cannot fall back to a pass.
+      if(evidence!==null){
+        if(!evidence||!evidence.receipt||!receiptMatches(evidence.receipt,receipt)||evidence.jobId!==job.id
+          ||!Number.isSafeInteger(evidence.observedAt)||evidence.observedAt>now||now-evidence.observedAt>30_000
+          ||!['success','failure','not_run','unknown'].includes(evidence.testStep)
+          ||!['completed','setup_failure','timed_out','cleanup_failure','unknown'].includes(evidence.executionOutcome)
+          ||typeof evidence.cleanupConfirmed!=='boolean')return null;
+        testStep=evidence.testStep;cleanupConfirmed=evidence.cleanupConfirmed;executionOutcome=evidence.executionOutcome;
+      }
+    }
+    return {receipt,workflowPath:EXECUTOR,workflowAttempt:1,jobId:job.id,runnerProfile:profile,status:run.status,conclusion:outcome(run.conclusion),jobConclusion:outcome(job.conclusion),testStep,startedAt:Number.isFinite(Date.parse(job.started_at))?Date.parse(job.started_at):null,completedAt,cleanupConfirmed,executionOutcome};
   }
   async cancel(receipt: ExecutionReceipt): Promise<void> {
     const run=await this.get(`actions/runs/${receipt.childRunId}`);need(run.id===receipt.childRunId&&this.child(run,receipt),'capacity_cancel_identity');
