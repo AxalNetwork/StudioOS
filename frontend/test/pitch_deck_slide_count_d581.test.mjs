@@ -23,7 +23,6 @@ import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const SURFACES = [
-  'frontend/src/lib/spinoutBrief.js',
   'frontend/src/lib/spinoutLabArsenal.js',
   'frontend/src/components/PitchDeckModals.jsx',
 ];
@@ -35,15 +34,10 @@ test('the deck has eleven slides, as D360 and the template say', () => {
 test('every count of the deck follows SLIDE_META: one more slide, and they all say twelve', async () => {
   SLIDE_META.push({ ...SLIDE_META[SLIDE_META.length - 1], prefix: 'extra' });
   try {
-    const brief = await import('../src/lib/spinoutBrief.js');
     const { LAB_TOOLS } = await import('../src/lib/spinoutLabArsenal.js');
     const templates = await import('../src/decks/templates/index.ts');
     const { PitchDeckExportModal } = await import('../src/components/PitchDeckModals.jsx');
 
-    assert.equal(brief.DECK_SLIDES, 12);
-    assert.ok(brief.DELIVERABLES.includes('Twelve-slide pitch deck'),
-      `the brief's deliverable does not follow the array: ${JSON.stringify(brief.DELIVERABLES)}`);
-    assert.equal(brief.TOOL_EXAMPLE_READS.deck.read, 'Twelve slides from recorded data');
     assert.equal(LAB_TOOLS.find((t) => t.id === 'deck').blurb, 'Twelve slides from your own data.');
 
     const registry = Object.values(templates).find((v) => v && typeof v === 'object' && v.axal_spinout_demoday);

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { readAllLeadPages } from '../../../lib/pagedRead';
-import PartialRead from './PartialRead';
+import PartialRead, { PipelineReadStatus } from './PartialRead';
 import RankByFit from '../../../ui/RankByFit';
 import Lightbox from '../../../ui/Lightbox';
 import { applyRank } from '../../../lib/rankByFit';
@@ -22,6 +22,7 @@ import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import OpportunitySheet from './OpportunitySheet';
 import LeadProposalDraft from './LeadProposalDraft';
+import PipelineSetupStatus from './PipelineSetupStatus';
 
 /**
  * Pipeline · Leads — `/pipeline/leads`.
@@ -326,10 +327,11 @@ export default function PartnerLeadsZone() {
         actions={rowActions}
       />
       <ZoneBody
+        what="Leads"
         loading={state.loading}
         error={unlinked ? null : state.error}
         onRetry={load}
-        notice={unlinked ? <NoPartnerProfile /> : null}
+        notice={<>{unlinked ? <NoPartnerProfile /> : !state.loading && !state.error ? <PipelineSetupStatus leads={state.data} /> : null}<PipelineReadStatus state={state} onRetry={load} /></>}
         isEmpty={unlinked || (items.length === 0 && passed.length === 0)}
         empty={(
           <NothingYet

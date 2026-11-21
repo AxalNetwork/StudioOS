@@ -136,6 +136,8 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | `grow_attention_4862.test.ts` | #4862: real-SQLite focus evidence, action ranking, scoped counters, Mercury visibility and last-touch stalled-customer rules. |
 | `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
 
+`_containment_fixture_5567.ts` supplies synthetic owner-registry evidence to broker integration tests; no live provider attestation.
+
 ## Conventions
 
 - Build the database from the migration the feature actually ships with, so the
@@ -369,12 +371,14 @@ catalogue version only in the fixture.
 | `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
+| `approval_board_pages_5876.test.ts` | Mounted summary and active-page queries across the three approval lanes (#5876). |
 | `research_global_funds_7325.test.mjs` | D7325: evidence validation, canonical catalogue preservation, source takedowns, country facets, duplicate suppression, replay and fault-injection checks on real SQLite. |
 
 | File | What it covers |
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `build_burnup_weekly_6025.test.ts` | D6025: Prototype / MVP's burn-up by month, ISO week or day of completion over the real schema: three weeks of one month draw week labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three dated completions still read the too-little sentence, three months still draw by month, the same statements at every grain, and `burnupPoints` across a 53-week year. |
 
 | File | What it covers |
 |---|---|
@@ -382,4 +386,6 @@ catalogue version only in the fixture.
 | `file_recovery_6653.test.mjs` | D6653: include independent file recovery Python fixtures in the standard Worker runner. |
 | `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
 | `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
+
+`icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
