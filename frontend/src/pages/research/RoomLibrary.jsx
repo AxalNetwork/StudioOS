@@ -16,7 +16,7 @@ import Sheet from '../../ui/Sheet.jsx';
 import { roomLibraryApi } from '../../lib/api/roomLibrary';
 import { LIBRARY_OFF, confirmLines, fileLibraryState, libraryError } from './roomLibraryModel';
 
-const btn = 'rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11.5px] font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300';
+const btn = 'rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11.5px] font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/50';
 const primary = 'min-h-[44px] rounded-lg bg-indigo-600 px-4 text-[13px] font-bold text-white hover:bg-indigo-700 disabled:opacity-60 sm:min-h-[36px]';
 const secondary = 'min-h-[44px] rounded-lg border border-axal-hairline px-4 text-[13px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100 sm:min-h-[36px]';
 
