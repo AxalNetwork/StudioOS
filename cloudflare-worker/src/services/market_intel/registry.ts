@@ -29,6 +29,14 @@ export interface CommonRow {
   ts: string;                    // ISO timestamp
   citation_url?: string;
   payload?: unknown;             // raw provider payload (truncated by writer)
+  // D7707 — what the row measures and when. Optional, so a connector that
+  // does not set them compiles unchanged and stores null ("not recorded").
+  observed_period?: string | null;      // 'YYYY' | 'YYYY-Qn' | 'YYYY-MM' | 'YYYY-MM-DD/YYYY-MM-DD'
+  observed_period_end?: string | null;  // last day measured, 'YYYY-MM-DD'
+  published_at?: string | null;         // provider's last-updated date, never the fetch time
+  retrieved_at?: string | null;         // ISO timestamp of the fetch
+  coverage_area?: string | null;        // macro rows: 'World', 'OECD aggregate', 'EU27'
+  scope?: 'sector' | 'context';         // a per-sector signal, or macro context replicated across sectors
 }
 
 /** Cadence the aggregator uses to schedule a source. */

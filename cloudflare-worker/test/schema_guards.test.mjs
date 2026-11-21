@@ -326,9 +326,11 @@ test('the guard reports how much of the SQL it actually read', () => {
   // `licencePackagesStore.ts`'s column allow-list and `?`-placeholder
   // builder, pushing the count past the old 500 ceiling — raised with
   // headroom rather than just past the new total, since this is a loose
-  // growth alarm, not an exact ratchet.
+  // growth alarm, not an exact ratchet. D7707 (#7707) reached 600 with the
+  // market-intelligence health reads, whose live-row filter must be spliced
+  // in as `${liveRowSql()}` (D538), so it is raised again to 700.
   assert.ok(coverage.read > 3500, `expected most strings read, got ${coverage.read}`);
-  assert.ok(coverage.skipped > 0 && coverage.skipped < 600, `unexpected skip count ${coverage.skipped}`);
+  assert.ok(coverage.skipped > 0 && coverage.skipped < 700, `unexpected skip count ${coverage.skipped}`);
 });
 
 test('the ten tagged-template defects are corrected at the source', () => {

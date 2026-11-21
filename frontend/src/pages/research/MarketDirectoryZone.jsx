@@ -5,6 +5,8 @@ import { Unreadable, Unrecorded } from '../../ui/Honesty';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { api } from '../../lib/api';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
+import { researchMarketReadingsApi } from '../../lib/api/researchMarketReadings.js';
+import ReadingsSummary from './ReadingsSummary.jsx';
 import MarketDirectoryPanel, { CoverageNote } from './MarketDirectory.jsx';
 import { DIRECTORY_TABS, MARKET_SORTS, readMarketQuery, writeMarketQuery, sectorSlug } from './marketDirectoryQuery.js';
 import { researchOverviewApi } from '../../lib/api/researchOverview.js';
@@ -476,7 +478,7 @@ const TD = 'px-2 py-2.5 align-top text-[12.5px] text-axal-ink dark:text-gray-100
  * the service lines it offers come from. A service line never read keeps its
  * row and says No reading yet, never $0.
  */
-export function Readings({ readings, record = null, onExport = exportReadings }) {
+export function Readings({ readings, record = null, onExport = exportReadings, summary = null }) {
   const items = readings.data?.items || [];
   const offer = record && readings.status === 'ready';
   let body;
@@ -599,6 +601,8 @@ export function Readings({ readings, record = null, onExport = exportReadings })
           ) : null}
         </div>
       </div>
+      {/* D7651 part 2: the Eadwyn summary of these readings, under the CSV export (RMP-12). */}
+      {summary ? <ReadingsSummary read={summary} /> : null}
       <div className="mt-2">{body}</div>
       {offer && record.form ? (
         <RecordReading key={record.opened} form={record.form} lines={lines} onChange={record.onChange} onCancel={record.onCancel}
@@ -648,6 +652,8 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
   const [sigs, reloadSigs] = useRead(() => api.signals.list({ limit: 3, mode: role === 'advisor' ? 'advisor' : 'founder' }), role);
   const showReadings = role !== 'investor';
   const [readings, reloadReadings] = useRead(() => (showReadings ? api.research.marketReadings() : Promise.resolve({ items: [] })), role);
+  // D7651 part 2: an investor never asks for the summary (D6273 Q2); the Worker refuses one anyway.
+  const [readingsSummary, reloadReadingsSummary] = useRead(() => (showReadings ? researchMarketReadingsApi.all() : Promise.resolve(null)), role);
   const [overview, reloadOverview] = useRead(() => researchOverviewApi.get(1));
   const [form, setForm] = useState(null);
   const [opened, setOpened] = useState(0);
@@ -679,6 +685,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
     if (result.ok) {
       setForm(null);
       reloadReadings();
+      reloadReadingsSummary();
     }
   };
 
@@ -806,6 +813,7 @@ export default function MarketDirectoryZone({ role = 'founder', zoneActions = nu
             onChange: setForm,
             onCancel: () => { setForm(null); setNote(null); setErrors(null); },
           }}
+          summary={{ ...readingsSummary, reload: reloadReadingsSummary }}
         />
       ) : null}
       <p className="text-[11px] leading-relaxed text-axal-faint">
