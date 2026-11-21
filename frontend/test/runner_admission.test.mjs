@@ -96,14 +96,36 @@ test('GitHub adapter forbids arbitrary origins and paths; the staged CLI denies 
  const result=await main({REQUEST_ID:'request-7886',LEASE_GENERATION:'3',PART:'worker-1-of-6',PROFILE:'hosted',GITHUB_REPOSITORY:REPO,GITHUB_WORKFLOW_SHA:EXEC,GITHUB_RUN_ID:'202',GITHUB_RUN_ATTEMPT:'1'});assert.equal(result,1);
 });
 
-test('a later main-only dispatch wrapper can use the published callee SHA without confusing it with the wrapper SHA',async()=>{
+test('an absent dispatch wrapper cannot obtain admission even with an apparent published callee SHA',async()=>{
  const f=fixture();f.child.path='.github/workflows/runner-dispatch.yml';f.child.head_sha=BASE;f.child.workflow_id=99;f.context.childWorkflowPath=f.child.path;f.context.childWorkflowSha=BASE;
  f.map.set(PREFIX+'/actions/workflows/runner-dispatch.yml',{id:99,path:f.child.path,state:'active'});
- assert.equal((await admit(f)).allowed,true);
+ assert.equal((await admit(f)).reason,'child_workflow_identity_mismatch');
  f.context.childWorkflowPath='.github/workflows/unselected.yml';assert.equal((await admit(f)).allowed,false);
 });
 
 test('an isolation claim in request data cannot replace independent job-identity isolation verification',async()=>{
  const missing=fixture();delete missing.deps.verifyIsolation;missing.request.isolationVerified=true;assert.equal((await admit(missing)).reason,'execution_isolation_unconfigured');
  const unsafe=fixture();unsafe.deps.verifyIsolation=async()=>false;assert.equal((await admit(unsafe)).reason,'execution_isolation_unverified');assert.equal(unsafe.calls.length,0);
+});
+
+
+test('D7904 target startup may finish after pickup deadline only with independently verified timely worker pickup',async()=>{
+ const f=fixture();f.context.targetPickupRequired=true;f.deps.phase='execute';f.deps.now=()=>NOW+90000;
+ const key=PREFIX+'/actions/runs/202/jobs?per_page=100';
+ const job={id:909,name:'Admitted Worker shard',run_id:202,run_attempt:1,head_sha:EXEC,status:'in_progress',started_at:new Date(NOW+1000).toISOString()};
+ f.map.set(key,{total_count:1,jobs:[job]});
+ assert.equal((await admit(f)).allowed,true);
+ for(const patch of [{run_id:999},{run_attempt:2},{head_sha:SHA},{status:'queued'},{started_at:'unknown'},
+  {started_at:new Date(f.receipt.startDeadline+1).toISOString()},{started_at:new Date(NOW+90001).toISOString()},{name:'Other job'}]){
+  f.map.set(key,{total_count:1,jobs:[{...job,...patch}]});assert.equal((await admit(f)).reason,'target_pickup_not_verified',JSON.stringify(patch));
+ }
+ for(const page of [{total_count:2,jobs:[job]},{total_count:2,jobs:[job,job]}]){
+  f.map.set(key,page);assert.equal((await admit(f)).reason,'target_pickup_not_verified');
+ }
+ f.map.set(key,{total_count:1,jobs:[job]});
+ f.deps.now=()=>NOW+500;assert.equal((await admit(f)).reason,'target_pickup_not_verified');f.deps.now=()=>NOW+90000;
+ f.calls.length=0;
+ const {context,phase,...deps}=f.deps;
+ assert.equal(await main({REQUEST_ID:f.request.requestId,LEASE_GENERATION:'3',PART:f.request.shard,PROFILE:'hosted',GITHUB_REPOSITORY:REPO,GITHUB_WORKFLOW_SHA:EXEC,GITHUB_RUN_ID:'202',GITHUB_RUN_ATTEMPT:'1'},deps),0);
+ assert.ok(f.calls.includes(key));
 });
