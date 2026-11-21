@@ -13,6 +13,7 @@ import {
 } from './wellbeing/wellbeingModel';
 import { BTN, FIELD, CardHead, NotRecorded, ScoreDots, Sparkline, Outcome } from './wellbeing/WellbeingParts';
 import { PeriodCards, PrivateLine, ReflectionView, useTodayReflections } from './wellbeing/Reflections';
+import { SuggestionsSection } from './wellbeing/WellnessSuggestions';
 import { TAB_WORDS, cadenceOfParam } from './wellbeing/reflectionsModel';
 
 /**
@@ -642,6 +643,8 @@ export default function WellbeingPage() {
             </header>
             {showAggregate && <AdminAggregate />}
             <PeriodCards read={reflections.read} timezone={reflections.timezone} onRetry={reflections.reload} />
+            {/* D7119 part 2 (WLM-05): suggestions from the member's own choices only. */}
+            <SuggestionsSection />
           </>
         )}
         {cadence ? null : (
