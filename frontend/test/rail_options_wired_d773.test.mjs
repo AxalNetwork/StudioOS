@@ -76,7 +76,9 @@ test('D773: the shared interview and competitor runs keep the founder\'s keys an
   const advisorCompanies = pageKeyFor('/research/companies', 'Advisor');
   assert.equal(railOptionFor(advisorCompanies, { file: competitors, control: 'competitors.analyze' })?.key, 'analyze:competitors');
   assert.equal(railOptionFor(advisorCompanies, { file: competitors, control: 'competitors.rerun' })?.key, 'rerun:analysis');
-  assert.equal(railOptionFor(advisorCompanies, { file: competitors, control: 'competitors.refresh' })?.key, 'refresh:sources');
+  // D7652: Refresh sources runs no model (D7176), so no profile lists it.
+  assert.equal(railOptionFor(advisorCompanies, { file: competitors, control: 'competitors.refresh' }), null);
+  assert.equal(railOptionFor('Founder · Research · Companies', { file: competitors, control: 'competitors.refresh' }), null);
   // Outside a listed page the founder's literal stays the default.
   assert.match(read(competitors), /useRailOption\(running === 'analyze' \? \(analyzeOption\?\.key \?\? 'analyse:competitors'\) : null,/);
   assert.match(read(interview), /useRailOption\(asking \? sendKey : null,/);
