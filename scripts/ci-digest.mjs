@@ -2,7 +2,7 @@
 /** D5619: update one CI digest comment using only trusted base scripts; every error exits zero. */
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { classify } from './lib/ciClassify.mjs';
+import { collectEvidence, boundedBody } from './lib/ciFailureCollector.mjs';
 import { digest, render, MARKER } from './lib/ciDigest.mjs';
 
 export function githubApi({ repo = process.env.GITHUB_REPOSITORY, token = process.env.GITHUB_TOKEN, fetcher = fetch } = {}) {
@@ -44,7 +44,7 @@ export async function publish({ api, pr, d, author = 'github-actions[bot]' }) {
   else await api('POST', `issues/${pr}/comments`, { body });
   return { updated: Boolean(existing), created: !existing };
 }
-export async function runDigest({ api, pr, runId, headSha, artifact = null, log = console.log }) {
+export async function runDigest({ api, pr, runId, headSha, artifact = null, evidence = null, log = console.log }) {
   try {
     if (!/^[1-9]\d*$/.test(String(runId))) throw new Error('invalid run');
     const run = await api('GET', `actions/runs/${runId}`);
@@ -52,12 +52,8 @@ export async function runDigest({ api, pr, runId, headSha, artifact = null, log 
     // An older red run must never overwrite a newer push's digest. Forks never write.
     if (run.event !== 'pull_request' || pull.head?.sha !== headSha || pull.head?.repo?.full_name !== pull.base?.repo?.full_name) return 0;
     const jobs = await pages(api, `actions/runs/${runId}/jobs?filter=latest`, 'jobs');
-    let main = null, incident = null;
-    try {
-      const list = await api('GET', 'actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1');
-      const latest = list.workflow_runs?.[0];
-      if (latest) main = { conclusion: latest.conclusion, jobs: await pages(api, `actions/runs/${latest.id}/jobs?filter=latest`, 'jobs') };
-    } catch { /* classify returns unknown; never invent an inherited verdict */ }
+    // D5502: no latest-main fallback. Without exact-base evidence the verdict is unknown.
+    let incident = null;
     try {
       const issues = await api('GET', 'issues?state=open&sort=created&direction=desc&per_page=100');
       incident = issues.find(i => !i.pull_request && i.title === '[alert] main is red')?.html_url ?? null;
@@ -66,7 +62,7 @@ export async function runDigest({ api, pr, runId, headSha, artifact = null, log 
     for (let attempt = Math.max(1, (run.run_attempt ?? 1) - 10); attempt < (run.run_attempt ?? 1); attempt++) {
       attempts.push({ headSha: run.head_sha, jobs: await pages(api, `actions/runs/${runId}/attempts/${attempt}/jobs`, 'jobs') });
     }
-    const d = digest({ classification: classify({ pr: jobs, main, incident }), jobs, artifact, headSha, attempts });
+    const d = digest({ classification: { verdict: evidence?.verdict || 'main_health_unknown', incident }, jobs, artifact, headSha, attempts });
     await publish({ api, pr, d });
     log(`CI digest: ${d.verdict}, ${d.failures.length} failed jobs`);
   } catch { log('CI digest unavailable; advisory failure has no effect on CI.'); }
@@ -85,8 +81,17 @@ export async function main(argv = process.argv.slice(2)) {
   try {
     const api = githubApi();
     if (argv[0] === '--report') { console.log(JSON.stringify(await pushesToGreen({ api, pr: argv[1] }))); return 0; }
-    const artifact = process.env.CI_DIGEST_ARTIFACT ? JSON.parse(readFileSync(process.env.CI_DIGEST_ARTIFACT, 'utf8')) : null;
-    return runDigest({ api, pr: process.env.PR_NUMBER, runId: process.env.RUN_ID, headSha: process.env.HEAD_SHA, artifact });
+    let artifact = process.env.CI_DIGEST_ARTIFACT ? JSON.parse(readFileSync(process.env.CI_DIGEST_ARTIFACT, 'utf8')) : null;
+    let evidence = null;
+    try {
+      const repo = process.env.GITHUB_REPOSITORY;
+      evidence = await collectEvidence({ api: path => api('GET', path.slice(1)), runId: process.env.RUN_ID, baseSha: process.env.CI_FAILURE_BASE,
+        download: async path => boundedBody(await fetch(`https://api.github.com/repos/${repo}${path}`, {
+          headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15000),
+        })) });
+    } catch { /* Advisory API failures leave attribution unknown. */ }
+    if (evidence) artifact = { headSha: process.env.HEAD_SHA, failures: [...evidence.shared, ...evidence.own, ...evidence.unknown].map(f => ({ job: `suite (${f.part})`, id: f.id, testNames: [f.test], repro: f.repro, excerpt: f.excerpt })) };
+    return runDigest({ api, evidence, pr: process.env.PR_NUMBER, runId: process.env.RUN_ID, headSha: process.env.HEAD_SHA, artifact });
   } catch { console.log('CI digest unavailable; advisory failure has no effect on CI.'); return 0; }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().then(code => { process.exitCode = code; }).catch(() => { process.exitCode = 0; });
