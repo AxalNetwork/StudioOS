@@ -85,6 +85,7 @@ export const RUNS_ON_DRAFTS = {
   'meeting-bot-image.yml': 'path-filtered to the meeting bot\'s own files, so a draft that touches them is checking them',
   'release-rehearsal.yml': 'path-filtered to the release scripts, so a draft that touches them is checking them',
   'dependency-review.yml': 'D7899 checks newly introduced vulnerable dependencies on every PR and merge group, including drafts, without checking out candidate code',
+  'ownership.yml': 'D8075 reports coordination overlaps before work leaves draft; bounded read-only issue/file scan and parser tests only',
 };
 /** Jobs that run on drafts inside a workflow that otherwise skips them, each with why. */
 export const JOB_RUNS_ON_DRAFTS = {

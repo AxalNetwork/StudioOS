@@ -1,0 +1,60 @@
+name: Ownership
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: ownership-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ownership:
+    name: ownership
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted checker
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Detect first introduction
+        id: checker
+        run: |
+          if [[ -f scripts/ci/ownership-check.mjs ]]; then
+            echo 'bootstrap=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'bootstrap=true' >> "$GITHUB_OUTPUT"
+          fi
+      # First introduction must report on itself. It is always advisory; once merged,
+      # later candidates run the base's checker rather than their editable replacement.
+      - name: Check out candidate for parser tests
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Test the ownership parser
+        working-directory: candidate
+        run: node --test scripts/ci/ownership-check.test.mjs
+      - name: Report ownership overlaps
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LANDING_OWNERSHIP_CHECK: ${{ vars.LANDING_OWNERSHIP_CHECK }}
+          BOOTSTRAP: ${{ steps.checker.outputs.bootstrap }}
+        run: |
+          if [[ "$BOOTSTRAP" == true ]]; then
+            export LANDING_OWNERSHIP_CHECK=advisory
+            node candidate/scripts/ci/ownership-check.mjs
+          else
+            node scripts/ci/ownership-check.mjs
+          fi
