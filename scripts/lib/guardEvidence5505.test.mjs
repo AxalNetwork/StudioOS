@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { guardReports, compareEvidence, identity, failureReport, renderEvidence } from './ciFailures.mjs';
 import { runPart, reportHeadSha } from '../test-drift-parts.mjs';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const sha = 'a'.repeat(40);
@@ -39,7 +39,7 @@ test('the shard clears stale guard records, retains original exit status and emi
     writeFileSync(output, JSON.stringify(result([row('stale', 'failed')])));
     const lines = [];
     const status = runPart({ commands: ['npm run test:guards'], root: dir, env: { CI_FAILURE_DIR: evidence, CI_FAILURE_PART: 'rest', GITHUB_EVENT_NAME: 'merge_group', GITHUB_SHA: sha, GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1' },
-      sh: () => { assert.equal(existsSync(output), false); writeFileSync(output, JSON.stringify(result([row('first', 'failed'), row('second', 'failed')]))); return { status: 1 }; }, log: s => lines.push(s), error() {} });
+      sh: () => { writeFileSync(output, JSON.stringify(result([row('first', 'failed'), row('second', 'failed')])), { flag: 'wx' }); return { status: 1 }; }, log: s => lines.push(s), error() {} });
     assert.equal(status, 1);
     const reports = JSON.parse(readFileSync(join(evidence, 'failures.json'), 'utf8'));
     assert.deepEqual(reports.flatMap(r => r.failures.map(f => f.test)), ['first', 'second']);
@@ -65,14 +65,22 @@ test('a valid JSON report that omits a planned guard or changes its flags suppli
   assert.throws(() => guardReports({ ...report, exitCode: 0 }, meta, 0));
 });
 test('missing guard output cannot reuse an old node reporter file as current failure evidence', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'guards5505-stale-')), stale = join(tmpdir(), `ci-evidence-${process.pid}-0.jsonl`);
+  // The runner names its reporter file under os.tmpdir(); point that at a private directory
+  // so the planted stale file is never created at a predictable path in the shared temp dir.
+  const dir = mkdtempSync(join(tmpdir(), 'guards5505-stale-')), stale = join(dir, `ci-evidence-${process.pid}-0.jsonl`);
+  const savedTmp = process.env.TMPDIR;
+  process.env.TMPDIR = dir;
   try {
+    assert.equal(tmpdir(), dir, 'the runner must resolve its reporter file inside the private directory');
     writeFileSync(stale, `${JSON.stringify({ file: 'scripts/stale.test.mjs', test: 'old failure' })}\n${JSON.stringify({ end: true, complete: true, files: ['scripts/stale.test.mjs'] })}\n`);
     const code = runPart({ commands: ['npm run test:guards'], root: dir, env: { CI_FAILURE_DIR: dir }, sh: () => ({ status: 1 }), log() {}, error() {} });
     assert.equal(code, 1);
     const report = JSON.parse(readFileSync(join(dir, 'failures.json'), 'utf8'))[0];
     assert.equal(report.complete, false); assert.deepEqual(report.failures, []);
-  } finally { rmSync(stale, { force: true }); rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    if (savedTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = savedTmp;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 test('guard coverage cannot be mistaken for execution of a node:test in the same source file', () => {
   const base = guardReports(result([row('first', 'passed')]), meta, 0);
