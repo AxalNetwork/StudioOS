@@ -1,5 +1,7 @@
 # frontend/test — what the frontend guarantees
 
+`ci_capacity_auth_composition_8011.test.mjs` exercises the inactive capacity runtime's signed authentication, SQLite admission and trusted reader continuation through the Node platform adapter. `ci_capacity_transport.test.mjs` retains the real Linux profile/executor composition and its success, failure, revocation and incomplete-result cases. Neither suite is live provider or deployed Workers-runtime evidence.
+
 ```
 node --import ./frontend/test/_deck-loader.mjs --test 'frontend/test/*.test.mjs'
 ```

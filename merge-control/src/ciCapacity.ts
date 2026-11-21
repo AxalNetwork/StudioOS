@@ -1,7 +1,7 @@
 /** D7887: durable CI coordinator core; no production adapter or result producer is enabled here. */
 import {
   activeAttempt, admitReceipt, aggregateCapacity, applyObservation, selectPools, submissionMatches,
-  validateCapacityPolicy,
+  validateCapacityPolicy, HOSTED_JOB_CEILING_MS,
 } from './lib/ciCapacityPolicy.ts';
 import type {
   Aggregate, CapacityInventory, CapacityPolicy, CapacityRequest, ChildObservation, CiAttempt,
@@ -205,8 +205,9 @@ export class CiCapacity {
       event: s.event, parentWorkflowId: s.parentWorkflowId, parentRunId: s.parentRunId, parentAttempt: s.parentAttempt,
       sourceSha: s.sourceSha, queueBaseSha: s.queueBaseSha, planDigest: s.planDigest, planArtifactId: s.planArtifactId, executorSha: s.executorSha,
       profile, generation, childRunId: null, childAttempt: 1, startDeadline,
-      executionDeadline: startDeadline + (profile === 'hosted' ? b.hostedExecutionMs
+      executionDeadline: Math.min(startDeadline + (profile === 'hosted' ? b.hostedExecutionMs
         : profile === 'github-8' ? b.includedExecutionMs : b.externalExecutionMs),
+      profile === 'hosted' ? now + HOSTED_JOB_CEILING_MS : Number.MAX_SAFE_INTEGER),
       phase: 'reserved', cancelDeadline: null, reason: null,
     };
   }
@@ -250,7 +251,7 @@ export class CiCapacity {
 
   private bound(a: CiAttempt): ExecutionReceipt {
     if (a.childRunId === null) throw new Error('capacity_unbound_child');
-    const { phase: _phase, cancelDeadline: _cancelDeadline, reason: _reason, ...receipt } = a;
+    const { phase: _phase, cancelDeadline: _cancelDeadline, reason: _reason, verifiedTestFailure: _failure, ...receipt } = a;
     return { ...receipt, childRunId: a.childRunId };
   }
 

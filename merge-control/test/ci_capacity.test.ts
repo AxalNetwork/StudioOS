@@ -76,7 +76,7 @@ function fixture(t: { after(fn: () => void): void }, patch: Partial<CapacityPoli
     receipt: structuredClone(a) as ExecutionReceipt,
     workflowPath: '.github/workflows/runner-executor.yml', workflowAttempt: 1, jobId: a.childRunId! + 1000,
     runnerProfile: a.profile, status: 'completed', conclusion: 'success', jobConclusion: 'success',
-    testStep: 'success', startedAt: get(a.requestId).acceptedAt + 1, ...patch,
+    testStep: 'success', startedAt: get(a.requestId).acceptedAt, completedAt: state.now, cleanupConfirmed: true, ...patch,
   });
   return { db, storage, store, state, ports, dispatched, cancelled, observed, outcomes, create, get, attempt, observation };
 }
@@ -580,4 +580,101 @@ test('D7907 a verified test failure on github-8 is a real failure, never an infr
   await c.tick();
   assert.equal(f.attempt('worker-1-of-6').phase, 'failed'); assert.equal(f.attempt('worker-1-of-6').generation, 1);
   assert.equal(c.status(s.requestId)?.status, 'failure');
+});
+
+test('D8009 hosted lease fits the existing 45 minute job and late pickup cannot extend it', async t => {
+  const f = fixture(t, { maxExternalWorkerShards: 0 }), c = f.create();
+  await c.submit(input()); await c.tick();
+  const a = f.attempt('worker-1-of-6'), original = structuredClone(a);
+  assert.equal(a.executionDeadline - f.get().acceptedAt, 45 * 60_000);
+  assert.equal(a.executionDeadline - a.startDeadline, 35 * 60_000);
+  f.state.now = a.startDeadline;
+  f.outcomes.set(a.childRunId!, f.observation(a, { status: 'in_progress', conclusion: null, jobConclusion: null, startedAt: a.startDeadline }));
+  await c.tick();
+  assert.equal(f.attempt(a.logicalShard).executionDeadline, original.executionDeadline);
+  assert.equal((await c.receipt(input().requestId, a.logicalShard, a.childRunId!, 1))?.executionDeadline, original.executionDeadline);
+});
+
+test('D8009 late success needs verified whole-job completion within the immutable lease', async t => {
+  for (const finish of ['in-time', 'missing', 'expired', 'future', 'future-early', 'before-start'] as const) {
+    const f = fixture(t, { maxExternalWorkerShards: 0 }), c = f.create();
+    await c.submit(input()); await c.tick(); const a = f.attempt('worker-1-of-6');
+    f.state.now = finish === 'future-early' ? f.get().acceptedAt : a.executionDeadline + 1;
+    const completedAt = finish === 'in-time' ? a.executionDeadline - 1 : finish === 'expired' ? a.executionDeadline
+      : finish.startsWith('future') ? f.state.now + 1 : finish === 'before-start' ? f.get().acceptedAt : null;
+    f.outcomes.set(a.childRunId!, f.observation(a, { completedAt, startedAt: finish === 'before-start' ? f.get().acceptedAt + 1 : f.get().acceptedAt }));
+    await c.tick();
+    assert.equal(f.attempt(a.logicalShard).phase === 'passed', finish === 'in-time', finish);
+    assert.equal(f.attempt(a.logicalShard).executionDeadline, a.executionDeadline);
+  }
+});
+
+test('D8009 verified completion timestamps cannot revive fenced or older generations', async t => {
+  const f = fixture(t), c = f.create(); await c.submit(input()); await c.tick();
+  const a = f.attempt('worker-1-of-6');
+  f.state.now = a.startDeadline; await c.tick();
+  f.outcomes.set(a.childRunId!, f.observation(a, { completedAt: a.startDeadline - 1 }));
+  await c.tick();
+  assert.equal(f.attempt(a.logicalShard).generation, 2);
+  assert.equal(f.attempt(a.logicalShard).profile, 'hosted');
+  await c.tick();
+  assert.notEqual(f.attempt(a.logicalShard).phase, 'passed');
+  assert.equal(f.get().shards[0].attempts[0].reason, 'completed_after_fence');
+});
+
+test('D8009 sticky test failure holds included reservation until independent cleanup confirmation across restart', async t => {
+  const f = fixture(t, { maxIncludedWorkerShards: 1 }), c = f.create(), s = input();
+  f.state.inventoryDown = true; await c.submit(s); await c.tick();
+  const a = f.attempt('worker-1-of-6'), sibling = f.attempt('worker-2-of-6');
+  f.outcomes.set(a.childRunId!, f.observation(a, { conclusion: 'failure', jobConclusion: 'failure', testStep: 'failure', cleanupConfirmed: false, executionOutcome: 'cleanup_failure' }));
+  await c.reconcileChild(s.requestId, a.childRunId!);
+  assert.equal(c.status(s.requestId)?.status, 'failure');
+  assert.equal(f.attempt(a.logicalShard).verifiedTestFailure, true);
+  assert.equal(await c.receipt(s.requestId, sibling.logicalShard, sibling.childRunId!, 1), null);
+  const restarted = f.create();
+  const second = { ...s, parentRunId: 13, requestId: '00000000-0000-4000-8000-000000000002' };
+  await restarted.submit(second);
+  assert.equal(f.get(second.requestId).shards.every(sh => activeAttempt(sh).profile === 'hosted'), true);
+  f.outcomes.set(a.childRunId!, f.observation(a, { testStep: 'success', cleanupConfirmed: true }));
+  await restarted.tick();
+  assert.equal(f.attempt(a.logicalShard).phase, 'failed');
+  assert.equal(f.attempt(a.logicalShard).generation, 1);
+  assert.equal(restarted.status(s.requestId)?.status, 'failure');
+  const third = { ...s, parentRunId: 14, requestId: '00000000-0000-4000-8000-000000000003' };
+  await restarted.submit(third);
+  assert.equal(activeAttempt(f.get(third.requestId).shards[0]).profile, 'github-8');
+});
+
+test('D8009 wrapper timeout and cleanup uncertainty never create fallback or success', async t => {
+  for (const executionOutcome of ['timed_out', 'cleanup_failure'] as const) for (const testStep of ['unknown', 'not_run', 'success'] as const) {
+    const f = fixture(t, { maxIncludedWorkerShards: 1 }), c = f.create(); f.state.inventoryDown = true;
+    await c.submit(input()); await c.tick(); const a = f.attempt('worker-1-of-6');
+    f.outcomes.set(a.childRunId!, f.observation(a, { conclusion: 'failure', jobConclusion: 'failure', testStep, cleanupConfirmed: false, executionOutcome }));
+    await c.tick(); await f.create().tick();
+    assert.equal(f.attempt(a.logicalShard).generation, 1);
+    assert.notEqual(c.status(input().requestId)?.status, 'success');
+    assert.notEqual(f.attempt(a.logicalShard).phase, 'failed');
+    assert.equal(await c.receipt(input().requestId, a.logicalShard, a.childRunId!, 1), null);
+  }
+});
+
+test('D8009 fallback waits for confirmed cancellation and fits the latest full budget boundary exactly', async t => {
+  for (const offset of [0, 1]) {
+    const f = fixture(t), c = f.create(); await c.submit(input()); await c.tick();
+    const a = f.attempt('worker-1-of-6');
+    f.state.now = a.startDeadline; await c.tick();
+    const latest = f.get().deadline - CI_CAPACITY_BUDGETS.hostedStartMs - CI_CAPACITY_BUDGETS.hostedExecutionMs - CI_CAPACITY_BUDGETS.controlMarginMs;
+    f.state.now = latest + offset;
+    await c.tick();
+    assert.equal(f.attempt(a.logicalShard).generation, 1, 'absence is not termination');
+    f.outcomes.set(a.childRunId!, f.observation(a, { conclusion: 'cancelled', jobConclusion: 'cancelled', testStep: 'not_run', startedAt: null }));
+    await c.tick();
+    assert.equal(f.attempt(a.logicalShard).generation, offset === 0 ? 2 : 1);
+    assert.equal(f.dispatched.filter(d => d.logicalShard === a.logicalShard).length, offset === 0 ? 2 : 1);
+    if (offset === 0) {
+      const fallback = f.attempt(a.logicalShard);
+      assert.equal(fallback.executionDeadline - latest, 45 * 60_000);
+      assert.equal(fallback.sourceSha, a.sourceSha); assert.equal(fallback.planDigest, a.planDigest);
+    }
+  }
 });
