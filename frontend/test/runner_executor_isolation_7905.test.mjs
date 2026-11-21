@@ -206,12 +206,12 @@ test('D7905 the receipt reader and catalog are composed only from repository con
   assert.throws(() => none.resolveProfile('candidate-profile'), /unknown_profile/);
   const built = [];
   const client = { githubOidcToken: env => ({ env }), createReceiptReader: options => { built.push(options); return 'reader'; } };
-  const env = { CAPACITY_AUTHORITY_URL: 'https://capacity.example/', CAPACITY_AUTHORITY_AUDIENCE: 'studioos-capacity' };
+  const env = { CI_CAPACITY_URL: 'https://capacity.example/', CI_CAPACITY_AUDIENCE: 'studioos-capacity' };
   const on = await trustedAuthority(env, { loadClient: async () => client });
   assert.equal(on.readReceipt, 'reader');
   assert.deepEqual(built.map(({ url, audience }) => ({ url, audience })), [{ url: 'https://capacity.example/', audience: 'studioos-capacity' }]);
   assert.equal(built[0].oidcToken.env, env);
-  assert.equal((await trustedAuthority({ CAPACITY_AUTHORITY_URL: 'https://capacity.example/' }, { loadClient: async () => client })).readReceipt, undefined);
+  assert.equal((await trustedAuthority({ CI_CAPACITY_URL: 'https://capacity.example/' }, { loadClient: async () => client })).readReceipt, undefined);
   assert.equal((await trustedAuthority(env, { loadClient: async () => { throw new Error('ERR_MODULE_NOT_FOUND'); } })).readReceipt, undefined);
   assert.equal((await trustedAuthority(env, { loadClient: async () => ({ ...client, createReceiptReader: () => { throw new Error('capacity_authority_unconfigured'); } }) })).readReceipt, undefined);
 });
@@ -223,7 +223,7 @@ test('D7905 the executor never installs or tests candidate code on a Linux self-
     assert.match(step, /^\s+if: inputs\.profile != 'linux-x64'$/m, name);
   }
   assert.doesNotMatch(text, /id-token:\s*write/, 'OIDC for the receipt reader is enablement work, not this change');
-  assert.equal(text.match(/CAPACITY_AUTHORITY_URL: \$\{\{ vars\.CAPACITY_AUTHORITY_URL \}\}/g).length, 3);
+  assert.equal(text.match(/CI_CAPACITY_URL: \$\{\{ vars\.CI_CAPACITY_URL \}\}/g).length, 3);
   const cleanup = text.split('- name: Remove only this child\'s files\n')[1].split('\n      - name:')[0];
   assert.match(cleanup, /if: always\(\)/);
   assert.match(cleanup, /runner-execution\.mjs" cleanup/);

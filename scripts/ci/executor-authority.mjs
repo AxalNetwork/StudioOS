@@ -9,7 +9,7 @@ import { resolveCatalogProfile } from './runners/catalog.mjs';
  */
 export async function trustedAuthority(env = process.env, { loadClient = () => import('./capacity-client.mjs'), resolveProfile = resolveCatalogProfile } = {}) {
   const authority = { resolveProfile: id => resolveProfile(id) };
-  const url = env.CAPACITY_AUTHORITY_URL, audience = env.CAPACITY_AUTHORITY_AUDIENCE;
+  const url = env.CI_CAPACITY_URL, audience = env.CI_CAPACITY_AUDIENCE;
   if (typeof url !== 'string' || !url || typeof audience !== 'string' || !audience) return authority;
   try {
     const client = await loadClient();

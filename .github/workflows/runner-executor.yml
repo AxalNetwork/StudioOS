@@ -93,8 +93,8 @@ jobs:
           EXECUTOR_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
-          CAPACITY_AUTHORITY_URL: ${{ vars.CAPACITY_AUTHORITY_URL }}
-          CAPACITY_AUTHORITY_AUDIENCE: ${{ vars.CAPACITY_AUTHORITY_AUDIENCE }}
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
           REQUEST_ID: ${{ inputs.request_id }}
           LEASE_GENERATION: ${{ inputs.generation }}
           PART: ${{ inputs.part }}
@@ -122,8 +122,8 @@ jobs:
           EXECUTOR_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
-          CAPACITY_AUTHORITY_URL: ${{ vars.CAPACITY_AUTHORITY_URL }}
-          CAPACITY_AUTHORITY_AUDIENCE: ${{ vars.CAPACITY_AUTHORITY_AUDIENCE }}
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
           ADMITTED_JSON: ${{ steps.admission.outputs.admitted_json }}
         run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-execution.mjs" verify-plan
       - name: Install admitted Worker dependencies
@@ -142,8 +142,8 @@ jobs:
           EXECUTOR_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CHILD_WORKFLOW_PATH: .github/workflows/runner-executor.yml
-          CAPACITY_AUTHORITY_URL: ${{ vars.CAPACITY_AUTHORITY_URL }}
-          CAPACITY_AUTHORITY_AUDIENCE: ${{ vars.CAPACITY_AUTHORITY_AUDIENCE }}
+          CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+          CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
           ADMITTED_JSON: ${{ steps.admission.outputs.admitted_json }}
         run: node "$GITHUB_WORKSPACE/studioos-executor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-control/scripts/ci/runner-execution.mjs" run
       - name: Upload test traces
