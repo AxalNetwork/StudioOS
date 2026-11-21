@@ -1,0 +1,452 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-21T18:03:24.757248+00:00",
+  "image_status": "qualification pending",
+  "image_qualified": false,
+  "current_source": {
+    "revision": "270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0",
+    "files": [
+      {
+        "path": "scripts/ci/runners/profiles.json",
+        "sha256": "6068ea1ba7e5a531c8e1975fad7bebaf29064ec3ed3480072b33fd78abc8bd01"
+      },
+      {
+        "path": "scripts/ci/runners/job-container.mjs",
+        "sha256": "ef4097d67ce6bb95c72d3030bc2f1def79d72b3e32c458a7693af1965ff91187"
+      },
+      {
+        "path": "scripts/ci/runners/executor-isolation.mjs",
+        "sha256": "bfa26ee99a0592b540dc345d31c47c6573b9e2404c4dfd6ee38e6ca0cb76929a"
+      },
+      {
+        "path": "scripts/ci/runner-execution.mjs",
+        "sha256": "bc00ee728d1e4f8f00ef8c6330a51b921dd9ec7d1c3fcbadc136302cdf304d74"
+      },
+      {
+        "path": "infra/runners/linux-x64.image.template.json",
+        "sha256": "598fdb8dabdef6ff74f61038e25d0cd9b6da9cae8ba2a15588674b1ae5027f79"
+      },
+      {
+        "path": "infra/runners/README.md",
+        "sha256": "d96f156232af14878856806c85b5f5f60ea9dcf448f4cab1122a61200a17e120"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "14329ebcdaf138c86f4b427b0c845c70dd6508ba8f58477d2df7ef7547041138"
+      },
+      {
+        "path": "cloudflare-worker/package-lock.json",
+        "sha256": "3b0e3f64c7596838194adceb5e63c8293b7956afb2d15134ad998f475e9bed5b"
+      }
+    ],
+    "verifiedContainer_predicate_unchanged": true,
+    "s18_candidate_template": {
+      "approved": false,
+      "version": null,
+      "digest": null,
+      "os": "linux",
+      "arch": "x64",
+      "runnerVersion": null,
+      "runnerDigest": null,
+      "nodeVersion": null,
+      "pythonVersion": null
+    },
+    "integration": "Published code now contains ACL staging and executor adapter. Unpublished S09 lifecycle changes and actual-node baseline requested from operator; no live wiring inferred."
+  },
+  "current_lock_engine_check": {
+    "revision": "270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0",
+    "targetNode": "22.23.3",
+    "targetPython": "3.11.18",
+    "checked": 364,
+    "excludedPlatformEntries": 192,
+    "mismatches": [],
+    "semver": "7.8.5",
+    "exit": 0
+  },
+  "official_metadata": {
+    "recorded_utc": "2026-11-21T17:59:48.092843+00:00",
+    "checks": [
+      {
+        "url": "https://nodejs.org/dist/v22.23.3/SHASUMS256.txt",
+        "argv": [
+          "curl",
+          "--proto",
+          "=https",
+          "--tlsv1.2",
+          "--location",
+          "--max-redirs",
+          "3",
+          "--connect-timeout",
+          "15",
+          "--max-time",
+          "45",
+          "--silent",
+          "--show-error",
+          "--fail-with-body",
+          "--output",
+          "../s31-8008-delivery/qualification-attempt/node-SHASUMS256.txt",
+          "--write-out",
+          "%{http_code}",
+          "https://nodejs.org/dist/v22.23.3/SHASUMS256.txt"
+        ],
+        "exit": 0,
+        "http_status": "200",
+        "stderr": ""
+      },
+      {
+        "url": "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20261110",
+        "argv": [
+          "curl",
+          "--proto",
+          "=https",
+          "--tlsv1.2",
+          "--location",
+          "--max-redirs",
+          "3",
+          "--connect-timeout",
+          "15",
+          "--max-time",
+          "45",
+          "--silent",
+          "--show-error",
+          "--fail-with-body",
+          "--output",
+          "../s31-8008-delivery/qualification-attempt/python-release.json",
+          "--write-out",
+          "%{http_code}",
+          "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20261110"
+        ],
+        "exit": 0,
+        "http_status": "200",
+        "stderr": ""
+      }
+    ]
+  },
+  "archive_acquisition": {
+    "recorded_utc": "2026-11-21T18:01:43.974779+00:00",
+    "checks": [
+      {
+        "name": "node",
+        "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-linux-x64.tar.gz",
+        "filename": "node-v22.23.3-linux-x64.tar.gz",
+        "exit": 0,
+        "http_status": "200",
+        "stderr": ""
+      },
+      {
+        "name": "python",
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.11.18%2B20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        "filename": "cpython-3.11.18+20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        "exit": 0,
+        "http_status": "200",
+        "stderr": ""
+      }
+    ]
+  },
+  "archive_inspection": {
+    "schema_version": 1,
+    "status": "verified archive bytes; native execution not performed",
+    "limitations": "ELF strings are observed, not a version-need proof. Dependencies may be supplied by the same archive. Rootfs, dynamic loading, signatures, image build/scan and intended-node compatibility remain unverified.",
+    "artifacts": [
+      {
+        "name": "node",
+        "filename": "node-v22.23.3-linux-x64.tar.gz",
+        "archive_sha256": "1084aa36196bba4c3a5e69a1ee388a6e4ff729dad09445fbcd434b28fe3c24af",
+        "bundled_npm": "10.9.9",
+        "elf": [
+          {
+            "path": "node-v22.23.3-linux-x64/bin/node",
+            "sha256": "fde6a4bf8d0562f7751d1a2d6cb9b417c4cfe107bbcb0aa3e9a24e125e348f48",
+            "machine": "x86_64",
+            "interpreter": "/lib64/ld-linux-x86-64.so.2",
+            "needed": [
+              "libdl.so.2",
+              "libstdc++.so.6",
+              "libm.so.6",
+              "libgcc_s.so.1",
+              "libpthread.so.0",
+              "libc.so.6",
+              "ld-linux-x86-64.so.2"
+            ],
+            "observed_abi_version_strings": [
+              "CXXABI_1.3",
+              "CXXABI_1.3.5",
+              "CXXABI_1.3.7",
+              "CXXABI_1.3.9",
+              "GLIBCXX_3.4",
+              "GLIBCXX_3.4.11",
+              "GLIBCXX_3.4.14",
+              "GLIBCXX_3.4.15",
+              "GLIBCXX_3.4.17",
+              "GLIBCXX_3.4.18",
+              "GLIBCXX_3.4.19",
+              "GLIBCXX_3.4.20",
+              "GLIBCXX_3.4.21",
+              "GLIBCXX_3.4.9",
+              "GLIBC_2.10",
+              "GLIBC_2.12",
+              "GLIBC_2.14",
+              "GLIBC_2.16",
+              "GLIBC_2.17",
+              "GLIBC_2.2.5",
+              "GLIBC_2.25",
+              "GLIBC_2.27",
+              "GLIBC_2.28",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.3",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.6",
+              "GLIBC_2.7",
+              "GLIBC_2.9"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "python",
+        "filename": "cpython-3.11.18+20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        "archive_sha256": "3288c54cea3db350052019b3f8b558dd8a3da8afa6fda573f5fd2bcb37635b4a",
+        "bundled_npm": null,
+        "elf": [
+          {
+            "path": "python/bin/python3.11",
+            "sha256": "b8c56091244cc8a0ad37f60d3ecf4d7a2ca4a9127bb4bcb4c396a26e8ea46b68",
+            "machine": "x86_64",
+            "interpreter": "/lib64/ld-linux-x86-64.so.2",
+            "needed": [
+              "libpthread.so.0",
+              "libdl.so.2",
+              "libutil.so.1",
+              "librt.so.1",
+              "libm.so.6",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.10",
+              "GLIBC_2.11",
+              "GLIBC_2.12",
+              "GLIBC_2.13",
+              "GLIBC_2.14",
+              "GLIBC_2.15",
+              "GLIBC_2.16",
+              "GLIBC_2.17",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.3",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.5",
+              "GLIBC_2.6",
+              "GLIBC_2.7",
+              "GLIBC_2.9"
+            ]
+          },
+          {
+            "path": "python/lib/itcl4.3.8/libtcl9itcl4.3.8.so",
+            "sha256": "c75b53bf753c6f0c9ec812ce7ccbd1ca782e9ee8416f1a23d47914a48f4a1ae5",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.14",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4"
+            ]
+          },
+          {
+            "path": "python/lib/libpython3.11.so.1.0",
+            "sha256": "5e9a38bc85cfb632f6d0f969cdb35893a7880a11bd0c4f1981838e51a0a564dc",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libdl.so.2",
+              "librt.so.1",
+              "libm.so.6",
+              "libpthread.so.0",
+              "libutil.so.1",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.10",
+              "GLIBC_2.11",
+              "GLIBC_2.12",
+              "GLIBC_2.13",
+              "GLIBC_2.14",
+              "GLIBC_2.15",
+              "GLIBC_2.16",
+              "GLIBC_2.17",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.3",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.5",
+              "GLIBC_2.6",
+              "GLIBC_2.7",
+              "GLIBC_2.9"
+            ]
+          },
+          {
+            "path": "python/lib/libpython3.so",
+            "sha256": "a7d650e18a66e1131147e57e1d38046393b94e7fb5ec91b7fb1667483c4ab402",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "$ORIGIN/../lib/libpython3.11.so.1.0",
+              "libpthread.so.0",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.2.5"
+            ]
+          },
+          {
+            "path": "python/lib/libtcl9.0.so",
+            "sha256": "a7e60bf62e801b135a1b3b0405b77f8fe043eb22020a5a6803131a29ce04421b",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libdl.so.2",
+              "libpthread.so.0",
+              "libm.so.6",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.11",
+              "GLIBC_2.14",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.7",
+              "GLIBC_2.9"
+            ]
+          },
+          {
+            "path": "python/lib/libtcl9tk9.0.so",
+            "sha256": "3f3d8e0ba35fd5d4944ea2bd612ddb48de164ea69978cd5b7b11ccc77829c030",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libdl.so.2",
+              "libpthread.so.0",
+              "libm.so.6",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.14",
+              "GLIBC_2.15",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.7"
+            ]
+          },
+          {
+            "path": "python/lib/python3.11/lib-dynload/_crypt.cpython-311-x86_64-linux-gnu.so",
+            "sha256": "6038d0765af1c1dc7c45897e6421c1d65dd0f32d52674ce92a3f7ec330dff8d2",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libcrypt.so.1",
+              "libpthread.so.0",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.2.5",
+              "GLIBC_2.4"
+            ]
+          },
+          {
+            "path": "python/lib/python3.11/lib-dynload/_dbm.cpython-311-x86_64-linux-gnu.so",
+            "sha256": "1c5b9c77efe903cba050cb1fc25c9f523d078787107fd5384b1091d00e1f6169",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libpthread.so.0",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.14",
+              "GLIBC_2.15",
+              "GLIBC_2.17",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3",
+              "GLIBC_2.3.2",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4"
+            ]
+          },
+          {
+            "path": "python/lib/python3.11/lib-dynload/_tkinter.cpython-311-x86_64-linux-gnu.so",
+            "sha256": "85898f588251d9d2678fa4a9ccc53a2dcbffcd68777900a7520ed94b7d6d6c5a",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libtcl9.0.so",
+              "libtcl9tk9.0.so",
+              "libpthread.so.0",
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.2.5"
+            ]
+          },
+          {
+            "path": "python/lib/thread3.0.6/libtcl9thread3.0.6.so",
+            "sha256": "f5eb40cc87f2538df9a0e60163b256b6fd37c3cf79f9223260b296f06f8ff9c8",
+            "machine": "x86_64",
+            "interpreter": null,
+            "needed": [
+              "libc.so.6"
+            ],
+            "observed_abi_version_strings": [
+              "GLIBC_2.14",
+              "GLIBC_2.2.5",
+              "GLIBC_2.3.4",
+              "GLIBC_2.4",
+              "GLIBC_2.7"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "local_raw_evidence_sha256": {
+    "python-release.json": "2f441e912ea27abf19e019a1628e692c671ab1c9fea8d566a0fa477152bc3899",
+    "current-source.json": "97847f83d68ff7c57ed192b29df822a5e7b83b3921c88d09f6d4cef8fb3d2d89",
+    "archive-downloads.json": "094887a8eec095cb219274f748b7817099a6d0bf80bc02b84f4d1df30cd6832b",
+    "node-SHASUMS256.txt": "4fe99a2ba9d552a6f51c13ed68fb11104cfa5df601aec616be689253a8139e7a",
+    "runtime-archive-inspection.json": "3cb89226bc33340c3da46d603806aa98a21aec245f9f469084c75ba8c449dac0",
+    "current-lock-engines.json": "42b7320dc1d7334af2b91f5fdb78d5e545d7a1b96deae164790368c28efac8e2",
+    "upstream-http.json": "f6e3e5b51a0e507842fd715ed72687782eff17760c43b28148b9fafc3add0348"
+  },
+  "archive_inspection_exit": 0,
+  "executed_command": [
+    "python3",
+    "documentation/operations/runner-image-8008/verify-inputs.py",
+    "--inspect-runtime-archives",
+    "../s31-8008-delivery/qualification-attempt/inputs"
+  ],
+  "pending": [
+    "operator-approved native Linux amd64 builder access or immutable OCI/build evidence",
+    "approved rootfs/system package ledger and toolchain/scanner pins",
+    "exact unpublished S09 executor artifact and intended node OS/kernel/Docker/security baseline",
+    "native reproducible image build and mapping OCI manifest to Docker config ID",
+    "complete image/dependency SBOM and accepted immutable scan",
+    "signature/provenance policy verification",
+    "intended-node native runtime, six worker shards and isolation/cleanup evidence"
+  ],
+  "operator_coordination": "Sent requested inputs to Axal VC Actions runners operator chat. No approved builder or node inventory has yet been supplied. No live infrastructure action, dispatch or publication."
+}

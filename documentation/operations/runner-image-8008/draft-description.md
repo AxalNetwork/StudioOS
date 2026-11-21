@@ -24,6 +24,16 @@ The shared operations README entry is now included; the documentation guard's
 latest result is recorded in `evidence.json`.
 Docker, BuildKit, syft, trivy, cosign and shellcheck are unavailable locally.
 
+Actual qualification follow-up corroborated the runtime pins against official
+HTTPS release metadata, acquired and verified both archives, identified bundled
+npm 10.9.9 and inventoried 11 x86_64 ELF files without executing them. Current
+published main `270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0` preserves the runtime
+pins/container predicate and passes all 364 selected Node engine checks. S18's
+current published image metadata remains unapproved with null digests. Exact
+unpublished S09 source, approved native builder/rootfs, intended-node baseline
+and actual build/scan/native evidence have been requested from the operator.
+`qualification-progress.json` contains actual evidence and remaining gates.
+
 Coordinator handoff: integrate the local patch/bundle after review and when the
 publication hold permits. S18 owns builder integration; S09 owns adapter and
 real-node proof. The owner explicitly authorized completing the append-only

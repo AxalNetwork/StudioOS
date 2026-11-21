@@ -318,6 +318,96 @@
       "stdout": "",
       "stderr": "",
       "phase": "owner-authorized shared README completion"
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py"
+      ],
+      "exit": 0,
+      "stdout": "PASS source revisions, profile pins and lockfile hashes (offline review only)\nNOT RUN build input verification; missing inputs: rootfs, system_packages, build_utilities, build_toolchain, security_tools, identity_policy, upstream_authentication\n",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py",
+        "--inspect-runtime-archives",
+        "../s31-8008-delivery/qualification-attempt/inputs"
+      ],
+      "exit": 0,
+      "stdout": "Saved to qualification-attempt/runtime-archive-inspection.json",
+      "stderr": "",
+      "phase": "actual qualification follow-up",
+      "stdout_sha256": "3cb89226bc33340c3da46d603806aa98a21aec245f9f469084c75ba8c449dac0"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 check-folder-docs: 166 folders documented; every name they cite resolves; 4 file list(s) generated, every file described.\n",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "python3",
+        "documentation/operations/runner-image-8008/verify-inputs.py",
+        "--inspect-runtime-archives",
+        "<temporary-corrupt-input-fixture>"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "REFUSED: runtime archive checksum mismatch: node\n",
+      "phase": "checksum rejection: synthetic corrupted archive, not native runtime qualification"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-folder-docs.mjs"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "check-folder-docs: documentation/operations/runner-image-8008/ holds 8 source files and is not in DOCUMENTED",
+      "phase": "intermediate follow-up layout; resolved by consolidating archive inspection into existing offline verifier rather than adding a second tool; subsequent guard passes"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {readFileSync} from 'node:fs'; import {allDecisionProblems,readDecisionFiles} from './scripts/check-decision-ids.mjs'; const errors=allDecisionProblems(readFileSync('documentation/architecture/DECISIONS.md','utf8'),readDecisionFiles()); console.log(JSON.stringify({errors})); process.exitCode=errors.length?1:0;"
+      ],
+      "exit": 0,
+      "stdout": "{\"errors\":[]}\n",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {main} from './scripts/check-decision-appends.mjs'; process.exitCode=main();"
+      ],
+      "exit": 0,
+      "stdout": "\u2713 decision-appends: against the merge base d990215df2 with origin/main, 0 of the 2296 decision files already there changed, and none gained a section or more than 10 lines.\n",
+      "stderr": "",
+      "phase": "actual qualification follow-up"
     }
   ],
   "tools": {
@@ -342,7 +432,6 @@
   },
   "not_run": [
     "Dockerfile parse/build (Docker/BuildKit unavailable)",
-    "upstream artifact download/authentication",
     "native Linux runtime probe",
     "clean native npm ci/shards",
     "reproducible image builds",
@@ -350,7 +439,8 @@
     "immutable image scan",
     "signature/provenance verification",
     "actual-node isolation/cancellation/cleanup canary",
-    "full application guard/test suites (no application or executor change; dependencies not installed)"
+    "full application guard/test suites (no application or executor change; dependencies not installed)",
+    "release-signature/attestation policy authentication; official HTTPS metadata and runtime archive checksums have been corroborated"
   ],
   "image_status": "qualification pending",
   "publication": "none; #5719 hold",
@@ -360,6 +450,7 @@
     "No Docker parser/build, SBOM, scan, provenance or node qualification was run.",
     "Decision CLI entry guards also do not execute from this space-containing path; actual decision validation used their exported APIs and recorded output/exits. The initial silent exit-0 calls are not counted as checks."
   ],
-  "updated_utc": "2026-11-21T16:46:29.513605+00:00",
-  "shared_readme_registration": "Completed locally with explicit owner authorization; documentation guard passes."
+  "updated_utc": "2026-11-21T18:06:50.356065+00:00",
+  "shared_readme_registration": "Completed locally with explicit owner authorization; documentation guard passes.",
+  "qualification_follow_up": "Verified acquired runtime hashes/static ELF and current published-source compatibility recorded in qualification-progress.json. Native builder/rootfs/node inputs requested from operator; no actual image build, scan or native runtime result exists."
 }

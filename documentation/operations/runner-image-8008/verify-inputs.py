@@ -6,6 +6,8 @@ import json
 import pathlib
 import re
 import subprocess
+import struct
+import tarfile
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -16,12 +18,89 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def elf_details(data):
+    if data[:6] != b'\x7fELF\x02\x01':
+        raise ValueError('expected 64-bit little-endian ELF')
+    machine = struct.unpack_from('<H', data, 18)[0]
+    if machine != 62:
+        raise ValueError('expected ELF machine x86_64, got ' + str(machine))
+    offset = struct.unpack_from('<Q', data, 32)[0]
+    size, count = struct.unpack_from('<HH', data, 54)
+    headers = [struct.unpack_from('<IIQQQQQQ', data, offset + i * size) for i in range(count)]
+    interpreter, needed, strtab = None, [], None
+    for kind, _, pos, _, _, length, _, _ in headers:
+        if kind == 3:
+            interpreter = data[pos:pos + length].rstrip(b'\0').decode()
+        if kind == 2:
+            for i in range(pos, pos + length, 16):
+                tag, value = struct.unpack_from('<qQ', data, i)
+                if tag == 0:
+                    break
+                if tag == 1:
+                    needed.append(value)
+                if tag == 5:
+                    strtab = value
+    libraries = []
+    if needed:
+        tables = [h[2] + strtab - h[3] for h in headers
+                  if strtab is not None and h[0] == 1 and h[3] <= strtab < h[3] + h[5]]
+        if len(tables) != 1:
+            raise ValueError('ELF dynamic string table not uniquely mapped')
+        for index in needed:
+            start = tables[0] + index
+            end = data.index(b'\0', start)
+            libraries.append(data[start:end].decode())
+    return {'machine': 'x86_64', 'interpreter': interpreter, 'needed': libraries,
+            'observed_abi_version_strings': sorted({x.decode() for x in re.findall(
+                rb'(?:GLIBCXX|GLIBC|CXXABI)_[0-9]+(?:\.[0-9]+)*', data)})}
+
+
+def inspect(manifest, inputs):
+    results = []
+    for artifact in manifest['artifacts']:
+        if artifact['scope'] != 'candidate':
+            continue
+        file = inputs / artifact['filename']
+        with file.open('rb') as source:
+            digest = hashlib.sha256()
+            for block in iter(lambda: source.read(1024 * 1024), b''):
+                digest.update(block)
+        if digest.hexdigest() != artifact['sha256']:
+            raise ValueError('runtime archive checksum mismatch: ' + artifact['name'])
+        elf, bundled_npm = [], None
+        with tarfile.open(file, 'r:gz') as archive:
+            for member in archive:
+                if not member.isfile():
+                    continue
+                stream = archive.extractfile(member)
+                prefix = stream.read(4)
+                if prefix == b'\x7fELF':
+                    data = prefix + stream.read()
+                    elf.append(dict(path=member.name, sha256=hashlib.sha256(data).hexdigest(),
+                                    **elf_details(data)))
+                elif member.name == artifact['directory'] + '/lib/node_modules/npm/package.json':
+                    bundled_npm = json.loads(prefix + stream.read())['version']
+        if not elf:
+            raise ValueError('no native ELF runtime found: ' + artifact['name'])
+        results.append({'name': artifact['name'], 'filename': artifact['filename'],
+                        'archive_sha256': digest.hexdigest(), 'bundled_npm': bundled_npm, 'elf': elf})
+    return {'schema_version': 1, 'status': 'verified archive bytes; native execution not performed',
+            'limitations': 'ELF strings are observed, not a version-need proof. Dependencies may be supplied by the same archive. Rootfs, dynamic loading, signatures, image build/scan and intended-node compatibility remain unverified.',
+            'artifacts': results}
+
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--context', type=pathlib.Path,
                         help='Verify pre-acquired offline build inputs; never download')
+    parser.add_argument('--inspect-runtime-archives', type=pathlib.Path,
+                        help='Verify acquired runtime bytes and inspect ELF without extraction or execution')
     args = parser.parse_args()
     manifest = json.loads((HERE / 'components.json').read_text())
+    if args.inspect_runtime_archives is not None:
+        print(json.dumps(inspect(manifest, args.inspect_runtime_archives), indent=2))
+        return 0
     for source in manifest['source_revisions']:
         revision = source['revision']
         if not re.fullmatch('[a-f0-9]{40}', revision):
@@ -69,6 +148,6 @@ def main():
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
+    except (ValueError, KeyError, OSError, subprocess.CalledProcessError, tarfile.TarError, struct.error) as error:
         print('REFUSED: ' + str(error), file=sys.stderr)
         sys.exit(2)

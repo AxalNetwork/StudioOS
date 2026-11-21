@@ -8,6 +8,7 @@ Reviewed source is immutable, not the workstation's installed runtime:
 | Chosen newer main | `d990215df2ed696f6b7572b904afe2c96a653f7b` | Local package base; component manifest records file SHA256s. |
 | #7981 | `db11f2f3da613f3542d2bf8f736acaa35735457d` | Profiles, job-container and runner-execution match chosen main. |
 | #7972 | `513da8c5bf32eda4a4e8818f6fbbcd9bed63275c` | Also reviewed its executor-isolation adapter; host admission requires Docker and `/usr/bin/setfacl`. |
+| Qualification follow-up main | `270cdf4a2ad4d7d1fb57cf6315cca7e6e416e3b0` | Profile and verifiedContainer predicate unchanged; ACL/adapter now published. Exact unpublished S09 artifact still requested. |
 
 Inventory `git ls-tree -r --name-only <revision>` at all four references, including
 Dockerfile/Containerfile, runner/image and rootfs paths: no candidate Linux job
@@ -16,14 +17,18 @@ serve different products and are not reused. No `infra/runners/` builder was
 present in those published trees. This does not assert that S18 has no unpublished
 builder; return this template/input ledger to S18 for reuse, not a competing fleet
 implementation. The inaccessible historical workspace is not a prerequisite.
+The later follow-up main contains S18's `infra/runners/linux-x64.image.template.json`,
+but it is explicitly unapproved and every image/runtime digest/version is null.
+It is disabled metadata, not a rootfs/build recipe or qualified image.
 
 ## Native runtimes and executables
 
 `scripts/ci/runners/profiles.json` pins Linux x86_64 / Node `x64`, Node **22.23.3**,
 Python **3.11.18** (python-build-standalone release **20261110**). Official URLs,
 archive directories and SHA256s are in `components.json`. Node's bundled npm
-must come from that same verified archive; its exact version is to be measured
-and recorded during build qualification, never replaced with `npm@latest`.
+must come from that same verified archive, never replaced with `npm@latest`.
+The acquired archive contains npm 10.9.9; it has been inspected without execution.
+Native invocation remains a qualification gate.
 Node's native `node:sqlite` must implement FTS5 and JSON functions. Python must
 load its SSL, SQLite, compression and native-extension libraries.
 
@@ -36,6 +41,10 @@ linked by these binaries and lockfile native modules, CA trust, UTF-8 locale,
 DNS/NSS and timezone data. Exact versions, archive hashes, distro snapshot and
 transitive dependency ledger for these are missing; discover the complete set
 with ELF inspection and the SBOM, not this illustrative list alone.
+Static inspection of the acquired archives identifies the ELF interpreter
+`/lib64/ld-linux-x86-64.so.2` and dependencies including `libcrypt.so.1`,
+libstdc++ and Tcl/Tk. These findings are recorded in qualification-progress.json;
+they do not establish that any rootfs supplies the required ABIs.
 
 The host-only runner 2.338.2, root-owned policy, Docker at
 `/usr/local/bin/docker`, `setfacl` and Docker's init are not candidate-image
@@ -104,8 +113,9 @@ Network bridge/TLS/npm registry availability are prerequisites, not isolation
 evidence. Native Linux x64 lockfile entries and engine requirements are recorded
 without substituting packages from the Darwin workstation.
 
-Source review is not proof of wiring. Main still has host workflow install
-steps; #7972 supplies an executor-isolation adapter not present on chosen main.
-S09 must reconcile integration before a real run. This child edits neither
+Source review is not proof of wiring. The original package base lacked the
+#7972 executor-isolation adapter; it is present on the later follow-up main.
+The final unpublished S09 lifecycle/integration artifact is still requested
+through the operator and must be checked before a real run. This child edits neither
 executor nor workflow and claims no end-to-end isolation. Mac and hosted lanes
 remain separately unqualified.
