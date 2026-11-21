@@ -43,6 +43,7 @@ export function normalise(nodes) {
       ejectedLabelAt: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.ejected).map((i) => i.createdAt).sort().pop() ?? null,
       ejectedLabels: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.ejected).map((i) => ({ at: i.createdAt, actor: actor(i.actor) }))
         .sort((a, b) => (a.at < b.at ? -1 : 1)),
+      handedBackLabels: items.filter((i) => i.__typename === 'LabeledEvent' && i.label?.name === LABELS.handedBack).map((i) => ({ at: i.createdAt, actor: actor(i.actor) })),
     };
   });
 }
@@ -66,7 +67,11 @@ export function candidates(prs, { botLogin, now = Date.now() } = {}) {
     const old = Date.parse(newest.at) < Date.parse(RETRY_CUTOVER);
     const fresh = now - Date.parse(lastRemoved) < STRANDED_DAYS * 24 * 60 * 60 * 1000;
     const stillLabelled = (p.labels || []).includes(LABELS.ejected);
-    return byApp && old && fresh && stillLabelled ? [{ ...p, stranded: true }] : [];
+    // Review on #8054 (P2, second round): the hand-back of a stranded removal is an add-only App label event, so it
+    // is durable without rewriting \`ejected\`, survives an interrupted run (the next sweep adds it again) and never
+    // touches a label a person changed.
+    const handedBack = (p.handedBackLabels || []).some((l) => l.at >= lastRemoved && Boolean(botLogin) && l.actor?.login === botLogin);
+    return byApp && old && fresh && stillLabelled && !handedBack ? [{ ...p, stranded: true }] : [];
   });
 }
 
@@ -83,6 +88,15 @@ const out = (k, v) => {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${oneLine(v)}\n`);
 };
 const say = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${oneLine(s)}\n`); };
+
+/** Whether the newest \`ejected\` label event, read fresh, is still the App's own from before RETRY_CUTOVER. */
+export async function stillAppsStrandedLabel(gh, number, botLogin) {
+  let events;
+  try { events = await gh.get(`issues/${number}/events?per_page=100`); } catch { return false; }
+  if (!Array.isArray(events)) return false;
+  const newest = events.filter((e) => e?.event === 'labeled' && e?.label?.name === LABELS.ejected).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)).pop();
+  return Boolean(newest) && Boolean(botLogin) && newest.actor?.login === botLogin && Date.parse(newest.created_at) < Date.parse(RETRY_CUTOVER);
+}
 
 /** The sticky comment's second line: restored, waiting (and until when), or handed back. */
 export function stickyLine(d) {
@@ -153,15 +167,17 @@ export async function sweep(env, {
     if (d.action === 'requeue') {
       await app.graph('mutation($id:ID!,$oid:GitObjectID!){enqueuePullRequest(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}', { id: pr.id, oid: pr.head.sha })
         .catch(() => { throw new Error(`enqueue of #${pr.number} failed`); });
-      // Only the App's own stranded label comes off, and only after the entry is back.
-      if (pr.stranded) await app.del(`issues/${pr.number}/labels/${encodeURIComponent(LABELS.ejected)}`).catch(() => {});
+      // Only the App's own stranded label comes off, after the entry is back, and only if a fresh read still shows the
+      // newest \`ejected\` event as the App's pre-cutover one: a person's newer label is left alone.
+      if (pr.stranded && await stillAppsStrandedLabel(gh, pr.number, botLogin)) {
+        await app.del(`issues/${pr.number}/labels/${encodeURIComponent(LABELS.ejected)}`).catch(() => {});
+      }
     } else if (d.action === 'keeper') keeper.push(pr.number);
     else if (d.action !== 'wait') {
-      // Review on #8054 (P2): a stranded PR already carries the App's pre-cutover label, so adding it again writes no
-      // event and the next sweep would treat it as stranded again. Re-label it so the hand-back is a post-cutover event
-      // and final; only the App's own label is touched (a person's label never makes a PR stranded).
-      if (pr.stranded) await app.del(`issues/${pr.number}/labels/${encodeURIComponent(LABELS.ejected)}`);
-      if (pr.stranded || !pr.labels.includes(LABELS.ejected)) await app.post(`issues/${pr.number}/labels`, { labels: [LABELS.ejected] });
+      // Review on #8054 (P2): a stranded PR already carries the App's pre-cutover \`ejected\`, so adding it again writes
+      // no event. Its hand-back is recorded with the add-only \`bot:handed-back\` label instead: nothing is deleted.
+      const add = [...(pr.labels.includes(LABELS.ejected) ? [] : [LABELS.ejected]), ...(pr.stranded ? [LABELS.handedBack] : [])];
+      if (add.length) await app.post(`issues/${pr.number}/labels`, { labels: add });
       if (d.action === 'repair') repair.push(pr.number);
     }
     const comments = await gh.get(`issues/${pr.number}/comments?per_page=100`);

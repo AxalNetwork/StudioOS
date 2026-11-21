@@ -175,8 +175,8 @@ Otherwise it either waits or hands back (#6476 S1, D6476-p4):
 
 One sticky comment says which, and a sweep whose outcome has not changed writes nothing. `ejected` labels the App
 wrote before 2026-11-21, when it labelled the waiting cases too, get one fresh look on removals under 7 days old;
-on a restore the App removes only its own label, and on a hand-back it re-labels so the hand-back is final. A label a
-person added is never second-guessed.
+on a restore the App removes only its own label, after a fresh read shows it is still the App's. A stranded hand-back
+adds `bot:handed-back`, which makes it final and is never removed. A label a person added is never second-guessed.
 ## The serial refresh
 
 `.github/workflows/landing-bot-refresh.yml` (#6478) acts only when main's newest completed CI push run is green

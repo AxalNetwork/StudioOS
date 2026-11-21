@@ -53,12 +53,17 @@ function world({ removalReason = 'MERGE_CONFLICT' } = {}) {
       if (p === 'pulls/7/commits?per_page=100') return s.commits;
       if (p === 'pulls/7') return { number: 7, mergeable: { CONFLICTING: false, MERGEABLE: true }[s.mergeable] ?? null, head: { sha: s.head } };
       if (p === 'issues/7/comments?per_page=100') return s.comments;
+      if (p === 'issues/7/events?per_page=100') {
+        if (s.eventsHook) s.eventsHook();
+        return s.timeline.filter((e) => e.__typename === 'LabeledEvent').map((e) => ({ event: 'labeled', label: e.label, actor: { login: e.actor.login }, created_at: e.createdAt }));
+      }
       throw new Error(`unexpected GET ${p}`);
     },
   };
   const app = {
     graph: async (_q, v) => { s.enqueues.push(v.oid); s.inQueue = true; s.timeline.push({ __typename: 'AddedToMergeQueueEvent', createdAt: s.now, actor: { login: BOT, __typename: 'Bot' } }); },
     post: async (p, b) => {
+      if (s.failNextLabelPost && p === 'issues/7/labels') { s.failNextLabelPost = false; throw new Error('process stopped'); }
       s.writes.push(['POST', p]);
       if (p === 'issues/7/labels') { for (const l of b.labels) if (!s.labels.includes(l)) { s.labels.push(l); s.timeline.push({ __typename: 'LabeledEvent', createdAt: s.now, actor: { login: BOT, __typename: 'Bot' }, label: { name: l } }); } }
       if (p === 'issues/7/comments') s.comments.push({ id: 900, user: { login: BOT, type: 'Bot' }, body: b.body });
@@ -218,11 +223,12 @@ test('#8054 review (P2): a hand-back on a stranded App label is final; a later g
   expired.s.evidence = pending(SHA1);
   await expired.run(24 * 60);
   assert.match(expired.s.comments[0].body, /24 hours after the ejection: the owner re-queues it/);
-  assert.deepEqual(expired.s.labels, ['ejected']);
+  assert.deepEqual(expired.s.labels, ['ejected', 'bot:handed-back'], 'an add-only hand-back record; ejected is not rewritten');
   expired.s.evidence = green(SHA1);
   await expired.run(24 * 60 + 10);
   assert.deepEqual(expired.s.enqueues, [], 'no enqueue after the hand-back');
-  assert.deepEqual(expired.s.labels, ['ejected'], 'the hand-back marker stays');
+  assert.deepEqual(expired.s.labels, ['ejected', 'bot:handed-back'], 'the hand-back marker stays');
+  assert.ok(!expired.s.writes.some(([m]) => m === 'DELETE'), 'nothing is ever deleted on a hand-back');
   // Failed checks → green, inside the window.
   const failedThenGreen = strandedWorld();
   failedThenGreen.s.evidence = failed(SHA1);
@@ -230,7 +236,7 @@ test('#8054 review (P2): a hand-back on a stranded App label is final; a later g
   assert.match(failedThenGreen.s.comments[0].body, /a required check failed/);
   failedThenGreen.s.evidence = green(SHA1);
   await failedThenGreen.run(20);
-  assert.deepEqual([failedThenGreen.s.enqueues, failedThenGreen.s.labels], [[], ['ejected']]);
+  assert.deepEqual([failedThenGreen.s.enqueues, failedThenGreen.s.labels], [[], ['ejected', 'bot:handed-back']]);
   // A fresh hand-back (not stranded) is final the same way.
   const plain = world({ removalReason: 'QUEUE_CLEARED' });
   plain.s.mergeable = 'MERGEABLE'; plain.s.evidence = failed(SHA1);
@@ -238,6 +244,37 @@ test('#8054 review (P2): a hand-back on a stranded App label is final; a later g
   plain.s.evidence = green(SHA1);
   await plain.run(20);
   assert.deepEqual([plain.s.enqueues, plain.s.labels], [[], ['ejected']]);
+});
+
+test('#8054 review (P2, round 2): an interrupted hand-back is finished by the next sweep; a person\'s label is never deleted', async () => {
+  const stranded = () => {
+    const w = world({ removalReason: 'QUEUE_CLEARED' });
+    w.s.mergeable = 'MERGEABLE';
+    w.s.labels = ['ejected'];
+    w.s.timeline[0].createdAt = '2026-11-20T22:00:00Z'; w.s.timeline[1].createdAt = '2026-11-20T22:30:00Z';
+    w.s.timeline.push({ __typename: 'LabeledEvent', createdAt: '2026-11-20T23:00:00Z', actor: { login: BOT, __typename: 'Bot' }, label: { name: 'ejected' } });
+    w.s.commits = [work(SHA1, '2026-11-20T21:00:00Z')];
+    return w;
+  };
+  // The process stops while writing the hand-back: no label was lost, and the next sweep records it.
+  const cut = stranded();
+  cut.s.evidence = failed(SHA1);
+  cut.s.failNextLabelPost = true;
+  await assert.rejects(cut.run(10), /process stopped/);
+  assert.deepEqual(cut.s.labels, ['ejected'], 'the visible hand-back is never removed');
+  await cut.run(20);
+  assert.deepEqual(cut.s.labels, ['ejected', 'bot:handed-back']);
+  cut.s.evidence = green(SHA1);
+  await cut.run(30);
+  assert.deepEqual(cut.s.enqueues, [], 'final once recorded');
+  // A person replaces the App's label between the sweep's snapshot and the restore: the entry is restored (every gate
+  // holds) but the person's label stays.
+  const replaced = stranded();
+  replaced.s.eventsHook = () => replaced.s.timeline.push({ __typename: 'LabeledEvent', createdAt: '2026-11-21T10:09:00Z', actor: { login: 'guillaumelauzier', __typename: 'User' }, label: { name: 'ejected' } });
+  await replaced.run(10);
+  assert.deepEqual(replaced.s.enqueues, [SHA1]);
+  assert.deepEqual(replaced.s.labels, ['ejected'], 'a person\'s newer ejected label is not deleted');
+  assert.ok(!replaced.s.writes.some(([m]) => m === 'DELETE'));
 });
 
 test('#6476 owner addition: only a positive mergeable admits, for every class', async () => {
