@@ -277,5 +277,6 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
  // Imported lazily: the isolation module imports this one. Only linux-x64 has an implementation; others still refuse.
  const { isolationFor }=await import('./runners/executor-isolation.mjs');
  let isolation=null;try{isolation=isolationFor(process.env.PROFILE);}catch{isolation=null;}
- process.exitCode=await main(process.env,isolation?{verifyIsolation:isolation.admissionIsolation}:{});
+ const { trustedAuthority }=await import('./executor-authority.mjs');
+ process.exitCode=await main(process.env,{...await trustedAuthority(process.env),...(isolation?{verifyIsolation:isolation.admissionIsolation}:{})});
 }
