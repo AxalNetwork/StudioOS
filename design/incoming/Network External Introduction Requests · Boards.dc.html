@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network External Introduction Requests · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Introductions · #7678 · continues #7063–#7066, #6256 and #4799 (part of #7675)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Introductions — any member asks Axal to introduce them to a person, who may be outside Axal, and an operator owns the handoff</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A general introduction service at /network/introductions for founders, investors and advisors alike. The requester names a person (found in the directory, entered by hand as a provisional target, or still to be identified at a known organization), says why, picks the capacity they ask in, previews what Axal will share and submits. Submitting asks Axal to coordinate; it sends nothing to the target. An authorized Axal operator takes the case from a queue, confirms the target, checks the requester’s readiness summary, the contact channel, its freshness and any suppression, and contacts the target only through a separate review-and-contact step. Request lifecycle, target response, contact attempt and introduction are four fields with four events. These boards continue the landed desk, curated match, quarterly ask and teammate request canvases (D7063–D7066) and the Network v2 investor addendum (#6256): the shell, header, four links, request sheet, record Sheet, state words and the one Eadwyn rail (#5130). Team requests, curated matches, quarterly asks and Offer one keep their names and permissions. Keys carry the NIE prefix. Violet dashed ◇ tags mark backend work (mostly #7673, proposed); amber ⚑ tags owner picks drawn as option A. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · [Lena Sato], [Kelp Bio], [Priya Nair], [Harbor Seed], [Ren Okada] and every person, company and figure (12 requests through Axal, request 5c2e9a71, 16 open cases, no charge configured) are fictional; source systems are named, their rows are invented</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="24">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network External Introduction Requests Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW3-intro-desk · general requests', 'Desk by who acts next', 'Needs you now (3, read on its own), then Through Axal in four lanes with real counts: Needs you 2, Awaiting Axal 2, Awaiting target 1, History 7. Each row names the target, service type, capacity, stage and response, owner and next action. From your team and Curated matches keep their groups.', [F('NIE01', false, 960)]],
+      ['Entry points', 'Four ways in, one sheet', 'The Introductions primary, a Person Sheet, a private relationship and an organization’s person row each open the same request sheet with the exact person preselected. An organization is context, never the recipient.', [C('NIE02', false, 1400, 470)]],
+      ['Step 1 · target', 'Choose the person', 'Search the directory first with enough sourced identity to tell two [Priya Nair]s apart; the teammate path is checked before Through Axal. A person not in the directory is a provisional target with no email asked; an organization alone becomes “person to be identified”.', [C('NIE03', false, 1400, 930)]],
+      ['Step 2 · three journeys', 'Purpose and capacity', 'Founder [Lena Sato] to external investor [Priya Nair]; investor [Iris Chen] to external advisor [Hugo Brandt]; advisor [Ada Okafor] to member [Tom Becker]. Same model; capacity and represented organization chosen per request.', [C('NIE04', false, 1400, 720)]],
+      ['Readiness', 'Blocked submit and return to the draft', 'A blocked submit lists the exact requirements for the chosen capacity, links to each, and returns to the same draft with target, purpose and capacity kept. The readiness screens are #7677 (NRD).', [C('NIE05', false, 1400, 620)]],
+      ['Step 4 · confirm', 'Review your request', 'Target and whether they are a member, purpose, capacity with the readiness snapshot, who receives which information and when, the Axal service owner, cost from a policy read (none configured), no promised timing, and that submitting sends nothing. One primary.', [F('NIE06', false, 960)]],
+      ['Submit', 'Sending, retries and recovery', 'Submitting, a second click, a lost response, a retry that finds the same receipt, a stale edit from another tab, and a failed save, all with the content kept and one request key.', [C('NIE07', false, 1400, 640)]],
+      ['Receipt', 'One durable receipt', 'Request id, submitted time, target, capacity, readiness snapshot, cost, and Awaiting assignment with no invented owner. What happens next names the next actor at each step.', [F('NIE08', false, 1040)]],
+      ['Other journeys', 'Investor and advisor', 'The investor’s confirm and receipt (quarterly asks untouched), where the service sits on an investor desk, the advisor asking a member, and the four workflows that stay separate.', [C('NIE09', 'Investor → external advisor', 1400, 560), C('NIE09B', 'Advisor → member', 1400, 520)]],
+      ['Request detail', 'Requester view', 'Request a3c8b6f1 to [Jules Avery]: the four fields, the next actor and owner, visible activity, the shareable brief (edits after contact go to the operator), and three note scopes. Then answering the operator’s question.', [F('NIE10', false, 960), C('NIE10B', 'Needs information', 1400, 470)]],
+      ['Notification link', 'Open the exact record', 'A notification names the request id, opens it over the unchanged desk outside the current filter, and returns focus on close. Refused, Unavailable and signed-out outcomes.', [C('NIE11', false, 1400, 450)]],
+      ['Operator · queue', 'Introduction requests', 'The Axal operations queue in the Admin console: Unassigned 3, Assigned to me 6, to others 7, all open 16, with stage, response and contact separate. Nothing here sends.', [F('NIE12', false, 1090)]],
+      ['Operator · case', 'Case 5c2e9a71', 'Target identity review against a namesake, contact channels with source and freshness, suppression, an Eadwyn outreach draft after its quote, the requester’s readiness summary (no evidence), operator-only notes and append-only activity.', [F('NIE13', false, 1160)]],
+      ['Operator · contact', 'Review and contact', 'The one step that contacts the target: recipient, channel, message, attachments and what is not attached, a review check, then Send. Beside it: record contact made elsewhere, mark no route, request information.', [F('NIE14', false, 1000), C('NIE14B', 'Other operator actions', 1400, 520)]],
+      ['Operator · delivery', 'Delivery recovery', 'A confirmed send with a pending record gets Update the record (no second email); unknown delivery is reconciled before any new send; a refused send keeps the draft.', [C('NIE15', false, 1400, 440)]],
+      ['Response and outcome', 'Agreed, made, outcome', 'Agreement is recorded with its evidence and is not an introduction; the introduction is its own reviewed send; the outcome is recorded after, or Not recorded.', [C('NIE16', false, 1400, 480)]],
+      ['Withdrawal', 'Before contact, after contact, race', 'Withdrawing before contact stops everything; after contact the message cannot be unsent and the operator decides on a close note; a send that lands first is shown with both times.', [C('NIE17', false, 1400, 470)]],
+      ['States', 'Platform States', 'Loading, true empty, no results, missing facts, Unavailable, restricted, refused, unassigned, no channel; then stale readiness, duplicate request, decline, expired, delivery unknown, partial failure, concurrent assignment, a revoked target and Eadwyn.', [C('NIE18', 'Reads and refusals', 1400, 760), C('NIE18B', 'Lifecycle edges', 1400, 830)]],
+      ['Matrix', 'Lifecycle, transitions and permissions', 'The lifecycle with its next actor, the three other fields, each action with actor, precondition, visible fields, event and recovery, and field-level permissions for requester, operator, target, other members and support.', [W('NIE19')]],
+      ['Tablet', 'Tablet 768', 'Request detail in one column with the four fields two by two.', [C('NIE20', false, 768, 1060)]],
+      ['Phone', 'Phone 390', 'Choose the target, confirm, receipt, request detail, answer the operator and a blocked submit. 44 px targets, sticky primary.', [P('NIE21A', 'Choose target'), P('NIE21B', 'Confirm'), P('NIE21C', 'Receipt'), P('NIE21D', 'Request detail'), P('NIE21E', 'Needs information'), P('NIE21F', 'Blocked submit')]],
+      ['Dark', 'Dark', 'Request detail and its phone view on the dark tokens; states keep their glyphs and words.', [F('NIE22', 'Request detail · dark', 960), P('NIE22B', 'Phone · dark')]],
+      ['Index', 'Frame index and accessibility', 'Each frame’s actor, entry point, next action and data dependency; keyboard order, focus, error summary and announcements.', [W('NIEI')]],
+      ['Handoff', 'Handoff', 'Checked on main, reused components, frontend only, backend required (◇, existing or proposed), owner picks (⚑) and what is open.', [W('NIEH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Funds Source Import Console · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Funds · source import console · FND-I · #7738 prompt 1 · frame and result words from FND-G (#7035)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Funds — a Super Admin stages private source records as captured, proves the store equals the file, decides each record and promotes reviewed fund-side records</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A new HQ console at /research/source-imports (question 1, option A), for Super Admins only on HQ (question 2 A), reached from one link beside the Sheets sync card on /research/funds (question 3 A). It takes the HQ admin shell, the shared Sheet, Scope → Review → Result and the result words from the Google Sheets Sync canvas (FND-G00 to FND-G10) and redraws none of its boards. A source record is not a fund: a file is checked in the browser, applied in batches, and called Complete only when what is stored is read back and equals the file; each record then gets a kind and a decision, and only reviewed fund-side records are promoted. Contact columns are withheld by default (#7739 Q3). The five outcomes (created, linked, retained privately, unresolved, rejected) are always shown apart with their sum. No Eadwyn rail and no AI action. States follow Platform States (Unavailable on screen). Violet dashed ◇ tags mark backend work with its issue; amber ⚑ tags mark owner decisions, option A drawn. Board ids FND-I00 to FND-I17 map to component keys RFI00 onward.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 19 Nov 2026, 10:14 UTC · checked against main 58ee9d1b73 · every source, record, fund, firm and person is a bracketed sample; no real source row, name or period appears</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="18">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Funds Source Import Console Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FND-I00', 'Journey, routes, vocabulary and key', 'File to check to preview to run to read-back to review to promotion to report, the recovery paths, the routes of option A, and the words. “A source record is not a fund.” No Eadwyn rail, no AI action.', [W('RFI00')]],
+      ['FND-I01', 'Runs and sources', 'The five outcomes with their sum and the run they describe; each source with records, period, verdict, list name and last run; the run list. Empty state, and the entry link beside the unchanged FND-G01 card.', [F('RFI01', false, 1240), F('RFI01B', 'Empty · nothing staged', 620), F('RFI01C', 'Entry · /research/funds', 640)]],
+      ['FND-I02', 'Choose a file, check it, class the columns, preview', 'File name, size and SHA-256 from the browser; the manifest check; classes per source, withheld cells counted; new, unchanged, changed, removed. Nothing has been written. A failed check, a column with no class, the same file again; a contact column set to Held.', [F('RFI02', 'Review', 960), C('RFI02B', 'Check failed · no class · same file again', 1300, 520), C('RFI02C', 'Contact column · Held', 1300, 360)]],
+      ['FND-I03', 'Apply in batches', 'Batches sent of 73, records stored and read back per source, a paced wait. A step-up that expired, a stopped run with Resume, and the leave-page question.', [F('RFI03', 'Running · paced wait', 1000), C('RFI03B', 'Step-up · stopped · leaving', 1300, 420)]],
+      ['FND-I04', 'Result and Reconcile', 'Complete (stored equals read back; cells stored, withheld and blank; verified against hashes or only read back). Partial and Failed before any write. Outcome uncertain with Reconcile as the one action. Reconcile, then Complete or still short.', [F('RFI04', 'Complete', 1040), C('RFI04B', 'Partial · Failed before any write', 1300, 400), F('RFI04C', 'Outcome uncertain', 1000), C('RFI04D', 'Reconcile', 1300, 460)]],
+      ['FND-I05', 'One run', 'Who, when, Worker commit, list digest and file digest (as declared), per-source counts and cells, refused records by id and reason code, status history. No record content.', [F('RFI05', false, 980)]],
+      ['FND-I06', 'Remove', 'One source, a record’s private fields and one record, each Scope → Review → Result with a typed confirmation, what stays, and that the same file will not restore it.', [F('RFI06', 'One source · Review', 960), C('RFI06B', 'Private fields', 1300, 380), C('RFI06C', 'One record · one source result', 1300, 380)]],
+      ['FND-I07', 'Staged records', 'Paged list filtered by source, kind, decision, outcome and flag. No private field, no free-text search, no export. Zero with removable chips.', [F('RFI07', false, 1000), C('RFI07B', 'Empty filter result', 1100, 260)]],
+      ['FND-I08', 'One record as captured', 'Fields in the source’s words, blanks named, flags, the private part masked until Show. A funding-round record as history; a record from a Not allowed source.', [F('RFI08', false, 900), C('RFI08B', 'Funding-round record', 1300, 400), C('RFI08C', 'Verdict not allowed', 1300, 340)]],
+      ['FND-I09', 'Decide what a record is', 'Candidates with grounds, the shared-website warning, the decision form and history. Link, reject, create awaiting promotion; a manager with two vehicles; company and round records; bulk mapping refused whole.', [F('RFI09', false, 1040), C('RFI09B', 'Link · reject · create awaiting promotion', 1300, 300), C('RFI09C', 'Manager with two vehicles', 1100, 260), C('RFI09D', 'Company or round · bulk mapping', 1300, 440)]],
+      ['FND-I10', 'Columns, list name and kinds per source', 'Each column’s class, role, destination and serve beside the verdict; four money destinations; list name and kinds; flag counts and Recompute. Sources with no review or Not allowed.', [F('RFI10', false, 1100), C('RFI10B', 'No review · not allowed', 1300, 340)]],
+      ['FND-I11', 'Promote', 'Review with create, link, statements, refused with reason codes and held back; result with links; undo one record and its refused case; withdraw a source; a source with no reviewed terms.', [F('RFI11', 'Review', 1040), C('RFI11B', 'Result · undo', 1300, 420), C('RFI11C', 'Withdraw · no reviewed terms', 1300, 380)]],
+      ['FND-I12', 'Reconciliation report', 'The five outcomes and their sum by source and kind, the run they describe, stored against the manifest, held columns and flags. Summary-count export only.', [F('RFI12', false, 1560)]],
+      ['FND-I13', 'States', 'Loading and empty; Not recorded and Unavailable (no partial sum); Refused for a non-Super Admin, a non-admin, a branch, a support session and a missing step-up; a failed mapping check; saving and save failed.', [C('RFI13', 'Loading · empty', 1300, 360), C('RFI13B', 'Not recorded · Unavailable', 1300, 360), C('RFI13C', 'Refused', 1300, 320), C('RFI13D', 'Saving · save failed', 1300, 280)]],
+      ['FND-I14', 'Phone 390', 'Runs, file check and progress, staged records, one record with the private part collapsed, the decision as a bottom sheet, column rules, the promote preview and the report as stacked figures. 44 px targets.', [P('RFI14A', 'Runs'), P('RFI14B', 'Check and progress'), P('RFI14C', 'Staged records'), P('RFI14D', 'One record'), P('RFI14E', 'Decision sheet'), P('RFI14F', 'Column rules'), P('RFI14G', 'Promote'), P('RFI14H', 'Report')]],
+      ['FND-I15', 'Dark · desktop and phone', 'FND-I01 and FND-I09 on the dark tokens with visible focus; runs and the decision sheet at 390.', [F('RFI15', 'Runs and sources · dark', 900), F('RFI15B', 'Decide · dark', 900), P('RFI15C', 'Runs · dark'), P('RFI15D', 'Decision · dark')]],
+      ['FND-I16', 'Keyboard, focus and announcements', 'Focus order, where focus returns after each Sheet, and the live-region sentence for every result.', [W('RFI16')]],
+      ['FND-I17', 'Handoff', 'Route and store behind each board with the issue that builds it, what main has, owner questions, and which shared components came from FND-G.', [W('RFI17')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

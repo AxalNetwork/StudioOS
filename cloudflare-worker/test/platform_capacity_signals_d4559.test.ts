@@ -86,7 +86,7 @@ test('#4592: a scanning sweep gives eligible work, its age and the admission cou
     'a resent count of 0 is a measured zero, recorded by the sweep');
   const age = m['agents.sweep.oldest_eligible_age_seconds'];
   assert.equal(age.value, 4_000);
-  assert.equal(age.level, 'warning', 'over an hour is the proposed warning');
+  assert.equal(age.level, 'warning', 'over an hour is the approved warning');
   assert.deepEqual(age.thresholds, ELIGIBLE_AGE_THRESHOLDS);
   for (const s of Object.values(m)) {
     assert.equal(s.scope, 'deployment');
@@ -245,10 +245,13 @@ test('the whole read carries the part 3 signals, lists what it does not read, an
   assert.equal(r.level, 'critical', 'a failed restore drill raises the platform');
   const keys = r.metrics.map((m) => m.key);
   assert.ok(keys.includes('agents.sweep.eligible') && keys.includes('agents.repair.pending') && keys.includes('dr.restore.last_verified_age_seconds'));
-  for (const k of ['agents.halt_acknowledgement', 'd1.runtime_ddl_attempts', 'auth.monitor_state', 'ai.gateway_quota_retries']) {
+  for (const k of ['agents.halt_acknowledgement', 'd1.runtime_ddl_attempts', 'auth.monitor_state', 'ai.gateway_quota_retries', 'd1.schema_parity']) {
     assert.ok(r.not_read_here.some((n: any) => n.key === k), k);
   }
-  assert.equal(SIGNALS_NOT_READ_HERE.length, 4);
+  assert.equal(SIGNALS_NOT_READ_HERE.length, 5);
+  // D4559-p5: #4591's parity result lives only in an Actions run, so it is listed, never a measured metric.
+  assert.ok(!keys.includes('d1.schema_parity'), 'the schema parity result is not read as a metric');
+  assert.match(SIGNALS_NOT_READ_HERE.find((n) => n.key === 'd1.schema_parity')!.reason, /#4591/);
   const text = JSON.stringify(r.metrics);
   for (const forbidden of [/@/, /user_id|company_id|tenant_id|agent_id|task_id|email/i, /SELECT/, /token|secret|password/i]) assert.doesNotMatch(text, forbidden);
   const svc = readFileSync(join(ROOT, 'cloudflare-worker/src/services/platformCapacitySignals.ts'), 'utf8');

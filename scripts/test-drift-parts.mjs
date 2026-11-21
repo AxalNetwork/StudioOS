@@ -26,13 +26,14 @@
  * `guard › <command>` for a command that is not node:test, so the queue-stall
  * alert can read which failure a candidate had without its 44,000-line log.
  */
-import { readFileSync, writeFileSync, globSync, appendFileSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, globSync, appendFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { planParts, assertExactOnce, newestMainArtifact } from './lib/shardPlan.mjs';
 import { buildGenerated } from './build-generated.mjs';
+import { failureReport } from './lib/ciFailures.mjs';
 import { retryDecision } from './lib/flakyTests.mjs';
 
 /** How many shards each long test script is cut into. */
@@ -84,9 +85,15 @@ export function isNodeTest(cmd) {
 
 /** D6464: the same command, with TAP kept on stdout and failed tests written to `out`. */
 export function withFailureReporter(cmd, out, reporter) {
+  return withFailureReporters(cmd, [{ reporter, out }]);
+}
+
+/** D5502: construct each reporter/destination pair together, once, from the parsed command. */
+export function withFailureReporters(cmd, reporters) {
   const { prefix } = testCommand(cmd);
   const at = prefix.length - ' --test '.length;
-  return `${cmd.slice(0, at)} --test-reporter=tap --test-reporter-destination=stdout --test-reporter=${quote(reporter)} --test-reporter-destination=${quote(out)}${cmd.slice(at)}`;
+  const pairs = reporters.map(({ reporter, out }) => ` --test-reporter=${quote(reporter)} --test-reporter-destination=${quote(out)}`).join('');
+  return `${cmd.slice(0, at)} --test-reporter=tap --test-reporter-destination=stdout${pairs}${cmd.slice(at)}`;
 }
 
 /** D6464: the reporter's file as [{ file, test }]; unreadable or malformed means none. */
@@ -250,7 +257,7 @@ function main(argv) {
     env.TEST_TRACE_ROOT = root;
   }
   const sh = (command) => spawnSync('sh', ['-c', command], { cwd: root, stdio: 'inherit', env });
-  return runPart({ commands: part.commands, env, root, sh });
+  return runPart({ commands: part.commands, env: { ...env, CI_FAILURE_PART: part.name }, root, sh });
 }
 
 /**
@@ -261,16 +268,44 @@ function main(argv) {
 export function runPart({ commands, env = process.env, root = process.cwd(), sh, log = console.log, error = console.error,
   flakyList = () => readFlakyList(root), changedFiles = () => queueChangedFiles(root, env) }) {
   const event = env.GITHUB_EVENT_NAME;
+  const reports = [];
+  const record = (path, status) => {
+    if (!env.CI_FAILURE_DIR) return;
+    try {
+      const rows = readFileSync(path, 'utf8').split('\n').filter(Boolean).map(s => JSON.parse(s));
+      const end = rows.at(-1);
+      reports.push(failureReport({ failures: status ? rows.filter(r => r.file) : [], files: end?.files || [],
+        complete: end?.end === true && end.complete === true && [0, 1].includes(status), status,
+        testedSha: env.GITHUB_SHA, baseSha: env.CI_FAILURE_BASE, runId: env.GITHUB_RUN_ID,
+        attempt: env.GITHUB_RUN_ATTEMPT, part: env.CI_FAILURE_PART }));
+    } catch {
+      reports.push(failureReport({ status, complete: false, testedSha: env.GITHUB_SHA, runId: env.GITHUB_RUN_ID,
+        attempt: env.GITHUB_RUN_ATTEMPT, part: env.CI_FAILURE_PART }));
+    }
+    try {
+      mkdirSync(env.CI_FAILURE_DIR, { recursive: true });
+      let encoded = JSON.stringify(reports);
+      if (Buffer.byteLength(encoded) > 1024 * 1024) encoded = JSON.stringify(reports.slice(-1).map(r => ({ ...r, complete: false, files: [] })));
+      writeFileSync(resolve(env.CI_FAILURE_DIR, 'failures.json'), encoded);
+    } catch { error('CI diagnostic evidence could not be written; original test status is unchanged.'); }
+  };
   for (const [i, cmd] of commands.entries()) {
     const watch = event === 'merge_group' && isNodeTest(cmd);
     const out = resolve(tmpdir(), `failed-tests-${process.pid}-${i}.jsonl`);
     if (watch && existsSync(out)) rmSync(out);
-    const run = watch ? withFailureReporter(cmd, out, resolve(root, 'scripts/lib/failedTestsReporter.mjs')) : cmd;
+    const evidence = resolve(tmpdir(), `ci-evidence-${process.pid}-${i}.jsonl`);
+    const reporters = watch ? [{ reporter: resolve(root, 'scripts/lib/failedTestsReporter.mjs'), out }] : [];
+    if (env.CI_FAILURE_DIR && isNodeTest(cmd)) {
+      if (existsSync(evidence)) rmSync(evidence);
+      reporters.push({ reporter: resolve(root, 'scripts/lib/ciFailureReporter.mjs'), out: evidence });
+    }
+    const run = reporters.length ? withFailureReporters(cmd, reporters) : cmd;
     log(`\n> ${run}\n`);
     const r = sh(run);
-    if (r.status === 0) continue;
+    if (r.status === 0) { if (isNodeTest(cmd)) record(evidence, 0); continue; }
     error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
     if (!watch) {
+      record(evidence, r.status || 1);
       if (event === 'merge_group') log(failureAnnotation(`guard › ${cmd.slice(0, 120)}`));
       return r.status || 1;
     }
@@ -279,6 +314,7 @@ export function runPart({ commands, env = process.env, root = process.cwd(), sh,
       changedFiles: changedFiles(), event, exec: (command) => { log(`\n> ${command}\n`); return sh(command).status; } });
     for (const line of retried.lines) log(`test-drift-parts: ${line}`);
     if (env.GITHUB_STEP_SUMMARY && retried.lines[0].startsWith('###')) appendFileSync(env.GITHUB_STEP_SUMMARY, `${retried.lines.join('\n')}\n\n`);
+    record(evidence, retried.status === 0 ? 0 : r.status || 1);
     if (retried.status !== 0) {
       for (const f of failures.slice(0, FAILURE_ANNOTATIONS_MAX)) log(failureAnnotation(`${f.file} › ${f.test}`));
       return r.status || 1;

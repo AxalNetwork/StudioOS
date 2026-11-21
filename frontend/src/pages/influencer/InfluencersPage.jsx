@@ -1,26 +1,29 @@
 // D4297 (#4297, D4289 P8) — `/influencers`, the public Influencer program page
-// (IN8): the hero, how it works, the tiers (read from GET /api/influencer/tiers,
-// never typed), bonuses, benefits, rules, questions, and Apply. Signed out,
-// Apply registers for the program and comes back to the sheet
-// (`/register?program=influencer&next=/influencers?apply=1`); signed in, it
-// opens the sheet, or shows where the application stands.
+// (IN8). D6975 (#6975): it is the programme's presentation, drawn with the program
+// presentation kit (`pages/programs/kit.jsx`, boards PGF01 to PGF03): the name, the
+// purpose (#6993's sentence), "By application", Download PDF and Print; the availability
+// panel with where the visitor stands and the one Apply; then the five sections of
+// `pages/programs/content/influencer.js`. `/programs/influencer` resolves here.
+//
+// Two reads, as before. The tiers (GET /api/influencer/tiers, public) give the panel's earn
+// line and section 3's table; they are never typed, and a failed read shows no number. The
+// member's standing (GET /api/influencer/me, signed in) decides the panel and whether Apply is
+// offered. Signed out, Apply registers for the program and comes back to the sheet
+// (`/register?program=influencer&next=/influencers?apply=1`); signed in, it opens the sheet.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import SitePage from '../../components/site/SitePage';
-import { ButtonLink, FaqList, PageHero, Section, SectionHead } from '../../components/site/SiteBlocks';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuthSync';
 import { setSuppressAuthRedirect } from '../../lib/api';
 import { influencerProgramApi } from '../../lib/api/influencerProgram';
+import { ProgramPanel, ProgramPresentation } from '../programs/kit';
+import { programFor } from '../programs/registry';
+import CONTENT, { SIGN_IN_TO_APPLY } from '../programs/content/influencer.js';
 import ApplySheet, { ApplicationStatus } from './ApplySheet';
 import {
-  BONUS_MILESTONES, HERO_LINE, REGISTER_TO_APPLY, SECTION_PATH, STRATEGIC_NOTE, TIERS_UNREAD, hasStrategicTier, rateLine, standing, tierRows,
+  REGISTER_TO_APPLY, SECTION_PATH, STRATEGIC_NOTE, TIERS_UNREAD, hasStrategicTier, rateLine, standing, tierRows,
 } from './influencerPublicModel';
 
-const FAQ = [
-  { q: 'When am I paid?', a: 'Monthly, once your payable balance reaches the payout minimum in your terms. Commission is held 30 days in case of a refund.' },
-  { q: 'What if someone cancels?', a: 'You stop earning on that member. A refund reverses the line it refunds.' },
-  { q: 'Can I promote a startup on Axal?', a: 'No. You promote Axal memberships, which are software.' },
-];
+const SIGNED_IN_APPLY = '/influencers?apply=1';
 
 function useRead(load, on = true) {
   const [read, setRead] = useState({ status: on ? 'loading' : 'off', data: null });
@@ -36,9 +39,95 @@ function useRead(load, on = true) {
   return [read, () => setTick((t) => t + 1)];
 }
 
+/** Section 3's tier table from the read (PGF01, PGF02F): every value the read's, a failed read no number. */
+export function tierBlocks(tiers) {
+  if (tiers.status === 'error') {
+    return [{ type: 'card', title: 'What each tier earns · ⊘ Unavailable', text: `${TIERS_UNREAD} No rate or period is shown until the read succeeds.` }];
+  }
+  if (tiers.status !== 'ready') return [{ type: 'card', title: 'What each tier earns', text: 'Reading the tiers…' }];
+  const list = Array.isArray(tiers.data?.tiers) ? tiers.data.tiers : [];
+  return [
+    { type: 'card', title: 'What each tier earns · read live', block: { type: 'terms', items: tierRows(list).map((t) => [t.label, `${t.rate} · ${t.duration} · ${t.who}`]) } },
+    { type: 'aside', label: 'HQ sets the rates.', text: `Signed terms keep their own until they are replaced.${hasStrategicTier(list) ? ` ${STRATEGIC_NOTE}` : ''}` },
+  ];
+}
+
+/**
+ * The page's content for where the visitor stands: section 3 carries the live tier table, and
+ * Next step offers Apply only to someone who may apply (signed out, or signed in with nothing
+ * open), never beside an open application or a membership. Pure, for the tests.
+ */
+export function contentFor({ signedIn, state, tiers }) {
+  const sections = CONTENT.sections.map((s) => (s.blocks.some((b) => b.live === 'tiers')
+    ? { ...s, blocks: s.blocks.flatMap((b) => (b.live === 'tiers' ? tierBlocks(tiers) : [b])) }
+    : s));
+  const canApply = !signedIn || state?.kind === 'none';
+  const actions = CONTENT.next.actions
+    .filter((a) => a.id !== 'apply' || canApply)
+    .map((a) => (a.id === 'apply' && signedIn ? { ...a, to: SIGNED_IN_APPLY, note: 'The application opens here: three short steps.' } : a));
+  return { ...CONTENT, sections, next: { ...CONTENT.next, actions } };
+}
+
+/** PGF02A to PGF02F: the availability panel for where the visitor stands, with the one Apply. */
+export function InfluencerPanel({ program, signedIn, me, state, tiers, onApply, onAddDetails }) {
+  const earn = rateLine(tiers);
+  let body;
+  let action = null;
+  if (signedIn && me.status === 'error') {
+    body = <p className="pgs-coh-msg" data-testid="influencers-me-unread">Your application could not be read just now. That is not the same as having none.</p>;
+  } else if (state && ['review', 'more', 'declined'].includes(state.kind)) {
+    body = <div className="pgs-coh"><div className="pgs-coh-k">Your application</div><ApplicationStatus state={state} onAddDetails={onAddDetails} /></div>;
+  } else if (state?.kind === 'admitted') {
+    body = (
+      <div className="pgs-coh" data-testid="influencers-membership">
+        <div className="pgs-coh-k">Your membership</div>
+        <dl>
+          <div className="pgs-coh-r"><dt>Tier</dt><dd>{state.tier}</dd></div>
+          <div className="pgs-coh-r"><dt>Handle</dt><dd>{state.handle ? `@${state.handle}` : '—'}</dd></div>
+        </dl>
+      </div>
+    );
+    action = <Link to={SECTION_PATH} className="ax-btn ax-btn-lg ax-btn-bright" data-testid="influencers-open-section">Open your Influencer section →</Link>;
+  } else {
+    body = (
+      <div className="pgs-coh" data-testid="influencers-how">
+        <div className="pgs-coh-k">How it works</div>
+        <dl>
+          <div className="pgs-coh-r"><dt>To join</dt><dd>Apply · three short steps</dd></div>
+          <div className="pgs-coh-r"><dt>Decided by</dt><dd>Axal HQ</dd></div>
+          <div className="pgs-coh-r"><dt>What earns</dt><dd>Qualifying software subscriptions</dd></div>
+          <div className="pgs-coh-r"><dt>For how long</dt><dd>The period your tier sets</dd></div>
+        </dl>
+      </div>
+    );
+    if (!signedIn) {
+      action = (
+        <>
+          <Link to={REGISTER_TO_APPLY} className="ax-btn ax-btn-lg ax-btn-bright" data-testid="influencers-apply">Apply</Link>
+          <p className="pgs-panel-fine">Already a member? <Link to={SIGN_IN_TO_APPLY} className="pgs-panel-link" data-testid="influencers-signin">Sign in</Link></p>
+        </>
+      );
+    } else if (state?.kind === 'none') {
+      action = <button type="button" className="ax-btn ax-btn-lg ax-btn-bright" onClick={onApply} data-testid="influencers-apply">Apply</button>;
+    }
+  }
+  return (
+    <ProgramPanel program={program} action={action}>
+      {body}
+      {earn && (!state || state.kind === 'none') ? (
+        <p className="pgs-coh-msg">
+          {tiers.status === 'error' ? <span aria-hidden="true">⊘ </span> : null}
+          <span data-testid="influencers-rate-line">{earn}</span>
+        </p>
+      ) : null}
+    </ProgramPanel>
+  );
+}
+
 export default function InfluencersPage() {
+  const program = programFor('influencer');
   const user = useAuth()?.user ?? null;
-  const { search } = useLocation();
+  const { search, key } = useLocation();
   const [tiers] = useRead(() => influencerProgramApi.tiers());
   const [me, reloadMe] = useRead(() => influencerProgramApi.me(), Boolean(user));
   const [open, setOpen] = useState(false);
@@ -47,100 +136,27 @@ export default function InfluencersPage() {
   useLayoutEffect(() => { setSuppressAuthRedirect(true); return () => setSuppressAuthRedirect(false); }, []);
 
   const state = me.status === 'ready' ? standing(me.data) : null;
-  // `?apply=1` (back from registering) opens the sheet once, when the member can apply.
-  const autoOpened = useRef(false);
+  // `?apply=1` (back from registering, or Next step's Apply signed in) opens the sheet once per
+  // visit to the address, when the member can apply.
+  const openedFor = useRef(null);
   useEffect(() => {
-    if (autoOpened.current || new URLSearchParams(search).get('apply') !== '1' || state?.kind !== 'none') return;
-    autoOpened.current = true;
+    if (openedFor.current === key || new URLSearchParams(search).get('apply') !== '1' || state?.kind !== 'none') return;
+    openedFor.current = key;
     setOpen(true);
-  }, [search, state?.kind]);
+  }, [search, key, state?.kind]);
 
-  const list = tiers.status === 'ready' ? tiers.data?.tiers || [] : [];
-  // D6993: one line from the tiers read, beside Apply and in "Earn"; a failed read shows no number.
-  const earnLine = rateLine(tiers);
-
-  let apply;
-  if (!user) apply = <ButtonLink to={REGISTER_TO_APPLY} data-testid="influencers-apply">Apply</ButtonLink>;
-  else if (state?.kind === 'admitted') apply = <ButtonLink to={SECTION_PATH} data-testid="influencers-open-section">Open your Influencer section</ButtonLink>;
-  else if (state?.kind === 'none') apply = <button type="button" className="ax-btn ax-btn-lg ax-btn-primary" onClick={() => setOpen(true)} data-testid="influencers-apply">Apply</button>;
-  else apply = null;
+  const panel = (
+    <InfluencerPanel program={program} signedIn={Boolean(user)} me={me} state={state} tiers={tiers}
+      onApply={() => setOpen(true)} onAddDetails={() => setOpen(true)} />
+  );
 
   return (
-    <SitePage title="Influencers" description={`Earn recurring revenue by bringing people to Axal VC. ${HERO_LINE}`}>
-      <PageHero eyebrow="Axal VC Influencers" title="Earn recurring revenue by bringing people to Axal VC." id="influencers-h"
-        copy={[HERO_LINE]}
-        actions={(
-          <>
-            {apply}
-            {earnLine ? <span className="ax-phero-copy" style={{ margin: 0, alignSelf: 'center' }} data-testid="influencers-rate-line">{earnLine}</span> : null}
-          </>
-        )} />
-
-      {user && me.status === 'ready' ? (
-        <Section narrow>
-          <ApplicationStatus state={state} onAddDetails={() => setOpen(true)} />
-        </Section>
-      ) : null}
-      {user && me.status === 'error' ? (
-        <Section narrow><p className="ax-empty" data-testid="influencers-me-unread">Your application could not be read just now. That is not the same as having none.</p></Section>
-      ) : null}
-
-      <Section id="how" labelledBy="how-h">
-        <SectionHead id="how-h" eyebrow="How it works" title="Apply, share, earn" />
-        <div className="ax-grid-3" data-testid="influencers-how">
-          <div className="ax-card"><h3>1 · Apply</h3><p>Tell us where you publish and who reads you. We reply within 5 business days.</p></div>
-          <div className="ax-card"><h3>2 · Share your handle</h3><p>axal.vc/@you, with channel links and an offer from HQ.</p></div>
-          <div className="ax-card"><h3>3 · Earn</h3><p data-testid="influencers-earn">{earnLine || 'Reading the tiers…'}</p></div>
-        </div>
-      </Section>
-
-      <Section id="tiers" labelledBy="tiers-h" band>
-        <SectionHead id="tiers-h" eyebrow="Tiers" title="What each tier earns" lede="HQ sets the rates. Signed terms keep their own until they are replaced." />
-        {tiers.status === 'loading' ? <p className="ax-empty" data-testid="influencers-tiers-loading">Reading the tiers…</p> : null}
-        {tiers.status === 'error' ? <p className="ax-empty" data-testid="influencers-tiers-unread">{TIERS_UNREAD}</p> : null}
-        {tiers.status === 'ready' ? (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="ax-table" style={{ width: '100%', minWidth: 560 }} data-testid="influencers-tiers">
-              <thead><tr><th scope="col">Tier</th><th scope="col">Rate</th><th scope="col">Duration</th><th scope="col">For</th></tr></thead>
-              <tbody>
-                {tierRows(list).map((t) => (
-                  <tr key={t.tier} data-testid={`influencers-tier-${t.tier}`}><td>{t.label}</td><td>{t.rate}</td><td>{t.duration}</td><td>{t.who}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-        {tiers.status === 'ready' && hasStrategicTier(list) ? <p className="ax-empty" data-testid="influencers-strategic-note">{STRATEGIC_NOTE}</p> : null}
-      </Section>
-
-      <Section>
-        <div className="ax-grid-2">
-          <div className="ax-card" data-testid="influencers-bonuses">
-            <h3>Bonuses</h3>
-            <p>{`A one-time bonus at ${BONUS_MILESTONES.slice(0, -1).join(', ')} and ${BONUS_MILESTONES[BONUS_MILESTONES.length - 1]} paid members. Your terms set each amount.`}</p>
-          </div>
-          <div className="ax-card"><h3>Benefits</h3><p>Investor Pro included, premium research, and private events with the team.</p></div>
-        </div>
-        <div className="ax-card" style={{ marginTop: 18 }} data-testid="influencers-rules">
-          <h3>Rules</h3>
-          <p>Label every post as a paid partnership. Never promote a deal, a fund or investment returns. No sign-ups through your own handle.</p>
-        </div>
-      </Section>
-
-      <Section id="faq" labelledBy="faq-h">
-        <SectionHead id="faq-h" eyebrow="Questions" title="Before you apply" />
-        <FaqList items={FAQ} />
-      </Section>
-
-      <Section narrow>
-        <p className="ax-lede">Have an audience? Apply in about 5 minutes.</p>
-        {apply}
-      </Section>
-
+    <>
+      <ProgramPresentation program={program} content={contentFor({ signedIn: Boolean(user), state, tiers })} panel={panel} testId="influencers-presentation" />
       {open && me.status === 'ready' ? (
         <ApplySheet consentVersion={me.data?.consent_version || null} answers={state?.kind === 'more' ? state.answers : null}
           onClose={() => setOpen(false)} onSent={() => { setOpen(false); reloadMe(); }} />
       ) : null}
-    </SitePage>
+    </>
   );
 }
