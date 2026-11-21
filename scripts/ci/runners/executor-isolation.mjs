@@ -23,7 +23,26 @@ export function linuxExecutorDependencies({ policyPath = LINUX_POLICY_PATH, read
   return { job, admissionIsolation, executionIsolation: containerIsolationAdapter(job) };
 }
 
-/** Only linux-x64 has an isolation implementation. Mac stays off and hosted/github-8 keep refusing until separately reviewed. */
+/**
+ * Coordinator-owned hosted children (`hosted`, `github-8`) use S30's accepted hosted-verification port (#8007).
+ * Trusted readers are composed here only, never from inputs or the environment. None exists yet: provenance needs
+ * a target-job OIDC token that candidate processes cannot reach, the boundary needs a real credential-denying
+ * execution boundary, and included eligibility comes from the authority's receipt (s39). Until then every
+ * hosted admission refuses, and there is no hosted execution job, so run mode refuses too.
+ */
+export function hostedReaders() { return {}; }
+export function hostedExecutorDependencies({ loadVerification = () => import('./hosted-verification.mjs'), readers = hostedReaders } = {}) {
+  return {
+    admissionIsolation: async args => {
+      try { const { createHostedVerification } = await loadVerification(); return await createHostedVerification(readers()).verifyIsolation(args) === true; }
+      catch { return false; }
+    },
+  };
+}
+
+/** linux-x64: the container. hosted/github-8: S30's verification port, still without readers. Mac stays off. */
 export function isolationFor(profileId, options) {
-  return profileId === 'linux-x64' ? linuxExecutorDependencies(options) : null;
+  if (profileId === 'linux-x64') return linuxExecutorDependencies(options);
+  if (profileId === 'hosted' || profileId === 'github-8') return hostedExecutorDependencies(options);
+  return null;
 }
