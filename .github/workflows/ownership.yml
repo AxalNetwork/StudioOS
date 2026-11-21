@@ -43,6 +43,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      # D5612: every job that runs `node --test` builds the generated modules first.
+      - name: Build the generated modules
+        working-directory: candidate
+        run: node scripts/build-generated.mjs
       - name: Test the ownership parser
         working-directory: candidate
         run: node --test scripts/ci/ownership-check.test.mjs
