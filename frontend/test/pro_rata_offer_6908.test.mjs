@@ -143,7 +143,7 @@ test('the round manager’s Pro-rata panel records the offer and the respond-by 
   assert.match(src, /import \{ offerInputValue, offerPatch, respondByPatch \} from '\.\.\/portfolio\/proRataOfferModel'/);
   assert.match(src, /data-testid=\{`pro-rata-offer-\$\{h\.uid\}`\}/);
   assert.match(src, /data-testid=\{`pro-rata-respond-by-\$\{h\.uid\}`\}/);
-  assert.match(src, /const b = offerPatch\(e\.target\.value, h\.offer_cents\);/);
+  assert.match(src, /const b = offerPatch\(e\.target\.value, h\.offer_cents, h\.currency\);/);
   assert.match(src, /const b = respondByPatch\(e\.target\.value, h\.respond_by\);/);
   // The Worker fields these send are the ones PUT /api/contacts/raise-pro-rata/:id reads.
   const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/contacts.ts', import.meta.url), 'utf8');

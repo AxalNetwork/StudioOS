@@ -7,6 +7,7 @@
  * Nothing is computed: an offer is what the founder recorded, never a share of the ownership.
  */
 import { day } from './portfolioModel';
+import { formatMinor, toMajorString } from '../../lib/money';
 
 export const OFFER_NOT_RECORDED = 'Offer not recorded';
 export const NO_LIVE_ROUND = 'No live round';
@@ -19,11 +20,9 @@ export const PRO_RATA_SHAPE = (v) => !!v && typeof v === 'object' && 'live_round
 /** Cents in the offer's currency, whole units unless cents are recorded: 31000000, 'USD' → $310,000. */
 export function offerMoney(cents, currency) {
   const n = Number(cents);
-  if (cents === null || cents === undefined || cents === '' || !Number.isFinite(n) || n <= 0) return null;
+  if (cents === null || cents === undefined || cents === '' || !Number.isSafeInteger(n) || n <= 0) return null;
   const code = /^[A-Z]{3}$/.test(String(currency || '')) ? String(currency) : 'USD';
-  const units = n / 100;
-  const fraction = n % 100 !== 0;
-  return units.toLocaleString('en-US', { style: 'currency', currency: code, minimumFractionDigits: fraction ? 2 : 0, maximumFractionDigits: 2 });
+  return formatMinor(n, code, { locale: 'en-US', trimWhole: true });
 }
 
 /**
@@ -54,18 +53,19 @@ export function proRataAction(read) {
 // ── The founder's side: the offer to one holder and the day to answer by ────────────────────────────────────
 
 /** A holder's recorded offer as the input's value, in the round's units ('' when none). */
-export const offerInputValue = (cents) => {
+export const offerInputValue = (cents, currency = 'USD') => {
   const n = Number(cents);
-  return cents === null || cents === undefined || !Number.isFinite(n) || n <= 0 ? '' : String(n / 100);
+  if (cents === null || cents === undefined || !Number.isSafeInteger(n) || n <= 0) return '';
+  return (toMajorString(n, String(currency || 'USD').toUpperCase()) || '').replace(/\.0+$/, '');
 };
 
 /**
  * The PUT body for an edited offer, or null when nothing changed, or { problem } for a value the Worker refuses.
  * Blank clears the offer; anything else must be a positive amount.
  */
-export function offerPatch(raw, cents) {
+export function offerPatch(raw, cents, currency = 'USD') {
   const text = String(raw ?? '').trim();
-  if (text === offerInputValue(cents)) return null;
+  if (text === offerInputValue(cents, currency)) return null;
   if (text === '') return { offer_amount: null };
   const n = Number(text);
   if (!Number.isFinite(n) || n <= 0) return { problem: 'An offer is a positive amount, or blank for none.' };

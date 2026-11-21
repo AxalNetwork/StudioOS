@@ -351,10 +351,10 @@ export function ProRataPanel({ projectId, onError }) {
                   {/* D6908: what this holder is offered and the day to answer by. The investor reads exactly this
                       on Ownership & rights; nothing is derived from the entitlement. */}
                   <td className="px-3 py-2.5 text-right">
-                    <input type="number" min="0" step="1000" defaultValue={offerInputValue(h.offer_cents)}
+                    <input type="number" min="0" step="1000" defaultValue={offerInputValue(h.offer_cents, h.currency)}
                       aria-label={`Offer to ${h.holder_name}`} placeholder="Not recorded" data-testid={`pro-rata-offer-${h.uid}`}
                       onBlur={(e) => {
-                        const b = offerPatch(e.target.value, h.offer_cents);
+                        const b = offerPatch(e.target.value, h.offer_cents, h.currency);
                         if (b?.problem) onError?.(b.problem); else if (b) patch(h.id, b);
                       }}
                       className="w-28 px-2 py-1 text-xs text-right border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 tabular-nums" />
