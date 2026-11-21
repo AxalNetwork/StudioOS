@@ -47,6 +47,11 @@
       "channel": "#axalvc-actions-build-worker-contracts"
     },
     {
+      "id": null,
+      "path": ".github/workflows/capacity-planner.yml",
+      "channel": "#axalvc-actions-capacity-planner"
+    },
+    {
       "id": 389078766,
       "path": ".github/workflows/changelog-gate.yml",
       "channel": "#axalvc-actions-changelog-gate"
