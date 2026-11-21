@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { SHARE_BUTTON } from '../proofOfFundsModel';
 import { api } from '../../../lib/api';
 import { exportView } from '../../../lib/csvExport';
@@ -9,8 +9,11 @@ import { investorZoneActions } from '../../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../../workspaces/investorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, StatedLimit } from '../../advisor/expertise/kit';
+import { ICDecisionsList } from '../../ICDecisionsPage';
+import {ballotOf} from '../../icDecisionModel';
+export {ballotOf} from '../../icDecisionModel';
 import FromMercury from '../FromMercury';
 
 /**
@@ -90,17 +93,6 @@ export function openDecisionOf(room) {
  * row but not a vote cast, so it is counted apart. `eligible` is null:
  * no voting roster is stored.
  */
-export function ballotOf(decision) {
-  const votes = decision?.votes ?? [];
-  const recused = votes.filter((v) => v.vote === 'recused');
-  const cast = votes.filter((v) => v.vote !== 'recused');
-  return {
-    eligible: null,
-    voted: cast.length,
-    recused: recused.length,
-    rationales: cast.filter((v) => String(v.rationale || '').trim().length > 0).length,
-  };
-}
 
 /** What each stored vote value reads as. Recused and Abstain never share words. */
 export const VOTE_WORDS = {
@@ -287,7 +279,7 @@ export function DecisionCard({ decision }) {
         <div className="min-w-0">
           <Eyebrow>Decision</Eyebrow>
           <h2 className="mt-1 text-[18px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">
-            {decision.title || decision.uid}
+            <Link to={`/deals/commit/${encodeURIComponent(decision.uid)}`} className="hover:underline">{decision.title || decision.uid}</Link>
           </h2>
           <p className="mt-0.5 text-[11.5px] text-gray-600 dark:text-gray-400">
             Invest, pass or defer · {decision.status === 'draft' ? 'no vote cast yet' : 'voting'}
@@ -539,9 +531,6 @@ export function ShowProofLink({ dealId }) {
   );
 }
 
-/** The stage a decision is at, as the store spells it. */
-const STAGE_TONE = { draft: 'neutral', voting: 'info', decided: 'ok' };
-
 /** `GET /api/ic/conditions`' rows by uid: the owner's name and who recorded and resolved each. */
 function byUid(items) {
   const out = {};
@@ -554,7 +543,9 @@ export default function InvestorCommitZone() {
   const { user } = useAuth() || {};
   const [room, setRoom] = useState(null);
   const [more, setMore] = useState({});
-  const [view, setView] = useState('current');
+  const location = useLocation();
+  const [view, setView] = useState(() => new URLSearchParams(location.search).get('view') === 'decisions' ? 'decisions' : 'current');
+  useEffect(() => { if(new URLSearchParams(location.search).get('view') === 'decisions') setView('decisions'); }, [location.search]);
   const [closing, setClosing] = useState(null);
   const [closeError, setCloseError] = useState('');
   const [condForm, setCondForm] = useState(null);
@@ -934,37 +925,18 @@ export default function InvestorCommitZone() {
 
           {/* ══ EVERY DECISION ══ */}
           {view === 'decisions' && (
-            <Instrument
-              testid="commit-decisions"
-              title="All decisions"
-              meta="Newest first · scoped to the decisions this account may see"
-              cols="1.6fr .8fr 1.1fr .9fr .9fr"
-              head={['Decision', 'Stage', 'Tally', 'Rationales', 'Outcome']}
-              rows={decisionRows.map((r) => ({
-                key: r.uid,
-                cells: [
-                  {
-                    text: r.title || r.uid,
-                    sub: r.project_name || undefined,
-                    node: r.deal_id ? (
-                      <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <OpenDeal id={r.deal_id} onOpen={navigate} />
-                        {r.decision !== 'pass' ? <ShowProofLink dealId={r.deal_id} /> : null}
-                      </span>
-                    ) : undefined,
-                  },
-                  { text: '', pill: r.status, pillTone: STAGE_TONE[r.status] || 'neutral' },
-                  r.votes_cast
-                    ? { text: `${r.tally.yes} · ${r.tally.no} · ${r.tally.abstain}`, sub: r.tally.recused ? `yes · no · abstain · ${r.tally.recused} recused beside` : 'yes · no · abstain' }
-                    : { nr: true, sub: 'nobody has voted' },
-                  ballotOf(r).voted
-                    ? { text: `${ballotOf(r).rationales} of ${ballotOf(r).voted}` }
-                    : { nr: true },
-                  r.decision
-                    ? { text: '', pill: r.decision, pillTone: r.decision === 'invest' ? 'ok' : 'neutral', sub: day(r.decided_at) || undefined }
-                    : { nr: true, sub: 'not closed' },
-                ],
-              }))}
+            <ICDecisionsList
+              items={decisionRows}
+              onReload={load}
+              // D1424: a row that names its deal links its deal room and, unless
+              // the committee passed, the Commitment tab's proof door. Partners
+              // enter Commit only (D6154), so they get no link into a deal room.
+              dealLinks={(r) => (user?.role === 'partner' ? null : r.deal_id ? (
+                <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <OpenDeal id={r.deal_id} onOpen={navigate} />
+                  {r.decision !== 'pass' ? <ShowProofLink dealId={r.deal_id} /> : null}
+                </span>
+              ) : null)}
             />
           )}
 

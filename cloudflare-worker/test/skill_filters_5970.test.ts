@@ -202,7 +202,7 @@ test('D5970: the route refuses each bad filter with a 400 and its code, and stay
 test('D5970: an unfiltered read is the read it was: no `filters`, the whole catalogue, the campaign', async () => {
   const w = world();
   const r = await ok(w, '');
-  assert.deepEqual(Object.keys(r).sort(), ['coverage', 'next_page', 'pass_bar', 'published_evaluation', 'skills']);
+  assert.deepEqual(Object.keys(r).sort(), ['coverage', 'executions', 'next_page', 'pass_bar', 'published_evaluation', 'skills']);
   assert.deepEqual(r.coverage.by_scope, { hq: { draft: 1, published: 2, retired: 1, review_requested: 0 }, company: { draft: 0, published: 1, retired: 0, review_requested: 0 } });
   assert.deepEqual(r.coverage.adoption, { links: 1, agents: 1, pinned_behind_current: 1, published_without_links: 1 });
   assert.equal(typeof r.coverage.sources.library_files, 'number');

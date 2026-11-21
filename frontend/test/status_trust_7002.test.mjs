@@ -143,11 +143,12 @@ test('3: the interview notice row shows the notice page\'s own version and date'
   assert.deepEqual(notice, { version: 2, updated: '2026-10-22' });
   const row = documentTable({ terms: 'July 8, 2026', privacy: 'October 29, 2026', risk: 'March 31, 2026', interview: notice }).find((r) => r.name === 'Interview notice');
   assert.equal(row.version, 'Version 2');
-  assert.equal(row.updated, '2026-10-22');
+  assert.equal(row.updated, '22 Oct 2026', 'the notice date reads as a day word');
+  assert.equal(documentTable({ interview: { version: 2, updated: 'soon' } }).find((r) => r.name === 'Interview notice').updated, null, 'a date that is not a day is not shown');
   assert.deepEqual(currentInterviewNotice({ 1: { updated: 'not yet published' } }, 1), { version: 1, updated: null }, 'an unpublished notice has no date');
   const v = await mount(h(TrustCenter), '/trust/documents');
   try {
-    assert.match(v.text(), /Interview notice\s*Version 2\s*2026-10-22/);
+    assert.match(v.text(), /Interview notice\s*Version 2\s*22 Oct 2026/);
   } finally { await v.close(); }
 });
 

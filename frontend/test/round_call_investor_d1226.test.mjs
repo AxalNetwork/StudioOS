@@ -93,7 +93,9 @@ const checks = {
 for (const [name, check] of Object.entries(checks)) test('D1226 ' + name, () => check(actual));
 
 test('D1226 the investor Deals row lights on a round call', () => {
-  const src = readFileSync('frontend/src/sidebarConfig.js', 'utf8');
+  // The investor block only: D6154 gives partners a Commit-only Deals row.
+  const all = readFileSync('frontend/src/sidebarConfig.js', 'utf8');
+  const src = all.slice(all.indexOf('\n  investor: ['));
   assert.match(/label: 'Deals',\s*\n?\s*match: \[([^\]]*)\]/.exec(src)?.[1] || '', /'\/round-calls'/);
 });
 
