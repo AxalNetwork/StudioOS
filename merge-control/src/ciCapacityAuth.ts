@@ -1,6 +1,15 @@
 /** D7973: bounded GitHub OIDC authentication; caller JSON never supplies execution identity. */
 import type { CapacityIssuerKeys } from './lib/ciCapacityAuthPolicy.ts';
 export const CAPACITY_ISSUER = 'https://token.actions.githubusercontent.com';
+/** Workers supports manual redirects, not redirect:error. Refuse every redirect without following it. */
+export const capacityPlatformFetch: typeof fetch = async(input,init)=>{
+  const response=await fetch(input,{...init,redirect:'manual'});
+  if(response.redirected||(response.status>=300&&response.status<400)){
+    void response.body?.cancel().catch(()=>undefined);
+    throw new Error('capacity_redirect_refused');
+  }
+  return response;
+};
 export type CapacityIdentity = {
   repository: string; repository_id: string; run_id: string; run_attempt: string;
   event_name: string; ref: string; sha: string; workflow_ref: string; workflow_sha: string;
@@ -28,7 +37,7 @@ export async function boundedJson(response: Response, max = 512 * 1024): Promise
   return JSON.parse(new TextDecoder().decode(await capacityBody(response.body,max)));
 }
 export async function authenticateCapacity(request: Request, audience: string, repository: string,
-  fetcher: typeof fetch = fetch, now: number|(()=>number) = Date.now, keyProvider?: Pick<CapacityIssuerKeys, 'get'>): Promise<CapacityIdentity> {
+  fetcher: typeof fetch = capacityPlatformFetch, now: number|(()=>number) = Date.now, keyProvider?: Pick<CapacityIssuerKeys, 'get'>): Promise<CapacityIdentity> {
   if (!audience || audience.length > 200) throw new Error('capacity_audience_unconfigured');
   const token = capacityBearer(request);
   const parts = token.split('.');

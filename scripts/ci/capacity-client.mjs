@@ -39,10 +39,13 @@ function transport({url,audience,oidcToken,fetcher=globalThis.fetch},receiptCont
   flight={scope,promise};
   try{return await promise;}finally{if(flight?.promise===promise)flight=null;}
  }
- return async(path,body,signal,scope)=>{
+ return async(path,body,signal,scope,validate)=>{
   const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000);
   const token=receiptContinuation?await receiptToken(scope,deadline):await oidcToken(audience,deadline);
-  try{return await json(await fetcher(new URL(path,endpoint),{method:'POST',redirect:'error',signal:deadline,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)}));}
+  try{
+   const result=await json(await fetcher(new URL(path,endpoint),{method:'POST',redirect:'error',signal:deadline,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)}));
+   return validate?validate(result):result;
+  }
   catch(error){cached=null;throw error;}
  };
 }
@@ -51,10 +54,11 @@ export function createReceiptReader(options){
  return async({request,context,phase,signal})=>{
   if(context.repository!==REPOSITORY)throw new Error('capacity_repository_refused');
   const scope=JSON.stringify([context.repository,context.childRunId,context.childAttempt,context.executorSha]);
-  const result=await send('/capacity/receipt',{requestId:request.requestId,shard:request.shard,generation:Number(request.generation),profile:request.profile,phase},signal,scope);
-  const receipt=result.receipt;
-  if(result.active!==true||!receipt||receipt.repository!==context.repository||String(receipt.childRunId)!==String(context.childRunId)||String(receipt.childAttempt)!==String(context.childAttempt)||receipt.executorSha!==context.executorSha||receipt.requestId!==request.requestId||receipt.generation!==Number(request.generation)||receipt.logicalShard!==request.shard||receipt.profile!==request.profile)throw new Error('capacity_receipt_refused');
-  return result;
+  return send('/capacity/receipt',{requestId:request.requestId,shard:request.shard,generation:Number(request.generation),profile:request.profile,phase},signal,scope,result=>{
+   const receipt=result?.receipt;
+   if(result?.active!==true||!receipt||receipt.repository!==context.repository||String(receipt.childRunId)!==String(context.childRunId)||String(receipt.childAttempt)!==String(context.childAttempt)||receipt.executorSha!==context.executorSha||receipt.requestId!==request.requestId||receipt.generation!==Number(request.generation)||receipt.logicalShard!==request.shard||receipt.profile!==request.profile)throw new Error('capacity_receipt_refused');
+   return result;
+  });
  };
 }
 /** Disabled by default. Submission returns immediately; existing hosted execution stays the caller's default. */

@@ -1,7 +1,7 @@
 /** D7973: unbound inactive capacity Durable Object entrypoint; deployment/permissions remain #7909. */
 import { DurableObject } from 'cloudflare:workers';
 import { CiCapacity, SqlCapacityStore } from './ciCapacity.ts';
-import { authenticateCapacity, capacityBearer, capacityBody } from './ciCapacityAuth.ts';
+import { authenticateCapacity, capacityBearer, capacityBody, capacityPlatformFetch } from './ciCapacityAuth.ts';
 import { capacityGithubClient, GithubCapacityPorts } from './ciCapacityGithub.ts';
 import type { CapacityConfig } from './ciCapacityGithub.ts';
 import { CapacityOutbox } from './ciCapacityOutbox.ts';
@@ -27,7 +27,9 @@ export class SqlCapacityBudgetStore implements CapacityBudgetStore {
   async update(decide: Parameters<CapacityBudgetStore['update']>[0]): Promise<boolean> {
     return this.storage.transactionSync(() => {
       const row = this.storage.sql.exec<{state:string}>('SELECT state FROM capacity_auth_budget WHERE id = 1').toArray()[0];
-      const next = decide(row ? JSON.parse(row.state) as CapacityBudgetWindow : null);
+      const decoded:unknown=row?JSON.parse(row.state):null;
+      if(row&&(!decoded||typeof decoded!=='object'||Array.isArray(decoded)))throw new Error('capacity_budget_state_invalid');
+      const next = decide(decoded as CapacityBudgetWindow|null);
       this.storage.sql.exec('INSERT INTO capacity_auth_budget (id,state) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET state = excluded.state', JSON.stringify(next.state));
       return next.accepted;
     });
@@ -40,7 +42,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
   private budget: CapacityRequestBudget;
   constructor(ctx: DurableObjectState, env: CapacityEnv) {
     super(ctx,env); this.store=new SqlCapacityStore(ctx.storage);
-    this.keys = new CapacityIssuerKeys((input,init)=>fetch(input,init));
+    this.keys = new CapacityIssuerKeys(capacityPlatformFetch);
     this.budget = new CapacityRequestBudget(new SqlCapacityBudgetStore(ctx.storage));
   }
   private ordered<T>(fn:()=>Promise<T>):Promise<T>{const result=this.serial.then(fn);this.serial=result.catch(()=>undefined);return result;}
@@ -51,7 +53,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     return settings;
   }
   private async components() {
-    const config=this.settings(), api=await capacityGithubClient(this.env),ports=new GithubCapacityPorts(api,config);
+    const config=this.settings(), api=await capacityGithubClient(this.env,capacityPlatformFetch),ports=new GithubCapacityPorts(api,config);
     const parent=ports.parent.bind(ports),dispatch=ports.dispatch.bind(ports);
     ports.parent=async input=>await this.enabled()?parent(input):false;
     ports.dispatch=async attempt=>{if(!await this.enabled())throw new Error('capacity_disabled');return dispatch(attempt);};
@@ -82,7 +84,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
       const result=await this.budget.run(
         async()=>{
           if(!await this.enabled())throw new Error('capacity_disabled');
-          return authenticateCapacity(request,this.env.CAPACITY_AUDIENCE??'',this.env.REPOSITORY,fetch,Date.now,this.keys);
+          return authenticateCapacity(request,this.env.CAPACITY_AUDIENCE??'',this.env.REPOSITORY,capacityPlatformFetch,Date.now,this.keys);
         },
         identity=>{
           const lane=capacityIdentityLane(identity,config);
@@ -112,7 +114,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
     await this.ctx.storage.setAlarm(Date.now()+15000);
     if(this.store.count()===0){await this.ctx.storage.deleteAlarm();return;}
     const {capacity,config}=await this.components();
-    const outbox=new CapacityOutbox(this.ctx.storage,await capacityGithubClient(this.env),config);
+    const outbox=new CapacityOutbox(this.ctx.storage,await capacityGithubClient(this.env,capacityPlatformFetch),config);
     const next=await capacity.tick();
     const publication=await outbox.publish(this.store,id=>capacity.status(id),config.publication);
     if(next===null&&!publication)await this.ctx.storage.deleteAlarm();

@@ -6,7 +6,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import '../../merge-control/test/runtime-loader.mjs';
 const { CapacityControl, SqlCapacityBudgetStore } = await import('../../merge-control/src/ciCapacityRuntime.ts');
 import { CapacityTransport } from '../../merge-control/src/ciCapacityTransport.ts';
-import { authenticateCapacity, CAPACITY_ISSUER } from '../../merge-control/src/ciCapacityAuth.ts';
+import { authenticateCapacity, capacityPlatformFetch, CAPACITY_ISSUER } from '../../merge-control/src/ciCapacityAuth.ts';
 import { CapacityRequestBudget, CAPACITY_AUTH_LIMITS as L } from '../../merge-control/src/lib/ciCapacityAuthPolicy.ts';
 import { createReceiptReader } from '../../scripts/ci/capacity-client.mjs';
 
@@ -37,12 +37,12 @@ function fixture(t){
     transactionSync(fn){db.exec('BEGIN');try{const out=fn();db.exec('COMMIT');return out;}catch(error){db.exec('ROLLBACK');throw error;}},
     get:async key=>kv.get(key),put:async(key,value)=>{kv.set(key,value);},setAlarm:async()=>{},deleteAlarm:async()=>{}};
   const env={REPOSITORY:REPO,CAPACITY_ENABLED:'true',CAPACITY_OWNER_TOKEN:'fixture-owner',CAPACITY_AUDIENCE:'fixture-capacity',CAPACITY_CONFIG:JSON.stringify(config)};
-  let keyReads=0,verifications=0,work=0,owned=true,provider=async()=>Response.json({keys:[jwk]});
+  let keyReads=0,verifications=0,work=0,owned=true,lastRedirect,provider=async()=>Response.json({keys:[jwk]});
   const verify=crypto.subtle.verify.bind(crypto.subtle);
   t.mock.method(crypto.subtle,'verify',async(...args)=>{verifications++;return verify(...args);});
   t.mock.method(globalThis,'fetch',async(input,init)=>{
     assert.equal(String(input),`${CAPACITY_ISSUER}/.well-known/jwks`,'no live provider/API request');
-    assert.equal(init.redirect,'error');keyReads++;return provider(input,init);
+    lastRedirect=init.redirect;keyReads++;return provider(input,init);
   });
   let control;
   const restart=()=>{
@@ -64,13 +64,14 @@ function fixture(t){
     return {read:()=>read(input),acquisitions:()=>acquisitions};
   };
   return {db,storage,env,kv,send,reader,restart,control:()=>control,provider:value=>{provider=value;},owned:value=>{owned=value;},
-    counts:()=>({keyReads,verifications,work}),window:()=>JSON.parse(db.prepare('SELECT state FROM capacity_auth_budget WHERE id=1').get().state)};
+    counts:()=>({keyReads,verifications,work}),redirect:()=>lastRedirect,window:()=>JSON.parse(db.prepare('SELECT state FROM capacity_auth_budget WHERE id=1').get().state)};
 }
 
 test('per-authority keys cache material while every real signature and claim is checked',async t=>{
   const f=fixture(t);
   assert.equal((await f.send()).status,200);assert.equal((await f.send()).status,200);
   assert.deepEqual(f.counts(),{keyReads:1,verifications:2,work:2});
+  assert.equal(f.redirect(),'manual');
   for(const patch of [{aud:'other'},{repository_id:'8'},{run_attempt:'2'},{sha:'a'.repeat(40)},
     {workflow_sha:'a'.repeat(40)},{workflow_ref:`${REPO}/.github/workflows/runner-executor.yml@refs/heads/other`},
     {exp:Math.floor(Date.now()/1000)},{iss:'https://other.invalid'}])assert.equal((await f.send(token(claims(patch)))).status,403);
@@ -189,4 +190,45 @@ test('replacement CapacityControl instances retain the durable ordinary admissio
   const f=fixture(t);for(let n=0;n<L.authPerWindow;n++)await f.send('invalid.jwt.value');
   f.restart();assert.equal((await f.send()).status,429);
   assert.equal(f.window().authUsed,L.authPerWindow);assert.deepEqual(f.counts(),{keyReads:0,verifications:0,work:0});
+});
+
+test('same-context receipt validation failures discard the bearer before the next read',async t=>{
+  t.mock.timers.enable({apis:['Date'],now:NOW});
+  const receipt={repository:REPO,childRunId:100,childAttempt:1,executorSha:EXEC,requestId:body.requestId,logicalShard:body.shard,generation:1,profile:body.profile};
+  const input={request:{...body,generation:'1'},context:{repository:REPO,childRunId:100,childAttempt:1,executorSha:EXEC},phase:'execute'};
+  for(const bad of [null,{}, {active:false,receipt:null},{active:true,receipt:{...receipt,childRunId:999}},
+    {active:true,receipt:{...receipt,generation:2}},{active:true,receipt:{...receipt,profile:'macos-arm64'}}]){
+    let acquisitions=0,reads=0;
+    const read=createReceiptReader({url:'https://capacity.invalid',audience:'fixture-capacity',
+      oidcToken:async()=>token(claims({jti:String(++acquisitions)})),
+      fetcher:async()=>Response.json(++reads===2?bad:{active:true,receipt})});
+    assert.equal((await read(input)).active,true);await assert.rejects(read(input),/capacity_receipt_refused/);
+    assert.equal((await read(input)).active,true);assert.equal(acquisitions,2,'validation failure clears the same-context bearer');
+  }
+});
+
+test('the Workers fetch adapter uses manual redirects and refuses redirects without a second request',async t=>{
+  let calls=0,cancelled=false,redirect;
+  t.mock.method(globalThis,'fetch',async(_url,init)=>{
+    calls++;redirect=init.redirect;return new Response(new ReadableStream({cancel(){cancelled=true;}}),{status:302,headers:{location:'https://other.invalid'}});
+  });
+  await assert.rejects(capacityPlatformFetch(`${CAPACITY_ISSUER}/.well-known/jwks`,{redirect:'error'}),/capacity_redirect_refused/);
+  assert.equal(redirect,'manual');assert.equal(calls,1);assert.equal(cancelled,true);
+  t.mock.method(globalThis,'fetch',async()=>{
+    const result=Response.json({keys:[jwk]});Object.defineProperty(result,'redirected',{value:true});return result;
+  });
+  await assert.rejects(capacityPlatformFetch(`${CAPACITY_ISSUER}/.well-known/jwks`),/capacity_redirect_refused/);
+});
+
+test('an existing malformed SQLite budget cell cannot become the absent-row sentinel',async t=>{
+  const f=fixture(t),store=new SqlCapacityBudgetStore(f.storage);let verified=0,worked=0,decided=0;
+  for(const raw of ['null','false','0','""','[]','true']){
+    f.db.prepare('INSERT INTO capacity_auth_budget (id,state) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state').run(raw);
+    await assert.rejects(store.update(()=>{decided++;throw Error('malformed rows must not reach decide');}),/capacity_budget_state_invalid/);
+    await assert.rejects(new CapacityRequestBudget(store).run(async()=>{verified++;return {repository_id:'7',run_id:'100',run_attempt:'1'};},()=> 'receipt',async()=>{worked++;}),/capacity_budget_state_invalid/);
+    assert.equal(f.db.prepare('SELECT state FROM capacity_auth_budget WHERE id=1').get().state,raw,'corrupt persisted evidence is retained');
+  }
+  assert.equal(decided,0);assert.equal(verified,0);assert.equal(worked,0);
+  f.db.prepare('DELETE FROM capacity_auth_budget').run();
+  assert.equal(await new CapacityRequestBudget(store).run(async()=>({repository_id:'7',run_id:'100',run_attempt:'1'}),()=> 'receipt',async()=>true),true);
 });
