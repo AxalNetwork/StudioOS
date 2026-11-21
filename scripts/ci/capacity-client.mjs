@@ -55,10 +55,10 @@ export function createReceiptReader(options){
  const send=transport(options,true);
  return async({request,context,phase,signal})=>{
   if(context.repository!==REPOSITORY)throw new Error('capacity_repository_refused');
-  const scope=JSON.stringify([context.repository,context.childRunId,context.childAttempt,context.executorSha]);
+  const scope=JSON.stringify([context.repository,context.childRunId,context.childAttempt,context.executorSha,context.childWorkflowSha]);
   return send('/capacity/receipt',{requestId:request.requestId,shard:request.shard,generation:Number(request.generation),profile:request.profile,phase},signal,scope,result=>{
    const receipt=result?.receipt;
-   if(result?.active!==true||!receipt||receipt.repository!==context.repository||String(receipt.childRunId)!==String(context.childRunId)||String(receipt.childAttempt)!==String(context.childAttempt)||receipt.executorSha!==context.executorSha||receipt.requestId!==request.requestId||receipt.generation!==Number(request.generation)||receipt.logicalShard!==request.shard||receipt.profile!==request.profile)throw new Error('capacity_receipt_refused');
+   if(result?.active!==true||!receipt||receipt.repository!==context.repository||String(receipt.childRunId)!==String(context.childRunId)||String(receipt.childAttempt)!==String(context.childAttempt)||receipt.executorSha!==context.executorSha||(context.childWorkflowSha!==undefined&&(receipt.childWorkflowSha??receipt.executorSha)!==context.childWorkflowSha)||receipt.requestId!==request.requestId||receipt.generation!==Number(request.generation)||receipt.logicalShard!==request.shard||receipt.profile!==request.profile)throw new Error('capacity_receipt_refused');
    return result;
   });
  };

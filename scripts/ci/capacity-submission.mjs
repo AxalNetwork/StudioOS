@@ -13,7 +13,7 @@ export async function capacitySubmission(env=process.env,api){
  // The first pilot is main-push only. Queue/PR CI keeps its existing runner-free planning contract.
  if(env.GITHUB_REPOSITORY!==REPOSITORY||env.GITHUB_EVENT_NAME!=='push'||env.GITHUB_REF!=='refs/heads/main'
   ||!positive(env.GITHUB_RUN_ID)||!positive(env.GITHUB_RUN_ATTEMPT)||!positive(env.CAPACITY_PLAN_ARTIFACT_ID)
-  ||!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??'')||!/^[a-f0-9]{40}$/.test(env.CI_CAPACITY_EXECUTOR_SHA??''))throw Error('capacity_submission_context');
+  ||!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??'')||!/^[a-f0-9]{40}$/.test(env.CI_CAPACITY_EXECUTOR_SHA??'')||(env.CI_CAPACITY_CHILD_WORKFLOW_SHA!==undefined&&!/^[a-f0-9]{40}$/.test(env.CI_CAPACITY_CHILD_WORKFLOW_SHA)))throw Error('capacity_submission_context');
  const path=`/repos/${REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
  const read=api??(async()=>{
   if(typeof env.GH_TOKEN!=='string'||!env.GH_TOKEN)throw Error('capacity_submission_token');
@@ -30,7 +30,7 @@ export async function capacitySubmission(env=process.env,api){
  bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
  const hex=bytes.toString('hex'),requestId=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
  const submission={version:1,requestId,repository:REPOSITORY,parentRunId:run.id,parentAttempt:run.run_attempt,parentWorkflowId:run.workflow_id,
-  event:'push',sourceSha:env.GITHUB_SHA,queueBaseSha:null,executorSha:env.CI_CAPACITY_EXECUTOR_SHA,
+  event:'push',sourceSha:env.GITHUB_SHA,queueBaseSha:null,executorSha:env.CI_CAPACITY_EXECUTOR_SHA,...(env.CI_CAPACITY_CHILD_WORKFLOW_SHA?{childWorkflowSha:env.CI_CAPACITY_CHILD_WORKFLOW_SHA}:{}),
   planDigest:'sha256:'+createHash('sha256').update(plan).digest('hex'),planArtifactId:Number(env.CAPACITY_PLAN_ARTIFACT_ID),
   shards:Array.from({length:6},(_,i)=>`worker-${i+1}-of-6`),prerequisites:[...PILOT_PREREQUISITES]};
  if(env.GITHUB_OUTPUT)appendFileSync(env.GITHUB_OUTPUT,`capacity_submission=${JSON.stringify(submission)}\n`);

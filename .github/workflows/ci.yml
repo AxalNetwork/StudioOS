@@ -214,6 +214,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CI_CAPACITY_ENABLED: ${{ vars.CI_CAPACITY_ENABLED }}
           CI_CAPACITY_EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CI_CAPACITY_CHILD_WORKFLOW_SHA: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
           CAPACITY_PLAN_ARTIFACT_ID: ${{ steps.plan_artifact.outputs['artifact-id'] }}
           CAPACITY_PLAN_FILE: ${{ github.workspace }}/suite-plan.json
         run: node scripts/ci/capacity-submission.mjs
@@ -232,6 +233,7 @@ jobs:
     with:
       submission: ${{ needs.plan.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+      child_workflow_sha: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
 
   suite:
     name: suite (${{ matrix.part }})

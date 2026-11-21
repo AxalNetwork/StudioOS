@@ -352,3 +352,36 @@ for(const stop of ['owner-switch','environment'])test(`D7909 ${stop} revokes exe
  assert.equal(f.checks[0].conclusion,'cancelled');assert.equal(store.get(a.requestId).parentLive,false);
  assert.equal(f.calls.filter(row=>row.method==='POST'&&row.path.endsWith('/dispatches')).length,6);
 });
+
+test('D7909 independent control and child-workflow pins bind dispatch, receipt and result without a main-race exception',async t=>{
+ const f=fixture(t,{callbackResults:true}),child='c'.repeat(40);let main=child;
+ f.env.CAPACITY_CONFIG=JSON.stringify({...config,childWorkflowSha:child});f.restart();
+ t.mock.method(globalThis,'fetch',async(input,init)=>{
+  const r=await f.fetcher(input,init),url=new URL(input);
+  if(url.pathname.endsWith('/git/ref/heads/main'))return Response.json({ref:'refs/heads/main',object:{type:'commit',sha:main}});
+  if(url.pathname.includes('/compare/'))return Response.json({status:'ahead',base_commit:{sha:EXEC},merge_base_commit:{sha:EXEC}});
+  if(url.pathname.endsWith('/dispatches')&&init?.method==='POST')for(const run of f.children.values())run.head_sha=child;
+  return r;
+ });
+ await unlock(f);const s={...submission(),childWorkflowSha:child};await submitCapacity(s,{...options(f.clientFetch),enabled:true,plan});await f.tick();await f.tick();
+ const request={requestId:s.requestId,shard:'worker-1-of-6',generation:1,profile:'hosted'},context={repository:REPO,executorSha:EXEC,childWorkflowSha:child,childRunId:100,childAttempt:1};
+ await assert.rejects(createReceiptReader(options(f.clientFetch,100))({request,context}),/unavailable/);
+ const proof={...claims(100),sha:child,workflow_sha:child,check_run_id:'1100',runner_environment:'github-hosted'};
+ const opts={...options(f.clientFetch),oidcToken:async()=>token(proof)},receipt=(await createReceiptReader(opts)({request,context})).receipt;
+ assert.equal(receipt.executorSha,EXEC);assert.equal(receipt.childWorkflowSha,child);
+ await assert.rejects(reportExecutionResult({...receipt,childWorkflowSha:EXEC},{testStep:'success',executionOutcome:'completed',cleanupConfirmed:true,exportComplete:true},opts),/unavailable/);
+ assert.equal((await reportExecutionResult(receipt,{testStep:'success',executionOutcome:'completed',cleanupConfirmed:true,exportComplete:true},opts)).accepted,true);
+ main='d'.repeat(40);
+ const {GithubCapacityPorts}=await import('../../merge-control/src/ciCapacityGithub.ts'),api=async(method,path,body)=>path.endsWith('/git/ref/heads/main')?{object:{sha:main}}:f.api(method,path,body);
+ const ports=new GithubCapacityPorts(api,{...config,childWorkflowSha:child});await assert.rejects(ports.dispatch({...receipt,childRunId:null}),/main_moved/);
+});
+
+test('D7909 group 5 is the catalogued dispatch supervisor pool, never an implicit trusted/untrusted alias',async t=>{
+ const f=fixture(t),{GithubCapacityPorts}=await import('../../merge-control/src/ciCapacityGithub.ts'),{resolveCatalogProfile}=await import('../../scripts/ci/runners/catalog.mjs');
+ const profile=resolveCatalogProfile('linux-x64');assert.equal(profile.approvedGroupId,config.approvedGroupId);assert.equal(profile.target.group,'StudioOS Worker Pool');
+ for(const name of ['trusted','untrusted']){
+  const inventory=async(method,path,body)=>{const row=await f.api(method,path,body);if(path.endsWith('/runner-groups/5'))row.name=name;return row;};
+  await assert.rejects(new GithubCapacityPorts(f.api,config,Date.now,undefined,inventory).inventory(),/group_unapproved/);
+ }
+ const workflow=readFileSync('.github/workflows/runner-executor.yml','utf8');assert.ok(workflow.includes('"group":"'+profile.target.group+'"'));assert.ok(workflow.includes("github.event_name == 'workflow_dispatch'"));
+});

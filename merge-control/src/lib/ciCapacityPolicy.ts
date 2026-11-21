@@ -20,6 +20,9 @@ export const CI_CAPACITY_BUDGETS = Object.freeze({
 });
 /** D8009: existing #7972 hosted job limit; never issue a longer lease even for immediate pickup. */
 export const HOSTED_JOB_CEILING_MS = 45 * 60_000;
+/** D7909: leave the existing 26-minute Linux Run step a bounded 20-second delivery allowance. */
+export const EXTERNAL_RUN_CEILING_MS = 26 * 60_000;
+export const RESULT_DELIVERY_RESERVE_MS = 20_000;
 export type CapacityBudgets = { [K in keyof typeof CI_CAPACITY_BUDGETS]: number };
 export type CapacityPolicy = {
   version: typeof CI_CAPACITY_VERSION;
@@ -43,6 +46,8 @@ export type CiSubmission = {
   queueBaseSha: string | null;
   event: CiEvent;
   executorSha: string;
+  /** Approved main workflow revision, separate from pinned control code. Legacy receipts bind to executorSha. */
+  childWorkflowSha?: string;
   planDigest: string;
   planArtifactId: number | null;
   shards: string[];
@@ -57,6 +62,8 @@ export type CiProvenance = {
   queueBaseSha: string | null;
   event: CiEvent;
   executorSha: string;
+  /** Approved main workflow revision, separate from pinned control code. Legacy receipts bind to executorSha. */
+  childWorkflowSha?: string;
   planDigest: string;
   planArtifactId: number | null;
   shards: string[];
@@ -88,6 +95,8 @@ export type ExecutionReceipt = {
   planDigest: string;
   planArtifactId: number | null;
   executorSha: string;
+  /** Approved main workflow revision, separate from pinned control code. Legacy receipts bind to executorSha. */
+  childWorkflowSha?: string;
   profile: CiProfile;
   generation: number;
   childRunId: number;
@@ -173,7 +182,7 @@ export function submissionMatches(input: CiSubmission, proof: CiProvenance, repo
   if (!input || input.version !== 1 || !UUID.test(input.requestId) || input.repository !== repository
       || !positive(input.parentRunId) || !positive(input.parentAttempt) || !positive(input.parentWorkflowId)
       || (input.event === 'merge_group' ? !SHA.test(input.queueBaseSha ?? '') : input.queueBaseSha !== null)
-      || !SHA.test(input.sourceSha) || !SHA.test(input.executorSha) || !DIGEST.test(input.planDigest)
+      || !SHA.test(input.sourceSha) || !SHA.test(input.executorSha) || (input.childWorkflowSha !== undefined && !SHA.test(input.childWorkflowSha)) || !DIGEST.test(input.planDigest)
       || !['push', 'merge_group'].includes(input.event)
       || (input.event === 'merge_group' ? input.planArtifactId !== null : !positive(input.planArtifactId ?? 0))
       || !Array.isArray(input.shards) || !input.shards.length || input.shards.length > 6
@@ -183,7 +192,7 @@ export function submissionMatches(input: CiSubmission, proof: CiProvenance, repo
       || new Set(input.prerequisites).size !== input.prerequisites.length) return false;
   return proof.repository === input.repository && proof.parentRunId === input.parentRunId
     && proof.parentAttempt === input.parentAttempt && proof.parentWorkflowId === input.parentWorkflowId
-    && proof.queueBaseSha === input.queueBaseSha && proof.sourceSha === input.sourceSha && proof.event === input.event && proof.executorSha === input.executorSha
+    && proof.queueBaseSha === input.queueBaseSha && proof.sourceSha === input.sourceSha && proof.event === input.event && proof.executorSha === input.executorSha && (proof.childWorkflowSha ?? proof.executorSha) === (input.childWorkflowSha ?? input.executorSha)
     && proof.executorOnMain && proof.planDigest === input.planDigest && proof.planArtifactId === input.planArtifactId
     && sameSet(proof.shards, input.shards) && sameSet(proof.prerequisites, input.prerequisites) && proof.parentLive;
 }
@@ -237,7 +246,7 @@ export function selectPools(
 export function receiptMatches(a: ExecutionReceipt, b: ExecutionReceipt): boolean {
   return a.version === 1 && b.version === 1 && a.requestId === b.requestId && a.repository === b.repository
     && a.event === b.event && a.parentWorkflowId === b.parentWorkflowId && a.logicalShard === b.logicalShard && a.parentRunId === b.parentRunId && a.parentAttempt === b.parentAttempt
-    && a.queueBaseSha === b.queueBaseSha && a.sourceSha === b.sourceSha && a.planDigest === b.planDigest && a.planArtifactId === b.planArtifactId && a.executorSha === b.executorSha
+    && a.queueBaseSha === b.queueBaseSha && a.sourceSha === b.sourceSha && a.planDigest === b.planDigest && a.planArtifactId === b.planArtifactId && a.executorSha === b.executorSha && (a.childWorkflowSha ?? a.executorSha) === (b.childWorkflowSha ?? b.executorSha)
     && a.childAttempt === b.childAttempt && a.profile === b.profile && a.generation === b.generation && a.childRunId === b.childRunId
     && a.startDeadline === b.startDeadline && a.executionDeadline === b.executionDeadline;
 }

@@ -20,7 +20,7 @@ export function plannerSubmission(env, mode='submit'){
  if(typeof env.CAPACITY_SUBMISSION!=='string'||Buffer.byteLength(env.CAPACITY_SUBMISSION)>16*1024)throw new Error('planner_submission_bound');
  const s=JSON.parse(env.CAPACITY_SUBMISSION);
  const event=JSON.parse(plannerFile(env.GITHUB_EVENT_PATH,1024*1024));
- if(env.GITHUB_REPOSITORY!=='AxalNetwork/StudioOS'||s.repository!==env.GITHUB_REPOSITORY||String(s.parentRunId)!==env.GITHUB_RUN_ID||String(s.parentAttempt)!==env.GITHUB_RUN_ATTEMPT||s.sourceSha!==env.GITHUB_SHA||s.event!==env.GITHUB_EVENT_NAME||s.executorSha!==env.CAPACITY_EXECUTOR_SHA||!/^[a-f0-9]{40}$/.test(s.executorSha)||!['push','merge_group'].includes(s.event))throw new Error('planner_parent_mismatch');
+ if(env.GITHUB_REPOSITORY!=='AxalNetwork/StudioOS'||s.repository!==env.GITHUB_REPOSITORY||String(s.parentRunId)!==env.GITHUB_RUN_ID||String(s.parentAttempt)!==env.GITHUB_RUN_ATTEMPT||s.sourceSha!==env.GITHUB_SHA||s.event!==env.GITHUB_EVENT_NAME||s.executorSha!==env.CAPACITY_EXECUTOR_SHA||(s.childWorkflowSha!==undefined&&s.childWorkflowSha!==env.CAPACITY_CHILD_WORKFLOW_SHA)||!/^[a-f0-9]{40}$/.test(s.executorSha)||!['push','merge_group'].includes(s.event))throw new Error('planner_parent_mismatch');
  if(s.event==='push'?(env.GITHUB_REF!=='refs/heads/main'||s.queueBaseSha!==null||!Number.isSafeInteger(s.planArtifactId)||s.planArtifactId<=0):(s.queueBaseSha!==event.merge_group?.base_sha||s.sourceSha!==event.merge_group?.head_sha||s.planArtifactId!==null))throw new Error('planner_event_mismatch');
  if(mode==='metadata')return {artifact_id:s.planArtifactId??''};
  const root=resolve(env.CAPACITY_SOURCE_ROOT),scripts=JSON.parse(plannerFile(resolve(root,'package.json'),256*1024)).scripts;

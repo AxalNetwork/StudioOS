@@ -99,6 +99,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
         },
         identity=>{
           const lane=capacityIdentityLane(identity,config);
+          if(config.publication==='pilot'&&lane==='submit'&&identity.event_name!=='push')return null;
           return path===`/capacity/${lane}`||(path==='/capacity/outcome'&&lane==='receipt')?lane:null;
         },
         async identity=>{

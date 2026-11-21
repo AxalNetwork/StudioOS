@@ -407,8 +407,8 @@ test('composed Linux catalog and trusted executor preserve success, failures, re
    await f.control().fetch(new Request('https://capacity.invalid/capacity/switch',{method:'POST',headers:{authorization:'Bearer fixture-owner'},body:'{"kill":true}'}));
    await assert.rejects(executionMain('run',cliEnv,dependencies),/superseded_before_execution/);
   }else{
-   assert.equal(await executionMain('run',cliEnv,dependencies),outcome==='failure'?(jointAuthority?1:23):0);
-   if(jointAuthority)assert.equal(liveChecks>0,true);
+   await assert.rejects(executionMain('run',cliEnv,dependencies),/container_profile_mismatch|execution_boundary_unavailable/);
+   assert.equal(liveChecks,0,'a partial boundary cannot authorize candidate execution');
   }
   if(outcome==='revoked')await f.control().fetch(new Request('https://capacity.invalid/capacity/switch',{method:'POST',headers:{authorization:'Bearer fixture-owner'},body:'{"kill":true}'}));
   const execution=()=>executeShard({admitted,paths:{source:process.cwd(),temp:dir},testDriver:join(process.cwd(),'scripts/test-drift-parts.mjs'),planPath,readReceipt:liveRead,gitHead:()=>SOURCE,gitClean:()=>true,killGroup:()=>{},run:(_binary,_args,options)=>{

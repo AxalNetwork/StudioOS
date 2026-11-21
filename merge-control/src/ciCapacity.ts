@@ -1,7 +1,7 @@
 /** D7887: durable CI coordinator core; no production adapter or result producer is enabled here. */
 import {
   activeAttempt, admitReceipt, aggregateCapacity, applyObservation, selectPools, submissionMatches,
-  validateCapacityPolicy, HOSTED_JOB_CEILING_MS, receiptMatches, CapacityDispatchRefused,
+  validateCapacityPolicy, HOSTED_JOB_CEILING_MS, EXTERNAL_RUN_CEILING_MS, RESULT_DELIVERY_RESERVE_MS, receiptMatches, CapacityDispatchRefused,
 } from './lib/ciCapacityPolicy.ts';
 import type {
   Aggregate, CapacityInventory, CapacityPolicy, CapacityRequest, ChildObservation, CiAttempt,
@@ -203,11 +203,11 @@ export class CiCapacity {
     return {
       version: 1, requestId: s.requestId, repository: s.repository, logicalShard: shard,
       event: s.event, parentWorkflowId: s.parentWorkflowId, parentRunId: s.parentRunId, parentAttempt: s.parentAttempt,
-      sourceSha: s.sourceSha, queueBaseSha: s.queueBaseSha, planDigest: s.planDigest, planArtifactId: s.planArtifactId, executorSha: s.executorSha,
+      sourceSha: s.sourceSha, queueBaseSha: s.queueBaseSha, planDigest: s.planDigest, planArtifactId: s.planArtifactId, executorSha: s.executorSha, ...(s.childWorkflowSha ? {childWorkflowSha:s.childWorkflowSha} : {}),
       profile, generation, childRunId: null, childAttempt: 1, startDeadline,
       executionDeadline: Math.min(startDeadline + (profile === 'hosted' ? b.hostedExecutionMs
         : profile === 'github-8' ? b.includedExecutionMs : b.externalExecutionMs),
-      profile === 'hosted' ? now + HOSTED_JOB_CEILING_MS : Number.MAX_SAFE_INTEGER),
+      profile === 'hosted' ? now + HOSTED_JOB_CEILING_MS : profile === 'linux-x64' ? now + EXTERNAL_RUN_CEILING_MS - RESULT_DELIVERY_RESERVE_MS : Number.MAX_SAFE_INTEGER),
       phase: 'reserved', cancelDeadline: null, reason: null,
     };
   }
@@ -326,7 +326,7 @@ export class CiCapacity {
               if (id !== null && validRunId(id)
                   && !this.store.ownsChild(id)) {
                 if(typeof found==='object'&&found!==null){
-                  if(!/^[a-f0-9]{40}$/.test(found.rejectedWorkflowSha)||found.rejectedWorkflowSha===a.executorSha)throw new Error('capacity_discovery_revision');
+                  if(!/^[a-f0-9]{40}$/.test(found.rejectedWorkflowSha)||found.rejectedWorkflowSha===(a.childWorkflowSha??a.executorSha))throw new Error('capacity_discovery_revision');
                   a.childRunId=id;a.rejectedWorkflowSha=found.rejectedWorkflowSha;a.phase='cancelling';a.reason='unreviewed_child_revision';
                 }else{a.childRunId = id; a.phase = 'queued'; a.reason = null;}
                 this.store.save(request);

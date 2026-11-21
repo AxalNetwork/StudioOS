@@ -731,3 +731,11 @@ test('D7909 quarantined revision supplies no test truth; independent no-test cle
  assert.equal(await c.reconcileChild(input().requestId,999),true);assert.equal(f.attempt(a.logicalShard).phase,'cancelled');
  assert.equal(f.attempt(a.logicalShard).verifiedTestFailure,undefined);
 });
+
+test('D7909 Linux receipts reserve result delivery inside the existing 26-minute Run wrapper',async t=>{
+ const f=fixture(t),c=f.create();await c.submit(input());await c.tick();const a=f.attempt('worker-2-of-6'),accepted=f.get().acceptedAt;
+ assert.equal(a.profile,'linux-x64');assert.equal(a.executionDeadline,accepted+26*60_000-20_000);
+ assert.ok(a.executionDeadline-a.startDeadline<=CI_CAPACITY_BUDGETS.externalExecutionMs);
+ f.state.now=accepted+1_589_999;f.outcomes.set(a.childRunId!,f.observation(a,{startedAt:accepted+1,completedAt:f.state.now,cleanupConfirmed:true,exportComplete:true,executionOutcome:'completed'}));
+ await c.tick();assert.notEqual(f.attempt(a.logicalShard).phase,'passed');assert.notEqual(c.status(input().requestId)?.status,'success');
+});

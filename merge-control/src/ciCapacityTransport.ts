@@ -18,7 +18,7 @@ export function capacityIdentityLane(identity: CapacityIdentity, config: Capacit
       || (identity.event_name === 'merge_group' && /^refs\/heads\/gh-readonly-queue\/main\/pr-[1-9][0-9]*-[a-f0-9]{40}$/.test(identity.ref)))) return 'submit';
   if (identity.event_name === 'workflow_dispatch' && identity.ref === 'refs/heads/main'
     && identity.workflow_ref === `${config.repository}/.github/workflows/runner-executor.yml@refs/heads/main`
-    && identity.sha === config.executorSha && identity.workflow_sha === config.executorSha && identity.run_attempt === '1') return 'receipt';
+    && identity.sha === (config.childWorkflowSha??config.executorSha) && identity.workflow_sha === (config.childWorkflowSha??config.executorSha) && identity.run_attempt === '1') return 'receipt';
   return null;
 }
 export class CapacityTransport {
@@ -43,14 +43,14 @@ export class CapacityTransport {
     if(capacityIdentityLane(identity,this.config)!=='receipt'
       ||!body||typeof body.requestId!=='string'||body.requestId.length>100||!/^worker-[1-6]-of-6$/.test(body.shard)||!Number.isSafeInteger(body.generation))throw new Error('capacity_child_identity');
     const receipt=await this.capacity.receipt(body.requestId,body.shard,Number(identity.run_id),Number(identity.run_attempt));
-    if(!receipt||receipt.executorSha!==identity.workflow_sha||receipt.generation!==body.generation||receipt.profile!==body.profile||(receipt.profile==='macos-arm64'&&!this.config.selfHostedProfiles.includes(receipt.profile)))return {active:false,receipt:null};
+    if(!receipt||(receipt.childWorkflowSha??receipt.executorSha)!==identity.workflow_sha||receipt.generation!==body.generation||receipt.profile!==body.profile||(receipt.profile==='macos-arm64'&&!this.config.selfHostedProfiles.includes(receipt.profile)))return {active:false,receipt:null};
     return {active:true,receipt};
   }
   async outcome(body:{receipt:ExecutionReceipt;result:unknown},identity:CapacityIdentity,ports:GithubCapacityPorts,results:SqlCapacityResults){
     const receipt=body?.receipt;
     if(capacityIdentityLane(identity,this.config)!=='receipt'||!receipt||receipt.repository!==this.config.repository
       ||receipt.childRunId!==Number(identity.run_id)||receipt.childAttempt!==Number(identity.run_attempt)
-      ||receipt.executorSha!==identity.workflow_sha||receipt.profile==='macos-arm64')throw new Error('capacity_result_identity');
+      ||(receipt.childWorkflowSha??receipt.executorSha)!==identity.workflow_sha||receipt.profile==='macos-arm64')throw new Error('capacity_result_identity');
     const owned=this.capacity.ownsResult(receipt),result=executionResultBody(body.result);
     if(!owned||(!owned.current&&result.testStep!=='failure'))throw new Error('capacity_result_generation');
     const jobId=await ports.resultJob(owned.receipt,identity);

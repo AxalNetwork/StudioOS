@@ -11,13 +11,17 @@ on:
         description: Reviewed main executor revision; authority verifies this independently
         type: string
         required: true
+      child_workflow_sha:
+        description: Separately approved direct main workflow revision
+        type: string
+        required: true
 permissions:
   contents: read
 jobs:
   submit:
     if: >-
       github.repository == 'AxalNetwork/StudioOS' &&
-      (github.event_name == 'push' || github.event_name == 'merge_group') &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       vars.CI_CAPACITY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -31,6 +35,7 @@ jobs:
       CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
       CAPACITY_SUBMISSION: ${{ inputs.submission }}
       CAPACITY_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+      CAPACITY_CHILD_WORKFLOW_SHA: ${{ inputs.child_workflow_sha }}
       CAPACITY_SOURCE_ROOT: ${{ github.workspace }}/candidate
       CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
     steps:
