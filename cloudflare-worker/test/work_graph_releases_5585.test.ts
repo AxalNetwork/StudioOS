@@ -32,7 +32,8 @@ import {
 
 const read = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 const SCHEMA = read('202611140007_5581_work_graph_revisions.sql') + read('202611140122_5581_work_graph_lease_events.sql')
-  + read('202611140924_5581_work_graph_integrity.sql') + read('202611182125_5585_work_graph_releases.sql');
+  + read('202611140924_5581_work_graph_integrity.sql') + read('202611182125_5585_work_graph_releases.sql')
+  + read('202611190940_5585_work_graph_release_takedowns.sql');
 
 WORK_GRAPH_DEPS.now = () => new Date('2026-11-18T21:30:00Z');
 let n = 0;
