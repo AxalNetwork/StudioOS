@@ -67,15 +67,18 @@ test('an omitted save also preserves an opt-out that reaches the database just b
   try {
     await call(env, 'PUT', path, { contribute_to_signals: true });
     const original = env.DB;
+    // The opt-out lands just before the upsert runs, whether the route runs it alone or in a batch.
+    const optOut = () => db.exec('UPDATE investor_profiles SET contribute_to_signals = 0 WHERE user_id = 2');
     env.DB = { ...original, prepare(sql: string) {
       const statement = original.prepare(sql);
       if (!sql.includes('INSERT INTO investor_profiles')) return statement;
       const run = statement.run;
-      statement.run = async () => {
-        db.exec('UPDATE investor_profiles SET contribute_to_signals = 0 WHERE user_id = 2');
-        return run();
-      };
+      statement.run = async () => { optOut(); return run(); };
+      (statement as any).profileUpsert = true;
       return statement;
+    }, async batch(statements: any[]) {
+      if (statements.some((st) => st?.profileUpsert)) optOut();
+      return original.batch(statements);
     } };
     const saved = await call(env, 'PUT', path, { firm_name: 'Example Fund' });
     assert.equal(saved.status, 200);
