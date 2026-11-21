@@ -41,12 +41,15 @@ export function analysisTiles(analysis, { readFailed = false } = {}) {
 /** The inputs row: what the person actually gave the run, blanks as Not recorded. */
 export function inputsRow(inputs = {}) {
   const val = (v) => (Array.isArray(v) ? v.join(', ') : String(v ?? '').trim());
+  const given = inputs || {};
   return [
-    ['Market', val(inputs.market)],
-    ['Customer', val(inputs.target_customer)],
-    ['Geography', val(inputs.geography)],
-    ['Depth', val(inputs.depth)],
-    ['Known competitors', val(inputs.known_competitors)],
+    ['Market', val(given.market)],
+    ['Customer', val(given.target_customer)],
+    ['Geography', val(given.geography)],
+    // D7175 part 2 (RS-13 B1): the region the run was focused on.
+    ['Region', val(given.region_focus)],
+    ['Depth', val(given.depth)],
+    ['Known competitors', val(given.known_competitors)],
   ].map(([k, v]) => (v ? { k, v } : { k, nr: true }));
 }
 
@@ -272,3 +275,62 @@ export function reviseHref(analysis) {
 
 /** Known competitors as a list: comma, semicolon or newline separate names. */
 export const splitNames = (s) => String(s || '').split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+
+/* ---------------------------------------------------------------------------
+ * D7175 part 2 (#7175, canvas D7041, boards RS-13 A2, A5, B3).
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Known competitors as tokens (RS-13 A2): `typed` (one name, or several
+ * separated by commas, semicolons or new lines) is added to `tokens`, each
+ * name once (case ignored). A name that is the subject's name, uid or site is
+ * never added: it is returned in `refused`, so the field can say why.
+ */
+export function addKnown(tokens, typed, subject) {
+  const next = [...(tokens || [])];
+  const refused = [];
+  for (const name of splitNames(typed)) {
+    if (subject && isSubjectName(subject, name)) { refused.push(name); continue; }
+    if (!next.some((t) => t.toLowerCase() === name.toLowerCase())) next.push(name);
+  }
+  return { tokens: next, refused };
+}
+
+/**
+ * When a running analysis started (RS-13 A5). The row is made, with status
+ * running, as the run starts, and only a new run is ever running (a rerun is
+ * a proposal and never sets it), so its `created_at` is the start. Null for
+ * any other status.
+ */
+export function runStartedAt(analysis) {
+  return analysis?.status === 'running' && analysis?.created_at ? analysis.created_at : null;
+}
+
+/**
+ * "What the run did" (RS-13 B3): three lines, each with the time its step
+ * finished when the run recorded it (`output.run_steps`, from part 2 on);
+ * `timed` is false for a run that recorded none. The counts are the step's
+ * own when recorded: what discovery returned, not what was added by hand
+ * since.
+ */
+export function runSteps(analysis) {
+  const i = analysis?.inputs || {};
+  const stored = Array.isArray(analysis?.output?.run_steps) ? analysis.output.run_steps : [];
+  const step = (k) => stored.find((s) => s && s.step === k) || null;
+  const d = step('discovery');
+  const r = step('read');
+  const companies = d && d.companies != null && Number.isFinite(Number(d.companies)) ? Number(d.companies) : (analysis?.candidates || []).length;
+  const tried = r && r.tried != null ? Number(r.tried) : Number(analysis?.evidence?.sources_tried ?? (analysis?.sources || []).length);
+  const fetched = r && r.fetched != null ? Number(r.fetched) : null;
+  const searched = `Searched “${String(i.market || '').trim()}”${i.region_focus ? `, ${i.region_focus}` : ''}, ${i.depth === 'deep' ? 'Deep dive' : 'Quick scan'}`;
+  const found = `Discovery returned ${companies} ${companies === 1 ? 'company' : 'companies'} · `
+    + (tried === 0 && companies === 0 ? 'nothing to read'
+      : `${tried} ${tried === 1 ? 'read' : 'reads'} tried${fetched == null ? '' : `, ${fetched} fetched`}`);
+  const word = EVIDENCE[analysis?.evidence?.status]?.word;
+  const lines = [
+    { k: 'search', at: step('search')?.at || null, text: searched },
+    { k: 'discovery', at: r?.at || d?.at || null, text: found },
+    { k: 'saved', at: step('saved')?.at || null, text: `Saved as complete${word ? ` · ${word}` : ''}` },
+  ];
+  return { lines, timed: lines.some((l) => l.at) };
+}

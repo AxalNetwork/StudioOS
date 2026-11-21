@@ -150,6 +150,13 @@ test('shapeJobApplication derives has_resume and never inlines the resume', () =
   assert.equal(noResume.has_resume, false);
 });
 
+test('an explicit Grow stage is exposed to the posting manager only', () => {
+  const application = { status: 'submitted', stage: 'offer', stage_changed_at: '2026-11-15T08:00:00Z' };
+  assert.equal(shapeJobApplication(application, { includeStage: true })?.stage, 'offer');
+  assert.equal(shapeJobApplication({ ...application, stage_changed_at: null }, { includeStage: true })?.stage, null);
+  assert.equal(shapeJobApplication(application)?.stage, undefined);
+});
+
 test('shapeJobApplication attaches member once a platform account exists', () => {
   // No account yet (neither the email JOIN nor a backfilled user_id) → no member.
   const anon = shapeJobApplication({ id: 1, posting_id: 1, email: 'x@y.com', status: 'submitted', created_at: 't', user_id: null }) as Record<string, unknown>;

@@ -68,6 +68,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `profile/` | The founder's profile pages (D702): You, Your venture, What others see and Visibility, at `/profile`, `/profile/venture`, `/profile/preview` and `/profile/visibility`, for founders only, with their shared frame and pure model. Documented in its own README. |
 | `cycles/` | The four cycle overviews and their module pages (D661), drawn from #1469's shared read: the model, the SVG charts, the overview and the module page. Not mounted until each cycle's read lands. Start at `cycles/README.md`. |
 | `portfolio/` | D4817 part 1 (#5311): the Portfolio v2 frame every Portfolio board draws in (local navigation, basis context, document title, rail slot), the shared metric, attention and reporting-obligation parts, and their pure model. PF-01's Overview is `investor/InvestorPortfolioCanvas.jsx`. Start at `portfolio/README.md`. |
+| `programs/` | D6966 (#6966): program presentations — the kit, the key → page → PDF map (one file per program in `programs/catalog/` and `programs/content/`), the public Programs index (`/programs`) and a program's address (`/programs/:key`). Adding a program adds files there and edits nothing shared. Start at `programs/README.md`. |
 
 ## Rules
 

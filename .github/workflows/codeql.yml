@@ -122,9 +122,53 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      - name: Load trusted scanner installer
+        id: scanner_pins
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          MAIN_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            pull_request) trusted="$PR_BASE" ;;
+            merge_group) trusted="$GROUP_BASE" ;;
+            push|schedule)
+              [[ "$REF" == refs/heads/main ]] || exit 1
+              trusted="$MAIN_SHA" ;;
+            *) echo "Unsupported scanner acquisition event" >&2; exit 1 ;;
+          esac
+          [[ "$trusted" =~ ^[0-9a-f]{40}$ ]] || { echo "Missing trusted scanner base" >&2; exit 1; }
+          git cat-file -e "$trusted^{commit}" || git fetch --no-tags origin "$trusted" --depth=1
+          installer="$RUNNER_TEMP/trusted-scanner-installer"
+          mkdir -p "$installer"
+          for source in install-scanner.mjs scanner-acquisition.mjs scanner-tools.json; do
+            git show "$trusted:scripts/ci/$source" > "$installer/$source"
+          done
+          echo "installer=$installer/install-scanner.mjs" >> "$GITHUB_OUTPUT"
+          node "$installer/install-scanner.mjs" codeql --metadata
+      - name: Restore pinned codeql archive
+        id: scanner_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
+      - name: Acquire verified CodeQL bundle
+        id: acquire_tools
+        run: node "${{ steps.scanner_pins.outputs.installer }}" codeql
+      - name: Save verified codeql archive on main only
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.acquire_tools.outcome == 'success' && steps.scanner_cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
       - name: Initialize CodeQL
         uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
+          tools: ${{ steps.acquire_tools.outputs.archive }}
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended,security-and-quality

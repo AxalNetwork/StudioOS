@@ -30,11 +30,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isNoPartnerProfile } from '../kit';
 
+export const WRITE_FORBIDDEN = 'You do not have permission to save this record. Your draft is still here.';
 export const WRITE_FAILED = 'That did not save. What you typed is still here, so try again.';
 export const NO_PROFILE_LINE = 'No partner profile is linked to this account.';
 
 export function usePipelineZone(fetcher, loadFailed, key = null) {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
+  const [state, setState] = useState({ loading: true, refreshing: false, refreshError: false, error: '', data: null });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const gen = useRef(0);
@@ -53,20 +54,25 @@ export function usePipelineZone(fetcher, loadFailed, key = null) {
       // Another record: the last one's rows are not this one's, so they go.
       keyRef.current = key;
       hasData.current = false;
-      setState({ loading: true, error: '', data: null });
-    } else if (!hasData.current) setState((s) => ({ ...s, loading: true, error: '' }));
+      setState({ loading: true, refreshing: false, refreshError: false, error: '', data: null });
+    } else setState((s) => ({ ...s, loading: !hasData.current, refreshing: hasData.current, refreshError: false, error: '' }));
     try {
       const r = await fetchRef.current();
       if (!alive.current || mine !== gen.current) return false;
       hasData.current = true;
-      setState({ loading: false, error: '', data: r || {} });
+      setState({ loading: false, refreshing: false, refreshError: false, error: '', data: r || {} });
       return true;
     } catch (e) {
       if (!alive.current || mine !== gen.current) return false;
       // Keep the last good rows rather than blanking a zone over a failed refresh.
-      if (hasData.current) return false;
+      if (hasData.current) {
+        setState(s => ({ ...s, refreshing: false, refreshError: true }));
+        return false;
+      }
       setState({
         loading: false,
+        refreshing: false,
+        refreshError: false,
         error: isNoPartnerProfile(e?.message) ? NO_PROFILE_LINE : loadFailed,
         data: null,
       });
@@ -85,8 +91,8 @@ export function usePipelineZone(fetcher, loadFailed, key = null) {
     try {
       await fn();
       wrote = true;
-    } catch {
-      if (alive.current) setNote({ ok: false, text: WRITE_FAILED, scope });
+    } catch (error) {
+      if (alive.current) setNote({ ok: false, text: Number(error?.status) === 403 ? WRITE_FORBIDDEN : WRITE_FAILED, scope });
     }
     if (wrote) {
       if (alive.current) setNote({ ok: true, text: ok, scope });

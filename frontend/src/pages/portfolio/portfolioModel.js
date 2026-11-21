@@ -1239,6 +1239,42 @@ export function lastChaseOf(projectId, chases) {
 }
 
 /**
+ * D7650 (#7650): why the Worker did not chase a company, in words. The codes are
+ * `POST /portfolio/chase`'s `skips[].reason`; an unknown code is said as such,
+ * never read as chased.
+ */
+export function chaseSkipText(skip) {
+  const reason = skip?.reason;
+  if (reason === 'no_obligation') return 'no reporting obligation in your book';
+  if (reason === 'not_due') return skip.due_date && day(skip.due_date) ? `not due until ${day(skip.due_date)}` : 'not due yet';
+  if (reason === 'already_reported') return skip.period ? `already reported for ${periodName(skip.period) || skip.period}` : 'already reported for this period';
+  if (reason === 'unreadable') return 'its reporting obligation could not be read';
+  return 'skipped by the Worker';
+}
+
+/**
+ * D7650 (#7650): what a chase did, from the Worker's answer. A company counts as
+ * chased only when it is in `chased`; each skipped one is named with its reason.
+ * `nameOf(projectId)` gives the company's name. Returns the note the page shows.
+ */
+export function chaseOutcomeOf(result, nameOf = () => null) {
+  const chased = Array.isArray(result?.chased) ? result.chased : [];
+  const fresh = chased.filter((c) => !c.already).length;
+  const already = chased.filter((c) => c.already).length;
+  const skips = Array.isArray(result?.skips) ? result.skips : [];
+  const listed = new Set(skips.map((s) => Number(s.project_id)));
+  // A skipped id the Worker gave no reason for is still not chased.
+  const bare = (Array.isArray(result?.skipped) ? result.skipped : []).filter((id) => !listed.has(Number(id))).map((id) => ({ project_id: id }));
+  const skipped = [...skips, ...bare].map((s) => ({
+    project_id: Number(s.project_id),
+    name: nameOf(Number(s.project_id)) || `Company ${s.project_id}`,
+    reason: s.reason || null,
+    text: chaseSkipText(s),
+  }));
+  return { chased: fresh, already, skipped };
+}
+
+/**
  * PF-04's obligations inbox: one row per company in the reporting population
  * (`kpi-compliance`'s companies, the caller's book) for the period the Worker
  * measured, companies that have not reported first. A name the reporting read

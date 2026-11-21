@@ -11,9 +11,9 @@ keep running on their crons.
 
 | File | What it does |
 | --- | --- |
-| `liveRows.ts` | Which rows and indexes are real (D538). Every read of `market_intel_rows` goes through `liveRowSql()`, every read of `market_intel_indexes` through `liveIndexSql()`. |
+| `liveRows.ts` | Which rows and indexes are real (D538). Every read of `market_intel_rows` goes through `liveRowSql()`, every read of `market_intel_indexes` through `liveIndexSql()`. A row's retrieval time (`retrievedAtSql()`) and the count of distinct observations (`distinctObservationsSql()`, D7707). |
 | `registry.ts` | Which sources are enabled. |
-| `aggregator.ts` | Runs the sources and collects results. |
+| `aggregator.ts` | Runs the sources and collects results, and records each run of a live source in `market_intel_source_runs` (D7707). |
 | `reducer.ts` | Folds raw results into signals. |
 | `scoring.ts` | Ranks them. |
 | `cache.ts` | Caching layer. |
@@ -47,3 +47,15 @@ nothing either, because outside development only rows passing `isLiveRow` are
 kept. Flipping a source live is `MI_FLAG_<KEY> = "live"` in BOTH var tables of
 `wrangler.toml`; `market_intel_live_sources_d538.test.ts` fails on a flag in
 one table only, or on a flagged source that reads a key or answers with stubs.
+
+**A row says what it measures, and a run leaves a record (D7707).** A row
+carries the period it measures, the provider's last-updated date and when it
+was fetched, and whether it is a per-sector signal or macro context with its
+coverage area; see `sources/README.md`. A row written before D7707 has none of
+these recorded, and its retrieval time is its `ts`. Rows are append-only and
+not idempotent: every run of a live source appends its rows again, unchanged
+figures included (#7711 changes that). Each run of a source flagged live
+writes one `market_intel_source_runs` row (outcome, reason, rows seen and
+inserted, and an error class from a fixed list, never provider text or a URL);
+a source that is off writes none. HQ reads them at
+`GET /api/admin/market-intel/health`.
