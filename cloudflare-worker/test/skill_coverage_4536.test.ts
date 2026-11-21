@@ -119,12 +119,12 @@ test('library files, seeded skills and published skills are three counts', () =>
   assert.deepEqual(c.sources, { library_files: 3, source_only: ['not-seeded'], seeded: 2, seeded_published: 1, authored_in_store: 1 });
 });
 
-test('linked agents are adoption, and executions are unavailable rather than zero', () => {
+test('linked agents are adoption, and coverage serves no execution count of its own', () => {
   const c = cover([row()], { adoption: { links: 4, agents: 3, behind_current: 1, published_without_links: 0 } });
   assert.deepEqual(c.adoption, { links: 4, agents: 3, pinned_behind_current: 1, published_without_links: 0 });
   assert.equal(c.executions.available, false);
   assert.ok(!('count' in c.executions) && !('value' in c.executions), 'no number stands in for a missing measure');
-  assert.match(c.executions.reason, /#4667/);
+  assert.match(c.executions.reason, /D4536-p4/, 'executions are served beside coverage, from completed runs');
 });
 
 // ── D4536-p2 (#5969): publishedEvaluation, the published versions' evaluation ─────────────────────────────

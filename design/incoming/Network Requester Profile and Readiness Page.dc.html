@@ -1,0 +1,1536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Requester Profile and Readiness · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.nrd-cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.nrd-cv.nrd-dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.nrd-cv *{box-sizing:border-box}
+.nrd-cv a{color:var(--vt);text-decoration:none}
+.nrd-cv button{font-family:var(--sg);cursor:pointer}
+.nrd-cv :focus-visible,.nrd-cv .nrd-fv{outline:2px solid var(--vi);outline-offset:2px}
+.nrd-cv h1,.nrd-cv h2,.nrd-cv h3,.nrd-cv p,.nrd-cv ol,.nrd-cv ul,.nrd-cv dl,.nrd-cv dd,.nrd-cv dt{margin:0;padding:0}
+.nrd-cv ol,.nrd-cv ul{list-style:none}
+.nrd-mo{font-family:var(--mo)}
+.nrd-mu{color:var(--mu)}
+.nrd-eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nrd-sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.nrd-sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.nrd-sd .nrd-lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.nrd-logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.nrd-sd .nrd-grp{padding:6px 20px 4px}
+.nrd-sd nav{display:flex;flex-direction:column;gap:2px}
+.nrd-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.nrd-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.nrd-sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.nrd-mn{min-width:0;display:flex;flex-direction:column}
+.nrd-tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.nrd-srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.nrd-bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.nrd-ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.nrd-av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.nrd-sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.nrd-sp .nrd-e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.nrd-sp .nrd-vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nrd-bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.nrd-hdr{display:flex;flex-direction:column;gap:6px}
+.nrd-hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.nrd-hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.nrd-hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.nrd-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nrd-ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.nrd-ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nrd-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.nrd-ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.nrd-scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.nrd-kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nrd-k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.nrd-k.nrd-att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.nrd-kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.nrd-kv.nrd-un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.nrd-ks{font-size:12px;color:var(--mu);line-height:1.45}
+.nrd-g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.nrd-c3{grid-column:span 3}
+.nrd-c4{grid-column:span 4}
+.nrd-c5{grid-column:span 5}
+.nrd-c6{grid-column:span 6}
+.nrd-c7{grid-column:span 7}
+.nrd-c8{grid-column:span 8}
+.nrd-c9{grid-column:span 9}
+.nrd-c12{grid-column:span 12}
+.nrd-cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.nrd-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nrd-ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.nrd-ch .nrd-sm{font:500 12px var(--mo);color:var(--mu)}
+.nrd-sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.nrd-cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.nrd-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.nrd-btn.nrd-p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.nrd-btn.nrd-t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.nrd-btn.nrd-ask .nrd-em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.nrd-btn[aria-disabled=true]{opacity:.6;cursor:default}
+.nrd-lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.nrd-foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.nrd-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.nrd-pl.nrd-a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nrd-pl.nrd-g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.nrd-pl.nrd-v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nrd-pl.nrd-r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nrd-nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nrd-nt.nrd-r{background:var(--negBg);border-color:var(--negE)}
+.nrd-nt.nrd-a{background:var(--amBg);border-color:var(--amE)}
+.nrd-nt.nrd-g{background:var(--posBg);border-color:var(--posE)}
+.nrd-ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nrd-nt.nrd-r .nrd-ic{background:var(--neg)}
+.nrd-nt.nrd-a .nrd-ic{background:var(--amT)}
+.nrd-nt.nrd-g .nrd-ic{background:var(--pos)}
+.nrd-nt .nrd-bt{margin-left:auto;flex:none}
+.nrd-sk{display:block;border-radius:6px;background:var(--skel)}
+.nrd-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.nrd-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.nrd-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.nrd-tbl .nrd-n{text-align:right;font-family:var(--mo)}
+.nrd-tbl td.nrd-na{color:var(--mu);font-weight:500}
+.nrd-tbl td b{font-weight:700}
+.nrd-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.nrd-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nrd-inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.nrd-dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.nrd-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.nrd-seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.nrd-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.nrd-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.nrd-pg .nrd-pb{display:flex;gap:5px;align-items:center}
+.nrd-pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.nrd-pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.nrd-st{display:grid;gap:14px 18px}
+.nrd-st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nrd-st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.nrd-st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nrd-dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.nrd-sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.nrd-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.nrd-dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.nrd-dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.nrd-df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.nrd-stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.nrd-stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.nrd-stp span:first-child{border-radius:999px 0 0 999px}
+.nrd-stp span:last-child{border-radius:0 999px 999px 0}
+.nrd-stp span+span{border-left:0}
+.nrd-stp span.nrd-on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.nrd-stp span.nrd-nx{border-style:dashed}
+.nrd-tl{display:flex;flex-direction:column}
+.nrd-tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.nrd-tl li:first-child{border-top:0}
+.nrd-tl .nrd-mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.nrd-tl .nrd-mk.nrd-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.nrd-tl .nrd-mk.nrd-cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.nrd-tl .nrd-mk.nrd-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.nrd-tl .nrd-mk.nrd-no{border-style:dashed}
+.nrd-tl .nrd-w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.nrd-ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.nrd-pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.nrd-pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.nrd-pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.nrd-ph .nrd-hrow h1{font-size:22px}
+.nrd-ph .nrd-kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.nrd-ph .nrd-k{padding:12px 13px}
+.nrd-ph .nrd-kv{font-size:22px}
+.nrd-ph .nrd-btn{min-height:44px}
+.nrd-ph .nrd-lk{min-height:44px}
+.nrd-msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.nrd-lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.nrd-lst li:first-child{border-top:0}
+.nrd-lst b{font-size:13.5px}
+.nrd-lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.nrd-bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.nrd-bar i{display:block;height:100%;background:var(--vi)}
+.nrd-toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.nrd-toast a{color:#c4b5fd!important}
+.nrd-pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.nrd-pr:first-of-type{border-top:0}
+.nrd-pr b{font-size:13px}
+.nrd-pr small{display:block;font-size:12px;color:var(--mu)}
+.nrd-grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.nrd-grp:first-of-type{border-top:0}
+.nrd-step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.nrd-ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.nrd-tbl tr.nrd-cur td{background:var(--lav)}
+.nrd-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.nrd-sec h3{font-size:13.5px;font-weight:800}
+.nrd-ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.nrd-ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.nrd-ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.nrd-k.nrd-bad{border-color:var(--negE)}
+.nrd-tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+.nrd-lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+/* ---- NWI addendum (#6256): additions to the approved Network workspace look ---- */
+.nrd-cv{text-align:left}
+.nrd-cv table{border-spacing:0}
+.nrd-st.nrd-tx dd{font:700 14px var(--sg);letter-spacing:0;line-height:1.3}
+.nrd-sh.nrd-ro{grid-template-columns:196px minmax(0,1fr) 360px}
+.nrd-sd .nrd-sep{height:1px;background:var(--hair);margin:8px 16px}
+.nrd-bk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nrd-ow{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nrd-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.nrd-s.nrd-ur{color:var(--neg)}
+.nrd-s.nrd-rf{color:var(--ink)}
+.nrd-s b{font:800 12px var(--mo)}
+.nrd-cold{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nrd-vd{text-decoration:line-through;color:var(--mu)}
+.nrd-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.nrd-rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.nrd-rh b{display:flex;align-items:center;gap:8px;font-size:14px}
+.nrd-rh .nrd-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.nrd-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.nrd-q{align-self:flex-end;max-width:88%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.nrd-an{padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.nrd-src{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.nrd-src span::before{content:"↳ ";color:var(--vt)}
+.nrd-draft{border:1.5px dashed var(--lavE);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.nrd-draft p.nrd-tx{font-size:12.5px;line-height:1.55;white-space:normal}
+.nrd-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 11.5px var(--mo);color:var(--mu)}
+.nrd-ent{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:600 12.5px var(--sg);color:var(--ink)}
+.nrd-ent[aria-disabled=true]{color:var(--mu);border-style:dashed}
+.nrd-rin{margin-top:auto;padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px}
+.nrd-rin span{flex:1;display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px}
+.nrd-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px;flex-wrap:wrap}
+.nrd-line b.nrd-mo{font-size:14px}
+.nrd-grh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 4px;border-top:1px solid var(--hair)}
+.nrd-grh:first-child{border-top:0;padding-top:0}
+.nrd-grh h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.nrd-mc{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.nrd-mc .nrd-mh{display:flex;gap:10px;align-items:center}
+.nrd-mc .nrd-mh>div{flex:1;min-width:0}
+.nrd-mc small{display:block;font-size:12px;color:var(--mu)}
+.nrd-rs{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink)}
+.nrd-rs span::before{content:"· ";color:var(--mu)}
+.nrd-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nrd-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.nrd-strip{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);flex-wrap:wrap}
+.nrd-strip .nrd-it{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font-size:12.5px}
+.nrd-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.nrd-f{display:flex;flex-direction:column;gap:5px}
+.nrd-f label,.nrd-f .nrd-lb{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nrd-in{display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink)}
+.nrd-in.nrd-hint{color:var(--mu)}
+.nrd-ta{min-height:76px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.nrd-cnt{align-self:flex-end;font:500 11px var(--mo);color:var(--mu)}
+.nrd-panel{background:var(--card);border:1px solid var(--hair);border-radius:14px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.nrd-panel .nrd-dh{padding:16px 20px 12px}
+.nrd-panel .nrd-dc{padding:14px 20px}
+.nrd-panel .nrd-df{padding:12px 20px}
+.nrd-pick{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.nrd-pick.nrd-on{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi);background:var(--lav)}
+.nrd-pick small{display:block;font-size:12px;color:var(--mu)}
+.nrd-rv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px}
+.nrd-rv dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nrd-bn{display:flex;align-items:center;gap:10px;padding:10px 30px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.nrd-bn.nrd-ro{background:#334155;color:#fff}
+.nrd-bn.nrd-sup{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.nrd-bn b{font-weight:800}
+.nrd-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px;align-self:flex-start}
+.nrd-cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nrd-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.nrd-cmp dl{display:grid;grid-template-columns:80px minmax(0,1fr);gap:4px 10px}
+.nrd-cmp dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nrd-src2{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.nrd-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.nrd-tile b{font:700 22px var(--mo)}
+.nrd-ph.nrd-fx{height:844px;overflow:hidden}
+.nrd-ph .nrd-pbd{flex:1;min-height:0}
+.nrd-stk{flex:none;display:flex;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.nrd-stk .nrd-btn{flex:1;min-height:44px;font-size:14px}
+.nrd-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.nrd-pc .nrd-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nrd-pc small{font-size:12px;color:var(--mu)}
+.nrd-tab{width:768px;display:flex;flex-direction:column;min-height:1024px;position:relative}
+.nrd-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.nrd-doc h2{font-size:17px;font-weight:800}
+.nrd-doc h3{font-size:13.5px;font-weight:800;margin-bottom:6px}
+.nrd-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.nrd-doc .nrd-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.nrd-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.nrd-crop{padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:16px}
+.nrd-sheetc{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:640px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.nrd-lst small{display:block}
+.nrd-lst li>div{min-width:0}
+.nrd-cv td,.nrd-cv th,.nrd-cv dd,.nrd-cv li,.nrd-cv p,.nrd-cv h1,.nrd-cv h2,.nrd-cv h3{color:inherit}
+.nrd-tbl td{color:var(--ink)}
+.nrd-tbl td.nrd-mo{white-space:nowrap}
+.nrd-crop,.nrd-doc{box-sizing:border-box}
+/* ---- NID addendum (#7063): Introductions desk, inbox and notification links ---- */
+.nrd-box{border:1px solid var(--hair);border-radius:10px;padding:10px 14px 12px;display:flex;flex-direction:column;gap:6px;min-width:0;background:var(--card)}
+.nrd-box .nrd-grh{border-top:0;padding-top:0}
+.nrd-sm2{font:500 11.5px var(--mo);color:var(--mu)}
+.nrd-pr.nrd-hl{background:var(--lav);box-shadow:inset 3px 0 0 var(--vi);border-radius:8px;padding-left:8px;padding-right:8px}
+.nrd-fl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nrd-dd.nrd-on{border-color:var(--vi);background:var(--lav);color:var(--vt)}
+.nrd-tbl td.nrd-gap{text-align:center;color:var(--mu);font-size:11.5px;background:var(--raised)}
+.nrd-more{display:flex;align-items:center;justify-content:space-between;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.nrd-attn{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav)}
+.nrd-attn a{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font:600 12.5px var(--sg);color:var(--ink)!important}
+.nrd-attn a b{font-size:14px;color:var(--vt)}
+.nrd-attn a small{font-size:11px;color:var(--mu)}
+.nrd-gl{display:flex;flex-direction:column}
+.nrd-gl li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.nrd-gl li:first-child{border-top:0}
+.nrd-gl li span{color:var(--mu);text-align:right}
+.nrd-flow{display:flex;align-items:flex-start;gap:14px}
+.nrd-fs{display:flex;flex-direction:column;gap:10px}
+.nrd-fs>b{font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:8px}
+.nrd-fs .nrd-step{width:28px;height:28px;border-radius:9px;font-size:13px}
+.nrd-fs{position:relative}
+.nrd-fs>.nrd-step{position:absolute;left:0;top:-4px}
+.nrd-fs>b{padding-left:38px;min-height:24px}
+.nrd-arr{align-self:center;font:800 22px var(--sg);color:var(--mu)}
+.nrd-nf{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start;padding:10px 8px;border-radius:9px;color:var(--ink)!important;border-top:1px solid var(--hair)}
+.nrd-nf:first-child{border-top:0}
+.nrd-nf.nrd-on{background:var(--lav);outline:2px solid var(--vi);outline-offset:-2px}
+.nrd-nf b{display:block;font-size:12.5px}
+.nrd-nf small{display:block;font-size:11.5px;color:var(--mu)}
+.nrd-url{font:500 11px var(--mo);color:var(--mu);word-break:break-all}
+.nrd-pa{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.nrd-pa a{display:flex;flex-direction:column;gap:2px;min-height:64px;padding:10px 12px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);color:var(--ink)!important;font-size:12px}
+.nrd-pa a b{font-size:20px;color:var(--vt)}
+.nrd-chip{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 4px 0 12px;border-radius:999px;border:1px solid var(--vi);background:var(--lav);color:var(--vt);font:700 13px var(--sg)}
+.nrd-chip button{min-width:36px;min-height:36px;border:0;background:transparent;color:var(--vt);font:700 13px var(--sg)}
+.nrd-ph .nrd-tools .nrd-btn{min-height:44px}
+.nrd-sheet-r .nrd-dc{overflow:hidden}
+.nrd-doc .nrd-tbl td{font-size:12px;vertical-align:top}
+.nrd-cv .nrd-tbl th{color:var(--mu)}
+/* ---------- NRD (#7677) requester readiness additions ---------- */
+.nrd-sc{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair2);background:var(--raised);color:var(--ink)}
+.nrd-sc.nrd-am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nrd-sc.nrd-vi{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nrd-sc.nrd-gr{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.nrd-sc.nrd-rd{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nrd-sc.nrd-dsh{border-style:dashed}
+.nrd-agc{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font:800 12.5px var(--sg);line-height:1.6;white-space:nowrap;border:1.5px solid var(--hair2);background:var(--raised);color:var(--ink);vertical-align:middle}
+.nrd-agc.nrd-am{color:var(--amT);background:var(--amBg);border-color:var(--amD)}
+.nrd-agc.nrd-vi{color:var(--vt);background:var(--lav);border-color:var(--vi)}
+.nrd-agc.nrd-gr{color:var(--pos);background:var(--posBg);border-color:var(--pos)}
+.nrd-agc.nrd-rd{color:var(--neg);background:var(--negBg);border-color:var(--neg);border-style:dashed}
+.nrd-req{display:inline-flex;align-items:center;padding:0 6px;border-radius:5px;border:1px solid var(--hair2);font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);line-height:1.7}
+.nrd-opt{display:inline-flex;align-items:center;padding:0 6px;border-radius:5px;border:1px dashed var(--hair2);font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);line-height:1.7}
+.nrd-rql{display:flex;flex-direction:column;gap:8px}
+.nrd-rq{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 16px;padding:11px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);align-items:start}
+.nrd-rq.nrd-need{border-left:3px solid var(--amD)}
+.nrd-rq.nrd-blk{border-left:3px solid var(--neg)}
+.nrd-rq.nrd-hl{box-shadow:0 0 0 2px var(--vi)}
+.nrd-rq .nrd-rt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;grid-column:1}
+.nrd-rq .nrd-rt b{font-size:13.5px;font-weight:800}
+.nrd-rq .nrd-id{font:600 11px var(--mo);color:var(--mu)}
+.nrd-rq .nrd-why{grid-column:1;color:var(--mu);font-size:12.5px}
+.nrd-rq .nrd-mt{grid-column:1;display:flex;flex-wrap:wrap;gap:3px 18px;font-size:12px}
+.nrd-mt em{font-style:normal;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);margin-right:6px}
+.nrd-rq .nrd-ra{grid-column:2;grid-row:1 / span 3;display:flex;align-items:center;align-self:center}
+.nrd-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.nrd-fact{border:1px solid var(--hair);border-radius:10px;padding:11px 13px;background:var(--card);display:flex;flex-direction:column;gap:5px;align-items:flex-start;min-width:0}
+.nrd-fact small{color:var(--mu);font-size:11.5px}
+.nrd-agg{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.nrd-agg.nrd-am{border-color:var(--amE);background:var(--amBg)}
+.nrd-agg.nrd-gr{border-color:var(--posE);background:var(--posBg)}
+.nrd-agg h2{font-size:16px;font-weight:800;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.nrd-ctx{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:14px;align-items:center;padding:12px 16px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.nrd-ctx > div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.nrd-ctx small{color:var(--mu);font-size:12px}
+.nrd-fs{border:1px solid var(--hair);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;background:var(--card);min-width:0}
+.nrd-fs legend{font-size:13.5px;font-weight:800;padding:0 4px}
+.nrd-fr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nrd-f .nrd-hn{font-size:11.5px;color:var(--mu)}
+.nrd-f .nrd-fe{font-size:12px;color:var(--neg);font-weight:700}
+.nrd-in.nrd-bad{border:2px solid var(--neg)}
+.nrd-es{border:2px solid var(--neg);border-radius:10px;padding:12px 14px;background:var(--negBg);display:flex;flex-direction:column;gap:6px}
+.nrd-es h2{font-size:14px;font-weight:800;color:var(--neg)}
+.nrd-es a{text-decoration:underline}
+.nrd-c3w{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.nrd-srx{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;background:var(--raised)}
+.nrd-srx small{color:var(--mu);font-size:11.5px}
+.nrd-shr{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start}
+.nrd-prv{border:1.5px dashed var(--hair2);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;background:var(--raised)}
+.nrd-prv li{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.nrd-rad{display:flex;flex-direction:column;gap:8px}
+.nrd-rad label{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px}
+.nrd-rad label.nrd-on{border-color:var(--vi);background:var(--lav)}
+.nrd-rad .nrd-dot{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--hair2);margin-top:1px}
+.nrd-rad label.nrd-on .nrd-dot{border:5px solid var(--vi)}
+.nrd-rad small{display:block;color:var(--mu);font-size:12px}
+.nrd-tln li{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--hair)}
+.nrd-tln li:last-child{border-bottom:0}
+.nrd-tln .nrd-mo{color:var(--mu);font-size:11.5px}
+.nrd-mx th,.nrd-mx td{font-size:12px}
+.nrd-mx td{vertical-align:top}
+.nrd-gal td{vertical-align:top}
+.nrd-sp2{display:flex;gap:16px;align-items:flex-start}
+.nrd-sp2 > *{flex:1;min-width:0}
+.nrd-cv .nrd-tag.nrd-am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nrd-fs{margin:0;min-inline-size:0}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "NRD01", "options": ["NRD00", "NRD01", "NRD01B", "NRD02", "NRD03", "NRD03B", "NRD04", "NRD04B", "NRD05", "NRD05B", "NRD06", "NRD07", "NRD07B", "NRD07C", "NRD08", "NRD08B", "NRD08C", "NRD09", "NRD09B", "NRD10", "NRD11", "NRD12A", "NRD12B", "NRD12C", "NRD12D", "NRD12E", "NRD12F", "NRD13", "NRD13B", "NRD14", "NRDH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'NRD01';
+    /* NRD13 boards draw on the dark tokens; everything else is light. */
+    const dark = B.indexOf('NRD13') === 0;
+    const CV = 'cv' + (dark ? ' dk' : '');
+    const J = (a) => a.join('');
+    const mo = (s) => `<span class="mo">${s}</span>`;
+
+    /* ---------- annotations (not product copy) ---------- */
+    const TB = (t) => `<span class="bk" title="Needs backend work">◇ ${t}</span>`;
+    const TO = (t) => `<span class="ow" title="Owner decision">⚑ ${t}</span>`;
+    const LBL = (t) => `<span class="lbl">${t}</span>`;
+
+    /* ---------- Platform States (D5129): glyph + word, never colour alone ---------- */
+    const NR = (t) => `<span class="s">— Not recorded${t ? ' · ' + t : ''}</span>`;
+    const UN = (t) => `<span class="s ur">⚠ Unavailable${t ? ' · ' + t : ''}</span>`;
+    const NONE = (t) => `<span class="s">○ None${t ? ' · ' + t : ''}</span>`;
+    const NA = (t) => `<span class="s">· Not applicable${t ? ' · ' + t : ''}</span>`;
+    const RF = (t) => `<span class="s rf">⊘ Refused${t ? ' · ' + t : ''}</span>`;
+    const LOAD = (t) => `<span class="s" role="status">◌ Loading${t ? ' · ' + t : ''}</span>`;
+    const STALE = (t) => `<span class="pl a">◔ Stale · ${t}</span>`;
+    const E = `<span class="em" aria-hidden="true">E</span>`;
+    const SR = (t) => `<span class="sr">${t}</span>`;
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- requirement statuses: each its own glyph, border and word ---------- */
+    const S = {
+      ns: ['sc', '□', 'Not started'],
+      inc: ['sc am', '◐', 'Incomplete'],
+      cmp: ['sc', '●', 'Complete'],
+      sub: ['sc vi', '↑', 'Submitted'],
+      rev: ['sc vi', '◷', 'In review'],
+      mi: ['sc am', '✎', 'More information needed'],
+      ok: ['sc gr', '✓', 'Approved'],
+      dec: ['sc rd', '✕', 'Declined'],
+      exp: ['sc am dsh', '⌛', 'Expired'],
+      unr: ['sc rd dsh', '▧', 'Unreadable'],
+      na: ['sc dsh', '·', 'Not applicable']
+    };
+    const SC = (k, x) => `<span class="${S[k][0]}"><span aria-hidden="true">${S[k][1]}</span>${S[k][2]}${x ? ' · ' + x : ''}</span>`;
+    /* aggregate readiness, scoped to capacity + organization + request type */
+    const AG = {
+      ns: ['', '□', 'Not started'],
+      inc: ['am', '◐', 'Incomplete'],
+      ready: ['gr', '✓', 'Ready to request'],
+      rev: ['vi', '◷', 'In review'],
+      mi: ['am', '✎', 'More information needed'],
+      blk: ['rd', '✕', 'Blocked'],
+      exp: ['am', '⌛', 'Expired'],
+      unr: ['rd', '▧', 'Unreadable']
+    };
+    const AGC = (k) => `<span class="agc ${AG[k][0]}"><span aria-hidden="true">${AG[k][1]}</span>${AG[k][2]}</span>`;
+    const RQD = '<span class="req">Required</span>';
+    const OPT = '<span class="opt">Optional</span>';
+
+    /* ---------- sample data: fictional; every figure agrees on every board ----------
+       Today Sat 21 Nov 2026. Requester [Iris Chen] (IC), Partner at [Harbor Lane Capital], capacity Investor,
+       drafting an external introduction to [Jules Avery], founder of [Elm Studio] (shared directory, not on Axal).
+       Draft [d-4f21] saved 2026-11-20 16:42 · server check 2026-11-21 09:14 · policy v0.3 (illustrative, #7673).
+       Requirements: 6 required + 1 optional = 2 need you + 1 with a reviewer + 3 done + 1 optional.
+       Reviewer queue: 6 need review (3 yours, 2 unassigned, 1 [Dev Varma]) · 2 waiting on requester · 14 decided in 30 days. */
+    const RI = [
+      { id: 'RQ-MAN-06', t: 'Investment mandate', why: 'Lets Axal judge fit before it contacts a founder for you.', r: 1, s: 'mi', x: 'asked 2026-11-19', who: 'You', ev: 'Self-entered 2026-11-17', rv: `${mo('2026-11-19')} · [Sara Holm]`, val: '—', act: 'Answer', need: 1 },
+      { id: 'RQ-PROF-01', t: 'Professional profile', why: 'Axal reads it to understand who is asking. This policy requires six fields.', r: 1, s: 'inc', x: '5 of 6 fields', who: 'You', ev: `Self-entered · updated ${mo('2026-11-20')}`, rv: 'Not reviewed: completeness only', val: '—', act: 'Add description', need: 1 },
+      { id: 'RQ-REP-03', t: 'Authority to act for [Harbor Lane Capital]', why: 'You are asking as the firm, not only as yourself.', r: 1, s: 'rev', x: 'since 2026-11-18', who: 'Axal reviewer · [Sara Holm]', ev: 'EV-1207 · private', rv: '—', val: 'Set at decision', act: 'View' },
+      { id: 'RQ-AFF-02', t: 'Current affiliation · Partner, [Harbor Lane Capital]', why: 'Confirms the role shown to the person you want to meet.', r: 1, s: 'ok', who: 'Nobody', ev: 'EV-1182 · reviewed affiliation', rv: `${mo('2026-10-02')} · [Dev Varma]`, val: `to ${mo('2027-04-02')}`, act: 'View' },
+      { id: 'RQ-ID-04', t: 'Identity verification', why: 'Reused from your Trust Center identity check: status and date only.', r: 1, s: 'ok', who: 'Nobody', ev: 'Trust Center identity check', rv: mo('2026-03-12'), val: `to ${mo('2027-03-12')}`, act: 'View' },
+      { id: 'RQ-PUR-05', t: 'Purpose and shareable brief', why: 'Written for each request. It is what the person would read.', r: 1, s: 'cmp', x: 'in your draft', who: 'Nobody', ev: `Draft [d-4f21] · saved ${mo('2026-11-20 16:42')}`, rv: 'Not reviewed', val: 'This request', act: 'Preview' },
+      { id: 'RQ-REF-07', t: 'Professional reference', why: 'Can help a reviewer. It never blocks a request.', r: 0, s: 'ns', who: 'You, if you choose', ev: 'None', rv: '—', val: '—', act: 'Add' }
+    ];
+    const rq = (q, o) => {
+      o = o || {};
+      return `<div class="rq${q.need ? ' need' : ''}${o.blk ? ' blk' : ''}${o.hl ? ' hl' : ''}" role="listitem"><div class="rt"><b>${q.t}</b><span class="id">${q.id}</span>${q.r ? RQD : OPT}${SC(q.s, q.x)}</div><p class="why">${q.why}</p><div class="mt"><span><em>Next</em>${q.who}</span><span><em>Evidence</em>${q.ev}</span><span><em>Reviewed</em>${q.rv}</span><span><em>Valid</em>${q.val}</span></div><div class="ra"><a class="btn" href="#">${q.act}<span class="sr"> · ${q.id}</span></a></div></div>`;
+    };
+
+    /* ---------- shell: company/project switcher top-left, sidebar = held licences, Account menu holds Portfolio, Companies, Licences ---------- */
+    const NAVS = {
+      i: ['Home', 'Deals', 'Portfolio', 'Axal VC Fund', 'Network', 'Research', '|', 'Trust', 'Firm Settings'],
+      f: ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', '|', 'Trust', 'Company Settings'],
+      v: ['Home', 'Practice', 'Cohorts', 'Expertise', 'Network', 'Research', '|', 'Trust', 'Practice Settings'],
+      a: ['Home', 'Network', 'Research', '|', 'Admin console']
+    };
+    const SW = { i: '[Harbor Lane Capital]', f: '[Kelp Bio]', v: '[Okafor Advisory]', a: '[Axal HQ]' };
+    const GRP = { i: 'Investor', f: 'Founder', v: 'Advisor', a: 'HQ' };
+    const INI = { i: 'IC', f: 'LS', v: 'AO', a: 'SH' };
+    const CUR = { i: 'Network', f: 'Network', v: 'Network', a: 'Admin console' };
+    const side = (r) => `<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company or project: ${SW[r]}">${SW[r]} <span aria-hidden="true">▾</span></button><span class="eye grp">${GRP[r]}</span><nav aria-label="${GRP[r]}">${J(NAVS[r].map((t) => t === '|' ? '<div class="sep"></div>' : `<a href="#"${t === CUR[r] ? ' aria-current="page"' : ''}>${t}</a>`))}</nav></aside>`;
+    const top = (r) => `<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">${bell}</button><button type="button" class="av" style="border:0" aria-label="Account menu: Portfolio, Companies, Licences">${INI[r]}</button></div></div>`;
+    const RAILC = (t) => `<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">${t || 'Ask about your network'}</span></aside>`;
+    const railOpen = (c, ph) => `<aside class="rail" aria-label="Eadwyn"><div class="rh"><b><span class="e" aria-hidden="true">E</span>Eadwyn</b><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">→</button></div><div class="rb">${c}</div><div class="rin"><span>${ph || 'Ask about your network…'}</span><button type="button" class="btn">Ask</button></div></aside>`;
+    const shell = (r, body, o) => {
+      o = o || {};
+      const h = o.h || 900;
+      return `<div class="${CV}" style="width:1440px;min-height:${h}px">${o.banner || ''}<div class="sh${o.rail ? ' ro' : ''}" style="min-height:${h}px">${side(r)}<div class="mn">${top(r)}<main class="bd">${body}</main></div>${o.rail ? railOpen(o.rail, o.railPh) : RAILC(o.railT)}</div>${o.overlay ? '<div class="dim" aria-hidden="true"></div>' + o.overlay : ''}</div>`;
+    };
+    const TABS = (cur) => `<nav class="ptabs" aria-label="Network">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<a href="#"${t === cur ? ' aria-current="page"' : ''}>${t}</a>`))}</nav>`;
+    const HEAD = (o) => `${o.crumb ? `<nav aria-label="Breadcrumb" class="foot">${o.crumb}</nav>` : ''}<header class="hdr"><span class="eye">${o.eye || 'Network · Introductions'}</span><div class="hrow"><div><h1>${o.h1 || 'Introductions'}</h1><p>${o.sub || ''}</p></div><div class="acts">${o.acts !== undefined ? o.acts : `<button type="button" class="btn ask">${E}Ask</button>`}</div></div></header>${o.tab === false ? '' : TABS(o.tab || 'Introductions')}`;
+    const panel = (eye, h, body, foot, w) => `<div class="panel" role="dialog" aria-labelledby="p${h.length}" style="width:${w || 440}px"><div class="dh"><div><span class="eye">${eye}</span><h2 id="p${h.length}">${h}</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="dc">${body}</div><div class="df">${foot}</div></div>`;
+    const phTop = (t, back) => `<div class="pt"><button type="button" class="pi" aria-label="${back ? 'Back' : 'Open menu'}">${back ? '‹' : '☰'}</button><b style="font-size:15px">${t}</b><div style="display:flex"><button type="button" class="pi" aria-label="Ask Eadwyn"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)">E</span></button><button type="button" class="pi" aria-label="Notifications">${bell}</button></div></div>`;
+    const phone = (t, body, stk, o) => `<div class="${CV} ph${stk ? ' fx' : ''}" style="width:390px;min-height:${(o && o.h) || 844}px">${phTop(t, o && o.back)}<main class="pbd" style="overflow:hidden">${body}</main>${stk ? `<div class="stk">${stk}</div>` : ''}</div>`;
+    const crop = (w, body) => `<div class="${CV} crop" style="width:${w}px">${body}</div>`;
+    const stcard = (tag, h, body, cls) => `<section class="cd${cls ? ' ' + cls : ''}"><span class="tag">${tag}</span><div class="ch"><h2>${h}</h2></div>${body}</section>`;
+    const SUPBAN = (who) => `<div class="bn sup" role="status"><span aria-hidden="true">⚠</span><b>Support session</b> · [Axal Support · Jo Park] is viewing ${who || '[Iris Chen]'}’s account, started ${mo('2026-11-21 09:40')}. Read-only: nothing here attests, submits or decides.<button type="button" class="btn" style="margin-left:auto">End session</button></div>`;
+
+    /* ---------- shared readiness pieces ---------- */
+    const DRAFTBAR = `<div class="strip" role="region" aria-label="Your saved introduction draft"><span aria-hidden="true">✎</span><span><b>Your draft to [Jules Avery] is saved.</b> Target, message, capacity and source stay as you left them while you work here.</span><a class="btn t" href="#" style="margin-left:auto">Return to introduction →</a></div>`;
+    const CTX = `<div class="ctx"><div><span class="eye">Asking as</span><b>[Iris Chen] · Investor</b><small>Partner, [Harbor Lane Capital] · authority ${SC('rev')}</small></div><div><span class="eye">Request</span><b>External introduction</b><small>to [Jules Avery], [Elm Studio] · draft ${mo('[d-4f21]')}</small></div><div><span class="eye">Policy</span><b>${mo('v0.3')} · illustrative</b><small>requirements supplied through #7673 ${TB('#7673')}</small></div><button type="button" class="btn">Change capacity</button></div>`;
+    const AGG = `<section class="agg am" aria-labelledby="ag"><span class="eye">Ready to request? · Investor · for [Harbor Lane Capital] · external introduction</span><h2 id="ag">${AGC('mi')} Not yet: 2 items need you and 1 is with a reviewer</h2><p class="sub">3 of 6 required items are done. The optional reference does not block. You can keep browsing and editing your saved draft.</p></section>`;
+    const FACTS = `<section class="facts" aria-label="Four separate facts, each with its own date">
+      <div class="fact"><span class="eye">Profile completeness</span>${SC('inc')}<span>5 of 6 required fields</span><small>Updated ${mo('2026-11-20 16:40')} · not a review</small></div>
+      <div class="fact"><span class="eye">Identity verification</span>${SC('ok')}<span>Trust Center identity check</span><small>Approved ${mo('2026-03-12')} · valid to ${mo('2027-03-12')}</small></div>
+      <div class="fact"><span class="eye">Due-diligence review</span>${SC('rev')}<span>1 in review · 1 needs your answer</span><small>Last decision ${mo('2026-11-19')}</small></div>
+      <div class="fact"><span class="eye">Eligible for this request</span>${AGC('mi')}<span>Not yet · decided by the server</span><small>Checked ${mo('2026-11-21 09:14')} · policy ${mo('v0.3')}</small></div></section>
+      <p class="foot">A legal agreement is not part of readiness. The Trust Center NDA step still follows only an accepted investor ask to a founder on Axal (D7065).</p>`;
+    const RLIST = (o) => {
+      o = o || {};
+      return `<section class="cd" aria-labelledby="rl"><div class="ch"><h2 id="rl">Requirements for this request</h2><span class="sm">6 required · 1 optional · policy v0.3</span></div>
+      <div class="grh"><h3>✎ Needs you · 2</h3></div><div role="list" class="rql">${rq(RI[0], { hl: o.hl })}${rq(RI[1])}</div>
+      <div class="grh"><h3>◷ With a reviewer · 1</h3><span class="foot">no date is promised</span></div><div role="list" class="rql">${rq(RI[2])}</div>
+      <div class="grh"><h3>✓ Done · 3</h3></div><div role="list" class="rql">${rq(RI[3])}${rq(RI[4])}${rq(RI[5])}</div>
+      <div class="grh"><h3>Optional · 1</h3><span class="foot">never blocks submission</span></div><div role="list" class="rql">${rq(RI[6])}</div>
+      <div class="cf"><span class="foot">Requirement names, reasons and validity are illustrative. The policy owner supplies them through #7673. A complete profile is not approval to request.</span>${TO('Q1 · identity check for investors only, drawn A')}</div></section>`;
+    };
+    const OVERVIEW = () => `${HEAD({ crumb: '<a href="#">Introductions</a> › Draft to [Jules Avery] › Request readiness', eye: 'Network · Introductions · requester readiness', h1: 'Request readiness', sub: 'What applies to this request, what is done, what needs you and what awaits review.', acts: `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn p">Answer the reviewer</button>` })}
+      ${DRAFTBAR}${CTX}${AGG}${FACTS}${RLIST()}`;
+
+    /* ---------- reviewer pieces ---------- */
+    const QROWS = [
+      ['[Iris Chen]', 'Investor · [Harbor Lane Capital]', 'RQ-REP-03 Authority to act', '2026-11-18', '3 days', 'You', SC('rev')],
+      ['[Tom Becker]', 'Investor · [Northstar Capital]', 'RQ-MAN-06 Investment mandate · answer received', '2026-11-20', '1 day', 'You', SC('sub', 'answer')],
+      ['[Ari Lane]', 'Advisor · independent', 'RQ-AFF-02 Current affiliation', '2026-11-16', '5 days', 'You', SC('rev')],
+      ['[Ada Okafor]', 'Advisor · independent', 'RQ-EXP-06 Advisory expertise · renewal', '2026-11-20', '1 day', '<span class="s">○ Unassigned</span>', SC('sub')],
+      ['[Priya Nair]', 'Founder · [Tidepool Labs]', 'RQ-AFF-02 Current affiliation', '2026-11-17', '4 days', '<span class="s">○ Unassigned</span>', SC('sub')],
+      ['[Lena Sato]', 'Founder · [Quill Analytics]', 'RQ-REP-03 Authority to act', '2026-11-19', '2 days', '[Dev Varma]', SC('rev')]
+    ];
+    const QHEAD = `<tr><th scope="col">Requester</th><th scope="col">Capacity · organization</th><th scope="col">Requirement</th><th scope="col">Submitted</th><th scope="col">Waiting</th><th scope="col">Assigned</th><th scope="col">Status</th><th scope="col"><span class="sr">Open</span></th></tr>`;
+    const qrow = (r, cur) => `<tr${cur ? ' class="cur"' : ''}><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td class="mo">${r[3]}</td><td class="mo">${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td><td><a class="btn t" href="#">Open</a></td></tr>`;
+    const RVHEAD = (o) => HEAD(Object.assign({ tab: false, eye: 'Admin console · Network · requester reviews', h1: 'Requester reviews', sub: 'Cases you may review: assigned to you or unassigned within your entitlement.', acts: '<button type="button" class="btn p">Open next case</button>' }, o || {}));
+    const CASEBODY = (o) => {
+      o = o || {};
+      return `${RVHEAD({ crumb: '<a href="#">Requester reviews</a> › [Iris Chen] · RQ-REP-03', h1: '[Iris Chen] · Authority to act for [Harbor Lane Capital]', sub: `RQ-REP-03 · submitted ${mo('2026-11-18 10:05')} · assigned to you · policy v0.3`, acts: o.acts !== undefined ? o.acts : '<button type="button" class="btn p">Record decision</button>' })}
+      ${o.notice || ''}
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:16px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+      <section class="cd" aria-labelledby="cx"><div class="ch"><h2 id="cx">Request context · only what this requirement needs</h2></div>
+      <dl class="rv"><dt>Capacity</dt><dd>Investor</dd><dt>Organization</dt><dd>[Harbor Lane Capital] · linked on Axal</dd><dt>Request type</dt><dd>External introduction</dd><dt>Target</dt><dd>${NA('not needed for this requirement, so not shown')}</dd><dt>Affiliation</dt><dd>${SC('ok')} Partner · reviewed ${mo('2026-10-02')} by [Dev Varma]</dd></dl></section>
+      <section class="cd" aria-labelledby="evd"><div class="ch"><h2 id="evd">Evidence references</h2><span class="sm">each opening is logged</span></div>
+      <table class="tbl"><thead><tr><th scope="col">Ref</th><th scope="col">What</th><th scope="col">From</th><th scope="col">Added</th><th scope="col"><span class="sr">Open</span></th></tr></thead><tbody>
+      <tr><td class="mo">EV-1207</td><td><b>Letter of authority</b><small>PDF · 2 pages</small></td><td>Uploaded by [Iris Chen]</td><td class="mo">2026-11-18</td><td><a class="btn t" href="#">Open</a></td></tr>
+      <tr><td class="mo">EV-1182</td><td><b>Reviewed affiliation</b><small>decision record, no file</small></td><td>Axal review</td><td class="mo">2026-10-02</td><td><a class="btn t" href="#">Open</a></td></tr>
+      <tr><td class="mo">—</td><td><b>Trust Center identity check</b><small>status and date only</small></td><td>Trust Center</td><td class="mo">2026-03-12</td><td><span class="foot">No file here</span></td></tr></tbody></table></section>
+      <section class="cd" aria-labelledby="hs"><div class="ch"><h2 id="hs">History</h2></div><ul class="tln">
+      <li><span class="mo">2026-11-18</span><span>[Iris Chen] submitted RQ-REP-03 with EV-1207.</span></li>
+      <li><span class="mo">2026-11-18</span><span>Assigned to [Sara Holm] by [Dev Varma].</span></li>
+      <li><span class="mo">2026-10-02</span><span>RQ-AFF-02 approved by [Dev Varma]. Requester read: “Your role at [Harbor Lane Capital] is confirmed.”</span></li></ul></section></div>
+      <section class="cd" aria-labelledby="dc"><div class="ch"><h2 id="dc">Your decision</h2>${o.dchip || ''}</div>
+      <div class="rad" role="radiogroup" aria-label="Decision"><label class="on"><span class="dot" aria-hidden="true"></span><span><b>Approve</b><small>Valid to ${mo('2027-05-21')} · 6 months in policy v0.3 (illustrative)</small></span></label><label><span class="dot" aria-hidden="true"></span><span><b>Ask for more information</b><small>Name exactly what is missing</small></span></label><label><span class="dot" aria-hidden="true"></span><span><b>Decline</b><small>The requester can ask for a new review with new evidence</small></span></label></div>
+      <div class="f"><label for="rx">Explanation the requester reads</label><span id="rx" class="in ta">${o.rx || 'The letter is signed by a managing partner and names you as authorised to make introductions for the firm.'}</span></div>
+      <div class="f"><label for="ri">Internal note · reviewers only</label><span id="ri" class="in ta" style="min-height:56px">${o.ri || 'Signatory matches the firm’s registered managing partner.'}</span><span class="hn">Never shown to the requester, the target or other members.</span></div>
+      <div class="f"><label for="ra">Reassign</label><button type="button" id="ra" class="dd" aria-haspopup="listbox">[Sara Holm] (you) ▾</button></div>
+      <p class="foot">A decision contacts nobody outside Axal. The requester gets an in-app notice and their draft stays as it was.</p></section></div>`;
+    };
+
+    let html = '';
+
+    /* ================= NRD · Requester profile and due-diligence readiness (#7677) ================= */
+
+    /* NRD00 — the contract */
+    if (B === 'NRD00') html = `<div class="${CV} doc"><div><span class="eye">Requester readiness · #7677 · the contract the boards draw</span><h2 style="font-size:22px;margin-top:4px">Five facts that are never merged, one readiness that is always scoped</h2></div>
+      <div class="cols">
+      <div><h3>Five separate facts, each with its own words and date</h3><ul>
+      <li><b>Profile completeness</b>: required fields filled. ${SC('inc')} or ${SC('cmp')}. Nobody reviewed it.</li>
+      <li><b>Identity verification</b>: an existing check, today the investor-only Trust Center identity check. ${SC('ok')} with its date.</li>
+      <li><b>Due-diligence review</b>: a reviewer’s decision on one requirement. ${SC('rev')}, ${SC('mi')}, ${SC('ok')}, ${SC('dec')}.</li>
+      <li><b>Eligible for this request</b>: the server’s answer for one capacity, organization and request type, with a snapshot id and policy version. ${AGC('ready')} or not.</li>
+      <li><b>Legal agreement</b>: the Trust Center NDA after an accepted investor ask (D7065). Not part of readiness, and readiness never replaces it.</li></ul>
+      <h3 style="margin-top:12px">Aggregate readiness, worst first</h3><ul>
+      <li>${AGC('unr')} a requirement or the policy could not be read. Never shown as ready.</li>
+      <li>${AGC('blk')} a required item was declined.</li>
+      <li>${AGC('exp')} a required approval passed its validity.</li>
+      <li>${AGC('mi')} a reviewer asked the requester something.</li>
+      <li>${AGC('inc')} the requester has a required item to finish.</li>
+      <li>${AGC('rev')} only reviewer work remains.</li>
+      <li>${AGC('ready')} every required item is Approved, Complete or Not applicable. Optional items never count.</li>
+      <li>${AGC('ns')} nothing has been started for this capacity.</li></ul></div>
+      <div><h3>One requirement row</h3><ul><li>ID, name and why it matters for this request.</li><li>Required or Optional for this capacity and request type.</li><li>Status (NRD01B), next actor, one concrete action.</li><li>Evidence or source reference, last reviewed date, validity from policy.</li></ul>
+      <h3 style="margin-top:12px">Illustrative policy v0.3 ${TO('owner supplies through #7673')}</h3>
+      <table class="tbl mx"><thead><tr><th scope="col">Requirement</th><th scope="col">Founder</th><th scope="col">Investor</th><th scope="col">Advisor</th></tr></thead><tbody>
+      <tr><td>RQ-PROF-01 Professional profile</td><td>Required</td><td>Required</td><td>Required</td></tr>
+      <tr><td>RQ-AFF-02 Current affiliation</td><td>Required</td><td>Required</td><td>If one is claimed</td></tr>
+      <tr><td>RQ-REP-03 Authority to act for an organization</td><td>If acting for one</td><td>If acting for one</td><td>If acting for one</td></tr>
+      <tr><td>RQ-ID-04 Identity verification</td><td>Not applicable</td><td>Required · reuse</td><td>Not applicable</td></tr>
+      <tr><td>RQ-PUR-05 Purpose and shareable brief</td><td>Each request</td><td>Each request</td><td>Each request</td></tr>
+      <tr><td>RQ-VEN/MAN/EXP-06 Venture, mandate or expertise</td><td>Venture</td><td>Mandate</td><td>Expertise</td></tr>
+      <tr><td>RQ-REF-07 Professional reference</td><td>Optional</td><td>Optional</td><td>Optional</td></tr></tbody></table>
+      <p class="foot" style="margin-top:6px">No KYC regime, passport upload, accreditation, legal certification or score threshold is invented. An imported target never has to do any of this.</p>
+      <h3 style="margin-top:12px">What each event is, and is not</h3><ul><li>Saving a profile or evidence: saves. Contacts nobody.</li><li>A reviewer decision: an in-app notice to the requester. Contacts nobody outside Axal.</li><li>Submitting a request: queues it for an Axal operator (#7678). Nobody is contacted and no target has agreed.</li></ul></div></div></div>`;
+
+    /* NRD01 — investor overview */
+    else if (B === 'NRD01') html = shell('i', OVERVIEW(), { h: 1780, railT: 'Ask about this request' });
+
+    /* NRD01B — status gallery */
+    else if (B === 'NRD01B') {
+      const G = [
+        ['ns', 'Nothing entered or uploaded yet.', 'Yes, if required', 'Requester'],
+        ['inc', 'Started; a required part is missing.', 'Yes, if required', 'Requester'],
+        ['cmp', 'The requester’s part is done and no review applies.', 'No', 'Nobody'],
+        ['sub', 'Sent for review; not yet picked up.', 'Yes', 'Axal reviewer'],
+        ['rev', 'A named reviewer is looking at it.', 'Yes', 'Axal reviewer'],
+        ['mi', 'The reviewer asked a specific question.', 'Yes', 'Requester'],
+        ['ok', 'Decided, with a date and a validity limit.', 'No', 'Nobody until it expires'],
+        ['dec', 'Decided against, with a reason the requester reads.', 'Yes', 'Requester may ask again'],
+        ['exp', 'Was approved; its validity has passed.', 'Yes', 'Requester renews'],
+        ['unr', 'The record or file could not be read.', 'Yes · never counted as done', 'Retry, then support'],
+        ['na', 'Does not apply to this capacity or request.', 'No', 'Nobody']
+      ];
+      html = crop(1400, `<section class="cd"><div class="ch"><h2>Requirement row statuses</h2><span class="sm">11 words · never collapsed into “Pending”</span></div>
+      <table class="tbl gal"><thead><tr><th scope="col">Status</th><th scope="col">Means</th><th scope="col">Blocks submit</th><th scope="col">Next actor</th></tr></thead><tbody>${J(G.map((g) => `<tr><td>${SC(g[0])}</td><td>${g[1]}</td><td>${g[2]}</td><td>${g[3]}</td></tr>`))}</tbody></table></section>
+      <section class="cd"><div class="ch"><h2>Rows in each state</h2><span class="sm">the same row component</span></div><div role="list" class="rql">
+      ${rq({ id: 'RQ-AFF-02', t: 'Current affiliation · Partner, [Harbor Seed]', why: 'Shown to the person you want to meet.', r: 1, s: 'dec', x: '2026-11-20', who: 'You', ev: 'EV-1240', rv: `${mo('2026-11-20')} · [Dev Varma]`, val: '—', act: 'Ask for a new review' }, { blk: 1 })}
+      ${rq({ id: 'RQ-EXP-06', t: 'Advisory expertise', why: 'Lets Axal describe what you advise on.', r: 1, s: 'exp', x: 'on 2026-11-03', who: 'You', ev: 'EV-0931', rv: mo('2025-11-03'), val: `ended ${mo('2026-11-03')}`, act: 'Renew', need: 1 })}
+      ${rq({ id: 'RQ-REP-03', t: 'Authority to act for [Harbor Lane Capital]', why: 'You are asking as the firm.', r: 1, s: 'unr', x: 'EV-1207', who: 'You', ev: 'letter_of_authority.pdf could not be opened', rv: '—', val: '—', act: 'Upload again', need: 1 })}
+      ${rq({ id: 'RQ-ID-04', t: 'Identity verification', why: 'Does not apply to an advisor in policy v0.3.', r: 0, s: 'na', who: 'Nobody', ev: '—', rv: '—', val: '—', act: 'Why' })}</div></section>`);
+    }
+
+    /* NRD02 — founder, investor, advisor */
+    else if (B === 'NRD02') {
+      const li = (t, k, x) => `<li style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--hair)"><span>${t}</span>${SC(k, x)}</li>`;
+      html = crop(1400, `<div class="g3">
+      <section class="cd"><span class="tag">Founder</span><div class="ch"><h2>[Lena Sato] · for [Kelp Bio]</h2></div><p class="sub">To [Morgan Vale], partner at [Harbor Seed] · not on Axal</p>
+      <div class="agg gr"><h2 style="font-size:14px">${AGC('ready')}</h2><span class="foot">Snapshot ${mo('S-114')} · Founder · [Kelp Bio] · external introduction · checked ${mo('2026-11-21 09:10')} · policy ${mo('v0.3')}</span></div>
+      <ul>${li('RQ-PROF-01 Professional profile', 'cmp')}${li('RQ-AFF-02 Founder, [Kelp Bio]', 'ok', 'company owner on Axal')}${li('RQ-REP-03 Authority for [Kelp Bio]', 'ok')}${li('RQ-VEN-06 Venture summary', 'cmp')}${li('RQ-PUR-05 Purpose and brief', 'cmp')}${li('RQ-ID-04 Identity verification', 'na')}</ul>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>Ready for <b>[Kelp Bio]</b> only. Asking for <b>[Quill Analytics]</b> needs its own authority: ${SC('ns')}</div></div></section>
+      <section class="cd"><span class="tag">Investor</span><div class="ch"><h2>[Iris Chen] · for [Harbor Lane Capital]</h2></div><p class="sub">To [Jules Avery], founder of [Elm Studio] · not on Axal</p>
+      <div class="agg am"><h2 style="font-size:14px">${AGC('mi')}</h2><span class="foot">2 need you · 1 with a reviewer · 3 of 6 required done</span></div>
+      <ul>${li('RQ-MAN-06 Investment mandate', 'mi')}${li('RQ-PROF-01 Professional profile', 'inc', '5 of 6')}${li('RQ-REP-03 Authority for the firm', 'rev')}${li('RQ-AFF-02 Partner, [Harbor Lane Capital]', 'ok')}${li('RQ-ID-04 Identity verification', 'ok', 'reused')}${li('RQ-PUR-05 Purpose and brief', 'cmp')}</ul>
+      <p class="foot">The full checklist is NRD01.</p></section>
+      <section class="cd"><span class="tag">Advisor</span><div class="ch"><h2>[Ada Okafor] · independent</h2></div><p class="sub">To [Priya Nair], [Tidepool Labs] · founder on Axal</p>
+      <div class="agg am"><h2 style="font-size:14px">${AGC('exp')}</h2><span class="foot">Advisory expertise review ended ${mo('2026-11-03')}</span></div>
+      <ul>${li('RQ-PROF-01 Professional profile', 'cmp')}${li('RQ-EXP-06 Advisory expertise', 'exp')}${li('RQ-PUR-05 Purpose and brief', 'cmp')}${li('RQ-AFF-02 Current affiliation', 'na', 'none claimed')}${li('RQ-REP-03 Authority', 'na', 'acting for herself')}${li('RQ-ID-04 Identity verification', 'na')}</ul>
+      <p class="foot">[Ada] also holds an investor licence. NRD03 shows her switching capacity.</p></section></div>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>Each card is one person, one capacity, one organization and one request type. Ready is never carried across capacities, organizations or policy versions. ${TO('Q1 · identity verification for investors only, reusing Trust Center · drawn A')}</div></div>`);
+    }
+
+    /* NRD03 — capacity switch with preview */
+    else if (B === 'NRD03') html = crop(1400, `<div class="sp2">
+      ${panel('Request readiness · [Ada Okafor]', 'Ask as a different capacity', `<p class="sub">Your licences: Advisor and Investor. You stay one person with one profile.</p>
+      <div class="rad" role="radiogroup" aria-label="Capacity"><label><span class="dot" aria-hidden="true"></span><span><b>Advisor · independent</b><small>Current · ${AGC('exp')}</small></span></label><label class="on"><span class="dot" aria-hidden="true"></span><span><b>Investor · angel, own capital</b><small>No organization named</small></span></label><label><span class="dot" aria-hidden="true"></span><span><b>Investor · for an organization</b><small>Name it and show your authority (NRD03B)</small></span></label></div>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Switch to Investor</button>`, 520)}
+      <section class="cd" aria-labelledby="pv"><div class="ch"><h2 id="pv">What changes if you switch</h2><span class="sm">preview · nothing saved yet</span></div>
+      <div class="grh"><h3>+ Newly applies · 2</h3></div><div role="list" class="rql">
+      ${rq({ id: 'RQ-MAN-06', t: 'Investment mandate', why: 'Stages and cheque range you invest at.', r: 1, s: 'ns', who: 'You', ev: 'None', rv: '—', val: '—', act: 'Preview' })}
+      ${rq({ id: 'RQ-ID-04', t: 'Identity verification', why: 'Policy v0.3 asks investors for the Trust Center identity check.', r: 1, s: 'ns', who: 'You, in Trust Center', ev: 'None on record', rv: '—', val: '—', act: 'Preview' })}</div>
+      <div class="grh"><h3>− Stops applying · 1</h3><span class="foot">kept on your record, not deleted</span></div><p class="sub">RQ-EXP-06 Advisory expertise · ${SC('exp')} · comes back as it is if you switch back.</p>
+      <div class="grh"><h3>= Unchanged · 2</h3></div><p class="sub">RQ-PROF-01 Professional profile ${SC('cmp')} · RQ-PUR-05 Purpose and brief ${SC('cmp')}</p>
+      <div class="nt"><span class="ic" aria-hidden="true">✎</span><div><b>Your draft to [Priya Nair] stays.</b> Its capacity changes to Investor and readiness is checked again: ${AGC('inc')}</div></div></section></div>`);
+
+    /* NRD03B — represented organization */
+    else if (B === 'NRD03B') html = crop(1400, `<div class="g2">
+      <fieldset class="fs"><legend>Who are you asking for?</legend><div class="rad" role="radiogroup" aria-label="Asking for">
+      <label><span class="dot" aria-hidden="true"></span><span><b>Myself</b><small>No organization is named to the person</small></span></label>
+      <label class="on"><span class="dot" aria-hidden="true"></span><span><b>[Harbor Lane Capital]</b><small>Linked on Axal · your role Partner ${SC('ok', 'reviewed 2026-10-02')}</small></span></label>
+      <label><span class="dot" aria-hidden="true"></span><span><b>Another organization</b><small>Search the shared directory ${TB('#7672 · #7674')}</small></span></label></div>
+      <p class="foot">Naming an organization adds RQ-REP-03. You cannot confirm your own authority; an Axal reviewer does.</p></fieldset>
+      <section class="cd"><div class="ch"><h2>Representation, as each state reads</h2></div><table class="tbl"><tbody>
+      <tr><th scope="row">Confirmed</th><td>${SC('ok')} Authority for [Kelp Bio] · [Lena Sato] is its owner on Axal · ${mo('2026-06-01')}</td></tr>
+      <tr><th scope="row">In review</th><td>${SC('rev')} Authority for [Harbor Lane Capital] · EV-1207 · since ${mo('2026-11-18')}</td></tr>
+      <tr><th scope="row">Not confirmed</th><td>${SC('ns')} Authority for [Quill Analytics] · nothing submitted</td></tr>
+      <tr><th scope="row">Not in the directory</th><td>${NR('organization')} · You type its name; it becomes a provisional entry for review ${TB('#7673')}</td></tr>
+      <tr><th scope="row">Directory unreadable</th><td>${UN('organizations')} · Choose Myself, or try again. Your draft is kept.</td></tr></tbody></table></section></div>`);
+
+    /* NRD04 — professional profile form with conflict and Eadwyn */
+    else if (B === 'NRD04') {
+      const rail = `<span class="eye">Suggested · from your own profile fields</span>
+      <div class="an"><b>Draft a professional description?</b><span>Eadwyn reads only your saved profile: role, affiliation, location and links.</span><div class="cost"><span>Estimated cost</span><b>[900] tokens</b></div><div class="acts"><button type="button" class="btn">Draft description</button><button type="button" class="btn t">Not now</button></div></div>
+      <span class="eye">Proposed · after you chose Draft</span>
+      <div class="draft"><div class="cost"><span>Cost, quoted before drafting</span><b>[900] tokens · used</b></div><p class="tx">Partner at [Harbor Lane Capital], leading seed investments in health software across Southern Europe. Before investing I ran product at two clinical-data startups.</p><div class="acts"><button type="button" class="btn">Use in the field</button><button type="button" class="btn">Edit</button><button type="button" class="btn t">Discard</button></div><span class="foot">Check every claim; you save it, not Eadwyn. Eadwyn cannot add evidence, attest or approve anything.</span></div>`;
+      html = shell('i', `${HEAD({ crumb: '<a href="#">Introductions</a> › <a href="#">Request readiness</a> › Professional profile', eye: 'Network · Introductions · RQ-PROF-01', h1: 'Professional profile', sub: 'Six fields are required by policy v0.3. Others can help but never block.', acts: '<span class="s" role="status">✓ Draft saved 09:20</span><button type="button" class="btn p">Save profile</button>' })}
+      <fieldset class="fs"><legend>1 · Basics</legend><div class="fr"><div class="f"><label for="n1">Name ${RQD}</label><span id="n1" class="in">[Iris Chen]</span></div><div class="f"><label for="n2">Location ${RQD}</label><span id="n2" class="in">[Lisbon, Portugal]</span><span class="hn">City and country. Example: Berlin, Germany</span></div></div></fieldset>
+      <fieldset class="fs"><legend>2 · Current role and affiliation</legend><div class="fr"><div class="f"><label for="n3">Role ${RQD}</label><span id="n3" class="in">Managing Partner</span></div><div class="f"><label for="n4">Affiliation ${RQD}</label><span id="n4" class="in">[Harbor Lane Capital] · ${SC('ok', 'reviewed')}</span></div></div>
+      <div class="nt a" role="region" aria-labelledby="cf1"><span class="ic" aria-hidden="true">!</span><div style="flex:1"><b id="cf1">Your title differs between three records</b><div class="c3w" style="margin-top:8px">
+      <div class="srx"><span class="eye">You entered</span><b>Managing Partner</b><small>${mo('2026-11-20')} · self-entered</small></div>
+      <div class="srx"><span class="eye">Shared directory</span><b>Partner</b><small>imported source · ${mo('2026-11-12')} ${TB('#7672')}</small></div>
+      <div class="srx"><span class="eye">Reviewed affiliation</span><b>Partner</b><small>${SC('ok')} ${mo('2026-10-02')} · [Dev Varma]</small></div></div>
+      <div class="acts" style="margin-top:8px"><button type="button" class="btn">Use the reviewed title</button><button type="button" class="btn">Ask for a review of my change</button></div><span class="foot">You can correct your profile. You cannot approve a reviewed fact; until a review, the person sees the reviewed title.</span></div></div></fieldset>
+      <fieldset class="fs"><legend>3 · Professional description</legend><div class="f"><label for="n5">Description ${RQD}</label><span id="n5" class="in ta hint">What you do and what you are looking for. Example: “I lead seed rounds in B2B health software and sit on two boards.”</span><span class="hn">${mo('0 / 600')} · at least 80 characters</span></div></fieldset>
+      <div class="fr"><fieldset class="fs"><legend>4 · Professional links</legend><div class="f"><label for="n6">LinkedIn profile ${OPT}</label><span id="n6" class="in">https://linkedin.com/in/[iris-chen]</span></div><div class="f"><label for="n7">Firm website ${OPT}</label><span id="n7" class="in">https://[harborlane.example]</span></div></fieldset>
+      <fieldset class="fs"><legend>5 · How Axal reaches you</legend><div class="f"><label for="n8">Contact method ${RQD}</label><span id="n8" class="in">Email · iris@[harborlane.example]</span><span class="hn">Seen by Axal operators only. Never shared with the person or shown in the directory.</span></div></fieldset></div>
+      <p class="foot">Visible to: you and assigned Axal reviewers. The shareable part is previewed on NRD06 before any request is sent.</p>`, { h: 1180, rail, railPh: 'Ask about your profile…' });
+    }
+
+    /* NRD04B — validation, error summary, failed save */
+    else if (B === 'NRD04B') html = crop(1400, `<div class="g2">
+      <div style="display:flex;flex-direction:column;gap:12px"><div class="es" role="alert" tabindex="-1" aria-labelledby="es1"><h2 id="es1">2 fields need attention</h2><ul style="list-style:disc;padding-left:18px"><li><a href="#n5">Description: add at least 80 characters</a></li><li><a href="#n6">LinkedIn profile: enter a full link that starts with https://</a></li></ul><span class="foot">Focus moves here after Save. Each link moves focus to its field.</span></div>
+      <fieldset class="fs"><legend>3 · Professional description</legend><div class="f"><label for="n5">Description ${RQD}</label><span id="n5" class="in ta bad" aria-invalid="true" aria-describedby="e5">I invest in health.</span><span id="e5" class="fe">✕ Add at least 80 characters. You have 19.</span></div></fieldset>
+      <fieldset class="fs"><legend>4 · Professional links</legend><div class="f"><label for="n6">LinkedIn profile ${OPT}</label><span id="n6" class="in bad" aria-invalid="true" aria-describedby="e6">linkedin/iris</span><span id="e6" class="fe">✕ Enter a full link that starts with https://</span></div></fieldset></div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+      ${stcard('Save failed', 'Not saved', `<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>${UN('the save did not answer')}</b><br>Everything you typed is kept in this page. Trying again sends the same save once ${TB('#7673 idempotent save')}.</div><button type="button" class="btn bt">Try again</button></div>`)}
+      ${stcard('Conflict', 'Saved in another tab', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div>Another tab saved your profile at ${mo('09:22')}. Your typing here was not saved over it. <b>Description</b> differs; every other field is the same.</div></div><div class="acts"><button type="button" class="btn">Keep mine</button><button type="button" class="btn">Use the other tab’s</button></div>`)}
+      ${stcard('Draft kept', 'Leaving with unsaved changes', `<p class="sub">Draft saved ${mo('09:20')}. Leaving keeps it. Coming back opens the same fields with focus on the first one you changed.</p>`)}</div></div>`);
+
+    /* NRD05 — evidence reuse, scope, unreadable */
+    else if (B === 'NRD05') html = crop(1400, `<div class="g2">
+      ${stcard('Reuse · in scope', 'Identity verification can reuse your Trust Center check', `<dl class="rv"><dt>Record</dt><dd>Trust Center identity check · ${SC('ok')} ${mo('2026-03-12')}</dd><dt>Reused as</dt><dd>Status, date and validity only (to ${mo('2027-03-12')})</dd><dt>Not copied</dt><dd>Your documents, ID number and address stay in Trust Center</dd><dt>Seen by</dt><dd>Assigned Axal reviewers</dd></dl><div class="acts"><button type="button" class="btn">Reuse for RQ-ID-04</button><button type="button" class="btn t">Not now</button></div><p class="foot">After reuse: “Reused ${mo('2026-11-21')} · scope status and date”. Withdrawing reuse sets RQ-ID-04 back to Not started.</p>`)}
+      ${stcard('Outside your scope', 'Entity verification for [Harbor Lane Capital]', `<p class="sub">${RF('held by the firm’s administrator')}</p><p class="sub">It is not offered for reuse, and nothing about it is shown here. Ask the firm’s administrator to share it, or use a letter of authority instead.</p>`)}
+      ${stcard('Unreadable', 'letter_of_authority.pdf', `<div class="nt r"><span class="ic" aria-hidden="true">▧</span><div><b>${SC('unr')}</b> The file could not be opened. RQ-REP-03 stays Not started; it is never counted as submitted.</div></div><div class="acts"><button type="button" class="btn">Upload again</button></div><p class="foot">PDF, JPG or PNG up to 6 MB, as Trust Center accepts today.</p>`)}
+      ${stcard('Nothing on record', 'Professional reference · optional', `<p class="sub">${NONE('no reference recorded')}. Axal never fills this in for you, and a directory listing is not a reference.</p>`)}</div>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Who sees evidence:</b> the Axal reviewers assigned to this requirement. Never the person you want to meet, never the directory, never other members, and never an outreach brief by default.</div></div>`);
+
+    /* NRD05B — more information needed and waiting */
+    else if (B === 'NRD05B') html = crop(1400, `<div class="g2">
+      <section class="cd" aria-labelledby="mi1"><span class="tag">Requester · ${S.mi[2]}</span><div class="ch"><h2 id="mi1">RQ-MAN-06 · Investment mandate</h2>${SC('mi')}</div>
+      <div class="nt a"><span class="ic" aria-hidden="true">✎</span><div><span class="eye">From Axal review · ${mo('2026-11-19')}</span><br>“Add the stages and cheque range you invest at for [Harbor Lane Capital].”</div></div>
+      <p class="sub">Your earlier answer (${mo('2026-11-17')}): “Seed, health software.”</p>
+      <div class="fr"><div class="f"><label for="m1">Stages ${RQD}</label><span id="m1" class="in">Pre-seed, Seed</span></div><div class="f"><label for="m2">Cheque range ${RQD}</label><span id="m2" class="in">€250k – €750k</span></div></div>
+      <div class="f"><label for="m3">Note to the reviewer ${OPT}</label><span id="m3" class="in ta hint">Anything else the reviewer asked about…</span></div>
+      <div class="cf"><span class="foot">Goes back to the same reviewer. Your draft to [Jules Avery] stays saved.</span><button type="button" class="btn p">Send answer</button></div></section>
+      <div style="display:flex;flex-direction:column;gap:12px">
+      ${stcard('After sending', 'Answer sent', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div>Sent ${mo('2026-11-21 09:31')}. RQ-MAN-06 is now ${SC('sub', 'answer')}. Next: [Sara Holm].</div></div><a class="btn t" href="#" style="align-self:flex-start">Return to introduction →</a>`)}
+      ${stcard('Waiting', 'With a reviewer', `<p class="sub">${SC('rev')} since ${mo('2026-11-18')} · [Sara Holm]. No date is promised. You can keep editing your draft; you will get an in-app notice when it is decided.</p>`)}
+      ${stcard('Resumed', 'Coming back later', `<p class="sub">Your typed answer is kept as a draft until you send it. A second Send returns the same answer, not two.</p>`)}</div></div>`);
+
+    /* NRD06 — what Axal will share */
+    else if (B === 'NRD06') html = shell('i', `${HEAD({ crumb: '<a href="#">Introductions</a> › Draft to [Jules Avery] › What Axal will share', eye: 'Network · Introductions · share preview', h1: 'What Axal will share', sub: 'Exactly what [Jules Avery] could read if an Axal operator contacts them. Nothing is sent now.', acts: '<button type="button" class="btn p">Confirm and return to the request</button>' })}
+      <div class="shr">
+      <section class="cd" aria-labelledby="sh1"><div class="ch"><h2 id="sh1">Shared with [Jules Avery]</h2><span class="sm">profile ${mo('r12')} · brief ${mo('r3')}</span></div>
+      <div class="pr"><span class="av">IC</span><div><b>[Iris Chen]</b><small>Partner, [Harbor Lane Capital] · ${SC('ok', 'reviewed affiliation')} · [Lisbon, Portugal]</small></div><a class="btn t" href="#">Edit in profile</a></div>
+      <dl class="rv"><dt>Description</dt><dd>Partner at [Harbor Lane Capital], leading seed investments in health software across Southern Europe. <a href="#">Edit</a></dd><dt>Link</dt><dd>https://linkedin.com/in/[iris-chen] <a href="#">Edit</a></dd><dt>Purpose</dt><dd>Explore a seed investment in [Elm Studio]’s clinical tooling. <a href="#">Edit</a></dd><dt>Brief</dt><dd>“We back seed-stage health software and would like 30 minutes to learn how [Elm Studio] works with hospital teams.” <a href="#">Edit</a></dd><dt>Contact</dt><dd>Through Axal only. Your email is not shared.</dd></dl></section>
+      <section class="prv" aria-labelledby="sh2"><h2 id="sh2" style="font-size:15px;font-weight:800">Stays private</h2><ul>
+      <li><span aria-hidden="true">⊘</span>Evidence EV-1182, EV-1207 and your Trust Center identity check</li>
+      <li><span aria-hidden="true">⊘</span>Readiness, statuses and review history</li><li><span aria-hidden="true">⊘</span>Reviewer explanations and internal notes</li>
+      <li><span aria-hidden="true">⊘</span>Your email and other contact channels</li><li><span aria-hidden="true">⊘</span>Your private note to Axal in this draft</li></ul>
+      <p class="foot">A private item never enters the brief by default. Adding one would be its own choice, named here ${TO('Q2 · no evidence in briefs, drawn A')}.</p></section></div>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>Confirming records this preview version with the request. It sends nothing. Axal shares it only if an operator contacts [Jules Avery] (#7678), and only these fields.</div></div>`, { h: 900, railT: 'Ask about this request' });
+
+    /* NRD07 — introduction draft with blocked submit */
+    else if (B === 'NRD07') html = shell('i', `${HEAD({ crumb: '<a href="#">Introductions</a> › Draft to [Jules Avery]', eye: 'Network · Introductions · external introduction', h1: 'Request an introduction', sub: 'You can search, write and save before you are ready. Submitting is checked by Axal.', acts: '<button type="button" class="btn">Save draft</button><button type="button" class="btn p" aria-disabled="true" aria-describedby="blk" style="opacity:.55">Submit to Axal</button>' })}
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;align-items:start">
+      <section class="cd"><div class="ch"><h2>Your request</h2><span class="sm">draft ${mo('[d-4f21]')} · saved ${mo('2026-11-20 16:42')}</span></div>
+      <dl class="rv"><dt>Person</dt><dd><b>[Jules Avery]</b> · Founder, [Elm Studio]<br><span class="foot">From the shared directory · not on Axal · has not been contacted ${TB('#7672')}</span></dd><dt>Asking as</dt><dd>Investor · for [Harbor Lane Capital] <a href="#">Change</a></dd><dt>Found by</dt><dd>Directory search “seed health Lisbon”</dd></dl>
+      <div class="f"><label for="d1">Purpose ${RQD}</label><span id="d1" class="in">Explore a seed investment in [Elm Studio]’s clinical tooling.</span></div>
+      <div class="f"><label for="d2">Shareable brief ${RQD}</label><span id="d2" class="in ta">We back seed-stage health software and would like 30 minutes to learn how [Elm Studio] works with hospital teams.</span><span class="hn">[Jules Avery] could read this. <a href="#">Preview what Axal will share</a></span></div>
+      <div class="f"><label for="d3">Private note to Axal ${OPT}</label><span id="d3" class="in ta" style="min-height:56px">We met their CTO at a conference in 2025.</span><span class="hn">Only Axal operators read this.</span></div></section>
+      <section class="cd" id="blk" aria-labelledby="bk1"><div class="ch"><h2 id="bk1">Submitting needs 3 items</h2>${AGC('mi')}</div>
+      <ul class="lst"><li><div><b>RQ-MAN-06 Investment mandate</b><small>${SC('mi')} · the reviewer asked a question</small></div><a class="btn" href="#">Answer</a></li><li><div><b>RQ-PROF-01 Professional profile</b><small>${SC('inc', '5 of 6')} · description missing</small></div><a class="btn" href="#">Add</a></li><li><div><b>RQ-REP-03 Authority for the firm</b><small>${SC('rev')} · with [Sara Holm]</small></div><a class="btn t" href="#">View</a></li></ul>
+      <p class="foot">Checked by the server at ${mo('2026-11-21 09:14')}, policy ${mo('v0.3')}. It is checked again when you submit.</p></section></div>`, { h: 900, railT: 'Ask about this request' });
+
+    /* NRD07B — return journey and submit outcomes */
+    else if (B === 'NRD07B') html = crop(1400, `<div class="g3">
+      ${stcard('Return', 'All required items done', `<div class="nt g"><span class="ic" aria-hidden="true">✓</span><div>${AGC('ready')} for Investor · [Harbor Lane Capital] · external introduction.</div></div><p class="sub">Restores: [Jules Avery] · your purpose and brief · Investor for [Harbor Lane Capital] · found by “seed health Lisbon”.</p><a class="btn" href="#" style="align-self:flex-start">Return to introduction →</a>`)}
+      ${stcard('Submitted', 'Request submitted to Axal', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div>Request ${mo('R-2291')} · readiness snapshot ${mo('S-118')} · policy ${mo('v0.3')} · ${mo('2026-11-21 09:41')}</div></div><p class="sub"><b>Nobody has been contacted.</b> [Jules Avery] has not agreed to anything. Next: an Axal operator reviews it (#7678).</p>`)}
+      ${stcard('Same receipt', 'A second click or tab', `<p class="sub">${mo('R-2291')} is already submitted. A second Submit returns this receipt; nothing is queued twice ${TB('#7673 idempotency key')}.</p>`)}
+      ${stcard('Expired while drafting', 'Readiness changed', `<div class="nt a"><span class="ic" aria-hidden="true">⌛</span><div>[Ada Okafor]’s RQ-EXP-06 ended ${mo('2026-11-03')} while her draft (opened ${mo('2026-10-28')}) was open.</div></div><p class="sub">Draft kept. Submit stays off until it is renewed. <a href="#">Renew</a></p>`)}
+      ${stcard('Policy changed', 'A requirement changed', `<p class="sub">Policy ${mo('v0.4')} replaced ${mo('v0.3')} since your last check. RQ-PUR-05 now asks for one “Why now” line. Your brief is kept; add the line.</p><p class="foot">Shown also after a capacity switch adds or removes items.</p>`)}
+      ${stcard('Lost answer', 'Could not confirm the submit', `<p class="sub">${LOAD('checking whether R-2291 arrived')}</p><p class="sub">Found: shown as Submitted. Not found: “Not submitted. Your draft is intact.” with Submit again. Never a blind resend.</p>`)}</div>`);
+
+    /* NRD07C — submitted, readiness later expired */
+    else if (B === 'NRD07C') html = crop(1400, `<div class="g2">
+      ${stcard('Requester', 'Request R-2240 · to [Sara Holm]’s queue', `<p class="sub">[Hugo Brandt] → [Morgan Vale], [Harbor Seed] · submitted ${mo('2026-10-30')} · snapshot ${mo('S-097')}</p><div class="nt a"><span class="ic" aria-hidden="true">⌛</span><div><b>Readiness expired after you submitted.</b> RQ-AFF-02 ended ${mo('2026-11-15')}. Your request is not cancelled. An Axal operator decides what happens next and may ask you to renew.</div></div><a class="btn" href="#" style="align-self:flex-start">Renew RQ-AFF-02</a>`)}
+      ${stcard('Operator', 'Flag on the case', `<p class="sub">${SC('exp')} Readiness changed after submit. Snapshot ${mo('S-097')} was valid when submitted. Outreach waits for the operator’s choice: continue, pause, or ask the requester to renew ${TB('#7673 · #7678')}.</p><p class="foot">Nothing is cancelled or sent by the expiry itself.</p>`)}</div>`);
+
+    /* NRD08 — reviewer queue */
+    else if (B === 'NRD08') html = shell('a', `${RVHEAD({})}
+      <div class="tools"><div class="seg" role="radiogroup" aria-label="Queue"><button type="button" role="radio" aria-checked="true">Needs review · 6</button><button type="button" role="radio" aria-checked="false">Assigned to me · 3</button><button type="button" role="radio" aria-checked="false">Waiting on requester · 2</button><button type="button" role="radio" aria-checked="false">Decided, 30 days · 14</button></div><button type="button" class="dd" aria-haspopup="listbox">Capacity: All ▾</button><button type="button" class="dd" aria-haspopup="listbox">Requirement: All ▾</button></div>
+      <section class="cd"><div class="ch"><h2>Needs review</h2><span class="sm">6 cases · 3 yours · 2 unassigned · 1 [Dev Varma]</span></div>
+      <table class="tbl"><thead>${QHEAD}</thead><tbody>${J(QROWS.map((r, i) => qrow(r, i === 0)))}</tbody></table>
+      <div class="cf"><span class="foot">Oldest first. Only requirement, capacity and dates are listed; evidence opens in the case.</span>${TB('#7673 reviewer entitlement and queue read')}</div></section>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>Reviewers need the Network reviewer entitlement ${TO('Q3 · HQ Admins with an entitlement, drawn A')}. An investor or advisor licence never grants access to another requester’s diligence.</div></div>`, { h: 900, railT: 'Ask about reviews' });
+
+    /* NRD08B — reviewer case */
+    else if (B === 'NRD08B') html = shell('a', CASEBODY({}), { h: 960, railT: 'Ask about this case' });
+
+    /* NRD08C — reviewer edge states */
+    else if (B === 'NRD08C') html = crop(1400, `<div class="g3">
+      ${stcard('Concurrent review', '[Dev Varma] decided first', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div>[Dev Varma] recorded Approve at ${mo('09:52')} while you were writing. Your decision was not saved. Your two notes are kept below.</div></div><button type="button" class="btn" style="align-self:flex-start">Open the current decision</button>`)}
+      ${stcard('Access removed', 'Your review entitlement ended', `<p class="sub">${RF('entitlement removed at 10:03')}</p><p class="sub">Nothing you typed was saved. Copy it before you leave; the case and its evidence are closed to you.</p>`)}
+      ${stcard('Save failed', 'Decision not saved', `<div class="nt r"><span class="ic" aria-hidden="true">!</span><div>${UN('the save did not answer')}. Your decision and both notes are kept. Trying again records it once.</div></div><button type="button" class="btn" style="align-self:flex-start">Try again</button>`)}
+      ${stcard('Already decided', 'RQ-AFF-02 · read-only', `<p class="sub">${SC('ok')} ${mo('2026-10-02')} by [Dev Varma]. To change it, start a recheck; the original decision stays in the history.</p><button type="button" class="btn" style="align-self:flex-start">Start a recheck</button>`)}
+      ${stcard('Support session', 'Cannot decide or attest', `<p class="sub">${RF('support sessions cannot record a decision')}</p><p class="sub">The same refusal applies to a requester’s attestation, submit and evidence upload ${TB('#7673 server refusal')}.</p>`)}
+      ${stcard('Requester view', 'What [Iris Chen] reads', `<p class="sub">${SC('ok')} “The letter is signed by a managing partner and names you as authorised to make introductions for the firm.”</p><p class="foot">The internal note is not in this read.</p>`)}</div>`);
+
+    /* NRD09 — privacy in shared views */
+    else if (B === 'NRD09') html = crop(1400, `<div class="g2">
+      ${stcard('Another member · Person Sheet', '[Iris Chen]', `<div class="pr"><span class="av">IC</span><div><b>[Iris Chen]</b><small>Partner, [Harbor Lane Capital] · [Lisbon, Portugal]</small></div></div><p class="sub">No readiness, review status, evidence or decline is shown to other members. The sheet shows only the fields the directory policy allows ${TB('#7674')}.</p>`)}
+      ${stcard('Another investor · direct link', 'Request readiness', `<p class="sub">${RF()} You can read only your own readiness.</p><p class="foot">The answer is the same whether or not the person exists.</p>`)}
+      <section class="cd"><span class="tag">Support session · read-only</span><div class="ch"><h2>[Iris Chen] · Request readiness</h2></div><div class="nt a" role="status"><span class="ic" aria-hidden="true">⚠</span><div><b>Support session</b> · [Axal Support · Jo Park] is viewing [Iris Chen]’s account, started ${mo('2026-11-21 09:40')}. Read-only.</div></div><div class="acts"><button type="button" class="btn" aria-disabled="true" style="opacity:.55">Send answer</button><button type="button" class="btn" aria-disabled="true" style="opacity:.55">Reuse for RQ-ID-04</button></div><p class="foot">Support can see statuses to help. It cannot attest, answer, reuse evidence, submit or decide for the member ${TB('#7673')}.</p></section>
+      ${stcard('Declined · requester only', 'RQ-AFF-02 for [Priya Nair]', `<p class="sub">${SC('dec')} “The company page lists a different founder for [Tidepool Labs].” Only [Priya] reads this reason.</p><p class="foot">Directory, Person Sheet and the target see nothing about it.</p>`)}</div>`);
+
+    /* NRD09B — permission and transition matrix */
+    else if (B === 'NRD09B') {
+      const NO = '—';
+      const M = [
+        ['Professional profile, shareable part', 'Read, edit', 'Read', 'Read', 'Directory fields only', 'After outreach, as previewed', 'Read', 'Draft text for review'],
+        ['Contact channels', 'Read, edit', 'Read', NO, NO, NO, 'Read', NO],
+        ['Evidence files (EV-…)', 'Upload, read own', 'Read, logged', NO, NO, NO, NO, NO],
+        ['Reused Trust Center check', 'Choose to reuse', 'Status and date', NO, NO, NO, 'Status', NO],
+        ['Requirement status, history', 'Read', 'Read', 'Read if entitled', NO, NO, 'Read', NO],
+        ['Requester-visible explanation', 'Read', 'Write', 'Read', NO, NO, 'Read', NO],
+        ['Internal reviewer note', NO, 'Write', 'Read if entitled', NO, NO, NO, NO],
+        ['Attestation, answer, submit', 'Do', NO, NO, NO, NO, 'Refused', 'Never'],
+        ['Approve, decline, ask, reassign', NO, 'Do', 'Do if entitled', NO, NO, 'Refused', 'Never']
+      ];
+      const T = [
+        ['Not started → Incomplete or Complete', 'Requester', 'Saves a field or file', 'Nobody'],
+        ['Complete or Incomplete → Submitted', 'Requester', 'Sends an item for review', 'In-app notice to reviewers'],
+        ['Submitted → In review', 'Reviewer', 'Takes or is assigned the case', 'Nobody'],
+        ['In review → More information needed', 'Reviewer', 'Asks with a requester-visible explanation', 'In-app notice to the requester'],
+        ['More information needed → Submitted', 'Requester', 'Sends the answer', 'In-app notice to the reviewer'],
+        ['In review → Approved or Declined', 'Reviewer', 'Records decision, reason, validity', 'In-app notice to the requester'],
+        ['Approved → Expired', 'Server clock', 'Validity date passes', 'In-app notice; a submitted request is flagged, not cancelled'],
+        ['Draft → Submitted request', 'Requester', 'Server re-evaluates and stores a snapshot', 'Queued for an Axal operator; nobody outside Axal']
+      ];
+      html = `<div class="${CV} doc"><div><span class="eye">Requester readiness · #7677 · permissions and transitions</span><h2 style="font-size:22px;margin-top:4px">Who reads and does what, and what each transition sets off</h2></div>
+      <table class="tbl mx"><thead><tr><th scope="col">Field or action</th><th scope="col">Requester</th><th scope="col">Assigned reviewer</th><th scope="col">Other reviewer</th><th scope="col">Other member</th><th scope="col">Target</th><th scope="col">Support session</th><th scope="col">Eadwyn</th></tr></thead><tbody>${J(M.map((r) => `<tr><th scope="row" style="text-transform:none;letter-spacing:0;font:700 12px var(--sg);color:var(--ink);white-space:normal">${r[0]}</th>${J(r.slice(1).map((c) => `<td>${c}</td>`))}</tr>`))}</tbody></table>
+      <table class="tbl mx"><thead><tr><th scope="col">Transition</th><th scope="col">Actor</th><th scope="col">Event</th><th scope="col">Side effect</th></tr></thead><tbody>${J(T.map((r) => `<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`))}</tbody></table>
+      <p class="foot">An investor, founder or advisor licence grants no reviewer rights. No transition contacts a third party or implies that an introduction will happen. Each cell names the allowed action.</p></div>`;
+    }
+
+    /* NRD10 — states grid */
+    else if (B === 'NRD10') {
+      const sk = (w) => `<span class="sk" style="height:12px;width:${w}%"></span>`;
+      html = crop(1400, `<div class="g3">
+      ${stcard('Loading', 'Request readiness', `${LOAD('readiness for this request')}${sk(90)}${sk(70)}${sk(80)}<p class="foot">No counts and no 0 until the read answers.</p>`)}
+      ${stcard('First use', 'No requester profile yet', `<p class="sub">${AGC('ns')} Choose the capacity you are asking as. You can keep browsing and drafting meanwhile.</p><button type="button" class="btn" style="align-self:flex-start">Choose capacity</button>`)}
+      ${stcard('Missing fields', 'Profile', `<p class="sub">${SC('inc', '5 of 6')} Description is missing. <a href="#">Add it</a></p>`)}
+      ${stcard('Invalid input', 'LinkedIn profile', `<span class="in bad" aria-invalid="true">linkedin/iris</span><span class="fe" style="color:var(--neg);font-weight:700;font-size:12px">✕ Enter a full link that starts with https://</span>`)}
+      ${stcard('Evidence unreadable', 'EV-1207', `<p class="sub">${SC('unr')} The file could not be opened. <a href="#">Upload again</a></p>`)}
+      ${stcard('Stale', 'Readiness snapshot', `<p class="sub">${STALE('checked 3 days ago')} Checking again before you submit. ${LOAD()}</p>`)}
+      ${stcard('Expired', 'Advisory expertise', `<p class="sub">${SC('exp', 'ended 2026-11-03')} <a href="#">Renew</a></p>`)}
+      ${stcard('Permission refused', 'Another member’s readiness', `<p class="sub">${RF()} You can read only your own.</p>`)}
+      ${stcard('In review', 'Authority for the firm', `<p class="sub">${SC('rev')} since ${mo('2026-11-18')} · [Sara Holm] · no date promised</p>`)}
+      ${stcard('Clarification', 'Investment mandate', `<p class="sub">${SC('mi')} “Add the stages and cheque range.” <a href="#">Answer</a></p>`)}
+      ${stcard('Blocked', 'Affiliation declined', `<p class="sub">${AGC('blk')} RQ-AFF-02 declined ${mo('2026-11-20')}. You can ask for a new review with new evidence.</p>`)}
+      ${stcard('Save failed', 'Profile', `<p class="sub">${UN('save')} Everything you typed is kept. <a href="#">Try again</a></p>`)}
+      ${stcard('Duplicate submit', 'R-2291', `<p class="sub">Already submitted ${mo('09:41')}. Same receipt; nothing queued twice.</p>`)}
+      ${stcard('Success', 'Request submitted', `<p class="sub">${SC('sub')} ${mo('R-2291')} · nobody has been contacted · next: Axal operator.</p>`)}
+      ${stcard('Unavailable', 'Readiness could not be read', `<p class="sub">${UN('readiness')} Never shown as ready. Submit stays off; your draft is kept. <a href="#">Try again</a></p><p class="foot">An unreadable policy reads ${AGC('unr')}.</p>`)}</div>`);
+    }
+
+    /* NRD11 — tablet */
+    else if (B === 'NRD11') html = `<div class="${CV} tab">${phTop('Request readiness', true).replace('class="pt"', 'class="pt" style="padding:0 12px"')}<main class="bd" style="padding:20px 24px">
+      <header class="hdr"><span class="eye">Network · Introductions · requester readiness</span><div class="hrow"><div><h1>Request readiness</h1><p>Investor · for [Harbor Lane Capital] · to [Jules Avery]</p></div><div class="acts"><button type="button" class="btn p">Answer the reviewer</button></div></div></header>
+      ${DRAFTBAR}${AGG}
+      <section class="facts" style="grid-template-columns:repeat(2,minmax(0,1fr))" aria-label="Four separate facts"><div class="fact"><span class="eye">Profile completeness</span>${SC('inc')}<small>5 of 6 · ${mo('2026-11-20')}</small></div><div class="fact"><span class="eye">Identity verification</span>${SC('ok')}<small>${mo('2026-03-12')}</small></div><div class="fact"><span class="eye">Due-diligence review</span>${SC('rev')}<small>1 in review · 1 needs you</small></div><div class="fact"><span class="eye">Eligible for this request</span>${AGC('mi')}<small>${mo('2026-11-21 09:14')}</small></div></section>
+      ${RLIST()}</main></div>`;
+
+    /* NRD12 — phone */
+    else if (B === 'NRD12A') html = phone('Readiness', `<span class="eye">To [Jules Avery] · draft saved</span><h1 style="font-size:22px;font-weight:800">Request readiness</h1><p class="sub">Investor · for [Harbor Lane Capital]</p>
+      <div class="agg am"><h2 style="font-size:14px">${AGC('mi')}</h2><span class="foot">2 need you · 1 with a reviewer · 3 of 6 done</span></div>
+      <section class="cd"><div class="ch"><h2>Needs you · 2</h2></div><ul class="lst"><li><div><b>Investment mandate</b><small>${SC('mi')}</small></div><a class="btn" href="#">Answer</a></li><li><div><b>Professional profile</b><small>${SC('inc', '5 of 6')}</small></div><a class="btn" href="#">Add</a></li></ul></section>
+      <section class="cd"><div class="ch"><h2>With a reviewer · 1</h2></div><ul class="lst"><li><div><b>Authority for the firm</b><small>${SC('rev')} · [Sara Holm]</small></div></li></ul></section>
+      <section class="cd"><div class="ch"><h2>Done · 3</h2></div><p class="sub">Affiliation ${SC('ok')} · Identity ${SC('ok')} · Brief ${SC('cmp')}</p></section>
+      <a class="btn t" href="#" style="min-height:44px;align-self:flex-start">Return to introduction →</a>`, '<button type="button" class="btn p">Answer the reviewer</button>');
+    else if (B === 'NRD12B') html = phone('Investment mandate', `<span class="eye">RQ-MAN-06 · ${S.mi[2]}</span><h1 style="font-size:20px;font-weight:800">Investment mandate</h1>
+      <div class="nt a"><span class="ic" aria-hidden="true">✎</span><div>“Add the stages and cheque range you invest at for [Harbor Lane Capital].” <span class="foot">· Axal review, ${mo('2026-11-19')}</span></div></div>
+      <div class="f"><label for="pm1">Stages ${RQD}</label><span id="pm1" class="in" style="min-height:44px">Pre-seed, Seed</span></div><div class="f"><label for="pm2">Cheque range ${RQD}</label><span id="pm2" class="in" style="min-height:44px">€250k – €750k</span></div>
+      <p class="foot">Goes back to [Sara Holm]. Your draft stays saved.</p>`, '<button type="button" class="btn p">Send answer</button>', { back: 1 });
+    else if (B === 'NRD12C') html = phone('Profile', `<div class="es" role="alert" tabindex="-1"><h2>2 fields need attention</h2><a href="#">Description: at least 80 characters</a><a href="#">LinkedIn: a full https:// link</a></div>
+      <div class="f"><label for="pp1">Description ${RQD}</label><span id="pp1" class="in ta bad" aria-invalid="true" aria-describedby="pe1">I invest in health.</span><span id="pe1" class="fe">✕ Add at least 80 characters. You have 19.</span></div>
+      <div class="f"><label for="pp2">LinkedIn profile ${OPT}</label><span id="pp2" class="in bad" aria-invalid="true" aria-describedby="pe2" style="min-height:44px">linkedin/iris</span><span id="pe2" class="fe">✕ Enter a full link that starts with https://</span></div>
+      <button type="button" class="btn ask" style="min-height:44px">${E}Draft description · est. [900] tokens</button><p class="foot">Draft saved 09:20. Nothing you typed is lost.</p>`, '<button type="button" class="btn p">Save profile</button>', { back: 1 });
+    else if (B === 'NRD12D') html = phone('What Axal will share', `<h1 style="font-size:20px;font-weight:800">What Axal will share</h1><p class="sub">If an operator contacts [Jules Avery]. Nothing is sent now.</p>
+      <div class="pc"><b>[Iris Chen]</b><small>Partner, [Harbor Lane Capital] · ${SC('ok', 'reviewed')}</small><span class="eye" style="margin-top:6px">Brief</span><span>“We back seed-stage health software and would like 30 minutes to learn how [Elm Studio] works with hospital teams.”</span><a class="btn t" href="#" style="min-height:44px;align-self:flex-start">Edit</a></div>
+      <div class="prv"><b>Stays private</b><ul><li>⊘ Evidence and identity check</li><li>⊘ Readiness and review history</li><li>⊘ Your email and private note</li></ul></div>`, '<button type="button" class="btn p">Confirm and return</button>', { back: 1 });
+    else if (B === 'NRD12E') html = phone('Request', `<span class="eye">Draft · saved 2026-11-20 16:42</span><h1 style="font-size:20px;font-weight:800">Introduction to [Jules Avery]</h1><p class="sub">[Elm Studio] · not on Axal · Investor for [Harbor Lane Capital]</p>
+      <section class="cd" id="pb"><div class="ch"><h2>Submitting needs 3 items</h2></div><ul class="lst"><li><div><b>Investment mandate</b><small>${SC('mi')}</small></div><a class="btn" href="#">Answer</a></li><li><div><b>Professional profile</b><small>${SC('inc', '5 of 6')}</small></div><a class="btn" href="#">Add</a></li><li><div><b>Authority for the firm</b><small>${SC('rev')}</small></div><a class="btn t" href="#">View</a></li></ul></section>
+      <p class="foot">Checked by Axal at 09:14 and again when you submit.</p>`, '<button type="button" class="btn">Save draft</button><button type="button" class="btn p" aria-disabled="true" aria-describedby="pb" style="opacity:.55">Submit</button>', { back: 1 });
+    else if (B === 'NRD12F') html = phone('Request', `<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Submitted to Axal.</b> ${mo('R-2291')} · ${mo('2026-11-21 09:41')}</div></div><h1 style="font-size:20px;font-weight:800">Introduction to [Jules Avery]</h1>
+      <div class="pc"><span class="eye">Status</span>${SC('sub')}<span class="eye" style="margin-top:6px">Contacted</span><span>Nobody yet. [Jules Avery] has not agreed to anything.</span><span class="eye" style="margin-top:6px">Next</span><span>An Axal operator reviews it (#7678)</span><span class="eye" style="margin-top:6px">Readiness</span><span>Snapshot ${mo('S-118')} · policy ${mo('v0.3')}</span></div>`, '<button type="button" class="btn p">Back to Introductions</button>', { back: 1 });
+
+    /* NRD13 — dark */
+    else if (B === 'NRD13') html = shell('i', OVERVIEW(), { h: 1780, railT: 'Ask about this request' });
+    else if (B === 'NRD13B') html = phone('Investment mandate', `<span class="eye">RQ-MAN-06 · ${S.mi[2]}</span><h1 style="font-size:20px;font-weight:800">Investment mandate</h1>
+      <div class="nt a"><span class="ic" aria-hidden="true">✎</span><div>“Add the stages and cheque range you invest at for [Harbor Lane Capital].”</div></div>
+      <div class="f"><label for="dm1">Stages ${RQD}</label><span id="dm1" class="in" style="min-height:44px">Pre-seed, Seed</span></div><div class="f"><label for="dm2">Cheque range ${RQD}</label><span id="dm2" class="in" style="min-height:44px">€250k – €750k</span></div>`, '<button type="button" class="btn p">Send answer</button>', { back: 1 });
+
+    /* NRD14 — frame index and accessibility */
+    else if (B === 'NRD14') {
+      const FR = [
+        ['NRD01, NRD11, NRD12A, NRD13', 'Requester', 'Investor · [Harbor Lane Capital]', 'Policy v0.3 requirement set', 'Statuses only; no files', 'None (read)', 'Requester'],
+        ['NRD02', 'Requester', 'Founder, investor, advisor', 'Per-capacity applicability', 'Statuses only', 'None', 'Requester'],
+        ['NRD03, NRD03B', 'Requester', 'Advisor → Investor; organization', 'Capacity and representation rules', 'None', 'Capacity saved; readiness rechecked', 'Requester'],
+        ['NRD04, NRD04B, NRD12C', 'Requester (+ Eadwyn draft)', 'Investor', 'Required profile fields', 'Requester and reviewers', 'Profile saved', 'Requester'],
+        ['NRD05, NRD05B, NRD12B', 'Requester', 'Investor', 'Reuse scope, validity', 'Assigned reviewers', 'Evidence reused or answer sent', 'Reviewer'],
+        ['NRD06, NRD12D', 'Requester', 'Investor', 'Shareable fields', 'Preview of shareable part only', 'Preview version confirmed', 'Requester'],
+        ['NRD07, NRD07B, NRD12E, NRD12F', 'Requester', 'Investor', 'Server eligibility at submit', 'None', 'Request queued with snapshot', 'Axal operator (#7678)'],
+        ['NRD07C', 'Requester, operator', 'Investor', 'Validity after submit', 'Statuses', 'Case flagged', 'Axal operator'],
+        ['NRD08, NRD08B, NRD08C', 'Reviewer', 'Any', 'Reviewer entitlement', 'Assigned reviewer, logged', 'Decision recorded', 'Requester'],
+        ['NRD09, NRD09B', 'Member, support', 'Any', 'Directory field policy', 'None beyond directory fields', 'None', '—']
+      ];
+      html = `<div class="${CV} doc"><div><span class="eye">Requester readiness · #7677 · frame index and accessibility</span><h2 style="font-size:22px;margin-top:4px">Each frame’s actor, capacity, policy dependency, evidence visibility, success event and next owner</h2></div>
+      <table class="tbl mx"><thead><tr><th scope="col">Frames</th><th scope="col">Actor</th><th scope="col">Capacity</th><th scope="col">Policy dependency</th><th scope="col">Evidence visibility</th><th scope="col">Success event</th><th scope="col">Next owner</th></tr></thead><tbody>${J(FR.map((r) => `<tr>${J(r.map((c, i) => i ? `<td>${c}</td>` : `<td><b>${c}</b></td>`))}</tr>`))}</tbody></table>
+      <div class="cols">
+      <div><h3>Keyboard order (NRD01)</h3><ul><li>Skip link → breadcrumb → Ask, Answer the reviewer → Return to introduction → Change capacity → the four facts (read only, not tab stops) → requirement groups in order: Needs you, With a reviewer, Done, Optional; each row’s one action → Eadwyn.</li><li>Group headings are h3 under the “Requirements for this request” h2; the list is a list, each row a listitem with its action named “Answer · RQ-MAN-06”.</li><li>Forms (NRD04) are fieldsets with legends in the order shown; Save is last.</li></ul>
+      <h3 style="margin-top:12px">Errors and focus</h3><ul><li>Save with errors moves focus to the error summary; each link moves focus to its field.</li><li>Each field error is tied with <code>aria-describedby</code> and the field has <code>aria-invalid</code>.</li><li>Return to introduction restores focus to the Submit area of the draft; a blocked Submit names its blocking list with <code>aria-describedby</code>.</li></ul></div>
+      <div><h3>Announcements (polite live region)</h3><ul><li>“Draft saved, 09:20.” “Answer sent. Investment mandate is submitted.”</li><li>“Readiness checked: more information needed, 2 items need you.”</li><li>“Capacity changed to Investor. 2 requirements now apply.”</li><li>Failures name what failed and say it is not saved; nothing is announced as ready unless the server said so.</li></ul>
+      <h3 style="margin-top:12px">Targets and words</h3><ul><li>Phone targets 44 px; the one primary sits in the sticky bar.</li><li>Every status pairs a glyph with a word; dashed borders mark Expired, Unreadable and Not applicable.</li><li>Long requirement names wrap; the action stays in view with no horizontal page scroll at 390.</li></ul></div></div></div>`;
+    }
+
+    /* NRDH — handoff */
+    else if (B === 'NRDH') html = `<div class="${CV} doc"><div><span class="eye">Requester profile and due-diligence readiness · #7677 · handoff</span><h2 style="font-size:22px;margin-top:4px">What main has today, what is new, and what the policy owner must supply</h2></div>
+      <div class="cols">
+      <div><h3>Checked on main (a2677f7615)</h3><ul>
+      <li>No readiness service, requirement model, requester capacity or general external request exists. #7673 is blocked on #7672’s directory schema (PR #7687, draft).</li>
+      <li><code>routes/kyc.ts</code>: a member identity check with <code>not_started</code>, <code>pending</code>, <code>needs_info</code>, <code>approved</code>, <code>rejected</code>, <code>expired</code>, documents in R2, an admin queue with assign, needs-info, approve, reject and recheck, and <code>kyc_case_events</code>. <code>TrustCenterPage.jsx</code> waives it for every non-investor. Reused here as status and date only.</li>
+      <li><code>routes/kyc_governance.ts</code>: validity periods (<code>kyc_v1</code>, <code>kyb_v1</code>) and renewals; <code>routes/trust.ts</code> <code>/me</code>, <code>/matrix</code> and <code>/companies/kyb</code>.</li>
+      <li><code>routes/founder_profile.ts</code> <code>GET /preview?audience=</code> (“What others see”) and <code>advisors_profile_draft.ts</code> (draft with revision check and publish): patterns for NRD06 and NRD04.</li>
+      <li><code>pages/account/AccountProfile.jsx</code> (identity, personal profile, details) and <code>routes/account_licences.ts</code> (held licences): the capacities a person may choose.</li>
+      <li><code>auth.ts</code> marks <code>support_session</code>; some routes refuse writes with it (<code>research_studies.ts</code>, <code>eadwyn.ts</code>).</li>
+      <li><code>routes/introductions.ts</code> and <code>trust.ts</code> <code>/intro/*</code>: the investor ask and NDA, untouched (D7065).</li></ul>
+      <h3 style="margin-top:12px">Preserved</h3><ul><li>The #6256 shell, header, four links, Person Sheet, request sheet and one Eadwyn rail. D7065’s ask and NDA step; D7058’s save-is-not-invitation.</li></ul></div>
+      <div><h3>Backend required (◇ #7673, with #7672 and #7674)</h3><ul>
+      <li>Policy-versioned requirement set per capacity and request type: IDs, required or optional, reason, validity rule.</li>
+      <li>Requirement records: status, next actor, evidence references, review history, <code>decided_at</code>/<code>decided_by</code>, requester-visible explanation and internal note as separate fields.</li>
+      <li>Server-evaluated eligibility returning a scoped snapshot id and policy version; Unreadable never evaluates to ready.</li>
+      <li>Evidence reuse with explicit scope; KYB outside scope refused.</li>
+      <li>Reviewer entitlement, queue, assignment, compare-and-set decisions, recheck.</li>
+      <li>Idempotent profile saves and submit; a draft-return contract (target, message, capacity, source).</li>
+      <li>Support-session refusal on attest, answer, reuse, submit and decide.</li>
+      <li>Expiry after submit flags the case for the operator (#7678).</li></ul>
+      <h3 style="margin-top:12px">Pending the owner (⚑, drawn as A)</h3><ul><li>Q1: identity verification only for investors, reusing Trust Center.</li><li>Q2: private evidence never enters a brief.</li><li>Q3: reviewers are HQ Admins with a Network reviewer entitlement.</li><li>Also needed: required profile fields and validity periods for each requirement.</li></ul>
+      <h3 style="margin-top:12px">Frontend only</h3><ul><li>Nothing here can ship without #7673. Reusable today: <code>AccountProfile</code> cards, the <code>Pill</code>, <code>Unrecorded</code> and <code>Unreadable</code> components, and the Trust Center KYC read.</li></ul></div></div></div>`;
+
+    html = html.replace(/class="([^"]*)"/g, (m, c) => 'class="' + c.split(/\s+/).filter(Boolean).map((x) => 'nrd-' + x).join(' ') + '"');
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

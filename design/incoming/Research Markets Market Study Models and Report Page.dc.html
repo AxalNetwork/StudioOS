@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Market Study Models and Report · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.st-bh{display:flex;gap:14px;align-items:flex-start}
+.st-bh h1{font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.st-bh p{font-size:13px;color:var(--mu);margin-top:4px;max-width:1060px;line-height:1.55}
+.st-id{font:700 11px var(--mo);padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--bg);white-space:nowrap;margin-top:2px}
+.st-sec{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px}
+.st-sh{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.st-note{font-size:12px;color:var(--mu)}
+.st-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.st-sep{width:1px;height:20px;background:var(--hair2);margin:0 6px}
+.st-gray{filter:grayscale(1)}
+/* chips */
+.st-c{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu);vertical-align:middle}
+.st-c svg{flex:none}
+.st-nr{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-na{color:var(--mu);background:transparent;border-color:transparent;padding-left:2px}
+.st-un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed;border-width:1.5px}
+.st-un svg{color:var(--neg)}
+.st-rf{color:var(--ink);background:var(--raised);border-color:var(--ink);border-width:1px}
+.st-stale{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed;border-width:1.5px}
+.st-part{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-pv{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dashed;border-width:1.5px;font-style:italic}
+.st-nc{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-l-ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.st-l-am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-l-mu{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.st-l-fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.st-retry{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);color:var(--vt);background:transparent;border:0;padding:2px 4px;border-radius:6px;vertical-align:middle}
+.st-unin{display:inline-flex;align-items:center;gap:4px;color:var(--neg);font-weight:800}
+.st-nrin{color:var(--mu);font-style:italic;font-weight:600}
+.st-nain{color:var(--mu)}
+.st-why{display:block;font-size:12px;color:var(--mu);line-height:1.45}
+.st-route{font:700 12px var(--sg)}
+.st-zero{color:var(--ink)!important;font-weight:800}
+.st-cellnr{color:var(--mu)}
+.st-stack{font:800 20px var(--mo);letter-spacing:-.02em}
+.st-eng{display:inline-flex;font:700 11px var(--mo);color:var(--vt);background:var(--lav);border:1px dashed var(--lavE);border-radius:6px;padding:1px 6px}
+.st-spec{font:500 11px var(--mo)}
+/* tiles */
+.st-tiles{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+.st-t5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.st-tw{display:flex;flex-direction:column;gap:6px;min-width:0}
+.st-cap2{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.st-tile{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px;min-height:150px;align-items:flex-start}
+.st-tl{font-size:12px;color:var(--mu);font-weight:600}
+.st-tv{font:800 26px var(--mo);letter-spacing:-.03em;line-height:1.1;color:var(--ink)}
+.st-ts{display:flex;flex-direction:column;gap:5px;align-items:flex-start;font-size:12px}
+.st-tna{opacity:1}
+.st-big-nr{color:var(--mu);font-weight:500}
+.st-big-un{display:inline-grid;place-items:center;width:30px;height:30px;border:1.5px dashed var(--hair2);border-radius:8px;font:800 18px var(--sg);color:var(--neg)}
+.st-big-rf{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid var(--ink);border-radius:8px;font:700 18px var(--sg);color:var(--ink);background:var(--raised)}
+.st-provv{color:var(--mu);font-style:italic}
+.st-wh{font:700 15px var(--sg);color:var(--mu);font-style:italic}
+.st-withheld{border-style:dashed}
+.st-mini{min-height:120px}
+.st-sk{display:inline-block;height:12px;border-radius:5px;background:var(--skel)}
+/* prose */
+.st-prose{font-size:14px;line-height:1.7;padding:6px 0;border-bottom:1px solid var(--hair)}
+.st-prose:last-child{border-bottom:0}
+/* tables */
+.st-tb{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.45}
+.st-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1.5px solid var(--ink)}
+.st-tb td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.st-tb .n{text-align:right;font-family:var(--mo)}
+.st-tb code,.st-dict code,.st-sec code,.st-bh code,.st-rules code,.st-opt code,.st-foot2 code{font:500 11px var(--mo);background:var(--raised);border:1px solid var(--hair);padding:0 4px;border-radius:4px}
+.st-dict{background:var(--card);border-radius:12px;overflow:hidden}
+.st-dict td:first-child{font-weight:800;white-space:nowrap}
+.st-dict td:first-child small{display:block;font:600 10px var(--mo);color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+.st-dict td:nth-child(4){font:700 13px var(--mo);color:var(--mu);white-space:nowrap}
+.st-modrow td{background:var(--raised)}
+.st-in th{border-bottom:1px solid var(--hair2)}
+.st-none-ex{font-size:12px;color:var(--mu)}
+.st-foot2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;font-size:12px;color:var(--mu);line-height:1.5}
+.st-foot2 b{color:var(--ink)}
+/* lists */
+.st-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair)}
+.st-list li:first-child{border-top:0}
+.st-list li>span:first-child{display:flex;flex-direction:column}
+.st-list small{font-size:12px;color:var(--mu)}
+.st-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.st-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.st-lb{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-height:190px}
+.st-lbh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-lbh b{font-size:14px}
+.st-cnt{font:700 11px var(--mo);padding:1px 7px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--ink)}
+.st-none{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:9px;background:var(--raised);font-size:13px}
+.st-unbox,.st-rfbox{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.5}
+.st-unbox{border:1.5px dashed var(--hair2);background:var(--card)}
+.st-unbox svg{color:var(--neg);margin-top:3px}
+.st-unbox div,.st-rfbox div{display:flex;flex-direction:column;gap:3px;flex:1}
+.st-unbox span,.st-rfbox span{color:var(--mu)}
+.st-rfbox{border:1px solid var(--ink);background:var(--raised)}
+.st-rfbox svg{margin-top:3px}
+.st-pb{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;background:var(--amBg);border:1px solid var(--amE);color:var(--ink);font-size:12.5px;line-height:1.45}
+.st-pb svg{color:var(--amT);flex:none}
+.st-pb>span{flex:1}
+.st-skl>div{display:flex;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.st-skl>div:first-child{border-top:0}
+/* charts */
+.st-ch{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.st-chh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-chh b{font-size:14px}
+.st-ch svg{font-family:var(--sg)}
+.st-rule{font:700 13px var(--sg);padding:12px 14px;border-left:3px solid var(--vi);background:var(--card);border-radius:0 9px 9px 0}
+/* composite */
+.st-comp{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.st-ch2{display:flex;justify-content:space-between;align-items:flex-end}
+.st-ch2 h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.st-comp .st-tile{background:var(--raised)}
+.st-rules{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5;list-style:disc!important;padding-left:18px!important}
+.st-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:500 11.5px var(--mo);color:var(--mu)}
+/* phone */
+.st-pt{display:flex;justify-content:space-between;padding:12px 18px 8px;font:700 12px var(--sg);border-bottom:1px solid var(--hair);background:var(--card)}
+.st-plist{background:var(--card);border:1px solid var(--hair);border-radius:12px}
+.st-plist>div{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:12px;border-top:1px solid var(--hair)}
+.st-plist>div:first-child{border-top:0}
+.st-plist span{font-size:12.5px}
+/* do / don't */
+.st-dd{display:flex;flex-direction:column;gap:8px}
+.st-ddt{font:800 14px var(--sg)}
+.st-ddp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st-dn,.st-do{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px}
+.st-dn{border:1.5px solid var(--negE);background:var(--negBg)}
+.st-do{border:1.5px solid var(--posE);background:var(--posBg)}
+.st-ddl{display:inline-flex;align-items:center;gap:5px;font:800 11px var(--mo);text-transform:uppercase;letter-spacing:.05em}
+.st-dn .st-ddl{color:var(--neg)}
+.st-do .st-ddl{color:var(--pos)}
+/* options */
+.st-opt{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.st-opt p{font-size:12.5px;line-height:1.55;color:var(--mu)}
+.st-opt b{font-size:15px}
+.st-on{border:2px solid var(--vi)}
+.st-ol{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt)}
+.st-code{font:500 12px/1.6 var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;white-space:pre-wrap;margin:0;color:var(--ink)}
+.st-whyi{font-size:12px;color:var(--mu)}
+.st-ch svg text{font-family:'Space Grotesk',system-ui,sans-serif}
+.st-ch svg text[font-family]{font-family:'Roboto Mono',ui-monospace,monospace}
+.st-plist~.st-lb{min-height:0}
+.rsm-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rsm-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.rsm-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.rsm-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
+.rsm-four{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
+.rsm-mono{font-family:var(--mo)}
+.rsm-mu{color:var(--mu)}
+.rsm-sm{font-size:12px;color:var(--mu);line-height:1.45}
+.rsm-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.rsm-addr{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.rsm-addr code{font:600 11.5px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:1px 6px}
+.rsm-flag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.rsm-held{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1.5px dotted var(--amE);color:var(--amT);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.rsm-ws{display:grid;grid-template-columns:232px minmax(0,1fr);gap:18px;align-items:start}
+.rsm-secs{border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden;display:flex;flex-direction:column}
+.rsm-secs a{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font:600 12.5px var(--sg);color:var(--ink)!important;min-height:40px}
+.rsm-secs a:last-child{border-bottom:0}
+.rsm-secs a i{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);font:700 10px var(--mo);font-style:normal;color:var(--mu)}
+.rsm-secs a[aria-current=page]{background:var(--lav);font-weight:800}
+.rsm-secs a[aria-current=page] i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.rsm-secs a em{font:700 10.5px var(--mo);font-style:normal;color:var(--amT);border:1px solid var(--amE);background:var(--amBg);border-radius:999px;padding:0 6px;white-space:nowrap}
+.rsm-sh{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.rsm-sh h2{font-size:19px;font-weight:800;letter-spacing:-.015em;margin-top:2px}
+.rsm-sh p{font-size:12.5px;color:var(--mu);margin-top:4px;max-width:640px;line-height:1.5}
+.rsm-in{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:11px 13px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.rsm-in label{font:700 12.5px var(--sg)}
+.rsm-in .v{display:flex;align-items:center;gap:8px;min-height:36px;padding:0 10px;border:1.5px solid var(--hair2);border-radius:9px;background:var(--card);font:600 13px var(--mo)}
+.rsm-in .v small{margin-left:auto;font:500 11px var(--sg);color:var(--mu)}
+.rsm-in .v.empty{border-style:dashed;color:var(--mu);font:italic 600 12.5px var(--sg)}
+.rsm-in .u{font:500 11px var(--mo);color:var(--mu)}
+.rsm-in.bad .v{border-color:var(--amE)}
+.rsm-src{display:flex;gap:6px;align-items:flex-start;font-size:11.5px;line-height:1.45;border-top:1px dashed var(--hair);padding-top:6px}
+.rsm-src b{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);flex:none;padding-top:1px}
+.rsm-src .as{font-weight:800;color:var(--ink)}
+.rsm-src .ro{font:600 10px var(--mo);color:var(--mu);border:1px solid var(--hair2);border-radius:5px;padding:0 5px;white-space:nowrap}
+.rsm-kind{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:6px;border:1px solid var(--hair2);background:var(--raised);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+.rsm-kind:before{content:"";width:7px;height:7px;border-radius:2px;background:var(--ink)}
+.rsm-kind.mod:before{background:transparent;border:1.5px dashed var(--ink);transform:rotate(45deg);border-radius:1px}
+.rsm-kind.obs:before{border-radius:999px}
+.rsm-kind.act:before{background:transparent;border:1.5px dotted var(--ink)}
+.rsm-res{border:1.5px dashed var(--hair2);border-radius:12px;background:var(--raised);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.rsm-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.rsm-fig{border:1px solid var(--hair);border-radius:10px;background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.rsm-fig small{font-size:11.5px;color:var(--mu)}
+.rsm-fig b{font:700 17px var(--mo);letter-spacing:-.02em}
+.rsm-fig b.cant{font:italic 600 12.5px var(--sg);color:var(--ink);letter-spacing:0}
+.rsm-calc{display:flex;flex-direction:column;gap:5px;font-size:12.5px;line-height:1.5}
+.rsm-calc p{display:grid;grid-template-columns:160px minmax(0,1fr);gap:10px}
+.rsm-calc p span:first-child{font-weight:700}
+.rsm-calc p span:last-child{font-family:var(--mo);font-size:12px}
+.rsm-lim{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:9px;border:1px solid var(--lavE);background:var(--lav);font-size:12.5px}
+.rsm-lim i{font-style:normal;font-weight:800;color:var(--vt)}
+.rsm-ovr{border:1px solid var(--hair);border-left:3px solid var(--ink);border-radius:10px;background:var(--card);padding:11px 13px;display:flex;flex-direction:column;gap:8px}
+.rsm-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid var(--hair);padding-top:12px}
+.rsm-tb{width:100%;border-collapse:collapse;font-size:12.5px}
+.rsm-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);background:var(--raised);white-space:nowrap}
+.rsm-tb td{padding:8px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+.rsm-tb td.n{font:600 12.5px var(--mo);white-space:nowrap;text-align:right}
+.rsm-tb th.n{text-align:right}
+.rsm-tb td small{display:block;font-size:11px;color:var(--mu)}
+.rsm-tb tr.res td{background:var(--raised)}
+.rsm-tb tr.hl td{background:var(--amBg)}
+.rsm-dif{font:700 10px var(--mo);color:var(--vt);letter-spacing:.03em}
+.rsm-warn{display:inline-flex;align-items:center;gap:4px;font:700 11px var(--sg);color:var(--amT)}
+.rsm-sens{display:flex;flex-direction:column;gap:7px}
+.rsm-sens li{display:grid;grid-template-columns:22px 200px minmax(0,1fr) 150px;gap:10px;align-items:center;font-size:12.5px}
+.rsm-sens li>i{font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.rsm-sens li .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.rsm-sens li .tr span{display:block;height:100%;background:var(--ink)}
+.rsm-sens li .n{font:600 12px var(--mo);text-align:right}
+.rsm-est{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;background:var(--card)}
+.rsm-est.used{border:2px solid var(--ink)}
+.rsm-est b.big{font:700 16px var(--mo)}
+.rsm-used{display:inline-flex;align-items:center;gap:4px;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--card);background:var(--ink);border-radius:5px;padding:1px 6px;align-self:flex-start}
+.rsm-gap{display:grid;grid-template-columns:minmax(0,1fr) 90px minmax(0,1fr);gap:10px;align-items:center}
+.rsm-gap .mid{text-align:center;font:700 11px var(--mo);color:var(--mu)}
+.rsm-ver{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rsm-ver li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.rsm-ver li:last-child{border-bottom:0}
+.rsm-ver li>b{font:700 13px var(--mo)}
+.rsm-ver li small{display:block;color:var(--mu);font-size:11.5px}
+.rsm-ver li.on{background:var(--lav)}
+.rsm-alt{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.rsm-alt h3{font-size:14.5px;font-weight:800}
+.rsm-ak{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.rsm-af{display:grid;grid-template-columns:132px minmax(0,1fr);gap:4px 10px;font-size:12px;line-height:1.4}
+.rsm-af dt{color:var(--mu);font-weight:600}
+.rsm-af dd{min-width:0}
+.rsm-af dd a{font-size:11px}
+.rsm-uns{display:inline-flex;align-items:center;gap:4px;font:italic 700 11.5px var(--sg);color:var(--mu)}
+.rsm-uns:before{content:"";width:9px;height:9px;border:1.5px dotted var(--mu);border-radius:999px}
+.rsm-grp{border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.rsm-grp>header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-size:12.5px;flex-wrap:wrap}
+.rsm-grp>header b{font-weight:800}
+.rsm-pr{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.4fr) minmax(0,1fr);gap:10px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:start}
+.rsm-pr:last-child{border-bottom:0}
+.rsm-pr .amt{font:700 13.5px var(--mo)}
+.rsm-pr small{display:block;font-size:11px;color:var(--mu)}
+.rsm-nc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px 12px}
+.rsm-nc .rsm-pc{border:1px solid var(--hair);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:3px;font-size:12px}
+.rsm-pc .amt{font:700 13.5px var(--mo)}
+.rsm-why{display:flex;gap:8px;align-items:flex-start;padding:8px 12px;border-top:1px dashed var(--hair2);font-size:12px;color:var(--ink)}
+.rsm-why b{flex:none}
+.rsm-wd{border:1.5px dashed var(--hair2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;background:var(--raised)}
+.rsm-hint{border:1px dashed var(--lavE);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--card)}
+.rsm-hint q{font:500 12px var(--mo);background:var(--raised);border-radius:6px;padding:6px 8px;quotes:none;display:block}
+.rsm-ser{display:flex;flex-direction:column;border-left:2px solid var(--hair2);margin-left:6px;padding-left:12px;gap:8px}
+.rsm-ser li{font-size:12px;position:relative}
+.rsm-ser li:before{content:"";position:absolute;left:-17px;top:4px;width:8px;height:8px;border-radius:999px;background:var(--card);border:2px solid var(--ink)}
+.rsm-ser li.old{color:var(--mu)}
+.rsm-ser li.old:before{border-color:var(--hair2)}
+.rsm-ser li b{font-family:var(--mo)}
+.rsm-fm{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.rsm-ff{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rsm-ff label{font:700 11.5px var(--sg)}
+.rsm-ff .v{min-height:34px;padding:0 10px;border:1.5px solid var(--hair2);border-radius:9px;display:flex;align-items:center;font:600 12.5px var(--mo);background:var(--card)}
+.rsm-ff .v.emp{color:var(--mu);font:500 12px var(--sg);border-style:dashed}
+.rsm-ff .v.sel:after{content:"▾";margin-left:auto;color:var(--mu)}
+.rsm-ff small{font-size:11px;color:var(--mu)}
+.rsm-tick{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;padding:9px 11px;border:1px solid var(--hair);border-radius:9px}
+.rsm-tick span.bx{width:16px;height:16px;flex:none;border:1.5px solid var(--hair2);border-radius:4px;display:grid;place-items:center;font-size:11px;font-weight:800}
+.rsm-tick.on span.bx{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.rsm-rep{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:24px 30px;display:flex;flex-direction:column;gap:14px;font-size:13px;line-height:1.55;min-width:0}
+.rsm-rep h2{font-size:21px;font-weight:800;letter-spacing:-.02em}
+.rsm-rep h3{font-size:14.5px;font-weight:800;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--hair);padding-top:12px}
+.rsm-rep h3 i{font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.rsm-rep ul.li{display:flex;flex-direction:column;gap:5px;padding-left:16px;list-style:disc}
+.rsm-wh{display:inline-flex;align-items:center;gap:5px;font:700 11.5px var(--sg);color:var(--ink);border:1.5px solid var(--ink);border-radius:999px;padding:0 8px;background:var(--raised)}
+.rsm-words{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.rsm-words div{border:1px solid var(--hair);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.rsm-ch{border:1px solid var(--hair);border-radius:12px;background:var(--card);display:flex;flex-direction:column;overflow:hidden}
+.rsm-ch>.top{padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.rsm-ch>.top p{font-size:13.5px;font-weight:700;line-height:1.45}
+.rsm-ch>.dep{padding:10px 14px;border-top:1px solid var(--hair);background:var(--raised);display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.rsm-ch>.dep ul{display:flex;flex-direction:column;gap:4px}
+.rsm-ch>.dep li{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px}
+.rsm-ch>.dep li b{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.rsm-ch>.act{padding:10px 14px;border-top:1px solid var(--hair);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rsm-was{font:600 12.5px var(--mo)}
+.rsm-was s{color:var(--mu)}
+.rsm-badge{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap}
+.rsm-grid{display:grid;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.rsm-grid>div{padding:10px 11px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);font-size:11.5px;line-height:1.45;display:flex;flex-direction:column;gap:5px;min-width:0}
+.rsm-grid>div.h{background:var(--raised);font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.rsm-grid>div.r{background:var(--raised);font-weight:800;font-size:12px}
+.rsm-grid>div.ho{background:var(--raised);color:var(--amT)}
+.rsm-sk{height:10px;border-radius:4px;background:var(--skel)}
+.rsm-emp{border:1px dashed var(--hair2);border-radius:12px;background:var(--card);padding:16px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-height:150px}
+.rsm-emp b{font-size:14px}
+.rsm-emp p{font-size:12.5px;color:var(--mu);line-height:1.5}
+.rsm-emp.hold{border-color:var(--amE);border-style:dotted}
+.rsm-path{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.rsm-st{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 13px;display:flex;flex-direction:column;gap:6px;min-height:150px}
+.rsm-st>i{display:grid;place-items:center;width:26px;height:26px;border-radius:999px;background:var(--ink);color:var(--card);font:700 12px var(--mo);font-style:normal}
+.rsm-st.on{border:2px solid #7c3aed;background:var(--lav)}
+.rsm-st.on>i{background:#7c3aed;color:#fff}
+.rsm-st.hold{border-style:dotted;border-color:var(--amE)}
+.rsm-st b{font-size:13px;line-height:1.35}
+.rsm-st p{font-size:11.5px;color:var(--mu);line-height:1.45}
+.rsm-st a{font:700 11.5px var(--mo);margin-top:auto}
+.rsm-ord{display:flex;flex-direction:column;gap:5px;counter-reset:o}
+.rsm-ord li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:8px;font-size:12px;line-height:1.45;align-items:start}
+.rsm-ord li>i{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--vi);color:var(--vt);font:700 10.5px var(--mo);font-style:normal}
+.rsm-lv{display:flex;flex-direction:column;gap:5px}
+.rsm-lv li{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--hair)}
+.rsm-lv li code{font:600 11px var(--mo);color:var(--mu)}
+.rsm-pcard{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.rsm-pcard .amt{font:700 15px var(--mo)}
+.rsm-sw{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair2);border-radius:10px;overflow:hidden}
+.rsm-sw button{min-height:44px;border:0;border-right:1px solid var(--hair2);background:var(--card);font:700 13px var(--sg);color:var(--ink)}
+.rsm-sw button:last-child{border-right:0}
+.rsm-sw button[aria-checked=true]{background:var(--ink);color:var(--card)}
+.rsm-ptab{display:flex;gap:2px;border-bottom:1px solid var(--hair);overflow:hidden;white-space:nowrap}
+.rsm-ptab a{padding:12px 10px;min-height:44px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;flex:none}
+.rsm-ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.rsm-pb{min-height:44px!important}
+.rsm-dk h3{font-size:13.5px;font-weight:800;margin:16px 0 6px}
+.rsm-dk ul.li{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5;color:#3f3a49}
+.rsm-q{border:1px solid #fcd34d;background:#fffbeb;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.rsm-q h3{margin:0;font-size:14px;font-weight:800;color:#18181b}
+.rsm-q ol{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:#3f3a49}
+.rsm-q ol li b{color:#18181b}
+.rsm-q p{margin:0!important;font-size:12px!important}
+.rsm-tb tbody th{text-transform:none!important;letter-spacing:0!important;font:600 12.5px var(--sg)!important;color:var(--ink)!important;background:transparent!important;white-space:normal!important;width:250px}
+.rsm-tb tr.res th{background:var(--raised)!important;font-weight:800!important}
+.rsm-tb tr.hl th{background:var(--amBg)!important}
+.rsm-col>div>.rsm-sm{display:block}
+.rsm-grid .st-c,.rsm-grid .rsm-held{align-self:flex-start}
+.rsm-st .rsm-held{align-self:flex-start}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "RST21", "options": ["RST21", "RST21B", "RST21C", "RST22", "RST22B", "RST23", "RST24", "RST24B", "RST25", "RST26", "RST28", "RST28B", "RST29", "RST30", "RST31A", "RST31B", "RST31C", "RST31D", "RST31E", "RST31F", "RST31G", "RST31H", "RST31L", "RST31M", "RST32A", "RST32B", "RST32C", "RST32D", "RST32E", "RST32F", "RST32PA", "RST32PE", "RST33", "RST34", "RST20", "RST35"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'RST21';
+    const dark = B.indexOf('RST32') === 0;
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- annotations (not product copy) ---------- */
+    const PT = (t) => '<span class="ptag" title="Needs backend work">◇ ' + t + '</span>';
+    const FL = (t) => '<span class="rsm-flag" title="Owner decision">⚑ ' + t + '</span>';
+    const HELD = (t) => '<span class="rsm-held" title="Held for the owner">⚑ ' + (t || 'Held · Questions 4, 10, 11') + '</span>';
+
+    /* ---------- Research v2 status chips (rs.js) ---------- */
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>')
+    };
+    const S = { Answered: ['ok', 'ok'], Addressed: ['ok', 'ok'], Confirmed: ['ok', 'ok'], Counted: ['ok', 'ok'], Approved: ['ok', 'ok'], 'In progress': ['pd', 'pd'], Open: ['pd', 'pd'], 'To confirm': ['pd', 'pd'], Draft: ['pd', 'pd'], 'Contradicting evidence': ['xar', 'ar'], 'Needs review': ['xar', 'ar'], 'Set aside': ['na', 'nd'], 'Nothing recorded': ['ni', 'nd'] };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+
+    /* ---------- Platform States (st.js, D5129) ---------- */
+    const G = {
+      nr: SV('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"/>'),
+      un: SV('<path d="M6 1.6v6" stroke="currentColor" stroke-width="2.2"/><circle cx="6" cy="10.2" r="1.2" fill="currentColor"/>'),
+      rf: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/>'),
+      stale: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.2V6l1.9 1.3" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      part: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.4a4.6 4.6 0 0 1 0 9.2z" fill="currentColor"/>'),
+      prov: SV('<path d="M6 1.2L10.8 6 6 10.8 1.2 6z" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      re: SV('<path d="M9.8 4.4A4.2 4.2 0 1 0 10 7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 1.6v3.2H7.2" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      lock: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>')
+    };
+    const K = { nr: ['st-nr', 'nr', 'Not recorded'], na: ['st-na', '', 'Not applicable'], un: ['st-un', 'un', 'Unavailable'], rf: ['st-rf', 'rf', 'Refused'], stale: ['st-stale', 'stale', 'Stale'], part: ['st-part', 'part', 'Partial'], prov: ['st-pv', 'prov', 'Provisional'], none: ['st-nr', 'nr', 'None'] };
+    const chip = (k, label) => { const x = K[k]; return '<span class="st-c ' + x[0] + '">' + (x[1] ? G[x[1]] : '') + (label || x[2]) + '</span>'; };
+    const NR = chip('nr');
+    const PROV = chip('prov');
+    const NOTSAVED = '<span class="st-c st-pv">' + G.prov + 'Preview · Not saved</span>';
+    const retry = (s) => '<button type="button" class="st-retry">' + G.re + (s || 'Try again') + '</button>';
+    const nt = (tone, ic, h, d, act) => '<div class="nt ' + tone + '"' + (tone === 'r' ? ' role="alert"' : '') + '><span class="ic" aria-hidden="true">' + ic + '</span><div><b>' + h + '</b>' + (d ? ' ' + d : '') + '</div>' + (act ? '<span class="bt">' + act + '</span>' : '') + '</div>';
+    const UNV = (what, still) => '<div class="nt" style="border-style:dashed;border-width:1.5px"><span class="ic" aria-hidden="true" style="background:var(--neg)">!</span><div>' + chip('un') + ' <b>' + what + '</b>' + (still ? '<span class="rsm-sm" style="display:block;margin-top:3px">' + still + '</span>' : '') + '</div><span class="bt">' + retry() + '</span></div>';
+
+    /* ---------- the five kinds of figure ---------- */
+    const KIND = { co: ['', 'Companies Axal lists'], el: ['', 'Eligible customers'], ob: ['obs', 'Observed spending or revenue'], mo: ['mod', 'Modelled'], ap: ['act', 'Activity proxy'] };
+    const kind = (k) => '<span class="rsm-kind ' + KIND[k][0] + '">' + KIND[k][1] + '</span>';
+
+    /* ---------- sample cast (bracketed, invented) ---------- */
+    const STUDY = '[Scheduling software for independent dental practices in Germany]';
+    const VEN = '[Northwind Labs]';
+    const FOUNDER = '[Maya Ruiz]';
+    const MATE = '[Tom Becker]';
+    const SA = '[Source A: Statistics Office Sample]';
+    const SB = '[Source B: Open Registry Sample]';
+    const OBS = '[Enterprises · 86.23 · Germany · 2023]';
+    const ALTA = '[Alternative A]';
+    const ALTB = '[Alternative B]';
+    const SEG = '[Independent practices, 1–2 dentists]';
+    const MKT = '[Dental practice software]';
+    const usd = (n) => 'USD ' + n;
+
+    /* ---------- shell (Research v2: union sidebar, company switcher, Research context rail) ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const RNAV = ['Overview', 'My Research', 'Markets', 'Companies', 'Funds', 'Library', 'Ask'];
+    const rnav = (cur) => '<nav aria-label="Research" style="display:flex;flex-direction:column;gap:2px;margin:2px 0 0 18px;border-left:1px solid var(--hair);padding-left:6px">' + J(RNAV.map(t => '<a href="#" style="min-height:30px;font-size:12.5px;font-weight:' + (t === cur ? '800' : '600') + ';color:' + (t === cur ? 'var(--vt)' : 'var(--mu)') + ';display:flex;align-items:center;padding:0 10px;border-radius:8px' + (t === cur ? ';background:var(--lav)' : '') + '"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><div class="selb" style="font-size:12px"><span>' + VEN + '</span><span aria-hidden="true">▾</span></div></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Research' ? ' style="color:var(--ink);font-weight:800"' : '') + '>' + t + '</a>' + (t === 'Research' ? rnav(cur) : ''))) + '</nav></aside>';
+    const top = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">MR</span></div></div>';
+    const ctxRail = () => '<aside class="rail" aria-label="Research context"><div class="rh"><b style="font-size:13.5px">Research context</b><button type="button" class="ib" aria-label="Collapse research context" aria-expanded="true">›</button></div><div class="rb">'
+      + '<section><h4>Active project</h4><a href="#" style="font-weight:800;font-size:13px;color:var(--ink)">' + STUDY + '</a><div class="raw" style="margin-top:4px">Market study · In progress · saved 14:02</div></section>'
+      + '<section><h4>Evidence coverage</h4><div style="font-size:12.5px"><b class="mo">9 of 12</b> sources answerable in Ask</div><div class="raw" style="margin-top:4px">Not completeness: that is on Scope and questions</div></section>'
+      + '<section><h4>Open questions · 3</h4><ul><li>[How many independent practices in Germany fit the beachhead segment?]</li><li>[Would a solo practice pay EUR 49 a month for booking and reminders?]</li><li>[Do German data-protection rules limit SMS appointment reminders?]</li></ul></section>'
+      + '<section><h4>Needs review · 2</h4><ul><li>' + OBS + ' has a later value</li><li>[Channel reading · Search ads, 2026-09] is no longer available</li></ul></section>'
+      + '</div></aside>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="rsh' + (o.rail ? ' wr' : '') + '" style="min-height:' + (o.h || 900) + 'px">' + side(o.cur || 'My Research') + '<div class="mn">' + top + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail ? ctxRail() : '<aside class="sp" aria-label="Research context"><button type="button" class="e" aria-label="Open research context" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Context</span></aside>') + (o.overlay || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+
+    /* ---------- the project bar, six tabs and the study's section list (RS-02 + RST-01) ---------- */
+    const pbar = (o) => { o = o || {}; return '<div class="crumb"><a href="#">Research</a>/<a href="#">My Research</a>/<b>' + STUDY + '</b></div><div class="pbar2"><div><h1 style="font-size:23px;font-weight:800;letter-spacing:-.02em">' + STUDY + '</h1><div class="meta"><span>Market study</span>' + (o.arch ? '<span class="stt na">' + G.lock + 'Archived · read-only</span>' : st('In progress')) + '<span>Saved 14:02</span><span>12 sources</span><span>Linked venture ' + VEN + '</span></div></div><div style="display:flex;gap:8px"><button type="button" class="btn">Add evidence</button></div></div>'; };
+    const ptabs = () => '<nav class="ptab" aria-label="Project">' + J([['Overview', ''], ['Evidence', '12'], ['Findings', '6'], ['Comparisons', '1'], ['Brief', 'v2'], ['Study', '']].map(t => '<a href="#"' + (t[0] === 'Study' ? ' aria-current="page"' : '') + '>' + t[0] + (t[1] ? '<span>' + t[1] + '</span>' : '') + '</a>')) + '</nav>';
+    const addr = (slug) => '<div class="rsm-addr"><code>/research/projects/:uid/study/' + slug + '</code><span>new address, owner decision</span>' + FL('Question 1 · option A') + '</div>';
+    const SECS = [['scope', 'Scope and questions'], ['cust', 'Customers and demand'], ['size', 'Size and scenarios'], ['comp', 'Competition and pricing'], ['entry', 'Entry strategy and risks'], ['evid', 'Evidence and findings'], ['rep', 'Report and monitoring']];
+    const secNav = (cur) => '<nav class="rsm-secs" aria-label="Study sections">' + J(SECS.map((s, i) => '<a href="#"' + (s[0] === cur ? ' aria-current="page"' : '') + '><i>' + (i + 1) + '</i><span>' + s[1] + '</span>' + (s[0] === 'rep' ? '<em>2 need review</em>' : '<span></span>') + '</a>')) + '</nav>';
+    const study = (cur, slug, body, o) => { o = o || {}; return page(pbar(o) + ptabs() + addr(slug) + '<div class="rsm-ws">' + secNav(cur) + '<div class="rsm-col" style="gap:14px">' + body + '</div></div>', { h: o.h, rail: o.rail }); };
+    const sh = (eye, title, desc, acts) => '<div class="rsm-sh"><div><span class="eye">' + eye + '</span><h2>' + title + '</h2>' + (desc ? '<p>' + desc + '</p>' : '') + '</div>' + (acts ? '<div class="rsm-row">' + acts + '</div>' : '') + '</div>';
+
+    /* ---------- phone (RS-10) ---------- */
+    const phone = (title, body, sheet) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Open research context">◫</button></div><div class="pbd" style="overflow:hidden;gap:12px">' + body + '</div>' + (sheet || '') + '</div></div>';
+    const psheet = (title, body) => '<div class="dim2"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="' + title + '" style="max-height:640px"><div class="grab" aria-hidden="true"></div><div style="padding:10px 16px 20px;display:flex;flex-direction:column;gap:10px"><h2 style="font-size:17px;font-weight:800">' + title + '</h2>' + body + '</div></div>';
+    const pcrumb = (sec) => '<div class="crumb" style="flex-wrap:wrap">Study / <b>' + sec + '</b></div>';
+
+    /* ==========================================================
+       RST-21 · the sizing sheet
+       ========================================================== */
+    const SRC = {
+      obs: (t, s, per, k) => '<div class="rsm-src"><b>Source</b><span>Observation attached to this study · <a href="#">' + t + '</a> · ' + s + ' · period measured ' + per + ' ' + kind(k) + '</span></div>',
+      ven: (t) => '<div class="rsm-src"><b>Source</b><span>One of the venture’s market sources · <a href="#">' + t + '</a></span></div>',
+      as: (n) => '<div class="rsm-src"><b>Source</b><span><span class="as">Assumption</span> · “' + n + '”</span></div>',
+      ead: (n) => '<div class="rsm-src"><b>Source</b><span>Citation of an Eadwyn proposal accepted on the venture’s sizing page · ' + n + ' <span class="ro">read-only</span></span></div>',
+      nl: '<div class="rsm-src"><b>Source</b><span><span class="as">Not labelled</span> · saved from the venture’s page before sources were asked for</span></div>'
+    };
+    const inp = (label, val, unit, meta, src, o) => { o = o || {}; return '<div class="rsm-in' + (o.bad ? ' bad' : '') + '"><label>' + label + '</label><div class="v' + (o.empty ? ' empty' : '') + '">' + (o.empty ? 'Not entered' : val) + '<small>' + unit + '</small></div><span class="u">' + meta + '</span>' + src + '</div>'; };
+    const INPUTS = [
+      ['Eligible accounts', '41,200', 'enterprises', 'count · NACE 86.23 · reference year 2023', SRC.obs(OBS, SA, '2023', 'el')],
+      ['Annual revenue per account', '600', 'EUR a year', 'per practice · EUR · reference year 2026', SRC.as('Planned price, EUR 50 a month per practice.')],
+      ['EUR to USD conversion', '1.08', 'USD per EUR', 'rate · reference date 2 Nov 2026', SRC.as('The rate I used on 2 Nov 2026.')],
+      ['Serviceable share', '25%', 'of eligible accounts', 'share · reference year 2026', SRC.ead('“Practices with one or two dentists”')],
+      ['Win rate', '5%', 'of serviceable accounts', 'share over the horizon', SRC.as('Two of fifty demos converted in the pilot month.')],
+      ['Deals per month', '20', 'accounts a month', 'sales capacity', SRC.ven('[Hiring plan for two account executives]')],
+      ['Horizon', '24', 'months', 'from the study’s Scope', SRC.as('The horizon set on Scope.')],
+      ['Sales cycle', '45', 'days', 'first call to signature', SRC.as('Pilot practices signed within a quarter.')],
+      ['Retention share', '88%', 'of accounts won', 'still paying at month 24', SRC.as('Pilot practices renewed after three months.')]
+    ];
+    const inputsGrid = (o) => { o = o || {}; return '<div class="rsm-three">' + J(INPUTS.map(r => inp(r[0], r[1], r[2], r[3], r[4]))) + '</div>'; };
+    const fig = (label, v, sub) => '<div class="rsm-fig"><div class="rsm-row" style="justify-content:space-between"><small>' + label + '</small>' + PROV + '</div><b>' + v + '</b><small>' + sub + '</small></div>';
+    const results = (o) => { o = o || {}; return '<section class="rsm-res" aria-labelledby="rsmres"><div class="rsm-row" style="justify-content:space-between"><div class="rsm-row"><span class="eye" id="rsmres">Results from the Worker</span>' + NOTSAVED + '</div><span class="raw">Previewed 14:06 · nothing is stored until you save · ' + kind('mo') + '</span></div>'
+      + '<div class="rsm-figs">' + fig('Total market', usd('26,697,600'), 'a year · 41,200 accounts') + fig('Serviceable', usd('6,674,400'), 'a year · 10,300 accounts') + fig('Obtainable', usd('256,608'), 'a year at month 24 · 396 accounts') + '</div>'
+      + '<div class="rsm-calc" aria-label="How it was computed"><span class="eye">How it was computed</span><p><span>Revenue per account</span><span>EUR 600 × 1.08 = USD 648 a year</span></p><p><span>Total market</span><span>41,200 eligible accounts × USD 648 = USD 26,697,600</span></p><p><span>Serviceable</span><span>41,200 × 25% = 10,300 accounts × USD 648 = USD 6,674,400</span></p><p><span>Obtainable</span><span>the smaller of 10,300 × 5% = 515 (win rate) and 20 a month × (24 − 1.5) selling months = 450 (sales capacity), × 88% retained = 396 accounts × USD 648 = USD 256,608</span></p></div>'
+      + '<div class="rsm-lim"><i aria-hidden="true">◆</i><span><b>Sales capacity set Obtainable.</b> 450 accounts can be sold in 22.5 selling months (a 45-day sales cycle is 1.5 months), fewer than the 515 the win rate allows.</span></div></section>'; };
+    const override = '<section class="rsm-ovr" aria-label="Override, kept apart from the computed figures"><div class="rsm-row" style="justify-content:space-between"><span class="eye">Override · kept apart from the computed figures</span><span class="raw">None set</span></div><div class="rsm-fm" style="grid-template-columns:200px minmax(0,1fr) 220px"><div class="rsm-ff"><label for="ovt">Total market override</label><div class="v emp" id="ovt">USD · none set</div></div><div class="rsm-ff"><label for="ovr">Reason</label><div class="v emp" id="ovr">Required when an override is set</div></div><div class="rsm-ff"><label>Computed, beside it</label><div class="v">USD 26,697,600</div></div></div><span class="rsm-sm">An override shows as “Override, not computed” wherever the total appears, with its reason and the computed value next to it.</span></section>';
+    const RST21 = () => study('size', 'size', sh('Size and scenarios', 'The sizing sheet', 'V18’s sheet, inside the study. Each input names its source, unit, currency and reference year; the three figures come only from the Worker. US dollars.', '<button type="button" class="btn">Version history</button>')
+      + '<div class="rsm-row"><span class="raw">Linked venture</span><b>' + VEN + '</b><span class="raw">· Attached to this study: version [3] · Bottom-up</span>' + PT('#7704 sizing') + PT('#7725 sources per input') + '</div>'
+      + '<section class="cd" style="gap:10px"><div class="ch"><h2>Scope</h2><span class="sm">read from the study’s Scope</span></div><div class="rsm-three" style="font-size:12.5px"><div><span class="rsm-lbl">Category</span><div>' + SEG + '</div></div><div><span class="rsm-lbl">Customer countries</span><div>Germany · chosen on Scope</div></div><div><span class="rsm-lbl">Method</span><div>Bottom-up: eligible accounts × revenue per account</div></div></div></section>'
+      + '<div class="rsm-row" style="justify-content:space-between"><span class="eye">Inputs · 9</span><button type="button" class="btn bsm">Use an attached observation…</button></div>'
+      + inputsGrid() + results() + override
+      + '<div class="rsm-bar"><span class="rsm-sm" style="max-width:640px">No default percentage and no hidden multiplier: every number above was typed or read from its source. A modelled figure carries Provisional and never an observation’s source line. Saving attaches the version to this study.</span><div class="rsm-row"><button type="button" class="btn">Preview again</button><button type="button" class="btn p">Save as version [4]</button></div></div>', { h: 1860 });
+
+    const RST21B = () => crop('<span class="eye">RST-21 · inputs at their edges · the Worker answers, the page never guesses</span><div class="rsm-two">'
+      + '<div class="rsm-col">' + inp('Win rate', '0%', 'of serviceable accounts', 'typed 0 · a value', SRC.as('Testing a zero-win case.')) + '<div class="rsm-res"><div class="rsm-row"><span class="eye">Results from the Worker</span>' + NOTSAVED + '</div><div class="rsm-figs" style="grid-template-columns:1fr">' + fig('Obtainable', usd('0'), 'a year · 10,300 × 0% = 0 accounts · computed with 0') + '</div></div></div>'
+      + '<div class="rsm-col">' + inp('Serviceable share', '', 'of eligible accounts', 'left empty', '<div class="rsm-src"><b>Source</b><span class="rsm-mu">No source until a value is entered</span></div>', { empty: true, bad: true }) + '<div class="rsm-res"><div class="rsm-row"><span class="eye">Results from the Worker</span>' + NOTSAVED + '</div><div class="rsm-figs" style="grid-template-columns:1fr 1fr"><div class="rsm-fig"><small>Serviceable</small><b class="cant">Cannot compute: serviceable share is not entered</b></div><div class="rsm-fig"><small>Obtainable</small><b class="cant">Cannot compute: serviceable share is not entered</b></div></div><span class="rsm-sm">The Worker’s sentence, word for word. Total market still shows; Save as version stays off until the Worker can compute all three.</span></div></div>'
+      + '</div><div class="rsm-two"><div class="cd" style="gap:8px"><div class="ch"><h2>Use an attached observation</h2><button type="button" class="ib" aria-label="Close">✕</button></div>' + nt('', 'i', 'No observation is attached to this study.', 'Find one for Germany and your industry codes, attach it, then pick it here.', '<a class="btn bsm" href="#">Evidence and findings →</a>') + '</div>'
+      + '<div class="cd" style="gap:8px"><div class="ch"><h2>Version [2], opened read-only</h2><span class="sm">saved from the venture’s page · 28 Oct 2026</span></div>' + inp('Eligible accounts', '38,000', 'enterprises', 'reference year not recorded', SRC.nl) + '</div></div>', 1180);
+
+    const RST21C = () => crop('<span class="eye">RST-21 · no venture linked · no form</span><section class="cd" style="gap:10px;align-items:flex-start">' + sh('Size and scenarios', 'This study is not linked to a venture', 'Sizing versions belong to a venture. Link this study to the venture open in the company switcher, on Scope; then the sizing sheet opens here.') + '<a class="btn" href="#">Link a venture on Scope</a><span class="rsm-sm">Nothing is drawn as 0 and no figure is shown until a venture is linked.</span></section>', 900);
+
+    /* ==========================================================
+       RST-22 · scenarios, sensitivity, conflicts, versions
+       ========================================================== */
+    const SC = [
+      ['Eligible accounts', '41,200', '41,200', '41,200', 'Same in all three'],
+      ['Annual revenue per account (EUR)', '500', '600', '700', 'All three differ'],
+      ['EUR to USD conversion', '1.08', '1.08', '1.08', 'Same in all three'],
+      ['Serviceable share', '20%', '25%', '30%', 'All three differ'],
+      ['Win rate', '2.5%', '5%', '5%', 'Low differs'],
+      ['Deals per month', '22', '20', '24', '<span class="rsm-warn">' + SH.ar + 'Low is above base · flagged, not refused</span>', 'hl'],
+      ['Horizon (months)', '24', '24', '24', 'Same in all three'],
+      ['Sales cycle (days)', '45', '45', '45', 'Same in all three'],
+      ['Retention share', '50%', '88%', '90%', 'All three differ']
+    ];
+    const RES = [
+      ['Total market', '22,248,000', '26,697,600', '31,147,200'],
+      ['Serviceable', '4,449,600', '6,674,400', '9,344,160'],
+      ['Obtainable at month 24', '55,620', '256,608', '367,416'],
+      ['What set Obtainable', 'win rate · 206 accounts', 'sales capacity · 450', 'sales capacity · 540']
+    ];
+    const scTable = () => '<table class="rsm-tb"><thead><tr><th scope="col">Input · entered by you</th><th scope="col" class="n">Low</th><th scope="col" class="n">Base</th><th scope="col" class="n">High</th><th scope="col">Across the three</th></tr></thead><tbody>'
+      + J(SC.map(r => '<tr' + (r[5] ? ' class="hl"' : '') + '><th scope="row" style="font:600 12.5px var(--sg);text-align:left;padding:8px 10px;border-bottom:1px solid var(--hair)">' + r[0] + '</th><td class="n">' + r[1] + '</td><td class="n">' + r[2] + '</td><td class="n">' + r[3] + '</td><td>' + r[4] + '</td></tr>'))
+      + J(RES.map((r, i) => '<tr class="res"><th scope="row" style="font:800 12.5px var(--sg);text-align:left;padding:8px 10px;border-bottom:1px solid var(--hair)">' + r[0] + (i < 3 ? ' <small style="font-weight:500;color:var(--mu)">USD a year</small>' : '') + '</th><td class="n">' + r[1] + '</td><td class="n">' + r[2] + '</td><td class="n">' + r[3] + '</td><td>' + (i === 0 ? PROV + ' ' + kind('mo') : i === 3 ? '<span class="rsm-sm">from the Worker</span>' : PROV) + '</td></tr>')) + '</tbody></table>';
+    const SENS = [
+      ['Retention share', 100, 'USD 145,800 to 262,440', 'moves 116,640'],
+      ['Win rate', 94, 'USD 146,837 to 256,608', 'moves 109,771'],
+      ['Annual revenue per account', 73, 'USD 213,840 to 299,376', 'moves 85,536'],
+      ['Deals per month', 32, 'USD 282,269 to 293,674 · both raise it', 'moves 37,066'],
+      ['Serviceable share', 19, 'USD 234,939 to 256,608', 'moves 21,669'],
+      ['Eligible accounts · conversion · horizon · sales cycle', 0, 'same in all three scenarios', 'no move']
+    ];
+    const sens = () => '<ol class="rsm-sens">' + J(SENS.map((s, i) => '<li><i>' + (i + 1) + '</i><span><b>' + s[0] + '</b><small style="display:block;color:var(--mu);font-size:11px">' + s[2] + '</small></span><span class="tr" role="img" aria-label="' + s[3] + '"><span style="width:' + s[1] + '%"></span></span><span class="n">' + s[3] + '</span></li>')) + '</ol>';
+    const conflicts = () => '<div class="rsm-two"><div class="rsm-est used"><span class="rsm-used">' + SH.ok + 'Used</span><span class="rsm-lbl">' + SA + '</span><b class="big">41,200 enterprises</b><span class="rsm-sm">' + OBS + ' · counts enterprises · period measured 2023</span>' + kind('el') + '</div><div class="rsm-est"><span class="rsm-lbl">' + SB + '</span><b class="big">44,900 legal units</b><span class="rsm-sm">[Registered dental practices, Germany, 2024] · counts legal units · period measured 2024</span>' + kind('el') + '</div></div><div class="rsm-sm"><b style="color:var(--ink)">Why the first is used, in your words:</b> “Source B counts legal units, so a practice with two legal entities appears twice.” Nothing is averaged; the other estimate stays readable.</div>';
+    const topdown = () => '<div class="rsm-gap"><div class="rsm-est"><span class="rsm-lbl">Bottom-up · version [4] preview</span><b class="big">USD 26,697,600</b><span class="rsm-sm">Total market, a year</span>' + PROV + '</div><div class="mid">gap<br>USD 4,302,400<br>below</div><div class="rsm-est"><span class="rsm-lbl">Top-down check</span><b class="big">USD 31,000,000</b><span class="rsm-sm">[Practice software spend, Germany, 2024] · ' + SB + '</span>' + kind('ob') + '</div></div><span class="rsm-sm">Shown side by side; never blended into one figure.</span>';
+    const RST22 = () => study('size', 'size/scenarios', sh('Size and scenarios', 'Scenarios, sensitivity and conflicting estimates', 'Low, base and high are each entered by you. The Worker computes every result; nothing is averaged or blended.', '<button type="button" class="btn">Back to the sizing sheet</button><button type="button" class="btn p">Save as version [4]</button>')
+      + '<div class="rsm-row">' + PT('#7725 scenarios, sensitivity, conflicts, top-down check') + PT('#7704 versions') + '</div>'
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:12px 14px"><h2>A · Low, base and high</h2><span class="sm">US dollars · results from the Worker</span></div>' + scTable() + '</section>'
+      + '<section class="cd"><div class="ch"><h2>B · Sensitivity</h2><span class="sm">inputs ranked by how far Obtainable moves between their low and high, all else at base</span></div>' + sens() + '</section>'
+      + '<section class="cd"><div class="ch"><h2>C · Two estimates for eligible accounts</h2></div>' + conflicts() + '</section><section class="cd"><div class="ch"><h2>D · Top-down check</h2></div>' + topdown() + '</section>', { h: 1960 });
+
+    const VERS = [
+      ['4', '12 Nov 2026', FOUNDER, 'Saved · not attached · same values as [3], each input now with its source', true],
+      ['3', '9 Nov 2026', FOUNDER, 'Attached to this study', true],
+      ['2', '28 Oct 2026', VEN + ' sizing page', 'Not labelled · inputs have no source', false],
+      ['1', '12 Oct 2026', FOUNDER, 'Saved before versions existed · figures only', false]
+    ];
+    const verList = (o) => { o = o || {}; return '<ol class="rsm-ver">' + J(VERS.map(v => '<li class="' + (v[0] === '3' ? 'on' : '') + '"><b>[' + v[0] + ']</b><span><b style="font-weight:700">' + v[1] + ' · ' + v[2] + '</b><small>' + v[3] + '</small>' + (v[4] ? '<small style="color:var(--amT)">' + SH.ar + ' Eligible accounts: its observation has a later edition (retrieved 18 Nov 2026)</small>' : '') + '</span><a class="btn bsm" href="#">Open read-only</a></li>')) + '</ol>'; };
+    const RST22B = () => crop('<span class="eye">RST-22 · E, F and G</span><div class="rsm-two" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)"><section class="cd"><div class="ch"><h2>E · Version history</h2><span class="sm">number · date · author</span></div>' + verList() + '<span class="rsm-sm">Older figures from the venture’s page read “Saved before versions existed”. A version is never edited; a new one is saved.</span></section>'
+      + '<div class="rsm-col"><section class="cd"><div class="ch"><h2>F · Saved, not attached</h2></div>' + nt('a', '!', 'Version [4] is saved. It is not attached to this study yet.', 'The study still relies on version [3].', retry()) + '</section>'
+      + '<section class="cd"><div class="ch"><h2>G · What this formula does not handle</h2></div><p style="font-size:12.5px;line-height:1.5">This formula does not handle overlapping segments or organisations with several locations.</p><span class="rsm-sm">Printed under the results on every version and in the report.</span></section></div></div>', 1280);
+
+    /* ==========================================================
+       RST-23 · alternatives and the comparison
+       ========================================================== */
+    const UNS = '<span class="rsm-uns">Unsupported</span>';
+    const lk = (t) => ' <a href="#">' + t + '</a>';
+    const AF = ['Target customer', 'Distribution', 'Buying process', 'Implementation cost', 'Switching cost', 'Reason to switch', 'Differentiation claim'];
+    const ALTS = [
+      ['Direct competitor', ALTA, SEG, ['Practices with one or two dentists' + lk('finding [3]'), 'Self-serve sign-up online' + lk('fetched page · 3 Nov'), UNS, 'Free data import' + lk('fetched page · 3 Nov'), UNS, UNS, 'SMS recall reminders' + lk('fetched page · 3 Nov')]],
+      ['Adjacent product', ALTB, '[Group practices, 3+ dentists]', ['Group practices with three or more dentists' + lk('finding [5]'), UNS, 'Annual contract through a dealer' + lk('fetched page · 30 Oct'), UNS, 'Patient records move with the suite' + lk('finding [5]'), UNS, UNS]],
+      ['In-house solution', '[Front-desk spreadsheet]', SEG, ['Practices with a full-time front desk' + lk('interviews held · 4'), UNS, UNS, UNS, UNS, UNS, UNS]],
+      ['Status quo', '[paper diary and phone]', SEG, ['Solo practices' + lk('interviews held · 7'), UNS, UNS, UNS, UNS, 'No-shows cost chair time' + lk('finding [2]'), UNS]]
+    ];
+    const altCard = (a) => '<article class="rsm-alt"><div class="rsm-row" style="justify-content:space-between"><span class="rsm-ak">' + a[0] + '</span><span class="raw">segment ' + a[2] + '</span></div><h3>' + a[1] + '</h3><dl class="rsm-af">' + J(AF.map((f, i) => '<dt>' + f + '</dt><dd>' + a[3][i] + '</dd>')) + '</dl></article>';
+    const prRow = (who, plan, amt, terms, meta, hist) => '<div class="rsm-pr"><div><b>' + who + '</b><small>' + plan + '</small></div><div class="amt">' + amt + '</div><div>' + terms + '</div><div><small>' + meta + '</small>' + (hist ? '<a href="#" style="font-size:11.5px">' + hist + '</a>' : '') + '</div></div>';
+    const priceGroups = () => '<div class="rsm-grp"><header><b>Comparable · subscription · per practice · monthly · contract term not stated · EUR</b><span class="raw">3 prices · share a line because all five terms match</span></header>'
+      + prRow(ALTA, 'Free', 'EUR 0', 'per practice a month · 0 is a stated free price', 'Germany · captured 3 Nov 2026 · public pricing page')
+      + prRow(ALTA, 'Starter', 'EUR 49', 'per practice a month', 'Germany · captured 3 Nov 2026 · public pricing page', 'History · 2 entries')
+      + prRow(ALTA, 'Practice', 'EUR 89', 'per practice a month', 'Germany · captured 3 Nov 2026 · public pricing page') + '</div>'
+      + '<div class="rsm-grp"><header><b>Not comparable</b><span class="raw">side by side, never on one line</span></header><div class="rsm-nc"><div class="rsm-pc"><b>' + ALTA + ' · Practice</b><span class="amt">EUR 89</span><span>subscription · per practice · monthly · term not stated</span><small class="rsm-mu">Germany · captured 3 Nov 2026</small></div><div class="rsm-pc"><b>' + ALTB + ' · Scheduling module</b><span class="amt">USD 1,200</span><span>subscription · per practice · yearly · 12-month term</span><small class="rsm-mu">EU · captured 30 Oct 2026 · dealer price list</small></div></div><div class="rsm-why"><b>The Worker’s reason:</b><span>currency differs (EUR, USD); billing period differs (month, year); contract term differs (not stated, 12 months).</span></div>'
+      + '<div class="rsm-nc" style="grid-template-columns:1fr;padding-top:0"><div class="rsm-pc"><b>' + ALTB + ' · Enterprise</b><span class="amt" style="font:italic 700 12.5px var(--sg)">Quote, no public figure</span><small class="rsm-mu">EU · captured 30 Oct 2026 · no amount recorded</small></div></div></div>';
+    const RST23 = () => study('comp', 'competition', sh('Competition and pricing', 'Alternatives and the price comparison', 'Each alternative is described field by field; a field with no linked evidence reads Unsupported. Prices sit on one line only when their terms match. Nothing is converted, annualised, averaged or totalled.', '<a class="btn" href="#">Comparisons tab →</a><button type="button" class="btn p">Add an alternative</button>')
+      + '<div class="rsm-row">' + PT('#7724 alternatives and comparison') + PT('#7723 price observations') + '</div>'
+      + '<span class="eye">A · Alternatives by kind · 4</span><div class="rsm-two">' + J(ALTS.map(altCard)) + '</div>'
+      + '<section class="cd"><div class="ch"><h2>B · Prices you linked to an alternative</h2><span class="sm">region and capture date beside every price</span></div>' + priceGroups() + '</section>'
+      + '<div class="rsm-two"><section class="cd"><div class="ch"><h2>C · Revenue or market share</h2></div><div class="rsm-pr" style="grid-template-columns:minmax(0,1fr) 130px;padding:0;border:0"><div><b>' + ALTB + ' · revenue</b><small>[Company accounts, 2025] · ' + SB + ' · period measured 2025 · revenue of the enterprise, not customer spending</small>' + kind('ob') + '</div><div class="amt">USD 4,100,000</div></div><span class="rsm-sm">' + ALTA + ': ' + '</span><div style="margin-top:-8px">' + NR + ' <span class="rsm-sm">· no observation linked; nothing is estimated.</span></div></section>'
+      + '<section class="cd"><div class="ch"><h2>D · Withheld by the Worker</h2></div><div class="rsm-row"><span class="rsm-wh">' + G.lock + '[2] prices withheld</span></div><span class="rsm-sm">A count and nothing else: no alternative, plan or amount is named.</span></section></div>', { h: 1800 });
+
+    /* ==========================================================
+       RST-24 · proposals, prices, Would pay, readings
+       ========================================================== */
+    const ff = (l, v, o) => { o = o || {}; return '<div class="rsm-ff"' + (o.span ? ' style="grid-column:span ' + o.span + '"' : '') + '><label>' + l + '</label><div class="v' + (o.emp ? ' emp' : '') + (o.sel ? ' sel' : '') + '">' + v + '</div>' + (o.hint ? '<small>' + o.hint + '</small>' : '') + '</div>'; };
+    const priceForm = (o) => { o = o || {}; return '<div class="rsm-fm">' + ff('Product', ALTA + ' scheduling') + ff('Plan', 'Starter') + ff('Charge type', 'Subscription', { sel: true }) + ff('Amount', '49', { hint: 'Or “quote, no public figure”. 0 is a free price.' })
+      + ff('Currency', 'EUR', { sel: true }) + ff('Unit and quantity', 'per practice · 1', { sel: true }) + ff('Billing period', 'Monthly', { sel: true }) + ff('Contract term', 'Not stated', { sel: true })
+      + ff('Region', 'Germany') + ff('Capture date', '2026-11-03') + ff('Source kind', 'Public pricing page', { sel: true }) + ff('Source link', o.noLink ? 'Pick a fetched page' : 'pricing page · fetched 3 Nov 2026', { emp: !!o.noLink, sel: true }) + '</div>'
+      + '<div class="rsm-tick' + (o.tick ? ' on' : '') + '"><span class="bx" aria-hidden="true">' + (o.tick ? '✓' : '') + '</span><span><b>This source’s terms allow keeping this price.</b> Required. You confirm it; the platform does not check the source’s terms.</span></div>'; };
+    const series = () => '<ol class="rsm-ser"><li><b>EUR 49</b> per practice a month · captured 3 Nov 2026 · entered 4 Nov by ' + FOUNDER + ' · corrects the entry of 14 Aug</li><li class="old"><b>EUR 39</b> per practice a month · captured 14 Aug 2026 · corrected on 4 Nov · stays readable</li></ol>';
+    const RST24 = () => study('comp', 'competition/prices', sh('Competition and pricing', 'Prices from your saved analysis', 'A hint from a saved analysis is a proposal, never a price. You add a price yourself, with its terms and its source; nothing is prefilled.', '<a class="btn" href="#">Companies analysis →</a>')
+      + '<div class="rsm-row">' + PT('#7723 price observations, corrections, withdrawals') + '<span class="raw">Hints read today: GET /api/competitors/:id, only by the member who ran it</span></div>'
+      + '<section class="cd"><div class="ch"><h2>A · From your saved analysis</h2><span class="sm">[Dental scheduling competitors] · run 28 Oct 2026 by you</span></div><div class="rsm-two"><div class="rsm-hint"><b>' + ALTA + '</b><span class="rsm-lbl">Pricing hint · raw text</span><q>Starter from €49/mo per practice, Practice €89; free tier for one dentist</q><span class="rsm-lbl">Its fetched pages</span><div class="rsm-row"><button type="button" class="btn bsm">pricing page · 3 Nov</button><button type="button" class="btn bsm">features page · 3 Nov</button></div><button type="button" class="btn bsm" style="align-self:flex-start">Add a price from this hint…</button></div>'
+      + '<div class="rsm-hint"><b>' + ALTB + '</b><span class="rsm-lbl">Pricing hint · raw text</span><q>scheduling module sold with the suite; enterprise on request</q><span class="rsm-lbl">Its fetched pages</span><div class="rsm-row"><button type="button" class="btn bsm">dealer price list · 30 Oct</button></div><button type="button" class="btn bsm" style="align-self:flex-start">Add a price from this hint…</button></div></div></section>'
+      + '<section class="cd"><div class="ch"><h2>B · Add a price · ' + ALTA + '</h2><span class="sm">every field is required; Save stays off until all are given</span></div>' + priceForm({ tick: false }) + '<div class="rsm-bar"><span class="rsm-sm">Save is off: tick “This source’s terms allow keeping this price”.</span><div class="rsm-row"><button type="button" class="btn">Cancel</button><button type="button" class="btn p" aria-disabled="true">Save price</button></div></div></section>'
+      + '<section class="cd"><div class="ch"><h2>C · ' + ALTA + ' · Starter · the dated series</h2><span class="sm">a correction is a new entry</span></div>' + series() + '</section>', { h: 1230 });
+
+    const WP = [
+      ['Would pay', 'Intent', 'EUR 49 a month', 'To confirm', '21 Oct 2026', ALTA],
+      ['Would pay', 'Intent', 'EUR 45 a month', 'Confirmed', '24 Oct 2026', ''],
+      ['Letter of intent', 'Intent', 'EUR 588 a year', 'Confirmed', '2 Nov 2026', ALTA],
+      ['Pre-sale', 'Payment', 'EUR 294 for 6 months', 'Counted', '6 Nov 2026', '']
+    ];
+    const wpTable = () => '<table class="rsm-tb"><thead><tr><th>Record</th><th>Amount · currency · period</th><th>Status</th><th>Date</th><th>Beside</th></tr></thead><tbody>' + J(WP.map(w => '<tr><td><b>' + w[0] + '</b><small>stage: ' + w[1] + '</small></td><td class="rsm-mono">' + w[2] + '</td><td>' + st(w[3]) + (w[3] === 'To confirm' ? '<small>shown, not counted</small>' : '') + '</td><td class="rsm-mono">' + w[4] + '</td><td>' + (w[5] ? w[5] + '<small>linked by you</small>' : '<span class="rsm-sm">not linked</span>') + '</td></tr>')) + '</tbody></table>';
+    const RST24B = () => crop('<span class="eye">RST-24 · D, E, F and the analysis another member ran</span><div class="rsm-two"><section class="cd"><div class="ch"><h2>D · A withdrawn price</h2></div><div class="rsm-wd"><b>' + ALTB + ' · Scheduling module</b><span>Withdrawn on 12 Nov 2026 by ' + FOUNDER + ': “Dealer list was for Austria, not Germany.”</span><span class="rsm-sm">No amount is shown. The entry stays in the history.</span></div></section>'
+      + '<section class="cd"><div class="ch"><h2>A · An analysis you did not run</h2></div>' + nt('', 'i', 'This analysis is not on your list.', 'Hints show only to the member who ran the analysis. No name and no hint are shown.') + '</section></div>'
+      + '<section class="cd"><div class="ch"><h2>E · Would pay, letter of intent and pre-sale</h2><span class="sm">from Validate, read only · ' + PT('#7722 record') + ' ' + PT('#7724 link') + '</span></div>' + wpTable() + '<span class="rsm-sm">Their own block: never averaged with prices, never matched by amount, no interview detail. Would pay is never drawn as committed.</span></section>'
+      + '<section class="cd"><div class="ch"><h2>F · What comparable engagements cost, in US dollars. Not product prices.</h2><span class="sm">GET /api/research/market-readings · in a study: ' + PT('#7721') + '</span></div><div class="rsm-pr" style="grid-template-columns:minmax(0,1.3fr) 170px 110px minmax(0,1fr);padding:0;border:0"><div><b>[Practice onboarding service]</b><small>scope: one practice, setup and staff training</small></div><div class="amt">USD 1,500 – 3,000</div><div><small>6 comparables</small></div><div><small>ran 5 Nov 2026 · your own reading</small></div></div><span class="rsm-sm">Left out of this section when the study references no reading.</span></section>', 1240);
+
+    /* ==========================================================
+       RST-25 · the report, versions and export
+       ========================================================== */
+    const rp = (n, t, inner, tag) => '<h3><i>' + n + '</i>' + t + (tag || '') + '</h3>' + inner;
+    const report = (o) => { o = o || {}; return '<article class="rsm-rep" aria-label="Report">'
+      + '<div class="rsm-row" style="justify-content:space-between"><span class="eye">' + (o.ver ? 'Version [' + o.ver + '] · frozen' : 'Assembled now · not a version') + '</span><span class="raw">' + (o.ver ? '10 Nov 2026 · ' + FOUNDER : 'as the Worker assembles it, in its order') + '</span></div><h2>' + STUDY + '</h2>'
+      + rp('1', 'Scope, segments and origin', '<p>Product: [Online booking and recall reminders for dental practices]. Boundary: [Booking, reminders and waitlist. No billing and no clinical records.] Model: [Monthly subscription per practice]. Decision to be made: [Enter Germany with a paid pilot in Q2 2027, or not]. Horizon: 24 months. Segment: ' + SEG + ' (beachhead), [Group practices, 3+ dentists]. Started from: Market ' + MKT + ' · Markets filters: companies based in Germany (where listed companies are based).</p>')
+      + rp('2', 'The decision', '<p>' + st('Open', 'Test further') + ' · 18 Nov 2026 · ' + FOUNDER + '. Rationale: “[Interviews show demand, but the EUR 49 price test contradicts it. Run a paid pilot before deciding.]” Could reverse it: “[Pilot practices renew after three months.]”</p>')
+      + rp('3', 'Questions with evidence for and against', '<ul class="li"><li>[Who decides on scheduling software in a practice with one or two dentists?] · Answered · 3 for · 0 against</li><li>[Do solo practices pay today to reduce no-shows?] · Answered · 3 for · 1 against</li><li>[How many independent practices in Germany fit the beachhead segment?] · Open · 1 for · 0 against</li><li>[Would a solo practice pay EUR 49 a month for booking and reminders?] · Open · 1 for · 1 against</li><li>[Do German data-protection rules limit SMS appointment reminders?] · Open · 0 for · 0 against</li></ul><p class="rsm-sm">Key questions answered · 2 of 5, as you marked them</p>')
+      + rp('4', 'Findings by kind, with citations', '<p><span class="fk src">Source fact</span> [Vendors in the sample price add-ons per practice per month.] <span class="cite">1</span>. <span class="fk hu">Your conclusion</span> [Price sensitivity is higher than the landing-page test assumed.]</p>')
+      + rp('5', 'Referenced observations', '<p><b>' + OBS + '</b> · 41,200 enterprises · counts enterprises · Period measured 2023 · Published ' + NR + ' · Retrieved 4 Nov 2026 · ' + SA + ' · limitations: excludes practices without employees ' + kind('el') + '</p><p><b>[Registered dental practices, Germany, 2024]</b> · <span class="rsm-wh">' + G.lock + 'Withheld: [Source B]’s terms do not allow export</span></p>')
+      + rp('6', 'Sizing versions', '<p>Version [3] · 9 Nov 2026 · USD 648 revenue per account, 20 deals a month, 45-day sales cycle, 24-month horizon, 88% retention: Total market USD 26,697,600 · Serviceable USD 6,674,400 · Obtainable USD 256,608, with the formula in words and each input’s source or the word Assumption. A newer version exists: [4]. ' + PROV + ' ' + kind('mo') + '</p>', ' ' + FL('Question 11 · option A: shown as the attached sizing version'))
+      + rp('7', 'Alternatives and prices, on their stated terms', '<p>4 alternatives · 6 prices · [2] prices withheld · not comparable lines kept apart.</p>')
+      + rp('8', 'Customer evidence', '<p>Interviews held · 7 · Would pay · 2 · Letter of intent · 1 · Pre-sale · 1 (counts, no names). One quote: “[We still call every patient back by hand.]” <span class="rsm-wh">' + G.lock + 'Withheld: consent to quote is no longer given</span></p>')
+      + rp('9', 'The entry plan', '<p>[Dental association newsletter]: assumed then CAC USD 180 in 2026-09; measured now USD 240 in 2026-11. [Search ads]: assumed then USD 310 in 2026-09; now Not recorded, Grow’s reason given. Spend read as US dollars. Sales capacity from version [3]: 20 deals a month, 45-day cycle, 24-month horizon, 88% retention.</p>')
+      + rp('10', 'The brief’s eight sections', '<p>Executive summary · Key findings: <b>Marked reviewed by the author</b>. Market context · Company comparison · Risks and uncertainty · Open questions · Sources · Methodology: not marked.</p>')
+      + rp('11', 'Completeness', '<p>Customer definition Addressed · Demand Contradicting evidence · Size In progress · Competition In progress · Pricing Contradicting evidence · Channels In progress · Risks Nothing recorded. No score.</p>')
+      + rp('12', 'What needs review', '<p>2 · ' + OBS + ' has a later value · [Channel reading · Search ads, 2026-09] is no longer available.</p>')
+      + '<p class="rsm-sm" style="border-top:1px solid var(--hair);padding-top:10px">Activity proxy: ' + NR + ' — a part with nothing stored says so.</p></article>'; };
+    const words3 = '<div class="rsm-words"><div><b>Reviewed by you</b><span class="rsm-sm">the Brief’s tick on a section</span></div><div><b>Verdict</b><span class="rsm-sm">a teammate’s Approved or Changes requested ' + HELD('RST-26/27 held') + '</span></div><div><b>Needs review</b><span class="rsm-sm">evidence the study relies on changed</span></div></div>';
+    const repSide = () => '<aside class="rsm-col" style="gap:12px"><section class="cd" style="gap:10px"><div class="ch"><h2>Report versions</h2><span class="sm">' + PT('#7727') + '</span></div><ol class="rsm-ver"><li class="on"><b>[2]</b><span><b style="font-weight:700">10 Nov 2026</b><small>' + FOUNDER + '</small></span><a class="btn bsm" href="#">Open</a></li><li><b>[1]</b><span><b style="font-weight:700">2 Nov 2026</b><small>' + FOUNDER + '</small></span><a class="btn bsm" href="#">Open</a></li></ol><span class="rsm-sm">A version is frozen: never changed, never deleted.</span></section>'
+      + '<section class="cd" style="gap:8px"><div class="ch"><h2>Export version [2]</h2></div><button type="button" class="btn">Download report (Markdown)</button><button type="button" class="btn">Download evidence (CSV)</button><span class="rsm-sm">Only a numbered version downloads. Withheld values stay withheld in both files, named with their reason.</span></section>'
+      + '<section class="cd" style="gap:8px"><div class="ch"><h2>Three words, never mixed</h2></div>' + words3.replace('rsm-words', 'rsm-col') + '</section>'
+      + '<section class="cd" style="gap:8px"><div class="ch"><h2>Reviewers</h2></div><span class="rsm-sm">Name a reviewer on a version.</span>' + HELD('RST-26 held') + '<span class="rsm-sm">Drawn after Questions 4, 10 and 11.</span>' + '</section></aside>';
+    const RST25 = () => study('rep', 'report', sh('Report and monitoring', 'The report', 'Assembled by the Worker from what the study records, in a fixed order. Take a version to freeze it; only a version can be exported. The Brief tab stays as built.', '<button type="button" class="btn p">Take version [3]</button>')
+      + '<div class="rsm-two" style="grid-template-columns:minmax(0,1fr) 300px">' + report() + repSide() + '</div>', { h: 2480 });
+
+    /* ==========================================================
+       RST-28 · needs review
+       ========================================================== */
+    const change = (txt, deps, acts, o) => { o = o || {}; return '<article class="rsm-ch"><div class="top"><div class="rsm-col" style="gap:4px"><p>' + txt + '</p><span class="raw">' + o.meta + '</span></div>' + (o.chip || st('Needs review')) + '</div><div class="dep"><span class="rsm-lbl">What depends on it</span><ul>' + J(deps.map(d => '<li><b>' + d[0] + '</b><span>' + d[1] + '</span></li>')) + '</ul></div><div class="act">' + acts + '</div></article>'; };
+    const ackForm = '<div class="rsm-ff" style="flex:1;min-width:300px"><label for="ackn">Note · required to acknowledge</label><div class="v emp" id="ackn">Why the decision still holds, or what you will change</div></div><button type="button" class="btn p" style="align-self:flex-end">Acknowledge</button>';
+    const RST28 = () => study('rep', 'review', sh('Report and monitoring', 'Needs review · 2', 'What changed in the evidence this study relies on, and what depends on it. Nothing in the study changes by itself.')
+      + '<div class="rsm-row">' + PT('#7726 needs review') + '</div>'
+      + change('<span class="rsm-was">' + OBS + ' has a later value: <s>41,200</s> became 39,850</span>', [['Questions', '[How many independent practices in Germany fit the beachhead segment?] · Size'], ['Decisions', 'Test further · 18 Nov 2026'], ['Sizing versions', '[3] attached · [4] saved · input: eligible accounts']], ackForm, { meta: SA + ' · retrieved 18 Nov 2026 · period measured 2023 · the earlier value stays readable' })
+      + change('[Channel reading · Search ads, 2026-09] is no longer available', [['Entry plan', '[Search ads] · assumed then CAC USD 310 in 2026-09']], '<span class="rsm-sm">Gone: it can be removed from the study, not acknowledged.</span><button type="button" class="btn" style="margin-left:auto">Remove reference…</button>', { meta: 'attached 2 Oct 2026 · its kind: channel reading', chip: chip('nr', 'No longer available') })
+      + '<section class="cd" style="gap:8px"><div class="ch"><h2>A linked finding whose text changed</h2><span class="sm">listed apart from references</span></div><div class="rsm-ch"><div class="top"><div class="rsm-col" style="gap:4px"><p style="font-weight:600">Finding [2] · Your conclusion · edited 17 Nov 2026</p><span class="rsm-sm"><s>[Sign-up under target.]</s> → [Sign-up at EUR 49 was well under the target.]</span></div><button type="button" class="btn bsm">Acknowledge…</button></div><div class="dep"><ul><li><b>Questions</b><span>[Would a solo practice pay EUR 49 a month for booking and reminders?] · Pricing</span></li></ul></div></div></section>'
+      + '<section class="cd" style="gap:8px"><div class="ch"><h2>History</h2></div><ul class="hist"><li><span>30 Oct 2026</span>Acknowledged by ' + FOUNDER + ': [Labour cost index, 2024] had a later value · note “Not an input to any version.”</li><li><span>21 Oct 2026</span>Removed by ' + FOUNDER + ': [Directory market · Dental labs] was refused</li></ul></section>', { h: 1420, rail: true });
+
+    const myCard = (badge, foot) => '<article class="pc"><div class="rsm-row" style="justify-content:space-between;align-items:flex-start"><h3>' + STUDY + '</h3>' + st('In progress') + '</div><div class="m"><span>Market study</span><span>12 sources</span></div><div class="rsm-row">' + badge + '</div><div class="f"><span class="raw">' + foot + '</span><a class="btn t bsm" href="#">Continue →</a></div></article>';
+    const RST28B = () => crop('<span class="eye">RST-28 · the count on a My Research card · and acknowledging</span><div class="pcards">' + myCard('<span class="rsm-badge">' + SH.ar + '[2] need review</span>', 'Count read') + myCard('<span class="rsm-sm">No badge</span>', 'The count failed to read: no badge, never 0') + myCard('<span class="rsm-sm">No badge</span>', 'A project with no study has no count') + '</div>'
+      + '<div class="rsm-two"><section class="cd"><div class="ch"><h2>Acknowledged</h2></div>' + nt('g', '✓', 'Acknowledged with your note.', 'Version [3] still reads 41,200; the new value is shown beside it. Nothing was changed automatically.') + '</section><section class="cd"><div class="ch"><h2>Nothing needs review</h2></div><p style="font-size:12.5px">Nothing needs review.</p><span class="rsm-sm">The section list shows no count. The card shows no badge.</span></section></div>', 1240);
+
+    /* ==========================================================
+       RST-26 / RST-27 · held for the owner
+       ========================================================== */
+    const RST26 = () => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk rsm-dk"><h1>RST-26 / RST-27 · held for the owner</h1><p>The owner’s side of reviewing (RST-26) and the reviewer’s list and page (RST-27) decide who may see what. #7703 asks three questions about them that are not answered yet. Both boards, and every frame that depends on them, are drawn after the owner answers on #7703.</p>'
+      + '<div class="rsm-q"><h3>Question 4 · Who may be named a reviewer?</h3><ol><li><b>A)</b> Only the linked venture’s founder and accepted co-founders, named one by one, removable. <b>(the brief’s pick)</b></li><li><b>B)</b> Also a named advisor member, operating partner or investor of that venture.</li><li><b>C)</b> Any member, by name.</li></ol><p>The same question is on #7728; one answer serves both.</p></div>'
+      + '<div class="rsm-q"><h3>Question 10 · What does a reviewer get?</h3><ol><li><b>A)</b> One frozen version on the page, with a verdict and a note, no download. <b>(the brief’s pick)</b></li><li><b>B)</b> Also the two files.</li></ol></div>'
+      + '<div class="rsm-q"><h3>Question 11 · May a study show the venture’s market figures in its report and to a reviewer?</h3><ol><li><b>A)</b> Yes, as the attached sizing version. <b>(the brief’s pick)</b></li><li><b>B)</b> No: the section links to Validate and the report leaves the figures out.</li></ol><p>D6009 named the deck and the Verdict as the only places the venture’s figures go. RST-25 is drawn with option A and carries a ⚑ on its sizing part; option B removes that part from the report.</p></div>'
+      + '<h2>Waiting on the answers</h2><table class="dt"><thead><tr><th>Frame</th><th>What it would draw</th><th>Builder</th></tr></thead><tbody>'
+      + '<tr><td>RST-26</td><td>Name a reviewer from the teammates the Worker returns (names only, never a typed email); who has access, up to 20 a version; Remove; verdicts with note and date; “Link a venture on Scope before you ask for a review”</td><td>#7735 · ◇ #7728</td></tr>'
+      + '<tr><td>RST-27 A to F</td><td>“Asked to review” list; one frozen version read-only; “A later version exists”; download (Question 10); one refusal page for every reason; the link on My Research (Question 3)</td><td>#7736 · ◇ #7728 · addresses /research/reviews and /research/reviews/:uid (Question 2)</td></tr>'
+      + '<tr><td>RST-29</td><td>Empty: nobody reviewing (Name a reviewer); nothing shared with you</td><td>#7735, #7736</td></tr>'
+      + '<tr><td>RST-30</td><td>Unavailable on the reviewer list; Refused as the reviewer’s one refusal page; “no reviewer can be named” on an archived project</td><td>#7735, #7736</td></tr>'
+      + '<tr><td>RST-31 I, J, K</td><td>Name a reviewer; the reviewer’s list; the reviewer’s page with the verdict sheet; the refusal page in M</td><td>#7735, #7736</td></tr>'
+      + '<tr><td>RST-32</td><td>Phone K on the dark tokens</td><td>#7736</td></tr>'
+      + '<tr><td>RST-33 step 9</td><td>“A teammate reviews”</td><td>#7736</td></tr>'
+      + '<tr><td>RST-34</td><td>Tab order through the verdict; live region “verdict recorded”</td><td>#7736</td></tr></tbody></table>'
+      + '<p style="margin-top:12px">Drawn now without depending on the answers: RST-25 keeps the three words apart (Reviewed by you · Verdict · Needs review) and its Reviewers card says the boards are held.</p></div></div>';
+
+    /* ==========================================================
+       RST-29 · empty states
+       ========================================================== */
+    const emp = (t, p, act, o) => { o = o || {}; return '<div class="rsm-emp' + (o.hold ? ' hold' : '') + '"><span class="rsm-lbl">' + o.where + '</span><b>' + t + '</b><p>' + p + '</p>' + (act || '') + '</div>'; };
+    const RST29 = () => crop('<span class="eye">RST-29 · Empty states · one per screen, each with the one action that fills it</span><div class="rsm-four">'
+      + emp('No sizing version yet', 'Nothing is sized for this study. The sheet opens with every input Not entered.', '<button type="button" class="btn p">Open the sizing sheet</button>', { where: 'RST-21 · Size and scenarios' })
+      + emp('No alternative yet', 'Describe what a practice uses today, including the status quo.', '<button type="button" class="btn p">Add an alternative</button>', { where: 'RST-23 · Competition' })
+      + emp('No price yet', 'No price is linked to an alternative. A hint is not a price.', '<button type="button" class="btn p">Add a price</button>', { where: 'RST-23/24 · Pricing' })
+      + emp('No saved analysis with pricing hints', 'You have not run a competitor analysis with hints.', '<a href="#" style="font-weight:700">Companies analysis →</a>', { where: 'RST-24 A · Hints' })
+      + emp('No report version yet', 'The report below is assembled now and is not a version. Take one to freeze and export it.', '<button type="button" class="btn p">Take a version</button>', { where: 'RST-25 · Report' })
+      + emp('Nothing needs review', 'No reference or linked finding has changed since you attached it.', '', { where: 'RST-28 · Needs review' })
+      + emp('Nobody reviewing', 'Drawn after Questions 4, 10 and 11.', HELD('RST-26'), { where: 'RST-26 · held', hold: true })
+      + emp('Nothing has been shared with you for review', 'Drawn after Questions 4, 10 and 11.', HELD('RST-27'), { where: 'RST-27 · held', hold: true })
+      + '</div>', 1400);
+
+    /* ==========================================================
+       RST-30 · states grid
+       ========================================================== */
+    const sk = (w) => '<span class="rsm-sk" style="width:' + w + '%"></span>';
+    const SK = sk(90) + sk(70) + sk(80);
+    const cell = (inner, cls) => '<div' + (cls ? ' class="' + cls + '"' : '') + '>' + inner + '</div>';
+    const GR = [
+      ['RST-21 · sizing sheet', SK + '<span>in the shape of the input cards</span>', 'An empty input: Not entered; the result says “Cannot compute: … is not entered”', chip('un') + '<span>The preview failed. Typed inputs stay; Save is off until a preview returns.</span>', chip('rf') + '<span>The venture can no longer be read: “The venture’s founder can add you to the venture.”</span>', '<span>Saving… fields locked</span><span><b>Save failed:</b> your edits are kept. Try again.</span>'],
+      ['RST-22 · scenarios, versions', SK + '<span>table rows</span>', 'High not entered: “Not available: this version has a base scenario only”', chip('un') + '<span>Version list failed. The current preview still shows.</span>', chip('rf') + '<span>As RST-21</span>', '<span>Saved, not attached: “Version [4] is saved. It is not attached to this study yet.” Try again</span>'],
+      ['RST-23 · alternatives, comparison', SK + '<span>cards</span>', 'A field with no linked evidence: Unsupported. Revenue with no observation: Not recorded', chip('un') + '<span>The prices read failed. Alternatives still show.</span>', '<span>Withheld rows: “[2] prices withheld”, a count only</span>', '<span>Save failed: the alternative’s fields are kept</span>'],
+      ['RST-24 · prices, hints', SK + '<span>form rows</span>', 'Contract term: “not stated” is a value. Amount: “quote, no public figure”', chip('un') + '<span>Hints failed to read. Add a price still works.</span>', chip('rf') + '<span>“This analysis is not on your list.” No name.</span>', '<span>Save failed: every field and the tick kept</span>'],
+      ['RST-25 · report', SK + '<span>report parts</span>', 'A part with nothing stored: Not recorded', chip('un') + '<span>The report read failed. Take a version is off: “The report could not be assembled.”</span>', chip('rf') + '<span>Over the size limit: the Worker’s sentence, “Customer evidence is over the report’s size limit.”</span>', '<span>Taking version [3]… · failed: no version was taken</span>'],
+      ['RST-28 · needs review', SK + '<span>change cards</span>', 'No study: no count, never 0', chip('un') + '<span>The needs-review read failed. No badge on the card.</span>', '<span>A refused reference: Remove, never Acknowledge</span>', '<span>Acknowledge failed: your note is kept</span>'],
+      ['RST-26 / RST-27 · reviewers', HELD('held'), HELD('held'), HELD('held · reviewer list'), HELD('held · the one refusal page'), HELD('held')]
+    ];
+    const RST30 = () => crop('<span class="eye">RST-30 · States · RST-21 to RST-28 against Loading, Not recorded, Unavailable, Refused and saving (Platform States, D5129)</span><div class="rsm-grid" style="grid-template-columns:170px repeat(5,minmax(0,1fr))">'
+      + J(['Screen', 'Loading', 'Not recorded', 'Unavailable', 'Refused', 'Saving · save failed'].map(h => cell(h, 'h')))
+      + J(GR.map(r => cell(r[0], 'r') + J(r.slice(1).map(c => cell(c, r[0].indexOf('RST-26') === 0 ? 'ho' : ''))))) + '</div>'
+      + '<div class="rsm-two"><section class="cd" style="gap:6px"><div class="ch"><h2>Archived project · read-only</h2></div><div class="rsm-row">' + pbar({ arch: true }).split('<div class="pbar2">')[1].split('<div class="meta">')[1].split('</div>')[0] + '</div><span class="rsm-sm">No version can be taken, no price or alternative added, and no reviewer named. Inputs show; buttons are absent, not disabled.</span></section>'
+      + '<section class="cd" style="gap:6px"><div class="ch"><h2>Someone else saved first</h2></div>' + nt('a', '!', 'This sizing sheet changed since you opened it.', 'Nothing was saved. Your edits are kept.', '<button type="button" class="btn bsm">Reload and keep my edits</button>') + '</section></div>', 1400);
+
+    /* ==========================================================
+       RST-31 · phone 390
+       ========================================================== */
+    const pin = (r) => '<div class="rsm-in" style="padding:10px 12px"><label>' + r[0] + '</label><div class="v" style="min-height:44px">' + r[1] + '<small>' + r[2] + '</small></div>' + r[4] + '</div>';
+    const PA = () => phone('Size and scenarios', pcrumb('Sizing sheet') + '<div class="rsm-row"><span class="raw">US dollars · attached: version [3]</span></div>' + J(INPUTS.slice(0, 3).map(pin)) + '<span class="rsm-sm">and 6 more inputs, each with its source line</span>' + '<div class="rsm-res" style="padding:10px 12px"><div class="rsm-row"><span class="eye">Results</span>' + NOTSAVED + '</div><span class="rsm-sm">Total market USD 26,697,600 · Serviceable 6,674,400 · Obtainable 256,608</span></div><button type="button" class="btn p rsm-pb">Save as version [4]</button>');
+    const PB = () => phone('Scenarios', pcrumb('Size and scenarios') + '<div class="rsm-sw" role="radiogroup" aria-label="Scenario"><button type="button" role="radio" aria-checked="false">Low</button><button type="button" role="radio" aria-checked="true">Base</button><button type="button" role="radio" aria-checked="false">High</button></div>'
+      + '<section class="cd" style="gap:6px;padding:12px 14px"><span class="eye">Base · inputs</span>' + J(SC.map(r => '<div class="rsm-row" style="justify-content:space-between;font-size:12.5px;min-height:24px"><span>' + r[0] + '</span><b class="rsm-mono">' + r[2] + '</b></div>')) + '</section>'
+      + '<section class="cd" style="gap:6px;padding:12px 14px"><span class="eye">Base · results ' + PROV + '</span><div class="rsm-row" style="justify-content:space-between;font-size:12.5px"><span>Total market</span><b class="rsm-mono">USD 26,697,600</b></div><div class="rsm-row" style="justify-content:space-between;font-size:12.5px"><span>Serviceable</span><b class="rsm-mono">USD 6,674,400</b></div><div class="rsm-row" style="justify-content:space-between;font-size:12.5px"><span>Obtainable</span><b class="rsm-mono">USD 256,608</b></div><span class="rsm-sm">Set by sales capacity · 450 accounts, 396 retained</span></section>');
+    const PC = () => phone('Version history', pcrumb('Size and scenarios') + J(VERS.map(v => '<div class="mc"><div class="r1"><b>Version [' + v[0] + ']</b><span class="raw">' + v[1] + '</span></div><small>' + v[2] + ' · ' + v[3] + '</small>' + (v[4] ? '<small style="color:var(--amT)">' + SH.ar + ' Eligible accounts has a later edition</small>' : '') + '<a class="btn rsm-pb" href="#">Open read-only</a></div>')));
+    const PD = () => phone('Alternatives', pcrumb('Competition and pricing') + J(ALTS.slice(0, 2).map(a => '<div class="mc"><span class="rsm-ak">' + a[0] + '</span><b>' + a[1] + '</b><dl class="rsm-af" style="grid-template-columns:118px minmax(0,1fr)">' + J(AF.slice(0, 5).map((f, i) => '<dt>' + f + '</dt><dd>' + a[3][i] + '</dd>')) + '</dl><a href="#" class="btn t bsm" style="align-self:flex-start;min-height:44px">All seven fields</a></div>')) + '<button type="button" class="btn p rsm-pb">Add an alternative</button>');
+    const PE = () => phone('Prices', pcrumb('Competition and pricing') + '<span class="eye">Subscription · per practice · monthly · EUR</span>'
+      + J([['Free', 'EUR 0'], ['Starter', 'EUR 49'], ['Practice', 'EUR 89']].map(p => '<div class="rsm-pcard"><div class="rsm-row" style="justify-content:space-between"><b>' + ALTA + ' · ' + p[0] + '</b><span class="amt">' + p[1] + '</span></div><small class="rsm-sm">Germany · captured 3 Nov 2026</small></div>'))
+      + '<span class="eye">Subscription · per practice · yearly · 12-month term · USD</span><div class="rsm-pcard"><div class="rsm-row" style="justify-content:space-between"><b>' + ALTB + ' · Scheduling</b><span class="amt">USD 1,200</span></div><small class="rsm-sm">EU · captured 30 Oct 2026 · not comparable with the group above: currency, period and term differ</small></div><div class="rsm-row"><span class="rsm-wh">' + G.lock + '[2] prices withheld</span></div>');
+    const PF = () => phone('Prices', pcrumb('Competition and pricing'), psheet('Add a price', '<div class="rsm-col" style="gap:8px">' + ff('Plan', 'Starter') + '<div class="rsm-two" style="gap:8px">' + ff('Amount', '49') + ff('Currency', 'EUR', { sel: true }) + ff('Unit', 'per practice', { sel: true }) + ff('Billing period', 'Monthly', { sel: true }) + '</div>' + ff('Contract term', 'Not stated', { sel: true }) + ff('Source link', 'pricing page · 3 Nov 2026', { sel: true }) + '<div class="rsm-tick on"><span class="bx" aria-hidden="true">✓</span><span>This source’s terms allow keeping this price.</span></div><button type="button" class="btn p rsm-pb">Save price</button></div>'));
+    const PG = () => phone('Report', pcrumb('Report and monitoring') + '<span class="eye">Assembled now · not a version</span><article class="rsm-rep" style="padding:14px 14px;gap:8px;font-size:12.5px"><h2 style="font-size:16px">' + STUDY + '</h2><h3><i>2</i>The decision</h3><p>' + st('Open', 'Test further') + ' · 18 Nov 2026</p><h3><i>5</i>Referenced observations</h3><p>' + OBS + ' · 41,200 enterprises · Period measured 2023 · Published ' + NR + ' · Retrieved 4 Nov 2026</p><h3><i>6</i>Sizing versions</h3><p>Version [3] · ' + PROV + ' ' + FL('Q11 · A') + '</p><h3><i>8</i>Customer evidence</h3><p>Interviews held · 7 · <span class="rsm-wh">' + G.lock + 'Withheld: consent to quote is no longer given</span></p></article>');
+    const PH = () => phone('Report', pcrumb('Report and monitoring') + '<button type="button" class="btn p rsm-pb">Take version [3]</button><span class="eye">Versions</span><div class="mc"><div class="r1"><b>Version [2]</b><span class="raw">10 Nov 2026</span></div><small>' + FOUNDER + '</small><button type="button" class="btn rsm-pb">Download report (Markdown)</button><button type="button" class="btn rsm-pb">Download evidence (CSV)</button></div><div class="mc"><div class="r1"><b>Version [1]</b><span class="raw">2 Nov 2026</span></div><small>' + FOUNDER + '</small><a href="#" class="btn rsm-pb">Open</a></div>' + nt('g', '✓', 'Version [3] taken.', 'Frozen at 14:12. It can now be downloaded.'));
+    const PL = () => phone('Needs review · 2', pcrumb('Report and monitoring') + '<div class="mc"><b class="rsm-was">' + OBS + ': <s>41,200</s> became 39,850</b><small>retrieved 18 Nov 2026 · ' + SA + '</small><span class="rsm-lbl">Depends on it</span><small>1 question · 1 decision · versions [3], [4] (eligible accounts)</small><button type="button" class="btn p rsm-pb">Acknowledge with a note</button></div><div class="mc"><b>[Channel reading · Search ads, 2026-09]</b>' + chip('nr', 'No longer available') + '<small>1 question · the entry plan</small><button type="button" class="btn rsm-pb">Remove reference</button></div><div class="mc"><b>Finding [2] · text changed</b><small>listed apart · 1 question</small><button type="button" class="btn rsm-pb">Acknowledge…</button></div>');
+    const PM = () => phone('Size and scenarios', pcrumb('States') + '<div class="rsm-emp" style="min-height:0"><b>No sizing version yet</b><p>The sheet opens with every input Not entered.</p><button type="button" class="btn p rsm-pb">Open the sizing sheet</button></div>' + UNV('The preview could not be read.', 'Your typed inputs are kept.') + '<div class="nt" style="border-color:var(--ink)"><span class="ic" aria-hidden="true" style="background:var(--ink)">⦸</span><div>' + chip('rf') + ' <b>The venture’s founder can add you to the venture.</b></div></div><span class="rsm-sm">The reviewer’s refusal page is held with RST-27.</span>');
+
+    /* ==========================================================
+       RST-33 · main task path
+       ========================================================== */
+    const STEPS = [
+      ['Define the market', 'Scope: product, boundary, segment, customer countries.', 'RST-03 · pass 2'],
+      ['Find customer-count and spending evidence', 'Attach ' + OBS + ' and a spending observation.', 'RST-08 · pass 2'],
+      ['Inspect a source', 'Three dates, what it counts, the source.', 'RMO-01 · pass 1'],
+      ['Build three scenarios', 'Inputs with sources, then low, base and high; save version [4].', 'RST-21 → RST-22'],
+      ['Compare alternatives and prices', 'Four alternatives; prices on stated terms.', 'RST-23 → RST-24'],
+      ['Attach interviews and an experiment', 'Counts and consented quotes per segment.', 'RST-09 · pass 2'],
+      ['Tie channels and capacity to the plan', 'CAC then and now; deals per month from the sizing version.', 'RST-10 · pass 2'],
+      ['Record a contradiction, an open question and a decision', 'Against beside for; Test further on 18 Nov.', 'RST-05, RST-07 · pass 2'],
+      ['A teammate reviews', 'Name a reviewer; the reviewer’s page.', 'RST-26/27 · held'],
+      ['Export, then see what needs review', 'Take version [3], download; a later value arrives.', 'RST-25 → RST-28']
+    ];
+    const RST33 = () => crop('<span class="eye">RST-33 · Main task path · the ten steps · each card opens its board</span><div class="rsm-path">' + J(STEPS.map((s, i) => '<a href="#" class="rsm-st' + (i === 3 ? ' on' : '') + (i === 8 ? ' hold' : '') + '" style="color:var(--ink)"><i>' + (i + 1) + '</i><b>' + s[0] + '</b><p>' + s[1] + '</p>' + (i === 8 ? HELD('Questions 4, 10, 11') : '') + '<span style="font:700 11.5px var(--mo);color:var(--vt);margin-top:auto">' + s[2] + ' →</span></a>')) + '</div>'
+      + '<section class="cd"><div class="ch"><h2>Inside this pass, click by click</h2></div><ol class="rsm-ord">' + J([
+        'Size and scenarios: type the nine inputs; each gets a source or the word Assumption (RST-21).',
+        'Preview: the Worker returns the three figures, Not saved, with how it was computed and what set Obtainable.',
+        'Scenarios: enter low and high; read sensitivity; mark the estimate used; compare with the top-down check (RST-22).',
+        'Save as version [4]; it is attached to the study, or “saved, not attached” with Try again.',
+        'Competition and pricing: add an alternative; add a price from a hint, with its terms and source (RST-23, RST-24).',
+        'Report: read the assembled report; Take version [3]; Download report (Markdown) and evidence (CSV) (RST-25).',
+        'A later value arrives: the card shows “[2] need review”; acknowledge with a note or remove the gone reference (RST-28).'
+      ].map((t, i) => '<li><i>' + (i + 1) + '</i><span>' + t + '</span></li>')) + '</ol></section>', 1400);
+
+    /* ==========================================================
+       RST-34 · keyboard and accessibility
+       ========================================================== */
+    const ord = (items) => '<ol class="rsm-ord">' + J(items.map((t, i) => '<li><i>' + (i + 1) + '</i><span>' + t + '</span></li>')) + '</ol>';
+    const RST34 = () => crop('<span class="eye">RST-34 · Keyboard and accessibility</span><div class="rsm-three">'
+      + '<section class="cd"><div class="ch"><h2>Sizing sheet</h2></div>' + ord(['Section list (arrow keys move, Enter opens)', 'Version history', 'Use an attached observation…', 'Each input in reading order: value, then its source link', 'Preview again', 'Results region (read once, as a summary)', 'Override, then its reason', 'Save as version [4]']) + '<span class="rsm-sm">Each input’s unit, reference year and source are tied to it with aria-describedby. Low, base and high are a radio group on phones.</span></section>'
+      + '<section class="cd"><div class="ch"><h2>Comparison and prices</h2></div>' + ord(['Add an alternative', 'Each alternative card: heading, then its seven fields as a description list', 'Price groups: a group heading names the shared terms', '“Not comparable” rows, then the Worker’s reason', 'Add a price… opens the sheet; focus goes to Product', 'The tick, then Save price (announces why it is off)']) + '<span class="rsm-sm">Unsupported is a word with a dotted glyph, never only a colour.</span></section>'
+      + '<section class="cd"><div class="ch"><h2>Report and review</h2></div>' + ord(['Take version [3]', 'Report parts as headings 1 to 12 (h3), in the Worker’s order', 'Versions list, then Download report (Markdown), Download evidence (CSV)', 'Needs review: each change, its dependents, Acknowledge or Remove', 'Verdict: held with RST-27']) + '<span class="rsm-sm">Focus returns to the row that opened a sheet; Escape closes it.</span></section></div>'
+      + '<section class="cd"><div class="ch"><h2>Live-region wording (polite)</h2></div><ul class="rsm-lv">' + J([
+        ['Version saved', '“Version 4 saved and attached to this study.” · failed: “Version 4 was not saved. Your inputs are kept.”'],
+        ['Saved, not attached', '“Version 4 is saved. It is not attached to this study yet.”'],
+        ['Price saved', '“Price saved for [Alternative A], Starter.” · failed: “The price was not saved. Your entries are kept.”'],
+        ['Version taken', '“Report version 3 taken. Downloads are ready.”'],
+        ['Verdict recorded', 'Held with RST-27 (Questions 4, 10, 11).'],
+        ['Acknowledged', '“Acknowledged with your note. Nothing in the study was changed.”']
+      ].map(l => '<li><b>' + l[0] + '</b><span>' + l[1] + '</span></li>')) + '</ul></section>', 1400);
+
+    /* ==========================================================
+       docs · RST-20 and RST-35
+       ========================================================== */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk rsm-dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const DOCS = {
+      RST20: () => dk('<h1>RST-20 · Where each value of this pass is read</h1><p>Pass 3 of #7703 continues Research v2 (RS-02 project workspace, RS-09 brief, RS-07 A context rail) and pass 2’s Study tab (RST-01). Checked on main <code>58ee9d1b73</code>, 19 Nov 2026. “Recorded today” is a read that exists on main; ◇ names the issue that builds the rest. Sample values are bracketed and invented.</p>'
+        + tbl(['Value on screen', 'Read from', 'Today', 'Boards'], [
+          ['Sizing inputs as typed (population, ACV, serviceable %, win rate, override, runway, capacity, CAGR, geography, target year, methodology)', '<code>GET/PUT /api/projects/:projectId/market-assumptions</code> → <code>project_market_assumptions</code> (founder, co-founder, admin may write)', 'Recorded today', 'RST-21'],
+          ['Saved Total market, Serviceable, Obtainable with method, source, who and when; the venture’s market sources', '<code>GET /api/cycles/validate/market-readiness</code> (<code>figures</code>, <code>sources</code>); <code>POST/DELETE …/market-sources</code>', 'Recorded today', 'RST-21, RST-22 E'],
+          ['Figures computed by the Worker, the formula in words, the limit that set Obtainable, a preview, numbered versions, horizon, sales cycle, retention, deals per month, override with reason', '<code>/api/market-sizing/projects/:projectId/preview</code>, <code>/versions</code> (not on main)', '◇ #7704', 'RST-21, RST-22'],
+          ['Per input: source, Assumption with a note, or Not labelled; unit, currency, reference year; low, base, high; sensitivity; conflicting estimates; top-down check; a later edition', 'same tables, extended', '◇ #7725', 'RST-21, RST-22'],
+          ['Pricing hints from a saved analysis (raw text)', '<code>GET /api/competitors/:id</code>: only the member who ran it; anyone else gets not found', 'Recorded today', 'RST-24 A'],
+          ['Price observations with terms; corrections and withdrawals as history', '<code>/api/competitor-prices</code> (not on main)', '◇ #7723', 'RST-23 B, RST-24 B to D'],
+          ['Alternatives by kind with seven fields; comparison lines; not comparable with a reason; withheld as a count', 'new', '◇ #7724', 'RST-23'],
+          ['Would pay, letter of intent, pre-sale with amount, currency, period, status, date; the alternative each sits beside', '<code>demand_signals</code> on main; read in a study ◇ #7722; the link ◇ #7724', '◇ #7722, #7724', 'RST-24 E'],
+          ['Service-engagement readings: low to high in USD, comparables, date, scope', '<code>GET /api/research/market-readings</code> (owner’s own); as a study reference ◇ #7721', 'Recorded today · in a study ◇', 'RST-24 F'],
+          ['Brief: eight sections, Reviewed by you, version, saved date', '<code>GET/PUT /api/research/projects/:uid/brief</code>', 'Recorded today', 'RST-25 part 10'],
+          ['Assembled report, numbered frozen versions, the Markdown and CSV files, withheld values with reasons', 'new <code>research_study_reports</code>', '◇ #7727', 'RST-25'],
+          ['Reviewers, verdicts, the reviewer’s list', 'new', '◇ #7728 · boards held (Questions 4, 10, 11)', 'RST-26, RST-27'],
+          ['What changed, what depends on it, acknowledge with a note, history, one count per project', 'new <code>research_study_ref_reviews</code>', '◇ #7726', 'RST-28']
+        ])
+        + '<h2>Rules this pass keeps</h2><ul class="li"><li>Every figure says what it counts and for which period. Zero, Not recorded and Unavailable never look alike: a typed 0 computes; an empty input reads Not entered.</li><li>Five kinds of figure carry their words: Companies Axal lists · Eligible customers · Observed spending or revenue · Modelled · Activity proxy. A modelled figure carries Provisional.</li><li>Prices with different units, terms or currencies are never totalled, averaged or converted. Service-engagement readings never sit among product prices.</li><li>No interview content beyond counts, dates and consented quotes.</li><li>Eadwyn proposes nothing in sizing, never a price, and writes no report text and no verdict.</li></ul>'),
+      RST35: () => dk('<h1>RST-35 · Handoff · Research Markets Market Study Models and Report (#7703 pass 3)</h1><p>Lands as <code>D7703-p3.md</code>. Checked on main <code>58ee9d1b73</code> (19 Nov 2026). Each builder also builds its frames on RST-29 to RST-32 and RST-34.</p>'
+        + tbl(['Board', 'Recorded today', 'Backend required', 'Builder'], [
+          ['RST-21 sizing sheet', 'inputs as typed; saved figures and the venture’s market sources', '◇ #7704 Worker computation, preview, versions · ◇ #7725 source per input, unit, reference year', '#7733'],
+          ['RST-22 scenarios, sensitivity, conflicts, versions', 'saved figures’ history (“Saved before versions existed”)', '◇ #7725 · ◇ #7704', '#7733'],
+          ['RST-23 alternatives and comparison', 'Comparisons tab as built (linked)', '◇ #7724 · ◇ #7723', '#7734'],
+          ['RST-24 hints, prices, Would pay, readings', 'hints (member who ran it), readings (owner’s own), demand signals in Validate', '◇ #7723 · ◇ #7722 · ◇ #7724 · ◇ #7721', '#7734'],
+          ['RST-25 report, versions, export', 'brief sections and “Reviewed by you”', '◇ #7727', '#7735'],
+          ['RST-26 reviewers, owner’s side', 'held', '◇ #7728', '#7735 · after Questions 4, 10, 11'],
+          ['RST-27 reviewer’s list and page', 'held', '◇ #7728 · new addresses (Question 2)', '#7736 · after Questions 4, 10, 11'],
+          ['RST-28 needs review', '—', '◇ #7726', '#7735']
+        ])
+        + '<div class="cols"><div><h2>Owner questions</h2><ul class="li"><li>⚑ Question 1: the Study tab’s addresses /research/projects/:uid/study/:section (option A printed on every frame).</li><li>⚑ Question 11: the report’s sizing part (option A drawn, flagged on RST-25).</li><li>⚑ Questions 4 and 10: RST-26, RST-27 and their frames are held; see the held board.</li><li>⚑ Question 2: /research/reviews addresses, with RST-27.</li></ul><h2>Frontend only</h2><ul class="li"><li>The section list, the six-tab row and the address line (with pass 2).</li><li>Phone layouts: inputs as cards, the three-way scenario switch, prices grouped by unit and term.</li><li>Dark tokens; keyboard order; live-region wording on RST-34.</li><li>Showing Save price off until every field and the tick are given (the Worker still checks).</li></ul></div>'
+        + '<div><h2>Preserved as built</h2><ul class="li"><li>The Brief tab (eight sections, Reviewed by you) and the Comparisons tab.</li><li>V18, the venture’s sizing drawer: unchanged; RST-21 adds to it inside the study only.</li><li>Pricing hints stay readable only by the member who ran the analysis.</li></ul><h2>Builds waiting</h2><ul class="li"><li>#7733, #7734 and #7735 (not RST-26) after this pass lands.</li><li>#7735 (RST-26) and #7736 (RST-27) after the owner answers Questions 4, 10 and 11 and the held boards are drawn.</li></ul><h2>Not checked</h2><ul class="li"><li>Production and deployed pages; whether an open PR has taken RST since main 58ee9d1b73. A ◇ value’s wording is settled by its build.</li></ul></div></div>')
+    };
+
+    /* ---------- dispatch ---------- */
+    let html;
+    if (B === 'RST21') html = RST21();
+    else if (B === 'RST21B') html = RST21B();
+    else if (B === 'RST21C') html = RST21C();
+    else if (B === 'RST22') html = RST22();
+    else if (B === 'RST22B') html = RST22B();
+    else if (B === 'RST23') html = RST23();
+    else if (B === 'RST24') html = RST24();
+    else if (B === 'RST24B') html = RST24B();
+    else if (B === 'RST25') html = RST25();
+    else if (B === 'RST26') html = RST26();
+    else if (B === 'RST28') html = RST28();
+    else if (B === 'RST28B') html = RST28B();
+    else if (B === 'RST29') html = RST29();
+    else if (B === 'RST30') html = RST30();
+    else if (B === 'RST31A') html = PA();
+    else if (B === 'RST31B') html = PB();
+    else if (B === 'RST31C') html = PC();
+    else if (B === 'RST31D') html = PD();
+    else if (B === 'RST31E') html = PE();
+    else if (B === 'RST31F') html = PF();
+    else if (B === 'RST31G') html = PG();
+    else if (B === 'RST31H') html = PH();
+    else if (B === 'RST31L') html = PL();
+    else if (B === 'RST31M') html = PM();
+    else if (B === 'RST32A') html = RST21();
+    else if (B === 'RST32B') html = RST22();
+    else if (B === 'RST32C') html = RST23();
+    else if (B === 'RST32D') html = RST24();
+    else if (B === 'RST32E') html = RST25();
+    else if (B === 'RST32F') html = RST28();
+    else if (B === 'RST32PA') html = PA();
+    else if (B === 'RST32PE') html = PE();
+    else if (B === 'RST33') html = RST33();
+    else if (B === 'RST34') html = RST34();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = RST21();
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>
