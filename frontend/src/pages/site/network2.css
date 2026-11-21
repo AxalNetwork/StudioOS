@@ -17,6 +17,10 @@
 .ax-n2-lede { font-size: 16px; color: var(--ax-body); line-height: 1.68; margin: 18px 0 0; max-width: 640px; }
 .ax-site .ax-n2-k { font-family: inherit; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .13em; color: var(--ax-muted); margin: 38px 0 16px; }
 .ax-site .ax-n2-k.is-gap { margin-top: 44px; }
+/* D6966 (PGS08C): the Programs heading with "See all programs →" beside it. */
+.ax-site .ax-n2-k-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 38px 0 16px; }
+.ax-site .ax-n2-k-row .ax-n2-k { margin: 0; }
+.ax-site .ax-n2-all { font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; }
 .ax-site .ax-n2-month-t { font-family: inherit; margin: 0; }
 .ax-n2-chip-green { background: rgba(15,128,61,.1); color: #15803d; }
 .ax-n2-chip-amber { background: rgba(180,83,9,.1); color: #b45309; }

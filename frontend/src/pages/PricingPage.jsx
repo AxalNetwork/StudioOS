@@ -135,6 +135,11 @@ function PlanCard({ card, onCheckout, onSelect }) {
       ) : (
         <div className="axp-notoffered"><span className="axp-pill axp-pill-dash">Not offered yet</span></div>
       )}
+      {card.limits.length > 0 && (
+        <ul className="axp-limits" aria-label={`${card.name} limits`} data-testid={`pricing-limits-${card.id}`}>
+          {card.limits.map((f) => <li key={f}><span className="axp-tick">{TICK}</span><span>{f}</span></li>)}
+        </ul>
+      )}
       {card.button.checkout && !card.button.disabled ? (
         <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => { onSelect(card); onCheckout(card); }} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
       ) : card.button.to && !card.button.disabled ? (
