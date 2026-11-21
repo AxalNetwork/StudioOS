@@ -6,23 +6,18 @@ export default {
     {
       id: 'overview',
       title: 'Integrations overview',
-      overview:
-        "Integrations are connected third-party accounts the platform talks to on your behalf — calendars, CRMs, e-signature providers, identity providers, and chat tools. Each integration is opt-in, scoped to the minimum permissions needed, and revocable from Settings → Integrations.",
+      overview: 'Account → Connectors lists tools for your account. Open a provider to see what it can read or send and which companies can use the connection.',
       howto: [
-        'Open Settings → Integrations to see the list.',
-        'Click "Connect" on any provider and complete the provider’s sign-in.',
-        'Review the scopes the provider asks for before approving — they’re listed plainly.',
-        'Disconnect any provider any time; in-flight syncs will stop.',
+        'Open /account/connectors. Find your provider and check its availability for this account.',
+        'When Connect is offered, open the setup, select the intended provider account and review the requested permissions before approving.',
+        'Return to the provider detail and check its connection status and company scope. Use the recovery guide below if a permission was refused or a read failed.',
+        'If the tool is missing, choose Add → Request a connector. You can follow up with support about availability. For an external assistant, use Account → Builder.',
       ],
-      tips: [
-        'Connect calendar first — bookings (advisors, office hours, deal calls) all rely on it.',
-        'You can connect multiple providers for the same category (e.g. both Google and Microsoft) but only one is "active" per category.',
-      ],
-      pitfalls: [
-        'Approving with a personal account instead of a work account leads to surprising behaviour for work-only events.',
-        'Some providers require admin consent on enterprise plans — flag the request to your IT admin if it bounces.',
-      ],
+      tips: ['On a shared device, confirm the account shown by the provider before approving access.'],
+      pitfalls: ['A catalogue entry or a submitted request does not establish a live connection.'],
       related: [
+        { label: 'Connector status and recovery', href: '#workflows/connector-recovery' },
+        { label: 'Connected assistants and MCP', href: '#workflows/connected-assistants' },
         { label: 'Calendar (Google / Microsoft)', href: '#integrations/calendar' },
         { label: 'Slack', href: '#integrations/slack' },
         { label: 'CRM (HubSpot, Salesforce)', href: '#integrations/crm' },
