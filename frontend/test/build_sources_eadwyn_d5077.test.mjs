@@ -20,6 +20,8 @@ import CycleModulePage, { ModuleAsk, ModuleAskView } from '../src/pages/cycles/C
 import PhoneModulePage, { PhoneAskEntryView } from '../src/pages/cycles/PhoneModulePage.jsx';
 import { primaryForModule } from '../src/pages/cycles/CycleRoute.jsx';
 import buildDef from '../src/pages/cycles/defs/build.jsx';
+import { BUILD_PARTS } from '../src/pages/cycles/buildParts.jsx';
+import FromLovable from '../src/pages/cycles/FromLovable.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
 import { BUILD_ASKS, BUILD_RAIL_NOTES, asksCountLabel, moduleAsks, moduleRailNote } from '../src/pages/cycles/buildEadwyn.js';
 import WorkerRail, { RailAsks } from '../src/ui/WorkerRail.jsx';
@@ -224,4 +226,37 @@ test('CycleRoute wires it: the asks reach the rail with its settings folded, and
   assert.match(src, /const moduleSources = def\.sourcesRegion \? parts : null;/);
   assert.match(src, /sources=\{moduleSources\}\s*sourcesAction=\{def\.sourcesRegion && def\.action \? def\.action\(q, openAction\) : null\}\s*asks=\{moduleAsks\}/);
   assert.match(src, /\{def\.sourcesRegion \? null : parts\}/, 'other cycles keep their parts as children');
+});
+
+// BD8 continuation: the same server-authorized handoff belongs to its source,
+// including at zero, where Sources remains available behind its disclosure.
+const renderLovable = BUILD_PARTS['prototype-mvp'].find(([key]) => key === 'lovable')[1];
+const launch = { project_id: 7, record: { id: 1, name: 'Synthetic must-have' }, can_launch: true, opened_at: null };
+for (const [name, Page, recordsId] of [['desktop', CycleModulePage, 'cycle-records'], ['phone', PhoneModulePage, 'phone-module-records']]) {
+  for (const count of [0, 2]) {
+    test(`BD8 ${name}, ${count} records: only Sources offers Build in Lovable`, () => {
+      const data = { card: { ...card, key: 'prototype-mvp', name: 'Prototype / MVP' }, records: recs(count), parts: { lovable: { state: 'ok', slots: [], launch } } };
+      const out = html(h(Page, { cycle: 'build', slug: 'prototype-mvp', data, add: [{ text: 'Add must-have', href: '/build/prototype-mvp/new' }], query: {}, lovable: { ...launch, cycle: 'build' }, sources: renderLovable(data, { projectId: 7, reload() {} }), sourcesAction: CONNECT }));
+      const sources = out.indexOf('data-testid="module-sources"');
+      const source = out.indexOf('id="from-lovable"');
+      const button = out.indexOf('data-testid="lovable-build"');
+      assert.ok(sources > out.indexOf(count ? `data-testid="${recordsId}"` : 'Add must-have'), 'founder work precedes Sources');
+      assert.ok(source > sources && button > source && button < out.indexOf('</section>', source), 'launch belongs to the From Lovable source card');
+      assert.equal((out.match(/data-testid="lovable-build"/g) || []).length, 1, 'no duplicate beside Add or in the phone next step');
+      if (!count) assert.match(out, /<details[^>]*data-testid="module-sources"[^>]*data-stage="zero"/);
+    });
+  }
+}
+test('BD8 source respects launch permission, preserves receipts and keeps failed-read retry independent', () => {
+  const draw = (part) => html(renderLovable({ parts: { lovable: part } }, { projectId: 7, reload() {} }));
+  const denied = draw({ state: 'ok', slots: [], launch: { ...launch, can_launch: false } });
+  assert.doesNotMatch(denied, /lovable-build|lovable-opened-on/);
+  const receipt = draw({ state: 'ok', slots: [], launch: { ...launch, can_launch: false, opened_at: '2026-11-20T12:00:00Z' } });
+  assert.match(receipt, /Opened in Lovable on 2026-11-20/);
+  assert.doesNotMatch(receipt, /data-testid="lovable-build"/);
+  const unreadable = draw({ state: 'unreadable', launch });
+  assert.match(unreadable, /data-testid="lovable-retry"/);
+  assert.match(unreadable, /data-testid="lovable-build"/);
+  assert.doesNotMatch(draw({ state: 'ok', slots: [] }), /data-testid="lovable-build"/);
+  assert.doesNotMatch(html(h(FromLovable, { part: { state: 'ok', slots: [] }, cycle: 'validate', projectId: 7 })), /data-testid="lovable-build"/, 'Validate has no module-wide Build action');
 });

@@ -1,7 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+/** D6154, DE21–28: the decision record in Deals; legacy /ic links preserve the uid. */
+import React, { useEffect, useRef, useState } from 'react';
+import { useParams, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { ArrowLeft, Gavel, Save, ShieldCheck, PieChart, RefreshCw } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
+import Sheet from '../ui/Sheet';
+import {DataState} from '../ui/Honesty';
+import ICDecisionMinutes from './ICDecisionMinutes';
 import { api } from '../lib/api';
 import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../lib/fillScoped.js';
@@ -17,22 +21,30 @@ const OUTCOMES = ['open', 'vindicated', 'regret'];
 export default function ICDecisionPage() {
   const { uid } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const legacy = location.pathname.startsWith('/ic/');
   const { user, role } = useAuth();
   // Every IC member may vote; only the record's author or an Admin may change
   // it (PUT /api/ic/:uid, #6155). Offering the others Save memo, Record
   // decision and Outcome only ever ended in 'Forbidden'.
-  const canVote = ['admin', 'partner', 'investor'].includes(role);
+  const roleCanVote = ['admin', 'partner', 'investor'].includes(role);
   // Task #83 — after an "invest" decision, admins commit it to the cap-table /
   // position ledger. Prefill the position form via router state so they don't
   // re-key the startup + round.
   const canRecordPosition = role === 'admin';
   const [d, setD] = useState(null);
+  const loadTicket=useRef(0);
   const [err, setErr] = useState(null);
+  const [errState,setErrState]=useState('unavailable');
+  const fail=e=>{setErr(e.message||'The request could not be completed.');setErrState(e.status===403||e.status===402?'refused':'unavailable');};
   const [memo, setMemo] = useState('');
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
   const [recusing, setRecusing] = useState(false);
   const [declaration, setDeclaration] = useState('');
+  const [pendingDecision,setPendingDecision]=useState(null);
+  const [termRows,setTermRows]=useState(null);
+  const [newCondition,setNewCondition]=useState('');
   // D1329 (#3490, AF17, the owner's answer B): Fill with Eadwyn on the memo's
   // words only, never its terms, decision or outcome. Its author fills it until
   // it is decided; a voter, a colleague and an admin read its marks.
@@ -42,22 +54,24 @@ export default function ICDecisionPage() {
   });
 
   const load = () => {
+    const ticket=++loadTicket.current;
     setErr(null);
     api.icGet(uid)
-      .then((res) => { setD(res); setMemo(res?.memo || ''); })
-      .catch((e) => setErr(e.message || 'The record could not be read.'));
+      .then((res) => { if(ticket!==loadTicket.current)return;setD(res); setMemo(res?.memo || ''); })
+      .catch((e) => {if(ticket===loadTicket.current)fail(e);});
   };
-  useEffect(load, [uid]);
+  useEffect(() => { if(!legacy) { setD(null);load(); } return ()=>{loadTicket.current++;}; }, [uid,legacy]);
+  if(legacy) return <Navigate to={`/deals/commit/${encodeURIComponent(uid)}`} replace/>;
 
   const saveMemo = async () => {
     setBusy(true); setErr(null);
     try { await api.icUpdate(uid, { memo }); await fill.afterSave(d?.id); load(); }
-    catch (e) { setErr(e.message); } finally { setBusy(false); }
+    catch (e) { fail(e); } finally { setBusy(false); }
   };
   const castVote = async (vote) => {
     setBusy(true); setErr(null);
     try { await api.icVote(uid, { vote, rationale: rationale || undefined }); setRationale(''); load(); }
-    catch (e) { setErr(e.message); } finally { setBusy(false); }
+    catch (e) { fail(e); } finally { setBusy(false); }
   };
   // A recusal sends the declared conflict as its rationale (the Worker
   // refuses one without it) and is final; a later vote is refused in the
@@ -67,18 +81,18 @@ export default function ICDecisionPage() {
     if (!body) return;
     setBusy(true); setErr(null);
     try { await api.icVote(uid, body); setDeclaration(''); setRecusing(false); load(); }
-    catch (e) { setErr(e.message); } finally { setBusy(false); }
+    catch (e) { fail(e); } finally { setBusy(false); }
   };
   const setField = async (patch) => {
     setBusy(true); setErr(null);
-    try { await api.icUpdate(uid, patch); load(); }
-    catch (e) { setErr(e.message); } finally { setBusy(false); }
+    try { await api.icUpdate(uid, patch); load(); return true; }
+    catch (e) { fail(e); return false; } finally { setBusy(false); }
   };
 
   if (err && !d) {
     return (
       <div className="max-w-3xl mx-auto py-16" role="alert">
-        <p className="text-sm text-rose-700 dark:text-rose-300">Unreadable: this IC record could not be read. {err}</p>
+        <DataState state={errState} reason={`This IC record could not be read. ${err}`}/>
         <button type="button" onClick={load}
           className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
           <RefreshCw size={13} /> Try again
@@ -88,13 +102,14 @@ export default function ICDecisionPage() {
   }
   if (!d) return <div className="max-w-3xl mx-auto py-16 text-sm text-gray-500" role="status" aria-live="polite">Reading the IC record…</div>;
 
+  const canVote = roleCanVote && d.status !== 'decided' && (!d.roster?.available || (d.roster.members||[]).some(m=>Number(m.user_id)===Number(user?.id)));
   const canChange = canChangeDecision(user, d);
   const recusal = ownRecusal(user, d.votes);
   const conditions = Array.isArray(d.conditions) ? d.conditions : [];
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <Link to="/ic" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 mb-4">
+    <div className="max-w-6xl mx-auto">
+      <Link to="/deals/commit?view=decisions" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 mb-4">
         <ArrowLeft size={14} /> Back to IC Decisions
       </Link>
 
@@ -115,10 +130,12 @@ export default function ICDecisionPage() {
         </Link>
       )}
 
-      {err && <div className="mb-4 px-4 py-2 bg-rose-50 text-rose-700 rounded-lg text-sm">{err}</div>}
+      {err && <DataState state={errState} reason={err}/>}
 
+      <dl className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">{[['Status',d.status],['Votes',tallyText(d.tally)],['Eligible voters',d.roster?.available?d.roster.eligible:'Not recorded'],['To vote',d.roster?.available?d.roster.to_vote:'Not recorded']].map(([label,value])=><div key={label} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900"><dt className="text-xs text-gray-600 dark:text-gray-400">{label}</dt><dd className="text-sm font-bold">{value}</dd></div>)}</dl>
+      <div className="grid gap-4 lg:grid-cols-12">
       {/* Memo */}
-      <section className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+      <section className="lg:col-span-7 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
         <FillLabel fill={fill} name="memo" label="Memo" value={memo}>
           <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">IC Memo</h2>
         </FillLabel>
@@ -140,12 +157,22 @@ export default function ICDecisionPage() {
         )}
       </section>
 
+
+      <section className="lg:col-span-5 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <h2 className="font-semibold">Proposed terms</h2><p className="text-xs text-gray-600 dark:text-gray-400">Lines the author wrote. Nothing is calculated from them.</p>
+        {d.terms&&Object.keys(d.terms).length?<dl className="my-3 grid grid-cols-2 gap-2">{Object.entries(d.terms).map(([key,value])=><React.Fragment key={key}><dt>{key}</dt><dd>{String(value)}</dd></React.Fragment>)}</dl>:<p>Not recorded</p>}
+        {canChange?<button className="min-h-11 text-violet-700 dark:text-violet-300" onClick={()=>setTermRows(Object.entries(d.terms||{}).map(([label,value])=>({label,value:String(value)})))}>Edit terms</button>:<p className="text-xs text-gray-600 dark:text-gray-400">{AUTHOR_ONLY_LINE}</p>}
+      </section>
+
       {/* Votes */}
-      <section className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+      <section className="lg:col-span-7 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
         <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
           Committee vote · {tallyText(d.tally)}
         </h2>
-        {canVote && recusal && (
+        {d.status==='decided'&&<p className="mb-3 text-sm text-gray-600 dark:text-gray-400">Voting is closed for this decision.</p>}
+        {d.roster?.available?<div className="mb-3 text-sm"><h3 className="font-semibold">Voting roster</h3><p>{d.roster.members.map(m=>m.name||'Name not recorded').join(' · ')}</p></div>:<p className="text-xs text-gray-600 dark:text-gray-400">Voting roster: Not recorded.</p>}
+        {!canVote&&d.status!=='decided'&&!recusal&&<p>You are not on this decision’s voting roster.</p>}
+        {recusal && (
           <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">You recused yourself from this decision. {RECUSAL_FINAL_LINE}</p>
         )}
         {canVote && !recusal && (
@@ -154,19 +181,21 @@ export default function ICDecisionPage() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm mb-2" />
             <div className="flex gap-2">
               {VOTES.map((v) => (
-                <button key={v} onClick={() => castVote(v)} disabled={busy || !rationale.trim()}
+                <button key={v} onClick={() => castVote(v)} disabled={busy || d.status==='decided' || !rationale.trim()}
                   title={rationale.trim() ? undefined : 'Every vote records its reason: write the rationale first.'}
                   className="px-3 py-1.5 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
                   Vote {VOTE_WORDS[v].toLowerCase()}
                 </button>
               ))}
-              <button type="button" onClick={() => setRecusing((x) => !x)} disabled={busy} aria-expanded={recusing}
+              <button type="button" onClick={() => setRecusing((x) => !x)} disabled={busy || d.status==='decided'} aria-expanded={recusing}
                 className="px-3 py-1.5 rounded-lg text-sm border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
                 Recuse…
               </button>
             </div>
             {recusing && (
-              <div className="mt-3 p-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+              <Sheet title="Recuse from this decision" onClose={()=>!busy&&setRecusing(false)}>
+              <div className="p-4">
+                {err&&<DataState state={errState} reason={err}/>}
                 <label htmlFor="ic-recusal-declaration" className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
                   Declare the conflict
                 </label>
@@ -184,7 +213,7 @@ export default function ICDecisionPage() {
                     Cancel
                   </button>
                 </div>
-              </div>
+              </div></Sheet>
             )}
             {/* Task #83 — each vote auto-drafts a private journal entry (yes→invest,
                 no→pass, abstain→defer). The Watchlist page that showed those
@@ -203,8 +232,8 @@ export default function ICDecisionPage() {
         </ul>
       </section>
 
-      {/* Conditions, read-only here: they are kept on the commit room. */}
-      <section className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+      {/* Conditions belong to this exact record. */}
+      <section className="lg:col-span-5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
         <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Conditions</h2>
         {conditions.length === 0 ? (
           <p className="text-sm text-gray-500">No conditions on this decision.</p>
@@ -213,11 +242,12 @@ export default function ICDecisionPage() {
             {conditions.map((cond) => (
               <li key={cond.uid} className="py-2 text-sm flex justify-between gap-3">
                 <span className="text-gray-700 dark:text-gray-300">{cond.body}</span>
-                <span className="text-gray-500 shrink-0">{CONDITION_WORDS[cond.status] || cond.status}</span>
+                <span className="text-gray-500 shrink-0">{CONDITION_WORDS[cond.status] || cond.status}</span>{canChange&&cond.status==='open'&&<span className="flex gap-2">{['met','waived'].map(status=><button key={status} disabled={busy} className="min-h-11 underline" onClick={async()=>{setBusy(true);setErr(null);try{await api.icResolveCondition(cond.uid,status);load();}catch(e){fail(e);}finally{setBusy(false);}}}>{status==='met'?'Mark met':'Waive'}</button>)}</span>}
               </li>
             ))}
           </ul>
         )}
+        {canChange?<form className="mt-3 space-y-2" onSubmit={async e=>{e.preventDefault();setBusy(true);setErr(null);try{await api.icAddCondition(uid,{body:newCondition.trim()});setNewCondition('');load();}catch(e){fail(e);}finally{setBusy(false);}}}><label className="block text-sm">Condition<input className="w-full rounded-lg border border-gray-300 bg-transparent p-2 dark:border-gray-700" value={newCondition} onChange={e=>setNewCondition(e.target.value)}/></label><button className="min-h-11 underline" disabled={busy||!newCondition.trim()}>Add condition</button></form>:<p className="text-xs text-gray-600 dark:text-gray-400">{AUTHOR_ONLY_LINE}</p>}
         {canOpenCommitRoom(role) && (
           <Link to="/deals/commit" className="mt-2 inline-block text-sm text-violet-700 dark:text-violet-300 hover:underline">
             Manage conditions on the commit room
@@ -225,13 +255,14 @@ export default function ICDecisionPage() {
         )}
       </section>
 
+      <ICDecisionMinutes uid={uid} />
       {/* Decision + outcome */}
       {canChange && (
-        <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+        <section className="lg:col-span-12 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
           <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Record decision</h2>
           <div className="flex flex-wrap gap-2 mb-3">
             {DECISIONS.map((dec) => (
-              <button key={dec} onClick={() => setField({ decision: dec })} disabled={busy}
+              <button key={dec} onClick={() => setPendingDecision(dec)} disabled={busy}
                 className={`px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 ${d.decision === dec ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
                 {dec}
               </button>
@@ -267,6 +298,9 @@ export default function ICDecisionPage() {
           </div>
         </section>
       )}
+      </div>
+      {pendingDecision&&<Sheet title="Record decision" onClose={()=>!busy&&setPendingDecision(null)}><div className="space-y-3 p-4"><p>Record {pendingDecision} for {d.title}? Voting controls close on this page.</p>{err&&<DataState state={errState} reason={err}/>}<button className="min-h-11 rounded-lg bg-violet-600 px-4 text-white" disabled={busy} onClick={async()=>{if(await setField({decision:pendingDecision}))setPendingDecision(null);}}>Confirm record decision</button></div></Sheet>}
+      {termRows&&<Sheet title="Edit proposed terms" onClose={()=>!busy&&setTermRows(null)}><form className="space-y-3 p-4" onSubmit={async e=>{e.preventDefault();if(await setField({terms:Object.fromEntries(termRows.filter(t=>t.label.trim()).map(t=>[t.label.trim(),t.value]))}))setTermRows(null);}}>{err&&<DataState state={errState} reason={err}/>}{termRows.map((t,i)=><div key={i} className="space-y-1"><input aria-label={`Term ${i+1}`} className="w-full rounded border border-gray-300 bg-transparent p-2 dark:border-gray-700" value={t.label} onChange={e=>setTermRows(termRows.map((x,j)=>i===j?{...x,label:e.target.value}:x))}/><input aria-label={`Value ${i+1}`} className="w-full rounded border border-gray-300 bg-transparent p-2 dark:border-gray-700" value={t.value} onChange={e=>setTermRows(termRows.map((x,j)=>i===j?{...x,value:e.target.value}:x))}/><button type="button" className="min-h-11 underline" onClick={()=>setTermRows(termRows.filter((_,j)=>j!==i))}>Remove line {i+1}</button></div>)}<button type="button" className="min-h-11 underline" onClick={()=>setTermRows([...termRows,{label:'',value:''}])}>Add a line</button><button className="ml-3 min-h-11 rounded bg-violet-600 px-3 text-white" disabled={busy}>Save terms</button></form></Sheet>}
     </div>
   );
 }

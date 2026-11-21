@@ -93,7 +93,7 @@ These jobs share a YAML definition across the listed events. Workflow filters, m
 - `ci.yml` / landing gate · pull_request, merge_group, push (conditional on pull_request, merge_group, push; steps reference event data)
 - `ci.yml` / ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'test:drift (draft fast tier)' &#124;&#124; 'test:drift (full suite)' }} · pull_request, merge_group, push (conditional on pull_request, merge_group, push; steps reference event data)
 - `ci.yml` / selection (shadow) · pull_request, merge_group, push (conditional on pull_request, merge_group, push; steps reference event data)
-- `ci.yml` / why CI failed (D5398) · pull_request, merge_group, push (conditional on pull_request, merge_group, push)
+- `ci.yml` / why CI failed (D5398) · pull_request, merge_group, push (conditional on pull_request, merge_group, push; steps reference event data)
 - `ci.yml` / editor visual regression and axe · pull_request, merge_group, push (conditional on pull_request, merge_group, push)
 - `ci.yml` / api ↔ worker drift · pull_request, merge_group, push (steps reference event data)
 - `ci.yml` / open graph metadata · pull_request, merge_group, push (conditional on pull_request, merge_group, push)
