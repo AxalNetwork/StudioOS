@@ -136,7 +136,7 @@ const ONLY_QUEUE_AND_MAIN = "(github.event_name == 'merge_group' || github.event
 
 test('ci.yml: the suite step traces only under merge_group and push, and its run line is unchanged', () => {
   const suite = job('suite');
-  const step = suite.match(/ {6}- run: node scripts\/test-drift-parts\.mjs \$\{\{ matrix\.part \}\} --plan-file suite-plan\.json\n {8}env:\n {10}TEST_TRACE_DIR: (.+)\n/);
+  const step = suite.match(/ {6}- run: node scripts\/test-drift-parts\.mjs \$\{\{ matrix\.part \}\} --plan-file suite-plan\.json\n {8}env:\n(?: {10}CI_FAILURE_[A-Z]+: .+\n)* {10}TEST_TRACE_DIR: (.+)\n/);
   assert.ok(step, 'the test-drift-parts step keeps its run line and sets TEST_TRACE_DIR as env');
   assert.equal(step[1], `\${{ ${ONLY_QUEUE_AND_MAIN} && format('{0}/test-traces', runner.temp) || '' }}`);
   assert.equal((ci.match(/TEST_TRACE_DIR/g) || []).length, 1, 'no other step or job sets the tracer');
