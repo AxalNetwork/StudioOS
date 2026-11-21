@@ -106,7 +106,7 @@ import {
   type CampaignCoverageRow, type CoverageRow, type PublishedVersionRow, type SkillFilters, type SkillLinkRow, type VersionEvalRow,
 } from '../services/agents/skillCoverage';
 import {
-  EXECUTION_LATENCY_SQL, EXECUTIONS_SQL, executionsWindow, skillExecutions, type ExecutionRow, type LatencyRow,
+  EXECUTION_LATENCY_SQL, EXECUTIONS_SQL, OUTCOMES_SQL, executionsWindow, skillExecutions, type ExecutionRow, type LatencyRow, type OutcomeRow,
 } from '../services/agents/skillExecutions';
 import { readSkillOverlap } from '../services/agents/skillOverlap';
 import { CATALOGUE } from '../services/ai/catalogue';
@@ -403,8 +403,8 @@ async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, 
 }
 
 /**
- * D4536-p4: two reads, whatever the catalogue's size or the page: the completed runs grouped in SQL, then the
- * latency ranks for the skills the filters kept. An unreadable run history is said, never served as zeros.
+ * D4536-p4: three reads, whatever the catalogue's size or the page: the completed runs grouped in SQL, the latency
+ * ranks for the skills the filters kept, and the marked run and refusal events for the outcome rates. An unreadable run history is said, never served as zeros.
  */
 async function libraryExecutions(env: Env, category: ReadonlyMap<string, string>, filters: SkillFilters | null, published: readonly CoverageRow[]) {
   const window = executionsWindow(filters, new Date());
@@ -423,7 +423,11 @@ async function libraryExecutions(env: Env, category: ReadonlyMap<string, string>
       latency = (await env.DB.prepare(EXECUTION_LATENCY_SQL).bind(JSON.stringify(ids), window.since, window.until, model, model, version, version).all<LatencyRow>()).results ?? [];
     } catch { latency = 'unreadable'; }
   }
-  return skillExecutions(rows, latency, { filters, category, window, published });
+  let outcomes: OutcomeRow[] | 'unreadable';
+  try {
+    outcomes = (await env.DB.prepare(OUTCOMES_SQL).bind(window.since, window.until).all<OutcomeRow>()).results ?? [];
+  } catch { outcomes = 'unreadable'; }
+  return skillExecutions(rows, latency, { filters, category, window, published, outcomes });
 }
 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.

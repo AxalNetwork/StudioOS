@@ -29,8 +29,9 @@ import { mount } from '../src/routes/admin_hq_skills.ts';
 import { CATALOGUE } from '../src/services/ai/catalogue.ts';
 import { MODEL_CONNECTIONS } from '../src/services/ai/moduleConnections.ts';
 import {
-  EXECUTION_LATENCY_SQL, EXECUTIONS_DEFAULT_DAYS, EXECUTIONS_SQL, executionsWindow, skillExecutions, type ExecutionRow,
+  EXECUTION_LATENCY_SQL, EXECUTIONS_DEFAULT_DAYS, EXECUTIONS_SQL, OUTCOMES_SQL, executionsWindow, skillExecutions, type ExecutionRow, type OutcomeRow,
 } from '../src/services/agents/skillExecutions.ts';
+import { refusalDetail } from '../src/services/agents/agentRun.ts';
 import { parseSkillFilters } from '../src/services/agents/skillCoverage.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
@@ -83,10 +84,10 @@ test('D4536-p4: no recorded charge is "not recorded", never a cost of 0; an obse
   assert.equal((empty.totals.model_latency_ms as any).available, false);
 });
 
-test('D4536-p4: rates, run latency and workflows are unavailable; a company skill is counted by scope only', () => {
+test('D4536-p4: with no marked event the rates are unavailable; run latency and workflows too; a company skill is counted by scope only', () => {
   const e = block([row(), row({ scope: 'company', uid: null, skill_id: 9, published_roles_json: null, published_tags_json: null, completed: 4 })]);
   for (const m of [e.outcomes, e.run_latency, e.workflows]) assert.equal((m as any).available, false);
-  assert.match((e.outcomes as any).reason, /no skill/);
+  assert.match((e.outcomes as any).reason, /attribution started/, 'no marked event: unavailable, never a rate of 0');
   assert.match((e.workflows as any).reason, /#4535/);
   assert.deepEqual(e.by_scope, { hq: { completed: 1 }, company: { completed: 4 } });
   assert.equal(e.totals.completed, 1, 'totals are HQ skills only');
@@ -116,6 +117,55 @@ test('D4536-p4: adoption is not usage: a published skill nobody ran is named, wh
     { scope: 'hq', status: 'retired', uid: UID_C }, { scope: 'company', status: 'published', uid: null },
   ] });
   assert.deepEqual(e.published_without_completed_runs, { count: 1, skill_uids: [UID_B] });
+});
+
+test('D4536-p4: outcome rates count marked events: completed, refused and failed end a run; a retryable refusal does not', () => {
+  const o = (x: Partial<OutcomeRow>): OutcomeRow => ({
+    skill_id: 1, uid: UID_A, status: 'published', current_version: 2, scope: 'hq',
+    published_roles_json: JSON.stringify(['cfo']), published_tags_json: null,
+    kind: 'refused', code: 'skill_not_ready', http_status: 422, version: 2, n: 1, first_at: '2026-11-10 00:00:00', ...x,
+  });
+  const outcomes = [
+    o({ kind: 'run', code: null, http_status: null, n: 6, first_at: '2026-11-12 00:00:00' }),
+    o({ n: 2, first_at: '2026-11-09 08:00:00' }),
+    o({ code: 'model_throttled', http_status: 503 }),
+    o({ code: 'policy_unreadable', http_status: 503 }),
+    o({ code: 'step_in_flight', http_status: 409 }),
+    o({ code: 'skill_not_attached', http_status: 422, version: null }),
+  ];
+  const e = skillExecutions([], [], { filters: null, category: CATEGORY, window: WINDOW, published: [], outcomes });
+  const t = (e.outcomes as any).totals;
+  // Mutation checked: counting retryable refusals in `ended` makes it 12; classifying model_throttled as refused moves it.
+  assert.deepEqual([t.completed, t.refused, t.failed, t.retryable, t.ended], [6, 3, 1, 2, 10]);
+  assert.deepEqual(t.rates, { success: 0.6, refusal: 0.3, failure: 0.1 });
+  assert.deepEqual(t.by_code, { skill_not_ready: 2, model_throttled: 1, policy_unreadable: 1, step_in_flight: 1, skill_not_attached: 1 });
+  assert.equal((e.outcomes as any).attributed_since, '2026-11-09 08:00:00', 'the earliest marked event read');
+  assert.deepEqual((e.outcomes as any).skills.map((x: any) => x.skill_uid), [UID_A]);
+
+  const filters = (q: Record<string, string>) => {
+    const p = parseSkillFilters(Object.fromEntries(Object.entries(q).map(([k, v]) => [k, [v]])), {
+      categories: ['finance_ops'], tags: CATEGORY, roleKeys: ['cfo', 'cto'], modelIds: ['m-1'], allowed: [],
+    });
+    assert.ok(p.ok);
+    return p.filters;
+  };
+  const byModel = skillExecutions([], [], { filters: filters({ model: 'm-1' }), category: CATEGORY, window: WINDOW, published: [], outcomes });
+  assert.match((byModel.outcomes as any).reason, /records no model/);
+  // A refusal before the pin was read has no version, so a version filter leaves it out.
+  const v2 = skillExecutions([], [], { filters: filters({ version: '2' }), category: CATEGORY, window: WINDOW, published: [], outcomes });
+  assert.equal((v2.outcomes as any).totals.by_code.skill_not_attached, undefined);
+  const cto = skillExecutions([], [], { filters: filters({ role: 'cto' }), category: CATEGORY, window: WINDOW, published: [], outcomes });
+  assert.equal((cto.outcomes as any).available, false, 'a filter that matches no skill gives no rate, not a 0');
+  const none = skillExecutions([], [], { filters: null, category: CATEGORY, window: WINDOW, published: [], outcomes: [o({ kind: 'refused', code: 'step_in_flight', http_status: 409 })] });
+  assert.equal((none.outcomes as any).totals.rates.success.available, false, 'only retryable refusals: no denominator');
+});
+
+test('D4536-p4: refusalDetail names the skill, its version once read, the status and the marker', () => {
+  const input = { module: 'grow', option: 'brief', skill: UID_A, skillVersion: 3, engine: true };
+  assert.deepEqual(refusalDetail({ code: 'skill_not_ready', status: 422 }, input, 2),
+    { code: 'skill_not_ready', status: 422, module: 'grow', option: 'brief', outcome_v: 1, skill: { uid: UID_A, version: 2 }, engine: true });
+  assert.deepEqual(refusalDetail({ code: 'agent_paused', status: 403 }, { ...input, engine: undefined }, null).skill, { uid: UID_A, version: 3 }, 'the saved version until the pin is read');
+  assert.equal('skill' in refusalDetail({ code: 'agent_paused', status: 403 }, { module: 'grow', option: 'brief' }, null), false, 'a run naming no skill names none');
 });
 
 test('D4536-p4: with no date filter the window is the last 30 UTC days, today included', () => {
@@ -182,6 +232,17 @@ function world() {
   use({ at: '2026-10-01 00:00:00' });
   // The company skill's run.
   use({ skill: co, version: 1 });
+  // Marked events (D4536-p4): two completed runs of A, a refusal and a failure of A, a refusal of the company skill
+  // (never joined), and an unmarked refusal from before the change (never counted).
+  const marked = (kind: string, detail: object, at = '2026-11-12 09:00:00') =>
+    db.prepare(`INSERT INTO team_agent_events (agent_id, actor_user_id, kind, detail_json, created_at) VALUES (?, ${EDITOR}, ?, ?, ?)`).run(cfo, kind, JSON.stringify(detail), at);
+  marked('run', { outcome_v: 1, skill: { uid: UID_A, version: 2 } }, '2026-11-11 10:00:00');
+  marked('run', { outcome_v: 1, skill: { uid: UID_A, version: 2 } });
+  marked('refused', { code: 'skill_not_ready', status: 422, outcome_v: 1, skill: { uid: UID_A, version: 2 } });
+  marked('refused', { code: 'model_throttled', status: 503, outcome_v: 1, skill: { uid: UID_A, version: 2 }, engine: true });
+  marked('refused', { code: 'skill_not_ready', status: 422, outcome_v: 1, skill: { uid: UID_C, version: 1 } });
+  marked('refused', { code: 'skill_not_ready', skill: { uid: UID_A, version: 2 } });
+  marked('refused', { code: 'skill_not_ready', status: 422, outcome_v: 1, skill: { uid: UID_A, version: 2 } }, '2026-10-01 00:00:00');
   const env: any = { DB, JWT_SECRET: 'd4536-p4-fixture-only-secret', ENVIRONMENT: 'development', TEAM_AGENTS_ENABLED: 'true' };
   return { db, env };
 }
@@ -234,6 +295,11 @@ test('D4536-p4: the route serves completed runs from the run-time tags, over the
   assert.deepEqual(e.published_without_completed_runs, { count: 1, skill_uids: [UID_B] });
   assert.deepEqual(r.body.filters.executions, { applied: ['from', 'to'], not_applicable: [] });
   assert.ok(!JSON.stringify(e).includes(UID_C) && !JSON.stringify(e).includes('acme-private'), 'no company skill is named');
+  // Mutation checked: dropping the outcome_v condition counts the unmarked refusal; dropping `s.scope = 'hq'` joins
+  // the company skill's refusal; dropping the window counts the October one.
+  assert.deepEqual([e.outcomes.totals.completed, e.outcomes.totals.refused, e.outcomes.totals.failed, e.outcomes.totals.ended], [2, 1, 1, 4]);
+  assert.deepEqual(e.outcomes.totals.rates, { success: 0.5, refusal: 0.25, failure: 0.25 });
+  assert.equal(e.outcomes.attributed_since, '2026-11-11 10:00:00');
 });
 
 test('D4536-p4: a model filter narrows runs and their latency; an unreadable history is unavailable, never zeros', async () => {
@@ -244,6 +310,8 @@ test('D4536-p4: a model filter narrows runs and their latency; an unreadable his
   assert.equal(m2.totals.cost_per_completed_microusd.available, false);
   assert.deepEqual(m2.totals.model_latency_ms, { p50: 400, p95: 400, runs_measured: 1 });
 
+  const byModel = (await get(w, `${HQ}${RANGE}&model=${encodeURIComponent(M1)}`)).body.executions;
+  assert.equal(byModel.outcomes.available, false, 'an event has no model');
   w.db.exec('DROP TABLE agent_task_runs');
   const broken = await get(w, `${HQ}${RANGE}`);
   assert.equal(broken.status, 200, 'the library still answers');
@@ -252,7 +320,7 @@ test('D4536-p4: a model filter narrows runs and their latency; an unreadable his
 });
 
 test('D4536-p4: the reads name no proposal table, so #3851 is not reused as skill quality', () => {
-  for (const text of [EXECUTIONS_SQL, EXECUTION_LATENCY_SQL]) {
+  for (const text of [EXECUTIONS_SQL, EXECUTION_LATENCY_SQL, OUTCOMES_SQL]) {
     assert.doesNotMatch(text, /ai_rail_proposals|proposal_decided|acceptance/i);
   }
 });

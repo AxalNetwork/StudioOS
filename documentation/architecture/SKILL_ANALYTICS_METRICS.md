@@ -114,8 +114,8 @@ Not recorded yet: time to resolve a regression. It needs the fixing version link
 
 Like the other blocks, it is the whole catalogue's on a `?page=` read.
 
-**What a run is.** A **completed run**: the model answered and the run wrote its proposal. `agentRun` tags that run's usage row and its guard rows with `ai_usage_logs.skill_id` and `skill_version` at run time (`tagUsage`), on both the manual and the scheduled path. It is the only record that names both the skill and the version a run used.
-- A refused or failed run never names its skill. `refused()` logs only `{ code, module, option }`, and `tagUsage` is not reached. Success, refusal and failure **rates** therefore have no denominator, and `outcomes` is `{ available: false }`.
+**What a run is.** A **completed run**: the model answered and the run wrote its proposal. `agentRun` tags that run's usage row and its guard rows with `ai_usage_logs.skill_id` and `skill_version` at run time (`tagUsage`), on both the manual and the scheduled path. It is the only record that names the skill, the version and the model a run used, so tokens, charge and latency read it.
+- A refused or failed run is not tagged. From D4536 part 4 on (owner answer A), every `run` event and every `refused` event carries `outcome_v: 1`. A refusal also names the skill the run asked for (`skill: { uid, version }`, with the version null until the pin is read), its HTTP `status`, and `engine: true` on a scheduled run. A scheduled skill-evidence refusal ends before `agentRun`, so the loop writes its event. The rates in `outcomes` read marked events only.
 - `agent_task_runs` has no skill column. A session's `agent_duties.skill_version` is rewritten on a re-pin, so a scheduled run's skill is never derived from its session at read time.
 - Evaluation runs never call `tagUsage`, so they are not executions. That covers `agent_skill_version_evals`, `agent_skill_eval_results` and the rubric.
 
@@ -134,7 +134,10 @@ Like the other blocks, it is the whole catalogue's on a `?page=` read.
 | `*.by_path.{scheduled,manual}` | scheduled when an `agent_task_runs` row names the usage row, else manual | as above | the window | completed runs | always | HQ |
 | `by_scope.{hq,company}.completed` | as `completed` | scope | the window | — | `company` is `{ available: false }` under a skill term; a company skill is counted, never named | HQ; company as a count only |
 | `published_without_completed_runs` | published HQ skills (coverage's rows, after the same filters) with no completed run | — | the window | published HQ skills | always; **not run**, which is not "unused" while refusals are unattributed | HQ |
-| `outcomes` | — | — | — | — | always `{ available: false }`: a refused or failed run records no skill | HQ |
+| `outcomes.{totals,skills[]}.{completed,refused,failed,retryable,ended}` | `team_agent_events` `run` / `refused` with `outcome_v = 1`, joined to HQ skills by `$.skill.uid` | skill | the window, on the event's `created_at` | — (counts) | `{ available: false }` when no marked event is in the window, under a `model` filter (an event has no model), or when the events cannot be read | HQ; a company skill is never joined |
+| `outcomes.*.rates.{success,refusal,failure}` | completed, refused or failed ÷ `ended`, rounded to 4 places | as above | as above | `ended` = completed + refused + failed | `{ available: false }` when `ended` is 0 | HQ |
+| `outcomes.*.by_code` | each refusal's `$.code` | code | as above | — | as above | HQ |
+| `outcomes.attributed_since` | the earliest marked event read | — | as above | — | as above | HQ |
 | `run_latency` | — | — | — | — | always `{ available: false }`: no run records when the whole run started and ended (a scheduled run's `ended_at` includes a person's wait) | HQ |
 | `workflows` | — | — | — | — | always `{ available: false }` until #4535 gives a workflow a stable identity | HQ |
 | Estimated context per run | `agent_skill_version_costs.context_tokens` | skill | — | — | served as `skills[].tokens_per_run`, labelled an estimate, never actual usage | HQ |
@@ -145,7 +148,14 @@ The filters apply as on `published_evaluation`, with two differences:
 
 When the run history cannot be read, the block is `{ available: false, reason, window }`, never zeros. When only the latency read fails, each `model_latency_ms` says so. No query names a proposal table: #3851's board is not reused.
 
-Still not recorded: a refused or failed run's skill (the rates), a run's whole start and end, and workflow runs (#4535).
+How a refusal is classed:
+- **failed:** the run reached the model path and did not finish. The codes are `FAILED_CODES`: the model, the gateway, the accounts, the guard, `step_lost`, `run_failed` and `proposal_not_saved`.
+- **retryable:** the step is tried again, so the refusal is not an outcome. That is `step_in_flight`, or any other status of 500 or above. It is counted apart and never enters `ended`.
+- **refused:** every other code, the gates (limits, pauses, policy, skill and tool checks).
+
+`version` keeps the event's version, and a refusal from before the pin was read has none. No event from before the change counts, and `attributed_since` says where the rates start.
+
+Still not recorded: a run's whole start and end, workflow runs (#4535), and the refusals that end a scheduled run before its skill is read (`load` and `context` steps, and a session whose skill cannot be read).
 
 ## Quality and maintenance signals (deferred)
 

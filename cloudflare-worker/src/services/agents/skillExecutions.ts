@@ -5,8 +5,10 @@
  * usage row (and its guard rows) with `ai_usage_logs.skill_id` and `skill_version` at run time (`tagUsage`, after the
  * answer), on the manual and the scheduled path alike. It is the only record that names the skill AND the version a
  * run used:
- *  - a refused or failed run never names its skill (`refused()` logs `{ code, module, option }`; `tagUsage` is not
- *    reached), so refusal, failure and success RATES have no denominator and are `{ available: false }`;
+ *  - a refused or failed run is not tagged (`tagUsage` is not reached). From D4536 part 4 on (owner answer A), its
+ *    `refused` event names the skill, the version once read, the HTTP status and `outcome_v: 1`, as every `run` event
+ *    carries `outcome_v: 1`; the rates (`outcomes`) count marked events only, so nothing from before the change
+ *    enters a denominator, and `attributed_since` says where they start;
  *  - `agent_task_runs` has no skill column, and a session's `agent_duties.skill_version` is rewritten on a re-pin, so
  *    a scheduled run's skill is never derived from its session at read time;
  *  - evaluation runs (`agent_skill_version_evals`, `agent_skill_eval_results`, the rubric) never call `tagUsage`, so
@@ -99,6 +101,37 @@ export const EXECUTION_LATENCY_SQL = `WITH r AS (
   SELECT 'overall' AS kind, NULL, NULL, latency_ms, rn, n FROM overall
     WHERE rn = (n * 50 + 99) / 100 OR rn = (n * 95 + 99) / 100`;
 
+/**
+ * D4536-p4 (owner answer A): outcomes over the `run` and `refused` events marked `outcome_v = 1` (agentRun's and the
+ * loop's, from the change on), for HQ skills. Bound: since, until. Events have no model, so a model filter makes the
+ * outcomes unavailable. A company skill is never joined (`s.scope = 'hq'`), so its uid never leaves SQL.
+ */
+export const OUTCOMES_SQL = `SELECT s.id AS skill_id, s.uid, s.status, s.current_version, 'hq' AS scope,
+    v.roles_json AS published_roles_json, v.taxonomy_json AS published_tags_json,
+    e.kind, json_extract(e.detail_json, '$.code') AS code, json_extract(e.detail_json, '$.status') AS http_status,
+    json_extract(e.detail_json, '$.skill.version') AS version, COUNT(*) AS n, MIN(e.created_at) AS first_at
+  FROM team_agent_events e
+  JOIN agent_skills s ON s.uid = json_extract(e.detail_json, '$.skill.uid') AND s.scope = 'hq'
+  LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
+  WHERE e.kind IN ('run', 'refused') AND json_extract(e.detail_json, '$.outcome_v') = 1
+    AND datetime(e.created_at) >= datetime(?) AND datetime(e.created_at) < datetime(?)
+  GROUP BY s.id, e.kind, code, http_status, version`;
+
+/** A run that reached the model and did not finish: the model, the gateway, the accounts, the guard, or saving it. */
+export const FAILED_CODES: ReadonlySet<string> = new Set([
+  'gateway_limit', 'model_throttled', 'run_failed', 'all_models_failed', 'step_lost', 'proposal_not_saved',
+  'accounts_unconfigured', 'accounts_exhausted', 'account_failed', 'guard_blocked', 'guard_unavailable',
+  'gateway_required', 'gateway_misconfigured',
+]);
+/** Not an outcome: the step is retried (a step still in flight, or another 5xx the engine retries). */
+export const isRetryable = (code: string, status: number | null) => code === 'step_in_flight' || (status != null && status >= 500 && !FAILED_CODES.has(code));
+
+export type OutcomeRow = {
+  skill_id: number; uid: string; status: string; current_version: number; scope: 'hq';
+  published_roles_json: string | null; published_tags_json: string | null;
+  kind: 'run' | 'refused'; code: string | null; http_status: number | null; version: number | null; n: number; first_at: string;
+};
+
 export type ExecutionRow = {
   skill_id: number; scope: 'hq' | 'company'; status: string; current_version: number; uid: string | null;
   published_roles_json: string | null; published_tags_json: string | null;
@@ -149,7 +182,7 @@ function latencyOf(rows: readonly LatencyRow[]): Latency {
  */
 export function skillExecutions(rows: readonly ExecutionRow[], latency: readonly LatencyRow[] | 'unreadable', ctx: {
   filters: SkillFilters | null; category: ReadonlyMap<string, string>; window: ReturnType<typeof executionsWindow>;
-  published: readonly PublishedSkill[];
+  published: readonly PublishedSkill[]; outcomes?: readonly OutcomeRow[] | 'unreadable';
 }) {
   const f = ctx.filters;
   // The window and the model narrow every run in SQL, a company skill's included. A skill term (scope, status, uid,
@@ -198,7 +231,7 @@ export function skillExecutions(rows: readonly ExecutionRow[], latency: readonly
       hq: { completed: hq.completed },
       company: bySkillTerm ? { available: false, reason: "A company skill's tags and roles are never read, so no filter can match it." } as Unavailable : { completed: company.completed },
     },
-    outcomes: { available: false, reason: 'A refused or failed run records no skill, so success, refusal and failure rates have no denominator.' } as Unavailable,
+    outcomes: outcomesOf(ctx.outcomes ?? [], f, skillTerms, ctx.category),
     run_latency: { available: false, reason: 'No run records when the whole run started and ended; model_latency_ms is the model call only.' } as Unavailable,
     workflows: { available: false, reason: 'Waits on a workflow\'s stable identity (#4535).' } as Unavailable,
     published_without_completed_runs: { count: idle.length, skill_uids: idle },
@@ -206,3 +239,47 @@ export function skillExecutions(rows: readonly ExecutionRow[], latency: readonly
   };
 }
 export type SkillExecutions = ReturnType<typeof skillExecutions>;
+
+type OutcomeTally = { completed: number; refused: number; failed: number; retryable: number; by_code: Record<string, number> };
+const rate = (n: number, d: number): number | Unavailable => d > 0 ? Math.round((n / d) * 10_000) / 10_000
+  : { available: false, reason: 'No attributed run ended in this window.' };
+const outcomeShape = (t: OutcomeTally) => {
+  const ended = t.completed + t.refused + t.failed;
+  return { ...t, ended, rates: { success: rate(t.completed, ended), refusal: rate(t.refused, ended), failure: rate(t.failed, ended) } };
+};
+
+/**
+ * Outcome rates over marked events only. A run is completed (a `run` event), failed (a code in FAILED_CODES), or
+ * refused (any other code); a retryable refusal is counted apart and never enters `ended`, the rates' denominator.
+ */
+function outcomesOf(rows: readonly OutcomeRow[] | 'unreadable', f: SkillFilters | null, skillTerms: SkillFilters | null, category: ReadonlyMap<string, string>) {
+  if (rows === 'unreadable') return { available: false, reason: 'The run and refusal events could not be read.' } as Unavailable;
+  if (f?.model != null) return { available: false, reason: 'A run or refusal event records no model, so a model filter cannot narrow the outcomes.' } as Unavailable;
+  const kept = rows.filter((r) => (!skillTerms || matchesSkill(r, skillTerms, category)) && (f?.version == null || Number(r.version) === f.version));
+  if (!kept.length) return { available: false, reason: 'No run or refusal in this window carries its skill: attribution started with D4536 part 4.' } as Unavailable;
+  const blank = (): OutcomeTally => ({ completed: 0, refused: 0, failed: 0, retryable: 0, by_code: {} });
+  const all = blank();
+  const bySkill = new Map<string, OutcomeTally>();
+  let first: string | null = null;
+  for (const r of kept) {
+    const n = Number(r.n);
+    if (first == null || r.first_at < first) first = r.first_at;
+    const t = bySkill.get(r.uid) ?? blank();
+    bySkill.set(r.uid, t);
+    for (const x of [all, t]) {
+      if (r.kind === 'run') { x.completed += n; continue; }
+      const code = String(r.code ?? 'not_recorded');
+      x.by_code[code] = (x.by_code[code] ?? 0) + n;
+      const status = r.http_status == null ? null : Number(r.http_status);
+      if (isRetryable(code, status)) x.retryable += n;
+      else if (FAILED_CODES.has(code)) x.failed += n;
+      else x.refused += n;
+    }
+  }
+  return {
+    available: true as const,
+    attributed_since: first,
+    totals: outcomeShape(all),
+    skills: [...bySkill.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([skill_uid, t]) => ({ skill_uid, ...outcomeShape(t) })),
+  };
+}
