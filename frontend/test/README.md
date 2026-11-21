@@ -245,6 +245,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
 | `grow_export_6103.test.mjs` | D6103: `canExport` covers only Feedback and KPIs, `exportCsv`'s path and query against the Worker route, Export drawn only with `onExport` (and only on `can_export` in CycleRoute), the saved row count and the Worker's refusal sentence. |
+| `portfolio_mark_today_d6226.test.mjs` | D6226: Positions counts stale marks from the positions read's own `today` with the reporting read failing; the company Latest FMV Stale chip; the reference-date order. |
 | `_approvalBoardPages_5876.mjs` | Shared fixtures for the approval board summary and active-page contracts (#5876). |
 | `approval_board_pages_5876.test.mjs` | Mounted regressions for lane counts and active-page reads (#5876). |
 
@@ -267,3 +268,7 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 `build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
 
 `runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).
+| `macbook_orphan_7902.test.mjs` | D7902: stale queued-child ownership/lease cleanup, pickup races and redacted API-status diagnostics. |
+
+| `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
+| `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
