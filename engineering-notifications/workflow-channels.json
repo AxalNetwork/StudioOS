@@ -188,6 +188,11 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/landing-conflict-indicator.yml",
+      "channel": "#axalvc-actions-landing-conflict-indicator"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/landing-feeder.yml",
       "channel": "#axalvc-actions-landing-feeder"
     },
