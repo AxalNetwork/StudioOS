@@ -79,9 +79,9 @@ refuses(lambda:b.load_registry(Path('merged.json')),'included_pool_must_remain_s
 
 test('the coordinator, admission and executor carry one budget per profile, and the included budget leaves hosted fallback room', () => {
   assert.deepEqual([...PROFILES].sort(), ['github-8', 'hosted', 'linux-x64', 'macos-arm64']);
-  const minutes = (name) => Number(new RegExp(`${name}: (\\d+) \\* 60_000`).exec(POLICY)?.[1]);
-  assert.equal(EXECUTION_BUDGETS['github-8'].startMs, minutes('includedStartMs') * 60000);
-  assert.equal(EXECUTION_BUDGETS['github-8'].executionMs, minutes('includedExecutionMs') * 60000);
+  const minutes = (pattern) => Number(pattern.exec(POLICY)?.[1]);
+  assert.equal(EXECUTION_BUDGETS['github-8'].startMs, minutes(/includedStartMs: (\d+) \* 60_000/) * 60000);
+  assert.equal(EXECUTION_BUDGETS['github-8'].executionMs, minutes(/includedExecutionMs: (\d+) \* 60_000/) * 60000);
   assert.ok(EXECUTION_BUDGETS['github-8'].testMinutes * 60000 > EXECUTION_BUDGETS['github-8'].executionMs);
   assert.ok(EXECUTION_BUDGETS['github-8'].jobMinutes > EXECUTION_BUDGETS['github-8'].testMinutes);
   const job = /timeout-minutes: \$\{\{ inputs\.profile == 'hosted' && (\d+) \|\| inputs\.profile == 'github-8' && (\d+) \|\| (\d+) \}\}/g;

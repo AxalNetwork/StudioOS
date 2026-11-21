@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
 import { receiptIdentity } from '../runner-admission.mjs';
-import { lstatSync, readFileSync, realpathSync, readlinkSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync, readlinkSync } from 'node:fs';
 const DIGEST=/^sha256:[a-f0-9]{64}$/;
 const ID=n=>Number.isSafeInteger(n)&&n>0;
 const need=(v,reason)=>{if(!v)throw Error(reason);};
@@ -23,7 +23,15 @@ export function readContainerPolicy(path) {
   need(st.uid===0&&!(st.mode&0o022)&&!st.isSymbolicLink(),'untrusted_container_policy');
  }
  const stat=lstatSync(actual);need(stat.isFile()&&stat.nlink===1&&stat.size<=4096,'untrusted_container_policy');
- const policy=JSON.parse(readFileSync(actual,'utf8'));
+ // Read through one handle, opened without following a link, and check that handle is the file checked above.
+ const fd=openSync(actual,constants.O_RDONLY|constants.O_NOFOLLOW);
+ let text;
+ try {
+  const opened=fstatSync(fd);
+  need(opened.isFile()&&opened.dev===stat.dev&&opened.ino===stat.ino&&opened.uid===0&&!(opened.mode&0o022)&&opened.nlink===1&&opened.size<=4096,'untrusted_container_policy');
+  text=readFileSync(fd,'utf8');
+ } finally { closeSync(fd); }
+ const policy=JSON.parse(text);
  need(policy.version===1&&DIGEST.test(policy.image??'')&&policy.nodeVersion==='22.23.3'&&policy.pythonVersion==='3.11.18','unreviewed_container_runtime');
  return Object.freeze(policy);
 }
