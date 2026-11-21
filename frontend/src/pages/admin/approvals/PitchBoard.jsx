@@ -49,25 +49,6 @@ const NEW_PILL = { label: 'New lane', tone: 'held' };
 
 const partnerOf = (p) => p?.partner_company || p?.partner_name || 'The partner';
 
-/** Each state's first page, read alone: its rows, its total and the queue's 30-day attribution. */
-function useStates() {
-  const read = (key) => (signal) => approvalBoardsApi.pitches(key, { limit: PAGE, offset: 0, signal });
-  const proposed = useLoad(read('proposed'), 'pitches-proposed', { what: 'approvals:comarketing:proposed' });
-  const approved = useLoad(read('approved'), 'pitches-approved', { what: 'approvals:comarketing:approved' });
-  const published = useLoad(read('published'), 'pitches-published', { what: 'approvals:comarketing:published' });
-  const rejected = useLoad(read('rejected'), 'pitches-rejected', { what: 'approvals:comarketing:rejected' });
-  const withdrawn = useLoad(read('withdrawn'), 'pitches-withdrawn', { what: 'approvals:comarketing:withdrawn' });
-  return { proposed, approved, published, rejected, withdrawn };
-}
-
-/** The oldest approval still to publish, when every approved pitch is on the page; else null. */
-export function oldestApproved(reply, now = Date.now()) {
-  const items = Array.isArray(reply?.items) ? reply.items : [];
-  if (!items.length || items.length < Number(reply?.total || 0)) return null;
-  const hrs = Math.max(...items.map((p) => hoursSince(p.reviewed_at, now) ?? -1));
-  return hrs >= 0 ? ageText(hrs) : null;
-}
-
 function PitchDialog({ kind, pitch, onClose, onDone, onStale }) {
   const [notes, setNotes] = useState('');
   const [url, setUrl] = useState('');
@@ -255,17 +236,21 @@ export default function PitchBoard({ at }) {
   const b = BOARDS['co-marketing'];
   const loc = useLocation();
   const navigate = useNavigate();
-  const states = useStates();
-  const [page, setPage] = useState(0);
+  const summary = useLoad((signal) => approvalBoardsApi.pitchSummary({ signal }), 'pitches-summary', { what: 'approvals:comarketing:summary' });
+  const [paging, setPaging] = useState(null);
   const [done, setDone] = useState(null);
   const [publish, setPublish] = useState(null);
   const tab = PITCH_TABS.find((t) => t.key === at.tab) || PITCH_TABS[0];
-  const paged = useLoad((signal) => approvalBoardsApi.pitches(tab.key, { limit: PAGE, offset: page * PAGE, signal }), `pitches-${tab.key}-${page}`, { enabled: page > 0, what: 'approvals:comarketing:page' });
-  const read = page > 0 ? paged : states[tab.key];
+  const page = paging?.tab === tab.key ? paging.page : 0;
+  const setPage = (next) => setPaging({ tab: tab.key, page: next });
+  const read = useLoad((signal) => approvalBoardsApi.pitches(tab.key, { limit: PAGE, offset: page * PAGE, signal }),
+    `pitches-${tab.key}-${page}`, { what: 'approvals:comarketing:page' });
   const from = at.item ? (loc.state?.from || tabPath('co-marketing', 'proposed')) : loc.pathname;
-  const count = (k) => {
-    const r = states[k];
-    return r.status === 'loading' ? { kind: 'load' } : r.status === 'error' ? { kind: 'dash', tip: 'This list could not be read.' } : { kind: 'num', value: nf(r.reply?.total ?? 0) };
+  const counts = summary.status === 'ready' ? summary.reply?.counts : null;
+  const count = (key) => {
+    if (summary.status === 'loading') return { kind: 'load' };
+    return Number.isSafeInteger(counts?.[key]) ? { kind: 'num', value: nf(counts[key]) }
+      : { kind: 'dash', tip: 'The pitch counts could not be read.' };
   };
   // Literal paths, so the reachability walk finds every tab.
   const tabs = (
@@ -277,26 +262,27 @@ export default function PitchBoard({ at }) {
       <HeaderTab to="/admin/approvals/co-marketing/withdrawn" count={count('withdrawn')} data-testid="pitches-tab-withdrawn">Withdrawn</HeaderTab>
     </>
   );
-  const pub = states.published;
-  const recent = pub.status === 'ready' ? pub.reply?.attribution_30d : null;
-  const reload = () => { for (const t of PITCH_TABS) states[t.key].reload(); if (page > 0) paged.reload(); };
-  const decided = (line) => { setDone(line); setPublish(null); reload(); };
+  const recent = summary.status === 'ready' ? summary.reply?.attribution_30d : null;
+  const reload = () => { summary.reload(); read.reload(); };
+  const decided = (line) => { setDone(line); setPublish(null); setPage(0); reload(); };
   const own = useBoardOwners('co-marketing', setDone);
   const pick = useBoardPick(`${tab.key}|${page}`);
-  const prop = states.proposed;
-  const propRows = prop.status === 'ready' ? pitchRows(prop.reply?.items) : [];
-  const approvedOldest = oldestApproved(states.approved.reply);
-  const fourth = states.approved.status === 'loading' ? { key: 'approved', label: 'Approved, not published', state: 'loading' }
-    : states.approved.status !== 'ready' ? { key: 'approved', label: 'Approved, not published', state: 'unreadable', reason: 'The approved pitches could not be read.' }
-      : { key: 'approved', label: 'Approved, not published', state: 'ready', value: nf(states.approved.reply?.total ?? 0), sub: approvedOldest ? `oldest ${approvedOldest}` : 'waiting to publish' };
-  const strip = boardStrip({ status: prop.status, label: 'Proposed', total: prop.status === 'ready' ? Number(prop.reply?.total ?? 0) : null, rows: propRows,
-    complete: prop.status === 'ready' && propRows.length >= Number(prop.reply?.total ?? 0), owners: own.owners, fourth, noun: 'waiting for a decision' });
+  const propRows = read.status === 'ready' && tab.key === 'proposed' && page === 0 ? pitchRows(read.reply?.items) : [];
+  const proposed = Number.isSafeInteger(counts?.proposed) ? counts.proposed : null;
+  const approved = Number.isSafeInteger(counts?.approved) ? counts.approved : null;
+  const oldest = summary.status === 'ready' ? hoursSince(summary.reply?.oldest_approved_at) : null;
+  const fourth = summary.status === 'loading' ? { key: 'approved', label: 'Approved, not published', state: 'loading' }
+    : approved === null ? { key: 'approved', label: 'Approved, not published', state: 'unreadable', reason: 'The approved pitches could not be read.' }
+      : { key: 'approved', label: 'Approved, not published', state: 'ready', value: nf(approved), sub: oldest === null ? 'waiting to publish' : `oldest ${ageText(oldest)}` };
+  const strip = boardStrip({ status: summary.status, label: 'Proposed', total: proposed, rows: propRows,
+    complete: proposed !== null && proposed === propRows.length, owners: own.owners, fourth, noun: 'waiting for a decision' });
   return (
     <div className="flex flex-col gap-5" data-testid="approvals-board-co-marketing">
       <AdminPageHeader crumb={CRUMB} title={b.title} pills={[NEW_PILL]} line={b.line} scope tabs={tabs} data-testid="approvals-board-header" />
       <Lifecycle at={['proposed', 'approved', 'published'].includes(tab.key) ? tab.key : null} testId="pitches-lifecycle" />
       <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { reload(); setDone(null); }} />
       <BoardStrip cells={strip} testId="pitches-strip" />
+      {summary.status === 'error' ? <Failed what="The pitch counts" onRetry={summary.reload} testId="pitches-summary-failed" /> : null}
       {read.status === 'error' ? <Failed what="These pitches" onRetry={read.reload} testId="pitches-failed" />
         : read.status === 'loading' ? <Skeleton.Text lines={4} />
           : (read.reply?.items || []).length ? (
@@ -310,8 +296,8 @@ export default function PitchBoard({ at }) {
       <section aria-labelledby="pitches-results-h" className="flex flex-col gap-3" data-testid="pitches-results">
         <h2 id="pitches-results-h" className={H2}>Results from published pitches, last 30 days</h2>
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Tile label="Visits from published pitches, 30 days" testId="pitches-tile-visits"><Figure status={pub.status} value={recent ? recent.visit || 0 : null} /></Tile>
-          <Tile label="Sign-ups" sub="from published pitches, 30 days" testId="pitches-tile-signups"><Figure status={pub.status} value={recent ? recent.signup || 0 : null} /></Tile>
+          <Tile label="Visits from published pitches, 30 days" testId="pitches-tile-visits"><Figure status={summary.status} value={recent?.visit ?? null} /></Tile>
+          <Tile label="Sign-ups" sub="from published pitches, 30 days" testId="pitches-tile-signups"><Figure status={summary.status} value={recent?.signup ?? null} /></Tile>
         </div>
       </section>
       {publish ? <PitchDialog kind="publish" pitch={publish} onClose={() => setPublish(null)} onDone={decided} onStale={reload} /> : null}

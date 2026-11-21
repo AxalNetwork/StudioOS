@@ -63,3 +63,5 @@ and a link in `documentation/README.md`.
 
 | `RUNNER_CAPACITY_RUNBOOK.md` | D7888: staged runner capacity proof, eligibility-first drain, private budget controls and hosted rollback; preparation only. |
 | `RUNNER_CAPACITY_EVIDENCE_7888.md` | D7888: sanitized existing-run observations and explicit missing live-proof evidence. |
+| `production-credential-inventory.json` | D7145 job, trigger, credential and environment assignments checked in CI. |
+| [Production credentials](PRODUCTION_CREDENTIALS.md) | D7145 environment setup, token permissions, verification and retirement. |
