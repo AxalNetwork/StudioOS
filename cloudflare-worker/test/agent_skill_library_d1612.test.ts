@@ -122,13 +122,16 @@ test('each skill has numbered steps, says "Not recorded" for a missing figure, a
   }
 });
 
+/** D7700 (#7700): the SAFE golden was re-derived from versioned passage text at version 2; every other case is 1. */
+const REVISED_CASES: Readonly<Record<string, number>> = Object.freeze({ 'safe-convertible-instrument-review': 2 });
+
 test('each skill has one golden case, naming the skill, its output and what the proposal must say', () => {
   const cases = readdirSync(new URL('cases/', DIR)).filter((f) => f.endsWith('.json')).sort(compareMigrations);
   assert.deepEqual(cases, files.map((f) => f.replace(/\.md$/, '.json')), 'a skill without a case, or a case without a skill');
   for (const s of skills) {
     const c = JSON.parse(readFileSync(new URL(`cases/${s.front.name}.json`, DIR), 'utf8'));
     assert.equal(c.skill, s.front.name);
-    assert.equal(c.version, 1);
+    assert.equal(c.version, REVISED_CASES[s.front.name] ?? 1, `${s.file}: an unrecorded case version`);
     assert.equal(c.expect.output, s.front.output, `${s.file}: the case expects another output`);
     assert.ok(c.input && typeof c.input.records === 'object' && Object.keys(c.input.records).length, `${s.file}: a case with no input records`);
     assert.ok(Array.isArray(c.expect.must_include) && c.expect.must_include.length, `${s.file}: nothing the proposal must say`);
