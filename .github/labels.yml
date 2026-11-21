@@ -259,3 +259,6 @@
 - name: "bot:resolved"
   color: "0E8A16"
   description: "The landing bot resolved what it was labelled for"
+- name: "bot:handed-back"
+  color: "C5DEF5"
+  description: "The ejection handler handed this queue removal back to the owner; the owner re-queues it (D6476-p4)"
