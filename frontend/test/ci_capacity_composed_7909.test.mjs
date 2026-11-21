@@ -75,7 +75,7 @@ async function setup(t,{exit=0,lost=false,cleanupFailure=false,long=false,skipEx
 }
 for(const outcome of ['success','failure','lost','cleanup'])test(`D7909 exact c36 bridge ${outcome}: actual supervisor, verified receipts, durable authenticated result`,async t=>{
  const x=await setup(t,{exit:outcome==='success'?0:9,lost:outcome==='lost',cleanupFailure:outcome==='cleanup'});
- if(outcome==='lost')await assert.rejects(bridge('run',x.env,x.ports),/acknowledgement lost/);else assert.equal(await bridge('run',x.env,x.ports),outcome==='success'?0:9);
+ if(outcome==='lost'){await assert.rejects(bridge('run',x.env,x.ports),/acknowledgement lost/);await assert.rejects(bridge('run',x.env,x.ports),/already_recorded/);}else assert.equal(await bridge('run',x.env,x.ports),outcome==='success'?0:9);
  const before=x.results.read();assert.equal(before.result.testStep,outcome==='success'?'success':'failure');assert.equal(before.result.exportComplete,true);assert.equal(before.result.cleanupConfirmed,outcome!=='cleanup');
  assert.equal(x.e.control.starts,2);assert.equal(x.store.list().length,outcome==='cleanup'?1:0);
  if(outcome==='cleanup')x.e.control.failRemoval=false;
@@ -115,6 +115,7 @@ test('D7909 listener journal survives more than 128 completed runs and updates r
  assert.equal(fs.readdirSync(root).length,128);const existing=resultStore(root,1);existing.write({...existing.read(),marker:'retained update'});assert.equal(existing.read().marker,'retained update');
  assert.throws(()=>resultStore(root,129).write(row(129)),/state_bound/);
  assert.equal(existing.retire(),false);existing.write({...row(1,true),ack:null});assert.equal(existing.retire(),false,'cleanup alone is not delivery acknowledgement');
+ existing.write({...row(1,true),ack:JSON.stringify(row(1).result)});assert.equal(existing.retire(),false,'an older acknowledgement cannot cover changed cleanup truth');
  existing.write(row(1,true));assert.equal(existing.retire(),true);assert.equal(fs.readdirSync(root).length,127);
  resultStore(root,129).write(row(129));assert.equal(fs.readdirSync(root).length,128);
 });
@@ -151,4 +152,27 @@ test('D7909 observed negative truth survives a supervisor-loss boundary before t
  assert.equal(x.results.read().result.testStep,'failure');assert.equal(x.results.read().result.cleanupConfirmed,false);assert.equal(x.store.list().length,1);
  assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
  const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,'failure');assert.equal(row.cleanupConfirmed,true);assert.equal(row.exportComplete,false);
+});
+
+for(const fault of ['after-phase-save','bad-output'])test(`D7909 captured negative survives ${fault} metadata failure`,async t=>{
+ const x=await setup(t,{exit:9});let injected=false;
+ if(fault==='after-phase-save'){
+  const write=x.results.write;x.ports.results={...x.results,write(row){write(row);if(!injected&&row.result?.testStep==='failure'&&row.removed===false){injected=true;throw Error('fixture failure after phase journal persistence');}}};
+ }else{
+  const execute=(await import('../../scripts/ci/runner-execution.mjs')).main;
+  x.ports.execute=async(mode,env,deps)=>{const code=await execute(mode,env,deps);if(mode==='run'){injected=true;fs.writeFileSync(env.GITHUB_OUTPUT,'unreadable-typed-output');}return code;};
+ }
+ const code=await bridge('run',x.env,x.ports);assert.equal(injected,true);assert.notEqual(code,0);
+ assert.equal(x.results.read().result.testStep,'failure');assert.equal(x.results.read().observedTest.exitCode,9);
+ const row=JSON.parse(x.f.storage.sql.exec('SELECT state FROM capacity_execution_results').toArray()[0].state);assert.equal(row.testStep,'failure');
+ assert.equal(new SqlCapacityStore(x.f.storage).get(x.s.requestId).shards[0].attempts[0].verifiedTestFailure,true);
+ assert.equal(await bridge('cleanup',x.env,x.ports),0);assert.equal(x.results.read(),null);
+});
+
+test('D7909 an unacknowledged failure journal blocks a second Run before the authority has received it',async t=>{
+ const x=await setup(t,{exit:9});x.ports.report=async()=>{throw Error('fixture offline before authority');};
+ await assert.rejects(bridge('run',x.env,x.ports),/offline before authority/);
+ assert.equal(x.results.read().result.testStep,'failure');assert.equal(x.f.storage.sql.exec('SELECT COUNT(*) AS n FROM capacity_execution_results').toArray()[0].n,0);
+ await assert.rejects(bridge('run',x.env,x.ports),/already_recorded/);assert.equal(x.e.control.starts,2);
+ assert.equal(x.results.read().result.testStep,'failure');
 });

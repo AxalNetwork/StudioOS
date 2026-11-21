@@ -103,6 +103,7 @@ export async function main(mode,env=process.env,ports={}){
  if(mode==='admit')return await (ports.admit??admit)(env,{...deps,verifyIsolation:isolation.admissionIsolation});
  if(mode==='verify-plan')return await executeMode(mode,env,deps);
  need(mode==='run'&&isolation.job,'supervisor_boundary_unavailable');
+ need(record===null,'supervisor_run_already_recorded');
  const paths=ownedPaths({runnerTemp:env.RUNNER_TEMP,workspace:env.GITHUB_WORKSPACE,childRunId:env.GITHUB_RUN_ID,childAttempt:env.GITHUB_RUN_ATTEMPT});
  mkdirSync(paths.temp,{recursive:true,mode:0o700});const out=join(paths.temp,'supervisor-values');
  // Never use a candidate path or the public log as outcome authority. No bearer is persisted.
@@ -134,7 +135,11 @@ export async function main(mode,env=process.env,ports={}){
  let code;
  try{code=await executeMode('run',{...env,GITHUB_OUTPUT:out},{...deps,store:observedStore,exporter:observedExport});
   need(canonical,'supervisor_receipt_missing');record??={receipt:canonical,removed:false,container:null,ack:null,result:null};
-  record.result=supervisorResult(outputValues(out),{observedTest,removed:record.removed,exportedAt,exportDeadline,observedCaptured,receiptDeadline:canonical.executionDeadline});save();await report();
+  const failed=record.result?.testStep==='failure';let mapped;
+  try{mapped=supervisorResult(outputValues(out),{observedTest,removed:record.removed,exportedAt,exportDeadline,observedCaptured,receiptDeadline:canonical.executionDeadline});}
+  catch(error){if(!failed)throw error;mapped={testStep:'failure',executionOutcome:'cleanup_failure',cleanupConfirmed:record.removed===true,exportComplete:false};}
+  // Later metadata cannot erase a phase failure already captured in durable listener state.
+  record.result={...mapped,testStep:failed?'failure':mapped.testStep};save();await report();
  }finally{isolation.job.runCandidateInterruptible=phase;rmSync(out,{force:true});}
  return code;
 }
