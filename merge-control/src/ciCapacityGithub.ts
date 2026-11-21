@@ -2,11 +2,13 @@
 import { createPrivateKey, sign } from 'node:crypto';
 import { boundedJson } from './ciCapacityAuth.ts';
 import type { CapacityPorts } from './ciCapacity.ts';
-import type { CiSubmission, CiAttempt, ExecutionReceipt, CiProvenance, ChildObservation, CapacityInventory } from './lib/ciCapacityPolicy.ts';
+import type { CiSubmission, CiAttempt, ExecutionReceipt, CiProvenance, ChildObservation, CapacityInventory, SelfHostedProfile } from './lib/ciCapacityPolicy.ts';
 export type CapacityApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 export type CapacityConfig = {
   repository: string; repositoryId: number; executorSha: string; approvedGroupId: number;
   prerequisiteJobs: string[]; fullSuiteJobs: string[];
+  /** Linux milestone only; broadening profiles requires a separate reviewed cutover. */
+  selfHostedProfiles: SelfHostedProfile[];
 };
 type Row = Record<string, any>; // External GitHub JSON is validated at each authority boundary.
 const SHA = /^[a-f0-9]{40}$/;
@@ -42,6 +44,7 @@ export class GithubCapacityPorts implements CapacityPorts {
   constructor(api: CapacityApi, config: CapacityConfig, now: () => number = Date.now) {
     this.api=api;this.config=config;this.now=now;
     need(/^[\w.-]+\/[\w.-]+$/.test(config.repository)&&Number.isSafeInteger(config.repositoryId)&&config.repositoryId>0&&SHA.test(config.executorSha)&&config.approvedGroupId===5,'capacity_config_refused');
+    need(Array.isArray(config.selfHostedProfiles)&&config.selfHostedProfiles.length===1&&config.selfHostedProfiles[0]==='linux-x64','capacity_linux_milestone_policy');
     need(Array.isArray(config.prerequisiteJobs)&&config.prerequisiteJobs.length>0&&config.prerequisiteJobs.length<=16&&new Set(config.prerequisiteJobs).size===config.prerequisiteJobs.length&&config.prerequisiteJobs.every(n=>typeof n==='string'&&n.length>0&&n.length<=120),'capacity_prerequisites_refused');
     need(Array.isArray(config.fullSuiteJobs)&&config.fullSuiteJobs.length<=32&&new Set(config.fullSuiteJobs).size===config.fullSuiteJobs.length&&config.fullSuiteJobs.every(n=>typeof n==='string'&&n.length>0&&n.length<=120),'capacity_full_suite_manifest_refused');
   }
@@ -129,14 +132,25 @@ export class GithubCapacityPorts implements CapacityPorts {
     need(Array.isArray(group.selected_workflows)&&group.selected_workflows.length===1&&group.selected_workflows[0]===`${this.config.repository}/${EXECUTOR}@refs/heads/main`,'capacity_group_workflow_unapproved');
     const repositories=await this.pages(`${base}/repositories`,'repositories');need(repositories.length===1&&this.repo(repositories[0]),'capacity_group_repositories');
     const runners=await this.pages(`${base}/runners`,'runners');
-    return {observedAt:this.now(),complete:true,runners:runners.map(r=>{
-      const labels=Array.isArray(r.labels)?r.labels.map((l:Row)=>l.name):[];
+    return {observedAt:this.now(),complete:true,runners:runners.flatMap(r=>{
+      // Every authority row must be readable, even when it is not eligible for this milestone.
+      need(r&&Number.isSafeInteger(r.id)&&r.id>0&&['linux','osx','win'].includes(r.os)
+        &&typeof r.busy==='boolean'&&['online','offline'].includes(r.status)
+        &&Array.isArray(r.labels)&&r.labels.length<=100
+        &&r.labels.every((l:Row)=>l&&typeof l.name==='string'&&l.name.length>0&&l.name.length<=100),'capacity_runner_shape');
+      const labels=r.labels.map((l:Row)=>l.name);
+      need(new Set(labels).size===labels.length,'capacity_runner_labels');
       const linux=['self-hosted','Linux','X64','studioos-worker-v1'].every(l=>labels.includes(l));
       const mac=['self-hosted','macOS','ARM64','studioos-worker-v1'].every(l=>labels.includes(l));
-      need(linux!==mac&&r.os===(linux?'linux':'osx')&&typeof r.busy==='boolean'&&['online','offline'].includes(r.status),'capacity_runner_profile');
-      return {id:r.id,profile:linux?'linux-x64':'macos-arm64',groupId:this.config.approvedGroupId,online:r.status==='online',busy:r.busy,draining:labels.includes('studioos-draining')};
+      need(!(linux&&mac)&&(!linux||r.os==='linux')&&(!mac||r.os==='osx'),'capacity_runner_profile');
+      // Well-formed legacy/unsupported members do not erase independently verified Linux capacity.
+      if(!linux&&!mac)return [];
+      const profile: SelfHostedProfile=linux?'linux-x64':'macos-arm64';
+      if(!this.config.selfHostedProfiles.includes(profile))return [];
+      return [{id:r.id,profile,groupId:this.config.approvedGroupId,online:r.status==='online',busy:r.busy,draining:labels.includes('studioos-draining')}];
     })};
   }
+
   async prerequisites(s: CiSubmission) {
     const jobs=await this.pages(this.path(`actions/runs/${s.parentRunId}/attempts/${s.parentAttempt}/jobs`),'jobs');
     return s.prerequisites.map(name=>{
@@ -150,6 +164,7 @@ export class GithubCapacityPorts implements CapacityPorts {
     return run?.event==='workflow_dispatch'&&run.path===EXECUTOR&&run.head_sha===a.executorSha&&run.head_branch==='main'&&run.run_attempt===1&&this.repo(run.repository)&&this.repo(run.head_repository)&&run.display_title===this.title(a);
   }
   async dispatch(a: Readonly<CiAttempt>): Promise<number> {
+    need(a.profile!=='macos-arm64','capacity_profile_disabled');
     const main=await this.get('git/ref/heads/main');need(main.object?.sha===a.executorSha,'capacity_dispatch_main_moved');
     // Dispatch has no retry: a timeout/204 is reconciled through the persisted discovery intent.
     const dispatched=await this.api('POST',this.path('actions/workflows/runner-executor.yml/dispatches'),{ref:'main',inputs:{request_id:a.requestId,generation:String(a.generation),part:a.logicalShard,profile:a.profile}}) as {workflow_run_id?:number}|null;

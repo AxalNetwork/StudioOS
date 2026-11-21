@@ -31,7 +31,7 @@ export class CapacityTransport {
       ||identity.sha!==this.config.executorSha||identity.workflow_sha!==this.config.executorSha||identity.run_attempt!=='1'
       ||!body||typeof body.requestId!=='string'||body.requestId.length>100||!/^worker-[1-6]-of-6$/.test(body.shard)||!Number.isSafeInteger(body.generation))throw new Error('capacity_child_identity');
     const receipt=await this.capacity.receipt(body.requestId,body.shard,Number(identity.run_id),Number(identity.run_attempt));
-    if(!receipt||receipt.executorSha!==identity.workflow_sha||receipt.generation!==body.generation||receipt.profile!==body.profile)return {active:false,receipt:null};
+    if(!receipt||receipt.executorSha!==identity.workflow_sha||receipt.generation!==body.generation||receipt.profile!==body.profile||(receipt.profile==='macos-arm64'&&!this.config.selfHostedProfiles.includes(receipt.profile)))return {active:false,receipt:null};
     return {active:true,receipt};
   }
 }
