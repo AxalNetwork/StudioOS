@@ -34,7 +34,7 @@ on:
       profile:
         description: Reviewed capability profile
         type: choice
-        options: [hosted, github-8, linux-x64, macos-arm64]
+        options: [hosted, linux-x64, macos-arm64]
         required: true
 
 permissions:
@@ -59,9 +59,8 @@ jobs:
       actions: read
     # Fixed main-definition pool allowlist; input is never a runner label or group.
     # Independent catalog admission on the selected target must agree before checkout.
-    # D7907: github-8 is GitHub-hosted included compute (group 6), separate from the self-hosted pool.
-    runs-on: ${{ fromJSON(inputs.profile == 'linux-x64' && '{"group":"StudioOS Worker Pool","labels":["self-hosted","Linux","X64","studioos-worker-v1"]}' || inputs.profile == 'macos-arm64' && '{"group":"StudioOS Worker Pool","labels":["self-hosted","macOS","ARM64","studioos-worker-v1"]}' || inputs.profile == 'github-8' && '{"group":"StudioOS Included Compute","labels":["studioos-bench-linux-8"]}' || '"ubuntu-latest"') }}
-    timeout-minutes: ${{ inputs.profile == 'hosted' && 45 || inputs.profile == 'github-8' && 38 || 35 }}
+    runs-on: ${{ fromJSON(inputs.profile == 'linux-x64' && '{"group":"StudioOS Worker Pool","labels":["self-hosted","Linux","X64","studioos-worker-v1"]}' || inputs.profile == 'macos-arm64' && '{"group":"StudioOS Worker Pool","labels":["self-hosted","macOS","ARM64","studioos-worker-v1"]}' || '"ubuntu-latest"') }}
+    timeout-minutes: ${{ inputs.profile == 'hosted' && 45 || 35 }}
     defaults:
       run:
         shell: bash
@@ -130,7 +129,7 @@ jobs:
         run: npm ci
       - name: Run admitted Worker shard
         id: tests
-        timeout-minutes: ${{ inputs.profile == 'hosted' && 41 || inputs.profile == 'github-8' && 29 || 26 }}
+        timeout-minutes: ${{ inputs.profile == 'hosted' && 41 || 26 }}
         env:
           GH_TOKEN: ${{ github.token }}
           EXECUTOR_SHA: ${{ github.workflow_sha }}

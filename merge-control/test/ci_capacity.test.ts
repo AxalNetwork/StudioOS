@@ -21,7 +21,7 @@ const input = (): CiSubmission => ({
   prerequisites: ['fast', 'test deps', 'api ↔ worker drift'],
 });
 const policy = (): CapacityPolicy => ({
-  version: 1, maxExternalWorkerShards: 2, maxIncludedWorkerShards: 0, minimumHostedWorkerShards: 1, approvedGroupId: 77,
+  version: 1, maxExternalWorkerShards: 2, minimumHostedWorkerShards: 1, approvedGroupId: 77,
   budgets: { ...CI_CAPACITY_BUDGETS },
 });
 const inventory = (now: number): CapacityInventory => ({ observedAt: now, complete: true, runners: [
@@ -29,7 +29,7 @@ const inventory = (now: number): CapacityInventory => ({ observedAt: now, comple
   { id: 2, profile: 'linux-x64', groupId: 77, online: true, busy: false, draining: false },
   { id: 3, profile: 'linux-x64', groupId: 77, online: true, busy: false, draining: false },
 ] });
-function fixture(t: { after(fn: () => void): void }, patch: Partial<CapacityPolicy> = {}) {
+function fixture(t: { after(fn: () => void): void }) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close());
   const storage = {
     sql: { exec(query: string, ...values: (string | number | null)[]) {
@@ -69,7 +69,7 @@ function fixture(t: { after(fn: () => void): void }, patch: Partial<CapacityPoli
       cancelled.push(structuredClone(r)); if (state.cancelDown) throw new Error('unavailable');
     },
   };
-  const create = () => new CiCapacity(new SqlCapacityStore(storage), ports, repository, { ...policy(), ...patch }, () => state.now);
+  const create = () => new CiCapacity(new SqlCapacityStore(storage), ports, repository, policy(), () => state.now);
   const get = (id = input().requestId) => store.get(id)!;
   const attempt = (name: string) => activeAttempt(get().shards.find(s => s.name === name)!);
   const observation = (a: CiAttempt, patch: Partial<ChildObservation> = {}): ChildObservation => ({
@@ -503,81 +503,4 @@ test('D7903 child uniqueness is transactional and old receipts acquire durable i
   assert.equal(upgraded.pending().length,1);
   assert.equal(upgraded.ownsChild(activeAttempt(before.shards[0]).childRunId!),true);
   assert.equal(upgraded.newerParent(12,0),true);
-});
-
-test('D7907 github-8 is a third pool: capped in flight, ahead of persistent Linux, and never below the hosted floor', () => {
-  const s = input(), p = { ...policy(), maxIncludedWorkerShards: 1 }, i = inventory(100);
-  assert.deepEqual(selectPools(s, true, i, {}, p, 100).filter(a => a.profile !== 'hosted'), [
-    { shard: 'worker-1-of-6', profile: 'macos-arm64' }, { shard: 'worker-2-of-6', profile: 'github-8' },
-    { shard: 'worker-3-of-6', profile: 'linux-x64' },
-  ]);
-  // One included attempt already in flight anywhere (queued or running) closes the pool for this request.
-  assert.equal(selectPools(s, true, i, { 'github-8': 1 }, p, 100).some(a => a.profile === 'github-8'), false);
-  // With the self-hosted pools closed, only included compute delegates, and hosted keeps the floor.
-  assert.deepEqual(selectPools(s, true, null, {}, p, 100).filter(a => a.profile !== 'hosted'), [{ shard: 'worker-1-of-6', profile: 'github-8' }]);
-  const two = { ...s, shards: ['worker-1-of-6', 'worker-2-of-6'] };
-  assert.deepEqual(selectPools(two, true, null, {}, { ...p, minimumHostedWorkerShards: 1 }, 100).map(a => a.profile), ['github-8', 'hosted']);
-  assert.deepEqual(selectPools({ ...s, shards: ['worker-1-of-6'] }, true, null, {}, p, 100).map(a => a.profile), ['hosted']);
-  // A self-hosted cap of zero does not close included compute, and an included cap of zero does not close self-hosted.
-  assert.equal(selectPools(s, true, i, {}, { ...p, maxExternalWorkerShards: 0 }, 100).filter(a => a.profile !== 'hosted').map(a => a.profile).join(), 'github-8');
-  assert.equal(selectPools(s, true, i, {}, policy(), 100).some(a => a.profile === 'github-8'), false);
-  // Untrusted source and other events never leave hosted.
-  assert.equal(selectPools(s, false, i, {}, p, 100).every(a => a.profile === 'hosted'), true);
-  assert.equal(selectPools({ ...s, event: 'pull_request' as CiSubmission['event'] }, true, i, {}, p, 100).every(a => a.profile === 'hosted'), true);
-});
-
-test('D7907 the included cap and budget leave a full hosted fallback inside the request deadline', () => {
-  validateCapacityPolicy({ ...policy(), maxIncludedWorkerShards: 1 });
-  for (const maxIncludedWorkerShards of [-1, 2, 0.5, Number.NaN]) {
-    assert.throws(() => validateCapacityPolicy({ ...policy(), maxIncludedWorkerShards }), /capacity_policy_refused/);
-  }
-  const { maxIncludedWorkerShards: _drop, ...missing } = policy();
-  assert.throws(() => validateCapacityPolicy(missing as CapacityPolicy), /capacity_policy_refused/);
-  assert.throws(() => validateCapacityPolicy({ ...policy(), budgets: { ...CI_CAPACITY_BUDGETS, includedExecutionMs: 40 * 60_000 } }), /capacity_budget_refused/);
-  const { includedStartMs: _gone, ...short } = CI_CAPACITY_BUDGETS;
-  assert.throws(() => validateCapacityPolicy({ ...policy(), budgets: short as typeof CI_CAPACITY_BUDGETS }), /capacity_budget_refused/);
-});
-
-test('D7907 a github-8 attempt that never starts is fenced, then falls back to hosted under a new generation', async t => {
-  const f = fixture(t, { maxIncludedWorkerShards: 1 }), c = f.create(), s = input();
-  f.state.inventoryDown = true; // Included compute has no inventory; the self-hosted pools stay closed.
-  await c.submit(s); await c.tick();
-  const included = f.attempt('worker-1-of-6');
-  assert.equal(included.profile, 'github-8');
-  assert.equal(included.startDeadline, f.get().acceptedAt + CI_CAPACITY_BUDGETS.includedStartMs);
-  assert.equal(included.executionDeadline - included.startDeadline, CI_CAPACITY_BUDGETS.includedExecutionMs);
-  // A queued job on that label never moves to ubuntu-latest by itself: the coordinator fences it first.
-  f.state.now = included.startDeadline; await c.tick();
-  assert.equal(f.cancelled.some(r => r.childRunId === included.childRunId), true);
-  assert.equal(f.attempt('worker-1-of-6').generation, 1);
-  assert.equal(await c.receipt(s.requestId, 'worker-1-of-6', included.childRunId!, 1), null);
-  f.outcomes.set(included.childRunId!, f.observation(included, { conclusion: 'cancelled', jobConclusion: 'cancelled', testStep: 'not_run', startedAt: null }));
-  await c.tick();
-  const fallback = f.attempt('worker-1-of-6');
-  assert.equal(fallback.profile, 'hosted'); assert.equal(fallback.generation, 2);
-  assert.equal(f.dispatched.filter(d => d.logicalShard === 'worker-1-of-6').map(d => d.profile).join(), 'github-8,hosted');
-});
-
-test('D7907 a running github-8 attempt keeps its slot, so a second request stays on hosted', async t => {
-  const f = fixture(t, { maxIncludedWorkerShards: 1 }), c = f.create();
-  f.state.inventoryDown = true;
-  await c.submit(input()); await c.tick();
-  const first = f.attempt('worker-1-of-6');
-  f.outcomes.set(first.childRunId!, f.observation(first, { status: 'in_progress', conclusion: null, jobConclusion: null, testStep: 'unknown' }));
-  await c.tick();
-  assert.equal(f.attempt('worker-1-of-6').phase, 'running');
-  const second = { ...input(), requestId: '00000000-0000-4000-8000-000000000002', parentRunId: 13 };
-  await c.submit(second);
-  assert.equal(f.get(second.requestId).shards.every(sh => activeAttempt(sh).profile === 'hosted'), true);
-});
-
-test('D7907 a verified test failure on github-8 is a real failure, never an infrastructure fallback', async t => {
-  const f = fixture(t, { maxIncludedWorkerShards: 1 }), c = f.create(), s = input();
-  f.state.inventoryDown = true;
-  await c.submit(s); await c.tick();
-  const included = f.attempt('worker-1-of-6');
-  f.outcomes.set(included.childRunId!, f.observation(included, { conclusion: 'failure', jobConclusion: 'failure', testStep: 'failure' }));
-  await c.tick();
-  assert.equal(f.attempt('worker-1-of-6').phase, 'failed'); assert.equal(f.attempt('worker-1-of-6').generation, 1);
-  assert.equal(c.status(s.requestId)?.status, 'failure');
 });

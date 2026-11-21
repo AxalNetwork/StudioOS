@@ -120,7 +120,7 @@ function workflowProblems(src){
  if(!src.includes('runs-on: ${{ fromJSON(inputs.profile'))bad.push('unreviewed_target');
  const step=src.split('- name: Run admitted Worker shard')[1]?.split('- name: Upload test traces')[0];
  if(!step||step.includes('continue-on-error: true')||step.includes('|| true'))bad.push('test_failure_hidden');
- if(!src.includes("timeout-minutes: ${{ inputs.profile == 'hosted' && 45 || inputs.profile == 'github-8' && 38 || 35 }}")||!src.includes("timeout-minutes: ${{ inputs.profile == 'hosted' && 41 || inputs.profile == 'github-8' && 29 || 26 }}"))bad.push('unbounded_execution');
+ if(!src.includes("timeout-minutes: ${{ inputs.profile == 'hosted' && 45 || 35 }}")||!src.includes("timeout-minutes: ${{ inputs.profile == 'hosted' && 41 || 26 }}"))bad.push('unbounded_execution');
  if(/secrets\.|secrets: inherit/.test(src))bad.push('executor_secrets');
  return bad;
 }

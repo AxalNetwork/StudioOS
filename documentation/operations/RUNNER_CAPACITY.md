@@ -84,24 +84,6 @@ Other paid larger labels remain excluded. Runner registration does not increase
 the standard hosted quota. More external machines increase
 capacity across simultaneous runs, not the shard count inside one run.
 
-## Included compute (github-8, D7907)
-
-`github-8` is the GitHub-hosted 8-core runner `studioos-bench-linux-8` in runner
-group 6, "StudioOS Included Compute": ephemeral, included compute only, no
-overage. It is a third pool beside standard hosted and the self-hosted machines,
-never an alias of either. The coordinator holds at most `maxIncludedWorkerShards`
-(0 or 1, default 0) of its attempts in flight, counting running ones, because
-no inventory of it is readable. An attempt that does not start or finish inside
-its budget is fenced, and only an observed termination falls back to hosted.
-
-Before any routing, run `.github/workflows/included-compute-canary.yml` from
-`main`. Pick a commit already on `main` and one Worker shard. The canary runs that
-shard once on `github-8` and once on hosted against one plan, then reports both
-timings. Group 6 must allow exactly that workflow at `refs/heads/main`. Until it
-does, the `github-8` job waits for a runner, and `timeout-minutes` does not count
-queued time, so cancel the run. Record the overage from the billing page; the
-job token cannot read it.
-
 ## Durable authority and exact-result rules
 
 Planning/submission may use a brief hosted job; it must finish promptly rather

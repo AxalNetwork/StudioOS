@@ -41,7 +41,7 @@ export function verifiedPlan({ event, part, expectedDigest, artifactBytes, scrip
 
 /** Actual runtime facts, not runner names/labels supplied by the caller. */
 export function verifyRuntime(profile, { platform = process.platform, arch = process.arch, node = process.versions.node, sqlite } = {}) {
-  need(profile && ['hosted', 'github-8', 'linux-x64', 'macos-arm64'].includes(profile.id), 'unknown_profile');
+  need(profile && ['hosted', 'linux-x64', 'macos-arm64'].includes(profile.id), 'unknown_profile');
   need(platform === profile.platform && arch === profile.arch, 'runtime_platform_mismatch');
   need(/^22\.[0-9]+\.[0-9]+$/.test(node), 'unsupported_node_runtime');
   if (profile.nodeVersion) need(node === profile.nodeVersion, 'runtime_node_pin_mismatch');

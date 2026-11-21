@@ -1,8 +1,6 @@
 /** D7887: bounded CI pool routing, immutable execution receipts, and full-set result authority. */
 export const CI_CAPACITY_VERSION = 1 as const;
-/** D7907: github-8 is GitHub-hosted included compute (group 6), a third pool beside hosted and the self-hosted machines. */
-export type CiProfile = 'hosted' | 'github-8' | 'linux-x64' | 'macos-arm64';
-export type SelfHostedProfile = 'linux-x64' | 'macos-arm64';
+export type CiProfile = 'hosted' | 'linux-x64' | 'macos-arm64';
 export type CiEvent = 'push' | 'merge_group';
 export const CI_CAPACITY_BUDGETS = Object.freeze({
   externalStartMs: 90_000,
@@ -10,9 +8,6 @@ export const CI_CAPACITY_BUDGETS = Object.freeze({
   cancellationMs: 2 * 60_000,
   hostedStartMs: 10 * 60_000,
   hostedExecutionMs: 40 * 60_000,
-  // D7907: provisional until the bounded canary measures a full shard there; equal to EXECUTION_BUDGETS['github-8'].
-  includedStartMs: 3 * 60_000,
-  includedExecutionMs: 28 * 60_000,
   controlMarginMs: 5 * 60_000,
   queueMs: 90 * 60_000,
   inventoryMaxAgeMs: 30_000,
@@ -22,8 +17,6 @@ export type CapacityBudgets = { [K in keyof typeof CI_CAPACITY_BUDGETS]: number 
 export type CapacityPolicy = {
   version: typeof CI_CAPACITY_VERSION;
   maxExternalWorkerShards: number;
-  /** D7907: at most this many Worker shards in flight on github-8 at once, across all requests. 0 disables the pool. */
-  maxIncludedWorkerShards: number;
   minimumHostedWorkerShards: number;
   approvedGroupId: number;
   budgets: CapacityBudgets;
@@ -63,7 +56,7 @@ export type CiProvenance = {
 };
 export type InventoryRunner = {
   id: number;
-  profile: SelfHostedProfile;
+  profile: Exclude<CiProfile, 'hosted'>;
   groupId: number;
   online: boolean;
   busy: boolean;
@@ -138,17 +131,12 @@ export function validateCapacityPolicy(policy: CapacityPolicy): void {
   const b = policy.budgets;
   if (policy.version !== CI_CAPACITY_VERSION || !positive(policy.approvedGroupId)
       || !Number.isSafeInteger(policy.maxExternalWorkerShards) || policy.maxExternalWorkerShards < 0
-      || policy.maxExternalWorkerShards > 2 || !positive(policy.minimumHostedWorkerShards)
-      || !Number.isSafeInteger(policy.maxIncludedWorkerShards) || policy.maxIncludedWorkerShards < 0
-      || policy.maxIncludedWorkerShards > 1) {
+      || policy.maxExternalWorkerShards > 2 || !positive(policy.minimumHostedWorkerShards)) {
     throw new Error('capacity_policy_refused');
   }
   if (Object.keys(b).length !== Object.keys(CI_CAPACITY_BUDGETS).length
       || Object.keys(CI_CAPACITY_BUDGETS).some(key => !positive(b[key as keyof CapacityBudgets])) || b.queueMs > CI_CAPACITY_BUDGETS.queueMs
       || b.externalStartMs + b.externalExecutionMs + b.cancellationMs + b.hostedStartMs
-        + b.hostedExecutionMs + b.controlMarginMs > b.queueMs
-      // A fenced included attempt must still leave a full hosted fallback inside the request deadline.
-      || b.includedStartMs + b.includedExecutionMs + b.cancellationMs + b.hostedStartMs
         + b.hostedExecutionMs + b.controlMarginMs > b.queueMs) throw new Error('capacity_budget_refused');
 }
 
@@ -171,48 +159,33 @@ export function submissionMatches(input: CiSubmission, proof: CiProvenance, repo
     && sameSet(proof.shards, input.shards) && sameSet(proof.prerequisites, input.prerequisites) && proof.parentLive;
 }
 
-/** Every profile still dispatches into a shared pool. Runner IDs are inventory identity, never dispatch targets.
- * `reservations` counts each profile's unfinished attempts; for github-8 that includes running ones, because
- * included compute has no readable inventory (D7907) and its cap is the only bound on concurrent use.
- */
+/** Every profile still dispatches into a shared pool. Runner IDs are inventory identity, never dispatch targets. */
 export function selectPools(
   input: CiSubmission, trusted: boolean, inventory: CapacityInventory | null,
   reservations: Readonly<Record<string, number>>, policy: CapacityPolicy, now: number,
 ): { shard: string; profile: CiProfile }[] {
   validateCapacityPolicy(policy);
   const assignments = input.shards.map(shard => ({ shard, profile: 'hosted' as CiProfile }));
-  if (!trusted || !['push', 'merge_group'].includes(input.event)) return assignments;
-  // A missing, stale or malformed inventory closes only the self-hosted pools.
-  const selfHosted = !!inventory?.complete
-    && Number.isSafeInteger(inventory.observedAt) && now >= inventory.observedAt
-    && now - inventory.observedAt <= policy.budgets.inventoryMaxAgeMs
-    && Array.isArray(inventory.runners) && inventory.runners.length <= 1000
-    && new Set(inventory.runners.map(r => r.id)).size === inventory.runners.length
-    && !inventory.runners.some(r => !positive(r.id) || r.groupId !== policy.approvedGroupId
-      || !['linux-x64', 'macos-arm64'].includes(r.profile)
-      || typeof r.online !== 'boolean' || typeof r.busy !== 'boolean' || typeof r.draining !== 'boolean');
-  const available = (profile: SelfHostedProfile) => !selfHosted ? 0 : Math.max(0, inventory!.runners.filter(r =>
+  if (!trusted || !['push', 'merge_group'].includes(input.event) || !inventory?.complete
+      || !Number.isSafeInteger(inventory.observedAt) || now < inventory.observedAt
+      || now - inventory.observedAt > policy.budgets.inventoryMaxAgeMs
+      || !Array.isArray(inventory.runners) || inventory.runners.length > 1000
+      || new Set(inventory.runners.map(r => r.id)).size !== inventory.runners.length
+      || inventory.runners.some(r => !positive(r.id) || r.groupId !== policy.approvedGroupId
+        || !['linux-x64', 'macos-arm64'].includes(r.profile)
+        || typeof r.online !== 'boolean' || typeof r.busy !== 'boolean' || typeof r.draining !== 'boolean')) return assignments;
+  const available = (profile: CiProfile) => Math.max(0, inventory.runners.filter(r =>
     r.profile === profile && r.online && !r.busy && !r.draining).length - (reservations[profile] ?? 0));
-  const free: Record<Exclude<CiProfile, 'hosted'>, number> = {
-    'macos-arm64': available('macos-arm64'), 'linux-x64': available('linux-x64'),
-    'github-8': Math.max(0, policy.maxIncludedWorkerShards - (reservations['github-8'] ?? 0)),
-  };
+  const free = { 'linux-x64': available('linux-x64'), 'macos-arm64': available('macos-arm64') };
   const workers = assignments.filter(a => a.shard.startsWith('worker-')).sort((a, b) => a.shard.localeCompare(b.shard));
-  // Standard hosted stays the floor: every delegated pool together leaves minimumHostedWorkerShards on hosted.
-  const total = Math.max(0, workers.length - policy.minimumHostedWorkerShards);
-  let external = 0;
+  const limit = Math.max(0, Math.min(policy.maxExternalWorkerShards, workers.length - policy.minimumHostedWorkerShards));
   let delegated = 0;
   for (const assignment of workers) {
-    if (delegated >= total) break;
-    const externalOk = external < policy.maxExternalWorkerShards;
-    // The Mac's approved compatibility starts with the one benchmarked shard. Ephemeral included
-    // compute comes before the persistent Linux host, which needs #7905's isolation proof.
-    const profile = externalOk && assignment.shard === 'worker-1-of-6' && free['macos-arm64'] > 0 ? 'macos-arm64'
-      : free['github-8'] > 0 ? 'github-8'
-      : externalOk && free['linux-x64'] > 0 ? 'linux-x64' : null;
-    if (!profile) continue;
-    assignment.profile = profile; free[profile]--; delegated++;
-    if (profile !== 'github-8') external++;
+    if (delegated >= limit) break;
+    // The Mac's approved compatibility starts with the one benchmarked shard.
+    const profile = assignment.shard === 'worker-1-of-6' && free['macos-arm64'] > 0 ? 'macos-arm64'
+      : free['linux-x64'] > 0 ? 'linux-x64' : null;
+    if (profile) { assignment.profile = profile; free[profile]--; delegated++; }
   }
   return assignments;
 }

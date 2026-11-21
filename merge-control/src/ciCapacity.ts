@@ -171,10 +171,7 @@ export class CiCapacity {
       try { inventory = await this.ports.inventory(); } catch { /* Unknown inventory chooses hosted before delegation. */ }
       const reservations: Record<string, number> = {};
       for (const request of requests) for (const shard of request.shards) for (const attempt of shard.attempts) {
-        // D7907: included compute has no inventory, so every unfinished github-8 attempt holds its slot.
-        const held = attempt.profile === 'github-8' ? !terminal(attempt)
-          : ['reserved', 'dispatching', 'dispatch_unknown', 'queued'].includes(attempt.phase);
-        if (held) reservations[attempt.profile] = (reservations[attempt.profile] ?? 0) + 1;
+        if (['reserved', 'dispatching', 'dispatch_unknown', 'queued'].includes(attempt.phase)) reservations[attempt.profile] = (reservations[attempt.profile] ?? 0) + 1;
       }
       const acceptedAt = this.now();
       const assignments = selectPools(input, proof.trustedSource, inventory, reservations, this.policy, acceptedAt);
@@ -199,14 +196,13 @@ export class CiCapacity {
   private attempt(request: CapacityRequest, shard: string, profile: CiAttempt['profile'], generation: number, now: number): CiAttempt {
     const s = request.submission;
     const b = this.policy.budgets;
-    const startDeadline = now + (profile === 'hosted' ? b.hostedStartMs : profile === 'github-8' ? b.includedStartMs : b.externalStartMs);
+    const startDeadline = now + (profile === 'hosted' ? b.hostedStartMs : b.externalStartMs);
     return {
       version: 1, requestId: s.requestId, repository: s.repository, logicalShard: shard,
       event: s.event, parentWorkflowId: s.parentWorkflowId, parentRunId: s.parentRunId, parentAttempt: s.parentAttempt,
       sourceSha: s.sourceSha, queueBaseSha: s.queueBaseSha, planDigest: s.planDigest, planArtifactId: s.planArtifactId, executorSha: s.executorSha,
       profile, generation, childRunId: null, childAttempt: 1, startDeadline,
-      executionDeadline: startDeadline + (profile === 'hosted' ? b.hostedExecutionMs
-        : profile === 'github-8' ? b.includedExecutionMs : b.externalExecutionMs),
+      executionDeadline: startDeadline + (profile === 'hosted' ? b.hostedExecutionMs : b.externalExecutionMs),
       phase: 'reserved', cancelDeadline: null, reason: null,
     };
   }
