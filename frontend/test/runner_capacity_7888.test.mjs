@@ -1,12 +1,15 @@
 /** D7888: real report code against deterministic GitHub metadata, never a live capacity claim. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { collectCapacity, overlapMetrics, validateManifest } from '../../scripts/ci/runners/verify-capacity.mjs';
+import { assessWorkerPilot, collectCapacity, overlapMetrics, validateManifest } from '../../scripts/ci/runners/verify-capacity.mjs';
+
+import { buildPlan } from '../../scripts/test-drift-parts.mjs';
+import { planDigest } from '../../scripts/ci/runner-execution.mjs';
 
 const SOURCE = 'a'.repeat(40); const EXECUTOR = 'b'.repeat(40); const PLAN = 'c'.repeat(64);
 const date = (s) => new Date(Date.UTC(2026, 10, 20, 12, 0, s)).toISOString();
@@ -214,4 +217,65 @@ console.log(JSON.stringify(data[path]));
     assert.equal(refused.status, 1);
     assert.doesNotMatch(refused.stdout + refused.stderr, /private error@/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+function pilotFixture() {
+  const f = fixture(); const root = mkdtempSync(join(tmpdir(), 'pilot-7974-'));
+  mkdirSync(join(root, 'worker')); mkdirSync(join(root, 'front'));
+  for (const [folder, count] of [['worker', 6], ['front', 2]]) for (let i = 0; i < count; i++) writeFileSync(join(root, folder, `${i}.test.mjs`), '');
+  const scripts = { 'test:frontend': "node --test 'front/*.test.mjs'", 'test:worker': "node --test 'worker/*.test.mjs'", 'test:drift': 'npm run test:frontend && npm run test:worker' };
+  const plan = buildPlan(scripts, {}, root); const planBytes = Buffer.from(JSON.stringify(plan));
+  f.spec.plan_sha = planDigest(planBytes).slice(7); f.spec.controllers = [];
+  f.spec.requests = Array.from({ length: 6 }, (_, i) => ({ shard: `worker-${i + 1}-of-6`, generation: 1, run_id: i < 2 ? 30 : 10, attempt: 1, job_id: i < 2 ? 301 + i : 101 + i, test_step: 1, profile: i < 2 ? 'linux-x64' : 'standard-hosted' }));
+  const linux = f.jobs.get(30)[0]; const hosted = f.jobs.get(10)[0];
+  f.jobs.set(30, [linux, { ...structuredClone(linux), id: 302, runner_id: 1302 }]);
+  f.jobs.set(10, Array.from({ length: 4 }, (_, i) => ({ ...structuredClone(hosted), id: 103 + i, runner_id: 1103 + i })));
+  const levels = () => Object.fromEntries(['job', 'runner', 'provider'].map(level => [level, { state: 'complete', referenceDigest: 'd'.repeat(64) }]));
+  const records = f.spec.requests.map((r, i) => ({ logicalShard: r.shard, sourceSha: SOURCE, executorSha: EXECUTOR, planDigest: planDigest(planBytes), runId: r.run_id, jobId: r.job_id, attempt: 1, generation: 1, exitCode: 0, files: plan.parts.find(p => p.name === r.shard).files,
+    machineEvidence: { digest: String(i + 1).repeat(64), source: 'provider_inventory', referenceDigest: 'e'.repeat(64) }, exercises: i ? [] : ['cancellation', 'host-loss'].map(kind => ({ kind, ...levels() })) }));
+  const context = { root, scripts, planBytes, records, cleanup: records.map(r => ({ logicalShard: r.logicalShard, jobId: r.jobId, ...levels() })), evidenceKind: 'synthetic' };
+  return { ...f, context, plan, assess() { return assessWorkerPilot(f.report(), context); }, close() { rmSync(root, { recursive: true, force: true }); } };
+}
+test('7974: six-part synthetic pilot measures two Linux plus hosted tests without publishing authority', () => {
+  const f = pilotFixture(); try {
+    assert.deepEqual(f.assess(), { evidence_scope: 'Worker parallel pilot (6 shards)', evidence_kind: 'synthetic', structural_result: 'consistent', reasons: [], linux_linux_hosted_overlap_ms: 70000, live_capacity_proof: 'not_verified', authoritative_result: null,
+      authority_blocker: 'Trusted receipt, machine and lifecycle evidence authentication remains with #7909; observations cannot publish a check.' });
+    f.context.evidenceKind = 'observed';
+    assert.equal(f.assess().live_capacity_proof, 'not_verified', 'even consistent caller observations cannot create live authority');
+  } finally { f.close(); }
+});
+const pilotCases = [
+  ['missing hosted test time', f => { f.jobs.get(10)[0].steps[0].started_at = null; }, 'test_interval_unavailable'],
+  ['invented evidence kind', f => { f.context.evidenceKind = 'verified'; }, 'evidence_kind_invalid'],
+  ['no overlap', f => { f.jobs.get(30)[1].steps[0].started_at = date(100); }, 'no_linux_linux_hosted_test_overlap'],
+  ['same runner', f => { f.jobs.get(30)[1].runner_id = 1301; }, 'distinct_runner_ids_required'],
+  ['same machine', f => { f.context.records[1].machineEvidence.digest = '1'.repeat(64); }, 'independent_machine_evidence_required'],
+  ['unsupported machine claim', f => { f.context.records[0].machineEvidence.source = 'runner_name'; }, 'independent_machine_evidence_required'],
+  ['wrong candidate', f => { f.context.records[0].sourceSha = EXECUTOR; }, 'execution_binding_mismatch'],
+  ['wrong executor', f => { f.context.records[0].executorSha = SOURCE; }, 'execution_binding_mismatch'],
+  ['wrong plan', f => { f.context.planBytes = Buffer.from('{}'); }, 'plan_unavailable_or_invalid'],
+  ['wrong record plan', f => { f.context.records[0].planDigest = 'sha256:' + '0'.repeat(64); }, 'execution_binding_mismatch'],
+  ['duplicate plan file', f => { f.plan.parts.find(p => p.name === 'worker-2-of-6').files = f.plan.parts.find(p => p.name === 'worker-1-of-6').files; f.context.planBytes = Buffer.from(JSON.stringify(f.plan)); f.spec.plan_sha = planDigest(f.context.planBytes).slice(7); for (const r of f.context.records) r.planDigest = planDigest(f.context.planBytes); }, 'plan_unavailable_or_invalid'],
+  ['missing part', f => { f.spec.requests.pop(); }, 'six_authoritative_parts_required'],
+  ['duplicate logical result', f => { f.context.records[1].logicalShard = 'worker-1-of-6'; }, 'six_authoritative_parts_required'],
+  ['missing executed file', f => { f.context.records[0].files = []; }, 'executed_file_coverage_mismatch'],
+  ['skipped', f => { f.jobs.get(30)[0].steps[0].conclusion = 'skipped'; }, 'work_not_successful'],
+  ['cancelled', f => { f.runs.get(10).conclusion = 'cancelled'; }, 'parent_not_successful'],
+  ['timed out', f => { f.jobs.get(30)[0].conclusion = 'timed_out'; }, 'work_not_successful'],
+  ['failed', f => { f.context.records[0].exitCode = 1; }, 'work_not_successful'],
+  ['unknown', f => { f.jobs.get(30)[0].steps[0].conclusion = null; }, 'work_not_successful'],
+  ...['job', 'runner', 'provider'].map(level => [`missing ${level} cleanup`, f => { delete f.context.cleanup[0][level]; }, 'cleanup_incomplete']),
+  ['host-loss cleanup absent', f => { f.context.records[0].exercises.pop(); }, 'recovery_cleanup_unproved'],
+  ['Mac placement', f => { f.spec.requests[0].profile = 'macos-arm64'; }, 'pilot_placement_mismatch'],
+];
+for (const [name, breakEvidence, reason] of pilotCases) test(`7974 rejects ${name}`, () => {
+  const f = pilotFixture(); try { breakEvidence(f); const result = f.assess(); assert.equal(result.structural_result, 'incomplete'); assert.ok(result.reasons.includes(reason), JSON.stringify(result)); } finally { f.close(); }
+});
+
+test('7974: one millisecond is observed overlap, not an invented one-minute threshold', () => {
+  const f = pilotFixture(); try {
+    f.jobs.get(30)[1].steps[0].started_at = new Date(Date.parse(date(100)) - 1).toISOString();
+    assert.equal(f.assess().structural_result, 'consistent');
+    assert.equal(f.assess().linux_linux_hosted_overlap_ms, 1);
+  } finally { f.close(); }
 });

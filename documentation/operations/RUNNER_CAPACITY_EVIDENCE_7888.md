@@ -38,3 +38,21 @@ assignment, failure/cancel/skip handling and restart/duplicate behavior. They ar
 not live runner, lifecycle or throughput measurements. The read-only report
 explicitly leaves aggregate authority unverified until its owning stages publish
 their receipt interface.
+
+## Current preparation template (#7974)
+
+The historical Mac/Linux observations above are not the current six-Worker pilot.
+Record the evidence kind explicitly (`synthetic` for fixtures). Public rows hold
+only immutable source/executor/plan identities, logical part, run/job/attempt and
+generation, pseudonymous runner/machine identities, actual test-step boundaries,
+real result and executed-file coverage. Keep raw provider identities private.
+Store reference digests for independently supported machine evidence and each of
+job, runner and provider cleanup; include cancellation and host-loss exercises.
+Absent references or non-success work prevent structural consistency.
+
+Exactly worker-1-of-6 and worker-2-of-6 run on two distinct Linux machines; parts
+3–6 remain standard-hosted. Mac stays disabled. Measure positive three-way test
+overlap, without an invented minimum. `assessWorkerPilot` checks these normalized
+observations using the exact executor plan validator; it cannot authenticate the
+evidence or publish a required check. Even a consistent fixture or observed
+report keeps live proof unverified until #7909's authority integration is proven.

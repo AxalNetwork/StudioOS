@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { verifiedPlan } from '../runner-execution.mjs';
 
 const REPOSITORY = 'AxalNetwork/StudioOS';
 const PROFILES = ['standard-hosted', 'linux-x64', 'macos-arm64'];
@@ -202,6 +203,74 @@ function reportCapacity(spec, rows, controllers = [], { calls = 0, parentMatches
       ...(waitOverlap == null ? ['controller wait-phase evidence is incomplete'] : waitOverlap > 0 ? ['observed hosted waiting overlaps external execution'] : [])],
     note: 'Observed metadata is not source admission, an authoritative aggregate, provider capacity, or a throughput prediction. Runner identities are pseudonyms; no runner names, group names, host addresses, raw job names or private configuration are emitted.',
   };
+}
+
+/** D7974: structural audit of normalized observations, never receipt authority.
+ * The caller must retain private evidence; #7909 owns authenticating/binding it.
+ * Plan bytes use the executor's digest and exact-once validation, not commands
+ * or a "verified" flag supplied in an observation.
+ */
+export function assessWorkerPilot(report, { planBytes, scripts, root, records = [], cleanup = [], evidenceKind = 'observed' } = {}) {
+  const reasons = new Set();
+  const reject = (reason) => reasons.add(reason);
+  const expected = Array.from({ length: 6 }, (_, i) => `worker-${i + 1}-of-6`);
+  let plan;
+  try {
+    verifiedPlan({ event: 'push', part: 'worker-1-of-6', expectedDigest: `sha256:${report.requested_plan_sha}`, artifactBytes: planBytes, scripts, sourceRoot: root });
+    plan = JSON.parse(Buffer.from(planBytes).toString('utf8'));
+  } catch { reject('plan_unavailable_or_invalid'); }
+  const rows = report.attempts ?? [];
+  if (rows.length !== 6 || expected.some(part => rows.filter(r => r.logical_shard === part).length !== 1)
+      || records.length !== 6 || expected.some(part => records.filter(r => r.logicalShard === part).length !== 1)) reject('six_authoritative_parts_required');
+  if (!report.parent_revision_matches || report.parent?.conclusion !== 'success') reject('parent_not_successful');
+  const intervals = [];
+  for (const part of expected) {
+    const row = rows.find(r => r.logical_shard === part);
+    const record = records.find(r => r.logicalShard === part);
+    const profile = expected.indexOf(part) < 2 ? 'linux-x64' : 'standard-hosted';
+    if (!row || !record) continue;
+    if (row.requested_profile !== profile || row.assignment_profile !== profile) reject('pilot_placement_mismatch');
+    if (!row.workflow_revision_matches || record.sourceSha !== report.requested_candidate_sha
+        || record.executorSha !== report.requested_executor_sha || record.planDigest !== `sha256:${report.requested_plan_sha}`
+        || record.jobId !== row.job_id || record.runId !== row.run_id || record.attempt !== row.attempt
+        || record.generation !== row.generation) reject('execution_binding_mismatch');
+    const files = plan?.parts.find(p => p.name === part)?.files;
+    if (!Array.isArray(files) || !Array.isArray(record.files)
+        || JSON.stringify([...record.files].sort()) !== JSON.stringify([...files].sort())) reject('executed_file_coverage_mismatch');
+    if ([row.run_conclusion, row.job_conclusion, row.test_conclusion].some(c => c !== 'success')
+        || report.logical_results?.find(r => r.logical_shard === part)?.observed_result !== 'success'
+        || record.exitCode !== 0) reject('work_not_successful');
+    const start = stamp(row.test_started_at); const end = stamp(row.test_completed_at);
+    if (start == null || end == null || end <= start) reject('test_interval_unavailable');
+    else intervals.push({ part, profile, start, end });
+  }
+  const linux = rows.filter(r => r.logical_shard === expected[0] || r.logical_shard === expected[1]);
+  if (linux.length !== 2 || linux.some(r => !r.runner_ref) || new Set(linux.map(r => r.runner_ref)).size !== 2) reject('distinct_runner_ids_required');
+  const machines = expected.slice(0, 2).map(part => records.find(r => r.logicalShard === part)?.machineEvidence);
+  const hex = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  if (machines.some(m => !m || !hex(m.digest) || !hex(m.referenceDigest)
+      || !['provider_inventory', 'platform_identity'].includes(m.source))
+      || new Set(machines.map(m => m?.digest)).size !== 2) reject('independent_machine_evidence_required');
+  let overlapMs = 0;
+  const external = intervals.filter(r => r.profile === 'linux-x64');
+  if (external.length === 2) for (const hosted of intervals.filter(r => r.profile === 'standard-hosted')) {
+    overlapMs = Math.max(overlapMs, Math.max(0, Math.min(...external.map(r => r.end), hosted.end) - Math.max(...external.map(r => r.start), hosted.start)));
+  }
+  if (!(overlapMs > 0)) reject('no_linux_linux_hosted_test_overlap');
+  const levels = ['job', 'runner', 'provider'];
+  const complete = r => levels.every(level => r?.[level]?.state === 'complete' && hex(r[level].referenceDigest));
+  if (cleanup.length !== 6 || expected.some(part => {
+    const items = cleanup.filter(r => r.logicalShard === part);
+    const row = rows.find(r => r.logical_shard === part);
+    return items.length !== 1 || items[0].jobId !== row?.job_id || !complete(items[0]);
+  })) reject('cleanup_incomplete');
+  const exercises = records.flatMap(r => r.exercises ?? []);
+  if (['cancellation', 'host-loss'].some(kind => !exercises.some(e => e.kind === kind && complete(e)))) reject('recovery_cleanup_unproved');
+  if (!['synthetic', 'observed'].includes(evidenceKind)) reject('evidence_kind_invalid');
+  return { evidence_scope: 'Worker parallel pilot (6 shards)', evidence_kind: evidenceKind === 'synthetic' ? 'synthetic' : 'observed',
+    structural_result: reasons.size ? 'incomplete' : 'consistent', reasons: [...reasons].sort(),
+    linux_linux_hosted_overlap_ms: overlapMs, live_capacity_proof: 'not_verified', authoritative_result: null,
+    authority_blocker: 'Trusted receipt, machine and lifecycle evidence authentication remains with #7909; observations cannot publish a check.' };
 }
 
 export function main(argv = process.argv.slice(2)) {
