@@ -22,6 +22,8 @@ They do not change production application state.
 | `runner-execution.mjs` | D7886: exact-plan Worker execution, verified runtime/source, actual test-result truth and owned-run cleanup. |
 | `macbook-admission.mjs` | Verify exact parent CI identity, active delegation and same-repository source provenance before the Mac runs candidate code (D7881). |
 | `macbook-worker.mjs` | Delegate one Worker shard with startup/completion bounds, real-failure propagation and standard hosted fallback (D7881). |
+| `agent-provenance.mjs` | Check the identity-chain trailers on every commit an `agent/**` pull request adds and write its provenance artifact (D8068). |
+| `agent-provenance.test.mjs` | Hold the trailer parser to AGENTS.md § "Identity trailers" and run the check on fixture repositories (D8068). |
 
 Scanner callers load the installer and pins from the trusted base commit,
 never from a pull request checkout or cached executable. Archive reuse still

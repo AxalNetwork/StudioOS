@@ -17,6 +17,11 @@
       "channel": "#axalvc-actions-agent-gateway-keys"
     },
     {
+      "id": null,
+      "path": ".github/workflows/agent-provenance.yml",
+      "channel": "#axalvc-actions-agent-provenance"
+    },
+    {
       "id": 417193959,
       "path": ".github/workflows/agent-stage-a.yml",
       "channel": "#axalvc-actions-agent-stage-a"
