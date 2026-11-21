@@ -1,0 +1,174 @@
+# D7907 (#7907): bounded included-compute canary. One real Worker shard of one pinned main commit, once on
+# github-8 (runner group 6, GitHub-hosted included compute) and once on standard hosted, against one
+# equal-weights plan. Operator dispatch from main only. It changes no routing, required check or variable.
+# Group 6 must allow exactly this file at refs/heads/main; nothing else here widens that group's access.
+name: Included compute canary
+run-name: "Included compute canary | ${{ inputs.part }} | ${{ inputs.source_sha }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Commit already on main to test (40 hex characters)
+        type: string
+        required: true
+      part:
+        description: One Worker shard
+        type: choice
+        options: [worker-1-of-6, worker-2-of-6, worker-3-of-6, worker-4-of-6, worker-5-of-6, worker-6-of-6]
+        default: worker-3-of-6
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: included-compute-canary
+  cancel-in-progress: false
+
+jobs:
+  pin:
+    name: pin source and plan
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      plan_digest: ${{ steps.plan.outputs.plan_digest }}
+    steps:
+      - name: Check out the canary's own definition
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22.23.3'
+          package-manager-cache: false
+      - name: Refuse a commit that is not on main
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          PART: ${{ inputs.part }}
+        run: node control/scripts/ci/included-compute-canary.mjs pin
+      - name: Check out the pinned source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.source.outputs.source_sha }}
+          path: source
+          persist-credentials: false
+      - name: Write the equal-weights plan from the pinned source
+        working-directory: source
+        run: node scripts/test-drift-parts.mjs --plan --equal-weights
+      - name: Record the plan's digest
+        id: plan
+        env:
+          PLAN_FILE: source/suite-plan.json
+          PART: ${{ inputs.part }}
+        run: node control/scripts/ci/included-compute-canary.mjs digest
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: canary-plan
+          path: source/suite-plan.json
+          if-no-files-found: error
+          retention-days: 7
+
+  canary:
+    name: canary (${{ matrix.lane }})
+    needs: pin
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [github-8, hosted]
+    # Fixed targets only: the lane is a matrix literal, never a dispatch input.
+    runs-on: ${{ fromJSON(matrix.lane == 'github-8' && '{"group":"StudioOS Included Compute","labels":["studioos-bench-linux-8"]}' || '"ubuntu-latest"') }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the canary's own definition
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: control
+          persist-credentials: false
+      - name: Check out the pinned source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.pin.outputs.source_sha }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22.23.3'
+          package-manager-cache: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11.18'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: canary-plan
+          path: plan
+      - name: Install Worker dependencies
+        working-directory: source/cloudflare-worker
+        run: npm ci
+      - name: Install root dependencies
+        working-directory: source
+        run: npm ci
+      - name: Run the pinned Worker shard
+        timeout-minutes: 40
+        env:
+          LANE: ${{ matrix.lane }}
+          PART: ${{ inputs.part }}
+          SOURCE_SHA: ${{ needs.pin.outputs.source_sha }}
+          PLAN_DIGEST: ${{ needs.pin.outputs.plan_digest }}
+          SOURCE_DIR: source
+          PLAN_FILE: plan/suite-plan.json
+          EVIDENCE_FILE: evidence-${{ matrix.lane }}.json
+          TEST_TIMEOUT_MS: '2340000'
+        run: node control/scripts/ci/included-compute-canary.mjs run
+      - name: Upload this lane's evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: canary-evidence-${{ matrix.lane }}
+          path: evidence-${{ matrix.lane }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  report:
+    name: canary report
+    needs: [pin, canary]
+    if: always() && needs.pin.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out the canary's own definition
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22.23.3'
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: canary-evidence-*
+          path: evidence
+      - name: Compare the lanes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART: ${{ inputs.part }}
+          SOURCE_SHA: ${{ needs.pin.outputs.source_sha }}
+          PLAN_DIGEST: ${{ needs.pin.outputs.plan_digest }}
+          EVIDENCE_DIR: evidence
+        run: node control/scripts/ci/included-compute-canary.mjs report

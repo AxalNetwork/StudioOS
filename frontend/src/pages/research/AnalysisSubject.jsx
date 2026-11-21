@@ -167,7 +167,7 @@ export function EvidenceChip({ evidence, short = false }) {
  * The subject bar on results and while running (RS-13 A5, B1–B3): the subject
  * and its site, and the evidence status. A custom run says it has no subject.
  */
-export function SubjectBar({ uid, read, onRetry, evidence, running }) {
+export function SubjectBar({ uid, read, onRetry, evidence, running, startedAt = null }) {
   const card = uid ? subjectCard(read) : null;
   return (
     <div data-testid="analysis-subject-bar"
@@ -193,7 +193,12 @@ export function SubjectBar({ uid, read, onRetry, evidence, running }) {
       </span>
       <span className="flex flex-wrap items-center gap-2">
         <span className={eyebrow}>Evidence</span>
-        {running ? <span role="status" className="text-axal-muted">Running · nothing is listed until the run returns</span>
+        {/* D7175 part 2 (RS-13 A5): the time the run started, when it is known (HH:MM). */}
+        {running ? (
+          <span role="status" data-testid="analysis-running-since" className="text-axal-muted">
+            {startedAt ? `Running · started ${startedAt} · nothing is listed until the run returns` : 'Running · nothing is listed until the run returns'}
+          </span>
+        )
           : evidence ? <EvidenceChip evidence={evidence} /> : <StateChip kind="not_recorded" />}
       </span>
     </div>
