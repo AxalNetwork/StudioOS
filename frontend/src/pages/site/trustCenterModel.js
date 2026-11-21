@@ -120,7 +120,8 @@ export const DISCLOSURE_GAPS = [
 /**
  * The documents and their last update, from the legal pages' own dates; a version is not recorded yet.
  * #7002: the interview notice's version and date come from the notice page's own source
- * (`currentInterviewNotice()` in InterviewNoticePage.jsx), so the two cannot differ.
+ * (`currentInterviewNotice()` in InterviewNoticePage.jsx), so the two cannot differ. Its date reads as a
+ * day word ("22 Oct 2026", owner's choice); a date that is not YYYY-MM-DD reads Not recorded.
  */
 export function documentRows({ terms, privacy, risk, interview = null }) {
   const notice = interview && Number.isInteger(interview.version) ? interview : null;
@@ -128,7 +129,7 @@ export function documentRows({ terms, privacy, risk, interview = null }) {
     { name: 'Terms of Service', to: '/terms', updated: terms || null, appliesTo: 'Everyone' },
     { name: 'Privacy Policy', to: '/privacy', updated: privacy || null, appliesTo: 'Everyone' },
     { name: 'Risk Disclosures', to: '/risk-disclosures', updated: risk || null, appliesTo: 'Investors' },
-    { name: 'Interview notice', to: '/privacy/interviews', updated: notice?.updated || null, appliesTo: 'Recorded sessions', version: notice ? `Version ${notice.version}` : null },
+    { name: 'Interview notice', to: '/privacy/interviews', updated: dayWord(notice?.updated), appliesTo: 'Recorded sessions', version: notice ? `Version ${notice.version}` : null },
     { name: 'Data Processing Addendum', to: null, updated: null, appliesTo: 'Being reviewed by counsel' },
   ];
 }
