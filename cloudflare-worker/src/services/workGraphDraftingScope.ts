@@ -1,7 +1,9 @@
 /** D5582 part 3 (#5582): read drafting sources through their canonical domain readers, bounded to an existing asset. */
 import type { Env } from '../types';
 import type { Scope } from './workGraphContracts';
-import { getDeckRow } from '../routes/decks';
+// Not `getDeckRow` from routes/decks: that module reaches the Mercury spend feeds, and no admin route may
+// (mercury_member_privacy_d752). The units need only the row's slides and title.
+import { hydrateSlides } from './decks/cardBlobs';
 import { publishedContractTemplates } from './contractPublication';
 import { deckUnits, legalTemplateUnits, quoteUnits, unitsDigest, type UnitDocument } from './workGraphUnits';
 
@@ -51,7 +53,9 @@ export async function readDraftingDomain(
         WHERE d.id = ? AND d.project_id = ? AND p.company_id = ? AND d.is_current = 1`,
     ).bind(id, asset.project_id, asset.company_id).first();
     if (!owned) return null;
-    const deck = await getDeckRow(env, id);
+    const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+    if (!row) return null;
+    const deck = await hydrateSlides(env, row);
     const slides = typeof deck.slides === 'string' ? JSON.parse(deck.slides) : deck.slides;
     if (!Array.isArray(slides)) return null;
     return { doc: deckUnits({ ...deck, slides }), target: { kind: 'pitch_deck', projectId: asset.project_id,
