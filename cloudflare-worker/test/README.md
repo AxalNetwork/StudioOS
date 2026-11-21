@@ -378,6 +378,7 @@ catalogue version only in the fixture.
 |---|---|
 | `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `research_global_funds_7585.test.ts` | D7585: historical preservation, original verification dates, independent source citation, competing manager identities, country filters and in-memory guard mutations for the next worldwide import. |
 | `positions_today_d6226.test.ts` | D6226: the positions list, analytics and per-company reads carry the Worker's UTC `today` under a fixed clock; analytics `as_of` stays null without a date. |
 | `build_burnup_weekly_6025.test.ts` | D6025: Prototype / MVP's burn-up by month, ISO week or day of completion over the real schema: three weeks of one month draw week labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three dated completions still read the too-little sentence, three months still draw by month, the same statements at every grain, and `burnupPoints` across a 53-week year. |
 
