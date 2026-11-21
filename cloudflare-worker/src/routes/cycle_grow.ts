@@ -14,6 +14,11 @@
  *                                               D6124: a writer's CSV of the table's filtered rows, on four
  *                                               modules (services/growExport.ts); `records.exportable` says so
  *
+ *   GET  /modules/:slug/export?project=&q=&filter=&sort=
+ *     D6103 (#6103): Product improvement's Feedback or Revenue and traction's
+ *     KPIs (monthly history) as CSV, for a writer; `services/growExport.ts`.
+ *     The module read's `records.can_export` says whether this viewer may.
+ *
  * WRITES (whoever `canAccessProject` lets write: the owner, a co-founder, a
  * partner, an admin; an advisor reads only). The writers are
  * `services/growWriters.ts` and `services/growKpis.ts`; each records who wrote
@@ -109,7 +114,7 @@ import {
 } from '../services/growCycle';
 import { growChanges } from '../services/growChanges';
 import { ensureProjectMetricsSchema } from './progress';
-import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
+import { KpiRefused, enterKpi, kpiMonths, kpiRows, type KpiRow } from '../services/growKpis';
 import {
   CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
   REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
@@ -123,8 +128,8 @@ import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
 import { growAttention, unreadableGrowAttention } from '../services/growAttention';
 import { hasRecords } from '../services/records';
-import { growExportCsv, isGrowExportSlug } from '../services/growExport';
-import { csvResponse } from '../services/csv';
+import { GROW_EXPORT_ROW_CAP, exportCapSentence, feedbackCsv, growExportCsv, hasGrowExport, isGrowExportSlug, kpiCsv, kpiLineCount } from '../services/growExport';
+import { csvResponse, stamp } from '../services/csv';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { publishPart } from '../services/publishSources';
 import {
@@ -544,8 +549,9 @@ r.get('/modules/:slug', async (c) => {
       ...(await facebookPart(c, user, pid, meta.slug)),
       publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
     // D6124: `exportable` tells the page to draw Export; the export route checks the same two things itself.
+    // D6103 adds Feedback and the KPIs to the modules with one (`hasGrowExport`).
     return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow'),
-      ...(writer && isGrowExportSlug(meta.slug) ? { exportable: true } : {}) }, ...(Object.keys(parts).length ? { parts } : {}) });
+      ...(writer && hasGrowExport(meta.slug) ? { exportable: true } : {}) }, ...(Object.keys(parts).length ? { parts } : {}) });
   } catch (e) { return fail(c, e); }
 });
 
@@ -553,23 +559,46 @@ r.get('/modules/:slug', async (c) => {
 // The table's rows as a CSV, every row its search, filters and sort select
 // (no page). A writer on the venture only: a reader is refused before anything
 // is read. A failed read is a refusal, never a file with a header and no rows.
+// D6103 (#6103): Feedback, or the KPIs with their monthly history. The
+// customer's name is the writer's column; no email is ever exported. Past
+// GROW_EXPORT_ROW_CAP rows it refuses (422) rather than cut the file short.
+// Each of these two is logged as `grow.<module>` with its row count before
+// the file is returned: no log row, no file.
 r.get('/modules/:slug/export', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await project(c, user, c.req.query('project'), true);
     const slug = c.req.param('slug');
     const meta = GROW_MODULES.find((m) => m.slug === slug);
-    if (!meta || !isGrowExportSlug(meta.slug)) return c.json({ detail: 'This Grow module has no export' }, 404);
+    if (!meta) return c.json({ detail: 'Not a Grow module' }, 404);
+    if (!hasGrowExport(meta.slug)) return c.json({ detail: `${meta.name} has no export` }, 404);
     const x = ctxFor(c.env, pid);
     let recs: RecordSet;
     try { recs = await recordsFor(x, meta.slug, user, true); } catch (e) {
-      console.error('[cycle_grow] export unreadable:', meta.slug, (e as Error).message);
+      console.error('[cycle_grow] export unreadable:', meta.slug, (e as Error).name);
       return c.json({ detail: `Unreadable: ${meta.source} could not be read, so nothing was exported` }, 503);
     }
     const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
-    const rows = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
-    const asOf = today(x);
-    return csvResponse(growExportCsv(meta.slug, rows, meta.source, asOf), `${meta.slug}-${pid}-${asOf}.csv`, { 'X-Export-Rows': String(rows.length) });
+    const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
+    if (isGrowExportSlug(meta.slug)) {
+      const asOf = today(x);
+      return csvResponse(growExportCsv(meta.slug, shaped, meta.source, asOf), `${meta.slug}-${pid}-${asOf}.csv`, { 'X-Export-Rows': String(shaped.length) });
+    }
+    // D6103: `project(..., true)` above admits a writer only, so the From column is always the writer's.
+    let body: string; let rows: number; let what: string;
+    if (meta.slug === 'product-improvement') {
+      if (shaped.length > GROW_EXPORT_ROW_CAP) throw new Refused(422, exportCapSentence(shaped.length, 'feedback rows'));
+      body = feedbackCsv(shaped, true, (v) => LABEL[String(v)] ?? v); rows = shaped.length; what = 'Feedback';
+    } else {
+      const kpis = [];
+      for (const row of shaped as KpiRow[]) kpis.push({ row, months: await kpiMonths(c.env, pid, row) });
+      rows = kpiLineCount(kpis);
+      if (rows > GROW_EXPORT_ROW_CAP) throw new Refused(422, exportCapSentence(rows, 'KPI months'));
+      body = kpiCsv(kpis); what = 'KPIs';
+    }
+    await logGrowWrite(c.env, pid, user.id, { module: meta.slug, entityId: null, action: `grow_${meta.slug === 'product-improvement' ? 'feedback' : 'kpis'}_exported`,
+      summary: `${what} exported as CSV: ${rows} row${rows === 1 ? '' : 's'}` });
+    return csvResponse(body, `${meta.slug === 'product-improvement' ? 'feedback' : 'kpis'}-${pid}-${stamp()}.csv`, { 'Cache-Control': 'no-store', 'X-Export-Rows': String(rows) });
   } catch (e) { return fail(c, e); }
 });
 

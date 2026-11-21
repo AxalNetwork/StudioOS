@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Shared Source Import · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · Sources · #7679 with the owner extension (NFX Signal, #7681) · part of #7675</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network Sources — import shared investor sources, review identity, publish with provenance</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An operator console in the HQ shell (Admin console › Network sources) that turns source records from Airtable, Folk and NFX Signal into reviewable people, organizations and affiliations in the shared Network directory. It runs in nine steps: source, snapshot, classify, map, validate, review, plan, publish, result. Every screen names its actor, snapshot, visibility, contract, side effect and recovery. A source record is not a person; a firm is never a fund vehicle; a name never decides identity. Staging, review and publishing contact nobody and create no account, tie, invitation, consent or diligence approval. The LinkedIn CSV importer on main writes a member’s private book and is not reused. It keeps the Network look of #6256 (nwi.js) and Platform States (D5129). It shares its operator steps with the Research Funds import console (FND-I, #7738) and cites FND-I11 for Research promotion. None of this exists on main: the schema is in the open PR #7687 (#7672), the routes are #7674, the NFX adapter is #7681. Violet dashed ◇ tags mark backend work; amber ⚑ tags mark owner picks drawn as option A. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · receipt totals (278, 328, 47, 606, 560, 81, 239, 89; NFX 32,819 / 13,291 / 5,300, 244 people, 1,826 firms) are from the 19 Nov snapshot in #7679 and #7681; every name, row, id, hash, time and bracketed split is fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="19">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network Shared Source Import Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NSI-00', 'Journey and words', 'The nine steps, what each produces, and the words used on every board: source record, staged, person, organization, fund vehicle, affiliation, list membership, unverified source claim, published, restricted, private, suppressed, stale, withdrawn.', [W('NSI00')]],
+      ['NSI-01', 'Sources and runs', 'Four sources with snapshot, rows retrieved, mapping version and status (NFX partial), and three runs: the 606-record Airtable + Folk rehearsal ready for review, the NFX captured subset, and a superseded run whose mapping read a blank as No.', [F('NSI01', false, 1240)]],
+      ['NSI-02', 'Stage a run', 'Fetch a known source, upload its export, or add a source, with the intended shared scope. Then the four ways a source can fail: refused, sign-in needed, fetch error, incomplete pagination. Mapping and decisions are kept; nothing gets around a restriction.', [F('NSI02', 'Choose the source', 1060), C('NSI02B', 'Source unavailable states', 1400, 650)]],
+      ['NSI-03', 'Inspect the snapshot', 'Source, URL, retrieved time, snapshot id and hash, row count, fields, external row key and mapping version for both sources; the 399 page title against the 328 rows read; a sample labelled as a sample.', [F('NSI03', false, 1120)]],
+      ['NSI-04', 'Classify rows', 'Person, organization, mixed (split only when the cell names both), unknown and quarantined, and affiliations from Folk. A firm-only row creates an organization with No people recorded and never a person named after it.', [F('NSI04', false, 1030)]],
+      ['NSI-05', 'Map fields', 'Raw column, raw example, destination, transform, required and status for Airtable and Folk; an unrecognized column; missing, unrecognized and invalid told apart; a mandate attached to its own entity. Then the full mapping specimen.', [F('NSI05', 'Airtable', 1260), C('NSI05B', 'Folk', 1400, 540), W('NSI05S')]],
+      ['NSI-06', 'Validate every row', 'An error summary with links, then the review specimens: organization row with a personal URL, run-together websites, a malformed and double email, a website for another firm, a headline as a title, an accent alias, and No against blank.', [F('NSI06', false, 1140)]],
+      ['NSI-07', 'Identity review', 'The queue (131 open: 30 suggested matches, 101 held) and the pair sheet with full evidence on both sides, one reason, and link, create distinct, defer or correct the mapping. Then six specimens: namesakes, firm or vehicle, shared identifier, member-owned conflict, one person at two organizations, and an organization row with a person’s URL. Hidden records give no hint.', [F('NSI07', 'Queue', 950), F('NSI07B', 'Pair sheet', 900), C('NSI07C', 'Specimens', 1400, 650)]],
+      ['NSI-08', 'NFX Signal coverage', 'The coverage ledger: lists, investor profiles, firm pages, named people and firms, affiliations, memberships and Research links, each discovered, fetched, partial, index only, pending or blocked. Partial, not a full-library import (#7681 decision B). The continuation path waits on a permitted export. Then one investor on four lists, deduplicated by profile id, matched across sources.', [F('NSI08', false, 1270), C('NSI08B', 'One investor, many lists', 1400, 410)]],
+      ['NSI-09', 'Person → firm → Research', 'A person, the affiliation a source states, the firm, and a reviewed link to Research › Funds as fund manager. A fund vehicle is not offered without evidence naming it; a missing Research row goes through FND-I11. Then no Research row, a retired id, and a withdrawn link.', [F('NSI09', false, 1050), C('NSI09B', 'Link states', 1400, 350)]],
+      ['NSI-10', 'Publish plan', 'Counts by entity and disposition (create, link, update, unchanged, skip, quarantine, validation failure) that reconcile to 606, the destination, what becomes discoverable, what stays restricted or private, and the one human action. Then a stale preview that revalidates only the changed rows.', [F('NSI10', false, 1060), F('NSI10B', 'Stale preview', 1140)]],
+      ['NSI-11', 'Publishing and result', 'A partial failure with committed and pending batches and Resume; the durable receipt with separate counts and searchable row outcomes; publishing, resumed and a no-op replay.', [F('NSI11', 'Partial failure', 970), F('NSI11B', 'Receipt', 1170), C('NSI11C', 'Publishing, resumed, no-op replay', 1400, 330)]],
+      ['NSI-12', 'Correction and source removal', 'Scope → Review → Result for a row that left its source: the source’s claims are withdrawn and the person stays because other sources support him. Then stale, suppressed and withdrawn, none of which deletes.', [C('NSI12', false, 1400, 540), C('NSI12B', 'Stale, suppressed, withdrawn', 1400, 230)]],
+      ['NSI-13', 'States and permissions', 'Loading, unavailable source, empty file, no recognized headers, malformed row, conflict, restricted field, forbidden operator, stale preview, publishing, partial failure, completed, no-op replay, Not recorded, partial snapshot and support session. Then the publish-state and permissions matrix.', [C('NSI13', false, 1400, 750), W('NSI13B')]],
+      ['NSI-14', 'Tablet 768', 'Identity review at 768: the pair opens in place with both sides side by side.', [C('NSI14', false, 768, 1024)]],
+      ['NSI-15', 'Phone 390', 'Sources as cards, mapping one column at a time, the pair stacked, the plan as cards, publishing stopped with Resume, and NFX coverage. 44 px targets, sticky primary.', [P('NSI15A', 'Sources'), P('NSI15B', 'Map'), P('NSI15C', 'Review'), P('NSI15D', 'Plan'), P('NSI15E', 'Resume'), P('NSI15F', 'Coverage')]],
+      ['NSI-16', 'Dark', 'The pair sheet and the coverage ledger on the dark tokens; states keep their words and glyphs.', [F('NSI16', 'Identity review · dark', 900), F('NSI16B', 'NFX coverage · dark', 1270)]],
+      ['NSI-17', 'Keyboard, accessibility and contracts', 'Keyboard order, focus return, announced counts, non-colour cues, and the proposed API contract for each screen.', [W('NSI17')]],
+      ['Handoff', 'Handoff', 'Checked on main, preserved, backend required (◇), owner picks (⚑), frontend only, open questions.', [W('NSIH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
