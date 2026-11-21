@@ -12,7 +12,7 @@ export function canChangeDecision(user, decision) {
   return decision.created_by != null && user.id != null && Number(decision.created_by) === Number(user.id);
 }
 
-export const AUTHOR_ONLY_LINE = 'Only the person who opened this record, or an Admin, can change its memo, decision and outcome.';
+export const AUTHOR_ONLY_LINE = 'Only the person who opened this record, or an Admin, can change its memo, terms, conditions, decision and outcome.';
 
 // POST /api/ic/:uid/vote with `recused` needs the declared conflict as its
 // rationale, and the Worker keeps a recusal final.
@@ -41,8 +41,20 @@ export const VOTE_WORDS = { yes: 'Yes', no: 'No', abstain: 'Abstain', recused: '
 
 export const CONDITION_WORDS = { open: 'Open', met: 'Met', waived: 'Waived' };
 
-// /deals/commit is guarded admin and investor only (App.jsx), so a partner is
-// not sent to a page that refuses them.
+// D6154: partners may use Commit only; other Deals zones keep their original guards.
 export function canOpenCommitRoom(role) {
-  return role === 'admin' || role === 'investor';
+  return role === 'admin' || role === 'investor' || role === 'partner';
+}
+
+// Cast rationale counts exclude final recusal declarations, as DX7 already does.
+export function ballotOf(decision) {
+  const votes = decision?.votes ?? [];
+  const recused = votes.filter((v) => v.vote === 'recused');
+  const cast = votes.filter((v) => v.vote !== 'recused');
+  return {
+    eligible: null,
+    voted: cast.length,
+    recused: recused.length,
+    rationales: cast.filter((v) => String(v.rationale || '').trim().length > 0).length,
+  };
 }

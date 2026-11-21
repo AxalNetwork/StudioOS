@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {MemoryRouter} from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
   CommitStrip, ConditionsCard, DecisionCard, HowThisWorks, MinutesCard, NoOpenDecision, UNAVAILABLE,
@@ -19,7 +20,7 @@ import {
 } from '../src/pages/investor/deals/CommitZone.jsx';
 
 const h = React.createElement;
-const html = (el) => renderToStaticMarkup(el);
+const html = (el) => renderToStaticMarkup(h(MemoryRouter,null,el));
 const ZONE = readFileSync(resolve(process.cwd(), 'frontend/src/pages/investor/deals/CommitZone.jsx'), 'utf8');
 
 const OPEN = {
@@ -201,8 +202,11 @@ test('review #6876 (1): every place that prints a decision\'s rationales counts 
   assert.equal(`${OPEN.rationales} of ${OPEN.votes_cast}`, '2 of 3');
   assert.equal(`${ballotOf(OPEN).rationales} of ${ballotOf(OPEN).voted}`, '1 of 2');
   const code = codeOnly(ZONE);
+  const list=readFileSync(resolve(process.cwd(),'frontend/src/pages/ICDecisionsPage.jsx'),'utf8');
+  assert.match(list,/ballotOf\(d\)\.rationales/);
+  assert.match(list,/ballotOf\(d\)\.voted/);
   assert.doesNotMatch(code, /\$\{r\.rationales\} of \$\{r\.votes_cast\}/, 'a table or export still prints the Worker\'s count');
-  assert.equal((code.match(/`\$\{ballotOf\(r\)\.rationales\} of \$\{ballotOf\(r\)\.voted\}`/g) || []).length, 2, 'the table and the export');
+  assert.equal((code.match(/`\$\{ballotOf\(r\)\.rationales\} of \$\{ballotOf\(r\)\.voted\}`/g) || []).length, 1, 'the existing export; D6154’s list uses the same ballot model');
 });
 
 test('review #6876 (2): the current decision\'s strip and card count its own open conditions, and the cross-decision list says so', () => {
