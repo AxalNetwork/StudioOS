@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { Layers, Plus, Users, RefreshCw, Download } from 'lucide-react';
 import { api } from '../../lib/api';
 import { userFacingRaiseError } from '../../lib/raiseErrors.js';
+import { offerInputValue, offerPatch, respondByPatch } from '../portfolio/proRataOfferModel';
 
 const money = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
 const moneyShort = (v) => {
@@ -316,12 +317,14 @@ export function ProRataPanel({ projectId, onError }) {
         </div>
       ) : (
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-gray-50 dark:bg-gray-900/60 border-b border-gray-100 dark:border-gray-800">
               <tr className="text-[10px] uppercase tracking-wider text-gray-500">
                 <th className="text-left px-4 py-2">Holder</th>
                 <th className="text-right px-3 py-2">Prior stake</th>
                 <th className="text-right px-3 py-2">Entitlement</th>
+                <th className="text-right px-3 py-2">Offer to them</th>
+                <th className="text-left px-3 py-2">Respond by</th>
                 <th className="text-right px-3 py-2">Taking</th>
                 <th className="text-right px-3 py-2">Post-round</th>
                 <th className="text-left px-3 py-2">State</th>
@@ -344,6 +347,26 @@ export function ProRataPanel({ projectId, onError }) {
                     {h.scaled && h.entitlement_raw != null && (
                       <div className="text-[10px] text-amber-600 dark:text-amber-400">scaled from {moneyShort(h.entitlement_raw)}</div>
                     )}
+                  </td>
+                  {/* D6908: what this holder is offered and the day to answer by. The investor reads exactly this
+                      on Ownership & rights; nothing is derived from the entitlement. */}
+                  <td className="px-3 py-2.5 text-right">
+                    <input type="number" min="0" step="1000" defaultValue={offerInputValue(h.offer_cents)}
+                      aria-label={`Offer to ${h.holder_name}`} placeholder="Not recorded" data-testid={`pro-rata-offer-${h.uid}`}
+                      onBlur={(e) => {
+                        const b = offerPatch(e.target.value, h.offer_cents);
+                        if (b?.problem) onError?.(b.problem); else if (b) patch(h.id, b);
+                      }}
+                      className="w-28 px-2 py-1 text-xs text-right border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 tabular-nums" />
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <input type="date" defaultValue={h.respond_by ? String(h.respond_by).slice(0, 10) : ''}
+                      aria-label={`Respond by, ${h.holder_name}`} data-testid={`pro-rata-respond-by-${h.uid}`}
+                      onBlur={(e) => {
+                        const b = respondByPatch(e.target.value, h.respond_by);
+                        if (b?.problem) onError?.(b.problem); else if (b) patch(h.id, b);
+                      }}
+                      className="px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900" />
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <input type="number" min="0" step="1000" defaultValue={h.taking_amount ?? ''}
