@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Trust and Coverage · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies · #7809 page 1 of 5 · addendum to RS-17 and RS-18</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Research Companies · who published a record, whether it is under review, how it is classified, and what it can support</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An addendum to the landed Research Companies canvases: RS-17 A (directory, D7045) and RS-18 A and B (profile, D7046) are drawn as they are, and only what is new is marked. Research v2 shell: company/project switcher top-left, Research zones in the sidebar, no licence switcher, Eadwyn as the one shared rail (#5130), closed; Eadwyn proposes nothing on these boards. Every row and profile names its publisher, licence and as-of date. A record on hold shows its status and reason as visible text and is left out of counts, peers and the filtered export (option A, drawn and not for build until the owner answers on #7819). The tracked sector or one of six mapping states replaces “Tracked sector: Not recorded”. Coverage counts are catalogue records, never a market size. Platform States (D5129): Value, None, Not recorded with “Needs research” as its reason on a company record, Unavailable with what still works and Try again, Refused with who can grant access; On hold, Withdrawn, Excluded and No review recorded are surface labels in the ST-12 chip shape. No fit score, rank or completeness figure. Violet dashed ◇ tags name the ◇ KEY line and issue; amber ⚑ tags mark owner questions, option A drawn. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · catalogue 3,170 records, 120 on hold, 3,050 counted; results 186, 3 on hold, filtered export 183 rows · every bracketed company, register, publisher, person and figure is fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="13">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Trust and Coverage Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RCT-00', 'Journey, words and date names', 'The two journeys (a row, a profile); the new words against Platform States (On hold, Withdrawn, Excluded and No review recorded in the ST-12 shape; Needs research as a reason line; the six mapping states as Values); the date names, per record and per citation; the sample figures every board shares. Shared by #7848 and #7849.', [W('RCT00')]],
+      ['RCT-01', 'Directory results with review status and classification on the row', 'RS-17 A with publisher and as-of on every row (K0). New: ◇K1 the On hold chip and reason on the row, ◇K3 tracked sector or mapping state under the sector label, two filters with counts in the address and the Back to results summary, the count naming the 3 on hold, the mixed-source footer. ⚑ #7819 drawn to A, not for build until answered. #7848.', [F('RCT01', 'Directory · page 2', 1720), C('RCT01B', 'Tracked sector and Mapping state filters', 1200, 523)]],
+      ['RCT-02', 'Coverage by field, country, publisher and information type', 'The RS-17 A disclosure, opened and extended: by field and by country (recorded); ◇K3 by publisher, by information type and by mapping state, the concentration sentence, the refresh date and the 120 on hold not counted; one fixed line that these are not market sizes. #7848.', [C('RCT02', 'Directory coverage, open', 1200, 957)]],
+      ['RCT-03', 'Export scope: this page, selection and filtered companies', 'Three scopes with their counts before the click: Export this page · 25 rows (K0), ◇K4 Export selection · 2 companies, ◇K4 Export filtered companies · 183 rows. Then preparing, done, zero rows, failed and past the cap; the last three offer no file. #7848.', [F('RCT03', 'The export menu', 900), C('RCT03B', 'Export frames', 1440, 244)]],
+      ['RCT-04', 'A kept selection after a company changed', 'Back from a profile, the kept selection is read again (◇K3): one renamed (picked as [Company A Robotik]), one ◇K1 On hold, one no longer available. The bar and Review selection say so, and what will be left out, before Add to research or Compare can act. #7848.', [F('RCT04', 'Return with the selection re-checked', 900), C('RCT04B', 'Review selection', 760, 591)]],
+      ['RCT-05', 'Profile: source, review status, identity and dates', 'RS-18 A with the record card for any publisher (K0): Companies House, a register record, a company-website record, Source not recorded. New: ◇K1 the status band (On hold, No review recorded, Withdrawn, Excluded), ◇K5 Identity with the website state, ◇K1 Dates as a list. Primary action unchanged. #7849.', [F('RCT05', '[Quarry AI] · On hold', 1185), C('RCT05B', 'The record card for any publisher', 1440, 301), C('RCT05C', 'The status band, four cases', 1440, 415)]],
+      ['RCT-06', 'Profile: classification and what the record supports', '◇K2 the native scheme, version, code and label beside Tracked sector with method and proof; the seven cases side by side (six mapping states and Unavailable). ◇K6 What this record supports, per job, in words; Investment-firm discovery reads Not assessed here. #7849.', [F('RCT06', '[Halden Grid] · classification and supports', 1294), C('RCT06B', 'Seven classification cases', 1440, 307)]],
+      ['RCT-07', 'Profile: business facts, conflicts and peers', '◇K6 twelve attributes, each with statement type, source, Published, Retrieved and Checked by Axal on; a conflict on both facts; Outdated with its replacement; Not found, Not offered and Source unavailable naming the source and day; Not recorded with Needs research. Sector peers of RS-18 B with “records on hold are left out”. #7849.', [F('RCT07', 'Business facts and sector peers', 1468), C('RCT07B', 'Passage · two facts in conflict', 1000, 350)]],
+      ['RCT-08', 'States for the directory', 'Loading, empty with removable chips, Not recorded, Unavailable today and as ◇K3 and ◇K1 would split it, Refused for an Advisor, export states, a filter value no longer offered. No save states: the page writes nothing of its own. #7848.', [C('RCT08', 'Directory states', 1440, 628)]],
+      ['RCT-09', 'States for the profile', 'Loading, empty (no business fact yet), one section Unavailable while the rest stays, Not recorded, a withdrawn record, Refused as RS-16B-08. #7849.', [C('RCT09', 'Profile states', 1440, 450)]],
+      ['RCT-10', 'Tablet 768 and phone 390', 'Cards, not tables; the status chip, reason and publisher on the card; filters in the Filters sheet; coverage as stacked disclosures; export in a bottom sheet; profile sections stacked, each with its own state. 44px targets.', [C('RCT10A', 'Tablet · directory', 768, 1024), C('RCT10B', 'Tablet · profile', 768, 1024), P('RCT10C', 'Directory cards'), P('RCT10D', 'Filters sheet'), P('RCT10E', 'Coverage disclosures'), P('RCT10F', 'Export sheet'), P('RCT10G', 'Profile sections')]],
+      ['RCT-11', 'Dark · desktop 1440 and phone 390', 'RCT-01, RCT-05 and RCT-06 on the dark tokens (#0B1220 / #111827, violet #A78BFA), and the phone directory and profile. States keep their words and shapes.', [F('RCT11A', 'RCT-01 · dark', 1632), F('RCT11B', 'RCT-05 · dark', 978), F('RCT11C', 'RCT-06 · dark', 1135), P('RCT11D', 'Phone directory · dark'), P('RCT11E', 'Phone profile · dark')]],
+      ['RCT-12', 'Keyboard, focus and handoff', 'Focus order for each new block, where focus returns when a menu, sheet or dialog closes, live announcements. Handoff: main today, each ◇K line with its issue, the ⚑ questions with option A, and the BUILD ISSUES line of the page.', [W('RCT12'), W('RCT12H')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
