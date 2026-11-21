@@ -269,7 +269,7 @@ jobs.get('/:id/applications', async (c) => {
   ).bind(id).all();
   return c.json({
     job: shapeJobPosting(posting, { includePrivate: true }),
-    applications: (rows.results || []).map(shapeJobApplication),
+    applications: (rows.results || []).map((row) => shapeJobApplication(row, { includeStage: true })),
   });
 });
 

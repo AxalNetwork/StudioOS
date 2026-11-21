@@ -24,6 +24,8 @@ import { Hono } from 'hono';
 
 import portfolio from '../src/routes/portfolio.ts';
 import positions from '../src/routes/positions.ts';
+import { d1Over } from './_d1_sqlite.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
@@ -44,95 +46,20 @@ const FOUNDER = 50;
 const PROJ = 7;
 const PROJ_OUT = 9;
 
-function coerce(a: any[]): any[] {
-  return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
-}
-function makeD1(db: InstanceType<typeof DatabaseSync>) {
-  return {
-    prepare(sql: string) {
-      let b: any[] = [];
-      const api: any = {
-        bind: (...x: any[]) => { b = coerce(x); return api; },
-        async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
-        async run() {
-          const r = db.prepare(sql).run(...b);
-          return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
-        },
-      };
-      return api;
-    },
-    async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
-  };
-}
-
 function freshDb() {
   const db = new DatabaseSync(':memory:', {
     enableForeignKeyConstraints: false,
     enableDoubleQuotedStringLiterals: true,
   });
-  db.exec(`
-    CREATE TABLE users (
-      id INTEGER PRIMARY KEY, role TEXT NOT NULL, name TEXT, email TEXT,
-      is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER,
-      investor_tier TEXT, partner_id INTEGER, founder_id INTEGER,
-      investor_seat_primary_user_id INTEGER
-    );
-    CREATE TABLE projects (
-      id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER,
-      company_id INTEGER, deleted_at TEXT
-    );
-    CREATE TABLE portfolio_update_chases (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
-      project_id INTEGER NOT NULL, chased_by INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE investor_dealroom_members (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, investor_user_id INTEGER NOT NULL,
-      deal_id INTEGER NOT NULL, company_id INTEGER
-    );
-    CREATE TABLE investor_introductions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, investor_user_id INTEGER NOT NULL,
-      project_id INTEGER, company_id INTEGER, quarter TEXT
-    );
-    CREATE TABLE watchlist_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, owner_user_id INTEGER NOT NULL,
-      converted_deal_id INTEGER, company_id INTEGER
-    );
-    CREATE TABLE deals (
-      id INTEGER PRIMARY KEY, uid TEXT, project_id INTEGER,
-      status TEXT NOT NULL DEFAULT 'applied'
-    );
-    CREATE TABLE portfolio_positions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, project_id INTEGER,
-      fund_id INTEGER, round_name TEXT, invested_amount REAL,
-      position_date TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE portfolio_marks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, project_id INTEGER,
-      fund_id INTEGER, as_of_date TEXT, fmv REAL, post_money REAL,
-      event TEXT, basis TEXT, source TEXT, note TEXT, created_by INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE portfolio_distributions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, project_id INTEGER,
-      fund_id INTEGER, distribution_date TEXT, amount REAL, kind TEXT,
-      note TEXT, created_by INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE mi_pro_subscriptions (
-      user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT,
-      period_end TEXT, stripe_customer_id TEXT
-    );
-  `);
-  const u = db.prepare('INSERT INTO users (id, role, name, founder_id) VALUES (?, ?, ?, ?)');
-  u.run(INVESTOR, 'investor', 'Ingrid Investor', null);
-  u.run(OUTSIDER, 'investor', 'Otto Outsider', null);
-  u.run(ADMIN, 'admin', 'Ada Admin', null);
-  u.run(FOUNDER, 'founder', 'Fred Founder', 9);
+  // The real schema (D7650): the chase now reads the reporting obligation, so
+  // the positions, duties and updates it reads are the ones the Worker has.
+  loadSchema(db);
+  const u = db.prepare(`INSERT INTO users (id, role, name, email, founder_id, is_active, investor_tier, investor_subscription_status)
+                        VALUES (?, ?, ?, ?, ?, 1, ?, 'active')`);
+  u.run(INVESTOR, 'investor', 'Ingrid Investor', 'ingrid@angel.example', null, 'professional');
+  u.run(OUTSIDER, 'investor', 'Otto Outsider', 'otto@angel.example', null, 'professional');
+  u.run(ADMIN, 'admin', 'Ada Admin', 'ada@axal.example', null, 'free');
+  u.run(FOUNDER, 'founder', 'Fred Founder', 'fred@alpha.example', 9, 'free');
   db.prepare("INSERT INTO projects (id, uid, name, founder_id) VALUES (?, 'p-alpha', 'Alpha', 9)").run(PROJ);
   db.prepare("INSERT INTO projects (id, uid, name, founder_id) VALUES (?, 'p-beta', 'Beta', null)").run(PROJ_OUT);
   // The investor's book: a deal on PROJ, and membership in its room.
@@ -141,12 +68,26 @@ function freshDb() {
   return db;
 }
 
+/**
+ * D7650: PROJ owes the investor a report that is due. A confirmed commitment
+ * and a position put it in the book; a duty of 0 days after the period ends
+ * makes the last completed period's report due today whatever today is.
+ */
+function owes(db: InstanceType<typeof DatabaseSync>) {
+  db.prepare(`INSERT INTO commitments (id, deal_id, investor_user_id, amount, status) VALUES (1, 71, ?, 1000, 'confirmed')`).run(INVESTOR);
+  db.prepare(`INSERT INTO portfolio_positions (uid, project_id, round_name, invested_amount, position_date) VALUES ('pos-owes', ?, 'Seed', 500, '2026-01-10')`).run(PROJ);
+  db.prepare(`INSERT INTO reporting_duties (closing_id, closing_line_id, closing_line_uid, project_id, holder_user_id, kind, cadence, due_rule, due_days,
+    source_document, source_clause, source_kind, starts_on, status)
+    VALUES (1, 1, 'l1', ?, ?, 'quarterly_kpi', 'quarterly', 'after_end', 0, 'IRA', '§1.1', 'closing_template', '2026-01-01', 'active')`).run(PROJ, INVESTOR);
+  return db;
+}
+
 async function token(userId: number, role: string): Promise<string> {
   return new SignJWT({ user_id: userId, role })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
-const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) });
+const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) });
 
 async function call(
   who: { user: number; role: string },
@@ -170,20 +111,21 @@ async function call(
 // ── The chase ──────────────────────────────────────────────────────────────
 
 test('a chase is logged per company, and the tenancy check is on the project', async () => {
-  const db = freshDb();
+  const db = owes(freshDb());
   const r = await call({ user: INVESTOR, role: 'investor' }, '/api/portfolio/chase', {
     method: 'POST', body: { project_ids: [PROJ, PROJ_OUT] },
   }, db);
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.chased.map((c: any) => c.project_id), [PROJ]);
   assert.deepEqual(r.body.skipped, [PROJ_OUT], 'a project outside the book is skipped, not chased');
+  assert.deepEqual(r.body.skips.map((s: any) => [s.project_id, s.reason]), [[PROJ_OUT, 'no_obligation']], 'D7650: and it says why');
   const rows = db.prepare('SELECT project_id, chased_by FROM portfolio_update_chases').all() as any[];
   assert.equal(rows.length, 1);
   assert.equal(rows[0].chased_by, INVESTOR);
 });
 
 test('a repeat chase inside the hour answers the existing row', async () => {
-  const db = freshDb();
+  const db = owes(freshDb());
   const first = await call({ user: INVESTOR, role: 'investor' }, '/api/portfolio/chase', { method: 'POST', body: { project_ids: [PROJ] } }, db);
   assert.equal(first.body.chased[0].already, false);
   const second = await call({ user: INVESTOR, role: 'investor' }, '/api/portfolio/chase', { method: 'POST', body: { project_ids: [PROJ] } }, db);
@@ -192,7 +134,7 @@ test('a repeat chase inside the hour answers the existing row', async () => {
 });
 
 test('the chase log reads back, scoped to the chaser', async () => {
-  const db = freshDb();
+  const db = owes(freshDb());
   await call({ user: INVESTOR, role: 'investor' }, '/api/portfolio/chase', { method: 'POST', body: { project_ids: [PROJ] } }, db);
   const read = await call({ user: INVESTOR, role: 'investor' }, '/api/portfolio/chases', {}, db);
   assert.equal(read.status, 200);
@@ -213,8 +155,8 @@ test('as_of cuts the flows and the marks at the date', async () => {
   const db = freshDb();
   // A position contributed in March, a distribution in May, and two marks:
   // one at the quarter end, one after it.
-  db.prepare(`INSERT INTO portfolio_positions (uid, project_id, invested_amount, position_date)
-              VALUES ('pos-1', ?, 1000000, '2026-03-10')`).run(PROJ);
+  db.prepare(`INSERT INTO portfolio_positions (uid, project_id, round_name, invested_amount, position_date)
+              VALUES ('pos-1', ?, 'Seed', 1000000, '2026-03-10')`).run(PROJ);
   db.prepare(`INSERT INTO portfolio_marks (uid, project_id, as_of_date, fmv, basis)
               VALUES ('m-1', ?, '2026-03-31', 1200000, 'gp_estimate'), ('m-2', ?, '2026-05-02', 900000, 'write_down')`).run(PROJ, PROJ);
   db.prepare(`INSERT INTO portfolio_distributions (uid, project_id, distribution_date, amount, kind)
@@ -235,7 +177,7 @@ test('as_of cuts the flows and the marks at the date', async () => {
 
 test('D1057: the chase notice sends the founder to Grow\'s Reporting desk, never the KPI board (#2427 finding 6)', async () => {
   // Mutation checked: the link back on /build/kpi.
-  const db = freshDb();
+  const db = owes(freshDb());
   const r = await call({ user: INVESTOR, role: 'investor' }, '/api/portfolio/chase', { method: 'POST', body: { project_ids: [PROJ] } }, db);
   assert.equal(r.status, 200);
   const sent = db.prepare("SELECT user_id, link, cta_url FROM notifications_inbox WHERE type = 'portfolio_update_chase'").all() as any[];

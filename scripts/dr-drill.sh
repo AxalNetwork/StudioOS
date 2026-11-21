@@ -68,6 +68,10 @@
 set -euo pipefail
 
 DRILL_PREFIX="dr-drill-$(date -u +%Y%m%d%H%M)"
+if [[ -n "${DR_DRILL_DB_FILE:-}" ]]; then
+  [[ "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ && "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid drill run identity' >&2; exit 1; }
+  DRILL_PREFIX="${DRILL_PREFIX}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+fi
 TARGET_DB="${DRILL_PREFIX}-db"
 BUCKET="${BACKUP_BUCKET:-studioos-backups}"
 PAGER_WEBHOOK_URL="${PAGER_WEBHOOK_URL:-}"
@@ -193,8 +197,11 @@ on_exit() {
   local rc=$?
   set +e
   if [[ "${DB_CREATED}" -eq 1 ]]; then
-    wrangler d1 delete "${TARGET_DB}" --skip-confirmation \
-      || log "WARN: could not delete throwaway DB ${TARGET_DB}; clean up manually"
+    if wrangler d1 delete "${TARGET_DB}" --skip-confirmation; then
+      [[ -z "${DR_DRILL_DB_FILE:-}" ]] || rm -f "${DR_DRILL_DB_FILE}"
+    else
+      log "WARN: could not delete throwaway DB ${TARGET_DB}; clean up manually"
+    fi
   fi
   if [[ -n "${TMP}" && -d "${TMP}" ]]; then
     rm -rf "${TMP}" || log "WARN: tmp cleanup failed (${TMP})"
@@ -293,6 +300,10 @@ log "creating throwaway DB ${TARGET_DB}"
 # rehearsing a shape that, followed for real, would land production data
 # outside the EU. branch-provision.yml already passes this flag when it
 # creates a branch database; the drill now does too.
+# Persist intent before creation so cancellation during create cannot orphan an unrecorded DB.
+if [[ -n "${DR_DRILL_DB_FILE:-}" ]]; then
+  (umask 077; printf '%s\n' "${TARGET_DB}" > "${DR_DRILL_DB_FILE}")
+fi
 wrangler d1 create "${TARGET_DB}" --jurisdiction eu >/dev/null
 DB_CREATED=1
 
