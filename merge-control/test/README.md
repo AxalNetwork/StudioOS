@@ -7,5 +7,6 @@
 | `repair_policy_5622.test.ts` | D5622: CI repair eligibility and breaker inputs. |
 | `runtime-loader.mjs` | Node-only platform base-class adapter and stand-in for the build's `policy_version` define; never imported by production. |
 | `ci_capacity.test.ts` | D7887: deterministic capacity, real SQLite recovery, timeout/fallback, provenance and aggregate tests. |
+| `ci_capacity_auth_policy_8011.test.ts` | D8011: fake clock/network/crypto boundaries test bounded key refresh, durable reservations and verified receipt progress. |
 
 Wrangler local-runtime smoke checks and packaging are recorded in D5618.

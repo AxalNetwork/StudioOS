@@ -535,7 +535,8 @@ test('composed Linux catalog and trusted executor preserve success, failures, re
   }});
   if(outcome==='revoked'){await assert.rejects(execution(),/superseded_before_execution/);assert.equal(started,0);return;}
   const result=await execution();assert.equal(result.code,outcome==='failure'?23:0);assert.equal(started,1);
-  assert.equal(isolationChecks>=2&&oidcReads>=4,true);
+  assert.equal(isolationChecks>=2,true);
+  assert.equal(oidcReads,2,'the two trusted reader lifetimes each reuse a short-lived token; authority still verifies every read');
   if(outcome==='incomplete')f.missingResults();
   f.result(outcome==='failure'?'failure':'success');await f.tick();
   assert.equal(f.checks[0].status,outcome==='incomplete'?'in_progress':'completed');

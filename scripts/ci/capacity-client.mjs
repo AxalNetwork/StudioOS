@@ -18,20 +18,40 @@ export function githubOidcToken(env=process.env,fetcher=globalThis.fetch){
   return result.value;
  };
 }
-function transport({url,audience,oidcToken,fetcher=globalThis.fetch}){
+function transport({url,audience,oidcToken,fetcher=globalThis.fetch},receiptContinuation=false){
  const endpoint=new URL(url);
  if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||endpoint.search||endpoint.hash||endpoint.pathname!=='/'||!audience||typeof oidcToken!=='function')throw new Error('capacity_authority_unconfigured');
- return async(path,body,signal)=>{
+ // One short-lived bearer, scoped to this trusted reader/run. It never reaches candidate code or disk.
+ // Client expiry parsing only shortens reuse; the authority verifies every signature and claim afresh.
+ let cached=null,flight=null;
+ async function receiptToken(scope,deadline){
+  const now=Date.now();
+  if(cached?.scope===scope&&cached.until>now)return cached.token;
+  if(flight){if(flight.scope!==scope)throw new Error('capacity_reader_context_changed');return flight.promise;}
+  const promise=(async()=>{
+   const token=await oidcToken(audience,deadline);
+   if(typeof token!=='string'||!/^[A-Za-z0-9_.-]{1,16384}$/.test(token))throw new Error('invalid_oidc_response');
+   let exp;try{exp=JSON.parse(Buffer.from(token.split('.')[1]??'','base64url').toString('utf8')).exp;}catch{throw new Error('invalid_oidc_response');}
+   if(!Number.isSafeInteger(exp)||exp*1000<=Date.now()+1000)throw new Error('invalid_oidc_response');
+   cached={scope,token,until:Math.min(now+30000,exp*1000-1000)};
+   return token;
+  })();
+  flight={scope,promise};
+  try{return await promise;}finally{if(flight?.promise===promise)flight=null;}
+ }
+ return async(path,body,signal,scope)=>{
   const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000);
-  const token=await oidcToken(audience,deadline);
-  return json(await fetcher(new URL(path,endpoint),{method:'POST',redirect:'error',signal:deadline,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)}));
+  const token=receiptContinuation?await receiptToken(scope,deadline):await oidcToken(audience,deadline);
+  try{return await json(await fetcher(new URL(path,endpoint),{method:'POST',redirect:'error',signal:deadline,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)}));}
+  catch(error){cached=null;throw error;}
  };
 }
 export function createReceiptReader(options){
- const send=transport(options);
+ const send=transport(options,true);
  return async({request,context,phase,signal})=>{
   if(context.repository!==REPOSITORY)throw new Error('capacity_repository_refused');
-  const result=await send('/capacity/receipt',{requestId:request.requestId,shard:request.shard,generation:Number(request.generation),profile:request.profile,phase},signal);
+  const scope=JSON.stringify([context.repository,context.childRunId,context.childAttempt,context.executorSha]);
+  const result=await send('/capacity/receipt',{requestId:request.requestId,shard:request.shard,generation:Number(request.generation),profile:request.profile,phase},signal,scope);
   const receipt=result.receipt;
   if(result.active!==true||!receipt||receipt.repository!==context.repository||String(receipt.childRunId)!==String(context.childRunId)||String(receipt.childAttempt)!==String(context.childAttempt)||receipt.executorSha!==context.executorSha||receipt.requestId!==request.requestId||receipt.generation!==Number(request.generation)||receipt.logicalShard!==request.shard||receipt.profile!==request.profile)throw new Error('capacity_receipt_refused');
   return result;
