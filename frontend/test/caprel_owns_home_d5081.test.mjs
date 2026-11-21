@@ -14,6 +14,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
+import { waitUntil } from './_waitUntil.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
   ADD_ACTION, FIND_ACTION, IMPORT_ACTION, START_READER, START_TITLE, addHref, homeAction, isFirstUse, setupActions,
@@ -128,6 +129,8 @@ async function mounted(url, { phone = false, works = true, prospects = PROSPECTS
   return {
     calls, by, props,
     has: (id) => Boolean(by(id)),
+    // D5504: wait on what the page shows, not on a fixed eight ticks, which a loaded runner can outlast.
+    until: (id) => waitUntil(() => Boolean(by(id)), { label: id, advance: flush, describe: () => text(container) }),
     text: (id) => text(id ? by(id) : container).replace(/\s+/g, ' ').trim(),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
@@ -190,9 +193,9 @@ test('first use collapses to the start card and its set-up actions, with no zero
 
 test('Add investor and Import pipeline open Pipeline’s own dialogs on arrival', async () => {
   const v = await mounted('/raise/capital-relationships/pipeline?project_id=3&open=add');
-  try { assert.ok(v.has('caprel-add-dialog'), 'Add investor opens'); } finally { await v.close(); }
+  try { await v.until('caprel-add-dialog'); assert.ok(v.has('caprel-add-dialog'), 'Add investor opens'); } finally { await v.close(); }
   const i = await mounted('/raise/capital-relationships/pipeline?project_id=3&open=import');
-  try { assert.ok(i.has('caprel-import-dialog'), 'Import opens'); } finally { await i.close(); }
+  try { await i.until('caprel-import-dialog'); assert.ok(i.has('caprel-import-dialog'), 'Import opens'); } finally { await i.close(); }
 });
 
 test('on the tabs the action is Add investor for a viewer who works the tool, none on Pipeline, which has its own', async () => {
