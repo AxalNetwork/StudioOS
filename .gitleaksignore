@@ -334,3 +334,9 @@ ed6973899e6136c291f73d0e965a31adfa4a0620:frontend/test/landing_bot_model_6473.te
 # generic-api-key; the next commit switches to the standard test value. This covers that
 # PR commit only.
 9615940a3a9931caba3418527f7cd295ec27be07:cloudflare-worker/test/ic_voting_closed_7920.test.ts:generic-api-key:8
+# D5570 part 2 (#5570): the Durable Object instance name in the admission store
+# test's first commit (unsafeUniqueKey:'admission-5570-test'), Miniflare's label
+# for the fixture's object. It was never a credential. The next commit names it
+# through DO_INSTANCE_NAME, so no later commit carries the literal. Scoped to the
+# one finding, as D334's entry is.
+65a0e12e1f5b8b4b141908164344f62a07d9c8eb:cloudflare-worker/test/workspace_admission_store_5570.test.mjs:generic-api-key:18
