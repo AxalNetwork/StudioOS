@@ -6,7 +6,7 @@ const NOW = 1_000_000;
 
 test('ephemeral supervision never forwards broad credentials and drains before unregister/teardown, with bounded enrollment', () => {
   assert.deepEqual(isolatedJobEnvironment({ PATH: '/tools', LANG: 'C', GH_TOKEN: 'synthetic', JELASTIC_TOKEN: 'synthetic', APP_PRIVATE_KEY: 'synthetic' }), { PATH: '/tools', LANG: 'C' });
-  const state = { machineCreatedAt: NOW, enrollmentAttempts: 0 };
+  const state = { machineCreatedAt: NOW, enrollmentAttempts: 0, jobsCompleted: 0 };
   const observed = { eligibilityRemoved: false, assignment: 'none', registered: false };
   const policy = { approved: true, imageVerified: true, issuerVerified: true, killSwitch: false, draining: false,
     lastAdmissionAt: NOW + 100_000, maxLifetimeMs: 600_000, minEnrollmentMs: 10_000, maxEnrollmentAttempts: 3, enrollmentExpiresAt: null };
@@ -19,4 +19,18 @@ test('ephemeral supervision never forwards broad credentials and drains before u
   assert.equal(nextSupervisorAction(state, { ...observed, eligibilityRemoved: true, registered: true }, { ...policy, draining: true }, NOW).action, 'unregister');
   assert.equal(nextSupervisorAction(state, { ...observed, eligibilityRemoved: true }, { ...policy, draining: true }, NOW).action, 'ready-for-provider-teardown');
   assert.equal(nextSupervisorAction({ ...state, enrollmentAttempts: 3 }, observed, policy, NOW).reason, 'enrollment_retry_limit');
+});
+
+test('completed one-job machines drain and unknown registration observations cannot authorize teardown', () => {
+  const state = { machineCreatedAt: NOW, enrollmentAttempts: 0, jobsCompleted: 1 };
+  const observed = { eligibilityRemoved: false, assignment: 'none', registered: false };
+  const policy = { approved: true, imageVerified: true, issuerVerified: true, killSwitch: false, draining: false,
+    lastAdmissionAt: NOW + 100_000, maxLifetimeMs: 600_000, minEnrollmentMs: 10_000, maxEnrollmentAttempts: 3, enrollmentExpiresAt: null };
+  assert.equal(nextSupervisorAction(state, observed, policy, NOW).action, 'remove-eligibility');
+  assert.equal(nextSupervisorAction(state, { ...observed, eligibilityRemoved: true }, policy, NOW).action, 'ready-for-provider-teardown');
+  for (const field of ['registered', 'eligibilityRemoved']) {
+    for (const value of [undefined, null, 'false', 0]) {
+      assert.throws(() => nextSupervisorAction(state, { ...observed, [field]: value }, policy, NOW), /invalid_supervisor_contract/);
+    }
+  }
 });

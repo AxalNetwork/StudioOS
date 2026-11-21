@@ -8,11 +8,12 @@ export function isolatedJobEnvironment(environment) {
 export function nextSupervisorAction(state, observed, policy, now) {
   if (!Number.isSafeInteger(now) || now < 0) throw Error('invalid_clock');
   if (!policy.approved || !policy.imageVerified || !policy.issuerVerified) return { action: 'blocked', reason: 'lifecycle_unverified' };
-  if (![policy.lastAdmissionAt, policy.maxLifetimeMs, policy.minEnrollmentMs, policy.maxEnrollmentAttempts, state.machineCreatedAt, state.enrollmentAttempts]
+  if (![policy.lastAdmissionAt, policy.maxLifetimeMs, policy.minEnrollmentMs, policy.maxEnrollmentAttempts, state.machineCreatedAt, state.enrollmentAttempts, state.jobsCompleted]
     .every((n) => Number.isSafeInteger(n) && n >= 0) || policy.maxLifetimeMs < 1 || policy.minEnrollmentMs < 1
     || policy.maxEnrollmentAttempts < 1 || policy.maxEnrollmentAttempts > 5 || state.machineCreatedAt > now
+    || typeof observed.registered !== 'boolean' || typeof observed.eligibilityRemoved !== 'boolean'
     || !['none', 'owned', 'unowned', 'unknown'].includes(observed.assignment)) throw Error('invalid_supervisor_contract');
-  const drain = policy.killSwitch || policy.draining || now >= policy.lastAdmissionAt || now - state.machineCreatedAt >= policy.maxLifetimeMs;
+  const drain = state.jobsCompleted > 0 || policy.killSwitch || policy.draining || now >= policy.lastAdmissionAt || now - state.machineCreatedAt >= policy.maxLifetimeMs;
   if (drain) {
     if (!observed.eligibilityRemoved) return { action: 'remove-eligibility', reEnroll: false };
     if (observed.assignment !== 'none') return { action: 'wait', reason: observed.assignment === 'owned' ? 'owned_job_deadline' : 'unverified_assignment', reEnroll: false };

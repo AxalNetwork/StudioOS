@@ -5,7 +5,7 @@ export interface ImageProfile {
   runnerVersion: string | null; runnerDigest: string | null; nodeVersion: string | null; pythonVersion: string | null;
 }
 export interface FleetNode {
-  reservation: string; profile: string; generation: number; phase: Phase; createdAt: number;
+  reservation: string; profile: string; generation: number; phase: Phase; createdAt: number; bootStartedAt: number;
   lastHeartbeat: number | null; idleSince: number | null; registered: boolean; bootVerified: boolean;
   eligibilityRemoved: boolean; assignment: 'none' | 'owned' | 'unowned' | 'unknown';
   providerId: string | null; runnerId: number | null; deleteConfirmed: boolean;
@@ -36,6 +36,12 @@ export interface ScaleProposal { expectedRevision: number; state: FleetState; op
 const integer = (n: number, min = 0) => Number.isSafeInteger(n) && n >= min;
 const profileName = (v: string) => /^[a-z][a-z0-9-]{0,63}$/.test(v);
 const semver = (v: string | null) => typeof v === 'string' && /^\d+\.\d+\.\d+$/.test(v);
+export function validInventoryInstance(value: unknown): value is Inventory['instances'][number] {
+  if (!value || typeof value !== 'object') return false;
+  const i = value as Inventory['instances'][number];
+  return typeof i.providerId === 'string' && i.providerId.length > 0 && i.providerId.length <= 256
+    && typeof i.owned === 'boolean' && (i.reservation === null || (typeof i.reservation === 'string' && /^[a-zA-Z0-9:_-]{1,160}$/.test(i.reservation)));
+}
 export const emptyFleet = (): FleetState => ({ revision: 0, sequence: 0, nodes: [], starts: [], lastScaleAt: null, reservedUnits: 0, recentEvents: [], retryCount: 0, pending: [] });
 
 export function imageEligible(image: ImageProfile): boolean {
@@ -89,8 +95,13 @@ export function planFleet(previous: FleetState, config: ScaleConfig, inventory: 
   validateScaleConfig(config);
   if (!integer(now) || !integer(previous.revision) || !integer(previous.sequence) || !integer(previous.reservedUnits)) throw Error('invalid_state');
   if (previous.nodes.length > 50 || new Set(previous.nodes.map((n) => n.reservation)).size !== previous.nodes.length
+      || new Set(previous.nodes.filter((n) => n.providerId !== null).map((n) => n.providerId)).size !== previous.nodes.filter((n) => n.providerId !== null).length
+      || new Set(previous.nodes.filter((n) => n.runnerId !== null).map((n) => n.runnerId)).size !== previous.nodes.filter((n) => n.runnerId !== null).length
       || previous.nodes.some((n) => !integer(n.generation, 1) || !integer(n.createdAt) || n.createdAt > now
+        || !integer(n.bootStartedAt) || n.bootStartedAt < n.createdAt || n.bootStartedAt > now
         || (n.lastHeartbeat != null && (!integer(n.lastHeartbeat) || n.lastHeartbeat > now)))) throw Error('invalid_state');
+  if (!Array.isArray(inventory.instances) || inventory.instances.length > 1000 || !inventory.instances.every(validInventoryInstance)
+      || new Set(inventory.instances.map((i) => i.providerId)).size !== inventory.instances.length) throw Error('invalid_inventory');
   const state = structuredClone(previous); state.revision++;
   state.nodes = state.nodes.filter((n) => !(n.phase === 'deleted' && n.deleteConfirmed && n.holdUnits === 0));
   const operations: ScaleOperation[] = []; const reasons: string[] = [];
@@ -106,14 +117,17 @@ export function planFleet(previous: FleetState, config: ScaleConfig, inventory: 
       keep.add(node.reservation); profileKept.set(node.profile, (profileKept.get(node.profile) ?? 0) + 1);
     }
   }
-  const orphans = inventory.instances.filter((i) => !state.nodes.some((n) => n.providerId === i.providerId || n.reservation === i.reservation));
+  const duplicateReservations = new Set(inventory.instances.filter((i, index, all) => i.reservation !== null
+    && all.findIndex((other) => other.reservation === i.reservation) !== index).map((i) => i.reservation));
+  const orphans = inventory.instances.filter((i) => duplicateReservations.has(i.reservation)
+    || !state.nodes.some((n) => n.providerId === i.providerId || (n.providerId === null && n.reservation === i.reservation)));
   const budget = config.budget;
   const finishReserveMs = config.lifetimeMs + budget.maxJobMs + budget.terminationMs + budget.billingLagMs;
   const perNodeUnits = budget.unitsPerNodeMinute == null ? null : Math.ceil(finishReserveMs / 60000) * budget.unitsPerNodeMinute;
   const canAdmit = config.enabled && config.approvedCap > 0 && budget.approved && budget.meterVerified
     && perNodeUnits != null && Number.isSafeInteger(perNodeUnits) && budget.expiresAt != null && budget.remainingUnits != null
     && budget.expiresAt - now > finishReserveMs && budget.remainingUnits >= state.reservedUnits;
-  const missedDeadlines = live.filter((n) => (['reserved', 'booting'].includes(n.phase) && now - n.createdAt >= config.warmupMs)
+  const missedDeadlines = live.filter((n) => (['reserved', 'booting'].includes(n.phase) && now - n.bootStartedAt >= config.warmupMs)
     || (n.jobStartedAt != null && now - n.jobStartedAt >= budget.maxJobMs)).length;
   const add = (node: FleetNode, kind: ScaleOperation['kind']) => {
     const key = `${node.reservation}:${node.generation}:${kind}`;
@@ -129,18 +143,18 @@ export function planFleet(previous: FleetState, config: ScaleConfig, inventory: 
     const healthy = node.lastHeartbeat != null && now >= node.lastHeartbeat && now - node.lastHeartbeat <= config.heartbeatMs
       && !!config.profiles[node.profile] && imageMatches(config.profiles[node.profile].image, node.observedImage ?? undefined);
     const missing = fresh && node.providerId != null && !inventory.instances.some((i) => i.providerId === node.providerId && i.owned);
-    const bootExpired = (node.phase === 'reserved' || node.phase === 'booting') && now - node.createdAt >= config.warmupMs;
+    const bootExpired = (node.phase === 'reserved' || node.phase === 'booting') && now - node.bootStartedAt >= config.warmupMs;
     const idleExpired = node.idleSince != null && now - node.idleSince >= config.idleMs;
     const profileLive = live.filter((n) => n.profile === node.profile && n.phase !== 'draining' && n.phase !== 'stopping').length;
     const desired = Math.min(config.profiles[node.profile]?.max ?? 0, Math.max(config.profiles[node.profile]?.min ?? 0, pending[node.profile] ?? 0));
     const shouldDrain = !canAdmit || (candidates.includes(node) && !keep.has(node.reservation)) || now - node.createdAt >= config.lifetimeMs || bootExpired
       || (idleExpired && profileLive > desired) || (node.phase === 'ready' && !healthy)
       || (node.jobStartedAt != null && now - node.jobStartedAt >= budget.maxJobMs);
-    if (missing || node.phase === 'uncertain') { node.phase = 'uncertain'; add(node, 'inspect'); continue; }
+    if (missing || node.phase === 'uncertain' || (node.providerId === null && shouldDrain)) { node.phase = 'uncertain'; add(node, 'inspect'); continue; }
     if (shouldDrain && node.phase !== 'stopping') node.phase = 'draining';
     if (node.phase === 'draining') {
       if (!node.eligibilityRemoved) add(node, 'remove-eligibility');
-      else if (fresh && node.assignment === 'none') {
+      else if (fresh && node.assignment === 'none' && node.jobStartedAt === null) {
         if (node.registered) add(node, 'unregister');
         else { node.phase = 'stopping'; add(node, 'stop-delete'); }
       }
@@ -161,7 +175,7 @@ export function planFleet(previous: FleetState, config: ScaleConfig, inventory: 
       const busy = state.nodes.filter((n) => n.profile === profile && n.assignment === 'owned').length;
       const desired = Math.min(p.max, Math.max(p.min, (pending[profile] ?? 0) + busy));
       if (!imageEligible(p.image) || count >= desired || perNodeUnits == null || budget.remainingUnits == null || state.reservedUnits + perNodeUnits > budget.remainingUnits) continue;
-      const node: FleetNode = { reservation: `scale-${++state.sequence}`, profile, generation: 1, phase: 'reserved', createdAt: now,
+      const node: FleetNode = { reservation: `scale-${++state.sequence}`, profile, generation: 1, phase: 'reserved', createdAt: now, bootStartedAt: now,
         lastHeartbeat: null, idleSince: null, registered: false, bootVerified: false, eligibilityRemoved: false,
         assignment: 'none', providerId: null, runnerId: null, deleteConfirmed: false, jobStartedAt: null, holdUnits: perNodeUnits, observedImage: null };
       state.nodes.push(node); state.reservedUnits += perNodeUnits; state.starts.push(now); state.lastScaleAt = now;
@@ -189,7 +203,7 @@ export function commitFleet(current: FleetState, proposal: ScaleProposal): Fleet
 }
 
 /** Bounded event receipt handling; terminal nodes never resurrect after duplicate/late boot events. */
-export function recordFleetEvent(previous: FleetState, event: { id: string; reservation: string; generation: number; kind: 'created' | 'ready' | 'drained' | 'unregistered' | 'deleted' | 'uncertain' | 'reconciled' | 'job-started' | 'job-finished' | 'meter-settled'; at: number; providerId?: string; runnerId?: number; bootVerified?: boolean; observedImage?: ImageProfile; registrationVerified?: boolean; online?: boolean; providerVerified?: boolean; assignment?: FleetNode['assignment'] }, config: ScaleConfig): FleetState {
+export function recordFleetEvent(previous: FleetState, event: { id: string; reservation: string; generation: number; kind: 'created' | 'ready' | 'heartbeat' | 'drained' | 'unregistered' | 'deleted' | 'uncertain' | 'reconciled' | 'job-started' | 'job-finished' | 'meter-settled'; at: number; providerId?: string; runnerId?: number; bootVerified?: boolean; observedImage?: ImageProfile; registrationVerified?: boolean; online?: boolean; providerVerified?: boolean; eligibilityRemoved?: boolean; absent?: boolean; assignment?: FleetNode['assignment'] }, config: ScaleConfig): FleetState {
   if (!/^[a-zA-Z0-9:_-]{1,160}$/.test(event.id) || !integer(event.at) || !integer(event.generation, 1)) throw Error('invalid_event');
   if (previous.recentEvents.includes(event.id)) return previous;
   const state = structuredClone(previous); const node = state.nodes.find((n) => n.reservation === event.reservation);
@@ -197,28 +211,39 @@ export function recordFleetEvent(previous: FleetState, event: { id: string; rese
   if (node.phase === 'deleted') {
     if (event.kind !== 'meter-settled' || !config.budget.meterVerified || !node.deleteConfirmed || event.at - (node.lastHeartbeat ?? event.at) < config.budget.billingLagMs) return previous;
     state.reservedUnits = Math.max(0, state.reservedUnits - node.holdUnits); node.holdUnits = 0;
-    state.revision++; state.recentEvents = [...state.recentEvents.slice(-255), event.id]; return state;
+    state.retryCount = 0; state.revision++; state.recentEvents = [...state.recentEvents.slice(-255), event.id]; return state;
   }
+  if (event.providerId && state.nodes.some((other) => other !== node && other.providerId === event.providerId)) return previous;
+  if (event.runnerId != null && state.nodes.some((other) => other !== node && other.runnerId === event.runnerId)) return previous;
   if (event.kind === 'created' && node.phase === 'reserved' && event.providerId) { node.providerId = event.providerId; node.phase = 'booting'; }
-  else if (event.kind === 'reconciled' && node.phase === 'uncertain' && event.providerVerified === true && event.registrationVerified === true && event.providerId && event.assignment === 'none') {
+  else if (event.kind === 'reconciled' && node.phase === 'uncertain' && event.absent === true && event.providerVerified === true
+      && event.registrationVerified === true && event.assignment === 'none' && (node.runnerId === null ? event.runnerId == null : event.runnerId === node.runnerId)
+      && (node.providerId === null ? event.providerId == null : event.providerId === node.providerId)) {
+    node.phase = 'deleted'; node.deleteConfirmed = true; node.registered = false; node.runnerId = null;
+    node.eligibilityRemoved = true; node.assignment = 'none'; node.jobStartedAt = null;
+  }
+  else if (event.kind === 'reconciled' && event.absent !== true && node.phase === 'uncertain' && event.providerVerified === true && event.registrationVerified === true && event.providerId && event.assignment === 'none') {
     node.generation++; node.providerId = event.providerId; node.phase = 'booting'; node.registered = false; node.runnerId = null; node.assignment = 'none'; node.jobStartedAt = null;
-    node.bootVerified = false; node.observedImage = null; node.eligibilityRemoved = false;
+    node.bootStartedAt = event.at; node.bootVerified = false; node.observedImage = null; node.eligibilityRemoved = false;
   }
   else if (event.kind === 'ready' && (node.phase === 'booting' || (node.phase === 'ready' && !node.registered)) && event.bootVerified === true && integer(event.runnerId ?? 0, 1)
       && event.registrationVerified === true && event.online === true && !!config.profiles[node.profile] && imageMatches(config.profiles[node.profile].image, event.observedImage)) {
     node.bootVerified = true; node.registered = true; node.runnerId = event.runnerId!; node.phase = 'ready'; node.idleSince = event.at; node.lastHeartbeat = event.at; node.observedImage = structuredClone(event.observedImage!);
   } else if (event.kind === 'job-started' && ['ready', 'draining', 'stopping'].includes(node.phase) && node.runnerId != null && event.runnerId === node.runnerId) {
     node.phase = node.phase === 'ready' ? 'busy' : 'draining';
-    node.assignment = event.assignment ?? 'unknown'; node.jobStartedAt = event.at; node.idleSince = null;
+    node.assignment = event.assignment === 'none' ? 'unknown' : event.assignment ?? 'unknown'; node.jobStartedAt = event.at; node.idleSince = null;
   } else if (event.kind === 'job-finished' && ['busy', 'draining'].includes(node.phase) && event.runnerId === node.runnerId) {
     // One-job machines drain; completion is not proof that GitHub removed the registration.
     node.assignment = 'none'; node.jobStartedAt = null; node.idleSince = event.at; node.phase = 'draining';
-  } else if (event.kind === 'drained' && node.phase === 'draining') { node.eligibilityRemoved = true; node.assignment = event.assignment ?? 'unknown'; if (node.assignment === 'none') node.jobStartedAt = null; }
+  } else if (event.kind === 'heartbeat' && ['ready', 'busy', 'draining'].includes(node.phase) && node.registered
+      && event.runnerId === node.runnerId && event.registrationVerified === true && event.online === true) { node.lastHeartbeat = event.at; }
+  else if (event.kind === 'drained' && node.phase === 'draining' && event.eligibilityRemoved === true) { node.eligibilityRemoved = true; node.assignment = event.assignment ?? 'unknown'; if (node.assignment === 'none') node.jobStartedAt = null; }
   else if (event.kind === 'unregistered' && node.phase === 'draining' && node.eligibilityRemoved && node.assignment === 'none' && event.registrationVerified === true && event.runnerId === node.runnerId) { node.registered = false; }
-  else if (event.kind === 'deleted' && event.providerVerified === true && node.phase === 'stopping' && node.eligibilityRemoved && !node.registered && node.assignment === 'none') { node.phase = 'deleted'; node.deleteConfirmed = true; node.registered = false; node.runnerId = null; node.lastHeartbeat = event.at; }
+  else if (event.kind === 'deleted' && event.providerVerified === true && node.providerId !== null && event.providerId === node.providerId && node.phase === 'stopping' && node.eligibilityRemoved && !node.registered && node.assignment === 'none') { node.phase = 'deleted'; node.deleteConfirmed = true; node.registered = false; node.runnerId = null; node.lastHeartbeat = event.at; }
   else if (event.kind === 'uncertain') node.phase = 'uncertain';
   else return previous;
-  if (node.phase !== 'deleted') node.lastHeartbeat = event.at;
+  node.lastHeartbeat = event.at;
+  if (event.kind !== 'uncertain' && event.kind !== 'heartbeat') state.retryCount = 0;
   state.revision++; state.recentEvents = [...state.recentEvents.slice(-255), event.id];
   state.pending = state.pending.filter((op) => operationAllowed(state, op, state.revision)); return state;
 }
@@ -239,6 +264,6 @@ export function operationAllowed(state: FleetState, operation: ScaleOperation, c
   if (operation.kind === 'create') return node.phase === 'reserved' && node.providerId === null;
   if (operation.kind === 'inspect') return node.phase === 'uncertain';
   if (operation.kind === 'remove-eligibility') return node.phase === 'draining' && !node.eligibilityRemoved;
-  if (operation.kind === 'unregister') return node.phase === 'draining' && node.eligibilityRemoved && node.assignment === 'none' && node.registered;
-  return node.phase === 'stopping' && node.eligibilityRemoved && !node.registered && node.assignment === 'none';
+  if (operation.kind === 'unregister') return node.providerId !== null && node.phase === 'draining' && node.eligibilityRemoved && node.assignment === 'none' && node.jobStartedAt === null && node.registered;
+  return operation.kind === 'stop-delete' && node.providerId !== null && node.phase === 'stopping' && node.eligibilityRemoved && !node.registered && node.assignment === 'none' && node.jobStartedAt === null;
 }
