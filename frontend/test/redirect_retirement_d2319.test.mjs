@@ -32,13 +32,13 @@ function checkRetired(routeSource, listed) {
 }
 
 function checkProtected(routeSource, listed) {
-  const retained = ["/settings", "/settings/:section", "/dashboard", "/product-testing", "/raise/pitch-deck", "/raise/pitch-deck/new", "/insights", "/notifications", "/notifications/*", "/help/:id", "/tickets/:id", "/support", "/plans-and-pricing", "/raise/capital/cap-table", "/lp-portal", "/integrations", "/lp/founder", "/lp/customer-discovery", "/lp/investor", "/lp/partner", "/admin/spinout-lab", "/admin", "/refer", "/wellbeing/expert-dashboard", "/grow/partner-network"];
+  const retained = ["/settings", "/settings/:section", "/dashboard", "/product-testing", "/raise/pitch-deck", "/raise/pitch-deck/new", "/insights", "/notifications", "/notifications/*", "/help/:id", "/tickets/:id", "/support", "/plans-and-pricing", "/raise/capital/cap-table", "/lp-portal", "/integrations", "/lp/founder", "/lp/customer-discovery", "/lp/investor", "/lp/partner", "/admin/spinout-lab", "/admin", "/refer", "/wellbeing/expert-dashboard", "/grow/partner-network", "/grow/team-expansion"];
   for (const path of retained) {
     assert.ok(listed.some((r) => r.path === path), path);
     assert.ok(routeSource.includes(`<Route path="${path}"`), path);
   }
-  // D6118: /grow/partner-network forwards to the one Partnerships page; sent digests carry it.
-  for (const path of ['/lp/founder', '/lp/customer-discovery', '/lp/investor', '/lp/partner', '/dashboard', '/refer', '/wellbeing/expert-dashboard', '/grow/partner-network']) {
+  // D6118/D6117: sent links retain the Partnerships and Team expansion forwards.
+  for (const path of ['/lp/founder', '/lp/customer-discovery', '/lp/investor', '/lp/partner', '/dashboard', '/refer', '/wellbeing/expert-dashboard', '/grow/partner-network', '/grow/team-expansion']) {
     assert.equal(listed.find((r) => r.path === path)?.keep, true, path);
   }
   for (const r of [...ADMIN_TAB_REDIRECTS, ...FORWARD_REDIRECTS, ...ROLE_REDIRECTS]) {
@@ -55,7 +55,7 @@ test('D2319: retired aliases are absent and every protected address remains', ()
   check();
   for (const path of retired) assert.equal(isRedirectKey(`redirect:${path}`), false, path);
   for (const r of REDIRECT_ROUTES) assert.equal(isRedirectKey(`redirect:${r.path}`), true, r.path);
-  for (const path of ['/lp/founder', '/lp/customer-discovery', '/lp/investor', '/lp/partner', '/dashboard', '/refer', '/wellbeing/expert-dashboard']) {
+  for (const path of ['/lp/founder', '/lp/customer-discovery', '/lp/investor', '/lp/partner', '/dashboard', '/refer', '/wellbeing/expert-dashboard', '/grow/team-expansion']) {
     assert.equal(redirectPatternFor(path), path, path);
   }
 });
@@ -75,7 +75,7 @@ test('D2319: each restored alias or missing protected route/key/keep flag fails,
       check();
     }
   }
-  for (const path of ['/lp/founder', '/lp/customer-discovery', '/lp/investor', '/lp/partner', '/dashboard', '/refer', '/wellbeing/expert-dashboard']) {
+  for (const path of ['/lp/founder', '/lp/customer-discovery', '/lp/investor', '/lp/partner', '/dashboard', '/refer', '/wellbeing/expert-dashboard', '/grow/team-expansion']) {
     assert.throws(() => check(routes, REDIRECT_ROUTES.map((r) => r.path === path ? { path } : r)), assert.AssertionError, path);
     check();
   }

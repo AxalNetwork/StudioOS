@@ -82,18 +82,24 @@ test.afterEach(async ({ page }) => {
 async function wire(page, opts = {}) {
   const o = {
     apple: 'on', appleStart: 'ok', google: 'redirect', gisMode: 'code', googlePopup: 'ok',
-    magic: 'ok', login: 'ok', passkeyOptions: 'ok', passkeyVerify: 'ok', webauthn: 'ok', webauthnSupported: true,
+    turnstileDelayMs: 20, magic: 'ok', login: 'ok', passkeyOptions: 'ok', passkeyVerify: 'ok', webauthn: 'ok', webauthnSupported: true,
     ...opts,
   };
   const seen = [];
-  await page.addInitScript(({ consentVersion, gisMode, webauthn, webauthnSupported }) => {
+  await page.addInitScript(({ consentVersion, gisMode, webauthn, webauthnSupported, turnstileDelayMs }) => {
     try {
       localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: consentVersion, decided: true, updatedAt: '2026-11-19T00:00:00Z', categories: { essential: true } }));
     } catch { /* storage off: the first check fails loudly */ }
     window.__gisMode = gisMode;
     // Turnstile, answering a token as an invisible `interaction-only` widget does.
     window.turnstile = {
-      render(el, cfg) { setTimeout(() => cfg.callback('synthetic-turnstile-token'), 20); return 'w'; },
+      render(el, cfg) {
+        setTimeout(() => {
+          cfg.callback('synthetic-turnstile-token');
+          el.dataset.fixtureTurnstileReady = 'true';
+        }, turnstileDelayMs);
+        return 'w';
+      },
       remove() {},
       reset() {},
     };
@@ -108,7 +114,7 @@ async function wire(page, opts = {}) {
         getClientExtensionResults: () => ({}),
       };
     };
-  }, { consentVersion: CONSENT_VERSION, gisMode: o.gisMode, webauthn: o.webauthn, webauthnSupported: o.webauthnSupported });
+  }, { consentVersion: CONSENT_VERSION, gisMode: o.gisMode, webauthn: o.webauthn, webauthnSupported: o.webauthnSupported, turnstileDelayMs: o.turnstileDelayMs });
 
   await page.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort('blockedbyclient'));
   await page.route(GIS_SRC, (route) => route.fulfill({ contentType: 'text/javascript', body: FAKE_GIS }));
@@ -546,7 +552,8 @@ for (const layout of LAYOUTS) {
     });
 
     test('accessibility: axe, keyboard path with visible focus, status announcements, touch targets, reduced motion', async ({ page }) => {
-      await wire(page);
+      // Keep verification asynchronous and slow enough to exercise the readiness wait.
+      await wire(page, { turnstileDelayMs: 2000 });
       await open(page);
       for (const step of ['first', 'email', 'link', 'code']) {
         if (step !== 'first') await page.goto(`/login?step=${step}`);
@@ -570,6 +577,9 @@ for (const layout of LAYOUTS) {
       await expect(live).toHaveCount(1);
       await surface(page).getByRole('button', { name: /Email me a sign-in link/ }).click();
       await surface(page).getByLabel('Email', { exact: true }).fill('synthetic.6959@example.test');
+      // Enter does not auto-wait for the asynchronous verification callback.
+      // Wait for this mounted fixture's token, not a fixed number of ticks.
+      await expect(surface(page).getByTestId('login-turnstile')).toHaveAttribute('data-fixture-turnstile-ready', 'true');
       await surface(page).getByLabel('Email', { exact: true }).press('Enter');
       await expect(live).toHaveText('Sign-in link sent to synthetic.6959@example.test.');
       if (!layout.phone) return;

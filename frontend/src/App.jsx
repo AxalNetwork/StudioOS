@@ -3757,6 +3757,7 @@ function AppInner() {
       <Route path="/grow/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" record />)} />
       <Route path="/grow/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" adding />)} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
+      <Route path="/grow/team-expansion" element={guard(['admin', 'founder'], <ParamRedirect to="/grow/talent" />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
       {/* D6118 (#6118, GR-09): one Partnerships page. It is the partner-network module (partners by stage,

@@ -44,10 +44,12 @@ import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import { HealthStatus, ObligationStatus, Skeleton, SourceFailure, SummaryTile } from '../portfolio/PortfolioParts';
 import {
-  NOT_RECORDED, NO_DUE_DATE, SHAPES, day, healthFor, obligationRowsOf, periodCovers, periodName, reportFieldsOf, requiredAgainst,
+  NOT_RECORDED, NO_DUE_DATE, SHAPES, chaseOutcomeOf, day, healthFor, obligationRowsOf, periodCovers, periodName, reportFieldsOf, requiredAgainst,
 } from '../portfolio/portfolioModel';
 import PortfolioReports from './PortfolioReports';
 
+/** D7650: the companies a chase skipped, each with the Worker's reason. */
+const skippedText = (skipped) => (skipped.length ? `Not chased: ${skipped.map((s) => `${s.name} (${s.text})`).join('; ')}.` : '');
 const money = (value, currency = 'USD') => value == null || value === '' || !Number.isFinite(Number(value))
   ? 'Unavailable'
   : Number(value).toLocaleString('en-US', { style: 'currency', currency, minimumFractionDigits: 0 });
@@ -359,23 +361,31 @@ export default function InvestorPortfolioUpdates() {
    * THE CHASE (D464). Chase all overdue sends the Worker's overdue set (D6204):
    * the companies past their due day that have not reported. The route re-checks the tenancy of
    * each id; one row per chase lands in the log and the founder is notified;
-   * a repeat inside the hour answers the existing row.
+   * a repeat inside the hour answers the existing row. D7650: the Worker chases
+   * only a company whose report is due and unreported, and names why it skipped
+   * any other; the note says so, and never counts a skipped company as chased.
    */
   const overdueRows = rows.filter((row) => row.overdue === true);
   const afterChase = useCallback(() => { retry('chases'); retry('compliance'); }, [retry]);
+  const nameOf = useCallback((id) => rows.find((row) => Number(row.projectId) === Number(id))?.name || null, [rows]);
   const chaseOne = useCallback(async (row) => {
     setChasing(true); setChaseNote('');
     try {
       const r = await api.portfolioChase([row.projectId]);
-      const already = (r?.chased || []).some((c) => c.already);
-      setChaseNote(already
-        ? `${row.name || 'That company'} was already asked inside the hour — the existing chase stands.`
-        : `${row.name || 'The company'} has been asked. The founder is notified and the chase is logged.`);
+      const out = chaseOutcomeOf(r, nameOf);
+      const skip = out.skipped.find((s) => s.project_id === Number(row.projectId));
+      setChaseNote(skip
+        ? `${row.name || 'That company'} was not chased: ${skip.text}.`
+        : out.already
+          ? `${row.name || 'That company'} was already asked inside the hour — the existing chase stands.`
+          : out.chased
+            ? `${row.name || 'The company'} has been asked. The founder is notified and the chase is logged.`
+            : `${row.name || 'The company'} was not confirmed as chased.`);
       afterChase();
     } catch (cause) {
       setChaseNote(cause?.message || 'The chase could not be sent.');
     } finally { setChasing(false); }
-  }, [afterChase]);
+  }, [afterChase, nameOf]);
 
   const chaseOverdue = useMemo(() => {
     if (reads.compliance.state !== 'ok') {
@@ -392,9 +402,8 @@ export default function InvestorPortfolioUpdates() {
         setChasing(true); setChaseNote('');
         try {
           const r = await api.portfolioChase(overdueRows.map((row) => row.projectId));
-          const n = (r?.chased || []).filter((c) => !c.already).length;
-          const already = (r?.chased || []).filter((c) => c.already).length;
-          setChaseNote(`${n} ${n === 1 ? 'company' : 'companies'} chased${already ? ` · ${already} already asked inside the hour` : ''}${r?.skipped?.length ? ` · ${r.skipped.length} skipped as outside your book` : ''}.`);
+          const { chased: n, already, skipped } = chaseOutcomeOf(r, nameOf);
+          setChaseNote(`${n} ${n === 1 ? 'company' : 'companies'} chased${already ? ` · ${already} already asked inside the hour` : ''}.${skipped.length ? ` ${skippedText(skipped)}` : ''}`);
           afterChase();
         } catch (cause) {
           setChaseNote(cause?.message || 'The chase could not be sent.');
@@ -402,7 +411,7 @@ export default function InvestorPortfolioUpdates() {
       },
       busy: chasing,
     };
-  }, [overdueRows, reads.compliance.state, inbox.dueRead, chasing, afterChase]);
+  }, [overdueRows, reads.compliance.state, inbox.dueRead, chasing, afterChase, nameOf]);
 
   const view = {
     header: ['Company', 'Period', 'Due', 'Received', 'Status', 'Missing', 'Last chase'],
