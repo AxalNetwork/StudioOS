@@ -91,6 +91,14 @@ test('a re-run of the same deploy is not an error', async () => {
   assert.match(summary[0], /already recorded, id 12/);
 });
 
+test('only an integer record id reaches the summary', async () => {
+  const f = fakeFetch([[201, { created: true, deployment: { id: '](https://evil.example) <b>x</b>' } }]]);
+  const summary = [];
+  assert.equal(await run({ env: ENV, fetchImpl: f, read: () => '', appendSummary: (l) => summary.push(l), log: quiet, error: quiet }), 0);
+  assert.match(summary[0], /recorded \(new, id \?\)/);
+  assert.ok(!summary[0].includes('evil.example'));
+});
+
 test('the version id is read from the wrangler deploy log when not given', async () => {
   const f = fakeFetch([[201, { created: true, deployment: { id: 1 } }]]);
   const env = { ...ENV, WORKER_VERSION_ID: '', WRANGLER_DEPLOY_LOG: 'deploy.log' };

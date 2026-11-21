@@ -66,7 +66,11 @@ export async function run({
     error(`[record-deployment] HTTP ${res.status}: ${body?.error || 'no refusal code'}`);
     return 1;
   }
-  const outcome = res.status === 201 ? `new, id ${body?.deployment?.id ?? '?'}` : `already recorded, id ${body?.deployment?.id ?? '?'}`;
+  // Only an integer id reaches the summary: the response is not trusted to
+  // write Markdown into it.
+  const rawId = body?.deployment?.id;
+  const id = Number.isSafeInteger(rawId) && rawId > 0 ? String(rawId) : '?';
+  const outcome = res.status === 201 ? `new, id ${id}` : `already recorded, id ${id}`;
   const line = summaryLine(built.record, outcome);
   log(line);
   try { appendSummary(line); } catch { /* the summary is a convenience */ }
