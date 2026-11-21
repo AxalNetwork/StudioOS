@@ -52,13 +52,13 @@ read), **unit**, **aggregation**, **scope**, **threshold** (warning / critical),
 | `d1.size_ratio` | `d1.size_bytes ÷ d1_limit_bytes` | same | ratio (bytes ÷ bytes) | point-in-time | deployment | — (the size carries the level) | none | `unavailable` |
 | `queue.job.backlog_messages`, `queue.agent.backlog_messages` | `Queue.metrics().backlogCount` | on each read | messages | point-in-time | deployment | none set | none | `unavailable` |
 | `queue.*.backlog_bytes` | `Queue.metrics().backlogBytes` | on each read | bytes | point-in-time | deployment | none set | none | `unavailable` |
-| `queue.*.oldest_age_seconds` | `now − Queue.metrics().oldestMessageTimestamp` | on each read | seconds | point-in-time | deployment | 15 min / 60 min, hysteresis 60 s (**proposed**) | none | `unavailable`; empty queue is `none_waiting`; a timestamp ahead of the clock is `unavailable` |
+| `queue.*.oldest_age_seconds` | `now − Queue.metrics().oldestMessageTimestamp` | on each read | seconds | point-in-time | deployment | 15 min / 60 min, hysteresis 60 s (**approved 2026-11-21**) | none | `unavailable`; empty queue is `none_waiting`; a timestamp ahead of the clock is `unavailable` |
 | `agents.sweep.eligible` | `system_metrics` `agent_sweep_eligible`, trusted only from a batch labelled `scanned: true` (#4592) | each 5-minute sweep; read on each request, stale after 20 min | count (capped at 120 a scan) | the newest sweep | deployment | none | `system_metrics` cleanup (30 days) | `unavailable`; a sweep that did not scan is `not_running`; agents off is `not_running` |
 | `agents.sweep.examined`, `.admitted`, `.refused`, `.resent` | `system_metrics` `agent_sweep_*` (#4592) | same | count | the newest sweep | deployment | none | same | `unavailable`; a sweep that admitted nothing records a real 0 |
-| `agents.sweep.oldest_eligible_age_seconds` | `system_metrics` `agent_sweep_oldest_eligible_age_seconds` (age since the oldest eligible task was created) | same | seconds | the newest scan | deployment | 1 h / 6 h, hysteresis 5 min (**proposed**) | same | `unavailable`; nothing eligible is `none_waiting`; no scan is `not_running` |
+| `agents.sweep.oldest_eligible_age_seconds` | `system_metrics` `agent_sweep_oldest_eligible_age_seconds` (age since the oldest eligible task was created) | same | seconds | the newest scan | deployment | 1 h / 6 h, hysteresis 5 min (**approved 2026-11-21**) | same | `unavailable`; nothing eligible is `none_waiting`; no scan is `not_running` |
 | `agents.repair.pending`, `agents.repair.unresolved` | `system_metrics` `agent_repair_pending`, `agent_repair_ambiguous` (#4593) | each sweep, before its halt and engine checks | count (pending capped at 20 a sweep) | the newest sweep | deployment | none | same | `unavailable` |
-| `agents.repair.oldest_age_seconds` | `system_metrics` `agent_repair_oldest_age_seconds`, counted only while a repair is still owed after the sweep | same | seconds | the newest sweep | deployment | 1 h / 6 h, hysteresis 5 min (**proposed**) | same | `unavailable`; nothing owed is `none_waiting` |
-| `dr.restore.last_verified_age_seconds` | `drill-d1.json` in `BACKUPS`, validated by `readRestoreDrill` (#4558, D263) | monthly drill; read on each request | seconds | the latest drill (the marker keeps only the latest run) | deployment (HQ database) | 32 d (the Security page's rule) / 64 d (**proposed**), hysteresis 1 d | the marker is overwritten each run | `unavailable`; a failed or absent drill is `not_verified` and **critical**; a branch is `not_running` |
+| `agents.repair.oldest_age_seconds` | `system_metrics` `agent_repair_oldest_age_seconds`, counted only while a repair is still owed after the sweep | same | seconds | the newest sweep | deployment | 1 h / 6 h, hysteresis 5 min (**approved 2026-11-21**) | same | `unavailable`; nothing owed is `none_waiting` |
+| `dr.restore.last_verified_age_seconds` | `drill-d1.json` in `BACKUPS`, validated by `readRestoreDrill` (#4558, D263) | monthly drill; read on each request | seconds | the latest drill (the marker keeps only the latest run) | deployment (HQ database) | 32 d (the Security page's rule) / 64 d (**approved 2026-11-21**), hysteresis 1 d | the marker is overwritten each run | `unavailable`; a failed or absent drill is `not_verified` and **critical**; a branch is `not_running` |
 | `bindings[].present` | `env[NAME] != null` | on each read | boolean | — | deployment | — | — | presence is not health |
 | `dlq.backlog` | D1 dead-letter tables (`services/deadLetters`) | HQ · Platform summary | rows | count | deployment | none set | table lifetime | block unreadable |
 | `cron.trigger_state` | `cron_run_history` | HQ · Platform summary | state | latest per trigger | deployment | stale past schedule + grace | table lifetime | `never recorded` |
@@ -69,7 +69,7 @@ read), **unit**, **aggregation**, **scope**, **threshold** (warning / critical),
 | `r2.stored_bytes`, `r2.operations` | GraphQL `r2StorageAdaptiveGroups`, `r2OperationsAdaptiveGroups` | — | bytes, count | — | bucket | — | Cloudflare's | **not read** (owner item 1) |
 | Durable Objects, Vectorize, Containers | no binding-level read; dashboard only | — | — | — | — | — | — | **unavailable**; manual check in the dashboard |
 | AI providers | `ai_usage_logs` (existing ledger) and AI Gateway analytics | existing | — | — | — | — | — | owned by #3851 / #4556 |
-| `ai.settlement.without_usage_row` | one count: settled `ai_budget_reservations` with `surface = 'ai'` and a non-zero charge that no `ai_usage_logs.reservation_uid` names (D4569 §1 fact 2; §5.2) | on each read; `last_success_at` is the read | count | holds taken in the last 24 h (by `created_at`), settled at least 5 min before the read | deployment | any non-zero count is a warning; no critical level (**proposed**), hysteresis 0 | snapshot only; the holds keep their own lifetime | `unavailable`, never 0 |
+| `ai.settlement.without_usage_row` | one count: settled `ai_budget_reservations` with `surface = 'ai'` and a non-zero charge that no `ai_usage_logs.reservation_uid` names (D4569 §1 fact 2; §5.2) | on each read; `last_success_at` is the read | count | holds taken in the last 24 h (by `created_at`), settled at least 5 min before the read | deployment | any non-zero count is a warning; no critical level (**approved 2026-11-21**), hysteresis 0 | snapshot only; the holds keep their own lifetime | `unavailable`, never 0 |
 
 ## 4. The slice in code (D4559)
 
@@ -223,25 +223,23 @@ right (the hold and the ledger carry it), the attribution is missing.
 
 ## 7. Owner items
 
-1. **Account analytics token.** The GraphQL datasets above need an account
-   token with `Account Analytics: Read`. The Worker may already hold one as
-   `CLOUDFLARE_AE_API_TOKEN` (used for Analytics Engine SQL); whether its scope
-   covers the D1/Workers/R2/Workflows GraphQL datasets is unverified. Confirm
-   the scope, or decide on a separate read-only secret. No code calls these
-   datasets until then.
-2. **Plan limit.** Confirm the account is on Workers Paid and the current D1
-   per-database limit, or set `PLATFORM_D1_LIMIT_BYTES`.
-3. **Thresholds.** Approve the queue oldest-age thresholds (15 / 60 min,
-   proposed) and the D1 critical size (7.5 GB, within #4559's 7–8 GB).
-4. **Canvas** for the capacity panel on HQ · Platform (`needs-design`).
-5. **Part 3 thresholds.** Approve the proposed eligible-work and repair ages
-   (1 h / 6 h each) and the restore drill's critical age (64 days; the 32-day
-   warning is the Security page's existing rule). A failed or absent restore
-   drill is critical from the first sweep after deploy: per D4558 no restore
-   had passed as of 2026-11-06, so expect that episode to open.
-6. **Settlement threshold.** Approve the proposed level for
-   `ai.settlement.without_usage_row` (§5.2): any non-zero count in the 24-hour
-   window is a warning, with no critical level.
+1. **Account analytics token.** Answered 2026-11-09 (B): a new read-only
+   Worker secret scoped only to `Account Analytics: Read`, not the existing
+   `CLOUDFLARE_AE_API_TOKEN`. Creating it is the owner's action. No code calls
+   the GraphQL datasets until it is set.
+2. **Plan limit.** Open. Confirm the account is on Workers Paid and the
+   current D1 per-database limit, or set `PLATFORM_D1_LIMIT_BYTES`.
+3. **Thresholds.** Approved 2026-11-21 (A): queue oldest-message age 15 / 60
+   min, and the D1 critical size 7.5 GB (within #4559's 7–8 GB).
+4. **Canvas.** Withdrawn 2026-11-09: no capacity panel in StudioOS, and
+   Cloudflare stays the detailed console.
+5. **Part 3 thresholds.** Approved 2026-11-21 (A): eligible-work and repair
+   ages 1 h / 6 h each, and the restore drill's critical age 64 days (the
+   32-day warning is the Security page's existing rule). A failed or absent
+   restore drill is critical from the first sweep after deploy.
+6. **Settlement threshold.** Approved 2026-11-21 (A): any non-zero
+   `ai.settlement.without_usage_row` count in the 24-hour window (§5.2) is a
+   warning, with no critical level.
 
 ## 7. Detected incidents (D4854)
 

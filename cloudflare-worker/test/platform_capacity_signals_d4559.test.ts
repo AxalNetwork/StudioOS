@@ -86,7 +86,7 @@ test('#4592: a scanning sweep gives eligible work, its age and the admission cou
     'a resent count of 0 is a measured zero, recorded by the sweep');
   const age = m['agents.sweep.oldest_eligible_age_seconds'];
   assert.equal(age.value, 4_000);
-  assert.equal(age.level, 'warning', 'over an hour is the proposed warning');
+  assert.equal(age.level, 'warning', 'over an hour is the approved warning');
   assert.deepEqual(age.thresholds, ELIGIBLE_AGE_THRESHOLDS);
   for (const s of Object.values(m)) {
     assert.equal(s.scope, 'deployment');
