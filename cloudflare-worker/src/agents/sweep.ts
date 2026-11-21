@@ -52,7 +52,13 @@ import { defaultTokensLeft, sweepDuties, type DutyDeps } from '../services/agent
 import { notify } from '../services/notify';
 import { purgeExpired } from '../services/agents/memory';
 import { resumeCapPauses } from '../services/agents/sponsor';
+import { pruneModelBuckets } from './modelBudget';
 
+/**
+ * D7077 (#7077): the sweep's bounds stay named here and unchanged. Raising them waits on #5573's
+ * benchmark (sizing) and #7074's elastic per-team ceiling (the per-scope bound), neither on main;
+ * the follow-up is an edit of these constants only.
+ */
 export const SWEEP_MAX = 60;
 /** Resends are repair traffic; they never spend the new-work admission budget. */
 export const RESEND_MAX = 20;
@@ -159,6 +165,11 @@ async function recordSweepMetrics(env: Env, now: Date, out: { resent: number; ad
     ['agent_sweep_resent', out.resent],
   ];
   if (stats.oldestEligibleAgeSeconds != null) values.push(['agent_sweep_oldest_eligible_age_seconds', stats.oldestEligibleAgeSeconds]);
+  // D7077: the oldest ready task beside the oldest pending decision, read every sweep (not only
+  // from a scan), so a backlog of work and a backlog of people's decisions can be told apart.
+  const backlog = await oldestBacklog(env, now);
+  if (backlog.readyTask != null) values.push(['agent_oldest_ready_task_age_seconds', backlog.readyTask]);
+  if (backlog.pendingDecision != null) values.push(['agent_oldest_pending_decision_age_seconds', backlog.pendingDecision]);
   // Low-cardinality labels only: no tenant, task, agent, prompt or output is telemetry.
   const labels = JSON.stringify({ cadence_minutes: 5, cursor_reset: stats.cursorReset, scanned: stats.scanned });
   try {
@@ -166,6 +177,35 @@ async function recordSweepMetrics(env: Env, now: Date, out: { resent: number; ad
       'INSERT INTO system_metrics (timestamp, metric_name, value, labels) VALUES (?, ?, ?, ?)',
     ).bind(now.toISOString().slice(0, 19).replace('T', ' '), name, value, labels)));
   } catch { console.warn('[agents] sweep_metrics_unreadable'); }
+}
+
+/**
+ * D7077 — the oldest ready task (open, on the ready column, its agent active, every dependency done)
+ * and the oldest run waiting for a person's decision, as ages in seconds. Null when there is none or
+ * the read fails: no figure is recorded rather than a zero.
+ */
+async function oldestBacklog(env: Env, now: Date): Promise<{ readyTask: number | null; pendingDecision: number | null }> {
+  try {
+    const r = await env.DB.prepare(
+      `SELECT
+         (SELECT MIN(t.created_at) FROM scope_tasks t
+            JOIN team_agents a ON a.id = t.assignee_agent_id
+           WHERE t.assignee_kind = 'agent' AND a.status = 'active'
+             AND t.status = 'open' AND (t.board_column IS NULL OR t.board_column = 'ready')
+             AND NOT EXISTS (
+               SELECT 1 FROM scope_task_deps d JOIN scope_tasks dep ON dep.id = d.depends_on_task_id
+                WHERE d.task_id = t.id AND dep.status <> 'done')) AS ready_task,
+         (SELECT MIN(updated_at) FROM agent_task_runs WHERE status = 'waiting_decision') AS pending_decision`,
+    ).first<{ ready_task: string | null; pending_decision: string | null }>();
+    const age = (v: string | null | undefined) => {
+      const ms = v ? sqlTime(v) : null;
+      return ms == null ? null : Math.max(0, Math.floor((now.getTime() - ms) / 1000));
+    };
+    return { readyTask: age(r?.ready_task), pendingDecision: age(r?.pending_decision) };
+  } catch {
+    console.warn('[agents] sweep_backlog_unreadable');
+    return { readyTask: null, pendingDecision: null };
+  }
 }
 
 const sqlTime = (value: string): number | null => {
@@ -218,6 +258,7 @@ export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>
   const finish = async () => { await recordSweepMetrics(env, now, out, stats); return out; };
   try { out.cap_resumed = await resumeCapPauses(env, now); } catch { console.warn('[agents] cap_resume_failed'); }
   await sweepStrandedRuns(env, now);
+  await pruneModelBuckets(env, now);
   if (await haltedAll(env)) return finish();
   const mode = await engineMode(env);
   if (mode === 'off') return finish();
