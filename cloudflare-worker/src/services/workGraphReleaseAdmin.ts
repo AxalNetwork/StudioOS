@@ -8,9 +8,11 @@
  * THE CONTEXT. A Super Admin acts in the one tenant and company the request names (`releaseAdminContext`), so a line or
  * manifest of any other scope is refused `wrong_tenant` by the part 1 and part 2 services, exactly as for any caller.
  * Release authorities (`maintainer`, `brand_owner`, `counsel`, `security_officer`…) are resolved by
- * `RELEASE_ADMIN_DEPS.authorities`. No table records them today (D5585-p7 §3), so on main it resolves NONE: being a
- * Super Admin grants no release authority, an approval counts for nobody, and a takedown is refused `no_authority`
- * (and recorded) until an authority store exists. Tests replace the resolver.
+ * `RELEASE_ADMIN_DEPS.authorities`, which reads part 8's per-company store (`workGraphReleaseAuthorities.ts`, the
+ * owner's answer A to D5585-p7 §3): every person of the scope who holds a grant there and is still linked to the
+ * company. Being a Super Admin grants no release authority by itself: a Super Admin holds one only where one was
+ * granted to them, like anyone else, so with no grant an approval counts for nobody and a takedown is refused
+ * `no_authority` (and recorded). Tests may replace the resolver.
  *
  * THE SCHEDULE. `scheduledReleaseDrain` runs from the existing every-minute cron (`index.ts` `scheduled()`, on minutes
  * where `% 5 === 2`), inside that tick's queue lease. Off, it returns null before touching D1. On, it runs ONE bounded
@@ -29,6 +31,7 @@ import { RELEASE_RETRACT_KIND } from './workGraphReleaseDelivery';
 import { drainReleaseEffects, releaseDeliveryEnabled, type ReleaseDrainResult } from './workGraphReleaseAdapters';
 import type { ReleaseDistributionChannels } from './workGraphReleaseDistribution';
 import type { DeliveryStatus } from './workGraphEffects';
+import { releaseAuthoritiesForScope } from './workGraphReleaseAuthorities';
 
 /** The value of `WORK_GRAPH_RELEASE_ADMIN` that turns the routes on. Unset, or anything else, is off. */
 export const RELEASE_ADMIN_ON = 'on';
@@ -48,10 +51,12 @@ export const RELEASE_EFFECT_KINDS: readonly string[] = Object.freeze([...EFFECT_
 
 export const RELEASE_ADMIN_DEPS = {
   /**
-   * Each person's release authorities in this scope. No store records them on main (D5585-p7 §3), so none are
-   * resolved: a Super Admin holds no release authority by being one. Replaced in tests.
+   * Each person's release authorities in this scope, from the part 8 store (D5585-p8): the grants whose latest row is
+   * a grant, of people still linked to the company. A Super Admin holds only what was granted to them. Replaceable in
+   * tests.
    */
-  authorities: async (_env: Pick<Env, 'DB'>, _scope: Scope): Promise<ReadonlyMap<number, readonly string[]>> => new Map(),
+  authorities: (env: Pick<Env, 'DB'>, scope: Scope): Promise<ReadonlyMap<number, readonly string[]>> =>
+    releaseAuthoritiesForScope(env, { tenantId: scope.tenantId, companyId: scope.companyId }),
 };
 
 const posInt = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;

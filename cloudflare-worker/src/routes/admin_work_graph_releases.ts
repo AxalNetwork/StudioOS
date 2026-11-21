@@ -15,6 +15,9 @@
  *   POST /manifests/:manifest/takedown  { tenant_id, company_id, digest, component?: { revision_uid, digest }, reason_code, evidence_ref, authority, idempotency_key }
  *   POST /lines/:line/repin             { tenant_id, company_id, target_manifest_uid, expected_manifest_uid, idempotency_key }
  *   POST /drain                         { limit? }   one bounded drain of the release outbox (at most 25 effects)
+ *   GET  /authorities?tenant_id&company_id[&user_id][&history=1]   part 8: who holds which release authority, and the history
+ *   POST /authorities/grant             { tenant_id, company_id, user_id, authority, reason, expected_seq, idempotency_key }
+ *   POST /authorities/revoke            { tenant_id, company_id, user_id, authority, reason, expected_seq, idempotency_key }
  *
  * GATES. Reads: `requireSuperAdmin` (HQ only). Writes and the drain: `requireSuperAdminWriteBar` (a TOTP session, a
  * recent step-up, then the elevation). Every write is recorded with the actor through `logAdminAction`, whatever its
@@ -25,8 +28,13 @@
  * carries the manifest it expects the pointer to name (the CAS refuses `stale_revision`); a re-pin carries the head it
  * saw (`stale_revision`, with the current head).
  *
- * The drain delivers only while `WORK_GRAPH_RELEASE_DELIVERY` is `preview` (409 `release_delivery_off` otherwise). Being
- * a Super Admin grants no release authority (D5585-p7 §3): approvals and takedowns still need a person who holds one.
+ * The drain delivers only while `WORK_GRAPH_RELEASE_DELIVERY` is `preview` (409 `release_delivery_off` otherwise).
+ *
+ * RELEASE AUTHORITIES (part 8, D5585-p8). Publish and takedown resolve every person's authorities in the named scope
+ * from the per-company store (`workGraphReleaseAuthorities.ts`): an approval counts only while its reviewer holds the
+ * authority it was given under, and a takedown only with an authority the acting Super Admin holds. Being a Super
+ * Admin grants none by itself. A Super Admin grants and revokes them here, to people linked to the company, with the
+ * `seq` they saw; each write is an admin audit row beside the store's own event row.
  */
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
@@ -42,6 +50,9 @@ import {
 } from '../services/workGraphReleases';
 import { repinRelease, servedRelease, takedownRelease, type TakedownReason } from '../services/workGraphReleaseTakedowns';
 import { drainReleaseEffects } from '../services/workGraphReleaseAdapters';
+import {
+  RELEASE_AUTHORITIES, grantReleaseAuthority, listReleaseAuthorityGrants, revokeReleaseAuthority,
+} from '../services/workGraphReleaseAuthorities';
 import {
   EFFECT_STATES, RELEASE_DRAIN_LIMITS, listLimit, listLineManifests, listReleaseDeliveries, listReleaseLines,
   releaseAdminContext, releaseAdminEnabled, scopeFrom, summariseDrain,
@@ -84,14 +95,21 @@ const SENTENCES: Record<string, string> = {
   revoked_author: 'The person acting has been revoked.',
   unpinned_component: 'A pinned piece no longer matches the digest the manifest records.',
   unapproved_release: 'A pinned piece’s bytes were not approved by a person when they became its head.',
+  unknown_authority: 'That is not a release authority. Name one of the authorities the release policy uses.',
+  not_member: 'That person is not linked to this company, so they cannot hold its release authorities.',
+  already_held: 'That person already holds this release authority in this company.',
+  not_held: 'That person does not hold this release authority in this company, so there is nothing to revoke.',
 };
-const STATUS: Record<string, number> = { malformed: 400, not_found: 404, wrong_tenant: 403, queue_full: 503 };
+const STATUS: Record<string, number> = { malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503 };
 
-function refused(c: Context, x: { code: string; ids?: string[]; cost?: Cost; currentHead?: unknown }) {
+function refused(c: Context, x: { code: string; ids?: string[]; cost?: Cost; currentHead?: unknown; current?: unknown }) {
   return refuse(c, STATUS[x.code] ?? 409, {
     code: x.code,
     message: SENTENCES[x.code] ?? 'The release service refused this request.',
-    extra: { ids: x.ids ?? [], ...(x.cost ? { cost: x.cost } : {}), ...(x.currentHead ? { current_head: x.currentHead } : {}) },
+    extra: {
+      ids: x.ids ?? [], ...(x.cost ? { cost: x.cost } : {}), ...(x.currentHead ? { current_head: x.currentHead } : {}),
+      ...(x.current ? { current: x.current } : {}),
+    },
   });
 }
 const badScope = (c: Context) => refuse(c, 400, { code: 'malformed', message: 'Name the scope this acts in: tenant_id and company_id, both positive integers.' });
@@ -265,6 +283,43 @@ r.post('/drain', async (c) => {
   await audit(c, user, 'work_graph_release_drain', { limit, outcome: 'drained', ...summary, effect_ids: res.results.map((x) => x.effectId) });
   return c.json({ ok: true, limit, ...summary, results: res.results.map((x) => ({ effectId: x.effectId, status: x.status, attempts: x.attempts ?? null })) });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Release authorities (part 8): the per-company store the routes above resolve from
+
+r.get('/authorities', async (c) => {
+  await requireSuperAdmin(c);
+  const scope = queryScope(c);
+  if (!scope) return badScope(c);
+  const u = c.req.query('user_id');
+  if (u !== undefined && !/^[1-9][0-9]{0,15}$/.test(u)) return refuse(c, 400, { code: 'malformed', message: 'user_id is a positive whole number.' });
+  const res = await listReleaseAuthorityGrants(c.env, scope, {
+    userId: u === undefined ? null : Number(u), history: c.req.query('history') === '1', limit: listLimit(c.req.query('limit')),
+  });
+  return c.json({ ok: true, scope, authorities: RELEASE_AUTHORITIES, ...res });
+});
+
+/** A grant or a revocation by the Super Admin who passed the write bar. */
+async function changeAuthority(c: Context<{ Bindings: Env }>, user: { id: number; email?: string | null }, op: 'grant' | 'revoke') {
+  const b = await body(c);
+  const scope = b && scopeFrom(b.tenant_id, b.company_id);
+  if (!b || !scope) return badScope(c);
+  const base = {
+    tenant_id: scope.tenantId, company_id: scope.companyId, user_id: b.user_id, authority: typeof b.authority === 'string' ? b.authority.slice(0, 40) : null,
+    expected_seq: b.expected_seq, idempotency_key: b.idempotency_key,
+  };
+  const out = async (outcome: string, extra: Record<string, unknown> = {}) => audit(c, user, `work_graph_release_authority_${op}`, { ...base, outcome, ...extra });
+  const input = {
+    scope: { tenantId: scope.tenantId, companyId: scope.companyId }, userId: b.user_id, authority: b.authority, reason: b.reason,
+    expectedSeq: b.expected_seq, actorUserId: Number(user.id), idempotencyKey: b.idempotency_key,
+  };
+  const res = op === 'grant' ? await grantReleaseAuthority(c.env, input) : await revokeReleaseAuthority(c.env, input);
+  if (!res.ok) { await out(res.code, res.current ? { current: res.current } : {}); return refused(c, res); }
+  await out(op === 'grant' ? 'granted' : 'revoked', { event_id: res.eventId, seq: res.seq, replayed: res.replayed });
+  return c.json(res);
+}
+r.post('/authorities/grant', async (c) => changeAuthority(c, await requireSuperAdminWriteBar(c), 'grant'));
+r.post('/authorities/revoke', async (c) => changeAuthority(c, await requireSuperAdminWriteBar(c), 'revoke'));
 
 export const mount: RouteMount = { path: '/api/admin/work-graph/releases', router: r };
 export default r;
