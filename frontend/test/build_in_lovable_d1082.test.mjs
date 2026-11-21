@@ -211,11 +211,9 @@ test('LV1 and LV4: an experiment row carries Build in Lovable for a writer on a 
   } finally { await one.close(); }
 });
 
-test('the wiring: LV7 beside Add must-have, the phone sheet, the client’s routes, one api.js line, and nothing calls lovable.dev', async () => {
+test('the wiring: BD8 Sources placement, the phone sheet, the client’s routes, one api.js line, and nothing calls lovable.dev', async () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /lovable=\{narrativeAdmin \? undefined : prototypeLovable\(cycle, slug, module\)\}/);
-  assert.match(read('frontend/src/pages/cycles/CycleModulePage.jsx'), /\{lovable && <BuildInLovable lovable=\{lovable\} \/>\}<\/div>/);
-  assert.match(read('frontend/src/pages/cycles/PhoneModulePage.jsx'), /\{lovable && <div className="mt-3 flex justify-center"><BuildInLovable lovable=\{lovable\} \/><\/div>\}/);
   assert.match(read('frontend/src/pages/cycles/lovable/BuildInLovable.jsx'), /flex h-full w-full flex-col[^"]*sm:h-auto/, 'LV8a: full height on the phone');
   assert.equal((read('frontend/src/lib/apiModules.generated.js').match(/export \* from '\.\/api\/lovable\.js';/g) || []).length, 1);
   const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : [p]; });

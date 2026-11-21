@@ -34,6 +34,8 @@ import MvpFromVercel from './MvpFromVercel';
 import RoadmapFromVercel from './RoadmapFromVercel';
 import CompanyFromVercel from './CompanyFromVercel';
 import FromLovable from './FromLovable';
+import { BuildInLovable } from './lovable/BuildInLovable.jsx';
+import { prototypeLovable } from './lovable/lovableModel.js';
 
 export const BUILD_PARTS = Object.freeze({
   'solution-design': [
@@ -52,7 +54,7 @@ export const BUILD_PARTS = Object.freeze({
     // VC2: the Live strip and each must-have's preview: #2963 (D1098), MvpFromVercel, #from-vercel.
     ['vercel', (data, ctx) => <MvpFromVercel vercel={data?.parts?.vercel} reload={ctx.reload} />],
     // LV7: From Lovable under From GitHub: #2948 (D1083), FromLovable, #from-lovable.
-    ['lovable', (data, ctx) => <FromLovable part={data?.parts?.lovable} cycle="build" projectId={ctx.projectId} onRetry={ctx.reload} />],
+    ['lovable', (data, ctx) => <FromLovable part={data?.parts?.lovable} cycle="build" projectId={ctx.projectId} onRetry={ctx.reload} action={<BuildInLovable className="[&_button]:min-h-[44px]" lovable={prototypeLovable('build', 'prototype-mvp', data)} />} />],
     // NT3: a must-have database as facts (D1088, #2953), anchored at #from-notion.
     ['notion', (_data, ctx) => <FromNotion section="build" module="prototype_mvp" projectId={ctx.projectId} />],
     // PH5: activation, flag links and Mark Done from PostHog (D1606, #3731), anchored at #from-posthog.

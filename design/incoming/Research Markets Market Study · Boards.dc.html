@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Market Study · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Markets · #7703 pass 2 · extends Research v2 RS-02, RS-07 A, RS-09, RS-10 D</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Market study — scope, questions with evidence for and against, customers and demand, entry plan and a recorded decision</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A founder starts a study from Markets or My Research, defines one market (product, segments, the decision to be made), asks key questions and links each finding or attached reference as Supports, Contradicts or Context, reads interviews, experiments and demand records from Validate and channels and readiness from Grow, and records a decision that is never edited. The study is a sixth project tab, Study, at /research/projects/:uid/study (new address, owner decision, Q1 option A); the five tabs stay as built. Completeness by topic is drawn apart from “sources answerable in Ask”. Every figure says what it counts and when it was measured; five kinds of figure keep their words. States follow Platform States (D5129). Violet dashed ◇ tags name the issue that builds the backend; amber ⚑ tags mark owner questions, drawn as option A. Size and scenarios, Competition and pricing and Report and monitoring are pass 3 (RST-20 onward).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 19 Nov 2026, 10:42 UTC · checked against main 58ee9d1b73 · [Maya Ruiz], [Northwind Labs], [Tom Becker], [Source A: Statistics Office Sample], [Source B: Open Registry Sample], the study, its segments, questions and every figure are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="19">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Markets Market Study Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RST-00', 'What the study answers, its seven sections, and where each value is read', 'The ten-step journey, the seven sections and their addresses, and every value marked recorded today or ◇ with its issue.', [W('RST00')]],
+      ['RST-01', 'Study frame and its addresses', 'A · the project bar and five built tabs plus Study, the section list, unbuilt sections reading Not built yet. B · a project with no study: None and Start a study. C · no venture linked. D · an archived project, read-only. The rail keeps what it has, with Open questions filled.', [F('RST01', 'A · Study home', 1080), F('RST01B', 'B · No study', 900), F('RST01C', 'C · No venture linked', 900), F('RST01D', 'D · Archived', 900)]],
+      ['RST-02', 'New market research carries the market', 'A · the New research form plus Started from; create saves project and study together. B · opened without a market, as built. C · the Markets header action by licence. D · create failed, nothing created, the form keeps what was typed.', [F('RST02', 'A · Started from a market', 1000), C('RST02B', 'B · Without a market', 800, 620), C('RST02C', 'C · Header action by licence', 1300, 260), C('RST02D', 'D · Create failed', 800, 880)]],
+      ['RST-03', 'Scope and questions · Scope', 'Overview texts read-only, product and decision, segment cards with the beachhead mark, “Use [Germany] as customer geography?” (⚑ Q5), linked venture and origin. B · someone saved first. C · the three venture cases.', [F('RST03', 'A · Scope', 1880), F('RST03B', 'B · Someone saved first', 1880), C('RST03C', 'C · Linked venture cases', 1100, 240)]],
+      ['RST-04', 'Scope and questions · the question list', 'Topic, question, status as marked, and [n] for · [n] against; reorder by drag and keyboard; no owner column.', [F('RST04', false, 900)]],
+      ['RST-05', 'One question', 'Supporting and Contradicting side by side, Context below, a removed finding kept with its direction and note; gap, next validation action, answer. B · Add evidence: a discarded interpretation cannot be picked.', [F('RST05', 'A · Pricing question', 1250), C('RST05B', 'B · Add evidence', 620, 760)]],
+      ['RST-06', 'The question counts', 'A and B · Overview “Key questions answered · 2 of 5” and the rail’s Open questions · 3. C · states, never a guessed 0. D · ◇ proposed progress bar on a My Research card (⚑ Q7).', [F('RST06', 'A and B · Overview and rail', 900), C('RST06B', 'C · States', 1100, 230), C('RST06C', 'D · My Research card, proposed', 480, 360)]],
+      ['RST-07', 'Completeness and the decision', 'A · seven topics in words with their counts, apart from evidence coverage; no score. B · Record a decision as a sheet. C · decision history, append-only.', [F('RST07', 'A and C · Completeness and history', 1150), F('RST07B', 'B · Record a decision', 1150)]],
+      ['RST-08', 'Evidence and findings', 'A · find an observation for the study’s countries, codes and period; what is missing is named. B · attached references in five kinds; C · marking for a question. Attach sheet. D · reference states.', [F('RST08', 'A · Find an observation', 900), F('RST08B', 'B and C · Attached references', 1180), F('RST08C', 'Attach to this study', 900), C('RST08D', 'D · Reference states', 1100, 230)]],
+      ['RST-09', 'Customers and demand', 'Per study segment: interviews, problems, a consented quote, hypotheses and experiments with direction, the contradiction kept together, demand records by kind with stage words (⚑ Q6), never summed. B · Validate Unavailable, Partial banner.', [F('RST09', 'A · Beachhead segment', 1780), F('RST09B', 'B · Validate Unavailable', 1000)]],
+      ['RST-10', 'Entry strategy and risks', 'Channels assumed then and measured now (spend read as US dollars), capacity from sizing version [3], payback only as the Worker returns it, readiness recorded in Grow, the referenced price Not recorded, open Risks questions.', [F('RST10', false, 1200)]],
+      ['RST-11', 'What Eadwyn proposes in a study', 'A · an Ask answer becomes a dashed interpretation with Accept, Edit, Discard. B · what Eadwyn never writes.', [C('RST11', false, 1100, 420)]],
+      ['RST-12', 'Empty states', 'One per screen with the one action that fills it.', [C('RST12', false, 1100, 560)]],
+      ['RST-13', 'States', 'RST-01 to RST-10 against Loading, Not recorded, Unavailable, Refused and saving; save failed, someone saved first, archived.', [C('RST13', false, 1400, 1260)]],
+      ['RST-14', 'Phone 390', 'A to N: tabs and section sheet, New research, Scope, a segment, questions, one question, counts and context sheet, completeness, Record a decision, find an observation, attached references, customers and demand, entry strategy, empty, Unavailable and Refused.', [P('RST14A', 'A · Section sheet'), P('RST14B', 'B · New research'), P('RST14C', 'C · Scope'), P('RST14D', 'D · Segment card'), P('RST14E', 'E · Questions'), P('RST14F', 'F · One question'), P('RST14G', 'G · Counts and context'), P('RST14H', 'H · Completeness'), P('RST14I', 'I · Record a decision'), P('RST14J', 'J · Find an observation'), P('RST14K', 'K · Attached references'), P('RST14L', 'L · Customers and demand'), P('RST14M', 'M · Entry strategy'), P('RST14N', 'N · Empty, Unavailable, Refused')]],
+      ['RST-15', 'Dark', 'RST-01 to RST-10 once each at 1440 and phone C, F and L on the dark tokens; states, finding kinds and the five kinds of figure keep their words and shapes.', [F('RST15A', 'RST-01', 1080), F('RST15B', 'RST-02', 1000), F('RST15C', 'RST-03', 1880), F('RST15D', 'RST-04', 900), F('RST15E', 'RST-05', 1250), F('RST15F', 'RST-06', 900), F('RST15G', 'RST-07', 1150), F('RST15H', 'RST-08', 900), F('RST15I', 'RST-09', 1780), F('RST15J', 'RST-10', 1200), P('RST15K', 'Phone C'), P('RST15L', 'Phone F'), P('RST15M', 'Phone L')]],
+      ['RST-16', 'Main task path', 'Start from a market to a recorded decision in ten steps, each linked to its frame.', [W('RST16')]],
+      ['RST-17', 'Keyboard and accessibility', 'Tab order, keyboard reorder, live-region wording, focus return.', [C('RST17', false, 1300, 720)]],
+      ['RST-18', 'Handoff', 'Checked on main, ◇ by issue and builder (#7729 to #7732), owner questions, frontend only, not drawn.', [W('RST18')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
