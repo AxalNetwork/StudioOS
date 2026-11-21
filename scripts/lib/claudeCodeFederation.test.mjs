@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { parse as parseYaml } from 'yaml';
 import { readClaudeCodeFederation, CLAUDE_CODE_VARIABLES } from './claudeCodeFederation.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -50,7 +51,9 @@ test('D5530: the preflight exits 1 with a remediation, and 0 without printing an
 
 test('D5530: claude-code.yml stores no API key and passes its own federation variables', () => {
   assert.doesNotMatch(code, /ANTHROPIC_API_KEY|anthropic_api_key|claude_code_oauth_token|secrets\./, 'no long-lived credential');
-  assert.match(code, /^permissions:\n(?: {2}\S.*\n)*? {2}id-token: write$/m, 'the exchange needs id-token: write');
+  const workflow = parseYaml(WORKFLOW);
+  assert.deepEqual(workflow.permissions, {}, 'the workflow starts without token permissions');
+  assert.equal(workflow.jobs?.claude?.permissions?.['id-token'], 'write', 'the claude job needs id-token: write');
   for (const [ours, theirs] of Object.entries(CLAUDE_CODE_VARIABLES)) {
     const input = theirs.toLowerCase();
     assert.match(code, new RegExp(`^ {10}${input}: \\$\\{\\{ vars\\.${ours} \\}\\}$`, 'm'), input);

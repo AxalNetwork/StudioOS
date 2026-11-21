@@ -91,12 +91,13 @@ concurrency:
   group: branch-provision-${{ inputs.code }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   provision:
+    permissions:
+      contents: write
+      pull-requests: write
     environment: production-ops
     name: provision ${{ inputs.code }}
     runs-on: ubuntu-latest
