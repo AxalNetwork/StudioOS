@@ -836,6 +836,31 @@ async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<Serv
   return services;
 }
 
+// D8073 (#8073) — which build is answering. Every field comes from the
+// bundle's deploy-time bindings, never from D1, so the answer is the running
+// Worker's own and costs no read. `scripts/check-spa-live.mjs` compares `sha`
+// with the sha the deploy job recorded. A field the deploy did not stamp is
+// null, and `missing` names it: a null is "not recorded", never a guess.
+export function versionBody(env: Pick<Env, 'WORKER_DEPLOY_VERSION' | 'WORKER_BUILT_AT' | 'CF_VERSION_METADATA'>) {
+  const raw = String(env.WORKER_DEPLOY_VERSION ?? '').trim().toLowerCase();
+  const sha = /^[0-9a-f]{40}$/.test(raw) ? raw : null;
+  const vid = String(env.CF_VERSION_METADATA?.id ?? '').trim().toLowerCase();
+  const version_id = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(vid) ? vid : null;
+  const at = String(env.WORKER_BUILT_AT ?? '').trim();
+  const built_at = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(at) ? at : null;
+  const missing = [
+    ...(sha ? [] : ['sha']),
+    ...(version_id ? [] : ['version_id']),
+    ...(built_at ? [] : ['built_at']),
+  ];
+  return { sha, version_id, built_at, missing };
+}
+
+publicRoutes.get('/version', (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json(versionBody(c.env));
+});
+
 publicRoutes.get('/status', async (c) => {
   await ensureMarketingSchema(c.env);
   const services = await probeServices(c);

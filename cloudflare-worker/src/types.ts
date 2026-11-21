@@ -151,6 +151,14 @@ export interface Env {
   // D452 — git ref or deploy id stamped at provision/deploy time; branch health
   // returns it so HQ can persist `licence_deployments.last_version` on read.
   WORKER_DEPLOY_VERSION?: string;
+  // D8073 — the build's UTC time, stamped beside WORKER_DEPLOY_VERSION at
+  // deploy (`--var WORKER_BUILT_AT:<iso>`). Unset, /api/public/version says so.
+  WORKER_BUILT_AT?: string;
+  // D8073 — the `[version_metadata]` binding (Cloudflare's own id for the
+  // running Worker version). Proposed on #8069; absent, version_id is null.
+  CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
+  /** D8073: the bearer token the production deploy job records a deploy with. Unset, the record refuses. */
+  DEPLOY_RECORD_TOKEN?: string;
   // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
   // generates it per deployment, puts the plaintext here and writes its SHA-256
   // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on
