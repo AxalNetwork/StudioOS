@@ -149,6 +149,8 @@ export function isPublicPath(pathname) {
     // Printable Program Brief — public brochure page; /spinout-lab/apply
     // is intentionally NOT listed (auth-only, a 401 there should bounce).
     || currentPath === '/spinout-lab/brief'
+    // D7121 (#7121): the public Wellness presentation; /wellbeing itself stays auth-only.
+    || currentPath === '/programs/wellness'
     // Audience product pages (For Founders / Investors & LPs / Service
     // Partners / Advisors) — public marketing surfaces. A background
     // settings/me 401 for an anonymous visitor must not bounce them to
