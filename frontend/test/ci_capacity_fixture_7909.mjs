@@ -23,8 +23,8 @@ function token(value = claims()) {
   const header = Buffer.from(JSON.stringify({ alg: "RS256", kid: jwk.kid })).toString("base64url"), body = Buffer.from(JSON.stringify(value)).toString("base64url"), payload = header + "." + body;
   return payload + "." + sign("RSA-SHA256", Buffer.from(payload), privateKey).toString("base64url");
 }
-function fixture(t,{callbackResults=false}={}) {
-  t.mock.timers.enable({apis:['Date'],now:1_800_000_000_000});
+function fixture(t,{callbackResults=false,clockInstalled=false}={}) {
+  if(!clockInstalled)t.mock.timers.enable({apis:['Date'],now:1_800_000_000_000});
   const db = new DatabaseSync(":memory:");
   t.after(() => db.close());
   const kv = new Map();

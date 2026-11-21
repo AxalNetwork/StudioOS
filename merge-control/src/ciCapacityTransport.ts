@@ -47,7 +47,6 @@ export class CapacityTransport {
     return {active:true,receipt};
   }
   async outcome(body:{receipt:ExecutionReceipt;result:unknown},identity:CapacityIdentity,ports:GithubCapacityPorts,results:SqlCapacityResults){
-    if(!await this.enabled())throw new Error('capacity_disabled');
     const receipt=body?.receipt;
     if(capacityIdentityLane(identity,this.config)!=='receipt'||!receipt||receipt.repository!==this.config.repository
       ||receipt.childRunId!==Number(identity.run_id)||receipt.childAttempt!==Number(identity.run_attempt)
@@ -55,7 +54,6 @@ export class CapacityTransport {
     const owned=this.capacity.ownsResult(receipt),result=executionResultBody(body.result);
     if(!owned||(!owned.current&&result.testStep!=='failure'))throw new Error('capacity_result_generation');
     const jobId=await ports.resultJob(owned.receipt,identity);
-    if(!await this.enabled())throw new Error('capacity_disabled');
     await this.wake();results.put(owned.receipt,jobId,result,Date.now());
     if(result.testStep==='failure')await this.capacity.recordExecutionFailure(owned.receipt,jobId);
     return {accepted:true};

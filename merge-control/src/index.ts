@@ -15,8 +15,8 @@ export default {
         const caller = request.method === 'POST' && ['/capacity/submit', '/capacity/receipt', '/capacity/outcome'].includes(path);
         if (!owner && !caller) return new Response('not found', { status: 404 });
         if (owner && !ownerAuthorized(request, env.CAPACITY_OWNER_TOKEN)) return new Response('unauthorized', { status: 401 });
-        // Default-off at ingress as well as inside the authority. Owner recovery stays independent.
-        if (caller && String(env.CAPACITY_ENABLED) !== 'true') return Response.json({ error: 'capacity_disabled' }, { status: 503 });
+        // Default-off admission. Owned outcome reports remain authenticated and bounded during draining.
+        if (caller && path !== '/capacity/outcome' && String(env.CAPACITY_ENABLED) !== 'true') return Response.json({ error: 'capacity_disabled' }, { status: 503 });
         if (caller && !/^Bearer [A-Za-z0-9_.-]{1,16384}$/.test(request.headers.get('authorization') ?? '')) return new Response('unauthorized', { status: 401 });
         return await env.CAPACITY_CONTROL.getByName(env.REPOSITORY).fetch(request);
       }

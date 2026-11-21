@@ -331,3 +331,24 @@ test('D7909 older owned generation can report a sticky failure but cannot report
  assert.equal((await send({testStep:'failure',executionOutcome:'completed',cleanupConfirmed:true,exportComplete:true})).accepted,true);
  const after=store.get(a.requestId);assert.equal(after.shards[0].attempts[0].verifiedTestFailure,true);assert.equal(after.evidenceConflict,true);
 });
+
+for(const stop of ['owner-switch','environment'])test(`D7909 ${stop} revokes execution but preserves authenticated owned cleanup reports`,async t=>{
+ const f=fixture(t,{callbackResults:true});t.mock.method(globalThis,'fetch',f.fetcher);await unlock(f);
+ await submitCapacity(submission(),{...options(f.clientFetch),enabled:true,plan});await f.tick();await f.tick();
+ const store=new SqlCapacityStore(f.storage),a=store.get(submission().requestId).shards[0].attempts[0];
+ const args={request:{requestId:a.requestId,shard:a.logicalShard,generation:1,profile:a.profile},context:{repository:REPO,childRunId:a.childRunId,childAttempt:1,executorSha:EXEC},phase:'execute'};
+ const receipt=(await createReceiptReader({...options(f.clientFetch,a.childRunId)})(args)).receipt;
+ await f.clientFetch('https://capacity.invalid/capacity/switch',{method:'POST',headers:{authorization:'Bearer fixture-owner'},body:'{"kill":true}'});
+ if(stop==='environment')f.env.CAPACITY_ENABLED='false';f.restart();
+ await assert.rejects(submitCapacity({...submission(),requestId:'00000000-0000-4000-8000-000000007999'},{...options(f.clientFetch),enabled:true,plan}),/unavailable/);
+ await assert.rejects(createReceiptReader({...options(f.clientFetch,a.childRunId)})(args),/unavailable/);
+ const signed={...claims(a.childRunId),check_run_id:String(a.childRunId+1000),runner_environment:'github-hosted'};
+ const body={testStep:'not_run',executionOutcome:'setup_failure',cleanupConfirmed:true,exportComplete:false};
+ const send=(owned,proof=signed)=>reportExecutionResult(owned,body,{...options(f.clientFetch),oidcToken:async()=>token(proof)});
+ await assert.rejects(send({...receipt,planDigest:'sha256:'+'0'.repeat(64)}),/unavailable/);
+ await assert.rejects(send(receipt,{...signed,aud:'wrong'}),/unavailable/);
+ assert.equal((await send(receipt)).accepted,true);f.result('cancelled');await f.tick();
+ assert.equal(store.get(a.requestId).shards[0].attempts[0].phase,'cancelled');
+ assert.equal(f.checks[0].conclusion,'cancelled');assert.equal(store.get(a.requestId).parentLive,false);
+ assert.equal(f.calls.filter(row=>row.method==='POST'&&row.path.endsWith('/dispatches')).length,6);
+});

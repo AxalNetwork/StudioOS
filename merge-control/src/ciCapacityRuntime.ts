@@ -89,12 +89,12 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
         return await this.ordered(async()=>Response.json({enabled:await this.enabled(),pending:this.store.pending().length}));
       }
       if(request.method!=='POST'||!['/capacity/submit','/capacity/receipt','/capacity/outcome'].includes(path))return new Response('not found',{status:404});
-      if(this.env.CAPACITY_ENABLED!=='true')return Response.json({error:'capacity_disabled'},{status:503});
+      if(path!=='/capacity/outcome'&&this.env.CAPACITY_ENABLED!=='true')return Response.json({error:'capacity_disabled'},{status:503});
       const token=capacityBearer(request),config=this.settings();
       // Admission precedes body reads and ordered work, so unauthenticated waits cannot queue ahead of alarms.
       const result=await this.budget.run(
         async()=>{
-          if(!await this.enabled())throw new Error('capacity_disabled');
+          if(path!=='/capacity/outcome'&&!await this.enabled())throw new Error('capacity_disabled');
           return authenticateCapacity(request,this.env.CAPACITY_AUDIENCE??'',this.env.REPOSITORY,capacityPlatformFetch,Date.now,this.keys);
         },
         identity=>{
@@ -102,10 +102,10 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
           return path===`/capacity/${lane}`||(path==='/capacity/outcome'&&lane==='receipt')?lane:null;
         },
         async identity=>{
-          if(!await this.enabled())throw new Error('capacity_disabled');
+          if(path!=='/capacity/outcome'&&!await this.enabled())throw new Error('capacity_disabled');
           const body=JSON.parse(new TextDecoder().decode(await capacityBody(request.body,path.endsWith('/submit')?9*1024*1024:path.endsWith('/outcome')?8192:4096)));
           return this.ordered(async()=>{
-            if(!await this.enabled())throw new Error('capacity_disabled');
+            if(path!=='/capacity/outcome'&&!await this.enabled())throw new Error('capacity_disabled');
             const {transport,ports}=await this.components();
             return path.endsWith('/submit')?transport.submit(body,identity):path.endsWith('/outcome')?transport.outcome(body,identity,ports,this.results):transport.receipt(body,identity);
           });

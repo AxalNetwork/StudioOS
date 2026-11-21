@@ -20,7 +20,12 @@ import { CI_CAPACITY_BUDGETS } from "../../merge-control/src/lib/ciCapacityPolic
 import { resolveCatalogProfile } from "../../scripts/ci/runners/catalog.mjs";
 import { main as admissionMain, admitRunnerJob, githubReadApi } from "../../scripts/ci/runner-admission.mjs";
 import { createReceiptReader, submitCapacity, githubOidcToken } from "../../scripts/ci/capacity-client.mjs";
-import { REPO, PREFIX, SOURCE, EXEC, SHARDS, privateKey, config, plan, submission, claims, token, fixture, options, unlock } from './ci_capacity_fixture_7909.mjs';
+import { REPO, PREFIX, SOURCE, EXEC, SHARDS, privateKey, config, plan, submission, claims, token, fixture as capacityFixture, options, unlock } from './ci_capacity_fixture_7909.mjs';
+function fixture(t){
+ t.mock.timers.enable({apis:['Date'],now:1_800_000_000_000});
+ return capacityFixture(t,{clockInstalled:true});
+}
+
 test("signed OIDC transport survives restart, binds executor receipt, and publishes only pilot authority", async (t) => {
   const f = fixture(t);
   t.mock.method(globalThis, "fetch", f.fetcher);
