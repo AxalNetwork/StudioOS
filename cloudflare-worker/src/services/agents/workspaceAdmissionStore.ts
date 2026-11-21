@@ -6,7 +6,8 @@ const KEY = 'workspace-admission-v1';
  * A throw rolls back the entire state, including fencing and settlement identity.
  */
 export class DurableWorkspaceAdmissionStore implements AdmissionStore {
-  constructor(private readonly storage: DurableObjectStorage) {}
+  private readonly storage: DurableObjectStorage;
+  constructor(storage: DurableObjectStorage) { this.storage = storage; }
   transaction<T>(change: (state: AdmissionState) => T): Promise<T> {
     return this.storage.transaction(async txn => {
       const state = await txn.get<AdmissionState>(KEY) ?? emptyAdmissionState();
