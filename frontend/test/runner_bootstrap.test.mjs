@@ -258,7 +258,8 @@ test('confirmed local removal clears stale server IDs so a fresh registration ca
 
 test('the bounded supervisor preserves child failure and terminates its process group at the pilot deadline', () => {
   fixture(`user=types.SimpleNamespace(pw_uid=1001)
-with mock.patch.object(b.pwd,'getpwnam',return_value=user),mock.patch.object(b.os,'geteuid',return_value=1001),mock.patch.object(b.time,'time',return_value=1000),mock.patch.object(b.signal,'signal'):
+# Exercise the scoped supervisor only behind a mocked successful security gate.
+with mock.patch.object(b,'isolation_enrollment_gate'),mock.patch.object(b.pwd,'getpwnam',return_value=user),mock.patch.object(b.os,'geteuid',return_value=1001),mock.patch.object(b.time,'time',return_value=1000),mock.patch.object(b.signal,'signal'):
  child=mock.Mock();child.wait.return_value=7;child.poll.return_value=7
  with mock.patch.object(b.subprocess,'Popen',return_value=child):assert b.serve(Path('/opt/test'),1100)==7
  child=mock.Mock();child.pid=123;child.wait.side_effect=[b.subprocess.TimeoutExpired('fixture',100),0];child.poll.side_effect=[None,0]

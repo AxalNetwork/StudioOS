@@ -14,6 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    environment: production
     if: github.ref == 'refs/heads/main' && vars.ARCHIVE_OBSERVER_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10

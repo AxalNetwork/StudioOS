@@ -461,3 +461,42 @@ export function railSummaryLine(status, view) {
   if (!view || view.state !== 'recorded') return 'Summaries: not recorded. This reading has no range to quote.';
   return `Summaries: when Eadwyn summarises this reading it quotes ${view.range}, to the cent.`;
 }
+
+// ---------------------------------------------------------------------------
+// D7651 part 2 (#7651) — the Eadwyn summary of all of your readings
+// ---------------------------------------------------------------------------
+
+/** The words the readings card's summary says around, or instead of, its lines (RMP-12). */
+export const READINGS_SUMMARY_COPY = Object.freeze({
+  heading: 'Eadwyn summary of your readings',
+  basis: 'From your stored readings only. No model is called and nothing is rounded.',
+  loading: 'Reading the summary of your readings.',
+  none: 'No readings recorded, so there is nothing to summarise.',
+  unreadableWhat: 'The summary of your readings',
+  unreadableClaim: 'This is not a sign you have none.',
+});
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * `GET /research/market-readings/summary`'s `summary` → what RMP-12 draws
+ * under the CSV export: `{ state: 'recorded', facts, lines }`, `{ state:
+ * 'none' }` with no readings, or `{ state: 'not_recorded' }` when the answer
+ * is not a summary. Each line is `summaryView` of one row, so its range is
+ * the Worker's two-decimal text read back to the cent, or Not recorded.
+ * Counts are the Worker's; nothing here counts or rounds.
+ */
+export function readingsSummaryView(summary) {
+  if (!summary || !Array.isArray(summary.lines) || !summary.age) return { state: 'not_recorded' };
+  if (!summary.lines.length) return { state: 'none' };
+  const lines = summary.lines.map((l) => ({ uid: l.uid, metric: l.metric, age: l.age || null, ...summaryView(l) }));
+  const a = summary.age;
+  const bands = [`${a.current} current`, `${a.ageing} ageing`, `${a.stale} stale`];
+  if (a.undated) bands.push(`${a.undated} undated`);
+  const facts = [
+    `${plural(summary.readings, 'reading')} stored, ${lines.length} summarised below`,
+    bands.join(', '),
+    summary.newest_ran_at ? `newest run ${summary.newest_ran_at}` : null,
+  ].filter(Boolean).join(' · ');
+  return { state: 'recorded', facts, lines };
+}

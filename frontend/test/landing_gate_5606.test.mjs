@@ -51,11 +51,16 @@ test('fast runs the guards before installing dependencies on a single full-histo
   assert.ok(job('gate').includes("&& 'test:drift (draft fast tier)' || 'test:drift (full suite)'"));
 });
 
-// D7108 (#7108): in the merge queue, fast skips exactly the six steps that the
+// D7108 / D5531: in the merge queue, fast delegates scanner acquisition and the checks that the
 // required `scan`, `worker (typecheck)` and `frontend (build)` jobs repeat on
 // the same candidate. Every other required step keeps a plain `!cancelled()`,
 // so the trusted-base migration and drift checkers still run in the queue.
-const QUEUE_SKIPPED = ['install_scanner', 'scan', 'worker_install', 'worker_typecheck', 'frontend_install', 'frontend_build'];
+const QUEUE_SKIPPED = ['scanner_pins', 'scanner_cache', 'install_scanner', 'scan', 'worker_install', 'worker_typecheck', 'frontend_install', 'frontend_build'];
+const SCANNER_IFS = {
+  scanner_cache: "${{ !cancelled() && github.event_name != 'merge_group' && steps.scanner_pins.outcome == 'success' }}",
+  install_scanner: "${{ !cancelled() && github.event_name != 'merge_group' && steps.scanner_pins.outcome == 'success' }}",
+  scan: "${{ !cancelled() && github.event_name != 'merge_group' && steps.install_scanner.outcome == 'success' && steps.range.outcome == 'success' }}",
+};
 const EVERY_EVENT = ['checkout', 'node', 'range', 'trusted', 'migrations', 'generated', 'drift', 'verdict'];
 function fastStepIfs(block) {
   const out = {};
@@ -69,14 +74,14 @@ function fastStepIfs(block) {
 function assertQueueSkips(block) {
   const ifs = fastStepIfs(block);
   for (const id of QUEUE_SKIPPED) {
-    assert.equal(ifs[id], "${{ !cancelled() && github.event_name != 'merge_group' }}", `${id} is skipped only in the queue`);
+    assert.equal(ifs[id], SCANNER_IFS[id] || "${{ !cancelled() && github.event_name != 'merge_group' }}", `${id} keeps queue delegation and acquisition prerequisites`);
   }
   for (const id of EVERY_EVENT) {
     assert.equal(ifs[id], '${{ !cancelled() }}', `${id} runs on every event`);
   }
 }
 
-test('D7108: fast skips only its six duplicated steps in the merge queue', () => {
+test('D7108: fast preserves merge-queue delegation and scanner prerequisites', () => {
   assertQueueSkips(fast);
   const swap = (id, from, to) => fast.replace(`id: ${id}\n        if: ${from}`, `id: ${id}\n        if: ${to}`);
   const plain = '${{ !cancelled() }}';
@@ -86,10 +91,10 @@ test('D7108: fast skips only its six duplicated steps in the merge queue', () =>
   assert.throws(() => assertQueueSkips(swap('worker_typecheck', queue, plain)));
   assert.throws(() => assertQueueSkips(swap('migrations', plain, queue)));
   assert.throws(() => assertQueueSkips(swap('drift', plain, queue)));
-  assert.throws(() => assertQueueSkips(swap('scan', queue, "${{ !cancelled() && github.event_name == 'merge_group' }}")));
+  assert.throws(() => assertQueueSkips(swap('scan', SCANNER_IFS.scan, "${{ !cancelled() && github.event_name == 'merge_group' }}")));
 });
 
-// D7108 (#7108): while fast skips those six steps in the queue, `ci / fast`
+// D7108 (#7108): while fast delegates those repeated checks in the queue, `ci / fast`
 // and `landing gate` go green on a candidate whose typecheck, build or secret
 // scan fails; only the separate required jobs check those there. So the
 // D5606 cutover (making `ci / fast` or `landing gate` required, then deleting

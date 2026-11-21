@@ -107,6 +107,10 @@ export type ListQuery = {
   availability_given?: string | undefined;
   /** D1200: `yes` for testers holding a picked place in a programme that has not closed, `no` for the rest. */
   in_programme?: string | undefined;
+  q?: string;
+  email_verified?: string;
+  email_consent?: string;
+  sort?: string;
 };
 
 /** A role as `users.role` stores one: lower case, letters and underscores. */
@@ -123,12 +127,40 @@ export const isYesNo = (s: string) => (YES_NO as readonly string[]).includes(s);
  */
 
 
+// D5876: the board's three aggregate figures without transferring applications.
+export async function testerBoardSummary(env: Env) {
+  const [statuses, recent, inProgramme] = await Promise.all([
+    env.DB.prepare(`SELECT t.status, COUNT(*) AS n FROM product_testers t
+      JOIN users u ON u.id = t.user_id GROUP BY t.status`).all<{ status: string; n: number }>(),
+    env.DB.prepare(`SELECT u.role, COUNT(*) AS n FROM product_testers t
+      JOIN users u ON u.id = t.user_id
+      WHERE datetime(t.applied_at) >= datetime('now', '-84 days') GROUP BY u.role`).all<{ role: string; n: number }>(),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM product_testers t JOIN users u ON u.id = t.user_id
+      WHERE t.status = 'active' AND EXISTS (
+        SELECT 1 FROM testing_applications ia JOIN testing_programmes ip ON ip.id = ia.programme_id
+        WHERE ia.user_id = t.user_id AND ia.status = 'picked' AND ip.status NOT IN ('closed', 'rejected'))`).first<{ n: number }>(),
+  ]);
+  if (!statuses.success || !recent.success || !Array.isArray(statuses.results) ||
+    !Array.isArray(recent.results) || !inProgramme || !Number.isSafeInteger(inProgramme.n)) throw new Error('Tester summary was not returned');
+  const counts = { applied: 0, active: 0, paused: 0, declined: 0, removed: 0 };
+  for (const { status, n } of statuses.results) {
+    if (isTesterStatus(status)) counts[status] = n;
+  }
+  return { counts, recent_by_role: recent.results, in_programme: inProgramme.n };
+}
+
 export async function listTesters(env: Env, q: ListQuery) {
   const status = q.status && isTesterStatus(q.status) ? q.status : '';
   const role = q.role && isRoleWord(q.role) ? q.role : '';
   const availability = q.availability_given && isYesNo(q.availability_given) ? q.availability_given : '';
   const inProgramme = q.in_programme && isYesNo(q.in_programme) ? q.in_programme : '';
-  const filters = [status, status, role, role, availability, availability, inProgramme, inProgramme];
+  const search = (q.q ?? '').trim().toLowerCase();
+  const needle = search.length >= 2 ? search : '';
+  const verified = q.email_verified && isYesNo(q.email_verified) ? q.email_verified : '';
+  const consent = q.email_consent && isYesNo(q.email_consent) ? q.email_consent : '';
+  const sort = q.sort ?? 'waiting';
+  const filters = [status, status, role, role, availability, availability, inProgramme, inProgramme,
+    needle, needle, verified, verified, consent, consent];
   const page = Math.max(1, Math.floor(Number(q.page) || 1));
   const pageSize = Math.min(PAGE_SIZE_MAX, Math.max(1, Math.floor(Number(q.page_size) || PAGE_SIZE)));
   const rows = await env.DB.prepare(
@@ -147,31 +179,42 @@ export async function listTesters(env: Env, q: ListQuery) {
         AND (? = '' OR (? = 'yes') = EXISTS (
               SELECT 1 FROM testing_applications ia JOIN testing_programmes ip ON ip.id = ia.programme_id
                WHERE ia.user_id = t.user_id AND ia.status = 'picked' AND ip.status NOT IN ('closed', 'rejected')))
-      ORDER BY t.applied_at ASC, t.id ASC LIMIT ? OFFSET ?`,
-  ).bind(...filters, pageSize, (page - 1) * pageSize).all<any>();
-  const counted = await env.DB.prepare('SELECT status, COUNT(*) AS n FROM product_testers GROUP BY status').all<any>();
+        AND (? = '' OR instr(lower(COALESCE(NULLIF(u.name, ''), 'Name not recorded') || ' ' || COALESCE(u.email, '')), ?) > 0)
+        AND (? = '' OR (? = 'yes') = (COALESCE(u.email_verified, 0) <> 0))
+        AND (? = '' OR (? = 'yes') = (COALESCE(t.consent_email_at, '') <> ''))
+      ORDER BY CASE WHEN ? = 'name' THEN COALESCE(NULLIF(u.name, ''), 'Name not recorded') END COLLATE NOCASE,
+        CASE WHEN ? = 'newest' THEN t.applied_at END DESC, t.applied_at ASC, t.id ASC LIMIT ? OFFSET ?`,
+  ).bind(...filters, sort, sort, pageSize, (page - 1) * pageSize).all<any>();
+  const counted = await env.DB.prepare(`SELECT t.status, COUNT(*) AS n FROM product_testers t
+      JOIN users u ON u.id = t.user_id GROUP BY t.status`).all<{ status: string; n: number }>();
   const totals: Record<TesterStatus | 'total', number> = { applied: 0, active: 0, paused: 0, declined: 0, removed: 0, total: 0 };
   for (const r of counted.results || []) {
     if (isTesterStatus(r.status)) totals[r.status as TesterStatus] = Number(r.n);
     totals.total += Number(r.n);
   }
-  const filtered = role || availability || inProgramme;
-  const matching = !filtered ? (status ? totals[status] : totals.total) : Number((await env.DB.prepare(
+  const filtered = role || availability || inProgramme || needle || verified || consent;
+  const matched = filtered ? await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM product_testers t JOIN users u ON u.id = t.user_id
       WHERE (? = '' OR t.status = ?)
         AND (? = '' OR u.role = ?)
         AND (? = '' OR (? = 'yes') = (t.availability IS NOT NULL AND trim(t.availability) <> ''))
         AND (? = '' OR (? = 'yes') = EXISTS (
               SELECT 1 FROM testing_applications ia JOIN testing_programmes ip ON ip.id = ia.programme_id
-               WHERE ia.user_id = t.user_id AND ia.status = 'picked' AND ip.status NOT IN ('closed', 'rejected')))`,
-  ).bind(...filters).first<any>())?.n ?? 0);
+               WHERE ia.user_id = t.user_id AND ia.status = 'picked' AND ip.status NOT IN ('closed', 'rejected')))
+        AND (? = '' OR instr(lower(COALESCE(NULLIF(u.name, ''), 'Name not recorded') || ' ' || COALESCE(u.email, '')), ?) > 0)
+        AND (? = '' OR (? = 'yes') = (COALESCE(u.email_verified, 0) <> 0))
+        AND (? = '' OR (? = 'yes') = (COALESCE(t.consent_email_at, '') <> ''))`,
+  ).bind(...filters).first<{ n: number }>() : { n: status ? totals[status] : totals.total };
+  if (!rows.success || !counted.success || !Array.isArray(rows.results) || !Array.isArray(counted.results) || !matched || !Number.isSafeInteger(matched.n)) {
+    throw new Error('Tester page was not returned');
+  }
   return {
     rows: (rows.results || []).map((r: any) => ({
       ...present(r),
       // D1200: the programmes this member applied to (any not withdrawn) and was picked for, all time.
       programmes: { applied: Number(r.programmes_applied ?? 0), picked: Number(r.programmes_picked ?? 0) },
     })),
-    page, page_size: pageSize, matching, totals,
+    page, page_size: pageSize, matching: matched.n, totals,
   };
 }
 
