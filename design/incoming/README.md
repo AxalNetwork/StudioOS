@@ -2749,6 +2749,16 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
 
 
+## Landed 2026-11-21 — HQ AI agents: capability policies, execution budgets and the agent registry (#8070, #8071, #8080)
+
+Three addenda to the landed `HQ AI Agents` canvas (D4137, SA0 to SA9), drawn on 2026-11-21 from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards. Landed at the owner's request before the briefs' questions were answered; each open question is drawn as option A.
+
+- **`HQ AI Agents Capability Policies`** (SA10 to SA14, SAP-H), Operations › Policies › Capabilities, D4137-p2.
+- **`HQ AI Agents Execution Budgets`** (SA15 to SA19, SAB-H), Operations › Spend › Agent budgets, D4137-p3.
+- **`HQ AI Agents Registry`** (SA20 to SA24, SAR-H), Roster › Registry, D4137-p4.
+
+Each file is the canvas export as published; no value was edited (the Axal mark already points at `/axal-mark.png`). The three canvases use the same eight sample agents. None is built yet.
+
 ## Landed 2026-11-21 — Research Markets, Funds and Companies, and Network people, introductions, sources and organizations (#7703, #7738, #7809, #7676 to #7680)
 
 Seventeen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-19 (#7703, #7738) and 2026-11-21 (the rest), each as a page plus its boards. Landed at the owner's request before the briefs' owner questions were answered: every open question is drawn as its option A, and boards a brief says wait for a letter are marked "not for build until answered" on the canvas and in their decision.
