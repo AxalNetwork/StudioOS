@@ -38,6 +38,7 @@ also exercises a `project_id` deep link.
 | `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
 | `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
 | `learning_studio_stream_copy_integration_4742.test.mjs` | #4742: Copy to Stream wired into the Studio (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid` drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal. |
+| `dr_cleanup_7917.test.mjs` | D7917: fake-CLI exact-run cleanup, unsafe-record refusal, retry and workflow timeout/always contract. |
 | `restore_d1_d5337.test.mjs` | D5337: `scripts/restore-d1.sh` run against a fake `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared path with the drill, and the runbook's reasons. |
 | `d1_backup_stream_d7142.test.mjs` | D7142: the backup manifest and the drill split stream the export: byte-identical to the frozen pre-D7142 code (`fixtures/d7142_old_*.mjs`) at read sizes down to one byte, a statement or `;` across a read boundary counted once, and an export bigger than the heap read under a heap cap (the >600 MiB run with `D7142_LARGE=1`). |
 | `_dr_fakes.mjs` | D5337: the `age` key pair and the fake `aws` store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`). |
@@ -230,6 +231,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
 | `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
 | `practice_cockpit_4829.test.mjs` | D4829: source isolation, canonical counts, timezone boundaries, pagination, record destinations, retry and Client Sheet. |
+| `practice_delivery_shell_4833.test.mjs` | D4833-p4: Delivery in the Practice v2 shell: PX-06's heading, line and header primary read from the canvas, the primary in every list state, no chips over an empty or unread list, the PX-06 A order, and the card's Client Sheet. |
 | `network_picker_6637.test.mjs` | D6637: mounted picker selection, eligibility and submission. |
 | `network_picker_6636.test.mjs` | D6636: mounted picker selection, eligibility and submission. |
 
@@ -242,7 +244,11 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `free_secret_detection_7899.test.mjs` | D7899 dedicated Axal bearer detection, public-prefix/placeholder exclusions and refusal of blanket JWT exemptions. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+| `portfolio_mark_today_d6226.test.mjs` | D6226: Positions counts stale marks from the positions read's own `today` with the reporting read failing; the company Latest FMV Stale chip; the reference-date order. |
+| `_approvalBoardPages_5876.mjs` | Shared fixtures for the approval board summary and active-page contracts (#5876). |
+| `approval_board_pages_5876.test.mjs` | Mounted regressions for lane counts and active-page reads (#5876). |
 
+`release_phases_5667.test.mjs` verifies release/target isolation, ordered receipt selection, phase failures and the existing publication relay boundary.
 ## Observable readiness (D5504)
 
 | File | Guarantee |
@@ -257,6 +263,11 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `deal_flow_thesis_6147.test.mjs` | D6147: New for you's thesis matches: the chip, the reasons line, the cap line, Set your thesis when none is set, and the unreadable source named while the rest list. |
 | `share_feedback_6064.test.mjs` | D6064: Share & analytics viewer feedback: the model and the mounted block's loading, Unreadable, refused, empty, ready and cap states. |
 
+`icp_complete_6003.test.mjs` (D6003) renders and round-trips the missing five-step fields without blanking omitted values.
 `build_facts_6040.test.mjs` (D6040) renders present, null, zero and unreadable Build facts through both desktop and phone module pages.
 
 `runner_bootstrap.test.mjs` checks native capability profiles, verified archives, private organization enrollment and idempotent/recoverable lifecycle behavior (D7885).
+| `macbook_orphan_7902.test.mjs` | D7902: stale queued-child ownership/lease cleanup, pickup races and redacted API-status diagnostics. |
+
+| `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
+| `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
