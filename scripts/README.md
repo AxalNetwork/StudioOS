@@ -360,5 +360,6 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 
 | `local-files.mjs` | D7255: descriptor-bound regular file reads/edits and private, no-follow operator-state files; rejects symlinks and hard links before truncation. |
 
+| `build-classification-crosswalk.mjs` | D7821: deterministically writes the UK SIC crosswalk seed from its reviewed asset and imported SIC_SECTORS; `--check` verifies it without database access. |
 | `file-recovery-independent.py` | D6653: encrypted independent snapshots, private run heartbeats and synthetic-only outside-preview restore proof. |
 | `file_recovery_6653_test.py` | D6653: fixtures for independent integrity, isolated credential roles, unconfigured skips and failure heartbeats. |
