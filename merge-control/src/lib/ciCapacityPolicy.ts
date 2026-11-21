@@ -1,7 +1,7 @@
 /** D7887: bounded CI pool routing, immutable execution receipts, and full-set result authority. */
 export const CI_CAPACITY_VERSION = 1 as const;
 export type CiProfile = 'hosted' | 'linux-x64' | 'macos-arm64';
-export type CiEvent = 'push' | 'merge_group' | 'pull_request';
+export type CiEvent = 'push' | 'merge_group';
 export const CI_CAPACITY_BUDGETS = Object.freeze({
   externalStartMs: 90_000,
   externalExecutionMs: 25 * 60_000,
@@ -123,7 +123,7 @@ export type Aggregate = { status: 'pending' | 'success' | 'failure' | 'cancelled
 const SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
-const SHARD = /^(?:rest|(?:worker|frontend)-[1-9][0-9]?-of-[1-9][0-9]?)$/;
+const SHARD = /^worker-[1-6]-of-6$/;
 const positive = (n: number) => Number.isSafeInteger(n) && n > 0;
 const sameSet = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((v, i) => v === [...b].sort()[i]);
 
@@ -145,9 +145,9 @@ export function submissionMatches(input: CiSubmission, proof: CiProvenance, repo
       || !positive(input.parentRunId) || !positive(input.parentAttempt) || !positive(input.parentWorkflowId)
       || (input.event === 'merge_group' ? !SHA.test(input.queueBaseSha ?? '') : input.queueBaseSha !== null)
       || !SHA.test(input.sourceSha) || !SHA.test(input.executorSha) || !DIGEST.test(input.planDigest)
-      || !['push', 'merge_group', 'pull_request'].includes(input.event)
+      || !['push', 'merge_group'].includes(input.event)
       || (input.event === 'merge_group' ? input.planArtifactId !== null : !positive(input.planArtifactId ?? 0))
-      || !Array.isArray(input.shards) || !input.shards.length || input.shards.length > 32
+      || !Array.isArray(input.shards) || !input.shards.length || input.shards.length > 6
       || input.shards.some(s => !SHARD.test(s)) || new Set(input.shards).size !== input.shards.length
       || !Array.isArray(input.prerequisites) || !input.prerequisites.length || input.prerequisites.length > 16
       || input.prerequisites.some(s => typeof s !== 'string' || !s || s.length > 120)
@@ -166,7 +166,7 @@ export function selectPools(
 ): { shard: string; profile: CiProfile }[] {
   validateCapacityPolicy(policy);
   const assignments = input.shards.map(shard => ({ shard, profile: 'hosted' as CiProfile }));
-  if (!trusted || input.event === 'pull_request' || !inventory?.complete
+  if (!trusted || !['push', 'merge_group'].includes(input.event) || !inventory?.complete
       || !Number.isSafeInteger(inventory.observedAt) || now < inventory.observedAt
       || now - inventory.observedAt > policy.budgets.inventoryMaxAgeMs
       || !Array.isArray(inventory.runners) || inventory.runners.length > 1000
@@ -244,6 +244,10 @@ export function applyObservation(request: CapacityRequest, observation: ChildObs
       // Unknown test truth is insufficient to replace this execution with a fresh attempt.
       if (observation.testStep === 'unknown') { attempt.phase = 'cancellation_unknown'; attempt.reason = 'test_outcome_unknown'; }
       else { attempt.phase = 'cancelled'; attempt.reason = 'infrastructure_ended'; }
+    } else if (observation.testStep === 'unknown') {
+      attempt.phase = 'cancellation_unknown'; attempt.reason = 'test_outcome_unknown';
+    } else if (attempt.profile !== 'hosted' && observation.conclusion === 'failure' && observation.testStep === 'not_run') {
+      attempt.phase = 'cancelled'; attempt.reason = 'infrastructure_failed';
     } else { attempt.phase = 'failed'; attempt.reason = 'execution_failed'; }
     return true;
   }
