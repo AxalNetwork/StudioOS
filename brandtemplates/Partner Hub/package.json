@@ -81,7 +81,13 @@
     "nitro": "3.0.260603-beta",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.56.1",
-    "vite": "^8.0.16"
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.1.6"
+  },
+  "packageManager": "bun@1.4.5",
+  "overrides": {
+    "@typescript-eslint/typescript-estree@8.72.2": {
+      "minimatch": "11.0.1"
+    }
   }
 }
