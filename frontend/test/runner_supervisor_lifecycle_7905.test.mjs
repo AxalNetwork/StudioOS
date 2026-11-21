@@ -200,7 +200,7 @@ test('D8010 export runs while the container still exists, inside the lease; a fa
   let f = engineFixture(t), seen = null;
   let s = supervisor(t, f, { exporter: async args => { seen = { args, rmBefore: f.calls.some(c => c[0] === 'rm') }; return { state: 'complete' }; } });
   assert.equal(await s.run(), 0);
-  assert.deepEqual([seen.rmBefore, seen.args.container, seen.args.observedTest.status, seen.args.deadline], [false, { id: CID, owner: '202-1-1' }, 'success', DEADLINE - 60000]);
+  assert.deepEqual([seen.rmBefore, seen.args.container, seen.args.observedTest.status, seen.args.deadline], [false, { id: CID, owner: '202-1-1' }, 'success', DEADLINE - 90000]);
   t.mock.timers.reset();
   f = engineFixture(t); s = supervisor(t, f, { exporter: async () => { throw new Error('stream truncated'); } });
   assert.equal(await s.run(), 1);
@@ -310,4 +310,55 @@ test('D8007 run mode has no route but a verified boundary job: hosted, Mac and e
   const run = source.split("return await withCancellation(async signal=>{")[1].split('\n });')[0];
   assert.match(run, /const job=requireExecutionBoundary\(dependencies\);/);
   assert.doesNotMatch(run, /executeShard\(/, 'the direct-host path is not reachable from run mode');
+});
+
+test('S32 C3: a create whose ID never came back is not clean: cleanup is unknown, never complete', async t => {
+  const f = engineFixture(t);
+  const lost = args => { if (args[0] === 'create') { f.calls.push(args); throw new Error('ack lost after side effect'); } return f.engine(args); };
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const job = new JobContainer(POLICY, { engine: lost, spawnEngine: realSpawn({ install: 'exit 0', test: 'exit 0' }), stage: () => {}, namespace: () => true });
+  const logs = [];
+  const code = await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter: completeExport, log: l => logs.push(l) });
+  const o = JSON.parse(logs.find(l => l.includes('container_outcome')));
+  assert.equal(code, 1);
+  assert.deepEqual([o.category, o.cleanup, o.cleanupComplete], ['infrastructure', { state: 'unknown', reason: 'create_unconfirmed' }, false]);
+  assert.equal(f.calls.some(c => c[0] === 'rm'), false, 'no broadened deletion without an exact ID');
+  // A failure before any create was attempted is still a genuine 'none'.
+  const g = engineFixture(t);
+  const before = new JobContainer(POLICY, { engine: g.engine, stage: () => { throw new Error('EPERM'); }, namespace: () => true });
+  const logs2 = [];
+  await runInContainer({ job: before, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: g.source }, planPath: g.plan, signal: new AbortController().signal, store: recoveryStore({ root: g.storeRoot, create: true }), exporter: completeExport, log: l => logs2.push(l) });
+  assert.deepEqual(JSON.parse(logs2.find(l => l.includes('container_outcome'))).cleanup, { state: 'none' });
+});
+
+test('S32 F1/F3: a full-length receipt ends work, export and three removal calls inside the 26-minute Run step', async t => {
+  const { runStepDeadline, LINUX_RUN_STEP_MS, RUN_STEP_MARGIN_MS } = await import('../../scripts/ci/runner-execution.mjs');
+  const { FINISH_RESERVE_MS, REMOVAL_RESERVE_MS } = await import('../../scripts/ci/runners/job-container.mjs');
+  assert.equal(FINISH_RESERVE_MS, 150_000); assert.equal(REMOVAL_RESERVE_MS, 90_000, 'inspect + rm + absence check at 30s each');
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const f = engineFixture(t);
+  const full = { ...identity(), executionDeadline: NOW + 1_590_000 };
+  const step = runStepDeadline(NOW);
+  assert.equal(step, NOW + LINUX_RUN_STEP_MS - RUN_STEP_MARGIN_MS);
+  const job = new JobContainer(POLICY, { engine: f.engine, stage: () => {}, namespace: () => true });
+  job.workDeadline = Math.min(full.executionDeadline, step);
+  job.create(full, { source: f.source, plan: f.plan });
+  const { timeout } = job.candidateExec({ receipt: full, admitted: { ...live(), identity: full }, phase: 'test' });
+  // Work + export reserve + three 30s removal calls cannot pass the wrapper (the old code reached 1,589,999ms).
+  assert.ok(NOW + timeout + FINISH_RESERVE_MS <= step, `${NOW + timeout + FINISH_RESERVE_MS} <= ${step}`);
+  assert.ok(step < NOW + LINUX_RUN_STEP_MS);
+  const wf = (await import('node:fs')).readFileSync(new URL('../../.github/workflows/runner-executor.yml', import.meta.url), 'utf8');
+  assert.match(wf, /timeout-minutes: \$\{\{ inputs\.profile == 'hosted' && 41 \|\| inputs\.profile == 'github-8' && 29 \|\| 26 \}\}/, 'the Linux Run wrapper the executor bounds itself by');
+});
+
+test('S32 F3: the supervisor applies the Run step wrapper to the job before any work starts', async t => {
+  const f = engineFixture(t);
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const timeouts = [];
+  const job = new JobContainer(POLICY, { engine: f.engine, stage: () => {}, namespace: () => true,
+    spawnEngine: args => { timeouts.push(job.candidateExec({ receipt: identity(), admitted: live(), phase: 'test' }).timeout); return spawn('/bin/sh', ['-c', 'exit 0'], { stdio: 'ignore' }); } });
+  const step = NOW + 300_000; // earlier than the receipt's NOW + 600_000
+  await runInContainer({ job, executionIsolation: async () => true, admit: async () => live(), recheck: async () => true, current: { profile: { id: 'linux-x64' }, identity: identity() }, paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: f.storeRoot, create: true }), exporter: completeExport, log: () => {}, stepDeadline: step });
+  assert.equal(job.workDeadline, step);
+  assert.ok(timeouts.length === 2 && timeouts.every(ms => ms === step - 150_000 - NOW), JSON.stringify(timeouts));
 });

@@ -10,13 +10,17 @@ const need=(v,reason)=>{if(!v)throw Error(reason);};
  * D8009: the container stops at the receipt's ABSOLUTE execution deadline, computed in the container at start,
  * not at a duration captured before staging/create. A deadline already past makes sleep fail, so it never runs.
  */
-const SHELL='exec sleep "$(( STUDIOOS_JOB_DEADLINE - $(date +%s) ))"';
+// date +%s truncates the current second, so subtract one: the stop can never land after the receipt deadline (S32 F2).
+const SHELL='exec sleep "$(( STUDIOOS_JOB_DEADLINE - $(date +%s) - 1 ))"';
 /**
  * D8009: candidate installs and tests stop this long before the absolute deadline, leaving time for observation
  * capture, a bounded export and exact inspect+rm removal (two engine calls of 30s each). This shortens candidate
  * work; it raises no timeout, cap or lease.
  */
-export const FINISH_RESERVE_MS=90000;
+export const REMOVAL_RESERVE_MS=90000;
+/** D8009/S32 F1: 60s for pause, copy and seal, then REMOVAL_RESERVE_MS for inspect, rm and the absence check (3 x 30s). */
+export const EXPORT_RESERVE_MS=60000;
+export const FINISH_RESERVE_MS=EXPORT_RESERVE_MS+REMOVAL_RESERVE_MS;
 /** Each ACL staging call is bounded so staging plus cleanup stays inside the coordinator's 120s cancellation budget. */
 export const STAGE_TIMEOUT_MS=20000;
 const ENV=['PATH=/usr/local/bin:/usr/bin:/bin','HOME=/work/home','LANG=C.UTF-8','CI=true','TZ=UTC'];
@@ -87,6 +91,8 @@ export class JobContainer {
  constructor(policy,{engine=dockerEngine,spawnEngine=dockerSpawn,stage=aclStage,namespace=(pid,kind)=>readlinkSync(`/proc/${pid}/ns/${kind}`)!==readlinkSync(`/proc/self/ns/${kind}`)}={}) {
   need(policy?.version===1&&DIGEST.test(policy.image??'')&&policy.nodeVersion==='22.23.3'&&policy.pythonVersion==='3.11.18','unreviewed_container_runtime');
   this.policy=Object.freeze({...policy});this.engine=engine;this.spawnEngine=spawnEngine;this.stage=stage;this.namespace=namespace;this.owned=null;
+  /** Optional earlier bound set by the supervisor (the Run step wrapper); never later than the receipt. */
+  this.workDeadline=null;this.createAttempted=false;
   /** Set by the trusted supervisor to persist exact ownership before start, for recovery after process loss. */
   this.onOwned=null;
  }
@@ -94,11 +100,13 @@ export class JobContainer {
   need(this.owned===null,'container_already_owned');const owner=ownerOf(receipt);
   const deadline=receipt.executionDeadline;
   need(Number.isSafeInteger(deadline)&&deadline-Date.now()>FINISH_RESERVE_MS&&deadline-Date.now()<=1590000,'invalid_container_deadline');
+  const workBound=()=>Math.min(deadline,Number.isSafeInteger(this.workDeadline)?this.workDeadline:deadline);
+  need(workBound()-Date.now()>FINISH_RESERVE_MS,'insufficient_execution_budget');
   source=safePath(source);plan=safePath(plan);
   need(lstatSync(source).isDirectory()&&lstatSync(plan).isFile()&&source!==plan,'unsafe_container_input');
   try { this.stage({source,plan}); } catch { need(false,'container_input_staging_failed'); }
   // Re-checked after staging: the absolute stop never moves later, and there must still be work time left.
-  need(deadline-Date.now()>FINISH_RESERVE_MS,'insufficient_execution_budget');
+  need(workBound()-Date.now()>FINISH_RESERVE_MS,'insufficient_execution_budget');
   const deadlineSeconds=Math.floor(deadline/1000);
   const args=['create','--pull=never','--name',`studioos-job-${owner}`,'--label',`${LABEL}=${owner}`,
    '--user','10001:10001','--init','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
@@ -108,6 +116,8 @@ export class JobContainer {
    '--mount',`type=bind,src=${source},dst=/input,readonly,bind-propagation=rprivate`,
    '--mount',`type=bind,src=${plan},dst=/input-plan.json,readonly,bind-propagation=rprivate`,
    ...[...ENV,`STUDIOOS_JOB_DEADLINE=${deadlineSeconds}`].flatMap(e=>['--env',e]),'--entrypoint','/bin/sh',this.policy.image,'-c',SHELL];
+  // S32 C3: from here an engine object may exist even if its ID never comes back; the supervisor must not call that clean.
+  this.createAttempted=true;
   const id=this.engine(args).trim();need(/^[a-f0-9]{64}$/.test(id),'container_creation_unconfirmed');
   // Persist exact local ownership before start/inspection. A failure never broadens cleanup to a name/pool.
   this.owned={id,owner,source,plan,image:this.policy.image,receipt:receiptIdentity(receipt),deadlineSeconds};
@@ -149,7 +159,8 @@ export class JobContainer {
   const setup='mkdir -p /work/source /work/home /work/traces; cp -R /input/. /work/source/; chmod -R u+rwX /work/source; cd /work/source; printf "%s" "$ORIGINAL_EVENT" > /work/event.json; unset ORIGINAL_EVENT; export GITHUB_EVENT_PATH=/work/event.json TEST_TRACE_DIR=/work/traces TEST_TRACE_ROOT=/work/source TMPDIR=/tmp; npm ci --prefix cloudflare-worker; npm ci';
   const test='cd /work/source; unset ORIGINAL_EVENT; export GITHUB_EVENT_PATH=/work/event.json TEST_TRACE_DIR=/work/traces TEST_TRACE_ROOT=/work/source TMPDIR=/tmp; exec node scripts/test-drift-parts.mjs "$PART" --plan-file /input-plan.json';
   const script=phase==='install'?setup:phase==='test'?test:`${setup}; ${test.slice(test.indexOf('exec '))}`;
-  const workRemaining=receipt.executionDeadline-FINISH_RESERVE_MS-Date.now();
+  // S32 F3: work also ends before the Run step's own wrapper, not only the receipt (workDeadline is the earlier one).
+  const workRemaining=Math.min(receipt.executionDeadline,Number.isSafeInteger(this.workDeadline)?this.workDeadline:receipt.executionDeadline)-FINISH_RESERVE_MS-Date.now();
   need(Number.isSafeInteger(workRemaining)&&workRemaining>0&&workRemaining<=25*60000,'insufficient_execution_budget');
   return {args:['exec','--user',CANDIDATE,...Object.entries(env).flatMap(([k,v])=>['--env',`${k}=${v}`]),this.owned.id,'/bin/sh','-ec',script],timeout:workRemaining};
  }

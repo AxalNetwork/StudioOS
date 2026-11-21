@@ -188,3 +188,28 @@ test('D8010 staged files are created exclusively, never through a link, and end 
   assert.throws(() => writeExclusive(join(root, 'link'), Buffer.from('y'), 0o400), /EEXIST|ELOOP/);
   assert.equal(readFileSync(join(root, 'target'), 'utf8'), 'listener secret');
 });
+
+test('S32 E1: a pause that outlives the budget, or an abort during or before the copy, never publishes an offer', async t => {
+  // Pause advances the clock past the export deadline; the copy itself would succeed instantly.
+  let f = exporterFixture(t);
+  const late = createTraceExporter({ stagingRoot: f.stagingRoot, now: () => clock.now, engine: args => { if (args[0] === 'pause') clock.now += 61_000; return ''; },
+    spawnCopy: () => spawn('/bin/cat', [join(f.root, 'archive.tar')], { stdio: ['ignore', 'pipe', 'ignore'] }) });
+  const clock = { now: NOW };
+  assert.deepEqual(await late({ receipt: receipt(), container: { id: CID, owner: '202-1-1' }, observedTest: null, deadline: NOW + 60_000 }), { state: 'failed', phase: 'copy', reason: 'export_budget_exhausted' });
+  assert.equal(existsSync(f.ready), false);
+  // The pause itself aborts the signal: the copy must not start, and nothing is published.
+  f = exporterFixture(t);
+  const controller = new AbortController(); let copies = 0;
+  const aborted = createTraceExporter({ stagingRoot: f.stagingRoot, now: () => NOW, engine: args => { if (args[0] === 'pause') controller.abort(); return ''; },
+    spawnCopy: () => { copies++; return spawn('/bin/cat', [join(f.root, 'archive.tar')], { stdio: ['ignore', 'pipe', 'ignore'] }); } });
+  assert.deepEqual(await aborted({ receipt: receipt(), container: { id: CID, owner: '202-1-1' }, observedTest: null, signal: controller.signal, deadline: NOW + 60_000 }), { state: 'failed', phase: 'copy', reason: 'export_cancelled' });
+  assert.equal(copies, 0);
+  assert.equal(existsSync(f.ready), false);
+  // The budget runs out while the archive is sealed: no ready offer either.
+  f = exporterFixture(t);
+  let tick = NOW;
+  const sealing = createTraceExporter({ stagingRoot: f.stagingRoot, now: () => tick, engine: () => '',
+    spawnCopy: () => { const c = spawn('/bin/cat', [join(f.root, 'archive.tar')], { stdio: ['ignore', 'pipe', 'ignore'] }); c.once('close', () => { tick = NOW + 60_000; }); return c; } });
+  assert.deepEqual(await sealing({ receipt: receipt(), container: { id: CID, owner: '202-1-1' }, observedTest: null, deadline: NOW + 60_000 }), { state: 'failed', phase: 'seal', reason: 'export_budget_exhausted' });
+  assert.equal(existsSync(f.ready), false);
+});

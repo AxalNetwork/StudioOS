@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { JobContainer,readContainerPolicy,containerIsolationAdapter } from '../../scripts/ci/runners/job-container.mjs';
-const IMAGE='sha256:'+'a'.repeat(64),CID='b'.repeat(64),NOW=1800000000000,DEADLINE=NOW+150000;
+const IMAGE='sha256:'+'a'.repeat(64),CID='b'.repeat(64),NOW=1800000000000,DEADLINE=NOW+300000;
 const clocked=new WeakSet();
 const receipt=()=>({version:1,repository:'AxalNetwork/StudioOS',profile:'linux-x64',requestId:'00000000-0000-4000-8000-000000000001',logicalShard:'worker-1-of-6',childRunId:202,childAttempt:1,generation:1,executionDeadline:DEADLINE,event:'push',sourceSha:'e'.repeat(40)});
 function fixture(t){
@@ -65,8 +65,8 @@ test('D7905 fixed installs and tests run inside the same container, and timeout 
  const run=f.calls.find(c=>c.args[0]==='exec'&&c.args.includes('/bin/sh'));assert.equal(run.args[run.args.indexOf('--user')+1],'10000:10000');assert.equal(run.args[run.args.indexOf(CID)+1],'/bin/sh');
  assert.match(run.args.at(-1),/npm ci --prefix cloudflare-worker; npm ci; exec node scripts\/test-drift-parts.mjs/);
  assert.doesNotMatch(run.args.join(' '),/GH_TOKEN|ACTIONS_ID_TOKEN|docker\.sock/);
- // D8009: candidate work ends FINISH_RESERVE_MS (90s) before the absolute deadline.
- assert.equal(run.options.timeout,DEADLINE-90000-NOW);
+ // D8009/S32 F1: candidate work ends FINISH_RESERVE_MS (60s export + 90s removal) before the absolute deadline.
+ assert.equal(run.options.timeout,DEADLINE-150000-NOW);
  assert.deepEqual(f.calls.at(-1).args,['rm','--force',CID]);
  assert.equal(f.job.verifyIsolation({receipt:r}),false);
  const other=fixture(t);other.create();assert.throws(()=>other.job.cleanup({...receipt(),generation:2}),/owner_mismatch/);
@@ -118,13 +118,13 @@ test('D7905 the container lifetime survives host loss and its init identity diff
  assert.equal(args[args.indexOf('--user')+1],'10001:10001');
  assert.ok(args.includes('--init'));
  // D8009: the container sleeps to the receipt's absolute deadline, computed in the container at start.
- assert.deepEqual(args.slice(-2),['-c','exec sleep "$(( STUDIOOS_JOB_DEADLINE - $(date +%s) ))"']);
+ assert.deepEqual(args.slice(-2),['-c','exec sleep "$(( STUDIOOS_JOB_DEADLINE - $(date +%s) - 1 ))"']);
  assert.ok(args.includes(`STUDIOOS_JOB_DEADLINE=${Math.floor(DEADLINE/1000)}`));
  assert.equal(args.some(v=>v.startsWith('STUDIOOS_JOB_MAX_SECONDS=')),false);
  for(const call of f.calls.filter(c=>c.args[0]==='exec'))assert.equal(call.args[call.args.indexOf('--user')+1],'10000:10000');
  f.state().Config.Env=f.state().Config.Env.map(v=>v.startsWith('STUDIOOS_JOB_DEADLINE=')?'STUDIOOS_JOB_DEADLINE=999999':v);
  assert.equal(f.job.verifyIsolation({receipt:receipt()}),false);
- for(const executionDeadline of [NOW,NOW-1,NOW+90000,NOW+1590001]){
+ for(const executionDeadline of [NOW,NOW-1,NOW+150000,NOW+1590001]){
   const expired=fixture(t);assert.throws(()=>expired.job.create({...receipt(),executionDeadline},{source:expired.source,plan:expired.plan}),/invalid_container_deadline/);
   assert.equal(expired.calls.length,0);
  }
