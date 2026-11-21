@@ -57,6 +57,8 @@ also exercises a `project_id` deep link.
 
 | `runner_catalog_7906.test.mjs` | D7906: real catalog translation, approved group refusal, exact pins and native shard limits. |
 
+| `deal_summary_menu_7771.test.mjs` | #7771: labelled Share menu availability on desktop/phone, PDF filename and blob, Worker refusals and abort on unmount. |
+
 ## Conventions
 
 - One file per surface or per rule; the header comment says what went wrong and
