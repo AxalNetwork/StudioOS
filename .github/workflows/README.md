@@ -10,6 +10,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 
 | Workflow file | Workflow | pull_request | pull_request_target | merge_group | push to main | schedule | Other events |
 |---|---|---|---|---|---|---|---|
+| `admin-drift.yml` | Admin drift | — | — | — | — | read the live admin settings and diff the baseline (advisory, conditional)<br>file or update one issue per drift (advisory, conditional) | `workflow_dispatch` · read the live admin settings and diff the baseline (advisory, conditional)<br>file or update one issue per drift (advisory, conditional) |
 | `agent-compute-image.yml` | General compute image | image (advisory) | — | — | — | — | — |
 | `agent-compute-preview.yml` | General compute preview (owner gated) | — | — | — | — | — | `workflow_dispatch` · gate (advisory, conditional)<br>deploy_disabled_host (advisory) |
 | `agent-gateway-keys.yml` | Agent gateway keys | — | — | — | — | — | `workflow_dispatch` · Verify, store and link the account keys (advisory, conditional) |
@@ -329,6 +330,7 @@ It uses synthetic queue responses and has no production credentials.
 
 ## Workflow purpose and credentials
 
+- `admin-drift.yml` · D8082: weekly read-only diff of the live GitHub admin settings (rulesets, environments, Actions permissions, Apps, runner groups) against `documentation/operations/GITHUB_ADMIN_BASELINE.md`; files or updates one `slot:chatgptpro` issue per drifted setting and changes no setting · Monday 04:47 UTC and manual dispatch on main · `check` reads `ADMIN_DRIFT_READ_TOKEN` from `production-ops` (`contents: read` only); `file` has `issues: write` and no secret
 - `agent-compute-image.yml` · D4557: read-only PR image validation; no publishing, credentials or deployment.
 - `agent-compute-preview.yml` · D4557: owner-dispatched, independently protected, exact-main disabled preview host deployment; no broker enablement.
 - `agent-stage-a.yml` · D4594 parts 2 and 3 (#4594): hosted Stage A. Creates a throwaway Worker `studioos-s4594-<run>` (workers.dev, no route, no cron) over its own D1, KV, queues, Workflow and R2, runs the #4566 preflight (must be `isolated`), drives one Workflow-path and one manual sponsor-run lifecycle with stubbed inference, reconciles holds, usage and proposals, and deletes everything. Never touches production. `scripts/agent-stage-a.mjs` · manual dispatch only · `CLOUDFLARE_API_TOKEN` (needs **Workers Scripts:Edit, D1:Edit, Workers KV:Edit, Queues:Edit, R2:Edit**, and Workflows), `CLOUDFLARE_ACCOUNT_ID`; repository secrets.

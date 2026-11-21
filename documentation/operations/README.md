@@ -61,4 +61,5 @@ and a link in `documentation/README.md`.
 | `WORKFLOW_FAILURE_ISSUES_6387.md` | D6387: GitHub repair issue activation, evidence and replay. |
 | `R2_INVENTORY.json` | D6650: reviewed source prefix classes, unknown retention bases, explicit copy approvals and dynamic-key provenance. `node scripts/build-r2-inventory.mjs --write` renders it with every current call site beside it as a generated, gitignored Markdown inventory. |
 | `production-credential-inventory.json` | D7145 job, trigger, credential and environment assignments checked in CI. |
+| `GITHUB_ADMIN_BASELINE.md` | D8082: the GitHub admin settings `slot:chatgptpro` set (rulesets, environments, Actions, Apps, runner groups; cloud names and quotas), which the weekly read-only `admin-drift.yml` checks, filing one issue per drift. |
 | [Production credentials](PRODUCTION_CREDENTIALS.md) | D7145 environment setup, token permissions, verification and retirement. |
