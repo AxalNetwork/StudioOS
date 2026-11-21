@@ -34,6 +34,14 @@ test('the branch is authoritative; unrelated body references cannot exempt anoth
   assert.equal(taskIssue({ body: 'Related #44' }), 44);
   assert.equal(taskIssue({ title: 'Maintenance' }), null);
 });
+test('multiline exclusions never become ownership through later bullets or nested headings', () => {
+  const bodies = [
+    '### Files owned\n`src/a.js`\nNot:\n- `src/b.js`\n- `src/c.js`\n\nOwned:\n`src/d.js`',
+    '### Files owned\n`src/a.js`\nExcluding\n- `src/b.js`\n  `src/c.js`\n\nAlso owned:\n`src/d.js`',
+    '### Files owned\n`src/a.js`\n#### Not owned\n- `src/b.js`\n- `src/c.js`\n#### Owned files\n`src/d.js`',
+  ];
+  for (const body of bodies) assert.deepEqual(ownedPatterns(body, 42), ['src/a.js', 'src/d.js']);
+});
 test('glob matching includes new/deleted/renamed paths and suppresses duplicate matches', () => {
   const issues = [active(8075, '### Files owned\n`src/**`'), active(42, '## Owned files\n`src/**/*.{js,ts}`, `src/a.js`, `old/file.js`'), active(43, '### Files owned\n`docs/`'), active(44, '### Files owned\n`src/**`', 'state:ready'), { ...active(45, '### Files owned\n`src/**`'), state: 'closed' }];
   issues.push(issues[1]);

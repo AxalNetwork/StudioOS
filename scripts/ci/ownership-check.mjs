@@ -25,7 +25,7 @@ function patternOf(input, issue) {
 export function ownedPatterns(body = '', issue) {
   if (typeof body !== 'string' || body.length > 1024 * 1024 || !positive(issue)) throw new Error('invalid ownership body');
   const patterns = new Set();
-  let level = null, fence = null;
+  let level = null, fence = null, excluding = false;
   for (const line of body.split(/\r?\n/)) {
     const code = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
     if (code) { if (!fence) fence = code[1][0]; else if (fence === code[1][0]) fence = null; continue; }
@@ -33,11 +33,16 @@ export function ownedPatterns(body = '', issue) {
     const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
     if (heading) {
       const name = heading[2].replace(/[*_`]/g, '').replace(/:$/, '').trim().toLowerCase();
-      if (['files owned', 'owned files'].includes(name)) level = heading[1].length;
+      if (['files owned', 'owned files'].includes(name)) { level = heading[1].length; excluding = false; }
       else if (level !== null && heading[1].length <= level) level = null;
+      else if (level !== null && ['exclusions', 'excluded files', 'not owned', 'out of scope'].includes(name)) excluding = true;
       continue;
     }
     if (level === null) continue;
+    if (/^\s*(?:[-*+]\s+)?(?:not(?:\s+owned)?|except|excluding|exclusions|out of scope)\s*:?\s*$/i.test(line)
+      || /^\s*(?:not|except|excluding)\b.*:\s*$/i.test(line)) { excluding = true; continue; }
+    if (/^\s*(?:also\s+)?owned(?:\s+files)?\s*:\s*$/i.test(line)) { excluding = false; continue; }
+    if (excluding) continue;
     const included = line.split(/\b(?:not|except|excluding)\s+/i)[0];
     const add = token => { const pattern = patternOf(token, issue); if (pattern) patterns.add(pattern); };
     for (const match of included.matchAll(/`([^`\n]+)`/g)) add(match[1]);
