@@ -130,7 +130,7 @@ export type CapacityBudgetStore = {
 };
 const wallClock: Clock = { ...nativeClock, now: () => Date.now() };
 function windowState(old: CapacityBudgetWindow | null, window: number): CapacityBudgetWindow {
-  if (old && (old.version !== 1 || !Number.isSafeInteger(old.window) || old.window < 0
+  if (old !== null && (typeof old !== 'object' || Array.isArray(old) || old.version !== 1 || !Number.isSafeInteger(old.window) || old.window < 0
     || !Number.isSafeInteger(old.authUsed) || old.authUsed < 0 || old.authUsed > CAPACITY_AUTH_LIMITS.authPerWindow
     || !Number.isSafeInteger(old.progressAuthUsed) || old.progressAuthUsed < 0 || old.progressAuthUsed > CAPACITY_AUTH_LIMITS.progressAuthPerWindow
     || !['receipt', 'submit'].every(name => {

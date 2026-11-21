@@ -262,3 +262,18 @@ test('ordinary verification concurrency cannot consume the proven-receipt slots'
   finish.resolve(identity());
   assert.equal((await waiting).every(result => result.status === 'rejected'), true);
 });
+
+
+test('malformed non-null native-store values cannot reopen admission', async () => {
+  for (const value of [false, 0, '', undefined, [], {}, true]) {
+    let verified = 0, work = 0;
+    const corrupt: CapacityBudgetStore = { async update(decide) {
+      return decide(value as unknown as CapacityBudgetWindow).accepted;
+    } };
+    await assert.rejects(new CapacityRequestBudget(corrupt, clock()).run(async () => {
+      verified++; return identity();
+    }, () => 'receipt', async () => { work++; }), /budget_state_invalid/);
+    assert.equal(verified, 0);
+    assert.equal(work, 0);
+  }
+});
