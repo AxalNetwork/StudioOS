@@ -13,11 +13,14 @@ persistent entries in this list; their absence is not missing capacity.
 
 The supported enrollment is **organization-scoped**, in the approved group
 shared only with StudioOS. A repository-only registration is not proof of group
-membership. The proposed central group is `StudioOS Worker Pool`; an admin must
-confirm/approve that name and restrictions before activation. The central
-self_hosted_group_id starts null; it must be set to the independently verified
-ID in a reviewed profile commit before registration is allowed. Do not rename or
-broaden the existing Mac group to make this work.
+membership. The central group is `StudioOS Worker Pool`, organization group **5**,
+as [verified by the operator on 21 November 2026](https://github.com/AxalNetwork/StudioOS/issues/7906#issuecomment-7061605125).
+The catalog records `self_hosted_group_id: 5` for both native self-hosted profiles.
+This configuration does not authorize registration or execution by itself: use a
+reviewed main profile commit and independently verify the current restrictions,
+executor and isolation evidence before activation. Group **6**, `StudioOS Included
+Compute`, remains separate. The Mac registration is in group 5, but
+`MACBOOK_WORKER_ENABLED=false` keeps its legacy execution path disabled.
 
 From the organization runner settings, verify selected repository access is only
 AxalNetwork/StudioOS, public-repository use is enabled only for that selected
@@ -34,19 +37,25 @@ bootstrap independently checks main ancestry and exact file content. A dispatch
 wrapper or caller is not the group-authorized runner-job definition. Do not add a
 branch-only workflow or remove the group restriction to bypass a refusal.
 
-Current evidence: organization/repository runner and permissions reads return
-403 for the development integration. The owner supplied an existing approved
-Linux pilot: runner 44451 in group 5 (StudioOS Linux Workers), with the
+Historical pilot evidence (20 November 2026): organization/repository runner and
+permissions reads returned 403 for the development integration. The owner supplied
+an approved Linux pilot: runner 44451 in group 5 (then StudioOS Linux Workers), with the
 linux-runner-smoke.yml definition at fe1c1ce6b48260e90a0c1049f0c0216701125758 on
 ci/linux-runner-test. Public run [44746099004](https://github.com/AxalNetwork/StudioOS/actions/runs/44746099004)
 independently confirms that assignment and passing setup/runtime steps; final
 Worker/cleanup outcome is recorded separately. That smoke-only branch revision
 is not on inspected main and is not #7886's trusted reusable executor. Do not
-broaden its group access, migrate its registration or start a duplicate run.
-The approved one-node stop deadline is 20 November 2026 at 18:00 Europe/Zurich
-(17:00 UTC); its job timeout is 40 minutes. Private operator limits remain binding,
-and no hard monetary cutoff is invented. The common production pool remains a
-separate, inactive proposal until main executor/group/isolation review.
+reuse that branch authorization or start a duplicate run. The pilot's approved
+one-node stop deadline was 20 November 2026 at 18:00 Europe/Zurich (17:00 UTC),
+with a 40-minute job timeout. This historical pilot does not authorize further
+provider runtime or spending.
+
+The 21 November operator verification renamed the existing group 5 to the common
+pool and replaced the branch-only workflow permission with the exact main
+executor entry above. Both existing registrations were observed idle in that
+group. This verifies group configuration only; live execution remains gated on
+the main executor, fresh private operator authorization and isolation evidence.
+It does not renew the expired pilot deadline or its provider authorization.
 
 ## 2. Prepare an approved machine
 

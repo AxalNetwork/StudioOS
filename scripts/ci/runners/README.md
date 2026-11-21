@@ -7,6 +7,8 @@ required checks, provider resources or shard counts.
 | File | Purpose |
 | --- | --- |
 | `bootstrap.sh` | Prepare pinned tools, verify native capabilities, and manage privately approved organization registration and service lifecycle. |
+| `job-container.mjs` | D7905: inactive trusted-host Linux container boundary, actual inspection adapter and exact-ID cleanup; Mac and enrollment remain blocked pending canary. |
+| `executor-isolation.mjs` | D7905: binds the container boundary to the trusted executor for `linux-x64` only: a pre-checkout readiness port and the live-container adapter. Not isolation proof by itself. |
 | `profiles.json` | Schema v1 profile enums, shared AND labels and reviewed archive digests; hosted Ubuntu is a separate pool. |
 
 Start at [RUNNER_BOOTSTRAP.md](../../../documentation/operations/RUNNER_BOOTSTRAP.md).

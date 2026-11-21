@@ -3707,7 +3707,7 @@ function AppInner() {
       <Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       {/* D1243 (#3256): the Pipeline zone is retired; its job is Deal flow's table. The query and hash travel. */}
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
-      <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/commit" element={guard(['admin', 'partner', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder', 'advisor', 'exploring'], investorWorkspace('deals', <DealRoomPage />))} />
       {/* D1148 (#2421): each deal tab at its own address; a word the role does not draw opens Overview.
@@ -3757,6 +3757,7 @@ function AppInner() {
       <Route path="/grow/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" record />)} />
       <Route path="/grow/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" adding />)} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
+      <Route path="/grow/team-expansion" element={guard(['admin', 'founder'], <ParamRedirect to="/grow/talent" />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
       {/* D6118 (#6118, GR-09): one Partnerships page. It is the partner-network module (partners by stage,

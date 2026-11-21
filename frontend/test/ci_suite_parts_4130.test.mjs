@@ -137,7 +137,7 @@ test('D7108 part 2: two shards planning independently with --equal-weights write
   const fixture = () => {
     const root = mkdtempSync(join(tmpdir(), 'queue-shard-'));
     mkdirSync(join(root, 'scripts', 'lib'), { recursive: true });
-    for (const path of ['scripts/test-drift-parts.mjs', 'scripts/build-generated.mjs', 'scripts/lib/shardPlan.mjs', 'scripts/lib/flakyTests.mjs']) {
+    for (const path of ['scripts/test-drift-parts.mjs', 'scripts/build-generated.mjs', 'scripts/lib/shardPlan.mjs', 'scripts/lib/flakyTests.mjs', 'scripts/lib/ciFailures.mjs']) {
       writeFileSync(join(root, path), readFileSync(path));
     }
     for (const dir of ['f', 'w']) mkdirSync(join(root, dir));
@@ -265,7 +265,7 @@ test('#6674 the downloader distinguishes unavailable, absent, malformed and elig
       writeFileSync(join(root, path), readFileSync(path));
     }
     mkdirSync(join(root, 'scripts', 'lib'));
-    for (const name of ['shardPlan', 'flakyTests']) {
+    for (const name of ['shardPlan', 'flakyTests', 'ciFailures']) {
       writeFileSync(join(root, 'scripts', 'lib', name + '.mjs'), readFileSync('scripts/lib/' + name + '.mjs'));
     }
     writeFileSync(join(root, 'gh'), `#!/usr/bin/env bash
