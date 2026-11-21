@@ -13,7 +13,7 @@
  * hold the same values there, and `frontend/test/landing_bot_core_6467.test.mjs` fails if either side drifts.
  */
 import { classify as classifyCi, infraFingerprint, VERDICTS } from '../lib/ciClassify.mjs';
-import { classify as classifyPaths } from '../merge-policy.mjs';
+import { classify as classifyPaths, PRIVILEGED } from '../merge-policy.mjs';
 
 /** The six automations. `push` writes a commit, `model` calls a model, `requeue` re-adds to the queue. */
 export const KINDS = Object.freeze({
@@ -255,20 +255,11 @@ export function budget(kind, env = {}, usage = {}) {
   return { allowed: reasons.length === 0, reasons };
 }
 
-/** Paths no bot writes, on top of everything merge-policy.mjs rates T2. */
-export const PROTECTED = Object.freeze([
-  /^\.github\//,
-  /^cloudflare-worker\/sql\//,
-  /^scripts\/ci\//,
-  /^merge-control\//,
-  /(?:^|\/)package\.json$/,
-  /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|[^/]*\.lock)$/,
-  /(?:^|\/)wrangler[^/]*\.toml$/,
-  /(?:^|\/)\.gitattributes$/,
-  /^AGENTS\.md$/,
-  /^CLAUDE\.md$/,
-  /(?:^|\/)CODEOWNERS$/,
-]);
+/**
+ * Paths no bot writes, on top of everything merge-policy.mjs rates T2. D8067: the privileged list, the same one T2,
+ * CODEOWNERS and the ruleset read (`merge-control/src/lib/classify.mjs` PRIVILEGED_PATHS).
+ */
+export const PROTECTED = PRIVILEGED;
 
 /**
  * Which of a bot's intended writes are refused. Every path (and a rename's old path) must clear PROTECTED and must
