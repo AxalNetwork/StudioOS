@@ -56,3 +56,4 @@ STUDIOOS_ACTIONS_WORKFLOW_SNAPSHOT=/tmp/studioos-actions-workflows.json node --t
 ```
 | `workflow-failure-dispatch.mjs` | D6387: signed workflow completion intake and batched main-branch dispatch. |
 | `wrangler.workflow-failures.jsonc` | D6387: independent failure dispatch Worker and queue bindings. |
+| `release-policy-5667.mjs` | D5667: release/target subject routing for PublicationRelay and attempt-ordered phase receipt selection. |

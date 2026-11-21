@@ -270,6 +270,28 @@ const ROUTES = [
     section: 'content',
     prefix: true,
   },
+  // D6966 (#6966): the public Programs index. Prefix, so a /programs/<key> page that has no entry
+  // of its own previews as the index; each program's own page is prerendered from its map entry
+  // (`frontend/src/pages/programs/catalog/`, read by scripts/lib/programCatalog.mjs), so adding a
+  // program adds no row here.
+  {
+    path: '/programs',
+    title: 'Programs',
+    description: 'What Axal VC runs, who each programme is for and how to take part, each with a presentation and a PDF.',
+    type: 'website',
+    section: 'content',
+    prefix: true,
+  },
+  {
+    // D7121 (#7121): the public Wellness presentation. Its words are the page's purpose sentence; it names no
+    // expert, member or entry. `/wellbeing`, the private workspace, has no entry and is never the shared link.
+    path: '/programs/wellness',
+    title: 'Wellness · Programs',
+    description:
+      'A private place in your Axal VC account to check in with yourself each week, find qualified support and book a 1:1 session on your own terms.',
+    type: 'website',
+    section: 'content',
+  },
   {
     path: '/circles',
     title: 'Communities & Circles',
@@ -559,6 +581,6 @@ export function ogTagsFor(pathname, overrides = {}) {
     card: 'summary_large_image',
     imageAlt: title,
     /** D4582: the route's robots directive, or null when it has none (indexable by default). */
-    robots: entry?.robots || null,
+    robots: overrides.robots || entry?.robots || null,
   };
 }

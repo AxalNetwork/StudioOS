@@ -22,6 +22,7 @@ import DeliverablesByClient, { DeliverableEditor } from './DeliverablesByClient'
 import { AddVersionDialog, DeliverableSheet, SendConfirmDialog } from './DeliverableSheet';
 import { FileChoice } from './VersionFile';
 import { partialLine, readEveryPage } from './everyPage';
+import ClientSheet from './ClientSheet';
 
 /**
  * The addresses a `?view=` may open the page on: a chip of the Practice v2
@@ -60,6 +61,15 @@ const VIEWS = new Set(['all', 'draft', 'ready', 'sent', 'opened', 'accepted', 'b
  * NO AI BAND. Nothing in this product records that an advisory session was
  * recorded, captures consent to record one, or holds a transcript of one, so
  * the zone states the gap instead of drawing a summariser over none of them.
+ *
+ * IN THE PRACTICE V2 SHELL (#4833 part 4, D4833-p4). The page is a body under
+ * `AdvisorBucketRoutes`' Practice shell (D4829, D4834): the shell draws PX-06's
+ * header, "Delivery" with its own line, and the header's one primary, New work
+ * product, is this page's `newWorkProduct` handler portalled up from the
+ * toolbar. The toolbar sits above `ZoneBody`, so the primary is there while
+ * the list loads, is empty or failed. The body follows PX-06 A's order: chips,
+ * the Ready line, the cards, then Post-session reviews; the receipt tiles and
+ * what Delivery cannot say come after, the second behind a disclosure.
  */
 
 /** The New work product form, empty. `file` is v1's document when it is a file (#5961). */
@@ -97,6 +107,8 @@ export default function DeliveryZone() {
   const [confirming, setConfirming] = useState(null);
   const [editing, setEditing] = useState(null);
   const [attaching, setAttaching] = useState(null);
+  // D4833-p4: a card's client opens the shared Client Sheet (D4831) on its Delivery tab.
+  const [client, setClient] = useState(null);
 
   const loadHeld = useCallback(async () => {
     setHeld((c) => ({ ...c, loading: true }));
@@ -298,7 +310,16 @@ export default function DeliveryZone() {
   const reviseItem = revising == null ? null : items.find((i) => i.id === revising) || null;
 
   // D1345: choose a client, then review and send their draft in Email.
+  // D4833-p4: `newWorkProduct` is PX-06's header primary. It waits for the list:
+  // the form's engagement picker is read after it, and a failed read is said
+  // below rather than offered as "no engagement".
+  const listRead = !state.loading && !state.error;
   const bulkHandlers = {
+    newWorkProduct: {
+      onClick: () => { setAdding(true); setNote(null); },
+      disabled: !listRead,
+      title: state.loading ? 'Your work products are still being read.' : state.error ? 'Your work products could not be read. Try again below.' : undefined,
+    },
     nudgeUnopened: {
       onClick: () => { setNudging(true); setNote(null); },
       disabled: targets.reachable.length === 0,
@@ -319,7 +340,7 @@ export default function DeliveryZone() {
   const heldCount = cov?.held ?? held.heldTotal ?? held.sessions.length;
 
   const createForm = (
-          <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+          <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" data-testid="work-product-create">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Title">
                 <input className={inputClass} value={draft.title} placeholder="Q2 advisory review"
@@ -373,63 +394,63 @@ export default function DeliveryZone() {
               moment the client can start reading it. Its document is a link or a file, not both. A v1
               with neither is a draft that cannot be sent until a version carries the document.
             </p>
-            <button type="button" className={`${buttonClass} mt-2`}
-              disabled={busy === 'new' || !draft.title.trim() || (!draft.engagement_id && !draft.client_name.trim())}
-              onClick={create} data-testid="new-work-product-save">
-              Add as v1
-            </button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className={buttonClass}
+                disabled={busy === 'new' || !draft.title.trim() || (!draft.engagement_id && !draft.client_name.trim())}
+                onClick={create} data-testid="new-work-product-save">
+                Add as v1
+              </button>
+              <button type="button" className={ghostButtonClass} onClick={() => setAdding(false)}
+                data-testid="new-work-product-cancel">
+                Cancel
+              </button>
+            </div>
           </div>
   );
 
+  // D4833-p4: the chips count the list, so they are drawn only over a list that was read and holds a card.
+  const chips = listRead && items.length > 0;
   return (
     <>
+    {/* PX-06 A: the chip row and the header's primary, above every state of the list (D4833-p4). */}
+    <ZoneToolbar
+      className="mb-1"
+      role="advisor"
+      filterLabel="Filter work products"
+      filters={chips ? advisorZoneFilters('practice/delivery', { value: filter, onChange: setFilter, counts }) : []}
+      actions={advisorZoneActions('practice/delivery', {
+        handlers: bulkHandlers,
+        view: {
+          header: ['Work product', 'Client', 'Version', 'Versions', 'State', 'Sent', 'Opened', 'Accepted'],
+          rows: visible,
+          cells: (i) => [
+            i.title, i.client_name, versionTag(i.latest_version), i.version_count,
+            VERSION_STATUS_LABEL[cardStatus(i)],
+            i.latest_version?.sent_at, i.latest_version?.opened_at, i.latest_version?.signed_off_at,
+          ],
+        },
+      })}
+    />
+    {/* D4687 (#4687): the form opens in every state of the list, the empty one included. */}
+    {adding && <div className="mt-3">{createForm}</div>}
+    {/* What a write did, or why it was refused, above every state of the list: a refused v1 from the empty state is said too. */}
+    <SaveNote note={note} />
     <ZoneBody
       loading={state.loading}
       error={state.error}
+      what="Your work products"
       isEmpty={!state.loading && !state.error && items.length === 0}
       onRetry={load}
-      empty={<>
+      empty={
       <NothingYet
         title="No work product is on file"
         body="Delivery fills as you record what you send a client: each version, who it went to, and whether they opened and accepted it. It is empty because nothing has been recorded, not because anything was lost."
         action={<button type="button" className={buttonClass} onClick={() => setAdding(true)}>Record a work product</button>}
-      />
-      {/* D4687 (#4687): the form used to live only in the non-empty body, so a
-          first-use advisor could not open it. The held-sessions review loop is
-          drawn once, outside `ZoneBody`, below (#4712). */}
-      {adding && <Card padding="md" className="mt-3" data-testid="work-product-create-empty">{createForm}</Card>}
-      </>}
+      />}
     >
       {partial && <p className="mb-2 text-[11px] text-axal-faint" data-testid="delivery-partial">{partial}</p>}
 
-      <ZoneHeading
-        title="Work products"
-        blurb="Work products sent to clients, with every version kept."
-        action={<button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}
-          data-testid="new-work-product">
-          {adding ? 'Close' : 'New work product'}
-        </button>}
-      />
-      {adding && createForm}
-
-      <ZoneToolbar
-        className="mb-1"
-        role="advisor"
-        filters={advisorZoneFilters('practice/delivery', { value: filter, onChange: setFilter, counts })}
-        actions={advisorZoneActions('practice/delivery', {
-          handlers: bulkHandlers,
-          view: {
-            header: ['Work product', 'Client', 'Version', 'Versions', 'State', 'Sent', 'Opened', 'Accepted'],
-            rows: visible,
-            cells: (i) => [
-              i.title, i.client_name, versionTag(i.latest_version), i.version_count,
-              VERSION_STATUS_LABEL[cardStatus(i)],
-              i.latest_version?.sent_at, i.latest_version?.opened_at, i.latest_version?.signed_off_at,
-            ],
-          },
-        })}
-      />
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 mt-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] text-axal-faint dark:text-gray-400" data-testid="ready-explained">
           Ready is your own mark on a draft that is ready to send. It sends nothing; sending clears it.
         </p>
@@ -438,8 +459,6 @@ export default function DeliveryZone() {
           {grouped ? 'Show as cards' : 'Group by client'}
         </button>
       </div>
-
-      <SaveNote note={note} />
 
       {nudging && (
         <Card padding="md" className="mb-3" data-testid="nudge-pr3">
@@ -486,59 +505,9 @@ export default function DeliveryZone() {
             editing={editing} attaching={attaching} onEdit={setEditing} onAttachOpen={setAttaching}
             onSave={saveEdit} onAttach={attachLink} onSend={askToSend} /></Card>
           : <div className="grid gap-2.5" data-testid="delivery-cards">{visible.map((i) => (
-            <DeliverableCard key={i.id} item={i} now={now} onOpen={() => { setOpenId(i.id); setNote(null); }} />
+            <DeliverableCard key={i.id} item={i} now={now} onOpen={() => { setOpenId(i.id); setNote(null); }}
+              onOpenClient={() => setClient({ id: i.client_user_id, name: i.client_name })} />
           ))}</div>}
-
-      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Work products" value={totals.work_products ?? 0}
-          note={totals.clients
-            ? `across ${totals.clients} ${totals.clients === 1 ? 'client' : 'clients'}`
-            : 'no client has a work product yet'} />
-        <Stat label="Unopened" value={totals.unopened ?? 0}
-          note={totals.unopened ? 'sent, not read' : 'nothing is waiting to be read'} />
-        {/* A REAL MEASUREMENT: both `sent_at` and `opened_at` are stamps. Null
-            before the first open, and null renders as "Not recorded", never
-            "0 h" (D56/D68). */}
-        <Stat
-          label="Median to open"
-          value={medianLabel(totals.median_to_open_hours) ?? <Unrecorded>Not recorded</Unrecorded>}
-          note={totals.median_to_open_hours == null ? 'nothing has been opened yet' : 'from send to first read'} />
-        <Stat label="Never opened" value={totals.never_opened ?? 0}
-          note={totals.oldest_never_opened
-            ? `${totals.oldest_never_opened.client_name} · ${totals.oldest_never_opened.title}`
-            : 'everything sent has been read'} />
-      </div>
-
-      <Card padding="md" variant="sunken" className="mt-3">
-        <ZoneHeading
-          title="Follow-ups from sessions"
-          blurb="Not available for advisory sessions yet."
-        />
-        <p className="text-[12px] leading-relaxed text-axal-muted">
-          A summary of a session needs a transcript, a transcript needs a recording, and a recording
-          needs consent agreed before it is made. <strong>Axal does not record advisory sessions, so
-          none of those three exists yet.</strong> Until then there is nothing to summarise, so no
-          button offers to.
-        </p>
-      </Card>
-
-      <StatedLimit title="What Delivery cannot say">
-        <p>
-          <strong>A work product can only be sent to a client with an Axal account.</strong> An
-          engagement may name a company that has not joined, and a version sent to one could never be
-          recorded as opened. Axal refuses the send rather than keeping a figure that quietly means nothing.
-        </p>
-        <p className="mt-2">
-          <strong>Opened and Accepted are the client&rsquo;s to give:</strong>
-          nothing on this page marks a work product opened or accepted. A receipt records when a
-          version was first opened, not how long it was read.
-        </p>
-        <p className="mt-2">
-          A version&rsquo;s document is a web link or a stored file, a PDF, JPEG or PNG of at most 10 MB. A
-          version is a draft until it is sent; marking it Ready tells you, not the client, that it can
-          go. There is no consent-gated session summary either; see the card above.
-        </p>
-      </StatedLimit>
 
       {openItem && (
         <DeliverableSheet item={openItem} engagementName={engagementName(openItem)} busy={busy}
@@ -657,6 +626,70 @@ export default function DeliveryZone() {
               )}
             </>}
     </Card>
+    {/* D4833-p4: below the reviews, as PX-06 A puts nothing between the cards and them. The receipt
+        tiles are drawn over a list that was read and holds a card, as they were inside ZoneBody. */}
+    {chips && (
+      <section aria-label="Receipts across every work product" data-testid="delivery-receipts">
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Work products" value={totals.work_products ?? 0}
+            note={totals.clients
+              ? `across ${totals.clients} ${totals.clients === 1 ? 'client' : 'clients'}`
+              : 'no client has a work product yet'} />
+          <Stat label="Unopened" value={totals.unopened ?? 0}
+            note={totals.unopened ? 'sent, not read' : 'nothing is waiting to be read'} />
+          {/* A REAL MEASUREMENT: both `sent_at` and `opened_at` are stamps. Null
+              before the first open, and null renders as "Not recorded", never
+              "0 h" (D56/D68). */}
+          <Stat
+            label="Median to open"
+            value={medianLabel(totals.median_to_open_hours) ?? <Unrecorded>Not recorded</Unrecorded>}
+            note={totals.median_to_open_hours == null ? 'nothing has been opened yet' : 'from send to first read'} />
+          <Stat label="Never opened" value={totals.never_opened ?? 0}
+            note={totals.oldest_never_opened
+              ? `${totals.oldest_never_opened.client_name} · ${totals.oldest_never_opened.title}`
+              : 'everything sent has been read'} />
+        </div>
+      </section>
+    )}
+    <details className="mt-3 rounded-xl border border-axal-hairline p-3 dark:border-gray-700" data-testid="delivery-limits">
+      <summary className="cursor-pointer text-[12px] font-semibold text-axal-muted dark:text-gray-300">
+        What Delivery records, and what it cannot say
+      </summary>
+      <Card padding="md" variant="sunken" className="mt-3">
+        <ZoneHeading
+          title="Follow-ups from sessions"
+          blurb="Not available for advisory sessions yet."
+        />
+        <p className="text-[12px] leading-relaxed text-axal-muted">
+          A summary of a session needs a transcript, a transcript needs a recording, and a recording
+          needs consent agreed before it is made. <strong>Axal does not record advisory sessions, so
+          none of those three exists yet.</strong> Until then there is nothing to summarise, so no
+          button offers to.
+        </p>
+      </Card>
+
+      <StatedLimit title="What Delivery cannot say">
+        <p>
+          <strong>A work product can only be sent to a client with an Axal account.</strong> An
+          engagement may name a company that has not joined, and a version sent to one could never be
+          recorded as opened. Axal refuses the send rather than keeping a figure that quietly means nothing.
+        </p>
+        <p className="mt-2">
+          <strong>Opened and Accepted are the client&rsquo;s to give:</strong>
+          nothing on this page marks a work product opened or accepted. A receipt records when a
+          version was first opened, not how long it was read.
+        </p>
+        <p className="mt-2">
+          A version&rsquo;s document is a web link or a stored file, a PDF, JPEG or PNG of at most 10 MB. A
+          version is a draft until it is sent; marking it Ready tells you, not the client, that it can
+          go. There is no consent-gated session summary either; see the card above.
+        </p>
+      </StatedLimit>
+    </details>
+    {client && (
+      <ClientSheet key={client?.id} clientUserId={client?.id} clientName={client?.name} initialTab="Delivery"
+        onClose={() => setClient(null)} />
+    )}
     </>
   );
 }
@@ -668,7 +701,7 @@ export default function DeliveryZone() {
  * The status is the LATEST version's (`cardStatus`). A card whose engagement
  * has no client account says it cannot be sent, because Send would be refused.
  */
-function DeliverableCard({ item, now, onOpen }) {
+function DeliverableCard({ item, now, onOpen, onOpenClient }) {
   const latest = item.latest_version;
   const status = cardStatus(item);
   // The version the Worker says is marked ready (`ready_version`), which is the
@@ -682,7 +715,13 @@ function DeliverableCard({ item, now, onOpen }) {
       <div className="min-w-0 flex-1">
         <h3 className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.title}</h3>
         <p className="mt-0.5 text-[12.5px] text-axal-muted dark:text-gray-400">
-          {item.client_name}
+          {/* D4833-p4: PX-06 A links the client. Only a client with an account has a Client Sheet (D4831). */}
+          {item.client_user_id != null
+            ? <button type="button" onClick={onOpenClient} data-testid={`client-pr3-${item.id}`}
+              className="font-semibold text-emerald-700 underline-offset-2 hover:underline max-sm:min-h-[44px] dark:text-emerald-300">
+              {item.client_name || `Member #${item.client_user_id}`}
+            </button>
+            : item.client_name}
           {latest ? <> · Latest {versionTag(latest)} · {sentLine(latest)}</> : <> · <Unrecorded>No version recorded yet</Unrecorded></>}
         </p>
         <p className="mt-1 text-[11px] tabular-nums text-cyan-700 dark:text-cyan-300" data-testid={`receipt-pr3-${item.id}`}>
@@ -700,8 +739,8 @@ function DeliverableCard({ item, now, onOpen }) {
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2">
         <Pill tone={VERSION_STATUS_TONE[status]}>{VERSION_STATUS_LABEL[status]}</Pill>
-        <button type="button" className={ghostButtonClass} onClick={onOpen} data-testid={`open-pr3-${item.id}`}
-          aria-label={`Open ${item.title}`}>
+        <button type="button" className={`${ghostButtonClass} max-sm:min-h-[44px] max-sm:min-w-[44px]`} onClick={onOpen}
+          data-testid={`open-pr3-${item.id}`} aria-label={`Open ${item.title}`}>
           Open
         </button>
       </div>

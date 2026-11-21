@@ -42,10 +42,19 @@ const MOVED = [
   'GET /brief-notes', 'POST /brief-notes', 'PATCH /brief-notes/:uid', 'DELETE /brief-notes/:uid',
   'GET /attachments', 'POST /attachments', 'DELETE /attachments/:uid',
 ];
-// D7651 (#7651): the one route this router has gained since the move, the
-// summary of one reading. It is held to the same rules as the moved ones.
+// D7651 (#7651): the routes this router has gained since the move, the summary
+// of one reading and (part 2) of all of them. They are held to the same rules
+// as the moved ones. The all-readings summary is registered ahead of
+// `GET /market-readings/:uid`, which also matches its path.
 const ADDED = ['GET /market-readings/:uid/summary'];
-const OWN = [...MOVED.slice(0, 4), ...ADDED, ...MOVED.slice(4)];
+const OWN = [
+  ...MOVED.slice(0, 2), 'GET /market-readings/summary', ...MOVED.slice(2, 4), ...ADDED, ...MOVED.slice(4),
+];
+// D7651 part 2: the one path two routes of this router match. The summary
+// answers first and returns, so `/:uid` never reads "summary" as a uid.
+const SHADOWS: Record<string, string[]> = {
+  'GET /market-readings/summary': ['GET /api/research/market-readings/summary', 'GET /api/research/market-readings/:uid'],
+};
 const own = (r: any) => (r.routes as Array<{ method: string; path: string }>)
   .filter((x) => x.method !== 'ALL').map((x) => `${x.method} ${x.path}`);
 
@@ -73,8 +82,10 @@ test('no other route the Worker serves answers a request for a moved route', () 
     const url = `/api/research${sample(path)}`;
     const matched = (app.router.match(method, url)[0] as any[]).map((e) => e[0][1]);
     const routes = matched.filter((m) => m.method !== 'ALL').map((m) => `${m.method} ${m.path}`);
-    assert.deepEqual(routes, [`${method} /api/research${path}`], `${method} ${url} matches ${routes.join(', ')}`);
-    // Middleware first, and the route last: no handler is chained after it.
-    assert.equal(matched[matched.length - 1].method, method, `${method} ${url}: a handler runs after the route`);
+    assert.deepEqual(routes, SHADOWS[r] || [`${method} /api/research${path}`], `${method} ${url} matches ${routes.join(', ')}`);
+    // Middleware first, and the route next: no middleware is chained after it.
+    const first = matched.findIndex((m) => m.method !== 'ALL');
+    assert.equal(`${matched[first].method} ${matched[first].path}`, `${method} /api/research${path}`, `${method} ${url}: another route answers first`);
+    assert.ok(matched.slice(first).every((m) => m.method === method), `${method} ${url}: a handler runs after the route`);
   }
 });
