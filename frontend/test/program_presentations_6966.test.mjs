@@ -258,19 +258,19 @@ test('admin: a mapped program\'s name opens its presentation and Open reads Mana
   const name = at('/admin/programs', h(PresentationName, { programKey: 'spinout-lab', name: 'Spin-Out Lab', hint: true }));
   assert.match(name, /<a [^>]*aria-label="Spin-Out Lab, presentation"[^>]*href="\/spinout-lab\/brief"/);
   assert.match(renderedText(name), /Opens the presentation · \/spinout-lab\/brief/);
-  assert.doesNotMatch(at('/admin/programs', h(PresentationName, { programKey: 'perks', name: 'Perks' })), /<a /);
+  assert.doesNotMatch(at('/admin/programs', h(PresentationName, { programKey: 'no-such-program', name: 'No such program' })), /<a /);
 
   const door = h(Link, { to: '/admin/programs/spinout-lab', 'aria-label': 'Open Spin-Out Lab' }, 'Open');
   const managed = at('/admin/programs', manageDoor(door, 'spinout-lab', 'Spin-Out Lab'));
   assert.match(managed, /aria-label="Manage program: Spin-Out Lab" class="whitespace-nowrap" href="\/admin\/programs\/spinout-lab"[^>]*>Manage program<\/a>/);
   assert.match(at('/admin/programs', manageDoor(door, 'spinout-lab', 'Spin-Out Lab', 'Manage')), />Manage<\/a>/);
-  const perks = h(Link, { to: '/admin/programs/perks' }, 'Open');
-  assert.match(at('/admin/programs', manageDoor(perks, 'perks', 'Perks')), />Open<\/a>/);
+  const unmapped = h(Link, { to: '/admin/programs/no-such-program' }, 'Open');
+  assert.match(at('/admin/programs', manageDoor(unmapped, 'no-such-program', 'No such program')), />Open<\/a>/);
   const frag = h(React.Fragment, null, h(Link, { to: '/a' }, 'Open'), h(Link, { to: '/b' }, 'Other'));
   assert.match(at('/', manageDoor(frag, 'spinout-lab', 'Spin-Out Lab')), />Manage program<\/a><a href="\/b"[^>]*>Other<\/a>/);
 
   assert.match(at('/admin/programs/spinout-lab', h(ViewPresentationLink, { programKey: 'spinout-lab' })), /href="\/spinout-lab\/brief"[^>]*>.*View presentation/);
-  assert.equal(at('/admin/programs/perks', h(ViewPresentationLink, { programKey: 'perks' })), '');
+  assert.equal(at('/admin/programs/no-such-program', h(ViewPresentationLink, { programKey: 'no-such-program' })), '');
 
   const cat = codeOnly(read('frontend/src/pages/admin/programs/ProgramsCatalogue.jsx'));
   assert.equal((cat.match(/<PresentationName programKey=\{p\.key\}/g) || []).length, 3, 'card, desktop row and phone row');
