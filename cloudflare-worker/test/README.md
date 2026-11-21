@@ -387,7 +387,9 @@ catalogue version only in the fixture.
 | `file_recovery_6653.test.mjs` | D6653: include independent file recovery Python fixtures in the standard Worker runner. |
 | `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
 | `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
+| `skill_passage_citations_7700.test.ts` | D7700: selected-document passage citation qualification, file/ref/sequence/read-state isolation, missing/unknown/duplicate/capped evidence and preserved dotted paths under evaluator version 5. |
 
 `research_project_subject_notes_7818.test.ts` verifies the D7818 contract against synthetic inputs and the canonical migrated schema.
 `icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
+| `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
