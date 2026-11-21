@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Market Study Models and Report · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Markets · #7703 pass 3 · continues Research v2 and pass 2 (Market Study)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Markets — a market study’s sizing models, competition and prices, frozen report and what needs review</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Pass 3 of the market study inside a research project (the Study tab, /research/projects/:uid/study/:section, Question 1 option A). A founder sizes the market with inputs that each name a source or the word Assumption, and the Worker computes Total market, Serviceable and Obtainable, with low, base and high, sensitivity, conflicting estimates and a top-down check. Alternatives are described field by field; prices sit together only on identical terms and are never converted, averaged or totalled. The report is assembled by the Worker, frozen as numbered versions and exported as Markdown and CSV; Needs review lists what changed and what depends on it. It continues Research v2 (RS-02 workspace, RS-09 brief, RS-07 A context rail) and reuses V18 and Platform States (D5129; a failed read says Unavailable). RST-26 and RST-27 (reviewers) are held for the owner’s Questions 4, 10 and 11. Violet dashed ◇ tags mark backend work by issue; amber ⚑ tags mark owner questions, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 19 Nov 2026 · checked against main 58ee9d1b73 · [Northwind Labs], [Maya Ruiz], [Tom Becker], [Alternative A], [Alternative B], [Source A], [Source B] and every figure, price and date are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Markets Market Study Models and Report Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RST-20', 'Where each value of this pass is read', 'Every value on the pass 3 boards, its read on main or the issue that builds it (◇), and the rules the pass keeps.', [W('RST20')]],
+      ['RST-21', 'Size and scenarios · the sizing sheet', 'V18’s sheet inside the study: nine inputs, each with unit, currency, reference year and a source line (an attached observation, a venture market source, an accepted Eadwyn citation read-only, Assumption with a note, or Not labelled). The Worker’s preview, Not saved, how it was computed and which limit set Obtainable. The override sits apart. Save as version [4] is the one primary.', [F('RST21', false, 1860), C('RST21B', 'Typed 0, Not entered, no observation attached, Not labelled', 1220, 586), C('RST21C', 'No venture linked · no form', 940, 251)]],
+      ['RST-22', 'Size and scenarios · scenarios, sensitivity, conflicts, versions', 'Low, base and high entered by the founder, “Low is above base” flagged not refused; inputs ranked by how far Obtainable moves; two estimates with one marked Used; a top-down check beside the bottom-up figure; version history, saved but not attached, and the formula’s limits.', [F('RST22', false, 1960), C('RST22B', 'E · versions, F · not attached, G · limits', 1320, 430)]],
+      ['RST-23', 'Competition and pricing · alternatives and the comparison', 'Four alternatives by kind, seven fields each, Unsupported where no evidence is linked. Prices on one line only when charge type, unit, period, term and currency match; otherwise Not comparable with the Worker’s reason. Revenue only as a linked observation; withheld prices as a count.', [F('RST23', false, 1800)]],
+      ['RST-24', 'Competition and pricing · proposals, prices, Would pay, readings', 'Hints from a saved analysis as raw text with their fetched pages; add a price with every term and the source-use tick; corrections as a dated series; a withdrawn price; Would pay, letter of intent and pre-sale records in their own block; service-engagement readings apart from product prices.', [F('RST24', false, 1230), C('RST24B', 'Withdrawn, another member’s analysis, Would pay, readings', 1280, 692)]],
+      ['RST-25', 'Report and monitoring · the report, versions and export', 'The report in the Worker’s order, twelve parts, Not recorded where nothing is stored, withheld values named with their reason. Take version [3]; numbered versions download as Markdown and CSV. Reviewed by you, Verdict and Needs review are never mixed. The sizing part carries ⚑ Question 11.', [F('RST25', false, 2480)]],
+      ['RST-26 / RST-27', 'Held for the owner', 'Questions 4, 10 and 11 decide who may review a study and what a reviewer sees. RST-26, RST-27 and their empty, state, phone, dark, path and keyboard frames are drawn after the owner answers on #7703.', [W('RST26')]],
+      ['RST-28', 'Needs review', 'A later value and a reference no longer available, each with the questions, decisions and sizing versions that depend on it; acknowledge with a note or remove; a changed finding listed apart; history. The count on a My Research card, with no badge when the count failed or there is no study.', [F('RST28', false, 1420), C('RST28B', 'The card badge and acknowledging', 1280, 394)]],
+      ['RST-29', 'Empty states', 'One per screen with the one action that fills it; the two reviewer empties are held.', [C('RST29', false, 1440, 395)]],
+      ['RST-30', 'States', 'RST-21 to RST-28 against Loading, Not recorded, Unavailable, Refused and saving, naming the read that failed and what still works; archived read-only and someone else saved first.', [C('RST30', false, 1440, 819)]],
+      ['RST-31', 'Phone 390', 'A sizing inputs as cards · B scenarios as a three-way switch · C version history · D alternatives · E prices grouped by unit and term · F add a price sheet · G the report · H take a version and downloads · L needs review · M empty, Unavailable and Refused. I, J and K wait with RST-26/27. 44px targets.', [P('RST31A', 'A · Sizing inputs'), P('RST31B', 'B · Scenarios'), P('RST31C', 'C · Versions'), P('RST31D', 'D · Alternatives'), P('RST31E', 'E · Prices'), P('RST31F', 'F · Add a price'), P('RST31G', 'G · Report'), P('RST31H', 'H · Take a version'), P('RST31L', 'L · Needs review'), P('RST31M', 'M · States')]],
+      ['RST-32', 'Dark · desktop 1440 and phone 390', 'RST-21 to RST-25 and RST-28 once each, and phone A and E, on the dark tokens; states and kinds of figure keep their words and shapes. Phone K waits with RST-27.', [F('RST32A', 'RST-21 · dark', 1860), F('RST32B', 'RST-22 · dark', 1960), F('RST32C', 'RST-23 · dark', 1800), F('RST32D', 'RST-24 · dark', 1230), F('RST32E', 'RST-25 · dark', 2480), F('RST32F', 'RST-28 · dark', 1420), P('RST32PA', 'Phone A · dark'), P('RST32PE', 'Phone E · dark')]],
+      ['RST-33', 'Main task path · the ten steps', 'Each step opens its board across passes 1 to 3; step 9 is held. Then the clicks inside this pass.', [C('RST33', false, 1440, 645)]],
+      ['RST-34', 'Keyboard and accessibility', 'Tab order through the sizing sheet, the comparison and the report; live-region wording for version saved, price saved, version taken and acknowledged; focus returns to the row that opened a sheet.', [C('RST34', false, 1440, 680)]],
+      ['RST-35', 'Handoff', 'Per board: recorded today or ◇ with its issue, and its builder (#7733, #7734, #7735, #7736); owner questions; frontend only; builds waiting.', [W('RST35')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
