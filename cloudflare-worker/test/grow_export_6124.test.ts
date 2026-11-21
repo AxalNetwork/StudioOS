@@ -163,7 +163,8 @@ test('D6124: a reader and a stranger are refused; a module without an export is 
   assert.equal(reader.status, 403);
   assert.doesNotMatch(reader.text, /Acme/);
   assert.equal((await download(f, STRANGER, 'partner-network')).status, 403);
-  for (const slug of ['distribution', 'product-improvement', 'revenue-and-traction', 'nope']) {
+  // Product improvement and Revenue and traction have D6103's export (grow_export_6103.test.ts).
+  for (const slug of ['distribution', 'nope']) {
     assert.equal((await download(f, FOUNDER, slug)).status, 404, slug);
   }
   assert.equal((await module_(f, FOUNDER, 'partner-network')).body.records.exportable, true);

@@ -146,7 +146,7 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
       pinned_behind_current: ctx.adoption.behind_current,
       published_without_links: ctx.adoption.published_without_links,
     },
-    executions: { available: false, reason: 'Waits on a reliable run status (#4667).' } as Unavailable,
+    executions: { available: false, reason: 'Served beside coverage as `executions` (D4536-p4): completed runs only, which is adoption apart from usage.' } as Unavailable,
   };
 }
 
@@ -374,9 +374,11 @@ export const FILTER_WINDOW_MAX_DAYS = 366;
 export const FILTER_KEYS = ['scope', 'status', 'uid', 'version', 'category', 'tag', 'role', 'model', 'from', 'to'] as const;
 export type FilterKey = typeof FILTER_KEYS[number];
 /** Which filter narrows which block. `coverage` is the catalogue as it is now: it has no run time and no model. */
-export const FILTER_BLOCKS: Readonly<Record<'coverage' | 'published_evaluation', readonly FilterKey[]>> = {
+export const FILTER_BLOCKS: Readonly<Record<'coverage' | 'published_evaluation' | 'executions', readonly FilterKey[]>> = {
   coverage: ['scope', 'status', 'uid', 'version', 'category', 'tag', 'role'],
   published_evaluation: FILTER_KEYS,
+  // D4536-p4: `version` keeps that EXECUTED version; the window is on the run's usage row (`created_at`).
+  executions: FILTER_KEYS,
 };
 const STATUSES = ['draft', 'published', 'retired'] as const;
 const UID = /^[0-9a-f]{32}$/;
@@ -539,6 +541,7 @@ export function filtersApplied(f: SkillFilters) {
     window: f.window ? { since: f.window.since, until: f.window.until, days: f.window.days, max_days: FILTER_WINDOW_MAX_DAYS } : null,
     coverage: block('coverage'),
     published_evaluation: block('published_evaluation'),
+    executions: block('executions'),
     // The paged list is the catalogue's rows, never filtered here.
     skills: { applied: [] as FilterKey[], not_applicable: keys },
   };

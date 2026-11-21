@@ -271,6 +271,7 @@ investorProfile.put('/me', async (c) => {
   await ensureSchema(c.env);
   let body: ProfileUpsertBody;
   try { body = await c.req.json<ProfileUpsertBody>(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ error: 'Invalid profile' }, 400);
 
   const investor_type = typeof body.investor_type === 'string'
     ? body.investor_type.slice(0, 32) : null;
@@ -306,71 +307,68 @@ investorProfile.put('/me', async (c) => {
   // Only overwrite when the key is present in the body; present-but-blank clears.
   const ACCRED_OPTIONS = ['accredited', 'qp', 'non_us', 'not_sure'];
   const LP_INTENT_OPTIONS = ['yes_now', 'maybe', 'deal_only', 'no'];
-  const existing = await c.env.DB.prepare(
-    `SELECT accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes
-       FROM investor_profiles WHERE user_id = ?`,
-  ).bind(user.id).first<{
-    accreditation_status: string | null; country: string | null; firm_name: string | null;
-    lp_intent: string | null; lp_target_usd: number | null; notes: string | null;
-  }>();
   const clampStr = (v: unknown, max: number): string | null =>
     typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
-  const accreditation_status = body.accreditation_status === undefined
-    ? (existing?.accreditation_status ?? null)
-    : (typeof body.accreditation_status === 'string' && ACCRED_OPTIONS.includes(body.accreditation_status) ? body.accreditation_status : null);
-  const country = body.country === undefined ? (existing?.country ?? null) : clampStr(body.country, 80);
-  const firm_name = body.firm_name === undefined ? (existing?.firm_name ?? null) : clampStr(body.firm_name, 120);
-  const lp_intent = body.lp_intent === undefined
-    ? (existing?.lp_intent ?? null)
-    : (typeof body.lp_intent === 'string' && LP_INTENT_OPTIONS.includes(body.lp_intent) ? body.lp_intent : null);
-  const lp_target_usd = body.lp_target_usd === undefined
-    ? (existing?.lp_target_usd ?? null)
-    : (() => { const n = parseInt(String(body.lp_target_usd), 10); return Number.isFinite(n) && n >= 0 ? n : null; })();
-  const notes = body.notes === undefined ? (existing?.notes ?? null) : clampStr(body.notes, 2000);
+  const accreditation_status = typeof body.accreditation_status === 'string' && ACCRED_OPTIONS.includes(body.accreditation_status)
+    ? body.accreditation_status : null;
+  const country = clampStr(body.country, 80);
+  const firm_name = clampStr(body.firm_name, 120);
+  const lp_intent = typeof body.lp_intent === 'string' && LP_INTENT_OPTIONS.includes(body.lp_intent)
+    ? body.lp_intent : null;
+  const target = parseInt(String(body.lp_target_usd), 10);
+  const lp_target_usd = Number.isFinite(target) && target >= 0 ? target : null;
+  const notes = clampStr(body.notes, 2000);
+  // Presence is separate from normalization: an explicit clear is a write.
+  // Evaluate it in the upsert so concurrent edits to different fields compose.
+  const supplied = JSON.stringify(Object.fromEntries(Object.keys(body).map((key) => [key, true])));
 
-  const isComplete = !!(investor_type && sectors.length && stages.length && ticket_band);
-  const completed_at = isComplete ? new Date().toISOString() : null;
-
-  await c.env.DB.prepare(
-    `INSERT INTO investor_profiles (
-      user_id, investor_type, sectors_json, stages_json, geos_json,
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `WITH supplied_fields(flags) AS (VALUES (?))
+      INSERT INTO investor_profiles (
+        user_id, investor_type, sectors_json, stages_json, geos_json,
+        ticket_band, ticket_min_usd, ticket_max_usd,
+        thesis_text, thesis_keywords_json, contribute_to_signals,
+        anti_thesis_sectors_json, anti_thesis_stages_json, value_weights_json,
+        accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(user_id) DO UPDATE SET
+        investor_type = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.investor_type') THEN excluded.investor_type ELSE investor_profiles.investor_type END,
+        sectors_json = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.sectors') THEN excluded.sectors_json ELSE investor_profiles.sectors_json END,
+        stages_json = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.stages') THEN excluded.stages_json ELSE investor_profiles.stages_json END,
+        geos_json = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.geos') THEN excluded.geos_json ELSE investor_profiles.geos_json END,
+        ticket_band = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.ticket_band') THEN excluded.ticket_band ELSE investor_profiles.ticket_band END,
+        ticket_min_usd = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.ticket_band') THEN excluded.ticket_min_usd ELSE investor_profiles.ticket_min_usd END,
+        ticket_max_usd = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.ticket_band') THEN excluded.ticket_max_usd ELSE investor_profiles.ticket_max_usd END,
+        thesis_text = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.thesis_text') THEN excluded.thesis_text ELSE investor_profiles.thesis_text END,
+        thesis_keywords_json = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.thesis_text') THEN excluded.thesis_keywords_json ELSE investor_profiles.thesis_keywords_json END,
+        contribute_to_signals = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.contribute_to_signals') THEN excluded.contribute_to_signals ELSE investor_profiles.contribute_to_signals END,
+        anti_thesis_sectors_json = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.anti_thesis_sectors') THEN excluded.anti_thesis_sectors_json ELSE investor_profiles.anti_thesis_sectors_json END,
+        anti_thesis_stages_json = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.anti_thesis_stages') THEN excluded.anti_thesis_stages_json ELSE investor_profiles.anti_thesis_stages_json END,
+        value_weights_json = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.value_weights') THEN excluded.value_weights_json ELSE investor_profiles.value_weights_json END,
+        accreditation_status = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.accreditation_status') THEN excluded.accreditation_status ELSE investor_profiles.accreditation_status END,
+        country = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.country') THEN excluded.country ELSE investor_profiles.country END,
+        firm_name = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.firm_name') THEN excluded.firm_name ELSE investor_profiles.firm_name END,
+        lp_intent = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.lp_intent') THEN excluded.lp_intent ELSE investor_profiles.lp_intent END,
+        lp_target_usd = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.lp_target_usd') THEN excluded.lp_target_usd ELSE investor_profiles.lp_target_usd END,
+        notes = CASE WHEN json_extract((SELECT flags FROM supplied_fields), '$.notes') THEN excluded.notes ELSE investor_profiles.notes END,
+        updated_at = CURRENT_TIMESTAMP`,
+    ).bind(
+      supplied, user.id, investor_type,
+      JSON.stringify(sectors), JSON.stringify(stages), JSON.stringify(geos),
       ticket_band, ticket_min_usd, ticket_max_usd,
-      thesis_text, thesis_keywords_json, contribute_to_signals,
-      anti_thesis_sectors_json, anti_thesis_stages_json, value_weights_json,
+      thesis_text, JSON.stringify(thesis_keywords), contribute_to_signals,
+      JSON.stringify(anti_thesis_sectors), JSON.stringify(anti_thesis_stages), JSON.stringify(value_weights),
       accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes,
-      completed_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT completed_at FROM investor_profiles WHERE user_id = ?)), CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id) DO UPDATE SET
-      investor_type = excluded.investor_type,
-      sectors_json = excluded.sectors_json,
-      stages_json = excluded.stages_json,
-      geos_json = excluded.geos_json,
-      ticket_band = excluded.ticket_band,
-      ticket_min_usd = excluded.ticket_min_usd,
-      ticket_max_usd = excluded.ticket_max_usd,
-      thesis_text = excluded.thesis_text,
-      thesis_keywords_json = excluded.thesis_keywords_json,
-      contribute_to_signals = CASE WHEN ? = 1 THEN investor_profiles.contribute_to_signals ELSE excluded.contribute_to_signals END,
-      anti_thesis_sectors_json = excluded.anti_thesis_sectors_json,
-      anti_thesis_stages_json = excluded.anti_thesis_stages_json,
-      value_weights_json = excluded.value_weights_json,
-      accreditation_status = excluded.accreditation_status,
-      country = excluded.country,
-      firm_name = excluded.firm_name,
-      lp_intent = excluded.lp_intent,
-      lp_target_usd = excluded.lp_target_usd,
-      notes = excluded.notes,
-      completed_at = COALESCE(excluded.completed_at, investor_profiles.completed_at),
-      updated_at = CURRENT_TIMESTAMP`,
-  ).bind(
-    user.id, investor_type,
-    JSON.stringify(sectors), JSON.stringify(stages), JSON.stringify(geos),
-    ticket_band, ticket_min_usd, ticket_max_usd,
-    thesis_text, JSON.stringify(thesis_keywords), contribute_to_signals,
-    JSON.stringify(anti_thesis_sectors), JSON.stringify(anti_thesis_stages), JSON.stringify(value_weights),
-    accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes,
-    completed_at, user.id, body.contribute_to_signals === undefined ? 1 : 0,
-  ).run();
+    ),
+    c.env.DB.prepare(
+      `UPDATE investor_profiles SET completed_at = ?
+       WHERE user_id = ? AND NULLIF(investor_type, '') IS NOT NULL AND ticket_band IS NOT NULL
+         AND CASE WHEN json_valid(sectors_json) THEN json_array_length(sectors_json) ELSE 0 END > 0
+         AND CASE WHEN json_valid(stages_json) THEN json_array_length(stages_json) ELSE 0 END > 0`,
+    ).bind(new Date().toISOString(), user.id),
+  ]);
 
   try {
     const sql = getSQL(c.env);
