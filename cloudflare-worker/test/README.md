@@ -382,6 +382,8 @@ catalogue version only in the fixture.
 | `positions_today_d6226.test.ts` | D6226: the positions list, analytics and per-company reads carry the Worker's UTC `today` under a fixed clock; analytics `as_of` stays null without a date. |
 | `build_burnup_weekly_6025.test.ts` | D6025: Prototype / MVP's burn-up by month, ISO week or day of completion over the real schema: three weeks of one month draw week labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three dated completions still read the too-little sentence, three months still draw by month, the same statements at every grain, and `burnupPoints` across a 53-week year. |
 
+| `research_recording_7587.test.mjs` | D7587: real Workers requests prove an abandoned bootstrap cannot strand the next request, with per-binding readiness. |
+| `research_email_7587.test.ts` | D7587: elevated HQ interview mail context, ordinary-admin and branch refusal, transcript exclusion and no invented address. |
 | File | What it covers |
 |---|---|
 

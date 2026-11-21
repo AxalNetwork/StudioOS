@@ -249,6 +249,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `_approvalBoardPages_5876.mjs` | Shared fixtures for the approval board summary and active-page contracts (#5876). |
 | `approval_board_pages_5876.test.mjs` | Mounted regressions for lane counts and active-page reads (#5876). |
 
+| `research_errors_7587.test.mjs` | D7587: recording Start recovery, microphone release, preserved queued audio and explicit session navigation. |
 `release_phases_5667.test.mjs` verifies release/target isolation, ordered receipt selection, phase failures and the existing publication relay boundary.
 ## Observable readiness (D5504)
 
