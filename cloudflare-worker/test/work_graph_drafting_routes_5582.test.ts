@@ -195,7 +195,7 @@ test('a saved legal version requires the actual template publication and an exac
   const input = { headRevisionUid: w.head, approvedDigest, publishedId: '2', idempotencyKey: 'published-legal' };
   assert.equal((await w.call('/confirm-publication', input)).status, 409, 'a saved draft is insufficient');
   w.db.prepare('INSERT INTO legal_template_publications (template_id, slug, version, title, category, body_md, published_at, published_by) VALUES (?, ?, 2, ?, ?, ?, ?, ?)')
-    .run(900040, 'workgraph-fixture', 'Fixture', 'compliance', 'Different published body', new Date().toISOString(), SUPER);
+    .run(900040, 'workgraph-fixture', 'Fixture', 'compliance', 'Different published body', '2026-11-21T00:00:00.000Z', SUPER);
   assert.equal((await w.call('/confirm-publication', input)).status, 409, 'publication bytes differ');
   w.db.prepare('UPDATE legal_template_publications SET body_md = ? WHERE template_id = 900040').run(body);
   assert.equal((await w.call('/confirm-publication', { ...input, approvedDigest: 'f'.repeat(64) })).status, 409);
