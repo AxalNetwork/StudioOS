@@ -68,8 +68,9 @@ test('Founder: the catalogue\'s prices, the canvas\'s names, and the AI each pla
   assert.equal(byId(cards, 'free').price, 'Free');
   assert.equal(byId(cards, 'growth').price, '$79');
   assert.equal(byId(cards, 'studio').price, '$249');
-  assert.ok(byId(cards, 'growth').feats.includes('$19.75 of AI tokens a month'), '25% of $79');
-  assert.ok(byId(cards, 'studio').feats.includes('$62.25 of AI tokens a month'), '25% of $249');
+  // D4653 part 3: a founder card's AI allowance is one of its limits, shown above its button.
+  assert.ok(byId(cards, 'growth').limits.includes('$19.75 of AI tokens a month'), '25% of $79');
+  assert.ok(byId(cards, 'studio').limits.includes('$62.25 of AI tokens a month'), '25% of $249');
   assert.equal(byId(cards, 'growth').lead, 'Everything in Free, plus:');
   assert.equal(byId(cards, 'free').lead, '');
 });

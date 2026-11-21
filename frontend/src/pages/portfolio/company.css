@@ -31,6 +31,20 @@
 .pf-co-note-box:focus-visible{outline:2px solid var(--pf-vi);outline-offset:1px}
 .pf-co-note-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .pf-co-note-error{margin:0;padding:6px 10px;border:1px solid var(--pf-negE);border-radius:8px;background:var(--pf-negBg);color:var(--pf-neg);font-size:12.5px}
+/* D6868 (#6868, PRM18–PRM19): the holding line and Rights under your documents, on the shell's tokens (dark from .dark .pf-shell). */
+.pf-rights-hold{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--pf-hair);border:1px solid var(--pf-hair);border-radius:9px;overflow:hidden}
+.pf-rights-hold>div{display:flex;flex-direction:column;gap:3px;padding:10px 12px;background:var(--pf-card)}
+.pf-rights-hold strong{font-size:15px;color:var(--pf-ink);font-variant-numeric:tabular-nums}
+.pf-rights-label{font:700 10px var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--pf-mu)}
+.pf-rights-card{gap:10px}
+.pf-rights-table td{vertical-align:top}
+.pf-rights-empty{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px dashed var(--pf-hair2);border-radius:9px;background:var(--pf-raised);color:var(--pf-ink)}
+.pf-rights-ask{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--pf-lavE);border-radius:9px;background:var(--pf-lav)}
+.pf-rights-ask label{display:flex;flex-direction:column;gap:4px}
+.pf-rights-ask select,.pf-rights-ask textarea{font:inherit;font-size:13px;color:var(--pf-ink);background:var(--pf-card);border:1px solid var(--pf-hair2);border-radius:8px;padding:7px 9px}
+.pf-rights-ask select{min-height:36px}
+.pf-rights-error{margin:0;font-size:12.5px;font-weight:700;color:var(--pf-neg)}
+.pf-rights-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
 @media(max-width:1300px){.pf-co-facts{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:1499px){.pf-co-fin{grid-template-columns:1fr}.pf-co-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:850px){.pf-co-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -41,5 +55,8 @@
   .pf-co-list li .pf-btn{justify-content:center;min-height:44px}
   .pf-co-note-acts .pf-btn{flex:1;justify-content:center;min-height:44px}
   .pf-co-rights{padding:14px 12px}
+  .pf-rights-hold{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pf-rights-ask select,.pf-rights-actions .pf-btn{min-height:44px}
+  .pf-rights-actions .pf-btn{flex:1 1 auto;justify-content:center}
   .pf-co-fin .pf-table tbody th{white-space:normal}
 }
