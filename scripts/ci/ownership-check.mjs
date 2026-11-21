@@ -124,14 +124,19 @@ export async function checkOwnership({ api, prNumber, expectedHead }) {
 }
 
 export const exitStatus = (report, mode) => !mode || mode === 'advisory' || ['clear', 'skipped'].includes(report.status) ? 0 : 1;
-const escape = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('|', '&#124;').replaceAll('`', '&#96;').replace(/[\u0000-\u001f\u007f]/g, ' ');
+// Encode literal Markdown table text, following prOverlap's cell encoding without
+// importing its scorecard/landing-bot dependency graph into this standalone job.
+const markdownCell = value => String(value).replace(/[&<>@`|\[\]\\*_~\u0000-\u001f\u007f]/g, c => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '@': '&#64;', '`': '&#96;', '|': '&#124;',
+  '[': '&#91;', ']': '&#93;', '\\': '&#92;', '*': '&#42;', '_': '&#95;', '~': '&#126;',
+}[c] || ' '));
 export function renderReport(report, mode) {
   const lines = [`## Ownership (${!mode || mode === 'advisory' ? 'advisory' : 'enforced'})`, '', `Result: **${report.status}**.`, ''];
   if (report.note) lines.push(report.note, '');
   if (report.issue) lines.push(`Task: #${report.issue}. Active issues scanned: ${report.scannedIssues ?? 'Unavailable'}. Changed files: ${report.changedFiles ?? 'Unavailable'}.`, '');
   if (report.overlaps.length) {
     lines.push('| PR task | Other owning issue | Changed path | Ownership pattern |', '|---|---|---|---|');
-    for (const r of report.overlaps.slice(0, 200)) lines.push(`| #${r.issue} | #${r.owner} | ${escape(r.file)} | ${r.patterns.map(escape).join(', ')} |`);
+    for (const r of report.overlaps.slice(0, 200)) lines.push(`| #${r.issue} | #${r.owner} | ${markdownCell(r.file)} | ${r.patterns.map(markdownCell).join(', ')} |`);
     if (report.overlaps.length > 200) lines.push('', `Showing 200 of ${report.overlaps.length} overlaps.`);
   } else if (report.status === 'clear') lines.push('No overlap with the explicit paths in active issues’ ownership sections. Undeclared or prose-only ownership is not inferred.');
   lines.push('', 'This check creates no reservation, grants no editing permission, and changes no repository settings.');

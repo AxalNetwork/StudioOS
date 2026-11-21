@@ -125,6 +125,11 @@ test('summary escapes API-supplied filenames and bounds large overlap tables', (
   assert.doesNotMatch(summary, /\r|^::warning/m);
   assert.equal(summary.split('\n').filter(l => l.startsWith('| #')).length, 200); assert.match(summary, /200 of 201/);
 });
+test('a filename remains literal text instead of Markdown links, mentions or formatting', () => {
+  const summary = renderReport({ status: 'overlap', issue: 8075, overlaps: [{ issue: 8075, owner: 42, file: '[name](path) @synthetic *bold* _em_ ~strike~ \\file', patterns: ['src/**'] }] });
+  for (const fragment of ['[name]', '@synthetic', '*bold*', '_em_', '~strike~', '\\file']) assert.ok(!summary.includes(fragment), fragment);
+  for (const encoded of ['&#91;name&#93;', '&#64;synthetic', '&#42;bold&#42;', '&#95;em&#95;', '&#126;strike&#126;', '&#92;file']) assert.ok(summary.includes(encoded), encoded);
+});
 test('CLI writes the same report to stdout and step summary and never treats missing event access as clear', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ownership8075-')), event = join(dir, 'event.json'), summary = join(dir, 'summary.md');
   try {
