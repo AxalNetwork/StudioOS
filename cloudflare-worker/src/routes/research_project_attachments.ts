@@ -43,9 +43,11 @@ function writeRefusal(c: C, user: User, project: { status: string }) {
   return null;
 }
 
-/** The list row: what was attached and when, never the copy's body. */
-const LIST_COLUMNS = `uid, kind, object_id, object_version, title, copy_format, attached_at,
-  json_extract(copy_json, '$.saved_at') AS saved_at`;
+/**
+ * The list row: what was attached and when, never the copy's body. Each query
+ * below names these columns as literal text: uid, kind, object_id,
+ * object_version, title, copy_format, attached_at, and the copy's saved_at.
+ */
 type ListRow = { uid: string; kind: string; object_id: string; object_version: number; title: string; copy_format: number; attached_at: string; saved_at: string | null };
 const itemDto = (r: ListRow) => ({
   uid: r.uid, kind: r.kind, object_id: r.object_id, version: r.object_version, title: r.title,
@@ -53,7 +55,7 @@ const itemDto = (r: ListRow) => ({
 });
 
 const ownAttachment = (env: Env, projectId: number, uid: string, userId: number) => env.DB.prepare(
-  `SELECT id, owner_user_id, copy_json, ${LIST_COLUMNS} FROM research_project_attachments WHERE uid = ? AND project_id = ? AND owner_user_id = ?`,
+  `SELECT id, owner_user_id, copy_json, uid, kind, object_id, object_version, title, copy_format, attached_at, json_extract(copy_json, '$.saved_at') AS saved_at FROM research_project_attachments WHERE uid = ? AND project_id = ? AND owner_user_id = ?`,
 ).bind(uid, projectId, userId).first<ListRow & { id: number; owner_user_id: number; copy_json: string }>();
 
 attachments.get('/:uid/attachments', async (c) => {
@@ -61,7 +63,7 @@ attachments.get('/:uid/attachments', async (c) => {
   const project = await checkProjectOwner(c.env, c.req.param('uid'), user.id);
   if (!project) return projectNotFound(c);
   const rows = await c.env.DB.prepare(
-    `SELECT ${LIST_COLUMNS} FROM research_project_attachments WHERE project_id = ? AND owner_user_id = ? ORDER BY id DESC`,
+    `SELECT uid, kind, object_id, object_version, title, copy_format, attached_at, json_extract(copy_json, '$.saved_at') AS saved_at FROM research_project_attachments WHERE project_id = ? AND owner_user_id = ? ORDER BY id DESC`,
   ).bind(project.id, user.id).all<ListRow>();
   return c.json({ items: (rows.results || []).map(itemDto), limit: ATTACHMENTS_PER_PROJECT, kinds: ATTACHMENT_KINDS });
 });
@@ -81,7 +83,7 @@ attachments.post('/:uid/attachments', async (c) => {
 
   // The same project, analysis and version attached again is the attachment on record.
   const existing = await c.env.DB.prepare(
-    `SELECT ${LIST_COLUMNS} FROM research_project_attachments WHERE project_id = ? AND owner_user_id = ? AND kind = ? AND object_id = ? AND object_version = ?`,
+    `SELECT uid, kind, object_id, object_version, title, copy_format, attached_at, json_extract(copy_json, '$.saved_at') AS saved_at FROM research_project_attachments WHERE project_id = ? AND owner_user_id = ? AND kind = ? AND object_id = ? AND object_version = ?`,
   ).bind(project.id, user.id, body.kind, objectId, version).first<ListRow>();
   if (existing) return c.json({ item: itemDto(existing), created: false }, 200);
 
@@ -103,11 +105,11 @@ attachments.post('/:uid/attachments', async (c) => {
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       WHERE (SELECT COUNT(*) FROM research_project_attachments WHERE project_id = ?) < ?
      ON CONFLICT(project_id, kind, object_id, object_version) DO NOTHING
-     RETURNING ${LIST_COLUMNS}`,
+     RETURNING uid, kind, object_id, object_version, title, copy_format, attached_at, json_extract(copy_json, '$.saved_at') AS saved_at`,
   ).bind(uid, project.id, user.id, body.kind, objectId, version, copy.title, COPY_FORMAT, copyJson, user.id, project.id, ATTACHMENTS_PER_PROJECT).first<ListRow>();
   if (!made) {
     const raced = await c.env.DB.prepare(
-      `SELECT ${LIST_COLUMNS} FROM research_project_attachments WHERE project_id = ? AND owner_user_id = ? AND kind = ? AND object_id = ? AND object_version = ?`,
+      `SELECT uid, kind, object_id, object_version, title, copy_format, attached_at, json_extract(copy_json, '$.saved_at') AS saved_at FROM research_project_attachments WHERE project_id = ? AND owner_user_id = ? AND kind = ? AND object_id = ? AND object_version = ?`,
     ).bind(project.id, user.id, body.kind, objectId, version).first<ListRow>();
     if (raced) return c.json({ item: itemDto(raced), created: false }, 200);
     return refuse(c, 409, { code: 'attachment_limit', message: `A project keeps at most ${ATTACHMENTS_PER_PROJECT} attachments. Detach one first.` });
