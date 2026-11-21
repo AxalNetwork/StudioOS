@@ -238,6 +238,7 @@ test('3. grant and revoke: membership, stale views, replays and conflicts; a rev
   assert.equal((await grant(env, BOB, 'maintainer', 2, 'g-4')).body.seq, 3);
   assert.equal((await grant(env, BOB, 'counsel', 0, 'g-5')).status, 200);
   assert.deepEqual(await held(w, BOB), ['counsel', 'maintainer']);
+  assert.deepEqual((await releaseAuthoritiesForScope(w.env, { tenantId: 7, companyId: 70 })).get(BOB), ['counsel', 'maintainer']);
 
   // Unlinking the person withdraws every grant in that company, with no row in the store.
   w.db.prepare('DELETE FROM user_company_links WHERE company_id = 70 AND user_id = ?').run(BOB);
@@ -259,10 +260,29 @@ test('3. grant and revoke: membership, stale views, replays and conflicts; a rev
   assert.equal(n(w, 'SELECT COUNT(*) AS n FROM activity_logs WHERE action = ? AND user_id = ?', 'work_graph_release_authority_revoke', SUPER), 4);
   assert.equal(n(w, 'SELECT COUNT(*) AS n FROM work_graph_release_authority_events WHERE user_id = ?', BOB), 5);
 
-  // Two Super Admins racing from the same view: one lands, the other is stale and writes nothing.
-  const race = await Promise.all([grant(env, CAROL, 'founder', 0, 'race-a'), grant(env, CAROL, 'founder', 0, 'race-b')]);
-  assert.deepEqual(race.map((x) => x.status).sort(), [200, 409]);
-  assert.deepEqual(race.find((x) => x.status === 409)!.body.current, { seq: 1, held: true });
+  // Two Super Admins from the same view: another grant lands after this one read the key and before it writes. The
+  // conditional insert writes nothing, and the answer is stale with the key as it is now.
+  const realDB = w.env.DB;
+  let raced = false;
+  const racingDB = {
+    ...realDB, batch: realDB.batch?.bind(realDB),
+    prepare(sql: string) {
+      const st = realDB.prepare(sql);
+      if (!/SELECT MAX\(seq\) AS seq/.test(sql) || raced) return st;
+      return { bind: (...args: any[]) => { const b = st.bind(...args); return { ...b, first: async () => {
+        const r = await b.first(); raced = true;
+        w.db.prepare(`INSERT INTO work_graph_release_authority_events
+          (tenant_id, company_id, user_id, authority, seq, op, reason, actor_user_id, idempotency_key, request_hash, created_at)
+          VALUES (7, 70, ?, 'founder', 1, 'grant', 'the other admin', 4, 'race-other', ?, 'now')`).run(CAROL, 'b'.repeat(64));
+        return r;
+      } }; } };
+    },
+  };
+  const race = await grantReleaseAuthority({ DB: racingDB } as any, {
+    scope: { tenantId: 7, companyId: 70 }, userId: CAROL, authority: 'founder', reason: 'x', expectedSeq: 0, actorUserId: SUPER, idempotencyKey: 'race-a',
+  });
+  assert.ok(raced, 'the other grant landed in between');
+  assert.deepEqual([race.ok, !race.ok && race.code, !race.ok && race.current], [false, 'stale_revision', { seq: 1, held: true }]);
   assert.equal(n(w, "SELECT COUNT(*) AS n FROM work_graph_release_authority_events WHERE user_id = ? AND authority = 'founder'", CAROL), 1);
 
   // The store is append-only, and a row must be the next of its key.
