@@ -148,14 +148,54 @@ function until(deadline, now, signal) {
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
+/** Only fixed diagnostic categories/status codes may leave the controller. */
+export class GitHubRequestError extends Error {
+  constructor(status) { super('github_request_failed'); this.status = Number.isInteger(status) && status >= 100 && status <= 599 ? status : null; }
+}
+function safeDiagnostic(error, operation) {
+  return error instanceof GitHubRequestError && Number.isInteger(error.status) && error.status >= 100 && error.status <= 599 ? { operation, kind: 'http', status: error.status }
+    : { operation, kind: error?.name === 'AbortError' || error?.name === 'TimeoutError' ? 'timeout_or_cancelled' : 'transport_or_unavailable' };
+}
+
+/** Reclaim only a fully bound legacy child whose queued pickup lease has expired. */
+export async function reclaimExpiredChild({ listed, workflowId, request, now, startTimeoutMs, signal }) {
+  if (!id(listed?.id) || listed.status !== 'queued') return null;
+  const child = await request('GET', runPath(listed.id), undefined, signal);
+  const title = /^MacBook worker \| ([1-9][0-9]*) \| ([1-9][0-9]*) \| ([a-f0-9]{40}) \| (worker-1-of-6)$/.exec(child?.display_title ?? '');
+  const created = Date.parse(child?.created_at);
+  if (!title || !id(title[1]) || !id(title[2]) || !Number.isFinite(created) || created > now() || now() - created < startTimeoutMs) return null;
+  const identity = { parentRunId: title[1], parentRunAttempt: title[2], sourceSha: title[3], part: title[4] };
+  if (!ownedChild(child, identity, listed.id, workflowId) || child.status !== 'queued' || !SHA.test(child.head_sha ?? '')) return null;
+  const parent = await request('GET', runPath(identity.parentRunId), undefined, signal);
+  if (id(parent?.id) !== identity.parentRunId || id(parent.run_attempt) !== identity.parentRunAttempt
+      || parent.repository?.full_name !== REPOSITORY || parent.head_repository?.full_name !== REPOSITORY
+      || parent.path !== '.github/workflows/ci.yml' || parent.head_sha !== identity.sourceSha
+      || !(parent.event === 'push' && parent.head_branch === 'main'
+        || parent.event === 'merge_group' && /^gh-readonly-queue\/main\/[A-Za-z0-9._/-]+$/.test(parent.head_branch ?? '') && !parent.head_branch.includes('..'))) return null;
+  const jobs = await request('GET', `${runPath(child.id)}/jobs?per_page=100`, undefined, signal);
+  if (!Array.isArray(jobs?.jobs) || !Number.isSafeInteger(jobs.total_count) || jobs.total_count !== jobs.jobs.length || jobs.total_count > 100
+      || jobs.jobs.some(job => job.status !== 'queued' || job.runner_id !== 0 || !Array.isArray(job.steps) || job.steps.length > 0)) return null;
+  // Recheck identity/status immediately before this exact run's cancellation.
+  const current = await request('GET', runPath(child.id), undefined, signal);
+  if (!ownedChild(current, identity, child.id, workflowId) || current.head_sha !== child.head_sha || current.status !== 'queued') return null;
+  let requested = false;
+  try { await request('POST', `${runPath(child.id)}/cancel`, {}, signal); requested = true; } catch { /* Read terminal truth, never guess from a POST failure. */ }
+  try {
+    const final = await request('GET', runPath(child.id), undefined, signal);
+    if (!ownedChild(final, identity, child.id, workflowId) || final.head_sha !== child.head_sha) return { reason: 'stale_mac_identity_changed', cleanupRunId: String(child.id) };
+    if (isDone(final)) return { reason: 'stale_mac_run_reconciled', cleanupRunId: String(child.id) };
+  } catch { /* A later CI invocation may safely reconcile the same owned ID. */ }
+  return { reason: requested ? 'stale_mac_cancel_pending' : 'stale_mac_cancel_unconfirmed', cleanupRunId: String(child.id) };
+}
+
 /**
  * Pure orchestration boundary: API, clock and sleeps are injectable. The child
  * workflow, loaded from main, performs the complete source/provenance admission.
  * This controller does not trust a caller-supplied merge-group PR list.
  */
-export async function delegateWorker({ config, api, now = Date.now,
+async function runDelegation({ config, api, now = Date.now,
   sleep = (ms, signal) => delay(ms, undefined, { signal }), signal, limits = {},
-  onDispatch = () => {} }) {
+  onDispatch = () => {}, onDiagnostic = () => {} }) {
   const problem = configurationProblem(config);
   if (problem) return fallback(problem);
   if (typeof api !== 'function') return fallback('api_unavailable');
@@ -174,8 +214,13 @@ export async function delegateWorker({ config, api, now = Date.now,
   let dispatchAt;
   let lastParentCheck = -Infinity;
 
-  const request = (method, path, body, requestSignal = signal) =>
-    api(method, path, body, { signal: requestSignal });
+  const request = async (method, path, body, requestSignal = signal) => {
+    const operation = path.endsWith('/cancel') ? 'cancel_request' : path.endsWith('/dispatches') ? 'dispatch_request'
+      : path === runPath(config.parentRunId) ? 'parent_status' : path === runPath(childId) ? 'child_status'
+      : path.includes('/jobs?') ? 'child_jobs' : path.includes('/runs?') ? 'busy_inventory' : 'metadata';
+    try { return await api(method, path, body, { signal: requestSignal }); }
+    catch (error) { onDiagnostic(safeDiagnostic(error, operation)); throw error; }
+  };
   const readParent = async requestSignal => {
     const parent = await request('GET', runPath(config.parentRunId), undefined, requestSignal);
     lastParentCheck = now();
@@ -242,7 +287,13 @@ export async function delegateWorker({ config, api, now = Date.now,
       if (!Array.isArray(runs?.workflow_runs) || !Number.isSafeInteger(runs?.total_count)) {
         return fallback('busy_state_unavailable');
       }
-      if (runs.total_count > 0 || runs.workflow_runs.length > 0) return fallback('mac_workflow_busy');
+      if (runs.total_count > 0 || runs.workflow_runs.length > 0) {
+        if (runs.workflow_runs.length > 1 || runs.workflow_runs.length > runs.total_count || runs.total_count < 1) return fallback('busy_state_unavailable');
+        const stale = await reclaimExpiredChild({ listed: runs.workflow_runs[0], workflowId, request, now,
+          startTimeoutMs: bounds.startTimeoutMs, signal: until(now() + bounds.cancelTimeoutMs, now, signal) });
+        if (stale) return fallback(stale.reason, '', { cleanupRunId: stale.cleanupRunId });
+        return fallback('mac_workflow_busy');
+      }
     }
     const main = await request('GET', `${ROOT}/branches/main`);
     targetSha = main?.commit?.sha;
@@ -319,6 +370,13 @@ export async function delegateWorker({ config, api, now = Date.now,
   }
 }
 
+/** Preserve the historical success/failure shape; attach bounded diagnostics only after real API errors. */
+export async function delegateWorker(options) {
+  const diagnostics = [];
+  const result = await runDelegation({ ...options, onDiagnostic: record => { if (diagnostics.length < 12) diagnostics.push(record); } });
+  return diagnostics.length ? { ...result, diagnostics } : result;
+}
+
 /** Best-effort cancellation hook for a separate parent cancellation step. */
 export async function cancelOwnedChild({ config, childRunId, api, signal }) {
   if (!childRunId) return { cancelled: false, reason: 'no_child' };
@@ -364,7 +422,7 @@ export function githubApi(token, { fetchImpl = fetch, requestTimeoutMs = 10_000 
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
-    if (!response.ok) throw new Error('GitHub request failed');
+    if (!response.ok) throw new GitHubRequestError(response.status);
     const text = await response.text();
     return text ? JSON.parse(text) : null;
   };
@@ -411,6 +469,7 @@ export async function main(env = process.env, argv = process.argv.slice(2)) {
         } })
       : fallback(configurationProblem(config) || 'token_unavailable');
     writeOutputs(result, env.GITHUB_OUTPUT);
+    for (const diagnostic of result.diagnostics || []) console.log(`MacBook diagnostic: ${JSON.stringify(diagnostic)}`);
     for (const line of result.annotations || []) console.log(line);
     if (result.annotationWarning) console.warn('::warning::Could not mirror Mac test failure identities; the shard remains failed.');
     console.log(`MacBook delegation: ${result.reason}${result.childRunId ? ` (child run ${result.childRunId})` : ''}.`);

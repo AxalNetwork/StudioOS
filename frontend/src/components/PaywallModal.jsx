@@ -44,7 +44,8 @@ export const TIER_PLANS = {
     blurb: 'Raise the money, then grow the company.',
     // D683: the second group keeps everything in the first, as Pricing's card leads its lines.
     lead: 'Everything in Validate + Build, plus:',
-    features: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
+    // D4653 part 3 (#4653): the catalogue's Studio entry states its startup and interview limits.
+    features: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
   },
   // D1334: Investor Plus, sold monthly between Basic and Pro.
   plus: {

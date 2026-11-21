@@ -65,8 +65,10 @@
  * D5950 — THE READ MODEL. `metrics` answers every Revenue metric in one envelope
  * (services/revenueReadModel.ts): its source, period, currencies, last
  * reconciliation, incomplete rows and coverage gap. Revenue per subsidiary
- * (#5947) and AI margin per licence (#5948) are `not_available` with their
- * issue named until those slices ship. The blocks above stay as they were.
+ * reads the branches' measured gross (#5947) and AI margin per licence the
+ * licence stamped on AI runs (#5948), D5950 part 2. The blocks above, and the
+ * top-level `revenue_per_subsidiary_*` and `token_pl_per_subsidiary_*`
+ * sentences the built page reads, stay as they were.
  *
  * Mounted at /api/admin/revenue BEFORE the catch-all /api/admin in index.ts.
  */

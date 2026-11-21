@@ -45,6 +45,7 @@ permissions:
 
 jobs:
   live-check:
+    environment: production-ops
     name: one synthetic gateway call, then teardown
     runs-on: ubuntu-latest
     timeout-minutes: 20

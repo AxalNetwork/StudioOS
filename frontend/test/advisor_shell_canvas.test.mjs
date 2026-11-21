@@ -107,8 +107,9 @@ test('the five zone slugs are the five routes the canvas names', () => {
 });
 
 test('D1424 (#3700): each advisor zone header fills the primary D1424 names, or none', async () => {
-  // Opportunities, Engagements, Delivery, the five Cohorts zones, Profile,
-  // Proof and Visibility have no live first step.
+  // Opportunities, Engagements, the five Cohorts zones, Profile, Proof and
+  // Visibility have no live first step. Delivery's is PX-06's New work
+  // product, since D4833-p4.
   const { ADVISOR_ZONE_ACTIONS } = await import('../src/workspaces/advisorZoneActions.js');
   const primaries = Object.fromEntries(Object.entries(ADVISOR_ZONE_ACTIONS)
     .map(([zone, rows]) => [zone, rows.filter((r) => r.primary).map((r) => r.label)])
@@ -116,9 +117,13 @@ test('D1424 (#3700): each advisor zone header fills the primary D1424 names, or 
   assert.deepEqual(primaries, {
     'expertise/services': ['New service'],
     'expertise/thinking': ['New piece'],
+    'practice/delivery': ['New work product'],
     'practice/sessions': ['Block time'],
     'practice/earnings': ['Download 1099 summary'],
   });
+  const work = ADVISOR_ZONE_ACTIONS['practice/delivery'].find((r) => r.label === 'New work product');
+  assert.deepEqual(work, { label: 'New work product', kind: 'handler', handler: 'newWorkProduct', primary: true },
+    'New work product is the handler that opens the v1 form');
   const service = ADVISOR_ZONE_ACTIONS['expertise/services'].find((r) => r.label === 'New service');
   assert.deepEqual(service, { label: 'New service', kind: 'handler', handler: 'focusAddForm', primary: true },
     'New service is the handler that focuses the Add form, not a note');

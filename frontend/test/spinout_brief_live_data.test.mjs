@@ -91,9 +91,10 @@ test('the brief no longer hardcodes a cohort number or deadline', () => {
 // What it reads instead.
 // ---------------------------------------------------------------------------
 
-test('the brief reads the shared stats hook', () => {
-  assert.match(BRIEF, /useSpinoutStats/, 'stats come from the shared hook');
-  assert.match(BRIEF, /const \{ companies, raised \} = useSpinoutStats\(\)/);
+test('the presentation prints no track record at all (D6966)', () => {
+  // D6966 (#6966): the PGS01 presentation draws no "built to date" or "capital raised"
+  // figures, so the page reads no stats; the hook stays the one source wherever one is drawn.
+  assert.doesNotMatch(BRIEF_CODE, /useSpinoutStats|companiesLabel|spinoutLab\.stats/);
 });
 
 /**
@@ -120,7 +121,9 @@ test('the brief reads the shared stats hook', () => {
 test('the brief takes its cohort from the platform, and computes none of its own', () => {
   assert.match(BRIEF_CODE, /spinoutLab\.brief\(\)/,
     'the brief must read the route that answers the six live values');
-  assert.match(BRIEF_CODE, /brief\?\.cohort\?\.name/,
+  assert.match(BRIEF_CODE, /const c = d\.cohort \|\| \{\};/,
+    'the cohort must come off the payload');
+  assert.match(BRIEF_CODE, /name: c\.name \|\| null/,
     'the cohort name must come off the payload');
   // A literal scan, not a regex built from this array. `new RegExp` over data
   // is the shape CodeQL and Semgrep have flagged three times in this repo, and
@@ -136,11 +139,12 @@ test('an unresolvable cohort degrades to a stated reason, not a wrong date', () 
   // The route reports `applications_open: false` between a close and the next
   // month's opening, and a failed read reports nothing at all. Those are two
   // different facts and the brief says which — but neither may become a date.
-  assert.match(BRIEF_CODE, /No cohort is open for applications/,
+  // D6966: the availability panel's words (PGS02B, PGS02C, PGS02D).
+  assert.match(BRIEF_CODE, /Applications are closed\./,
     'a closed window must say so rather than naming the wrong cohort');
-  assert.match(BRIEF_CODE, /The platform did not answer/,
+  assert.match(BRIEF_CODE, /<Unreadable what="The cohort dates"/,
     'a failed read must say so rather than printing a stale value');
-  assert.match(BRIEF_CODE, /<Unrecorded reason=\{reason\}>/,
+  assert.match(BRIEF_CODE, /<Unrecorded reason=\{reason\} \/>/,
     'the live fields must render the shared honest-absence component, never a bare fallback');
 });
 
@@ -150,11 +154,6 @@ test('an unresolvable cohort degrades to a stated reason, not a wrong date', () 
 // "0 companies built" on a forwarded brochure is materially worse than an
 // obvious placeholder — it reads as a track record rather than as a gap.
 // ---------------------------------------------------------------------------
-
-test('a failed stats fetch renders an em-dash on the brief', () => {
-  assert.match(BRIEF, /raised === null \? "—" : raised/);
-  assert.match(BRIEF, /companiesLabel\(companies\)/);
-});
 
 test('companiesLabel returns an em-dash for null and is singular-correct', () => {
   const src = LIB.slice(LIB.indexOf('export function companiesLabel'));
@@ -184,9 +183,7 @@ test('the track record has one source, and the brief reads it', () => {
   assert.doesNotMatch(PAGE, /function companiesLabel/);
   assert.doesNotMatch(PAGE, /function openCohortCopy/);
   assert.doesNotMatch(PAGE, /function HeroStatsPanel/, 'the dead hero stats panel came back');
-  // The brief consumes the shared hook and label rather than inlining either.
-  assert.match(BRIEF_CODE, /const \{ companies, raised \} = useSpinoutStats\(\)/);
-  assert.match(BRIEF_CODE, /companiesLabel\(companies\)/);
+  // D6966: the brief prints no track record, and never re-inlines the pluralisation.
   assert.doesNotMatch(
     BRIEF_CODE,
     /companies === 1 \? 'company' : 'companies'/,
