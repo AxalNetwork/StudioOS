@@ -545,8 +545,12 @@ export interface Env {
   // #4176: verifies Stream's Webhook-Signature (owner step B).
   STREAM_WEBHOOK_SECRET?: string;
   // D5585 part 3 (#5585): `preview` lets `drainReleaseEffects` deliver WorkGraph release effects through the real
-  // provider adapters. Unset (the default) it delivers nothing. Nothing schedules that drain yet.
+  // provider adapters. Unset (the default) it delivers nothing. D5585 part 7: the every-minute cron runs one bounded
+  // drain on minutes `% 5 === 2` while it is `preview`, and returns before any D1 read while it is not.
   WORK_GRAPH_RELEASE_DELIVERY?: string;
+  // D5585 part 7 (#5585): `on` opens the Super-Admin release routes (`routes/admin_work_graph_releases.ts`). Unset
+  // (the default) or any other value, every one of them refuses 404 `release_admin_off` before any D1 read.
+  WORK_GRAPH_RELEASE_ADMIN?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
